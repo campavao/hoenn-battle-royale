@@ -145,7 +145,7 @@ index 5b4ef70..4a54807 100644
  	}
  
 diff --git a/src/gba/renderers/software-mode0.c b/src/gba/renderers/software-mode0.c
-index 4aada17..a29ce22 100644
+index 4aada17..7bb95d7 100644
 --- a/src/gba/renderers/software-mode0.c
 +++ b/src/gba/renderers/software-mode0.c
 @@ -6,6 +6,8 @@
@@ -166,7 +166,7 @@ index 4aada17..a29ce22 100644
  	int length = renderer->end - renderer->start;
  	if (background->mosaic) {
  		int mosaicV = GBAMosaicControlGetBgV(renderer->mosaic) + 1;
-@@ -574,3 +576,605 @@ void GBAVideoSoftwareRendererDrawBackgroundMode0(struct GBAVideoSoftwareRenderer
+@@ -574,3 +576,622 @@ void GBAVideoSoftwareRendererDrawBackgroundMode0(struct GBAVideoSoftwareRenderer
  		}
  	}
  }
@@ -252,13 +252,19 @@ index 4aada17..a29ce22 100644
 +	return t ? _brMem(renderer, _brU32(t + field), size) : NULL;
 +}
 +
++/* Decoded secondary tilesets, least recently used out. A slot handed out this frame
++ * (`frame`) is never taken back the same frame: a map that finds them all taken falls
++ * back to the grid and the border. One that would not decode stays `bad`. */
 +static struct {
 +	uint32_t source;
 +	uint32_t used;
++	uint32_t frame;
++	bool bad;
 +	uint8_t tiles[BR_SECONDARY_TILE_BYTES];
 +} _brTileCache[BR_WORLD_TILE_SLOTS];
 +static mColor _brTilePalettes[BR_WORLD_TILE_SLOTS][256];
 +static uint32_t _brTileClock = 0;
++static uint32_t _brTileFrame = 0;
 +
 +/* The BIOS's LZ77 (type 0x10), as LZ77UnCompVram reads it, into at most `size` bytes. */
 +static bool _brLz77(const struct GBAVideoSoftwareRenderer* renderer, uint32_t address, uint8_t* out, uint32_t size) {
@@ -315,33 +321,43 @@ index 4aada17..a29ce22 100644
 +	}
 +	uint32_t tiles = _brU32(t + BR_TILESET_TILES);
 +	int slot;
-+	int oldest = 0;
++	int oldest = -1;
 +	++_brTileClock;
 +	for (slot = 0; slot < BR_WORLD_TILE_SLOTS; ++slot) {
 +		if (_brTileCache[slot].source == tiles) {
++			if (_brTileCache[slot].bad) {
++				return -1;
++			}
 +			_brTileCache[slot].used = _brTileClock;
++			_brTileCache[slot].frame = _brTileFrame;
 +			return slot;
 +		}
-+		if (_brTileCache[slot].used < _brTileCache[oldest].used) {
++		if (_brTileCache[slot].frame != _brTileFrame && (oldest < 0 || _brTileCache[slot].used < _brTileCache[oldest].used)) {
 +			oldest = slot;
 +		}
 +	}
++	if (oldest < 0) {
++		return -1;
++	}
 +	slot = oldest;
-+	_brTileCache[slot].source = 0;
++	_brTileCache[slot].source = tiles;
++	_brTileCache[slot].used = _brTileClock;
++	_brTileCache[slot].frame = _brTileFrame;
++	_brTileCache[slot].bad = false;
 +	if (t[BR_TILESET_COMPRESSED]) {
 +		memset(_brTileCache[slot].tiles, 0, BR_SECONDARY_TILE_BYTES);
 +		if (!_brLz77(renderer, tiles, _brTileCache[slot].tiles, BR_SECONDARY_TILE_BYTES)) {
++			_brTileCache[slot].bad = true;
 +			return -1;
 +		}
 +	} else {
 +		const uint8_t* raw = _brMem(renderer, tiles, BR_SECONDARY_TILE_BYTES);
 +		if (!raw) {
++			_brTileCache[slot].bad = true;
 +			return -1;
 +		}
 +		memcpy(_brTileCache[slot].tiles, raw, BR_SECONDARY_TILE_BYTES);
 +	}
-+	_brTileCache[slot].source = tiles;
-+	_brTileCache[slot].used = _brTileClock;
 +	return slot;
 +}
 +
@@ -428,6 +444,7 @@ index 4aada17..a29ce22 100644
 +	struct BrPaletteFit fit;
 +	bool fitted = false;
 +	world->nMaps = 0;
++	++_brTileFrame;
 +	if (!renderer->brWorldGroups) {
 +		return;
 +	}
