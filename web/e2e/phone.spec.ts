@@ -108,6 +108,7 @@ test(`a phone gets the screen and both thumbs, either way up${ring ? ' (ring)' :
       const need = { left: lay.lcdCol, top: lay.lcdRow, right: lay.cols - lay.lcdCol - 240, bottom: lay.rows - lay.lcdRow - 160 };
       for (const side of ['left', 'top', 'right', 'bottom'] as const) {
         expect(band?.[side], `the band covers the glass's ${side}`).toBeGreaterThanOrEqual(Math.max(0, need[side]));
+        expect(band?.[side], '...and not much more').toBeLessThan(Math.max(0, need[side]) + 8 + 16 + 16);
       }
       expect(need.top, 'map above the picture').toBeGreaterThan(40);
       expect(need.bottom, 'and under it, behind the pad').toBeGreaterThan(40);
