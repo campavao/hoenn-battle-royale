@@ -1749,7 +1749,9 @@ export class FieldView {
       ctx.fillRect(0, 0, lay.cols, lay.rows);
       ctx.globalAlpha = 1;
     }
-    if (overlay && !this.drawOverlay(overlay, c, map && map.outdoor ? map : null, marks)) complete = false;
+    const core = this.toCore(c, !!map?.outdoor);
+    if (core === false) complete = false;
+    if (overlay && !this.drawOverlay(overlay, c, map && map.outdoor ? map : null, marks, core !== null)) complete = false;
     // A picture missing its still is drawn again when the still arrives -- and not while
     // nothing is on its way, which is what a failed one is.
     this.drawn = complete || this.images.settled ? key : null;
@@ -1791,7 +1793,20 @@ export class FieldView {
   /** The people the ROM hid for being past its band, drawn over the picture -- only on
    *  the field, where the object table means what it says -- and faded the way the
    *  ROM's palette is, over their own pixels alone. */
-  private drawOverlay(overlay: HTMLCanvasElement, c: Camera, outdoors: WorldMap | null, marks: readonly Mark[]): boolean {
+  private corePeople: import('./field-extra').CorePeople | null = null;
+
+  /** With the whole window (`#world`), the people the overlay drew go to the core, which
+   *  draws them into the picture under roofs and treetops (HBR-27, POK-443): null when it
+   *  does not, else whether every sheet was in. */
+  private toCore(c: Camera, outdoors: boolean): boolean | null {
+    if (this.deps.world?.() && this.band && this.extra && c.onField && outdoors) {
+      return (this.corePeople ??= new this.extra.CorePeople()).send(this.painter, this.deps.emu, (n) => this.sym(n), c.sprites.filter((s) => s.hidden));
+    }
+    this.corePeople?.clear(this.deps.emu);
+    return null;
+  }
+
+  private drawOverlay(overlay: HTMLCanvasElement, c: Camera, outdoors: WorldMap | null, marks: readonly Mark[], core = false): boolean {
     const ctx = overlay.getContext('2d');
     if (!ctx) return true;
     const lay = this.lay;
@@ -1809,7 +1824,7 @@ export class FieldView {
       const fog = c.fog;
       complete = this.extra.drawPast(this.painter, ctx, c, outdoors, this.band, reached, marks, fog ? () => this.drawFog(ctx, fog) : null);
     }
-    if (!this.drawSprites(ctx, c.sprites.filter((s) => s.hidden), { maps: reached, ox, oy })) complete = false;
+    if (!core && !this.drawSprites(ctx, c.sprites.filter((s) => s.hidden), { maps: reached, ox, oy })) complete = false;
     if (c.fade > 0) {
       ctx.globalCompositeOperation = 'source-atop';
       ctx.globalAlpha = Math.min(1, c.fade / 16);

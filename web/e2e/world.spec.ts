@@ -106,7 +106,7 @@ for (const world of [false, true]) {
       }
 
       await page.evaluate(installStill, {
-        sym: { gSaveBlock1Ptr: sym.gSaveBlock1Ptr, gSaveBlock2Ptr: sym.gSaveBlock2Ptr, gTasks: sym.gTasks, gFieldCamera: sym.gFieldCamera, gMain: sym.gMain, CB2_Overworld: sym.CB2_Overworld, gBrOamHi: sym.gBrOamHi },
+        sym: { gSaveBlock1Ptr: sym.gSaveBlock1Ptr, gSaveBlock2Ptr: sym.gSaveBlock2Ptr, gTasks: sym.gTasks, gFieldCamera: sym.gFieldCamera, gMain: sym.gMain, CB2_Overworld: sym.CB2_Overworld, gBrOamHi: sym.gBrOamHi, gBrWorld: sym.gBrWorld },
         // Route 116 to the east reaches past the grid's seven metatiles on the walk right.
         ...aroundOf([RUSTBORO.id]),
         every: 0,
@@ -160,7 +160,7 @@ for (const cross of CROSSINGS) {
       const tag = `cross-${cross.at.map.id}`;
       await savePicture(page, `${tag}-standing`);
       await page.evaluate(installStill, {
-        sym: { gSaveBlock1Ptr: sym.gSaveBlock1Ptr, gSaveBlock2Ptr: sym.gSaveBlock2Ptr, gTasks: sym.gTasks, gFieldCamera: sym.gFieldCamera, gMain: sym.gMain, CB2_Overworld: sym.CB2_Overworld, gBrOamHi: sym.gBrOamHi },
+        sym: { gSaveBlock1Ptr: sym.gSaveBlock1Ptr, gSaveBlock2Ptr: sym.gSaveBlock2Ptr, gTasks: sym.gTasks, gFieldCamera: sym.gFieldCamera, gMain: sym.gMain, CB2_Overworld: sym.CB2_Overworld, gBrOamHi: sym.gBrOamHi, gBrWorld: sym.gBrWorld },
         ...aroundOf(cross.maps),
         every: 0,
         keep: 6,

@@ -33,6 +33,9 @@ export interface StillSymbols {
   /** The OAM side table (include/br/br_field.h), where the core reads a sprite's true
    *  rows from; absent on a ROM without it. */
   gBrOamHi?: number;
+  /** gBrWorld (include/br/br_field.h): where the LCD sits on the grid, which the core
+   *  places the page's people by; absent, they are not looked for. */
+  gBrWorld?: number;
 }
 
 export interface StillSetup {
@@ -124,6 +127,7 @@ type StillEmu = {
   bytes(addr: number, len: number): Uint8Array;
   onFrame(fn: () => void): () => void;
   picture(): Pic | null;
+  peopleBuffer?(bytes: number): Uint8Array | null;
 };
 type StillWindow = {
   __hbr: { emu: StillEmu };
@@ -184,6 +188,25 @@ export async function installStill(s: StillSetup): Promise<void> {
       // A marked entry says which way its 9-bit x reads (bit 3: 512 left of it).
       const left = nib & 4 ? x - (nib & 8 ? 512 : 0) : x >= 256 ? x - 512 : x;
       out.push([left - 1, top - 1, left + w + 1, top + h + 1]);
+    }
+    // The people the page hands the core with `#world` (HBR-27), where the core draws them:
+    // its buffer's grid pixels, less where gBrWorld has the LCD (software-mode0.c
+    // GBAVideoSoftwareRendererDrawPeople has the layout).
+    const head = s.sym.gBrWorld === undefined ? null : emu.peopleBuffer?.(8) ?? null;
+    if (head && s.sym.gBrWorld !== undefined) {
+      const count = new DataView(head.buffer, head.byteOffset, 8).getUint32(4, true);
+      const buf = emu.peopleBuffer?.(8 + 16 * count);
+      const lcdX = s16(emu.read(s.sym.gBrWorld + 4, 16));
+      const lcdY = s16(emu.read(s.sym.gBrWorld + 6, 16));
+      if (buf) {
+        const v = new DataView(buf.buffer, buf.byteOffset, buf.length);
+        for (let i = 0; i < count; i++) {
+          const e = 8 + 16 * i;
+          const x = v.getInt16(e, true) - lcdX;
+          const y = v.getInt16(e + 2, true) - lcdY;
+          out.push([x - 1, y - 1, x + v.getUint8(e + 4) + 1, y + v.getUint8(e + 5) + 1]);
+        }
+      }
     }
     return out;
   };
