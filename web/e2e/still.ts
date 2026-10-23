@@ -56,6 +56,10 @@ export interface StillSetup {
    *  cell of open water is that frame under half the time). The tall band
    *  never reaches the sea on the walks here; the wide one does. */
   skipWater?: boolean;
+  /** The maps joined to each map, where they sit: 'group:num' -> each neighbour's ref and
+   *  its top-left in the map's pixels (pret's connections, maps.ts). A picture past the
+   *  map's edge is held to the neighbour's still there, and past every one says nothing. */
+  around?: Record<string, { ref: string; dx: number; dy: number }[]>;
 }
 
 /** One 16x16 cell of one sample that was not the still. */
@@ -143,8 +147,9 @@ export async function installStill(s: StillSetup): Promise<void> {
     stills[ref] = { w: img.width, h: img.height, px: g.getImageData(0, 0, img.width, img.height).data };
   }
   const s16 = (v: number) => (v << 16) >> 16;
+  type Still = { w: number; h: number; px: Uint8ClampedArray };
   // skipWater's metatiles, by still and cell.
-  const seaCellsOf: Record<string, Map<number, boolean>> = {};
+  const seaCellsOf = new Map<Still, Map<number, boolean>>();
   // Every sprite the ROM put in OAM, where the core draws it: gMain.oamBuffer (at 0x38,
   // 128 entries of 8 bytes) is what the VBlank copies to OAM, so the picture of the next
   // frame is drawn from this frame's. A y of 216 (160 + the sprite window's 56) or more is
@@ -243,8 +248,19 @@ export async function installStill(s: StillSetup): Promise<void> {
   /** Compares one picture with the still, from the camera and the OAM it was drawn from.
    *  The sprites are left out, and this frame's too, a pixel round. */
   const sample = (pic: Pic, c: Cam, now: Cam) => {
-    const still = stills[c.map];
-    if (!still) return;
+    if (!stills[c.map]) return;
+    // The map and its neighbours, in the map's pixels: the first that holds a pixel is
+    // the still for it.
+    const placed = [{ still: stills[c.map], dx: 0, dy: 0 }];
+    for (const n of s.around?.[c.map] ?? []) if (stills[n.ref]) placed.push({ still: stills[n.ref], dx: n.dx, dy: n.dy });
+    const at = (mx: number, my: number) => {
+      for (const p of placed) {
+        const sx = mx - p.dx;
+        const sy = my - p.dy;
+        if (sx >= 0 && sy >= 0 && sx < p.still.w && sy < p.still.h) return { still: p.still, sx, sy };
+      }
+      return null;
+    };
     const o = originOf(c);
     const clip = clipOf(pic);
     // The sprites, as a bitmap of the picture: 1 where one is.
@@ -258,11 +274,12 @@ export async function installStill(s: StillSetup): Promise<void> {
     }
     const px = pic.data;
     const tol = s.tolerance;
-    const seaCells = (seaCellsOf[c.map] ??= new Map());
     // The sea's metatiles, as the stills draw them (Rustboro's corner, west of Route
     // 115): any with a pixel of its blues -- blue well clear of green and red, which no
     // grass, roof or path is -- the shore's foam and a rock's ripples animating with it.
-    const water = (sx: number, sy: number) => {
+    const water = (still: Still, sx: number, sy: number) => {
+      let seaCells = seaCellsOf.get(still);
+      if (!seaCells) seaCellsOf.set(still, (seaCells = new Map()));
       const key = (sx >> 4) * 4096 + (sy >> 4);
       let v = seaCells.get(key);
       if (v === undefined) {
@@ -280,8 +297,10 @@ export async function installStill(s: StillSetup): Promise<void> {
       }
       return v;
     };
-    const same = (i: number, sx: number, sy: number) => {
-      if (sx < 0 || sy < 0 || sx >= still.w || sy >= still.h) return false;
+    const same = (i: number, mx: number, my: number) => {
+      const hit = at(mx, my);
+      if (!hit) return false;
+      const { still, sx, sy } = hit;
       const j = (sy * still.w + sx) * 4;
       return Math.abs(px[i] - still.px[j]) <= tol && Math.abs(px[i + 1] - still.px[j + 1]) <= tol && Math.abs(px[i + 2] - still.px[j + 2]) <= tol;
     };
@@ -308,16 +327,16 @@ export async function installStill(s: StillSetup): Promise<void> {
           if (py < shown.y0 || py >= shown.y1) continue;
           const r = py - pic.top;
           const my = o.top + r;
-          if (my < 0 || my >= still.h) continue;
           for (let qx = cx; qx < Math.min(pic.width, cx + 16); qx++) {
             if (qx < shown.x0 || qx >= shown.x1) continue;
             const x = qx - pic.left;
             if (r >= 0 && r < 160 && x >= 0 && x < 240) continue; // the LCD
             if (r >= bg0From && r < 0) continue;
             const mx = o.left + x;
-            if (mx < 0 || mx >= still.w) continue;
+            const hit = at(mx, my);
+            if (!hit) continue;
             if (mask[py * pic.width + qx]) continue;
-            if (s.skipWater && water(mx, my)) continue;
+            if (s.skipWater && water(hit.still, hit.sx, hit.sy)) continue;
             const i = (py * pic.width + qx) * 4;
             compared++;
             if (same(i, mx, my)) matched++;
