@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LegendWatch } from './legends';
+import { LEGEND_GFX, LegendWatch, legendGfx } from './legends';
 import type { EventMsg } from '../net/wire';
 
 const ev = (n: number, key: number, place?: string): EventMsg => ({ t: 'event', seat: 0, n, mapsec: 0, key, place });
@@ -45,5 +45,14 @@ describe('LegendWatch (the sheet\'s legendary chip, #10)', () => {
     w.note({ t: 'pickup', seat: 0, key: 0x8100 });
     w.note({ t: 'start', seed: 1, spawns: [] });
     expect(w.chip([ev(0, 0x8100)], { mon: () => undefined }, names)).toBeNull();
+  });
+});
+
+describe('legendGfx', () => {
+  it("stands the match's own legendary as itself, and a trader holding one as a trader", () => {
+    expect(legendGfx(0x8100, 407)).toBe(LEGEND_GFX.get(407));
+    expect(legendGfx(0x8c21, 407), 'a house trader (Cam, 2026-10-23)').toBeUndefined();
+    expect(legendGfx(0x8c92, 407), "a floor's trader").toBeUndefined();
+    expect(legendGfx(0x0300, 407), "one out of a trainer's team").toBeUndefined();
   });
 });

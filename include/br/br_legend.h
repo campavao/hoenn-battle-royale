@@ -28,9 +28,6 @@
 // Asking for piece `key` (0xB0xx): web/src/match/events.ts's legendClaimKey.
 #define BR_LEGEND_CLAIM_KEY(key) ((u16)((key) | 0x0800))
 
-// Is this one of the match's legendaries (the table the map's ones stand as)?
-bool8 BrLegend_Is(u16 species);
-
 void BrLegend_Init(void);
 // Each frame: a put-back the ring had no room for goes out.
 void BrLegend_Tick(void);

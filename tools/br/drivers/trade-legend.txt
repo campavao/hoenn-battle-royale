@@ -1,6 +1,7 @@
-# trade-legend: a trader won't take a legendary (#9 review). He keeps what he is given and
-# offers it to the next trainer, so a LATIAS handed over would go round the room for one
-# common mon a time. BrEvent_Swap refuses it, as it does a fainted one, and he keeps his.
+# trade-legend: a legendary trades like any mon (Cam, 2026-10-23: "just treat it like any
+# pokemon since it would drop if they died too"). He keeps the LATIAS and offers it to the
+# next trainer, and he still stands as himself, not as the LATIAS (br_loot.c Spawn: home
+# keys first).
 #
 # house-trade's room and seed: PETALBURG CITY's HOUSE1 under 0x1072, a KADABRA trader.
 # A LATIAS on our own cell (row 0, over the room's cache) is taken into the party, then
@@ -47,12 +48,13 @@ tap A
 wait 90
 tap A
 wait 60
-shot refused
-# no ask went out, and after the claim's ten seconds nothing has traded: he still has
-# his KADABRA and we still have both
+# the ask, and no host behind the harness: after BR_CLAIM_FRAMES the trade goes ahead
 wait 660
+shot traded
 expect u8 gPlayerPartyCount 2
 expect u16 gBrLoot+20 0x8C21
-expect u16 gBrLoot+26 64
+expect u16 gBrLoot+26 407
 expect u8 gBrLoot+31 1
+expectmsg 10 u16 1 0x8C21
+expectmsg 10 u16 4 407
 say trade legend ok
