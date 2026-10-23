@@ -187,7 +187,10 @@ test('a seat past pret\'s box but in the rows a phone shows is the ROM\'s own: a
       const emu = (window as unknown as EmuWindow).__hbr.emu;
       return { top: emu.read(at, 16), bottom: emu.read(at + 2, 16) };
     }, symbols.gBrFieldShown);
-    expect(shown, 'the page told the ROM the rows a portrait phone shows').toEqual({ top: 184, bottom: 152 });
+    // The rows the glass shows above the LCD, in eights, up to the ROM's 184; below, the
+    // ROM's 152 (more than the ring holds).
+    const lcdRow = await page.evaluate(() => (window as unknown as { __hbr: { field: { placement: { lcdRow: number } } } }).__hbr.field.placement.lcdRow);
+    expect(shown, 'the page told the ROM the rows a portrait phone shows').toEqual({ top: Math.min(184, Math.ceil(lcdRow / 8) * 8), bottom: 152 });
 
     await poke(row);
     await expect.poll(() => page.evaluate((base) => (window as unknown as EmuWindow).__hbr.emu.read(base + 9, 8), seat), {
