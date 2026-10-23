@@ -11,7 +11,7 @@ import { GBA_H, GBA_W, PATCH_MAP, PATCH_MAX, PATCH_SPRITE_IDS, PATCH_TAKEN_SIZE,
 import spritesData from './data/sprites.json';
 
 const TILE = 16;
-const SHEETS = spritesData as Record<string, { w: number; h: number }>;
+const SHEETS = spritesData as Record<string, { w: number; h: number; frames: number }>;
 
 /** What these need of the FieldView drawing them. */
 export interface Painter {
@@ -101,6 +101,115 @@ export function drawMarks(p: Painter, ctx: CanvasRenderingContext2D, marks: read
  *  BG1, a roof, a tree's crown) cut out of them, and that laid on. Past the picture the
  *  page drew a bot on a roof the ROM would have put him behind ("he is not obeying the
  *  Z index"). A cover still on its way covers nobody, and is drawn again when it lands. */
+/** At most this many people go to the core a frame (HBR-27). */
+const CORE_PEOPLE_MAX = 64;
+const CORE_HEADER = 8;
+const CORE_ENTRY = 16;
+
+/** The people the overlay drew past the ROM's objects, handed to the core instead
+ *  (HBR-27): it draws them into the picture among the BGs, so a roof or a treetop covers
+ *  them the way it covers the ROM's own (POK-443), the field's fade and weather tint take
+ *  them, and there is one picture instead of a canvas of people over it. The core's
+ *  layout is software-mode0.c GBAVideoSoftwareRendererDrawPeople's: each sprite at its
+ *  grid pixel (MAP_OFFSET in), so a person stands still on the map while the camera
+ *  moves on the next frame, with the frame's pixels as BGR555 (bit 15 drawn). */
+export class CorePeople {
+  /** Each sheet's pixels, BGR555 with bit 15 where drawn; null while its image is not in. */
+  private sheets = new Map<number, Uint16Array>();
+  private canvas: HTMLCanvasElement | null = null;
+  private sent = false;
+
+  private sheet(p: Painter, gfx: number, doc: Document | null): Uint16Array | null {
+    const have = this.sheets.get(gfx);
+    if (have) return have;
+    const img = p.image(String(gfx), 'field-sprites');
+    if (!img || !doc) return null;
+    this.canvas ??= doc.createElement('canvas');
+    const ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx || !img.naturalWidth) return null;
+    this.canvas.width = img.naturalWidth;
+    this.canvas.height = img.naturalHeight;
+    ctx.clearRect(0, 0, img.naturalWidth, img.naturalHeight);
+    ctx.drawImage(img, 0, 0);
+    const rgba = ctx.getImageData(0, 0, img.naturalWidth, img.naturalHeight).data;
+    const out = new Uint16Array(img.naturalWidth * img.naturalHeight);
+    for (let i = 0; i < out.length; i++) {
+      const o = i * 4;
+      if (rgba[o + 3] >= 128) out[i] = 0x8000 | (rgba[o] >> 3) | ((rgba[o + 1] >> 3) << 5) | ((rgba[o + 2] >> 3) << 10);
+    }
+    this.sheets.set(gfx, out);
+    return out;
+  }
+
+  /** Hand the core `sprites` (top-lefts in the picture's pixels), placed by where gBrWorld
+   *  says the LCD's top-left is on the grid, for the map gMapHeader has. Null when the
+   *  image lacks either (the overlay draws them), false while a sheet is still on its
+   *  way: the rest are sent, and the page asks again. */
+  send(p: Painter, emu: Emulator, sym: (name: string) => number | undefined, sprites: readonly FieldSprite[]): boolean | null {
+    const world = sym('gBrWorld');
+    const header = sym('gMapHeader');
+    if (world === undefined || header === undefined) {
+      this.clear(emu);
+      return null;
+    }
+    const s16 = (v: number) => (v << 16) >> 16;
+    const lcdX = s16(emu.read(world + 4, 16));
+    const lcdY = s16(emu.read(world + 6, 16));
+    const layout = emu.read(header, 32);
+    const doc = typeof document === 'undefined' ? null : document;
+    let complete = true;
+    // The first entry is in front: the lowest on the map first, a SURF blob behind all.
+    const order = sprites.slice().sort((a, b) => Number(!!a.under) - Number(!!b.under)
+      || (b.y + (SHEETS[String(b.gfx)]?.h ?? 0)) - (a.y + (SHEETS[String(a.gfx)]?.h ?? 0)));
+    const rows: { s: FieldSprite; info: { w: number; h: number; frames: number }; px: Uint16Array }[] = [];
+    for (const s of order) {
+      if (rows.length >= CORE_PEOPLE_MAX) break;
+      const info = SHEETS[String(s.gfx)];
+      const px = info ? this.sheet(p, s.gfx, doc) : null;
+      if (!info || !px || info.w > 255 || info.h > 255) { complete = false; continue; }
+      rows.push({ s, info, px });
+    }
+    if (rows.length === 0) {
+      if (this.sent) emu.setPeople(0);
+      this.sent = false;
+      return complete;
+    }
+    const pixelsAt = CORE_HEADER + rows.length * CORE_ENTRY;
+    const bytes = pixelsAt + rows.reduce((n, r) => n + r.info.w * r.info.h * 2, 0);
+    const buf = emu.peopleBuffer(bytes);
+    if (!buf) return complete;
+    const view = new DataView(buf.buffer, buf.byteOffset, bytes);
+    view.setUint32(0, layout >>> 0, true);
+    view.setUint32(4, rows.length, true);
+    let at = pixelsAt;
+    rows.forEach(({ s, info, px }, i) => {
+      const e = CORE_HEADER + i * CORE_ENTRY;
+      view.setInt16(e, lcdX + s.x, true);
+      view.setInt16(e + 2, lcdY + s.y, true);
+      view.setUint8(e + 4, info.w);
+      view.setUint8(e + 5, info.h);
+      view.setUint8(e + 6, (s.hFlip ? 1 : 0) | ((s.above ? 1 : 2) << 1));
+      view.setUint8(e + 7, 0);
+      view.setUint32(e + 8, at, true);
+      view.setUint32(e + 12, 0, true);
+      const frame = Math.min(s.frame, info.frames - 1);
+      const stride = info.w * info.frames;
+      for (let y = 0; y < info.h; y++) {
+        for (let x = 0; x < info.w; x++, at += 2) view.setUint16(at, px[y * stride + frame * info.w + x] ?? 0, true);
+      }
+    });
+    emu.setPeople(bytes);
+    this.sent = true;
+    return complete;
+  }
+
+  /** Nobody: off the field, or with the overlay drawing them again. */
+  clear(emu: Emulator): void {
+    if (this.sent) emu.setPeople(0);
+    this.sent = false;
+  }
+}
+
 export function drawCovered(p: Painter, ctx: CanvasRenderingContext2D, sprites: FieldSprite[], cover: { maps: readonly Reached[]; ox: number; oy: number }): boolean {
   const lay = p.layout();
   const under = sprites.filter((s) => !s.above);

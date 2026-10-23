@@ -312,6 +312,12 @@ declare namespace mGBA {
     /** The ROM's OAM side table at a byte offset into EWRAM, -1 for none (POK-329 band). */
     _brSetOamTable(offset: number): void;
     _brSetWorld(offset: number, grid: number, header: number, cb2: number, overworld: number, groups: number): void;
+    /** Hoenn BR (HBR-27): a heap buffer of at least `bytes` for the page's people, 0 if
+     *  none can be had. Growing it moves it and drops what was set. */
+    _brPeopleBuffer(bytes: number): number;
+    /** Hoenn BR (HBR-27): draw the first `bytes` of that buffer's people on the field
+     *  from the next frame on; 0 for nobody. */
+    _brSetPeople(bytes: number): void;
     /** Hoenn BR (POK-329): the sprite window the loaded core draws with, as
      *  `top << 16 | bottom`, or -1 for none (or no game loaded). */
     _brSpriteWindow(): number;

@@ -66,6 +66,10 @@ export interface CoreModule {
    *  from the LCD. Older cores lack it. */
   _brSetOamTable?(offset: number): void;
   _brSetWorld?(offset: number, grid: number, header: number, cb2: number, overworld: number, groups: number): void;
+  /** The people's heap buffer (HBR-27), at least `bytes` long; 0 if none. */
+  _brPeopleBuffer?(bytes: number): number;
+  /** Draw the buffer's first `bytes` of people on the field; 0 for nobody. */
+  _brSetPeople?(bytes: number): void;
   /** The window the loaded core draws with, `top << 16 | bottom`, or -1 for none. */
   _brSpriteWindow?(): number;
   /** The picture's ABGR8888 pixels in the heap -- the texture's top-left, the LCD at
@@ -291,6 +295,16 @@ export class Emulator {
     if (!world) this.m._brSetWorld(-1, 0, 0, 0, 0, 0);
     else this.m._brSetWorld(world.at - EWRAM_BASE, world.grid, world.header, world.cb2, world.overworld, world.groups);
     return world !== null;
+  }
+
+  /** `bytes` of the core's buffer for the page's people (HBR-27), null on a core without
+   *  one; setPeople(n) has it draw the first n of them from the next frame on. */
+  peopleBuffer(bytes: number): Uint8Array | null {
+    const at = this.m._brPeopleBuffer?.(bytes) ?? 0;
+    return at ? this.m.HEAPU8.subarray(at, at + bytes) : null;
+  }
+  setPeople(bytes: number): void {
+    this.m._brSetPeople?.(bytes);
   }
 
   /** The sprite window the band is drawn with, on every boot from now on (POK-329): the
