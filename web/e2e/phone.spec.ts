@@ -139,8 +139,10 @@ test('on an iPhone with its insets, the band the core draws covers every row the
       return { band: h.emu.viewport, top: p.lcdRow, bottom: p.rows - p.lcdRow - 160 };
     });
     expect(got.bottom, 'the iPhone shows a long way past the LCD').toBeGreaterThan(160);
+    // The boot measured the layout play has, to the row: the band is that layout's, in
+    // eights, with its tile of margin below (field.ts worldBand) still whole.
     expect(got.band.top, `the ${got.top} rows above the LCD`).toBeGreaterThanOrEqual(got.top);
-    expect(got.band.bottom, `the ${got.bottom} rows below it, to the glass's bottom`).toBeGreaterThanOrEqual(got.bottom);
+    expect(got.band.bottom, `the ${got.bottom} rows below it, to the glass's bottom, and a tile`).toBeGreaterThanOrEqual(got.bottom + 16);
     expect(got.band.top, '...and not much more above').toBeLessThan(got.top + 16);
     expect(got.band.bottom, '...nor below').toBeLessThan(got.bottom + 8 + 16 + 8);
     await page.screenshot({ path: path.join(OUT_DIR, 'phone-iphone-insets.png') });

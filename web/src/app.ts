@@ -1697,12 +1697,16 @@ function matchLayout(): FieldLayout {
   body.classList.toggle('docked', desktop());
   // The dock's size before the phone HUD's chunk fills it (HBR-57): its rows are --s
   // tall, and a boot measured with an empty dock put the LCD lower than play does.
-  ($('#screen-playing') as HTMLElement).style.setProperty('--s', String(padScale($('#pad') as HTMLElement)));
+  const root = $('#screen-playing') as HTMLElement;
+  const s = root.style.getPropertyValue('--s');
+  root.style.setProperty('--s', String(padScale($('#pad') as HTMLElement)));
   try {
     return measureLayout($('#screen-wrap') as HTMLElement, $('#pad') as HTMLElement, liveAbove());
   } finally {
     body.classList.toggle('in-match', was.inMatch);
     body.classList.toggle('docked', was.docked);
+    if (s) root.style.setProperty('--s', s);
+    else root.style.removeProperty('--s');
   }
 }
 

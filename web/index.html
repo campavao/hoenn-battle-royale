@@ -230,9 +230,10 @@
           justify-content: center;
           gap: calc(var(--s, 1.5) * 4px);
           padding: calc(var(--s, 1.5) * 4px) 0;
-          /* Two rows of DOCK_H (ui/phonehud.ts) and the gap, before the HUD fills it:
-             the boot measures the layout with it (HBR-57). */
-          min-height: calc(var(--s, 1.5) * 84px);
+          /* The dock's height before the HUD fills it, which the boot measures the layout
+             with (HBR-57): two rows of DOCK_H (ui/phonehud.ts), the gap and the padding,
+             border-box. */
+          min-height: calc(var(--s, 1.5) * 92px);
           pointer-events: auto;
         }
         .hud-btn { padding: 0; margin: 0; border: 0; background: none; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
