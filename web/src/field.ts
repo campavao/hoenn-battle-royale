@@ -640,9 +640,9 @@ export function askBand(lay: FieldLayout, rom: FieldPicture, wideOk = false): Ba
 /** The whole window's band (HBR-27, include/br/br_field.h): every column and row the
  *  layout shows past the LCD, in eights, up to what the core's row buffer and rows hold.
  *  A core given the ROM's world draws all of it from the map. The rows below get a tile
- *  more: the layout is measured before the match is up, and a portrait phone's LCD
- *  settles ten rows higher (lcdRow 184 measured, 174 shown), which left its bottom ten
- *  rows to the stills under the picture. */
+ *  more, as a margin rather than the settled placement: the layout is measured before
+ *  the match is up, and a portrait phone's LCD settles ten rows higher (lcdRow 184
+ *  measured, 174 shown), which left its bottom ten rows to the stills under the picture. */
 export const WORLD_SIDE_MAX = 512;
 export const WORLD_ROWS_MAX = 256;
 export function worldBand(lay: FieldLayout): Band {

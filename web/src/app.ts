@@ -1731,9 +1731,9 @@ function askForBand(emu: Emulator): void {
   fieldShown = shownOk
     ? { top: askedBand.top, bottom: askedBand.bottom, left: askedBand.left, right: askedBand.right }
     : null;
-  // `#world` (dev, the whole-window prototype): the core draws the whole layout from the
-  // ROM's map grid, past what the ring holds; the ROM keeps the ring it has for the band
-  // above, which the core still draws the LCD's sprites and its own rows from.
+  // The whole window (the default; `#ring` opts out): the core draws the whole layout
+  // from the ROM's map grid, past what the ring holds; the ROM keeps the ring it has for
+  // the band above, which the core still draws the LCD's sprites and its own rows from.
   worldOn = wantWorld() && emu.setWorld(worldAt);
   if (worldOn) askedBand = worldBand(matchLayout());
   emu.setViewport(askedBand);

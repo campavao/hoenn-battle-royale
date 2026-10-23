@@ -169,6 +169,7 @@ type Emu = {
   write(addr: number, value: number, width: 8 | 16 | 32): void;
   onFrame(fn: () => void): () => void;
   viewport: Band | null;
+  picture(): { width: number; height: number; left: number; top: number; data: Uint8Array } | null;
 };
 export type EmuWindow = { __hbr: { emu: Emu } };
 
@@ -317,7 +318,9 @@ export async function expectLayout(page: Page, want: { onField?: boolean }, what
     // The ring the ROM latched is the one the band asked for (field.ts reads the latch;
     // edgeCut takes it from the band).
     if (cam.wide !== null && cam.wide !== undefined) expect(cam.wide, `${what}: the ROM latched the ring the band asked for`).toBe(band.left > 0);
-    const cut = edgeCut(cam, band);
+    // With the whole window (the default; `#ring` is the ring band) nothing is cut.
+    const world = !(await page.evaluate(() => new URLSearchParams(location.hash.slice(1)).has('ring')));
+    const cut = world ? { left: 0, top: 0, right: 0, bottom: 0 } : edgeCut(cam, band);
     const [top, right, bottom, left] = inset!.map((v) => v / scale);
     expect({ top, right, bottom, left }, `${what}: the band shows on the field, less what is past the edge of ${cam.map} at ${JSON.stringify(cam)} (clip-path "${clip}")`)
       .toEqual({ top: expect.closeTo(cut.top, 0), right: expect.closeTo(cut.right, 0), bottom: expect.closeTo(cut.bottom, 0), left: expect.closeTo(cut.left, 0) });
@@ -642,7 +645,10 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         // Off the field the whole band is cut; on it, what lies past the edge of the map
         // the picture was drawn on (POK-329).
         if (band && (!onField || before)) {
-          const want = onField && before ? edgeCut(before, band) : band;
+          // With the whole window (the default; `#ring` is the ring band) the core draws
+          // the map past every edge, and nothing is cut on the field.
+          const world = !new URLSearchParams(location.hash.slice(1)).has('ring');
+          const want = onField && before ? (world ? { left: 0, top: 0, right: 0, bottom: 0 } : edgeCut(before, band)) : band;
           const sc = r.width / lcd.width;
           const got = insetOf(lcd.style.clipPath);
           const ok = !!got && [want.top, want.right, want.bottom, want.left].every((v, i) => Math.abs(got[i] / sc - v) < 0.5);
@@ -689,8 +695,19 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
               log.seen.full++;
               const up = (v: number) => (v << 3) | (v >> 2);
               const want = [up(faded & 31), up((faded >> 5) & 31), up((faded >> 10) & 31)];
-              if (!px.every((p) => p.slice(0, 3).every((v, i) => Math.abs(v - want[i]) <= 8))) {
-                fail('unfaded', `map ${map} shows under a whole fade to ${faded.toString(16)}${fast ? ' (fast)' : fastCut ? ' (a fast fade ended before it began)' : fastEnd ? ' (a fast fade ended)' : ''}: corners ${JSON.stringify(px.map((p) => p.slice(0, 3)))}`);
+              // What the window shows there: with the whole window (nothing cut) the core's
+              // picture covers the field canvas wherever it reaches, and draws the fade
+              // itself, so that is what is held to it (a copy of the picture: only here).
+              const pic = new URLSearchParams(location.hash.slice(1)).has('ring') ? null : emu.picture();
+              const shown = pts.map(([x, y], j) => {
+                const qx = x - lx + (pic?.left ?? 0);
+                const qy = y - ly + (pic?.top ?? 0);
+                if (!pic || qx < 0 || qy < 0 || qx >= pic.width || qy >= pic.height) return px[j];
+                const i = 4 * (qy * pic.width + qx);
+                return Array.from(pic.data.subarray(i, i + 4));
+              });
+              if (!shown.every((p) => p.slice(0, 3).every((v, i) => Math.abs(v - want[i]) <= 8))) {
+                fail('unfaded', `map ${map} shows under a whole fade to ${faded.toString(16)}${fast ? ' (fast)' : fastCut ? ' (a fast fade ended before it began)' : fastEnd ? ' (a fast fade ended)' : ''}: corners ${JSON.stringify(shown.map((p) => p.slice(0, 3)))}`);
               }
             }
             if (black) log.seen.black++;
