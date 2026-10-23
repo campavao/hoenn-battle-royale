@@ -8,10 +8,8 @@
 // trainer's team or one released is a ball like any other.
 
 import type { EventMsg, Msg } from '../net/wire';
+import { isEventKey } from './events';
 import { short } from './ticker';
-
-/** BR_LOOT_KEY_NOBODY (include/br/br_loot.h): the match's own pieces. */
-const KEY_NOBODY = 0x8000;
 
 /** `sLegends` in br_legend.c: species -> the graphics id it stands as. parity.test.ts pins
  *  it to the C. */
@@ -31,9 +29,10 @@ export const LEGEND_GFX: ReadonlyMap<number, number> = new Map([
 ]);
 
 /** The sprite a piece on the ground stands as when it is a legendary to fight, else
- *  undefined (br_legend.c's BrLegend_Gfx). */
+ *  undefined (br_legend.c's BrLegend_Gfx: an event's key only). Not a trader holding one he
+ *  was given (Cam, 2026-10-23: a legendary trades like any mon): the ROM draws him as himself. */
 export function legendGfx(key: number, species: number): number | undefined {
-  return key & KEY_NOBODY ? LEGEND_GFX.get(species) : undefined;
+  return isEventKey(key) ? LEGEND_GFX.get(species) : undefined;
 }
 
 /** The legendary chip beside the game (Cam's 2026-10-19 play-test: "because of how noisy

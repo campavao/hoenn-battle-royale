@@ -22,7 +22,6 @@ import { pageCell, toRom, type PageCell } from './space';
 import { PROTOCOL, type MapRef, type Msg, type Outcome, type PackedMon, type SpillMsg } from '../net/wire';
 import { spillCells } from '../match/loot';
 import { isEventKey } from '../match/events';
-import { LEGEND_GFX } from '../match/legends';
 
 /** One tile per walk animation, whatever the host's tab is doing.
  *
@@ -1697,9 +1696,8 @@ export class Bots {
     );
     if (!t) return false;
     let slot = -1;
-    // Never a legendary (br_event.c refuses one): he would offer it to everyone after.
     walker.party.forEach((mon, i) => {
-      if (mon.hp > 0 && !LEGEND_GFX.has(mon.species) && (slot < 0 || mon.hp < walker.party[slot].hp)) slot = i;
+      if (mon.hp > 0 && (slot < 0 || mon.hp < walker.party[slot].hp)) slot = i;
     });
     if (slot < 0) return false;
     this.tradedKeys.add(t.key);

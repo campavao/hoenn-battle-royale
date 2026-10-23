@@ -1282,12 +1282,10 @@ void BrLoot_HomeClaim(void)
     gSpecialVar_Result = FALSE;
     if (it == NULL || !OnCurrentMap(it) || !BrWire_CanHold(BR_PICKUP_LEN))
         return;
-    // Asked only for a trade HomeTrade will make: a cancel, a fainted one or a legendary (which
-    // BrEvent_Swap refuses) never uses him up.
+    // Asked only for a trade HomeTrade will make: a cancel or a fainted one never uses him up.
     if (BrBalls_Trades(it->key)
         && (slot >= PARTY_SIZE || GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL) == SPECIES_NONE
-            || GetMonData(&gPlayerParty[slot], MON_DATA_HP, NULL) == 0
-            || BrLegend_Is(GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL))))
+            || GetMonData(&gPlayerParty[slot], MON_DATA_HP, NULL) == 0))
         return;
     taskId = CreateTask(Task_HomeClaim, 80);
     if (taskId == TASK_NONE)

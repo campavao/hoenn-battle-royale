@@ -16,7 +16,6 @@
 #include "constants/vars.h"
 #include "br/br_balls.h"
 #include "br/br_items.h"
-#include "br/br_legend.h"
 #include "br/br_loot.h"
 #include "br/br_match.h"
 
@@ -692,8 +691,7 @@ bool8 BrBalls_NoteHolds(u16 key, u16 species)
     u16 i;
     u16 here = (gSaveBlock1Ptr->location.mapGroup << 8) | gSaveBlock1Ptr->location.mapNum;
 
-    // Never a legendary: a trader offers what he holds to everyone after (#9).
-    if (!BrBalls_Trades(key) || species == SPECIES_NONE || species >= NUM_SPECIES || BrLegend_Is(species))
+    if (!BrBalls_Trades(key) || species == SPECIES_NONE || species >= NUM_SPECIES)
         return FALSE;
     if (key >= BR_LOOT_KEY_FLOOR_TRADER(0))
     {
