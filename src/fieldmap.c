@@ -16,6 +16,9 @@
 #include "tv.h"
 #include "constants/rgb.h"
 #include "constants/metatile_behaviors.h"
+#if BR
+#include "br/br_field.h"
+#endif
 
 struct ConnectionFlags
 {
@@ -626,6 +629,9 @@ bool8 CameraMove(s32 x, s32 y)
         gCamera.y = old_y - gSaveBlock1Ptr->pos.y;
         gSaveBlock1Ptr->pos.x += x;
         gSaveBlock1Ptr->pos.y += y;
+#if BR
+        BrField_CameraMoved();
+#endif
         MoveMapViewToBackup(direction);
     }
     return gCamera.active;

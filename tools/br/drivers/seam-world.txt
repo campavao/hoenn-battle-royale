@@ -1,0 +1,34 @@
+# seam-world: gBrWorld's LCD anchor on the VBlank that lands mid-step over a map seam
+# (HBR-58). The core draws the band past the LCD from gBrWorld and the backup grid; a
+# VBlank inside CameraUpdate publishes gBrWorld while pos and the ring slot disagree.
+# Over a seam the grid is the new map's from the load on, so the anchor has to be in the
+# new map's frame there, not the step's start.
+#
+# seam-midframe's walk: MAUVILLE CITY (0:2) at (16,16), DOWN out the south gap into
+# ROUTE 110 (0:25); 25 frames of DOWN put a VBlank inside the load.
+# checked-by: tools/br/seam-world.py
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 02 10 00 10 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 2
+hold DOWN 24
+say before
+dump gBrWorld 8
+dump *gSaveBlock1Ptr 6
+hold DOWN 1
+expect u8 gBrMidFrame 1
+say mid
+dump gBrWorld 8
+dump *gSaveBlock1Ptr 6
+hold DOWN 1
+say mid2
+dump gBrWorld 8
+dump *gSaveBlock1Ptr 6
+hold DOWN 1
+say after
+dump gBrWorld 8
+dump *gSaveBlock1Ptr 6
+hold DOWN 1
+say after2
+dump gBrWorld 8
+dump *gSaveBlock1Ptr 6

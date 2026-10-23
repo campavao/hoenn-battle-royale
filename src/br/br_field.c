@@ -26,6 +26,8 @@ EWRAM_DATA u32 gBrRingStale = 0;
 // A step right's far column, pos.x + 15, likewise: its slot is the band's left edge
 // until the step completes.
 static u8 sFarColumnPending;
+// HBR-58: the camera is between BrField_CameraStep and the end of CameraUpdate.
+static bool8 sCameraStepping;
 // This frame's step drew its slices: stale rows wait for a frame with less to do.
 static u8 sSliced;
 // THE WIDE RING (br_field.h): the BGs are 512x256, latched by BrField_InitRingBgs. Its
@@ -316,6 +318,7 @@ void BrField_Tick(void)
     u8 budget = ROWS_A_FRAME;
     u32 rows;
 
+    sCameraStepping = FALSE;
     if (gBrFieldWide)
     {
         WideTick();
@@ -938,6 +941,15 @@ void BrField_ShareObjects(u8 *ghosts, u8 *loot)
 // ---- THE WHOLE WINDOW (br_field.h) ----
 
 EWRAM_DATA struct BrWorld gBrWorld = {0};
+// The step under way (HBR-58): pos and the ring slot at its start, its direction, and
+// whether CameraMove has stepped pos over a seam (BrField_CameraMoved).
+static s16 sStepX;
+static s16 sStepY;
+static s8 sStepDx;
+static s8 sStepDy;
+static u8 sStepTileX;
+static u8 sStepTileY;
+static bool8 sStepMovedOverSeam;
 
 // A 9-bit scroll's distance, in [-256, 256).
 static s32 ScrollDistance(u32 v)
@@ -945,10 +957,46 @@ static s32 ScrollDistance(u32 v)
     return (s32)((v & 0x1FF) ^ 0x100) - 0x100;
 }
 
+void BrField_CameraStep(s32 dx, s32 dy, u8 xTileOffset, u8 yTileOffset)
+{
+    sCameraStepping = TRUE;
+    sStepMovedOverSeam = FALSE;
+    sStepX = gSaveBlock1Ptr->pos.x;
+    sStepY = gSaveBlock1Ptr->pos.y;
+    sStepDx = dx;
+    sStepDy = dy;
+    sStepTileX = xTileOffset;
+    sStepTileY = yTileOffset;
+}
+
+void BrField_CameraMoved(void)
+{
+    sStepMovedOverSeam = TRUE;
+}
+
+// One axis of the pos the ring slot `tile` stands for. Mid-step, once CameraMove has
+// added the step to pos and before AddCameraTileOffset has moved the slot, that is pos
+// less the step. Over a seam CameraMove first puts pos in the new map's frame, unstepped,
+// against the new map's grid, and adds the step after the load: it says so then.
+static s16 StepPos(s16 pos, s16 start, s8 d, u8 tile, u8 startTile)
+{
+    if (d != 0 && tile == startTile && (sStepMovedOverSeam || pos == start + d))
+        return pos - d;
+    return pos;
+}
+
 void BrField_PublishWorld(u16 hofs, u16 vofs, u8 xTileOffset, u8 yTileOffset)
 {
+    s16 x = gSaveBlock1Ptr->pos.x;
+    s16 y = gSaveBlock1Ptr->pos.y;
+
+    if (sCameraStepping)
+    {
+        x = StepPos(x, sStepX, sStepDx, xTileOffset, sStepTileX);
+        y = StepPos(y, sStepY, sStepDy, yTileOffset, sStepTileY);
+    }
     gBrWorld.hofs = hofs;
     gBrWorld.vofs = vofs;
-    gBrWorld.lcdX = gSaveBlock1Ptr->pos.x * 16 + ScrollDistance(hofs - xTileOffset * 8);
-    gBrWorld.lcdY = gSaveBlock1Ptr->pos.y * 16 + ScrollDistance(vofs - yTileOffset * 8);
+    gBrWorld.lcdX = x * 16 + ScrollDistance(hofs - xTileOffset * 8);
+    gBrWorld.lcdY = y * 16 + ScrollDistance(vofs - yTileOffset * 8);
 }

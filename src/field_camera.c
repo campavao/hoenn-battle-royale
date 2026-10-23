@@ -443,6 +443,9 @@ void CameraUpdate(void)
 
     if (deltaX != 0 || deltaY != 0)
     {
+#if BR
+        BrField_CameraStep(deltaX, deltaY, sFieldCameraOffset.xTileOffset, sFieldCameraOffset.yTileOffset);
+#endif
         CameraMove(deltaX, deltaY);
         UpdateObjectEventsForCameraUpdate(deltaX, deltaY);
         RotatingGatePuzzleCameraUpdate(deltaX, deltaY);
