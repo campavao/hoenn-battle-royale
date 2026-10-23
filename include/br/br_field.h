@@ -402,9 +402,12 @@ extern struct BrWorld gBrWorld;
 // field_camera.c, FieldUpdateBgTilemapScroll: the scroll it writes, and the ring slot of
 // pos it was written for.
 void BrField_PublishWorld(u16 hofs, u16 vofs, u8 xTileOffset, u8 yTileOffset);
-// field_camera.c, CameraUpdate: a step is under way. FieldUpdateBgTilemapScroll runs in
-// the VBlank, which on a lag frame lands inside CameraUpdate, between CameraMove's pos and
-// AddCameraTileOffset's ring slot; BrField_Tick ends the step.
-void BrField_CameraStep(void);
+// field_camera.c, CameraUpdate: a step of (dx, dy) metatiles starts, from ring slot
+// (xTileOffset, yTileOffset). FieldUpdateBgTilemapScroll runs in the VBlank, which on a
+// lag frame lands inside CameraUpdate, between CameraMove's pos and AddCameraTileOffset's
+// slot (HBR-58); BrField_Tick clears the step at the end of CameraUpdate.
+void BrField_CameraStep(s32 dx, s32 dy, u8 xTileOffset, u8 yTileOffset);
+// fieldmap.c, CameraMove: over a seam, the step is added to pos (in the new map's frame).
+void BrField_CameraMoved(void);
 
 #endif // GUARD_BR_FIELD_H
