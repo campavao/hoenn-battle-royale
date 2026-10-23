@@ -887,7 +887,7 @@ describe('the picture in the box', () => {
 
 describe('a field canvas in error state', () => {
   it("throws, reallocates its store, and draws whole again (Firefox's \"Canvas is already in error state\")", () => {
-    const emu = { viewport: null, boots: 1 };
+    const emu = { viewport: null, boots: 1, worldDrawn: () => null };
     const lcd = { width: 240, height: 160, style: {} };
     const widths: number[] = [];
     let w = 0;
