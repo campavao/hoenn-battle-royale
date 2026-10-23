@@ -1458,8 +1458,28 @@ static void HandleFollow(const u8 *payload, u8 len)
 }
 
 // How long a warp to the followed seat's map has to reach its map load before it is
-// asked for again: its fade and the old map's music take about a second between them.
+// asked for again.
 #define BR_FOLLOW_WARP_FRAMES 120
+
+// A cut, not a walk through a door (10-20 play-test, HBR-42: "swapping between players
+// should be instant"): no fade out, no wait for the old map's music, no SE_EXIT, and the
+// new map comes up at full light. DoWarp's fade and music took about a second of black.
+static void FieldCB_FollowArrive(void)
+{
+    Overworld_PlaySpecialMapMusic();
+}
+
+static void CutToSeat(const struct BrSeat *them)
+{
+    // Warp coords carry no MAP_OFFSET; the roster's do, the way an object event holds
+    // them.
+    SetWarpDestination(them->mapGroup, them->mapNum, WARP_ID_NONE,
+        them->x - MAP_OFFSET, them->y - MAP_OFFSET);
+    CloseWatchMenu();
+    gFieldCallback = FieldCB_FollowArrive;
+    WarpIntoMap();
+    SetMainCallback2(CB2_LoadMap);
+}
 
 // Each frame while following: get onto their map, then ride their ghost. The camera
 // object tracks a sprite's movement rather than jumping to it, so the warp is what
@@ -1523,28 +1543,36 @@ static void FollowTick(void)
         return;
     // On our map, or across one of its seams (BrGhosts_LocalPos): their ghost walks over
     // it and the camera with it, rather than a warp and a fade at every route's end.
-    if (!BrGhosts_LocalPos(gBrSpectate.follow, &x, &y)
-     || (them->objId == BR_NO_OBJ && !BrField_InObjectView(x, y)))
+    if (BrGhosts_LocalPos(gBrSpectate.follow, &x, &y)
+     && them->objId == BR_NO_OBJ && !BrField_InObjectView(x, y))
     {
-        // One warp at a time (POK-247). DoWarp only starts the errand: its task waits
-        // out the fade and the old map's music, then loads the map -- and this runs
-        // before that task every frame. Asked again each frame, it started a new fade the
-        // frame the last one finished, so the task never saw one finished, and it played
-        // SE_EXIT again every frame: a player who was out, watching somebody on another
-        // map, sat on a black screen with the sound chopped at 60 Hz. The latch lets go
-        // at the map load, or after BR_FOLLOW_WARP_FRAMES if the warp never got going.
+        // On our map but past the box the engine keeps objects in: no ghost to ride yet.
+        // The camera jumps there, the box with it, and their ghost spawns in it next
+        // frame -- where a warp blacked the screen out to land on the map we were on.
+        // A camera still scrolling after the last ghost is let finish its step first.
+        gBrSpectate.warpWait = 0;
+        if (gFieldCamera.x == 0 && gFieldCamera.y == 0)
+        {
+            BrSpectate_LetGo();
+            BrField_MoveCamera(x - (gSaveBlock1Ptr->pos.x + MAP_OFFSET), y - (gSaveBlock1Ptr->pos.y + MAP_OFFSET));
+        }
+        return;
+    }
+    if (!BrGhosts_LocalPos(gBrSpectate.follow, &x, &y))
+    {
+        // One warp at a time (POK-247). When this was DoWarp, its task waited out the
+        // fade and the old map's music while this ran every frame; asked again each
+        // frame, it started a new fade the frame the last one finished and played
+        // SE_EXIT at 60 Hz. The cut loads at once now, but the latch stays: it lets go
+        // at the map load, or after BR_FOLLOW_WARP_FRAMES if the load never got going.
         if (gBrSpectate.warpWait != 0)
         {
             gBrSpectate.warpWait--;
             return;
         }
-        // They are somewhere else: go there. Warp coords carry no MAP_OFFSET; the
-        // roster's do, the way an object event holds them.
+        // They are somewhere else: go there.
         gBrSpectate.followed = 0;
-        SetWarpDestination(them->mapGroup, them->mapNum, WARP_ID_NONE,
-            them->x - MAP_OFFSET, them->y - MAP_OFFSET);
-        CloseWatchMenu();
-        DoWarp();
+        CutToSeat(them);
         gBrSpectate.warpWait = BR_FOLLOW_WARP_FRAMES;
         return;
     }

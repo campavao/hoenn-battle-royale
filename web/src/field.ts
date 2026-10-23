@@ -1363,7 +1363,7 @@ export class FieldView {
       const stood = still === null ? [] : still.sprites.map((s) => ({
         ...s, x: s.x + still.origin.left - origin.left, y: s.y + still.origin.top - origin.top, hidden: false,
       }));
-      const drawn = outdoors ? this.walkers.sprites(c, origin, () => true, false, this.wetOn(c)) : [];
+      const drawn = outdoors ? [...this.walkers.sprites(c, origin, () => true, false, this.wetOn(c)), ...this.nextDoor(c, origin, () => true, false)] : [];
       this.ghosts = { rom: [], drawn };
       return [...stood, ...drawn];
     }
@@ -1379,8 +1379,9 @@ export class FieldView {
     // Inside the box the ROM walks them; and one it still holds an object for is its,
     // wherever the roster has already put it.
     const pos = { x: c.x, y: c.y };
+    const ours = (seat: number) => live.has(objectKey(GHOST_LOCAL_ID_BASE + seat, c.num, c.group));
     const drawn = outdoors
-      ? this.walkers.sprites(c, origin, (seat, x, y) => !inObjectView(pos, x, y) && !live.has(objectKey(GHOST_LOCAL_ID_BASE + seat, c.num, c.group)), true, wet)
+      ? [...this.walkers.sprites(c, origin, (seat, x, y) => !inObjectView(pos, x, y) && !ours(seat), true, wet), ...this.nextDoor(c, origin, (seat, x, y) => !inObjectView(pos, x, y) && !ours(seat), true)]
       : [];
     // gBrSeats' standing copy past the box is the page's drawing, not an object of the ROM's.
     this.ghosts = { rom: objects.filter((s) => s.seat !== undefined), drawn: [...dropped.filter((s) => s.seat !== undefined), ...drawn] };
@@ -1388,6 +1389,24 @@ export class FieldView {
     const extra = this.extra;
     if (map && extra) for (const s of [...dropped, ...drawn]) if (extra.standsAbove(map, s, origin)) s.above = true;
     return [...rom, ...drawn];
+  }
+
+  /** The walkers on the maps joined to ours, which the picture shows past our map's edge
+   *  (HBR-42, 10-20 play-test: watching one player, another just below them on the next
+   *  map was drawn by nobody). `keep` gets the cell in our map's numbers, so on the field
+   *  it leaves the ROM's box to the ROM: the overlay is over the picture, and a walker
+   *  painted there would stand on the menus and over roofs and tall grass. While
+   *  spectating the ROM spawns ghosts across a seam (br_ghosts.c LocalPos); playing, a
+   *  next-door walker inside the box stays undrawn until the core draws people (HBR-27). */
+  private nextDoor(c: { group: number; num: number }, origin: { left: number; top: number }, keep: (seat: number, x: number, y: number) => boolean, hidden: boolean): FieldSprite[] {
+    const map = HOENN.byRef.get(`${c.group}:${c.num}`);
+    if (!map) return [];
+    const out: FieldSprite[] = [];
+    for (const n of neighbours(map, HOENN.byId)) {
+      if (!n.map.outdoor) continue;
+      out.push(...this.walkers.sprites(n.map, { left: origin.left - n.x, top: origin.top - n.y }, (seat, x, y) => keep(seat, x + n.x / TILE, y + n.y / TILE), hidden));
+    }
+    return out;
   }
 
   /** objectKey of every active object. */

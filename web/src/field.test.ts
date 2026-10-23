@@ -1126,6 +1126,24 @@ describe('the people the ROM let go of reach the overlay (POK-318)', () => {
     expect(p.seats, 'the roster reached the walkers all the same').toEqual([2]);
   });
 
+  // HBR-42 (10-20 play-test): watching a player on Route 101, another one just south of
+  // them in Littleroot was on screen and drawn by nobody.
+  it('a walker on a map joined to ours is drawn past our edge, where that map sits', () => {
+    const route = HOENN.byId.get('MAP_ROUTE101')!;
+    const town = HOENN.byId.get('MAP_LITTLEROOT_TOWN')!;
+    const r = ram(route);
+    // We stand at (20, 20); Littleroot's (10, 2) is Route 101's (10, 22).
+    const drawn = r.step([rowAt(town, 2, 10 + 7, 2 + 7)]).sprites.filter((s) => s.seat === 2);
+    expect(drawn).toEqual([{ gfx: SKIN_GFX[0], frame: 0, hFlip: false, x: 112 - 10 * 16, y: 56 + 2 * 16, hidden: true, seat: 2 }]);
+    // ...and a map that is not joined to ours draws nobody.
+    const far = HOENN.byId.get('MAP_SLATEPORT_CITY')!;
+    expect(r.step([rowAt(far, 3, 10 + 7, 2 + 7)]).sprites.filter((s) => s.seat === 3)).toEqual([]);
+    // Two tiles east, Littleroot's (12, 2) is inside the ROM's box: the overlay is over the
+    // picture, so painted there it would stand on the menus and over the roofs. It is the
+    // ROM's (it spawns one across a seam while spectating), so the page leaves it.
+    expect(r.step([rowAt(town, 4, 12 + 7, 2 + 7)]).sprites.filter((s) => s.seat === 4)).toEqual([]);
+  });
+
   it("on the field a walker inside the box, or one whose ghost the ROM still has an object for, is the ROM's", () => {
     const map = HOENN.maps.find((m) => m.outdoor)!;
     const r = ram(map);

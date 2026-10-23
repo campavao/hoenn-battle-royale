@@ -1,0 +1,34 @@
+# spectate-follow-jump: following a seat on our own map but past the object box jumps the
+# camera there, with no warp (HBR-42, 10-20 play-test: "swapping between players should be
+# instant"). FollowTick used to DoWarp to the map we were already on -- a fade to black, the
+# map's music and SE_EXIT, a second of black -- because no ghost had spawned out there.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 9
+# seat 1 placed in LITTLEROOT's far corner (19, 19) -- 26, 26 with MAP_OFFSET -- facing
+# south, fourteen tiles east and eleven south of us: past the box
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 1A 00 1A 00 01 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 10
+expect u8 gBrSeats+16 1
+expect u8 gBrSeats+25 0xFF
+shot before
+# FOLLOW seat 1
+pokebytes gBrMailbox+0x1058 14 04 01 00 00 01
+poke u16 gBrMailbox+0x0C 2
+wait 4
+# still on LITTLEROOT, no warp latched, and the view is on their cell already
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 9
+expect u8 gBrSpectate+14 0
+expect u16 *gSaveBlock1Ptr+0 19
+expect u16 *gSaveBlock1Ptr+2 19
+shot jumped
+# their ghost spawns in the box that came with the view, and the camera rides it
+wait 20
+expectge u8 gBrSpectate+9 1
+expect u8 *gSaveBlock1Ptr+5 9
+shot following
+say spectate follow jump ok

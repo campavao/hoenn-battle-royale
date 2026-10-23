@@ -69,6 +69,10 @@ test('left and right on the D-pad flip who an eliminated player watches', async 
     });
     await watcher.evaluate((seat) => (window as unknown as Dev).__br.watch(seat), hostSeat);
     await expect.poll(follow, { timeout: 15_000, message: 'following the host' }).toBe(hostSeat);
+    // Following them cuts straight to their map (HBR-42): a press while that map loads is
+    // nobody's, as it is on a phone, so the thumb goes down once the field is back.
+    const onField = () => watcher.evaluate(([main, cb2]) => ((window as unknown as Dev).__br.mailbox.ram.read(main + 4, 32) & ~1) === cb2, [symbols.gMain, symbols.CB2_Overworld & ~1]);
+    await expect.poll(onField, { timeout: 15_000, message: 'back on the field' }).toBe(true);
 
     // RIGHT: the next one still in. Held for a while, as a thumb does: one step, not one a repeat.
     await watcher.keyboard.down('ArrowRight');
@@ -76,7 +80,7 @@ test('left and right on the D-pad flip who an eliminated player watches', async 
     await watcher.keyboard.up('ArrowRight');
     await expect.poll(watching, { message: 'RIGHT is NEXT' }).toBe(guestSeat);
     await expect.poll(follow, { timeout: 15_000, message: "and the ROM's camera went with it" }).toBe(guestSeat);
-    await watcher.waitForTimeout(3000); // the camera's warp onto their map
+    await watcher.waitForTimeout(1000); // the cut onto their map
     await watcher.screenshot({ path: path.join(OUT_DIR, 'spectate-dpad-right.png') });
 
     // LEFT: back round.

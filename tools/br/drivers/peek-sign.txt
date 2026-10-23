@@ -18,8 +18,9 @@ poke u16 gBrMailbox+0x0C 1
 wait 10
 pokebytes gBrMailbox+0x1058 14 04 01 00 00 01
 poke u16 gBrMailbox+0x0C 2
-# On ROUTE 101 with its sign still to come: open the box before it prints
-wait 100
+# On ROUTE 101 with its sign still to come: open the box before it prints. The follow
+# is a cut now, not a fade warp (HBR-42), so the sign comes about 40 frames in, not 100+
+wait 20
 expect u8 *gSaveBlock1Ptr+5 0x10
 tap SELECT
 wait 2

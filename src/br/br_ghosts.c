@@ -169,10 +169,18 @@ static bool8 AcrossConnection(u8 mapGroup, u8 mapNum, s16 *x, s16 *y)
     return FALSE;
 }
 
-// Where a seat stands in this map's coordinates. Its own, on this map; and the seat a
-// spectator rides keeps a ghost across a seam too (2026-10-06 play-test: a bot walking
-// out of Rustboro "teleported" into Route 116). It walks over the seam the way a player
-// does, the camera with it, and the camera's own crossing loads the next map.
+// Where a seat stands in this map's coordinates. Its own, on this map; and while
+// spectating, everybody across a seam too. The seat a spectator rides walks over the seam
+// the way a player does, the camera with it, and the camera's own crossing loads the next
+// map (2026-10-06 play-test: a bot walking out of Rustboro "teleported" into Route 116);
+// the rest are drawn where the screen shows them (HBR-42, 10-20 play-test: one just below
+// the watched player, on the next map, was drawn by nobody). A spectator fights nobody,
+// so a ghost on another map's cell engages nothing.
+static bool8 Spectating(void)
+{
+    return gBrSpectate.follow != BR_NO_SEAT;
+}
+
 static bool8 LocalPos(u8 seat, s16 *x, s16 *y)
 {
     const struct BrSeat *s = &gBrSeats[seat];
@@ -181,7 +189,7 @@ static bool8 LocalPos(u8 seat, s16 *x, s16 *y)
     *y = s->y;
     if (OnCurrentMap(s))
         return TRUE;
-    return seat == gBrSpectate.follow && AcrossConnection(s->mapGroup, s->mapNum, x, y);
+    return Spectating() && AcrossConnection(s->mapGroup, s->mapNum, x, y);
 }
 
 bool8 BrGhosts_LocalPos(u8 seat, s16 *x, s16 *y)
@@ -567,7 +575,7 @@ static bool8 CrossedSeam(u8 seat, u8 mapGroup, u8 mapNum, s16 x, s16 y)
     s16 ox, oy, nx = x, ny = y;
     u8 dir;
 
-    if (seat != gBrSpectate.follow || !s->present || GhostObject(seat) == NULL)
+    if (!Spectating() || !s->present || GhostObject(seat) == NULL)
         return FALSE;
     if (mapGroup == s->mapGroup && mapNum == s->mapNum)
         return FALSE;
