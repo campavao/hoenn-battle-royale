@@ -26,6 +26,8 @@ EWRAM_DATA u32 gBrRingStale = 0;
 // A step right's far column, pos.x + 15, likewise: its slot is the band's left edge
 // until the step completes.
 static u8 sFarColumnPending;
+// HBR-58: the camera is between CameraMove and the end of CameraUpdate (BrField_CameraStep).
+static bool8 sCameraStepping;
 // This frame's step drew its slices: stale rows wait for a frame with less to do.
 static u8 sSliced;
 // THE WIDE RING (br_field.h): the BGs are 512x256, latched by BrField_InitRingBgs. Its
@@ -316,6 +318,7 @@ void BrField_Tick(void)
     u8 budget = ROWS_A_FRAME;
     u32 rows;
 
+    sCameraStepping = FALSE;
     if (gBrFieldWide)
     {
         WideTick();
@@ -938,6 +941,11 @@ void BrField_ShareObjects(u8 *ghosts, u8 *loot)
 // ---- THE WHOLE WINDOW (br_field.h) ----
 
 EWRAM_DATA struct BrWorld gBrWorld = {0};
+// The pos and ring slot gBrWorld was last written from off a step (HBR-58).
+static s16 sWorldPosX;
+static s16 sWorldPosY;
+static u8 sWorldTileX;
+static u8 sWorldTileY;
 
 // A 9-bit scroll's distance, in [-256, 256).
 static s32 ScrollDistance(u32 v)
@@ -945,10 +953,24 @@ static s32 ScrollDistance(u32 v)
     return (s32)((v & 0x1FF) ^ 0x100) - 0x100;
 }
 
+void BrField_CameraStep(void)
+{
+    sCameraStepping = TRUE;
+}
+
 void BrField_PublishWorld(u16 hofs, u16 vofs, u8 xTileOffset, u8 yTileOffset)
 {
+    // Mid-step, pos has moved a metatile and the ring slot has not yet: the old pair,
+    // which puts the LCD where the new one will once both have moved (HBR-58).
+    if (!sCameraStepping)
+    {
+        sWorldPosX = gSaveBlock1Ptr->pos.x;
+        sWorldPosY = gSaveBlock1Ptr->pos.y;
+        sWorldTileX = xTileOffset;
+        sWorldTileY = yTileOffset;
+    }
     gBrWorld.hofs = hofs;
     gBrWorld.vofs = vofs;
-    gBrWorld.lcdX = gSaveBlock1Ptr->pos.x * 16 + ScrollDistance(hofs - xTileOffset * 8);
-    gBrWorld.lcdY = gSaveBlock1Ptr->pos.y * 16 + ScrollDistance(vofs - yTileOffset * 8);
+    gBrWorld.lcdX = sWorldPosX * 16 + ScrollDistance(hofs - sWorldTileX * 8);
+    gBrWorld.lcdY = sWorldPosY * 16 + ScrollDistance(vofs - sWorldTileY * 8);
 }
