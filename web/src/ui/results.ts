@@ -171,12 +171,12 @@ function paintCards(c: EmeraldCanvas, y: number, cards: readonly FameCard[], ope
  *  summary leads with. */
 function paintSummary(c: EmeraldCanvas, y: number, card: FameCard): { bottom: number; widgets: Widget[] } {
   const top = y;
-  const box = { x: 8, y, w: W - 16, h: PIC + 12 };
+  const box = { x: 0, y, w: W, h: PIC + 16 };
   c.drawFrame(box);
-  c.drawUiPicture(monPic(card), 0, 0, PIC, PIC, box.x + 6, box.y + 6);
-  const tx = box.x + PIC + 14;
+  c.drawUiPicture(monPic(card), 0, 0, PIC, PIC, box.x + 8, box.y + 8);
+  const tx = box.x + PIC + 16;
   const lines = [card.kind ?? '', `Lv${card.level}`, card.maxHp > 0 ? `HP ${card.hp}/${card.maxHp}` : '', card.shiny ? 'Shiny' : ''].filter(Boolean);
-  lines.forEach((l, i) => c.drawText(fitText(l, box.x + box.w - tx - 6), tx, box.y + 8 + i * ROW_H, i === 0 && card.kind ? TEXT_BLUE : TEXT_DARK));
+  lines.forEach((l, i) => c.drawText(fitText(l, box.x + box.w - tx - 8), tx, box.y + 8 + i * ROW_H, i === 0 && card.kind ? TEXT_BLUE : TEXT_DARK));
   y = box.y + box.h + 4;
   const moves = paintRows(c, y, (card.moves.length > 0 ? card.moves : ['-']).map((mv) => ({ label: mv })));
   const text = [card.name, ...lines, ...card.moves].join(' · ');
