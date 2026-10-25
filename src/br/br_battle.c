@@ -39,6 +39,8 @@
 #include "br/br_bag.h"
 #include "br/br_hud.h"
 #include "br/br_bot.h"
+#include "br/br_ring.h"
+#include "br/br_tally.h"
 #include "br/br_spectate.h"
 #include "br/br_field.h"
 #include "br/br_skin.h"
@@ -1007,4 +1009,10 @@ bool8 BrBattle_MoveTypeLine(u16 move)
         StringCopy(p - 1, p);
     BattlePutTextOnWindow(gDisplayedStringBattle, B_WIN_MOVE_TYPE);
     return TRUE;
+}
+
+void BrBattle_Finished(void)
+{
+    BrTally_BattleEnd();
+    BrRing_SetBattleFog(FALSE);
 }
