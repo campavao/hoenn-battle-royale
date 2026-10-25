@@ -59,7 +59,7 @@ describe('the e2e dev surface', () => {
 
   it('__hbr is the emulator, a meter of it (POK-247) and the field past the picture, which is all a spec reads of it', () => {
     expect([...fieldsRead(/__hbr\??\.(\w+)/g)].filter((f) => !['emu', 'perf', 'field'].includes(f))).toEqual([]);
-    expect(appSource).toMatch(/__hbr = \{ emu, perf: \(\) => new PerfProbe\(/);
+    expect(appSource).toMatch(/__hbr = \{ emu, perf: \(\) => new fpsUi!\.PerfProbe\(/);
     expect(appSource).toMatch(/__hbr \?\? \{\}, \{ field: fieldView \}\)/);
   });
 });
