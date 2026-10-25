@@ -72,6 +72,7 @@ export const TRUST: Record<Msg['t'], Trust> = {
   peek: 'self',
   ready: 'self',
   card: 'own',
+  tally: 'own',
   away: 'own',
   ping: 'self',
   pong: 'self',

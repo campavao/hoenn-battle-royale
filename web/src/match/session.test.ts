@@ -171,6 +171,17 @@ describe("one match's books (POK-330 #42)", () => {
     expect(session.parties.get(7)).toHaveLength(2);
   });
 
+  it("keeps the champion's counts for the results, and draws them again when they land late", () => {
+    const { session, view } = books();
+    session.note(start([0, 7]), 'page');
+    session.note({ t: 'win', seat: 7 }, 'page');
+    session.note({ t: 'tally', seat: 7, steps: 748, won: 3, caught: 2, items: 8, mon: 122 }, { from: 7 });
+    expect(view.partyLate).toHaveBeenCalledTimes(1);
+    expect(session.tallies.get(7)).toEqual({ t: 'tally', seat: 7, steps: 748, won: 3, caught: 2, items: 8, mon: 122 });
+    session.note(start([0, 7]), 'page');
+    expect(session.tallies.size, 'last match is forgotten').toBe(0);
+  });
+
   // POK-417: "Everyone who is still in the game should see the hall of fame screen."
   it("parades somebody else's win in our own ROM: the team that came after the win, and their name", () => {
     const { session, toRom, roster } = books();

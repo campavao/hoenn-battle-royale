@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { lifetimeLines } from '../ui/profile';
 import { tallyLines } from '../ui/results';
-import { favourite, readTally, TALLY_BYTES, zeroTally } from './tally';
+import { favourite, readTally, tallyMsg, TALLY_BYTES, zeroTally } from './tally';
 
 /** gBrTally as include/br/br_tally.h lays it out, in a byte array the test holds. */
 function ram(fill: (view: DataView) => void) {
@@ -55,15 +55,15 @@ describe("what our own ROM counted of the match (POK-416)", () => {
   });
 
   it('says every count, zero too, and a favourite only once there is one', () => {
-    const none = tallyLines({ steps: 1, won: 0, caught: 0, items: 0, mons: {}, moves: {} }, names);
+    const none = tallyLines({ steps: 1, won: 0, caught: 0, items: 0 }, names);
     expect(none.map((l) => `${l.label} ${l.value}`)).toEqual(['WON 0', 'CAUGHT 0', 'STEPS 1', 'ITEMS 0']);
-    const some = tallyLines({ steps: 40, won: 2, caught: 1, items: 3, mons: { 277: 5 }, moves: { 1: 4 } }, names);
+    const some = tallyLines(tallyMsg(0, { steps: 40, won: 2, caught: 1, items: 3, mons: { 277: 5, 280: 2 }, moves: { 1: 4 } }), names);
     expect(some.filter((l) => l.wide)).toEqual([
       { label: 'FAVORITE', value: 'TREECKO', wide: true },
       { label: 'TOP MOVE', value: 'POUND', wide: true },
     ]);
     // A move the page cannot name (no ROM tables) is left out rather than drawn as a number.
-    expect(tallyLines({ steps: 0, won: 0, caught: 0, items: 0, mons: {}, moves: { 33: 1 } }, names).some((l) => l.label === 'TOP MOVE')).toBe(false);
+    expect(tallyLines({ steps: 0, won: 0, caught: 0, items: 0, move: 33 }, names).some((l) => l.label === 'TOP MOVE')).toBe(false);
   });
 
   it("says a career's lifetime totals for MY STATS, zeroes for a career with none yet", () => {

@@ -13,7 +13,7 @@
 import { routeToBots } from '../bots/adapt';
 import type { Bots } from '../bots/brain';
 import type { RosterEvent } from '../net/relay';
-import type { EventMsg, Msg, NpcOutMsg, PackedMon, SpillMsg, TickerMsg } from '../net/wire';
+import type { EventMsg, Msg, NpcOutMsg, PackedMon, SpillMsg, TallyMsg, TickerMsg } from '../net/wire';
 import { bossAt } from './bosses';
 import { addCareerTotals, careerLine, recordMatch } from './career';
 import { DEFAULT_FOG_SECS } from './director';
@@ -84,8 +84,9 @@ export interface SessionView {
   started?(): void;
   /** Our match was decided: draw the results, with the career line under them. */
   decided(careerLine: string): void;
-  /** A team arrived after the results were drawn: the champion's parade (POK-243).
-   *  Not optional: solo went without it, and its champion's team was never drawn. */
+  /** A team arrived after the results were drawn: the champion's parade (POK-243), or
+   *  the champion's counts (TallyMsg). Not optional: solo went without it, and its
+   *  champion's team was never drawn. */
   partyLate(): void;
 }
 
@@ -163,6 +164,9 @@ export class MatchSession {
   readonly grace: EndGrace;
   /** Our own ROM's counts of the match, read as it was decided (POK-416); null before. */
   tally: MatchTally | null = null;
+  /** The champion's, as their page said them (TallyMsg): by seat, since the `tally` can
+   *  land before the `win` that says whose results it is. */
+  readonly tallies = new Map<number, TallyMsg>();
   /** The champion's Hall of Fame has been handed to our ROM (POK-417): once a match. */
   private famed = false;
   /** Who took the match, once it is decided. */
@@ -299,8 +303,13 @@ export class MatchSession {
         this.view.partyLate();
       }
     }
+    if (msg.t === 'tally') {
+      this.tallies.set(msg.seat, msg);
+      if (this.booked) this.view.partyLate();
+    }
     if (msg.t === 'start') {
       this.field = msg.spawns.length;
+      this.tallies.clear();
       this.results.start(this.field, now);
       this.record.start();
       this.booked = false;
@@ -459,5 +468,6 @@ export class MatchSession {
     this.booked = false;
     this.famed = false;
     this.parties.clear();
+    this.tallies.clear();
   }
 }

@@ -608,6 +608,21 @@ export interface CardMsg {
   fav?: number;
 }
 
+/** The champion's match, counted by their own ROM (gBrTally, POK-416), said to the room
+ *  as their results go up: everybody else's results show the champion's stats beside
+ *  their own (Cam's 10-20 play-test: "how many Pokemon did Drake catch, how many steps").
+ *  The favourites are the ids the counts named. JSON only. */
+export interface TallyMsg {
+  t: 'tally';
+  seat: number;
+  steps: number;
+  won: number;
+  caught: number;
+  items: number;
+  mon?: number;
+  move?: number;
+}
+
 /** This trainer's tab went to the background, or came back (POK-389). A hidden tab runs
  *  no frames, so its ROM stops mid-fight; the opponent's page waits longer for its blocks
  *  rather than closing the fight as unanswered. JSON only. */
@@ -695,6 +710,7 @@ export type Msg =
   | TickerMsg
   | ReadyMsg
   | CardMsg
+  | TallyMsg
   | AwayMsg
   | ResultMsg
   | GiveMsg
@@ -1271,6 +1287,17 @@ const decoders: Record<string, Decoder> = {
     battles: optInt(m, 'battles', 0, CARD_MAX),
     caught: optInt(m, 'caught', 0, CARD_MAX),
     fav: optInt(m, 'fav', 1, 0xffff),
+  }),
+
+  tally: (m) => ({
+    t: 'tally',
+    seat: reqSeat(m),
+    steps: reqInt(m, 'steps', 0, 0xffff),
+    won: reqInt(m, 'won', 0, 0xffff),
+    caught: reqInt(m, 'caught', 0, 0xffff),
+    items: reqInt(m, 'items', 0, 0xffff),
+    mon: optInt(m, 'mon', 1, 0xffff),
+    move: optInt(m, 'move', 1, 0xffff),
   }),
 
   away: (m) => {

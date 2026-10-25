@@ -12,13 +12,13 @@ import { Mailbox, MAILBOX } from './net/mailbox';
 import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
 import { RomPort } from './net/romport';
-import type { BstartMsg, Msg, PackedMon, StartMsg, TurnMsg } from './net/wire';
+import type { BstartMsg, Msg, PackedMon, StartMsg, TallyMsg, TurnMsg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
 import { HUD, HUD_PAGE, readFogHp, writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
 import type { HudWorld } from './ui/phonehud';
 import type { PadPrefsControl } from './ui/padprefs';
 import { moveInfo, type Rom } from './battle/movebook';
-import { favourite, readTally, zeroTally, type MatchTally } from './match/tally';
+import { favourite, readTally, tallyMsg, zeroTally, type MatchTally } from './match/tally';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
 import { battleSeats, cutTo, nameBstart, romReplaying, Spectate } from './match/spectate';
 import type { Results } from './match/results';
@@ -2002,6 +2002,8 @@ function renderResults(
     seed?: number;
     /** What our own ROM counted (POK-416), null without gBrTally. */
     tally: MatchTally | null;
+    /** The champion's, by seat, once their page has said it. */
+    tallies: ReadonlyMap<number, TallyMsg>;
   },
   shown: { career: string; held: boolean; again: ResultsModel['again']; menu?: () => void },
 ): void {
@@ -2014,13 +2016,18 @@ function renderResults(
     void loadResultsUi();
     return;
   }
-  const { fameOf, resultsScreen, resultsView } = resultsUi;
+  const { fameOf, resultsScreen, resultsView, standingsOf, tallyLines } = resultsUi;
   const nameOf = (s: number) => roster.nameOf(s);
+  const names = { species: speciesName, move: moveNameOf };
+  const linesOf = (s: number, tally: TallyMsg | undefined) => [...recordLines(books.record.forSeat(s)), ...(tally ? tallyLines(tally, names) : [])];
+  const champ = mine.winner;
   const model: ResultsModel = {
     view: resultsView(mine, books.fieldSize, seat, nameOf, books.seed),
     career: shown.career,
-    fame: fameOf(mine.winner, seat, mine.winner === undefined ? undefined : books.parties.get(mine.winner), nameOf, speciesName),
-    record: [...recordLines(books.record.forSeat(seat)), ...(books.tally ? resultsUi.tallyLines(books.tally, { species: speciesName, move: moveNameOf }) : [])],
+    fame: fameOf(champ, seat, champ === undefined ? undefined : books.parties.get(champ), nameOf, speciesName),
+    standings: standingsOf(books.results.standings(), seat, nameOf),
+    record: linesOf(seat, books.tally ? tallyMsg(seat, books.tally) : undefined),
+    champion: champ === undefined || champ === seat ? undefined : linesOf(champ, books.tallies.get(champ)),
     again: shown.again,
     menu: shown.menu,
   };
@@ -2415,6 +2422,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
         fieldSize: session.fieldSize,
         seed,
         tally: session.tally,
+        tallies: session.tallies,
       },
       {
         career,
@@ -3084,6 +3092,8 @@ function wireRoom(
   window.addEventListener('pagehide', sendJank);
   /** The career line the match produced, for the results. */
   let career = '';
+  /** Our counts have gone to the room this match (TallyMsg): we took it. */
+  let tallySaid = false;
   /** The results, drawn from the match's books over the room's roster. */
   const drawResults = (): void => {
     // A dead end's notice is the last screen for this room: nothing is drawn over it.
@@ -3091,6 +3101,13 @@ function wireRoom(
     const seat = bridge.seat;
     session.settleTally();
     const mine = session.results.forSeat(seat, performance.now());
+    const held = paraded.holds(mine.winner, seat) || (mine.ended && replay.holds());
+    // The champion says what their ROM counted, once its parade is over and the last win
+    // is in it, for everybody else's results (Cam's 10-20 play-test, #12).
+    if (mine.ended && !held && mine.winner === seat && session.tally && !tallySaid) {
+      tallySaid = true;
+      bridge.relay.all(tallyMsg(seat, session.tally));
+    }
     renderResults(
       seat,
       bridge.roster,
@@ -3101,10 +3118,11 @@ function wireRoom(
         fieldSize: session.fieldSize,
         seed: match.seed,
         tally: session.tally,
+        tallies: session.tallies,
       },
       {
         career,
-        held: paraded.holds(mine.winner, seat) || (mine.ended && replay.holds()),
+        held,
         again: { label: 'PLAY AGAIN', id: 'play-again', disabled: returning, onPress: () => void returnToRoom() },
         menu: () => backToLobby(),
       },
@@ -3159,6 +3177,7 @@ function wireRoom(
     },
     {
       started: () => {
+        tallySaid = false;
         if (rereadAt) return; // a reload's books: the screen is put up once they are read
         hideRoomScreen();
         if (gBrJank !== undefined) {

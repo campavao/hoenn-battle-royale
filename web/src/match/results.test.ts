@@ -78,6 +78,30 @@ describe('placement, from the outs anybody can see', () => {
   });
 });
 
+describe('the standings', () => {
+  it('lists every place, the champion first and the first one out last', () => {
+    const r = new Results();
+    r.start(5, 0);
+    for (const seat of [3, 0, 1, 5]) r.note({ t: 'out', seat }, 10);
+    r.note({ t: 'win', seat: 2 }, 20);
+    expect(r.standings()).toEqual([
+      { seat: 2, placement: 1 },
+      { seat: 5, placement: 2 },
+      { seat: 1, placement: 3 },
+      { seat: 0, placement: 4 },
+      { seat: 3, placement: 5 },
+    ]);
+  });
+
+  it('leaves off whoever was still standing in a draw', () => {
+    const r = new Results();
+    r.start(4, 0);
+    r.note({ t: 'out', seat: 3 }, 10);
+    r.note({ t: 'win' }, 20);
+    expect(r.standings()).toEqual([{ seat: 3, placement: 4 }]);
+  });
+});
+
 describe('the career record', () => {
   it('starts empty and counts matches, wins and the best placement', () => {
     const store = memStore();

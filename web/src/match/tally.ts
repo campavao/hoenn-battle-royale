@@ -6,6 +6,8 @@
 // at the hall of fame." record.ts already counts what the room sees off the wire (rings,
 // trainers, duels, loot); this is the rest. Layout: include/br/br_tally.h.
 
+import type { TallyMsg } from '../net/wire';
+
 export const TALLY_BYTES = 52;
 const MONS = 6;
 const MOVES = 8;
@@ -84,6 +86,17 @@ export function tallyGain(now: MatchTally, then: MatchTally | null): MatchTally 
     mons: map(now.mons, then?.mons),
     moves: map(now.moves, then?.moves),
   };
+}
+
+/** The counts as the results say them: the favourites named, the counts behind them not.
+ *  What the room hears from a champion (TallyMsg), and what our own results draw from. */
+export function tallyMsg(seat: number, t: MatchTally): TallyMsg {
+  const msg: TallyMsg = { t: 'tally', seat, steps: t.steps, won: t.won, caught: t.caught, items: t.items };
+  const mon = favourite(t.mons);
+  const move = favourite(t.moves);
+  if (mon !== undefined) msg.mon = mon;
+  if (move !== undefined) msg.move = move;
+  return msg;
 }
 
 export interface TallyNames {

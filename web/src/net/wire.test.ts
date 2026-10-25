@@ -64,6 +64,8 @@ const SAMPLES: Msg[] = [
   { t: 'card', seat: 1, wins: 3, matches: 12, best: 1 },
   { t: 'card', seat: 1, wins: 0, matches: 0 },
   { t: 'card', seat: 1, wins: 0, matches: 3, battles: 40, caught: 6, fav: 277 },
+  { t: 'tally', seat: 1, steps: 748, won: 3, caught: 2, items: 8, mon: 122, move: 93 },
+  { t: 'tally', seat: 1, steps: 0, won: 0, caught: 0, items: 0 },
   { t: 'away', seat: 1, away: true },
   { t: 'away', seat: 1, away: false },
   { t: 'result', seat: 1, outcome: 'win' },
