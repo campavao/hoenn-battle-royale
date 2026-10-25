@@ -31,7 +31,7 @@ export interface ResultsView {
    *  seed is last: it is the question anybody asks about a round afterwards (POK-248). */
   line: string;
   rows: { label: string; value: string }[];
-  /** The seed, for the footer under the record (Cam's 10-19 play-test, #29): a number
+  /** The seed, the last row of the match's box (Cam's 10-19 play-test, #29): a number
    *  you look up, not a stat of the match. */
   seed?: string;
 }
@@ -178,9 +178,13 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
       widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.view.headline, cls: 'results-head', cursor: null });
       y += 22;
 
-      // The match. Its seed is the footer, under the record.
+      // The match, and its seed. No career line under the record: "16 played" read as
+      // wins (HBR-51), and the trainer's rows keep it.
       const top = y;
-      const match = paintRows(c, y, m.view.rows.map((r) => ({ label: r.label, detail: r.value })));
+      // The seed is the last row of the match's box: on its own it was a box of two rows
+      // with one in it, once the career line above it went (HBR-51).
+      const seed = m.view.seed === undefined ? [] : [{ label: 'Seed', detail: m.view.seed }];
+      const match = paintRows(c, y, [...m.view.rows.map((r) => ({ label: r.label, detail: r.value })), ...seed]);
       widgets.push({ rect: { x: 0, y: top, w: W, h: match.bottom - top }, text: m.view.line, id: 'results-line', cls: 'results-line', cursor: null });
       widgets.push(...match.widgets);
       y = match.bottom + 4;
@@ -210,13 +214,6 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
         y = bottom + 4;
       }
 
-      // The footer: the match's seed. The career line ("16 played") read as wins and
-      // is gone (HBR-51); the trainer's rows keep the record.
-      if (m.view.seed !== undefined) {
-        const foot = paintRows(c, y, [{ label: 'Seed', detail: m.view.seed }]);
-        widgets.push(...foot.widgets);
-        y = foot.bottom + 4;
-      }
 
       const buttons: ButtonSpec[] = [];
       if (m.again) buttons.push({ label: m.again.label, id: m.again.id, disabled: m.again.disabled, onPress: m.again.onPress });
