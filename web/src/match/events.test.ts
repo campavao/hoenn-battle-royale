@@ -114,14 +114,14 @@ describe('eventDrop', () => {
 describe('clusterCells', () => {
   const at = (x: number, y: number, num = 16) => ({ map: { group: 0, num }, x, y });
 
-  it('is the nearest free cells on the same map, the anchor first', () => {
-    const pool = [at(5, 5), at(9, 9), at(5, 6), at(6, 5), at(5, 5, 17), at(4, 5), at(5, 7)];
-    const taken = (c: { x: number; y: number }) => c.x === 4 && c.y === 5;
+  it('is the nearest free cells on the same map, the anchor first and its four sides clear', () => {
+    const pool = [at(5, 5), at(9, 9), at(5, 6), at(6, 5), at(5, 5, 17), at(4, 6), at(6, 6), at(5, 7)];
+    const taken = (c: { x: number; y: number }) => c.x === 4 && c.y === 6;
     expect(clusterCells(pool, at(5, 5), 4, taken)).toEqual([
       { x: 5, y: 5 },
-      { x: 6, y: 5 },
-      { x: 5, y: 6 },
+      { x: 6, y: 6 },
       { x: 5, y: 7 },
+      { x: 9, y: 9 },
     ]);
   });
 

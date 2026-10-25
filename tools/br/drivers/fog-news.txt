@@ -1,10 +1,12 @@
 # fog-news: a ring move is one line on the ticker, in Kanto's words (POK-324). Cam's
 # play-test ignored the whole ticker after a minute of "LV 5 - OLD ROD - FOG 1", fog
 # tallies and outs; Kanto says "One message when the ring moves". So the first ring says
-# nothing there (its rung is the one the match had; the box says where it closes), every
-# later one THE FOG SPREADS! ALL GREW STRONGER!, and the last THE FOG COVERS ALL OF
-# HOENN! with no box, because there is nowhere left to name. And a line identical to the
-# last one queued is dropped, as Kanto's Ticker.push drops it.
+# nothing there (its rung is the one the match had; the box says where it closes), a
+# later one that moves the rung the level everybody is at now (HBR-40: "The fog spreads!
+# All grew stronger!" said neither what nor how much), one that leaves it where it was
+# nothing, and the last THE FOG COVERS ALL OF HOENN! with no box, because there is
+# nowhere left to name. And a line identical to the last one queued is dropped, as
+# Kanto's Ticker.push drops it.
 #
 # queue[0] is at gBrHud+0x44: kind, len (+0x45), text (+0x46); queue[1] is 44 bytes on.
 # The box's text is at +0x14E and its frames left at +0x178.
@@ -25,19 +27,21 @@ expect u8 gBrHud+0x157 0xE0
 # in the fog's red (BR_HUD_KIND_ALERT), apart from the rest (Cam's 2026-10-19 play-test)
 expect u8 gBrHud+0x14C 6
 shot phase-one
-# phase 2 names ROUTE 104: The fog spreads! All grew stronger! -- 35 characters, its s
-# at +8 and its ! last -- and the box names the route (its R after the newline, +21)
+# phase 2 names ROUTE 104: All POKeMON are now Lv. 15! -- 27 characters, its M at +8,
+# the 15 at +24 and its ! last -- and the box names the route (its R after the newline, +21)
 pokebytes gBrMailbox+0x1058 0C 13 10 00 00 00 02 19 0C 1C 09 CC C9 CF CE BF 00 A2 A1 A5 00
 poke u16 gBrMailbox+0x0C 2
 wait 10
 expect u8 gBrLevels+1 2
 expect u8 gBrHud+0x0A 1
 expect u8 gBrHud+0x44 6
-expect u8 gBrHud+0x45 0x23
-expect u8 gBrHud+0x46 0xCE
-expect u8 gBrHud+0x4E 0xE7
-expect u8 gBrHud+0x68 0xAB
-expect u8 gBrHud+0x69 0xFF
+expect u8 gBrHud+0x45 0x1B
+expect u8 gBrHud+0x46 0xBB
+expect u8 gBrHud+0x4E 0xC7
+expect u8 gBrHud+0x5E 0xA2
+expect u8 gBrHud+0x5F 0xA6
+expect u8 gBrHud+0x60 0xAB
+expect u8 gBrHud+0x61 0xFF
 expect u8 gBrHud+0x163 0xCC
 # ...one at a time (POK-358): the box is up and the line waits under it, unread and
 # off the screen, then comes up once the box has gone.
@@ -89,4 +93,15 @@ expect u8 gBrHud+0x61 0xAB
 expect u8 gBrHud+0x62 0xFF
 expect u8 gBrHud+0x178 0
 shot last-phase
+# A ring after the rung has topped out (phase 7 is still tier 5's, Lv. 100) has no
+# level to tell: the box names the place and the ticker stays quiet.
+wait 400
+expect u8 gBrHud+0x0A 0
+pokebytes gBrMailbox+0x11D8 0C 14 11 00 00 00 07 19 0C 00 0A C6 C3 CE CE C6 BF CC C9 C9 CE 00
+poke u16 gBrMailbox+0x0C 8
+wait 10
+expect u8 gBrLevels+1 7
+expect u8 gBrHud+0x0A 0
+expectge u8 gBrHud+0x178 1
+shot topped-out
 say fog news ok

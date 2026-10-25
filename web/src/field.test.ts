@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_VIEW_SIZE, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandOf, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, PAD_GAP, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach, unseenFade, fieldDimmed } from './field';
+import { FIELD_VIEW_SIZE, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandOf, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, PAD_GAP, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach, unseenFade, fieldDimmed, RING_BATTLE_FOG, FOG_EVA, FOG_EVB, WEATHER_CURR, WEATHER_EVA, WEATHER_EVB, WEATHER_FOG_HORIZONTAL } from './field';
 import { standsAbove } from './field-extra';
 import type { Band } from './emu';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
@@ -834,6 +834,9 @@ describe('the people the ROM let go of reach the overlay (POK-318)', () => {
   const OBJS = 0x02000200;
   const SEATS = 0x02001000;
   const MAIN = 0x02000800;
+  const WEATHER = 0x02010000;
+  const OFFSET_Y = 0x02011000;
+  const RING = 0x02012000;
   /** CB2_Overworld, a Thumb function: gMain.callback2 holds it with the low bit set. */
   const CB2_OVERWORLD = 0x080862fc;
   function frame(map: WorldMap): Camera | null {
@@ -882,6 +885,7 @@ describe('the people the ROM let go of reach the overlay (POK-318)', () => {
     w(seat + 8, 1, 8);
     const symbols = new Map([
       ['gSaveBlock1Ptr', SB], ['gFieldCamera', CAM], ['gObjectEvents', OBJS], ['gBrSeats', SEATS], ['gMain', MAIN], ['CB2_Overworld', CB2_OVERWORLD],
+      ['gWeather', WEATHER], ['gSpriteCoordOffsetY', OFFSET_Y], ['gBrRing', RING],
     ]);
     const view = new FieldView({ emu, symbols } as unknown as FieldDeps);
     const inner = view as unknown as { read(): Camera | null; walkers: GhostWalkers; prev: Camera | null };
@@ -898,6 +902,22 @@ describe('the people the ROM let go of reach the overlay (POK-318)', () => {
       onField: (on: boolean) => w(MAIN + 4, on ? CB2_OVERWORLD | 1 : 0x08000001, 32),
     };
   }
+  // HBR-38: a ring that closes mid-fight fogs the fight, and the map's weather stays clear
+  // until the field comes back; the map behind the fight is drawn in the fog all the same.
+  it('off the field, a fight in the fog has the fog behind it, whatever the weather says', () => {
+    const r = ram(HOENN.maps.find((m) => m.outdoor)!);
+    r.onField(false);
+    expect(r.read()!.fog, 'a clear fight').toBeNull();
+    r.w(RING + RING_BATTLE_FOG, 1, 8);
+    expect(r.read()!.fog).toEqual({ x: 0, y: 0, eva: FOG_EVA, evb: FOG_EVB });
+    r.onField(true);
+    expect(r.read()!.fog, 'on the field the map has its own weather').toBeNull();
+    r.w(WEATHER + WEATHER_CURR, WEATHER_FOG_HORIZONTAL, 8);
+    r.w(WEATHER + WEATHER_EVA, 10, 16);
+    r.w(WEATHER + WEATHER_EVB, 6, 16);
+    expect(r.read()!.fog).toEqual({ x: 0, y: 0, eva: 10, evb: 6 });
+  });
+
   /** A roster row on `map`, at a live cell (MAP_OFFSET included). */
   const rowAt = (map: WorldMap, seat: number, x: number, y: number, over: Partial<RosterEntry> = {}): RosterEntry =>
     ({ seat, name: '', alive: true, isMe: false, map: { group: map.group, num: map.num }, x, y, dir: 1, skin: '0', ...over });

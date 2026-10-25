@@ -44,7 +44,7 @@ const world: DirectorWorld = {
 
 /** A fake clock plus a recording `send` -- every test advances `t` by hand and
  *  calls `director.tick()`, exactly the contract `tick`'s own doc comment states. */
-function harness(seats: number[], seed: number, options?: { safariSecs?: number; fogSecs?: number }) {
+function harness(seats: number[], seed: number, options?: { safariSecs?: number; fogSecs?: number }, w: DirectorWorld = world) {
   let t = 0;
   const sent: Msg[] = [];
   let outHandler: ((seat: number) => void) | undefined;
@@ -52,7 +52,7 @@ function harness(seats: number[], seed: number, options?: { safariSecs?: number;
     seats,
     seed,
     options,
-    world,
+    world: w,
     send: (m) => sent.push(m),
     now: () => t,
     onOut: (h) => {
@@ -386,8 +386,8 @@ describe('hand-painted drop cells (POK-314)', () => {
 });
 
 describe('events (speed-up phase 6)', () => {
-  function runRing(seed: number) {
-    const h = harness([0, 1], seed, { safariSecs: 5, fogSecs: 10 });
+  function runRing(seed: number, w: DirectorWorld = world) {
+    const h = harness([0, 1], seed, { safariSecs: 5, fogSecs: 10 }, w);
     h.director.start();
     h.advance(5000);
     for (let i = 0; i < 8; i++) h.advance(10000);
@@ -436,6 +436,22 @@ describe('events (speed-up phase 6)', () => {
       const legend = spills.flatMap((s) => s.mons).find((m) => m.key === e.key);
       expect(legend, `event ${e.n}`).toBeDefined();
       expect(LEGENDS[e.n]).toContain(legend!.species);
+    }
+  });
+
+  it('stands the legendary on open ground where the section has any (HBR-41)', () => {
+    // Every tenth cell is the middle of a 3x3 of ground, as landing-reach.ts marks it.
+    const roomy: DirectorWorld = {
+      ...world,
+      landing: world.landing.map((c) => (c.map !== 'MAP_INDOOR' && c.x % 10 === 5 ? { ...c, open: 1 as const } : c)),
+    };
+    for (const seed of [1, 2, 3, 7, 11, 13]) {
+      const h = runRing(seed, roomy);
+      const spills = h.sent.filter((m) => m.t === 'spill') as SpillMsg[];
+      for (const e of h.sent.filter((m) => m.t === 'event') as EventMsg[]) {
+        const legend = spills.flatMap((s) => s.mons).find((m) => m.key === e.key)!;
+        expect((legend.x - 7) % 10, `seed ${seed} event ${e.n}`).toBe(5);
+      }
     }
   });
 
