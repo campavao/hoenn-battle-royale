@@ -336,6 +336,26 @@ u8 BrBattle_AutoScrollFrames(void)
     }
 }
 
+// Cam, 2026-10-23, on HBR-39 (10-20 play-test #6, already on TEXT FAST): "trim" the
+// pauses between battle lines, no new setting. The battle script's waits are the pauses
+// (waitmessage after a line, pause between beats: the cry before a faint, the 32 before
+// the end of a turn); MID keeps three quarters of each and FAST half, so the faint's
+// 64-frame hold is 32. A watcher keeps pret's, as AutoScrollFrames does.
+u16 BrBattle_Wait(u16 frames)
+{
+    if (!gMain.inBattle || Spectating())
+        return frames;
+    switch (gSaveBlock2Ptr->optionsTextSpeed)
+    {
+    case OPTIONS_TEXT_SPEED_FAST:
+        return frames / 2;
+    case OPTIONS_TEXT_SPEED_MID:
+        return frames - frames / 4;
+    default:
+        return frames;
+    }
+}
+
 void BrBattle_ShotReset(void)
 {
     gBrBattle.shotFrames = 0;

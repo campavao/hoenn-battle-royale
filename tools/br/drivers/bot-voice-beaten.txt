@@ -69,10 +69,6 @@ tap A
 wait 50
 tap A
 wait 50
-tap A
-wait 50
-tap A
-wait 50
 expect u32 gDisplayedStringBattle 0xBEC9C9C1
 expect u32 gDisplayedStringBattle+4 0xC1C3C000
 expect u32 gDisplayedStringBattle+8 0xFBADCEC2

@@ -49,9 +49,9 @@ wait 150
 tap A
 wait 150
 tap A
-# One more A, mashed on: it lands about as the box opens (the field is back 130 frames
+# One more A, mashed on: it lands about as the box opens (the field is back ~110 frames
 # after the prize, the box with it), and a box that took it would take TREECKO unread.
-wait 140
+wait 120
 tap A
 shot early-a
 wait 30

@@ -1,0 +1,44 @@
+# battle-waits: the battle script's pauses are trimmed on TEXT FAST (HBR-39; Cam
+# 2026-10-23: "trim" the pauses between battle lines, no new setting). spoils-bot's
+# fight on the boot's FAST: POUND faints the foe's TREECKO, and BattleScript_FaintTarget's
+# `pause B_WAIT_TIME_LONG` (64 frames in pret) lets go after 32. The counter reaching 31
+# is the last frame of the hold; pret's would read 32 the frame after.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# TRAINER: seat 31, "BOT", TREECKO (0x115) at 1 HP, so one POUND ends it, and a MUDKIP
+# (0x11B) that fainted in some earlier fight -- the spoils are the whole team. Level 5, POUND. PackedMon rows are 100 bytes: the second at +106.
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 02 15 01 05 01 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+pokebytes gDecompressionBuffer+106 1B 01 05 00 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 06 C7 CF BE C5 C3 CA
+mailsend gBrMailbox 23 gDecompressionBuffer 206
+wait 10
+expect u8 gBrBotFight+3 2
+# seat 31's ghost two cells right of us, then its CHALLENGE
+pokebytes gDecompressionBuffer 1F 01 00 09 07 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+# the walk-up first (POK-409): the "!", and the walk when there is one
+wait 400
+expect u8 gBrBotFight+2 1
+# A through the intro, FIGHT, POUND -- one turn, the second mon having fainted already
+# -- then the win and the prize, every text box by its own frame count, so no press is
+# left over for the box on the field.
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 90
+tap A
+wait 60
+# FIGHT, POUND
+tap A
+wait 30
+tap A
+waitfor u16 gBattleMons+0x80 0 400
+waitforge u16 gPauseCounterBattle 31 200
+wait 1
+expectle u16 gPauseCounterBattle 1
+say battle waits ok

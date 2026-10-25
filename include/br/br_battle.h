@@ -195,6 +195,10 @@ u8 BrBattle_LinkTextSpeed(void);
 // text.c: how long an auto-scrolling line holds (pret: 49 frames). Shorter on a faster
 // TEXT, in a battle; pret's 49 everywhere else.
 u8 BrBattle_AutoScrollFrames(void);
+// battle_script_commands.c's waitmessage and pause: how long a printed line holds before
+// the next, and the beats between (pret: B_WAIT_TIME_LONG is 64 frames, the pause before
+// a faint is one). Cut on a faster TEXT, in a battle.
+u16 BrBattle_Wait(u16 frames);
 // The battle over the map, an experiment (2026-10-05 play-test: "disable the white battle
 // background so the battle overlays the map"). [0] the page writes: nonzero asks for it.
 // [1] the ROM keeps: frames left in which a battle drew its picture see-through, 2 from
