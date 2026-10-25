@@ -15,7 +15,7 @@ describe('what the results say', () => {
       { label: 'Survived', value: '3:12' },
       { label: 'Winner', value: 'MAY' },
     ]);
-    expect(v.seed, 'the seed is the footer, not a row of the match').toBe('7');
+    expect(v.rows.some((r) => r.label === 'Seed'), 'the seed is in the line only (HBR-46)').toBe(false);
   });
 
   it('crowns you, and calls a draw a draw', () => {
@@ -41,7 +41,6 @@ describe('what the results say', () => {
   it('keeps the ids the page always had, for a test and a screen reader', () => {
     const model: ResultsModel = {
       view: resultsView({ ended: true, winner: 2, placement: 2, survived: 30 }, 8, 1, nameOf, 7),
-      career: '1 played · 0 won · best 2nd',
       fame: { title: 'The champion: MAY', mons: ['MUDKIP Lv12'] },
       record: [{ label: 'RINGS', value: '2' }],
       again: { label: 'PLAY AGAIN', id: 'play-again', onPress: vi.fn() },
@@ -50,7 +49,8 @@ describe('what the results say', () => {
     const byId = (id: string) => painted.widgets.find((w) => w.id === id);
     expect(painted.containers).toContainEqual({ id: 'results-panel', cls: 'results' });
     expect(byId('results-line')?.text).toMatch(/seed 7$/);
-    expect(byId('results-career')?.text).toBe('1 played · 0 won · best 2nd');
+    // HBR-51: no career line ("1 played" read as wins).
+    expect(byId('results-career')).toBeUndefined();
     expect(byId('results-fame')?.text).toContain('MUDKIP Lv12');
     expect(byId('results-record')?.text).toContain('RINGS 2');
     byId('play-again')!.onPress!();
@@ -64,7 +64,6 @@ describe('what the results say', () => {
     const menu = vi.fn();
     const model: ResultsModel = {
       view: resultsView({ ended: true, winner: 2, placement: 2, survived: 30 }, 8, 1, nameOf),
-      career: '1 played · 0 won · best 2nd',
       fame: null,
       record: [],
       again: { label: 'PLAY AGAIN', id: 'play-again', onPress: vi.fn() },

@@ -42,5 +42,7 @@ void BrLevels_TeachUpTo(struct Pokemon *mon, u8 level);
 // A mon joining the party (a ball taken, a catch): evolved and taught as a lift to its
 // level would have left it.
 void BrLevels_Settle(struct Pokemon *mon);
+// Only the evolving half of that, for naming a mon before it joins: its species after.
+u16 BrLevels_GrowUp(struct Pokemon *mon);
 
 #endif // GUARD_BR_LEVELS_H

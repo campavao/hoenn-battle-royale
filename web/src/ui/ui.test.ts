@@ -106,7 +106,7 @@ describe('the drawn screens (POK-320)', () => {
       onPress: () => undefined,
     }));
     const fake = fakeCanvas();
-    const painted = menuScreen(() => ({ title: 'HOENN BATTLE ROYALE', rows, note: '', tiles: true, trainer: { name: 'CAM', skin: 0, record: '', onPress: () => undefined } })).paint(fake.canvas, 320);
+    const painted = menuScreen(() => ({ title: 'HOENN BATTLE ROYALE', rows, note: '', tiles: true, trainer: { name: 'CAM', skin: 0, onPress: () => undefined } })).paint(fake.canvas, 320);
     for (const r of rows) {
       const w = painted.widgets.find((x) => x.id === r.id)!;
       expect(w.text, r.id).toBe(r.label);
@@ -117,7 +117,7 @@ describe('the drawn screens (POK-320)', () => {
     const seven = rows.slice(1);
     for (const h of [300, 310, 316, 320, 330]) {
       const low = fakeCanvas();
-      menuScreen(() => ({ title: 'HOENN BATTLE ROYALE', rows: seven, note: 'The relay is down.', tiles: true, trainer: { name: 'CAM', skin: 0, record: '', onPress: () => undefined } })).paint(low.canvas, h);
+      menuScreen(() => ({ title: 'HOENN BATTLE ROYALE', rows: seven, note: 'The relay is down.', tiles: true, trainer: { name: 'CAM', skin: 0, onPress: () => undefined } })).paint(low.canvas, h);
       for (const r of seven) expect(low.texts.map((t) => t.text), `${r.label} uncut at ${h}`).toContain(r.label);
     }
   });

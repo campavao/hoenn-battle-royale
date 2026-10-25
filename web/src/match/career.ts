@@ -293,7 +293,6 @@ export function addCareerTotals(
   return career;
 }
 
-/** "12 played · 3 won · best 2nd" -- the line the results panel shows. */
 /** Sets who you are. Kept beside the record rather than in a key of its own, so one
  *  read is your whole profile. */
 export function saveProfile(
@@ -323,12 +322,6 @@ export function saveProfile(
     // A blocked store: you are still that name for this tab's life.
   }
   return career;
-}
-
-export function careerLine(career: Career): string {
-  const parts = [`${career.matches} played`, `${career.wins} won`];
-  if (career.best !== undefined) parts.push(`best ${ordinal(career.best)}`);
-  return parts.join(' · ');
 }
 
 /** The TRAINER CARD's eight badge slots (POK-335), filled one per win: the first badge

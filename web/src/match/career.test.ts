@@ -2,7 +2,6 @@ import ghostsSource from '../../../src/br/br_ghosts.c?raw';
 import { describe, expect, it } from 'vitest';
 import { lineAt, LINE_COUNT, LINES, nextLine, VOICE_COUNT, voiceOf } from '../bots/lines';
 import {
-  careerLine,
   cleanName,
   exportCareer,
   FILE_TAG,
@@ -166,14 +165,6 @@ describe('the lifetime stats (POK-416)', () => {
     const t = loadCareer(s).totals!;
     expect(t).toMatchObject({ won: 0, caught: 0, steps: 1 });
     expect(t.mons).toEqual({ 277: 2 });
-  });
-});
-
-describe('the career line', () => {
-  it('reads as a record', () => {
-    const s = store();
-    recordMatch(1, s);
-    expect(careerLine(loadCareer(s))).toContain('1 won');
   });
 });
 
