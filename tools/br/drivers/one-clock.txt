@@ -16,14 +16,15 @@ expect u8 gBrLevels 30
 expect u8 gBrLevels+1 3
 expect u8 gPlayerParty+0x54 30
 expectge u16 gPlayerParty+0x58 60
-# tier 2: GOOD ROD (263), and one ticker line for all of it -- THE FOG SPREADS!, not
-# the rung and the rod by name (POK-324): "The" at queue[0].text (gBrHud+0x46)
+# tier 2: GOOD ROD (263), and one ticker line for all of it -- the level, not the rod
+# (POK-324, HBR-40): "All POKeMON are now Lv. 30!", its A at queue[0].text
+# (gBrHud+0x46) and the 30 at +24
 expect u8 gBrLevels+2 2
 expect u16 gBrLevels+4 263
 expect u8 gBrHud+0x0A 1
-expect u8 gBrHud+0x46 0xCE
-expect u8 gBrHud+0x47 0xDC
-expect u8 gBrHud+0x48 0xD9
+expect u8 gBrHud+0x46 0xBB
+expect u8 gBrHud+0x5E 0xA4
+expect u8 gBrHud+0x5F 0xA1
 wait 40
 shot phase
 # phase 6 -> 100

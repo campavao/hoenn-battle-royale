@@ -184,9 +184,9 @@ out, and one that comes in waits as it would in a menu.
   ring is closing, all ring phase long, or FOG EVERYWHERE on the last phase; and an eye
   while anyone watches), the ticker and the bottom box, as overworld windows on BG0.
   START's MAP says the same under the fog: `FOG: <place>`. A ring move is one ticker
-  line, Kanto's -- `THE FOG SPREADS! ALL GREW STRONGER!`, or `THE FOG COVERS ALL OF
-  HOENN!` on the last, none on the first -- and the box names the place but on the
-  last. A line identical to the last one queued is dropped (POK-324).
+  line, Kanto's -- `All POKéMON are now Lv. N!` when it raises the rung (HBR-40), none
+  when it does not or on the first, and `THE FOG COVERS ALL OF HOENN!` on the last --
+  and the box names the place but on the last. A line identical to the last one queued is dropped (POK-324).
 - **A clear map** (`br_strip.h`, 2026-10-13): in a match the map's own people never
   spawn -- route trainers, gym trainers, townsfolk -- and neither do cut trees, smash rocks
   or Strength boulders. What stays: the eight leaders on their gyms, the CENTER nurse, the
