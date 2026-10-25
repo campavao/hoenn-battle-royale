@@ -15,7 +15,7 @@ describe('what the results say', () => {
       { label: 'Survived', value: '3:12' },
       { label: 'Winner', value: 'MAY' },
     ]);
-    expect(v.seed, 'the seed is the footer, not a row of the match').toBe('7');
+    expect(v.rows.some((r) => r.label === 'Seed'), 'the seed is in the line only (HBR-46)').toBe(false);
   });
 
   it('crowns you, and calls a draw a draw', () => {

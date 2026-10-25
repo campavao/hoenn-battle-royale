@@ -31,9 +31,6 @@ export interface ResultsView {
    *  seed is last: it is the question anybody asks about a round afterwards (POK-248). */
   line: string;
   rows: { label: string; value: string }[];
-  /** The seed, the last row of the match's box (Cam's 10-19 play-test, #29): a number
-   *  you look up, not a stat of the match. */
-  seed?: string;
 }
 
 function clock(secs: number): string {
@@ -65,7 +62,7 @@ export function resultsView(mine: MatchResult, seats: number, seat: number, name
         : mine.winner === undefined
           ? 'A draw'
           : 'Results';
-  return { headline, line: parts.join(' · '), rows, seed: seed === undefined ? undefined : String(seed) };
+  return { headline, line: parts.join(' · '), rows };
 }
 
 export interface Fame {
@@ -178,13 +175,10 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
       widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.view.headline, cls: 'results-head', cursor: null });
       y += 22;
 
-      // The match, and its seed. No career line under the record: "16 played" read as
-      // wins (HBR-51), and the trainer's rows keep it.
+      // The match. No career line under the record: "16 played" read as wins (HBR-51),
+      // and the trainer's rows keep it. No seed either (HBR-46): #results-line still says it.
       const top = y;
-      // The seed is the last row of the match's box: on its own it was a box of two rows
-      // with one in it, once the career line above it went (HBR-51).
-      const seed = m.view.seed === undefined ? [] : [{ label: 'Seed', detail: m.view.seed }];
-      const match = paintRows(c, y, [...m.view.rows.map((r) => ({ label: r.label, detail: r.value })), ...seed]);
+      const match = paintRows(c, y, m.view.rows.map((r) => ({ label: r.label, detail: r.value })));
       widgets.push({ rect: { x: 0, y: top, w: W, h: match.bottom - top }, text: m.view.line, id: 'results-line', cls: 'results-line', cursor: null });
       widgets.push(...match.widgets);
       y = match.bottom + 4;
