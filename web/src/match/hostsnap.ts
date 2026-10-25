@@ -246,7 +246,8 @@ export function restoreBots(b: Bots, snap: BotsSnap, now: number, out: ReadonlyS
     const walker = find(seat);
     const other = find(opponent);
     if (!walker || b['fighting'].has(seat)) continue;
-    if (nonce !== undefined) {
+    // != null: a snapshot comes back through JSON, where a player fight's missing nonce is null.
+    if (nonce != null) {
       if (other) reproxy(b, walker, other, nonce, now, due);
       continue;
     }

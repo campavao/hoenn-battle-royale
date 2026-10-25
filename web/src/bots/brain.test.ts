@@ -1558,6 +1558,34 @@ describe('two bots meeting', () => {
     expect(back.partyOf(winner)[0].hp).toBe(7);
   });
 
+  it('keeps a bot in its fight with a player over a host reload, through JSON (#128 review)', () => {
+    const player: PlayerView = { seat: 0, mapId: 'FIELD', x: 2, y: 3, dir: 2 };
+    const opts = (sent: Msg[]): BotsOptions => ({
+      world: new World([FIELD, PATH]),
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [{ ...MON }],
+      engage: { players: () => [player] },
+    });
+    const bots = new Bots(opts([]));
+    const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 2, y: 1 }]);
+    bots.start(dealt, 0);
+    for (let t = STEP_MS; t <= 4000; t += STEP_MS) bots.tick(t);
+    player.busy = true; // the fight is on in their ROM
+    bots.tick(4000 + STEP_MS);
+    const snap = JSON.parse(JSON.stringify(snapBots(bots, 4000 + STEP_MS)));
+    expect(snap.fights, 'a fight with the player, no nonce').toEqual([[dealt[0].seat, 0, expect.any(Number), true, null]]);
+
+    const sent: Msg[] = [];
+    const back = new Bots(opts(sent));
+    restoreBots(back, snap, 0);
+    for (let now = 50; now <= 10_000; now += 50) back.tick(now);
+    expect(sent.filter((m) => m.t === 'step'), 'still standing in its fight').toEqual([]);
+    expect(sent.some((m) => m.t === 'busy' && (m as { kind?: string }).kind === undefined)).toBe(false);
+  });
+
   it('walks round a player standing in open ground, not up to them and stuck (HBR-37 review)', () => {
     const OPEN: WorldMap = {
       id: 'OPEN', group: 0, num: 4, w: 9, h: 3, section: 'S', outdoor: true,
