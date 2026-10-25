@@ -573,6 +573,34 @@ describe('a bot heading for another map', () => {
   });
 });
 
+describe('a bot and a player on one tile', () => {
+  // HBR-37 (Cam's 10-20 play-test): after Cam's fight, DRAKE walked onto Cam's tile and
+  // stood there. A corridor one cell wide, the bot at its west end, the only place to go
+  // its east end, and a player in a battle (busy, so not a fight) in the middle of it.
+  it('never steps onto a player, busy or not (HBR-37)', () => {
+    const LANE: WorldMap = {
+      id: 'LANE', group: 0, num: 3, w: 8, h: 1, section: 'S', outdoor: true,
+      grid: grid(['00000000']), seams: [],
+    };
+    const world = new World([LANE]);
+    const sent: Msg[] = [];
+    const bots = new Bots({
+      world,
+      targets: [{ mapId: 'LANE', x: 7, y: 0 }],
+      mapRef: () => ({ group: 0, num: 3 }),
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      engage: { players: () => [{ seat: 0, mapId: 'LANE', x: 3, y: 0, dir: 3, busy: true }] },
+    });
+    const dealt = dealBots(1, 1, [0], [{ mapId: 'LANE', map: { group: 0, num: 3 }, x: 0, y: 0 }]);
+    bots.start(dealt, 0);
+    for (let t = STEP_MS; t <= 30_000; t += STEP_MS) bots.tick(t);
+    const steps = sent.filter((m) => m.t === 'step') as { x: number }[];
+    expect(steps.map((m) => m.x)).toContain(2);
+    expect(steps.map((m) => m.x)).not.toContain(3);
+  });
+});
+
 describe('a bot meeting a player', () => {
   // One bot, parked where the player is standing right in front of it. The room is
   // told its team and then challenged -- in that order, because the ROM has to have
@@ -1154,12 +1182,17 @@ describe('the hunt', () => {
     return visited;
   }
 
+  // Next to them, never on them (HBR-37): a trainer's tile is nobody else's.
+  const beside = (s: Spot): boolean => s.map === 'PATH' && Math.abs(s.x - FAR.x) + Math.abs(s.y - FAR.y) === 1;
+
   it('walks to whoever is left once the field is down to three', () => {
-    expect(field(3)).toContainEqual({ map: 'PATH', x: FAR.x, y: FAR.y });
+    const visited = field(3);
+    expect(visited.some(beside)).toBe(true);
+    expect(visited).not.toContainEqual({ map: 'PATH', x: FAR.x, y: FAR.y });
   });
 
   it('does not hunt while the room is full', () => {
-    expect(field(12)).not.toContainEqual({ map: 'PATH', x: FAR.x, y: FAR.y });
+    expect(field(12).some(beside)).toBe(false);
   });
 });
 
