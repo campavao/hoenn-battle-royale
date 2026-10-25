@@ -2,7 +2,8 @@
 # "NICKNAME/SPECIES" with the gender glued on, so the 10-20 play-test's champion read
 # "FERALIGATR/FERALIGATR" and a glyph that looked like "$". hof-watcher's parade with
 # the second mon named after its species: mon-1.png reads "TREECKO" and the glyph a
-# space off, no "/TREECKO". The expects are hof-watcher's: the parade still runs.
+# space off, no "/TREECKO". The name is checked by that frame alone: no byte holds the
+# printed line. The expects are hof-watcher's: the parade still runs.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400

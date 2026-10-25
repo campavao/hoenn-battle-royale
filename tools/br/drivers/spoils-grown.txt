@@ -1,9 +1,10 @@
 # spoils-grown: the spoils list names what A gives. The 10-20 play-test's list said
 # OMANYTE and the take said "Took OMASTAR!" (HBR-52): a ball grows up as it is taken.
 # spoils-bot's fight, with the fainted MUDKIP at 36, which a take makes a SWAMPERT.
-# The list is checked by its frame (spoils-menu.png says SWAMPERT, not MUDKIP); the
-# expects pin the take, whose nickname is the grown species. The card waits 70 frames
-# where spoils-bot waits 10: a mon at 36 walks a longer learnset.
+# TREECKO is taken from the list, and the MUDKIP left lying is faced: the held line
+# (gBrHud.heldLine) says "Take SWAMPERT", where it said "Take MUDKIP" before HBR-52,
+# and A on it gives a SWAMPERT. The list itself says the same (spoils-menu.png). The
+# card waits 70 frames where spoils-bot waits 10: a mon at 36 walks a longer learnset.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
@@ -68,16 +69,29 @@ expectmsg 11 u16 19 0x11B
 # ...and nothing has been taken yet: the box is asking
 expect u8 gPlayerPartyCount 1
 shot spoils-menu
-# the second one
-tap DOWN
-wait 10
+# the first one, TREECKO, so the MUDKIP stays on the ground a step up and left of us
 tap A
 wait 60
 expect u8 gPlayerPartyCount 2
-expect u8 gBrLoot+0xA0 1
-expectmsg 10 u16 1 0x1F01
-# the second party mon's nickname (BoxPokemon+8): SWAMPERT
-expect u32 gPlayerParty+108 0xC7BBD1CD
-expect u32 gPlayerParty+112 0xCECCBFCA
+hold DOWN 16
+wait 20
+hold LEFT 16
+wait 30
+tap UP
+wait 20
+# heldLine: kind, len, then "{A} Take " (8 bytes from +0x1A) and the name at +0x22, read
+# a halfword at a time: it is not word-aligned
+expect u8 gBrHud+0x0C 1
+expect u16 gBrHud+0x22 0xD1CD
+expect u16 gBrHud+0x24 0xC7BB
+expect u16 gBrHud+0x26 0xBFCA
+expect u16 gBrHud+0x28 0xCECC
+shot held-line
+tap A
+wait 60
+expect u8 gPlayerPartyCount 3
+# the third party mon's nickname (BoxPokemon+8): SWAMPERT
+expect u32 gPlayerParty+208 0xC7BBD1CD
+expect u32 gPlayerParty+212 0xCECCBFCA
 shot spoils-took
 say spoils grown ok
