@@ -166,6 +166,14 @@ export function toggleBitOf(before: number, after: number): number {
   return flip !== 0 && (flip & (flip - 1)) === 0 ? flip : 0;
 }
 export const FAST_FADE = 1;
+/** A frame the toggle can be learned on (toggleBitOf): a normal fade still blending, its
+ *  mask set. Its four finishing frames have the mask cleared and run
+ *  softwareFadeFinishingCounter, whose bit 2 in the modern build is the toggle's bit in
+ *  agbcc's: learned there, the map past the picture ran a step behind the ROM's fade
+ *  for the rest of the match, or a step ahead (HBR-56). */
+export function toggleBlending(fade: { active: boolean }, mode: number, selected: number): boolean {
+  return fade.active && ((mode >> 8) & 3) !== FAST_FADE && selected !== 0;
+}
 export const FAST_WHITE_MAX = 1;
 /** A map load leaves y at 0 for ~13 frames before its fade-in; a hold that lasts longer
  *  than a second is not that, it is a fade the ROM never started (after a battle, say),
@@ -1179,8 +1187,9 @@ export class FieldView {
    *  play-test). Once the mask is cleared the last step has blended both at the target. */
   private bgFadeY(fade: { y: number; active: boolean }, mode: number, toggle: number, selected: number): number {
     const normal = fade.active && ((mode >> 8) & 3) !== FAST_FADE;
-    if (normal && this.toggleWord !== null && !this.toggleBit) this.toggleBit = toggleBitOf(this.toggleWord, toggle);
-    this.toggleWord = normal ? toggle : null;
+    const blending = toggleBlending(fade, mode, selected);
+    if (blending && this.toggleWord !== null && !this.toggleBit) this.toggleBit = toggleBitOf(this.toggleWord, toggle);
+    this.toggleWord = blending ? toggle : null;
     if (!normal || selected === 0 || !this.toggleBit) {
       this.lastBgY = null;
       return fade.y;

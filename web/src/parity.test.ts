@@ -823,6 +823,15 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
     expect(field.toggleBitOf(0x0200, 0x0200 | bit), 'learned from a flip').toBe(bit);
     expect(field.toggleBitOf(0x0a, 0x0e), "agbcc's, off a traced fade-in").toBe(0x4);
     expect(field.toggleBitOf(0x0a, 0x0a), 'a delay frame says nothing').toBe(0);
+    // ...and the finishing frames say nothing either: in this layout the counter they run
+    // holds the other candidate bit, and the mask is clear while it counts (HBR-56).
+    const counter = fade.bits.softwareFadeFinishingCounter;
+    const other = field.FADE_TOGGLE_BITS & ~bit;
+    expect(word('softwareFadeFinishingCounter')).toBe(field.FADE_TOGGLE_WORD);
+    expect(other >= 1 << (counter.bit % 16) && other < 1 << ((counter.bit % 16) + counter.width), 'the counter holds the other bit').toBe(true);
+    expect(field.toggleBlending({ active: true }, 0, 0), 'a finishing frame').toBe(false);
+    expect(field.toggleBlending({ active: true }, 0, 0xffff), 'a blending frame').toBe(true);
+    expect(field.toggleBlending({ active: true }, 0x100, 0xffff), 'a fast fade').toBe(false);
     // f's word with `v` in f and every other bit of the word set: fadeOf has to take
     // exactly f's bits out of it.
     const holding = (f: string, v: number) =>
