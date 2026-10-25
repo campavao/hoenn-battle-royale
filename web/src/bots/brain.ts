@@ -188,8 +188,13 @@ export interface Fight {
   /** The bot's walk-up to the player before the fight (walkUp): which way, and when the
    *  next step is due. */
   walk?: { dir: SeamDir; next: number };
+  /** What starts once the walk-up is over: a duel between two bots begins there. */
+  walked?: () => void;
   /** A proxy duel's draw, for the seeded resolver to settle it with after a reload. */
   nonce?: number;
+  /** A proxy duel the instance has answered, held until it has played out for anyone
+   *  watching (HBR-43): when, and what then. */
+  due?: { at: number; apply: () => void };
 }
 
 const DIR_WIRE: Record<SeamDir, 1 | 2 | 3 | 4> = {
@@ -288,6 +293,35 @@ export interface Decision {
   detail?: string;
 }
 
+/** A duel the proxy fought (proxy.ts). */
+export interface DuelOutcome {
+  winner: number;
+  loser: number;
+  a: { hp: number; status: number }[];
+  b: { hp: number; status: number }[];
+  /** What each side spent out of the bag it was handed (POK-237). */
+  usedA?: number[];
+  usedB?: number[];
+  /** The instance's frames for the fight, and the wall-clock ms it took to run them:
+   *  at 8x a fight is over long before it has played out for a watcher (HBR-43). */
+  frames?: number;
+  ranMs?: number;
+}
+
+/** Past a fight's own length at 60 frames a second: a watcher's replay starts a moment
+ *  after the instance's fight does, and lags it by a turn at most. */
+const PLAY_OUT_SLACK_MS = 3_000;
+
+/** How much longer the room waits on an answered duel before its outcome lands: the
+ *  rest of the fight at real speed, for anyone watching it (HBR-43). */
+export function playOutMs(out: DuelOutcome): number {
+  if (!out.frames) return 0;
+  return Math.max(0, (out.frames * 1000) / 60 - (out.ranMs ?? 0)) + PLAY_OUT_SLACK_MS;
+}
+
+/** Somewhere a bot can walk up to. */
+type Target = { mapId: string; x: number; y: number };
+
 export interface PlayerView {
   seat: number;
   mapId: string;
@@ -371,15 +405,7 @@ export interface BotsOptions {
   settle?: (
     a: { seat: number; party: PackedMon[]; items?: number[] },
     b: { seat: number; party: PackedMon[]; items?: number[] },
-  ) => Promise<{
-    winner: number;
-    loser: number;
-    a: { hp: number; status: number }[];
-    b: { hp: number; status: number }[];
-    /** What each side spent out of the bag it was handed (POK-237). */
-    usedA?: number[];
-    usedB?: number[];
-  } | null>;
+  ) => Promise<DuelOutcome | null>;
   /** Is anybody allowed to fight yet? FALSE through the Safari opening (POK-257):
    *  everybody is on one map catching things, and a bot that duels in there takes the
    *  field apart before the match has started -- eight went into the Zone and two came
@@ -752,13 +778,23 @@ export class Bots {
    *  spotted you walks up after its "!". Only when the bot faces the player down the
    *  line: otherwise the player looked, and their ROM walks them up instead. The ROM
    *  reads the same facing (BR_WALKUP_BOT, br_walkup.c) and waits for these steps. */
-  private walkUp(walker: Walker, player: PlayerView, fight: Fight, now: number): void {
+  private walkUp(walker: Walker, player: Target, fight: Fight, now: number): boolean {
     const dir = this.lineTo(walker, player);
-    if (dir && DIR_WIRE[dir] === walker.facing) fight.walk = { dir, next: now + WALKUP_DELAY_MS };
+    const far = Math.abs(player.x - walker.at.x) + Math.abs(player.y - walker.at.y) > 1;
+    if (dir && far && DIR_WIRE[dir] === walker.facing) fight.walk = { dir, next: now + WALKUP_DELAY_MS };
+    return fight.walk !== undefined;
+  }
+
+  /** Where a seat stands: a player on the field, or another bot. */
+  private targetOf(seat: number): Target | undefined {
+    const player = this.opts.engage?.players().find((p) => p.seat === seat);
+    if (player) return player;
+    const bot = this.walkers.find((w) => w.bot.seat === seat);
+    return bot && { mapId: bot.at.map, x: bot.at.x, y: bot.at.y };
   }
 
   /** Which way the player is from the bot along its row or column, if they are on it. */
-  private lineTo(walker: Walker, player: PlayerView): SeamDir | undefined {
+  private lineTo(walker: Walker, player: Target): SeamDir | undefined {
     const dx = player.x - walker.at.x;
     const dy = player.y - walker.at.y;
     if (player.mapId !== walker.at.map || (dx !== 0) === (dy !== 0)) return undefined;
@@ -773,7 +809,7 @@ export class Bots {
     const walk = fight.walk;
     if (!walk || now < walk.next) return;
     walk.next = now + STEP_MS;
-    const player = this.opts.engage?.players().find((p) => p.seat === fight.opponent);
+    const player = this.targetOf(fight.opponent);
     const world = this.opts.world;
     const at = walker.at;
     const to = world.step(at, walk.dir, true);
@@ -785,6 +821,7 @@ export class Bots {
       water(to) !== water(at) || this.taken(to, walker)
     ) {
       fight.walk = undefined;
+      fight.walked?.();
       return;
     }
     walker.at = to;
@@ -811,7 +848,9 @@ export class Bots {
     for (const [seat, fight] of [...this.fighting]) {
       if (this.fighting.get(seat) !== fight) continue; // a proxy pair goes both at once
       if (fight.proxy) {
-        if (now - fight.since > PROXY_TIMEOUT_MS) fight.proxy();
+        if (fight.due) {
+          if (now >= fight.due.at) fight.due.apply();
+        } else if (now - fight.since > PROXY_TIMEOUT_MS) fight.proxy();
         continue;
       }
       const them = field?.get(fight.opponent);
@@ -1348,7 +1387,13 @@ export class Bots {
   /** Hands the pair to the proxy and waits. Both are held as fighting meanwhile, so
    *  nothing engages them and the room sees them busy -- a bot strolling off while its
    *  own battle runs somewhere else is the bug POK-238's bot-vs-player half already
-   *  had to fix. */
+   *  had to fix.
+   *
+   *  First the one facing the other walks up to it, as one does to a player (HBR-36:
+   *  Cam saw two bots fight with no walk-up), and the duel starts when it is beside it.
+   *  The instance runs at 8x, so its answer comes long before the fight it streamed has
+   *  played out for anyone watching it; the outcome waits for that (HBR-43: "DRAKE WINS"
+   *  while the watched fight was still on its second turn). */
   private startProxyDuel(walker: Walker, other: Walker, now: number): void {
     const settle = this.opts.settle;
     const seed = this.opts.seed ?? 0;
@@ -1376,36 +1421,53 @@ export class Bots {
       (w) => [w, this.hold(w, (w === walker ? other : walker).bot.seat, now, expire)] as const,
     );
     for (const [, fight] of held) fight.nonce = nonce;
-    // Both bags go in with them (POK-237): what a bot spends in here is gone from the
-    // bag it will take into its next fight, the same as a fight against a player.
-    void settle(
-      { seat: walker.bot.seat, party: walker.party, items: battleItems(walker.bag) },
-      { seat: other.bot.seat, party: other.party, items: battleItems(other.bag) },
-    )
-      .catch(() => null)
-      .then((out) => {
-        const then = this.now;
-        if (!finish()) return;
-        if (out) {
-          const wonIsWalker = out.winner === walker.bot.seat;
-          const left = wonIsWalker ? out.a : out.b;
-          const winner = wonIsWalker ? walker : other;
+    const fought = (out: DuelOutcome | null) => {
+      const then = this.now;
+      if (!finish()) return;
+      if (out) {
+        const wonIsWalker = out.winner === walker.bot.seat;
+        const left = wonIsWalker ? out.a : out.b;
+        const winner = wonIsWalker ? walker : other;
 
-          spend(walker.bag, out.usedA ?? []);
-          spend(other.bag, out.usedB ?? []);
+        spend(walker.bag, out.usedA ?? []);
+        spend(other.bag, out.usedB ?? []);
 
-          this.applyDuel(walker, other, {
-            winner: out.winner,
-            loser: out.loser,
-            // What the fight actually left, mon for mon, in the order it was sent.
-            winnerParty: winner.party.map((mon, i) =>
-              left[i] ? { ...mon, hp: Math.min(mon.maxHp, left[i].hp), status: left[i].status } : mon,
-            ),
-          }, then);
-          return;
-        }
-        this.applyDuel(walker, other, resolve(), then);
-      });
+        this.applyDuel(walker, other, {
+          winner: out.winner,
+          loser: out.loser,
+          // What the fight actually left, mon for mon, in the order it was sent.
+          winnerParty: winner.party.map((mon, i) =>
+            left[i] ? { ...mon, hp: Math.min(mon.maxHp, left[i].hp), status: left[i].status } : mon,
+          ),
+        }, then);
+        return;
+      }
+      this.applyDuel(walker, other, resolve(), then);
+    };
+    const begin = () => {
+      // Both bags go in with them (POK-237): what a bot spends in here is gone from the
+      // bag it will take into its next fight, the same as a fight against a player.
+      void settle(
+        { seat: walker.bot.seat, party: walker.party, items: battleItems(walker.bag) },
+        { seat: other.bot.seat, party: other.party, items: battleItems(other.bag) },
+      )
+        .catch(() => null)
+        .then((out) => {
+          const wait = out ? playOutMs(out) : 0;
+          if (wait <= 0) {
+            fought(out);
+            return;
+          }
+          const due = { at: this.now + wait, apply: () => fought(out) };
+          for (const [w, fight] of held) if (this.fighting.get(w.bot.seat) === fight) fight.due = due;
+        });
+    };
+    // Whichever of them faces the other walks up; neither does, and it starts here.
+    const [[, mine], [, theirs]] = held;
+    const at = (w: Walker): Target => ({ mapId: w.at.map, x: w.at.x, y: w.at.y });
+    if (this.walkUp(walker, at(other), mine, now)) mine.walked = begin;
+    else if (this.walkUp(other, at(walker), theirs, now)) theirs.walked = begin;
+    else begin();
   }
 
   /** Standing at a nurse's counter with something to heal. The page is the bot's
