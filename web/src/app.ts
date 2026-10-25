@@ -4290,7 +4290,11 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
       rowsId: 'lobby-rooms',
       note: rooms.length === 0 ? emptyNote(online) : '',
       noteId: 'lobby-rooms-note',
-      buttons: [{ label: 'BACK', id: 'lobbies-back', onPress: () => stage.pop() }],
+      buttons: [
+        // HBR-49: the list's own way to make a room, open to whoever finds it here.
+        { label: 'HOST', id: 'lobbies-host', disabled: !online, onPress: () => press({ kind: 'host' }) },
+        { label: 'BACK', id: 'lobbies-back', onPress: () => stage.pop() },
+      ],
       onBack: () => stage.pop(),
     }));
     const look = profileScreen((ui) => ui.lookScreen(() => {

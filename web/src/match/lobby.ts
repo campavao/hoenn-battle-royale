@@ -228,9 +228,8 @@ export function roomRows(rooms: RoomListing[]): LobbyRow[] {
 }
 
 /** What the page says when the list is empty -- which it usually is, and saying so
- *  plainly beats an empty box that looks broken. */
+ *  plainly beats an empty box that looks broken. One line of the note's width: the
+ *  longer one was cut off at "fil…" (HBR-49). */
 export function emptyNote(online: boolean): string {
-  return online
-    ? 'No open rooms. QUICK PLAY hosts one and fills it with bots.'
-    : 'Not connected. QUICK PLAY is a game against bots.';
+  return online ? 'No open rooms. HOST opens one.' : 'Not connected. QUICK PLAY is vs bots.';
 }
