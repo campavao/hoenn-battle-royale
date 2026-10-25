@@ -1834,9 +1834,13 @@ export class Bots {
     return best;
   }
 
-  /** Is another bot standing here? */
+  /** Is another bot, or a player, standing here? A player in a battle or a menu too: a
+   *  bot walked onto Cam's tile while he fought and stood on him after (HBR-37). */
   private taken(spot: Spot, self: Walker): boolean {
-    return this.walkers.some((w) => w !== self && sameSpot(w.at, spot));
+    return (
+      this.walkers.some((w) => w !== self && sameSpot(w.at, spot)) ||
+      (this.opts.engage?.players() ?? []).some((p) => p.mapId === spot.map && p.x === spot.x && p.y === spot.y)
+    );
   }
 
   /** Would this step trade places with a bot walking the other way? Neither of them
