@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Bots, health, STEP_MS, WALKUP_DELAY_MS, type BotsOptions, type Decision, type PlayerView } from './brain';
+import { Bots, health, STEP_MS, WALKUP_DELAY_MS, type BotsOptions, type Decision, type DuelOutcome, type PlayerView } from './brain';
 import { dealBots, Grade, MAX_SEATS } from './roster';
 import { dealParty, grownUp, rungForPhase } from './party';
 import { World, type Spot, type WorldMap } from './world';
@@ -1458,6 +1458,72 @@ describe('two bots meeting', () => {
     // formula guessed.
     expect(bots.partyOf(left)[0].hp).toBe(7);
     expect(sent.some((m) => m.t === 'out')).toBe(true);
+  });
+
+  // A pair three cells apart down one column; the north one faces south, at the other.
+  function apart(settle: NonNullable<BotsOptions['settle']>) {
+    const world = new World([FIELD, PATH]);
+    const sent: { at: number; m: Msg }[] = [];
+    let now = 0;
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push({ at: now, m }),
+      rng: mulberry32(7),
+      deal: () => [{ ...MON }],
+      seed: 4242,
+      settle,
+    });
+    const dealt = dealBots(1, 2, [0], [
+      { mapId: 'FIELD', map: REFS.FIELD, x: 2, y: 0 },
+      { mapId: 'FIELD', map: REFS.FIELD, x: 2, y: 3 },
+    ]);
+    bots.start(dealt, 0);
+    // North first, whichever seat the deal put there.
+    const seats = dealt.map((b) => b.seat).sort((a, b) => bots.spotOf(a)!.y - bots.spotOf(b)!.y);
+    const run = (until: number) => {
+      for (now += 50; now <= until; now += 50) bots.tick(now);
+      now -= 50;
+    };
+    return { bots, sent, seats, run, clock: () => now };
+  }
+
+  it('walks up to the other before the duel starts (HBR-36)', async () => {
+    let askedAt: number | undefined;
+    let where: (Spot | undefined)[] = [];
+    const t = apart(async () => {
+      askedAt = t.clock();
+      where = t.seats.map((s) => t.bots.spotOf(s));
+      return null;
+    });
+    t.run(5000);
+    const [north, south] = t.seats;
+    const walk = t.sent.filter((e) => e.m.t === 'step' && (e.m as { seat: number }).seat === north);
+    expect(walk.map((e) => (e.m as { y: number }).y)).toEqual([1, 2]);
+    expect(askedAt, 'the duel starts once it is beside the other').toBeGreaterThanOrEqual(walk[1].at);
+    expect(where).toEqual([{ map: 'FIELD', x: 2, y: 2 }, { map: 'FIELD', x: 2, y: 3 }]);
+    expect(t.sent.some((e) => e.m.t === 'step' && (e.m as { seat: number }).seat === south)).toBe(false);
+  });
+
+  it('holds the outcome until the fight has played out at real speed (HBR-43)', async () => {
+    // 600 of the instance's frames is ten seconds of fight; it ran them in one.
+    let answer: ((v: DuelOutcome) => void) | undefined;
+    const t = apart((a, b) => new Promise((resolve) => (answer = () => resolve({
+      winner: b.seat, loser: a.seat, a: [{ hp: 0, status: 0 }], b: [{ hp: 7, status: 0 }], frames: 600, ranMs: 1000,
+    }))));
+    t.run(5000);
+    expect(answer, 'the duel is in the instance').toBeDefined();
+    answer!({} as DuelOutcome);
+    await Promise.resolve();
+    await Promise.resolve();
+    const answeredAt = t.clock();
+    t.run(answeredAt + 9000 + 3000 - 100);
+    expect(t.bots.count(), 'the watched fight is still on').toBe(2);
+    expect(t.sent.some((e) => e.m.t === 'out')).toBe(false);
+    t.run(answeredAt + 9000 + 3000 + 100);
+    expect(t.bots.count()).toBe(1);
+    expect(t.sent.filter((e) => e.m.t === 'out')).toHaveLength(1);
   });
 
   it('falls back to the seeded resolver when the proxy cannot (POK-238)', async () => {
