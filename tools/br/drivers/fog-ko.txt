@@ -222,4 +222,7 @@ wait 600
 shot back
 # and the fight is over, won: back on the field
 expect u32 gMain+4 CB2_Overworld+1
+# ...with its fog put away: the page draws the fog behind a fight that has it (HBR-38),
+# and left set it fogged every menu and wild fight after this one
+expect u8 gBrRing+31 0
 say fog final ko ok

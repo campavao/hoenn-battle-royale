@@ -65,17 +65,31 @@ static const u16 sDeptStore[] = { ITEM_MASTER_BALL, ITEM_POKE_BALL, ITEM_MAX_POT
                                   ITEM_THUNDER_STONE, ITEM_LEAF_STONE, ITEM_SUN_STONE, ITEM_MOON_STONE,
                                   BR_ITEM_LINK_CABLE, ITEM_NONE };
 
-// The ring's one ticker line, in Kanto's words (main.lua, "ONE box per shrink"): that
-// the fog moved and everything got stronger is the news, and the level number and the
-// rod's name -- "LV 5 - OLD ROD - FOG 1", which the play-test ignored with the rest of
-// the ticker (POK-324) -- were the detail nobody was reading. Where it is closing is the
-// bottom box's and the corner's; on the last phase there is nowhere, and this says so.
-static const u8 sText_FogSpreads[] = _("The fog spreads! All grew stronger!");
+// The ring's one ticker line (Kanto's "ONE box per shrink", POK-324): the level every
+// POKeMON is at now, when the rung moved. "The fog spreads! All grew stronger!" said
+// neither what grew nor how much (Cam's 2026-10-20 play-test, HBR-40), and once the rung
+// tops out it was not true. Where it is closing is the bottom box's and the corner's; on
+// the last phase there is nowhere, and this says so.
+static const u8 sText_AllNowLv[] = _("All POKéMON are now Lv. ");
 static const u8 sText_FogCoversAll[] = _("The fog covers all of HOENN!");
 
-static void SayPhase(void)
+static void SayPhase(u8 rungBefore)
 {
-    BrHud_Alert(gBrRing.r < 0 ? sText_FogCoversAll : sText_FogSpreads);
+    u8 line[sizeof(sText_AllNowLv) + 4];
+    u8 *p;
+
+    if (gBrRing.r < 0)
+    {
+        BrHud_Alert(sText_FogCoversAll);
+        return;
+    }
+    if (gBrLevels.rung == rungBefore)
+        return;
+    p = StringCopy(line, sText_AllNowLv);
+    p = ConvertIntToDecimalStringN(p, gBrLevels.rung, STR_CONV_MODE_LEFT_ALIGN, 3);
+    *p++ = CHAR_EXCL_MARK;
+    *p = EOS;
+    BrHud_Alert(line);
 }
 
 static void SwapRod(u16 rod)
@@ -599,6 +613,7 @@ u16 BrLevels_ItemPrice(u16 itemId, u16 price)
 void BrLevels_Tick(void)
 {
     u8 phase = gBrRing.active ? gBrRing.phase : 0;
+    u8 rungBefore = gBrLevels.rung;
 
     if (phase == gBrLevels.phaseSeen)
         return;
@@ -613,7 +628,7 @@ void BrLevels_Tick(void)
     // for the first ring, which keeps the rung the match already had (phase 1 is tier 0,
     // as no ring is): nothing grew stronger, and the box saying where it closes is the news.
     if (phase > 1)
-        SayPhase();
+        SayPhase(rungBefore);
 }
 
 u8 BrLevels_WildLevel(void)

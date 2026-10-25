@@ -405,6 +405,9 @@ static void CB2_BrReturnFromBattle(void)
     // the next link fight's first choice (POK-331 #11).
     gBrBattle.stalled = FALSE;
     gBrBattle.stallFrames = 0;
+    // ...and its fog, which BrBattle_Finished puts away for a fight that ran to its end
+    // and a torn-down one (BrBattle_Unwind) never reached.
+    BrRing_SetBattleFog(FALSE);
     BrEngage_OnBattleEnd(gBrNetlink.peerSeat, gBattleOutcome);
     BrMatch_SendResult(gBrMySeat, gBattleOutcome);
     Close();

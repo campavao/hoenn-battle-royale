@@ -290,7 +290,9 @@ export function layEvent(
 
 /** The cells of `pool` on `from`'s map nearest it, `n` of them, none `taken`, `from`
  *  first; within eight tiles, so an event is one cluster and not a trail across a route
- *  -- on open ground the seven are all within two. */
+ *  -- on open ground the seven are all within three. None on `from`'s four sides: the
+ *  legendary stands there, and its own pieces round it boxed it in as the trees had
+ *  (HBR-41, PR #127 review). */
 export function clusterCells(
   pool: readonly { map: MapRef; x: number; y: number }[],
   from: { map: MapRef; x: number; y: number },
@@ -300,7 +302,7 @@ export function clusterCells(
   const d = (c: { x: number; y: number }) => Math.abs(c.x - from.x) + Math.abs(c.y - from.y);
   const near = pool
     .filter((c) => c.map.group === from.map.group && c.map.num === from.map.num)
-    .filter((c) => d(c) <= 8 && (d(c) === 0 || !taken(c)))
+    .filter((c) => d(c) <= 8 && d(c) !== 1 && (d(c) === 0 || !taken(c)))
     .sort((a, b) => d(a) - d(b) || a.y - b.y || a.x - b.x)
     .filter((c, i, all) => i === 0 || c.x !== all[i - 1].x || c.y !== all[i - 1].y);
   return near.slice(0, n).map((c) => ({ x: c.x, y: c.y }));
