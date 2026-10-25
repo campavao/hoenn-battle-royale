@@ -364,8 +364,24 @@ export class SignCue {
   }
 }
 
+/** Frames off the field before the HUD steps aside. A door's map load leaves
+ *  CB2_Overworld for about 9 frames, and the HUD blinked off for them (Cam's 10-23
+ *  video, HBR-60); a battle or a menu is off it for good, and hides a moment later. */
+export const OFF_FIELD_GRACE = 15;
+
+/** Whether the HUD is off the field, a frame at a time, with OFF_FIELD_GRACE's grace. */
+export class OffField {
+  private frames = 0;
+
+  step(onField: boolean): boolean {
+    this.frames = onField ? 0 : this.frames + 1;
+    return this.frames > OFF_FIELD_GRACE;
+  }
+}
+
 export class PhoneHud {
   private view: HudView | null = null;
+  private readonly offField = new OffField();
   private scale = 1;
   private readonly signCue = new SignCue();
   private readonly sign: Win;
@@ -464,8 +480,9 @@ export class PhoneHud {
 
   update(v: HudView): void {
     this.view = v;
-    this.deps.top.classList.toggle('off-field', !v.onField);
-    this.deps.dock.classList.toggle('off-field', !v.onField);
+    const off = this.offField.step(v.onField);
+    this.deps.top.classList.toggle('off-field', off);
+    this.deps.dock.classList.toggle('off-field', off);
     const signKey = `${v.theme}|${v.place}`;
     if (this.signCue.next(signKey)) {
       this.sign.show(signKey);
