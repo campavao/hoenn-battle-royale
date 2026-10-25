@@ -457,16 +457,17 @@ static void LearnThrough(struct Pokemon *mon, u8 to, bool8 player)
     }
 }
 
-// A mon that joins the party at the rung -- a ball off the ground, a catch -- is where a
-// lift would have left it: evolved as far as levelling evolves it, and knowing the four
-// a lift would teach. Nothing else ever did it, so a ZUBAT taken at 50 stayed a ZUBAT
-// until the ring next moved, and for good on the last phase (2026-10-05 play-test).
+// The evolving half of a settle alone: what a mon about to join will be called.
 u16 BrLevels_GrowUp(struct Pokemon *mon)
 {
     GrowUp(mon);
     return GetMonData(mon, MON_DATA_SPECIES, NULL);
 }
 
+// A mon that joins the party at the rung -- a ball off the ground, a catch -- is where a
+// lift would have left it: evolved as far as levelling evolves it, and knowing the four
+// a lift would teach. Nothing else ever did it, so a ZUBAT taken at 50 stayed a ZUBAT
+// until the ring next moved, and for good on the last phase (2026-10-05 play-test).
 void BrLevels_Settle(struct Pokemon *mon)
 {
     GrowUp(mon);

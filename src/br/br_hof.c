@@ -122,7 +122,7 @@ const struct WindowTemplate *BrHof_PlayerWindow(void)
 // Emerald's slash is; the species follows it only when it says something new.
 void BrHof_PrintMonName(u8 windowId, const u8 *nickname, u16 species, u32 personality, const u8 *colors)
 {
-    u8 text[POKEMON_NAME_LENGTH + 4];
+    u8 text[1 + POKEMON_NAME_LENGTH + 2 + 1 + 1]; // "/", species, " " and glyph, EOS, a spare
     u8 *p;
 
     AddTextPrinterParameterized3(windowId, FONT_NORMAL, GetStringRightAlignXOffset(FONT_NORMAL, nickname, 0x80), 1,

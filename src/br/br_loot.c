@@ -10,6 +10,7 @@
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
 #include "pokemon.h"
+#include "random.h"
 #include "money.h"
 #include "data.h"
 #include "event_object_lock.h"
@@ -39,7 +40,6 @@
 #include "br/br_event.h"
 #include "br/br_story.h"
 #include "br/br_items.h"
-#include "random.h"
 #include "br/br_loot.h"
 #include "br/br_legend.h"
 #include "br/br_gym.h"
@@ -850,7 +850,9 @@ static void TalkTrade(struct BrLootItem *it);
 // The mon a ball holds, as taking it makes it: traded-into, at its level, from a seed
 // of the match's and the ball's own, so the same ball always holds the same mon. The
 // spoils list makes it too, to name what A gives: it said OMANYTE and the take said
-// "Took OMASTAR!" (10-20 #19, HBR-52). The game's own RNG is put back as it was.
+// "Took OMASTAR!" (10-20 #19, HBR-52). The game's own RNG is put back as it was. The
+// level is the rung's, read now: a list opened on one rung and taken on the next can
+// name the one before an evolution, and the held line keeps its name until we step off.
 static void MakeTaken(struct Pokemon *mon, const struct BrLootItem *it)
 {
     u32 rng = gRngValue;
