@@ -141,8 +141,11 @@ export function paintButtons(c: EmeraldCanvas, y: number, buttons: ButtonSpec[])
   });
 }
 
-/** A line of small text, centred, for a note under a list. */
-export function paintNote(c: EmeraldCanvas, text: string, y: number, color = TEXT_GRAY): Rect {
+/** A line of small text, centred, for a note under a list: on the page, not in a frame,
+ *  so white with the dark shadow, as the titles are. TEXT_GRAY is the window's faint ink
+ *  -- light gray with a white shadow -- and on the dark page it read as white on white
+ *  ("No open rooms", 10-20 play-test #17, HBR-50). */
+export function paintNote(c: EmeraldCanvas, text: string, y: number, color = TEXT_WHITE): Rect {
   const r = { x: 0, y, w: W, h: ROW_H };
   if (text) c.drawTextCentred(fitText(text, W - 8), W / 2, y, color);
   return r;
@@ -320,7 +323,7 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
       y = lay.frame.y + lay.frame.h + 2;
 
       const noteText = m.countdown !== null && !m.started ? `STARTS IN ${m.countdown}` : m.note;
-      const noteRect = paintNote(c, noteText, y, m.countdown !== null ? TEXT_WHITE : TEXT_GRAY);
+      const noteRect = paintNote(c, noteText, y);
       widgets.push({ rect: noteRect, text: noteText, parent: 'room-note', cursor: null });
       y += ROW_H + 2;
 
@@ -652,6 +655,10 @@ export function versionLines(version: string): string[] {
  *  #match-card, #room-note, #spectate-strip, #match-leave, #drawer-close, #mute,
  *  #remap, #remap-reset, #forget-rom, #remap-line. */
 export function sheetScreen(model: () => SheetModel): DrawnScreen {
+  // The most chips this sheet has shown. The chips' box keeps that many rows once it has
+  // had them, so the seats under it stay put: the legendary's line going and coming
+  // moved the whole panel ~40 px each time (10-20 play-test #22, HBR-55).
+  let chipRows = 0;
   return {
     look: () => model().look,
     back() {
@@ -682,8 +689,9 @@ export function sheetScreen(model: () => SheetModel): DrawnScreen {
         y += ROW_H;
       }
       const chips = m.chips ?? [];
+      chipRows = Math.max(chipRows, chips.length);
       if (chips.length > 0) {
-        const frame = { x: 0, y: y + 2, w: W, h: chips.length * ROW_H + 8 };
+        const frame = { x: 0, y: y + 2, w: W, h: chipRows * ROW_H + 8 };
         c.drawFrame(frame);
         chips.forEach((chip, i) => {
           const at = frame.y + 4 + i * ROW_H;
@@ -691,6 +699,8 @@ export function sheetScreen(model: () => SheetModel): DrawnScreen {
           widgets.push({ rect: { x: 0, y: at, w: W, h: ROW_H }, text: chip, id: `match-chip-${i}`, cls: 'room-code', cursor: null });
         });
         y = frame.y + frame.h;
+      } else if (chipRows > 0) {
+        y += 2 + chipRows * ROW_H + 8; // the box's room, left empty
       }
       y += 4;
 

@@ -3,7 +3,7 @@
 // is a real <textarea> in the mirror (stage.ts `field`): a phone's own keyboard types
 // into it, and this draws what it holds in Emerald's font.
 import { FEEDBACK_MAX, cleanNote, type FeedbackResult } from '../net/feedback';
-import { TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_RED, type TextColor, fitText, wrapText } from './emerald';
+import { TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_RED, TEXT_WHITE, type TextColor, fitText, wrapText } from './emerald';
 import { ROW_H, W, paintButtons, paintTitle } from './screens';
 import type { DrawnScreen, Look, Painted, Widget } from './stage';
 
@@ -70,7 +70,7 @@ export function feedbackScreen(model: () => FeedbackModel): DrawnScreen {
       y += 20;
       const intro = 'A bug or an idea? Tell us here.';
       const introRows = wrapText(intro, W - 8);
-      introRows.forEach((row, i) => c.drawTextCentred(row, W / 2, y + i * ROW_H, TEXT_GRAY));
+      introRows.forEach((row, i) => c.drawTextCentred(row, W / 2, y + i * ROW_H, TEXT_WHITE));
       widgets.push({ rect: { x: 0, y, w: W, h: introRows.length * ROW_H }, text: intro, cursor: null });
       y += introRows.length * ROW_H + 4;
 
