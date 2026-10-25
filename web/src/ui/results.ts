@@ -77,6 +77,35 @@ export function standingsOf(placed: readonly { seat: number; placement: number }
 export interface Fame {
   title: string;
   mons: string[];
+  /** The same team as Hall of Fame cards (Cam's 10-20 play-test, #14: "the champion's
+   *  team like the hall of fame cards, and tap one for its summary"). */
+  cards: FameCard[];
+}
+
+/** One of the champion's team, as its card and its summary say it. */
+export interface FameCard {
+  species: number;
+  shiny: boolean;
+  /** Its nickname, or its species' name. */
+  name: string;
+  /** The species, under a nickname; undefined without one. */
+  kind?: string;
+  level: number;
+  hp: number;
+  maxHp: number;
+  moves: string[];
+}
+
+/** What fameOf reads of a team row: PackedMon's, all but the species and level optional
+ *  for a team that came without them. */
+export interface FameMon {
+  species: number;
+  nickname?: string;
+  level: number;
+  hp?: number;
+  maxHp?: number;
+  shiny?: boolean;
+  moves?: readonly { id: number }[];
 }
 
 /** The champion's team (POK-243's half of the parade), or null when it never arrived --
@@ -84,14 +113,74 @@ export interface Fame {
 export function fameOf(
   winner: number | undefined,
   seat: number,
-  party: readonly { species: number; nickname?: string; level: number }[] | undefined,
+  party: readonly FameMon[] | undefined,
   nameOf: (seat: number) => string,
   speciesName: (species: number) => string,
+  moveName: (id: number) => string | undefined = () => undefined,
 ): Fame | null {
   if (winner === undefined || !party) return null;
-  const mons = party.filter((m) => m.species > 0).map((m) => `${m.nickname || speciesName(m.species)} Lv${m.level}`);
-  if (mons.length === 0) return null;
-  return { title: winner === seat ? 'Your team' : `The champion: ${nameOf(winner)}`, mons };
+  const team = party.filter((m) => m.species > 0);
+  if (team.length === 0) return null;
+  const cards = team.map((m): FameCard => {
+    const kind = speciesName(m.species);
+    return {
+      species: m.species,
+      shiny: m.shiny === true,
+      name: m.nickname || kind,
+      kind: m.nickname && m.nickname !== kind ? kind : undefined,
+      level: m.level,
+      hp: m.hp ?? 0,
+      maxHp: m.maxHp ?? 0,
+      moves: (m.moves ?? []).filter((mv) => mv.id > 0).map((mv) => moveName(mv.id) ?? `MOVE ${mv.id}`),
+    };
+  });
+  return { title: winner === seat ? 'Your team' : `The champion: ${nameOf(winner)}`, mons: cards.map((c) => `${c.name} Lv${c.level}`), cards };
+}
+
+/** A card: the picture, and the name under it, three to a row in one window, as the
+ *  Hall of Fame's own row of them. */
+const CARD_W = 74;
+const CARD_H = 78;
+const PIC = 64;
+
+/** The picture of one of the team (tools/br/export-mon-pics.py). */
+function monPic(card: FameCard): string {
+  return `/mon-pics/${card.species}${card.shiny ? 's' : ''}.png`;
+}
+
+/** The window the cards take: two rows for a full team. */
+function cardsHeight(count: number): number {
+  return Math.ceil(count / 3) * CARD_H + 16;
+}
+
+/** The cards, from `y`; the widgets are the taps that open a summary. */
+function paintCards(c: EmeraldCanvas, y: number, cards: readonly FameCard[], open: (i: number) => void): { bottom: number; widgets: Widget[] } {
+  const widgets: Widget[] = [];
+  c.drawFrame({ x: 0, y, w: W, h: cardsHeight(cards.length) });
+  cards.forEach((card, i) => {
+    const r = { x: 8 + (i % 3) * CARD_W, y: y + 8 + Math.floor(i / 3) * CARD_H, w: CARD_W, h: CARD_H };
+    c.drawUiPicture(monPic(card), 0, 0, PIC, PIC, r.x + Math.floor((r.w - PIC) / 2), r.y);
+    const name = fitText(card.name, r.w - 4);
+    c.drawText(name, r.x + Math.floor((r.w - measure(name)) / 2), r.y + PIC, card.shiny ? TEXT_BLUE : TEXT_DARK);
+    widgets.push({ rect: r, text: `${card.name} Lv${card.level}`, id: `fame-card-${i}`, onPress: () => open(i), cursor: { x: r.x, y: r.y + PIC } });
+  });
+  return { bottom: y + cardsHeight(cards.length), widgets };
+}
+
+/** One card, opened: its picture, its level and HP, and its moves -- what Emerald's own
+ *  summary leads with. */
+function paintSummary(c: EmeraldCanvas, y: number, card: FameCard): { bottom: number; widgets: Widget[] } {
+  const top = y;
+  const box = { x: 8, y, w: W - 16, h: PIC + 12 };
+  c.drawFrame(box);
+  c.drawUiPicture(monPic(card), 0, 0, PIC, PIC, box.x + 6, box.y + 6);
+  const tx = box.x + PIC + 14;
+  const lines = [card.kind ?? '', `Lv${card.level}`, card.maxHp > 0 ? `HP ${card.hp}/${card.maxHp}` : '', card.shiny ? 'Shiny' : ''].filter(Boolean);
+  lines.forEach((l, i) => c.drawText(fitText(l, box.x + box.w - tx - 6), tx, box.y + 8 + i * ROW_H, i === 0 && card.kind ? TEXT_BLUE : TEXT_DARK));
+  y = box.y + box.h + 4;
+  const moves = paintRows(c, y, (card.moves.length > 0 ? card.moves : ['-']).map((mv) => ({ label: mv })));
+  const text = [card.name, ...lines, ...card.moves].join(' · ');
+  return { bottom: moves.bottom, widgets: [{ rect: { x: 0, y: top, w: W, h: moves.bottom - top }, text, id: 'fame-summary', cls: 'results-fame', cursor: null }] };
 }
 
 /** The match's own lines, for the results under the Hall of Fame. Every count is said,
@@ -180,7 +269,7 @@ export interface ResultsModel {
  *  team and what they did. One page held them all until the 10-20 play-test asked for
  *  everybody's place and the champion's stats too, which a 320-high screen has no room
  *  for under the rest. */
-export type ResultsPage = 'match' | 'champion';
+export type ResultsPage = 'match' | 'champion' | 'stats';
 
 /** The standings as a grid: two columns, three once two run past the rows the screen
  *  has left, and past that the best of them and our own line (a room seats up to 32). */
@@ -235,6 +324,25 @@ function matchBottom(m: ResultsModel, h: number): number {
   return 28 + framed(standings) + (m.record.length > 0 ? framed(recordRows(m.record).length) : 0);
 }
 
+/** The champion's stats' window, and the gap under it. */
+function statsHeight(m: ResultsModel): number {
+  return m.champion && m.champion.lines.length > 0 ? layoutRows(0, recordRows(m.champion.lines).length).frame.h + 4 : 0;
+}
+
+/** The champion's cards and stats are a page each when both will not fit over the
+ *  buttons -- a full team of six and every count, on a 320-high screen. */
+function statsApart(m: ResultsModel, h: number): boolean {
+  return m.fame !== null && statsHeight(m) > 0 && 28 + cardsHeight(m.fame.cards.length) + 4 + statsHeight(m) > h - 28;
+}
+
+/** Where the buttons go while there are pages: under the longest, so they stay put as
+ *  the pages turn. */
+function buttonsAt(m: ResultsModel, h: number): number {
+  const cards = m.fame ? cardsHeight(m.fame.cards.length) + 4 : 0;
+  const champion = statsApart(m, h) ? 28 + Math.max(cards, statsHeight(m)) : 28 + cards + statsHeight(m);
+  return Math.max(matchBottom(m, h), champion);
+}
+
 /** The place column: "8th" and a space. */
 const PLACE_W = 28;
 
@@ -243,15 +351,26 @@ const PLACE_W = 28;
  *  first page holds all of them but the fame, which is the second's. */
 export function resultsScreen(model: () => ResultsModel): DrawnScreen {
   let page: ResultsPage = 'match';
+  /** The card a tap opened, on the champion's page. */
+  let open: number | null = null;
   return {
+    back() {
+      open = null;
+    },
     paint(c, h): Painted {
       const m = model();
       const widgets: Widget[] = [];
       const second = m.fame !== null || m.champion !== undefined;
-      if (!second) page = 'match';
+      const apart = statsApart(m, h);
+      const pages: ResultsPage[] = !second ? ['match'] : apart ? ['match', 'champion', 'stats'] : ['match', 'champion'];
+      if (!pages.includes(page)) page = 'match';
+      const card = page === 'champion' && open !== null ? m.fame?.cards[open] : undefined;
+      if (!card) open = null;
+      // The champion's page is under their name, and a card under its own.
+      const title = page === 'match' ? m.view.headline : card ? card.name : (m.fame?.title ?? `The champion: ${m.champion?.name ?? ''}`);
       let y = 6;
-      paintTitle(c, fitText(m.view.headline, W - 8), y);
-      widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.view.headline, cls: 'results-head', cursor: null });
+      paintTitle(c, fitText(title, W - 8), y);
+      widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: title, cls: 'results-head', cursor: null });
       y += 22;
 
       const record = (id: string, lines: readonly RecordLine[]) => {
@@ -284,33 +403,45 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
         });
         y = bottom + 4;
         record('results-record', m.record);
-      } else {
+      } else if (card) {
+        // One of the team, opened.
+        const sum = paintSummary(c, y, card);
+        widgets.push(...sum.widgets);
+        y = sum.bottom + 4;
+      } else if (page === 'champion') {
         if (m.fame) {
-          // The champion's team, two to a row, under whose it is.
-          const pairs: { label: string; detail?: string }[] = [];
-          for (let i = 0; i < m.fame.mons.length; i += 2) pairs.push({ label: m.fame.mons[i], detail: m.fame.mons[i + 1] });
-          const fameTop = y;
-          const fame = paintRows(c, y, [{ label: m.fame.title, color: TEXT_BLUE }, ...pairs]);
-          widgets.push({ rect: { x: 0, y: fameTop, w: W, h: fame.bottom - fameTop }, text: `${m.fame.title}: ${m.fame.mons.join(', ')}`, id: 'results-fame', cls: 'results-fame', cursor: null });
-          y = fame.bottom + 4;
+          // The champion's team as Hall of Fame cards; a tap opens one. The mirror's
+          // #results-fame says the whole team, over the title.
+          widgets.push({ rect: { x: 0, y: 6, w: W, h: ROW_H }, text: `${m.fame.title}: ${m.fame.mons.join(', ')}`, id: 'results-fame', cls: 'results-fame', cursor: null });
+          const cards = paintCards(c, y, m.fame.cards, (i) => {
+            open = i;
+          });
+          widgets.push(...cards.widgets);
+          y = cards.bottom + 4;
         }
-        if (m.champion) {
-          // Their team has not come (yet): the page still says whose stats these are.
-          if (!m.fame) {
-            paintRows(c, y, [{ label: `The champion: ${m.champion.name}`, color: TEXT_BLUE }]);
-            y += layoutRows(0, 1).frame.h + 4;
-          }
-          record('results-champion', m.champion.lines);
-        }
+        if (m.champion && !apart) record('results-champion', m.champion.lines);
+      } else if (m.champion) {
+        record('results-champion', m.champion.lines);
       }
 
       const buttons: ButtonSpec[] = [];
+      if (card) {
+        buttons.push({
+          label: 'BACK',
+          id: 'fame-back',
+          onPress: () => {
+            open = null;
+          },
+        });
+        widgets.push(...paintButtons(c, Math.min(Math.max(y, buttonsAt(m, h)), h - 28), buttons));
+        return { widgets, containers: [{ id: 'results-panel', cls: 'results' }] };
+      }
       if (m.again) buttons.push({ label: m.again.label, id: m.again.id, disabled: m.again.disabled, onPress: m.again.onPress });
       if (m.menu) buttons.push({ label: 'MAIN MENU', id: 'results-menu', onPress: m.menu });
       if (second) {
-        const other: ResultsPage = page === 'match' ? 'champion' : 'match';
+        const other = pages[(pages.indexOf(page) + 1) % pages.length];
         buttons.push({
-          label: other === 'match' ? 'RANKING' : 'CHAMPION',
+          label: other === 'match' ? 'RANKING' : other === 'champion' ? 'CHAMPION' : 'RECORDS',
           id: 'results-page',
           onPress: () => {
             page = other;
@@ -318,7 +449,7 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
         });
       }
       // Where the first page ends, on both: the buttons stay put as the pages turn.
-      if (second) y = Math.max(y, matchBottom(m, h));
+      if (second) y = Math.max(y, buttonsAt(m, h));
       if (buttons.length) widgets.push(...paintButtons(c, Math.min(y, h - 28), buttons));
       return { widgets, containers: [{ id: 'results-panel', cls: 'results' }] };
     },

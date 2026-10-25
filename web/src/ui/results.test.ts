@@ -29,7 +29,8 @@ describe('what the results say', () => {
       { species: 261, nickname: '', level: 9 },
     ];
     const fame = fameOf(2, 1, party, nameOf, () => 'POOCHYENA');
-    expect(fame).toEqual({ title: 'The champion: MAY', mons: ['MUDKIP Lv12', 'POOCHYENA Lv9'] });
+    expect(fame).toMatchObject({ title: 'The champion: MAY', mons: ['MUDKIP Lv12', 'POOCHYENA Lv9'] });
+    expect(fame?.cards.map((c) => [c.species, c.name, c.kind])).toEqual([[258, 'MUDKIP', 'POOCHYENA'], [261, 'POOCHYENA', undefined]]);
     expect(fameOf(1, 1, party, nameOf, () => '')?.title).toBe('Your team');
     expect(fameOf(2, 1, undefined, nameOf, () => ''), "a bot's never does").toBeNull();
     expect(fameOf(undefined, 1, party, nameOf, () => '')).toBeNull();
@@ -38,7 +39,7 @@ describe('what the results say', () => {
   it('keeps the ids the page always had, for a test and a screen reader', () => {
     const model: ResultsModel = {
       view: resultsView({ ended: true, winner: 2, placement: 2, survived: 30 }, 8, 1, nameOf, 7),
-      fame: { title: 'The champion: MAY', mons: ['MUDKIP Lv12'] },
+      fame: { title: 'The champion: MAY', mons: ['MUDKIP Lv12'], cards: [] },
       standings: [],
       record: [{ label: 'RINGS', value: '2' }],
       again: { label: 'PLAY AGAIN', id: 'play-again', onPress: vi.fn() },
@@ -73,7 +74,7 @@ describe('what the results say', () => {
     expect(standings[2]).toEqual({ place: '3rd', name: 'P1', me: true });
     const model: ResultsModel = {
       view: resultsView({ ended: true, winner: 2, placement: 3, survived: 30 }, 5, 1, nameOf),
-      fame: { title: 'The champion: MAY', mons: ['MUDKIP Lv100', 'SPINDA Lv100', 'SKARMORY Lv100', 'SPINDA Lv100', 'RAYQUAZA Lv100'] },
+      fame: fameOf(2, 1, [258, 327, 227, 327, 406].map((species) => ({ species, level: 100 })), nameOf, (sp) => ({ 258: 'MUDKIP', 327: 'SPINDA', 227: 'SKARMORY', 406: 'RAYQUAZA' })[sp] ?? '?'),
       standings,
       record: [{ label: 'RINGS', value: '2' }, { label: 'CAUGHT', value: '1' }, { label: 'STEPS', value: '748' }, { label: 'FAVORITE', value: 'MR. MIME', wide: true }],
       champion: { name: 'MAY', lines: [{ label: 'RINGS', value: '6' }, { label: 'CAUGHT', value: '4' }, { label: 'STEPS', value: '2100' }, { label: 'FAVORITE', value: 'FERALIGATR', wide: true }] },
@@ -102,6 +103,77 @@ describe('what the results say', () => {
     expect(byId('results-fame')?.text).toContain('RAYQUAZA Lv100');
     expect(byId('results-standings')).toBeUndefined();
     for (const w of painted.widgets) expect(w.rect.y + w.rect.h, w.text).toBeLessThanOrEqual(320);
+  });
+
+  // HBR-47: "the champion's team like the hall of fame cards, and tap one for its summary".
+  it("draws a full team of six as cards, the champion's stats with them or after, and a tap opens one", () => {
+    const party = [406, 160, 384, 282, 376, 395].map((species, i) => ({
+      species,
+      level: 50 + i,
+      nickname: i === 0 ? 'RAY' : '',
+      hp: 100,
+      maxHp: 150,
+      shiny: i === 1,
+      moves: [{ id: 1 }, { id: 2 }, { id: 0 }],
+    }));
+    const model: ResultsModel = {
+      view: resultsView({ ended: true, winner: 2, placement: 3, survived: 30 }, 8, 1, nameOf),
+      fame: fameOf(2, 1, party, nameOf, () => 'RAYQUAZA', (id) => ['', 'POUND', 'KARATE CHOP'][id]),
+      standings: [],
+      record: [],
+      champion: {
+        name: 'MAY',
+        lines: [...Array.from({ length: 8 }, (_, i) => ({ label: `N${i}`, value: '1' })), { label: 'FAVORITE', value: 'FERALIGATR', wide: true }, { label: 'TOP MOVE', value: 'HYDRO PUMP', wide: true }],
+      },
+      again: { label: 'PLAY AGAIN', id: 'play-again', onPress: vi.fn() },
+      menu: vi.fn(),
+    };
+    const screen = resultsScreen(() => model);
+    screen.paint(fakeCanvas().canvas, 320).widgets.find((w) => w.id === 'results-page')!.onPress!();
+    let fake = fakeCanvas();
+    let painted = screen.paint(fake.canvas, 320);
+    const byId = (id: string) => painted.widgets.find((w) => w.id === id);
+    expect(fake.texts.some((t) => t.text === 'The champion: MAY'), 'the page is under their name').toBe(true);
+    expect(fake.pictures.map((p) => p.name)).toEqual(['/mon-pics/406.png', '/mon-pics/160s.png', '/mon-pics/384.png', '/mon-pics/282.png', '/mon-pics/376.png', '/mon-pics/395.png']);
+    const cards = painted.widgets.filter((w) => w.id?.startsWith('fame-card-'));
+    expect(cards).toHaveLength(6);
+    for (let i = 1; i < cards.length; i++) {
+      const a = cards[i - 1].rect;
+      const b = cards[i].rect;
+      expect(a.x + a.w <= b.x || a.y + a.h <= b.y, 'cards do not overlap').toBe(true);
+    }
+    for (const w of painted.widgets) expect(w.rect.y + w.rect.h, w.text).toBeLessThanOrEqual(320);
+    const buttonsAt = byId('results-page')!.rect.y;
+    for (const f of fake.frames.filter((f) => f.y < buttonsAt)) expect(f.y + f.h, 'no frame under the buttons').toBeLessThanOrEqual(buttonsAt);
+    // Six cards and every count do not both fit over the buttons at 320: RECORDS is a page.
+    expect(byId('results-champion')).toBeUndefined();
+    expect(byId('results-page')?.text).toBe('RECORDS');
+    const pageAt = byId('results-page')!.rect;
+    byId('results-page')!.onPress!();
+    fake = fakeCanvas();
+    painted = screen.paint(fake.canvas, 320);
+    expect(byId('results-champion')?.text).toContain('TOP MOVE HYDRO PUMP');
+    expect(byId('results-page')?.rect, 'the buttons stay put').toEqual(pageAt);
+    expect(byId('results-page')?.text).toBe('RANKING');
+    for (const w of painted.widgets) expect(w.rect.y + w.rect.h, w.text).toBeLessThanOrEqual(320);
+    // A taller screen has room for both.
+    painted = screen.paint(fakeCanvas().canvas, 480);
+    expect(byId('results-page')?.text).toBe('CHAMPION');
+    byId('results-page')!.onPress!();
+    painted = screen.paint(fakeCanvas().canvas, 480);
+    expect(byId('results-champion')?.text).toContain('TOP MOVE HYDRO PUMP');
+    expect(painted.widgets.filter((w) => w.id?.startsWith('fame-card-'))).toHaveLength(6);
+    painted = screen.paint(fakeCanvas().canvas, 320);
+
+    cards[0].onPress!();
+    fake = fakeCanvas();
+    painted = screen.paint(fake.canvas, 320);
+    expect(byId('fame-summary')?.text).toBe('RAY · RAYQUAZA · Lv50 · HP 100/150 · POUND · KARATE CHOP');
+    expect(byId('results-page'), 'a card has only its way back').toBeUndefined();
+    for (const w of painted.widgets) expect(w.rect.y + w.rect.h, w.text).toBeLessThanOrEqual(320);
+    byId('fame-back')!.onPress!();
+    painted = screen.paint(fakeCanvas().canvas, 320);
+    expect(painted.widgets.filter((w) => w.id?.startsWith('fame-card-'))).toHaveLength(6);
   });
 
   it('fits a full room of 32 on a 320-high screen, our own place always on it', () => {

@@ -2039,7 +2039,7 @@ function renderResults(
   const champ = mine.winner;
   const model: ResultsModel = {
     view: resultsView(mine, books.fieldSize, seat, nameOf, books.seed),
-    fame: fameOf(champ, seat, champ === undefined ? undefined : books.parties.get(champ), nameOf, speciesName),
+    fame: fameOf(champ, seat, champ === undefined ? undefined : books.parties.get(champ), nameOf, speciesName, moveNameOf),
     standings: standingsOf(books.results.standings(), seat, nameOf),
     record: linesOf(seat, books.tally ? tallyMsg(seat, books.tally) : undefined),
     champion: champ === undefined || champ === seat ? undefined : { name: nameOf(champ), lines: linesOf(champ, books.tallies.get(champ)) },
