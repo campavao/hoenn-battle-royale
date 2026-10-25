@@ -2027,7 +2027,7 @@ function renderResults(
     fame: fameOf(champ, seat, champ === undefined ? undefined : books.parties.get(champ), nameOf, speciesName),
     standings: standingsOf(books.results.standings(), seat, nameOf),
     record: linesOf(seat, books.tally ? tallyMsg(seat, books.tally) : undefined),
-    champion: champ === undefined || champ === seat ? undefined : linesOf(champ, books.tallies.get(champ)),
+    champion: champ === undefined || champ === seat ? undefined : { name: nameOf(champ), lines: linesOf(champ, books.tallies.get(champ)) },
     again: shown.again,
     menu: shown.menu,
   };
@@ -3092,8 +3092,9 @@ function wireRoom(
   window.addEventListener('pagehide', sendJank);
   /** The career line the match produced, for the results. */
   let career = '';
-  /** Our counts have gone to the room this match (TallyMsg): we took it. */
-  let tallySaid = false;
+  /** How far our counts have gone to the room this match (TallyMsg), once we took it:
+   *  0 not yet, 1 as it was decided, 2 after our parade. */
+  let tallySaid = 0;
   /** The results, drawn from the match's books over the room's roster. */
   const drawResults = (): void => {
     // A dead end's notice is the last screen for this room: nothing is drawn over it.
@@ -3102,10 +3103,12 @@ function wireRoom(
     session.settleTally();
     const mine = session.results.forSeat(seat, performance.now());
     const held = paraded.holds(mine.winner, seat) || (mine.ended && replay.holds());
-    // The champion says what their ROM counted, once its parade is over and the last win
-    // is in it, for everybody else's results (Cam's 10-20 play-test, #12).
-    if (mine.ended && !held && mine.winner === seat && session.tally && !tallySaid) {
-      tallySaid = true;
+    // The champion says what their ROM counted, for everybody else's results (Cam's 10-20
+    // play-test, #12): as the match is decided, while the room is still in it, and again
+    // once the parade is over and the last win has been counted.
+    const due = held ? 1 : 2;
+    if (mine.ended && mine.winner === seat && session.tally && tallySaid < due) {
+      tallySaid = due;
       bridge.relay.all(tallyMsg(seat, session.tally));
     }
     renderResults(
@@ -3177,7 +3180,7 @@ function wireRoom(
     },
     {
       started: () => {
-        tallySaid = false;
+        tallySaid = 0;
         if (rereadAt) return; // a reload's books: the screen is put up once they are read
         hideRoomScreen();
         if (gBrJank !== undefined) {

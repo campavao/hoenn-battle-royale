@@ -170,7 +170,7 @@ export interface ResultsModel {
   record: RecordLine[];
   /** The champion's, when it is somebody else (Cam's 10-20 play-test, #12): what the room
    *  saw of them, and what their ROM counted once their page has said it (TallyMsg). */
-  champion?: RecordLine[];
+  champion?: { name: string; lines: RecordLine[] };
   /** PLAY AGAIN in a room; solo's MAIN MENU (id `results-lobby`, as the e2e has it). */
   again: { label: string; id: string; disabled?: boolean; onPress(): void } | null;
   /** MAIN MENU, beside PLAY AGAIN: a room's results were the one screen with no way off
@@ -184,9 +184,27 @@ export interface ResultsModel {
  *  for under the rest. */
 export type ResultsPage = 'match' | 'champion';
 
-function paintStandings(c: EmeraldCanvas, y: number, survived: string | undefined, standings: readonly Standing[]): number {
-  const half = Math.ceil(standings.length / 2);
-  const lay = layoutRows(y, (survived === undefined ? 0 : 1) + half);
+/** The standings as a grid: two columns, three once two run past the rows the screen
+ *  has left, and past that the best of them and our own line (a room seats up to 32). */
+function standingsGrid(standings: readonly Standing[], free: number): { cols: number; rows: number; shown: Standing[] } {
+  const rows = Math.max(1, free);
+  const cols = standings.length <= 2 * rows ? 2 : 3;
+  let shown = standings.slice(0, cols * rows);
+  const me = standings.find((s) => s.me);
+  if (me && !shown.includes(me)) shown = [...shown.slice(0, -1), me];
+  return { cols, rows: Math.ceil(shown.length / cols), shown };
+}
+
+/** Rows the standings have on the first page: what is left under the title, the record,
+ *  the career line and the buttons. */
+function standingsFree(m: ResultsModel, h: number): number {
+  const framed = (rows: number) => layoutRows(0, rows).frame.h + 4;
+  const rest = 28 + (m.record.length > 0 ? framed(recordRows(m.record).length) : 0) + framed(1) + 28;
+  return Math.floor((h - rest - 20) / ROW_H) - (m.view.survived === undefined ? 0 : 1);
+}
+
+function paintStandings(c: EmeraldCanvas, y: number, survived: string | undefined, grid: ReturnType<typeof standingsGrid>): number {
+  const lay = layoutRows(y, (survived === undefined ? 0 : 1) + grid.rows);
   c.drawFrame(lay.frame);
   let row = 0;
   if (survived !== undefined) {
@@ -194,16 +212,18 @@ function paintStandings(c: EmeraldCanvas, y: number, survived: string | undefine
     c.drawText('Survived', r.x + 8, r.y, TEXT_DARK);
     c.drawText(survived, r.x + r.w - measure(survived), r.y, TEXT_DARK);
   }
-  // Down the left column, then the right, the way the record reads.
-  for (let i = 0; i < half; i++, row++) {
+  // Down each column, then the next, the way the record reads.
+  for (let i = 0; i < grid.rows; i++, row++) {
     const r = lay.rows[row];
     const x0 = r.x + 8;
-    const mid = Math.floor((x0 + r.x + r.w + COL_GAP) / 2);
-    for (const [s, from, to] of [[standings[i], x0, mid - COL_GAP], [standings[i + half], mid, r.x + r.w]] as const) {
+    const step = Math.floor((r.x + r.w - x0 + COL_GAP) / grid.cols);
+    for (let col = 0; col < grid.cols; col++) {
+      const s = grid.shown[i + col * grid.rows];
       if (!s) continue;
+      const from = x0 + col * step;
       const color = s.me ? TEXT_BLUE : TEXT_DARK;
       c.drawText(s.place, from, r.y, color);
-      c.drawText(fitText(s.name, to - from - PLACE_W), from + PLACE_W, r.y, color);
+      c.drawText(fitText(s.name, step - COL_GAP - PLACE_W), from + PLACE_W, r.y, color);
     }
   }
   return lay.frame.y + lay.frame.h;
@@ -211,9 +231,9 @@ function paintStandings(c: EmeraldCanvas, y: number, survived: string | undefine
 
 /** How far down the first page's footer ends: the title, the standings, the record and
  *  the career line, each a frame and a gap. */
-function matchBottom(m: ResultsModel): number {
+function matchBottom(m: ResultsModel, h: number): number {
   const framed = (rows: number) => layoutRows(0, rows).frame.h + 4;
-  const standings = (m.view.survived === undefined ? 0 : 1) + Math.ceil(m.standings.length / 2);
+  const standings = (m.view.survived === undefined ? 0 : 1) + standingsGrid(m.standings, standingsFree(m, h)).rows;
   return 28 + framed(standings) + (m.record.length > 0 ? framed(recordRows(m.record).length) : 0) + framed(1);
 }
 
@@ -248,9 +268,10 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
 
       if (page === 'match') {
         const top = y;
-        const bottom = paintStandings(c, y, m.view.survived, m.standings);
+        const grid = standingsGrid(m.standings, standingsFree(m, h));
+        const bottom = paintStandings(c, y, m.view.survived, grid);
         widgets.push({
-          rect: { x: 0, y: top, w: W, h: bottom - top },
+          rect: { x: 0, y: 6, w: W, h: ROW_H },
           text: m.view.line,
           id: 'results-line',
           cls: 'results-line',
@@ -279,7 +300,14 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
           widgets.push({ rect: { x: 0, y: fameTop, w: W, h: fame.bottom - fameTop }, text: `${m.fame.title}: ${m.fame.mons.join(', ')}`, id: 'results-fame', cls: 'results-fame', cursor: null });
           y = fame.bottom + 4;
         }
-        record('results-champion', m.champion ?? []);
+        if (m.champion) {
+          // Their team has not come (yet): the page still says whose stats these are.
+          if (!m.fame) {
+            paintRows(c, y, [{ label: `The champion: ${m.champion.name}`, color: TEXT_BLUE }]);
+            y += layoutRows(0, 1).frame.h + 4;
+          }
+          record('results-champion', m.champion.lines);
+        }
       }
 
       const buttons: ButtonSpec[] = [];
@@ -288,7 +316,7 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
       if (second) {
         const other: ResultsPage = page === 'match' ? 'champion' : 'match';
         buttons.push({
-          label: other === 'match' ? 'PLACES' : 'CHAMPION',
+          label: other === 'match' ? 'RANKING' : 'CHAMPION',
           id: 'results-page',
           onPress: () => {
             page = other;
@@ -296,7 +324,7 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
         });
       }
       // Where the first page ends, on both: the buttons stay put as the pages turn.
-      if (second) y = Math.max(y, matchBottom(m));
+      if (second) y = Math.max(y, matchBottom(m, h));
       if (buttons.length) widgets.push(...paintButtons(c, Math.min(y, h - 28), buttons));
       return { widgets, containers: [{ id: 'results-panel', cls: 'results' }] };
     },

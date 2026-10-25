@@ -59,7 +59,7 @@ describe('what the results say', () => {
     byId('results-page')!.onPress!();
     painted = screen.paint(fakeCanvas().canvas, 320);
     expect(byId('results-fame')?.text).toContain('MUDKIP Lv12');
-    expect(byId('results-page')?.text).toBe('PLACES');
+    expect(byId('results-page')?.text).toBe('RANKING');
   });
 
   // Cam's 10-20 play-test, #12 and #15: "see what place Matt came in", and "how many
@@ -77,7 +77,7 @@ describe('what the results say', () => {
       fame: { title: 'The champion: MAY', mons: ['MUDKIP Lv100', 'SPINDA Lv100', 'SKARMORY Lv100', 'SPINDA Lv100', 'RAYQUAZA Lv100'] },
       standings,
       record: [{ label: 'RINGS', value: '2' }, { label: 'CAUGHT', value: '1' }, { label: 'STEPS', value: '748' }, { label: 'FAVORITE', value: 'MR. MIME', wide: true }],
-      champion: [{ label: 'RINGS', value: '6' }, { label: 'CAUGHT', value: '4' }, { label: 'STEPS', value: '2100' }, { label: 'FAVORITE', value: 'FERALIGATR', wide: true }],
+      champion: { name: 'MAY', lines: [{ label: 'RINGS', value: '6' }, { label: 'CAUGHT', value: '4' }, { label: 'STEPS', value: '2100' }, { label: 'FAVORITE', value: 'FERALIGATR', wide: true }] },
       again: { label: 'PLAY AGAIN', id: 'play-again', onPress: vi.fn() },
       menu: vi.fn(),
     };
@@ -95,14 +95,52 @@ describe('what the results say', () => {
     expect(buttons[0].rect.x).toBeGreaterThanOrEqual(0);
     expect(buttons[2].rect.x + buttons[2].rect.w).toBeLessThanOrEqual(240);
 
-    const placesAt = byId('results-page')!.rect.y;
+    const placesAt = byId('results-page')!.rect;
     byId('results-page')!.onPress!();
     painted = screen.paint(fakeCanvas().canvas, 320);
-    expect(byId('results-page')!.rect.y, 'the buttons stay put as the page turns').toBe(placesAt);
+    expect(byId('results-page')!.rect, 'the buttons stay put as the page turns').toEqual(placesAt);
     expect(byId('results-champion')?.text).toBe('RINGS 6 · CAUGHT 4 · STEPS 2100 · FAVORITE FERALIGATR');
     expect(byId('results-fame')?.text).toContain('RAYQUAZA Lv100');
     expect(byId('results-standings')).toBeUndefined();
     for (const w of painted.widgets) expect(w.rect.y + w.rect.h, w.text).toBeLessThanOrEqual(320);
+  });
+
+  it('fits a full room of 32 on a 320-high screen, our own place always on it', () => {
+    const standings = Array.from({ length: 32 }, (_, i) => ({ place: `${i + 1}th`, name: `TRAINER${i}`, me: i === 30 }));
+    const model: ResultsModel = {
+      view: resultsView({ ended: true, winner: 2, placement: 31, survived: 30 }, 32, 1, nameOf),
+      career: '1 played · 0 won · best 31st',
+      fame: null,
+      standings,
+      record: [...Array.from({ length: 8 }, (_, i) => ({ label: `N${i}`, value: '1' })), { label: 'FAVORITE', value: 'MR. MIME', wide: true }, { label: 'TOP MOVE', value: 'CONFUSION', wide: true }],
+      champion: { name: 'MAY', lines: [{ label: 'RINGS', value: '6' }] },
+      again: { label: 'PLAY AGAIN', id: 'play-again', onPress: vi.fn() },
+      menu: vi.fn(),
+    };
+    const { canvas, texts, frames } = fakeCanvas();
+    const painted = resultsScreen(() => model).paint(canvas, 320);
+    for (const w of painted.widgets) expect(w.rect.y + w.rect.h, w.text).toBeLessThanOrEqual(320);
+    const buttonsAt = painted.widgets.find((w) => w.id === 'results-page')!.rect.y;
+    for (const f of frames.filter((f) => f.y < buttonsAt)) expect(f.y + f.h, 'no frame under the buttons').toBeLessThanOrEqual(buttonsAt);
+    expect(texts.some((t) => t.text === '31th'), 'our own place').toBe(true);
+  });
+
+  it("names the champion over their stats when their team has not come", () => {
+    const model: ResultsModel = {
+      view: resultsView({ ended: true, winner: 2, placement: 3, survived: 30 }, 8, 1, nameOf),
+      career: '',
+      fame: null,
+      standings: [],
+      record: [],
+      champion: { name: 'MAY', lines: [{ label: 'RINGS', value: '6' }] },
+      again: null,
+    };
+    const screen = resultsScreen(() => model);
+    let painted = screen.paint(fakeCanvas().canvas, 320);
+    painted.widgets.find((w) => w.id === 'results-page')!.onPress!();
+    const { canvas, texts } = fakeCanvas();
+    painted = screen.paint(canvas, 320);
+    expect(texts.map((t) => t.text)).toContain('The champion: MAY');
   });
 
   it('has one page for a draw: nobody to show a team or stats of', () => {
