@@ -416,10 +416,16 @@ export class PhoneHud {
     this.sign = new Win(box('hud-sign'), SIGN_W, SIGN_H, (c, redo) => {
       const v = this.view;
       if (!v) return;
-      c.drawPicture(picture(`/ui/popup-${v.theme}.png`, redo), 0, 0, SIGN_W, SIGN_H, 0, 0);
+      // The name only on its plate: a theme not loaded yet drew the bare name for a few
+      // frames on landing in Slateport (Cam's 10-23 video, HBR-60). The load redraws.
+      const plate = picture(`/ui/popup-${v.theme}.png`, redo);
+      if (!plate.complete || plate.naturalWidth === 0) return;
+      c.drawPicture(plate, 0, 0, SIGN_W, SIGN_H, 0, 0);
       const name = fitText(v.place, SIGN_W - 16);
       c.drawTextCentred(name, SIGN_W / 2, 13, TEXT_DARK);
     });
+    // Every plate up front, so a new section's sign is whole on its first frame.
+    for (const theme of new Set(['wood', ...Object.values(THEMES)])) picture(`/ui/popup-${theme}.png`, () => undefined);
     this.fog = new Win(box('hud-fog'), FOG_W, fogHeight(3), (c) => {
       const v = this.view;
       if (!v) return;
