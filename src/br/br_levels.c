@@ -461,6 +461,12 @@ static void LearnThrough(struct Pokemon *mon, u8 to, bool8 player)
 // lift would have left it: evolved as far as levelling evolves it, and knowing the four
 // a lift would teach. Nothing else ever did it, so a ZUBAT taken at 50 stayed a ZUBAT
 // until the ring next moved, and for good on the last phase (2026-10-05 play-test).
+u16 BrLevels_GrowUp(struct Pokemon *mon)
+{
+    GrowUp(mon);
+    return GetMonData(mon, MON_DATA_SPECIES, NULL);
+}
+
 void BrLevels_Settle(struct Pokemon *mon)
 {
     GrowUp(mon);

@@ -23,6 +23,9 @@ u16 BrHof_TrainerPic(u16 pic);
 // 00000, and the save's play TIME is not the match's).
 const struct WindowTemplate *BrHof_PlayerWindow(void);
 void BrHof_PrintPlayer(u8 windowId, const u8 *colors);
+// A mon's name on its card: `nickname` (an EOS-ended copy), then "/SPECIES" only when
+// somebody renamed it, then its gender a space off.
+void BrHof_PrintMonName(u8 windowId, const u8 *nickname, u16 species, u32 personality, const u8 *colors);
 // The last screen, `frames` in: somebody else's parade moves on by itself after a few
 // seconds (a watcher is not made to press A to get their results); our own waits for A.
 bool8 BrHof_LetGo(u16 frames);

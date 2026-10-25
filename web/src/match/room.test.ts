@@ -46,7 +46,6 @@ describe('MAX past the relay\'s sixteen humans (POK-330 #29)', () => {
     const view = roomView(roster({ max: 16, seats: 30 }), 1, true);
     expect(view.max).toBe(30);
     expect(view.fill).toBe(28);
-    expect(startNote(view)).toBe('START: 2 trainers and 28 bots.');
     // ...and the ladder moves on from 30, instead of sticking at 16
     expect(nextMax(view.max)).toBe(MAX_STEPS[0]);
     expect(nextMax(roomView(roster({ max: 16, seats: 16 }), 1, true).max)).toBe(20);
@@ -93,9 +92,9 @@ describe('START', () => {
     expect(canStart(roomView(roster(), 2, true))).toBe(false); // not the host
   });
 
-  it('says what it would make', () => {
-    expect(startNote(roomView(roster({ max: 8 }), 1, true))).toBe('START: 2 trainers and 6 bots.');
-    expect(startNote(roomView(roster({ max: 2 }), 1, true))).toBe('START: 2 trainers.');
+  it('says nothing the seats already show (HBR-51)', () => {
+    expect(startNote(roomView(roster({ max: 8 }), 1, true))).toBe('');
+    expect(startNote(roomView(roster({ max: 2 }), 1, true))).toBe('');
     expect(startNote(roomView(roster(), 2, true))).toContain('Waiting for the host');
   });
 });

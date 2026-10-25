@@ -1,0 +1,47 @@
+# hof-name: a Hall of Fame card names a mon once (HBR-52). Emerald's line is
+# "NICKNAME/SPECIES" with the gender glued on, so the 10-20 play-test's champion read
+# "FERALIGATR/FERALIGATR" and a glyph that looked like "$". hof-watcher's parade with
+# the second mon named after its species: mon-1.png reads "TREECKO" and the glyph a
+# space off, no "/TREECKO". The expects are hof-watcher's: the parade still runs.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# seat 1 placed two tiles east of us, wearing skin 4 (HIKER)
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0E 00 0F 00 03 01 04
+poke u16 gBrMailbox+0x0C 1
+wait 10
+expect u8 gBrSeats+17 4
+# their party: two mons -- species 0x0115 Lv12 named TREKO, and the same at Lv14
+# named ZIGGY, a different personality each (+28) so the genders differ
+pokebytes gDecompressionBuffer 01 02 15 01 0C 22 00 38 00 00 01 00 23 00 47 00 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+copy gDecompressionBuffer+102 gDecompressionBuffer+2 100
+poke u8 gDecompressionBuffer+104 14
+pokebytes gDecompressionBuffer+130 01 00 00 00
+pokebytes gDecompressionBuffer+132 00 00 00 00
+pokebytes gDecompressionBuffer+138 07 CE CC BF BF BD C5 C9
+mailsend gBrMailbox 7 gDecompressionBuffer 202
+wait 10
+# FAME: seat 1, named STEVEN -- in a match (a FAME in the lobby is last match's, dropped)
+poke u8 gBrMatch 2
+pokebytes gDecompressionBuffer+0x400 01 06 CD CE BF D0 BF C8
+mailsend gBrMailbox 33 gDecompressionBuffer+0x400 8
+waitfor u8 gBrMatch 4 120
+wait 330
+shot mon-1
+# The un-nicknamed TREECKO first, in its own colours: a row without BR_MON_SHINY is never shiny (HBR-22, the
+# play-test's parade was all shiny). OBJ palette 1 is its pic's; colour 4 is 0x29BF shiny.
+expect u16 0x05000228 0x42E9
+wait 200
+shot mon-2
+wait 400
+shot team
+waitfor u8 gBrMatch 4 1
+wait 200
+shot champion
+# ...and no A: a watcher's last screen moves on by itself (BrHof_LetGo), four seconds in
+waitfor u8 gBrMatch 5 600
+wait 120
+shot after
+expect u8 gBrMatch 5
+# and it is let go of: a second FAME after the parade would parade again, not crash
+say hof name ok

@@ -106,13 +106,12 @@ export function dealable(humans: number, bots: number): boolean {
   return humans + bots >= 2;
 }
 
-/** The one line under the roster: what pressing START would actually make. */
+/** The one line under the roster, when it has something the seats do not say: the
+ *  seats already show who START deals in (HBR-51). */
 export function startNote(view: RoomView): string {
   if (!view.isHost) return 'Waiting for the host to start.';
-  const total = view.players + view.fill;
-  if (total < 2) return 'Nobody to play against. Turn FILL on, or wait for somebody.';
-  const bots = view.fill > 0 ? ` and ${view.fill} bot${view.fill === 1 ? '' : 's'}` : '';
-  return `START: ${view.players} trainer${view.players === 1 ? '' : 's'}${bots}.`;
+  if (view.players + view.fill < 2) return 'Nobody to play against. Turn FILL on, or wait for somebody.';
+  return '';
 }
 
 // ---- when a match starts (POK-330 #42) -----------------------------------------------

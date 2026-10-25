@@ -39,6 +39,7 @@
 #include "br/br_event.h"
 #include "br/br_story.h"
 #include "br/br_items.h"
+#include "random.h"
 #include "br/br_loot.h"
 #include "br/br_legend.h"
 #include "br/br_gym.h"
@@ -846,6 +847,37 @@ static void DropHeldLine(void);
 // Below too, beside BrLoot_HomeTrade.
 static void TalkTrade(struct BrLootItem *it);
 
+// The mon a ball holds, as taking it makes it: traded-into, at its level, from a seed
+// of the match's and the ball's own, so the same ball always holds the same mon. The
+// spoils list makes it too, to name what A gives: it said OMANYTE and the take said
+// "Took OMASTAR!" (10-20 #19, HBR-52). The game's own RNG is put back as it was.
+static void MakeTaken(struct Pokemon *mon, const struct BrLootItem *it)
+{
+    u32 rng = gRngValue;
+    u16 species = WasOurs(it->key) ? it->species : TradedInto(it->species);
+    // A ball dropped by somebody carries the level they were at, which is the record of
+    // the match the ground is for. A ball the match itself put down carries 0 and means
+    // the rung: the DAY CARE's chest (POK-306) has been on that floor since the drop.
+    // Never under the rung, though: a party is lifted to it and nothing else lifts this
+    // one until the fog moves, which on the last phase is never. A route trainer's team
+    // goes down at the game's own levels -- the battle lifted them, the spill does not --
+    // and a PELIPPER taken at rung 75 fought the rest of the match at 30 (10-19 #28).
+    u8 level = it->level > BrLevels_WildLevel() ? it->level : BrLevels_WildLevel();
+
+    gRngValue = gBrMatch.seed ^ ((u32)it->key << 16 | it->key);
+    CreateMon(mon, species, level, USE_RANDOM_IVS, FALSE, 0, OT_ID_PLAYER_ID, 0);
+    gRngValue = rng;
+}
+
+// What taking a ball gives, by name: the species after the growing-up a take does.
+static u16 TakenSpecies(const struct BrLootItem *it)
+{
+    struct Pokemon mon;
+
+    MakeTaken(&mon, it);
+    return BrLevels_GrowUp(&mon);
+}
+
 static void Take(struct BrLootItem *it)
 {
     u8 line[BR_HUD_LINE_MAX + 2];
@@ -855,7 +887,6 @@ static void Take(struct BrLootItem *it)
     u16 item;
     u16 count;
     u8 *p;
-    u8 level;
 
     // Nothing leaves the ground without its PICKUP on the way: with the ring full and the
     // hold full too, the press does nothing and the piece is there for the next one.
@@ -975,16 +1006,7 @@ static void Take(struct BrLootItem *it)
     // A ball: the mon inside goes to the party, evolving on the way if it just changed
     // hands. A full party goes through the catch ticket's own release flow -- the same
     // question, asked once, in one place (POK-227).
-    species = WasOurs(it->key) ? it->species : TradedInto(it->species);
-    // A ball dropped by somebody carries the level they were at, which is the record of
-    // the match the ground is for. A ball the match itself put down carries 0 and means
-    // the rung: the DAY CARE's chest (POK-306) has been on that floor since the drop.
-    // Never under the rung, though: a party is lifted to it and nothing else lifts this
-    // one until the fog moves, which on the last phase is never. A route trainer's team
-    // goes down at the game's own levels -- the battle lifted them, the spill does not --
-    // and a PELIPPER taken at rung 75 fought the rest of the match at 30 (10-19 #28).
-    level = it->level > BrLevels_WildLevel() ? it->level : BrLevels_WildLevel();
-    CreateMon(&mon, species, level, USE_RANDOM_IVS, FALSE, 0, OT_ID_PLAYER_ID, 0);
+    MakeTaken(&mon, it);
     BrLevels_Settle(&mon); // a ZUBAT taken at 50 is a CROBAT, and says so
     species = GetMonData(&mon, MON_DATA_SPECIES, NULL);
     if (sGiftKey == it->key)
@@ -1085,7 +1107,7 @@ static void HoldLineForReach(void)
     else if (it->kind == BR_LOOT_BAG)
         StringCopy(p, sText_TheBag);
     else
-        StringCopy(p, gSpeciesNames[it->species]);
+        StringCopy(p, gSpeciesNames[TakenSpecies(it)]);
     BrHud_Hold(line);
 }
 
@@ -1871,7 +1893,7 @@ static void AskSpoils(void)
     for (i = 0; i < n; i++)
     {
         tKey(i) = (s16)keys[i];
-        AddTextPrinterParameterized(tWin, FONT_NORMAL, gSpeciesNames[Find(keys[i])->species], 8,
+        AddTextPrinterParameterized(tWin, FONT_NORMAL, gSpeciesNames[TakenSpecies(Find(keys[i]))], 8,
                                     17 + 16 * i, TEXT_SKIP_DRAW, NULL);
     }
     InitMenuNormal(tWin, FONT_NORMAL, 0, 17, 16, n, 0);

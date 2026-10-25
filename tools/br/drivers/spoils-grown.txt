@@ -1,0 +1,83 @@
+# spoils-grown: the spoils list names what A gives. The 10-20 play-test's list said
+# OMANYTE and the take said "Took OMASTAR!" (HBR-52): a ball grows up as it is taken.
+# spoils-bot's fight, with the fainted MUDKIP at 36, which a take makes a SWAMPERT.
+# The list is checked by its frame (spoils-menu.png says SWAMPERT, not MUDKIP); the
+# expects pin the take, whose nickname is the grown species. The card waits 70 frames
+# where spoils-bot waits 10: a mon at 36 walks a longer learnset.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# TRAINER: seat 31, "BOT", TREECKO (0x115) at 1 HP, so one POUND ends it, and a MUDKIP
+# (0x11B) at 36 that fainted in some earlier fight -- the spoils are the whole team. Level 5, POUND. PackedMon rows are 100 bytes: the second at +106.
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 02 15 01 05 01 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+pokebytes gDecompressionBuffer+106 1B 01 24 00 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 06 C7 CF BE C5 C3 CA
+mailsend gBrMailbox 23 gDecompressionBuffer 206
+wait 10
+wait 60
+expect u8 gBrBotFight+3 2
+# seat 31's ghost two cells right of us, then its CHALLENGE
+pokebytes gDecompressionBuffer 1F 01 00 09 07 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+# the walk-up first (POK-409): the "!", and the walk when there is one
+wait 400
+expect u8 gBrBotFight+2 1
+# A through the intro, FIGHT, POUND -- one turn, the second mon having fainted already
+# -- then the win and the prize, every text box by its own frame count, so no press is
+# left over for the box on the field.
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 90
+tap A
+wait 60
+# FIGHT, POUND
+tap A
+wait 30
+tap A
+wait 600
+# fainted, defeated, the line, the prize
+tap A
+wait 150
+tap A
+wait 150
+tap A
+wait 150
+tap A
+# One more A, mashed on: it lands about as the box opens (the field is back 130 frames
+# after the prize, the box with it), and a box that took it would take TREECKO unread.
+wait 140
+tap A
+shot early-a
+wait 30
+expect u8 gPlayerPartyCount 1
+# back on the field: the team is down round us, under the bot's own keys...
+wait 130
+expect u8 gBrBotFight+2 0
+expect u8 gBrLoot+0xA0 2
+expectmsg 11 u8 0 0
+expectmsg 11 u8 3 2
+expectmsg 11 u16 4 0x1F00
+expectmsg 11 u16 10 0x115
+expectmsg 11 u16 13 0x1F01
+expectmsg 11 u16 19 0x11B
+# ...and nothing has been taken yet: the box is asking
+expect u8 gPlayerPartyCount 1
+shot spoils-menu
+# the second one
+tap DOWN
+wait 10
+tap A
+wait 60
+expect u8 gPlayerPartyCount 2
+expect u8 gBrLoot+0xA0 1
+expectmsg 10 u16 1 0x1F01
+# the second party mon's nickname (BoxPokemon+8): SWAMPERT
+expect u32 gPlayerParty+108 0xC7BBD1CD
+expect u32 gPlayerParty+112 0xCECCBFCA
+shot spoils-took
+say spoils grown ok

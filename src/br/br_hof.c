@@ -12,6 +12,8 @@
 #include "strings.h"
 #include "hall_of_fame.h"
 #include "international_string_util.h"
+#include "data.h"
+#include "constants/species.h"
 #include "constants/characters.h"
 #include "br/br_skin.h"
 #include "br/br_field.h"
@@ -112,6 +114,41 @@ static const struct WindowTemplate sPlayerWindow = { 0, 2, 2, 14, 2, 14, 1 };
 const struct WindowTemplate *BrHof_PlayerWindow(void)
 {
     return &sPlayerWindow;
+}
+
+// The card's name line. Emerald's is "NICKNAME/SPECIES" and the gender glyph straight
+// after it, so an un-nicknamed mon reads "FERALIGATR/FERALIGATR" and the glyph, glued
+// on, read as a "$" in the 10-20 play-test (#23, HBR-52). The name still ends where
+// Emerald's slash is; the species follows it only when it says something new.
+void BrHof_PrintMonName(u8 windowId, const u8 *nickname, u16 species, u32 personality, const u8 *colors)
+{
+    u8 text[POKEMON_NAME_LENGTH + 4];
+    u8 *p;
+
+    AddTextPrinterParameterized3(windowId, FONT_NORMAL, GetStringRightAlignXOffset(FONT_NORMAL, nickname, 0x80), 1,
+                                 colors, TEXT_SKIP_DRAW, nickname);
+    p = text;
+    if (StringCompare(nickname, gSpeciesNames[species]) != 0)
+    {
+        *p++ = CHAR_SLASH;
+        p = StringCopy(p, gSpeciesNames[species]);
+    }
+    if (species != SPECIES_NIDORAN_M && species != SPECIES_NIDORAN_F)
+    {
+        switch (GetGenderFromSpeciesAndPersonality(species, personality))
+        {
+        case MON_MALE:
+            *p++ = CHAR_SPACE;
+            *p++ = CHAR_MALE;
+            break;
+        case MON_FEMALE:
+            *p++ = CHAR_SPACE;
+            *p++ = CHAR_FEMALE;
+            break;
+        }
+    }
+    *p = EOS;
+    AddTextPrinterParameterized3(windowId, FONT_NORMAL, 0x80, 1, colors, TEXT_SKIP_DRAW, text);
 }
 
 void BrHof_PrintPlayer(u8 windowId, const u8 *colors)
