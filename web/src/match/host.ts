@@ -395,7 +395,10 @@ export class HostRole {
       if (id === this.link.seat || greeted.has(id)) continue;
       greeted.add(id);
       owedLoot.add(id);
-      for (const msg of catchUp(this.link.seat, state, this.session.beaten, this.session.events, this.session.loot, this.session.homes)) {
+      // Not a trader's word from the seat itself: its ROM acted on its own, and replayed it
+      // would answer a claim of its still waiting on the host (HBR-34 review).
+      const homes = this.session.homes.filter((h) => h.seat !== id);
+      for (const msg of catchUp(this.link.seat, state, this.session.beaten, this.session.events, this.session.loot, homes)) {
         this.link.toSeat(id, msg);
       }
     }
