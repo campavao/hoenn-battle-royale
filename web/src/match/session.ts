@@ -13,14 +13,14 @@
 import { routeToBots } from '../bots/adapt';
 import type { Bots } from '../bots/brain';
 import type { RosterEvent } from '../net/relay';
-import type { EventMsg, Msg, NpcOutMsg, PackedMon, SpillMsg, TickerMsg } from '../net/wire';
+import type { EventMsg, Msg, NpcOutMsg, PackedMon, PickupMsg, SpillMsg, TickerMsg } from '../net/wire';
 import { bossAt } from './bosses';
 import { addCareerTotals, careerLine, recordMatch } from './career';
 import { DEFAULT_FOG_SECS } from './director';
 import type { EndGrace } from './grace';
 import { botRows, freshMatch, noteMatch, type MatchSnapshot } from './lifecycle';
 import { MatchLog, saveMatch } from './log';
-import { noteEvent } from './events';
+import { isHomeKey, noteEvent } from './events';
 import { LegendWatch } from './legends';
 import { Loot } from './loot';
 import { OwedTeam } from './owed';
@@ -177,6 +177,10 @@ export class MatchSession {
   /** The match's events so far (match/events.ts), by n: the host hands them to a seat back
    *  from a blip, with what is still lying there, so its MAP has the marks. */
   private readonly eventList = new Map<number, EventMsg>();
+  /** The latest `pickup` of each house's and floor trader's own key (HBR-34): what he
+   *  holds now, or that he is gone or busy. Only each ROM keeps that (br_balls.c), so the
+   *  host hands these to a seat back from a blip or walking in late. */
+  private readonly homeList = new Map<number, PickupMsg>();
 
   // The ROM only holds the loot for the map it is standing on, and forgets it on the way
   // out; the page holds the match's whole table and hands back the piece that matters
@@ -218,6 +222,10 @@ export class MatchSession {
 
   get events(): readonly EventMsg[] {
     return [...this.eventList.values()];
+  }
+
+  get homes(): readonly PickupMsg[] {
+    return [...this.homeList.values()];
   }
 
   /** The legendary chip's words (legends.ts), or null. */
@@ -274,6 +282,10 @@ export class MatchSession {
       if (this.beatenList.length > BEATEN_KEPT) this.beatenList.shift();
     }
     noteEvent(this.eventList, msg);
+    if (msg.t === 'pickup' && isHomeKey(msg.key)) {
+      this.homeList.delete(msg.key); // newest last, as they happened
+      this.homeList.set(msg.key, msg);
+    }
     this.legends.note(msg);
     if (via === 'rom') giveBag(this.lootTable, msg, (m) => this.deps.toRom(m));
     this.lootTable.note(msg); // a bot taking a ball takes it off this page's table too
@@ -449,6 +461,7 @@ export class MatchSession {
     this.beatenList = [];
     this.beatenKeys.clear();
     this.eventList.clear();
+    this.homeList.clear();
   }
 
   /** ...and the verdict, once it has: last match's champion is not this match's, and the

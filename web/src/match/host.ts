@@ -395,7 +395,7 @@ export class HostRole {
       if (id === this.link.seat || greeted.has(id)) continue;
       greeted.add(id);
       owedLoot.add(id);
-      for (const msg of catchUp(this.link.seat, state, this.session.beaten, this.session.events, this.session.loot)) {
+      for (const msg of catchUp(this.link.seat, state, this.session.beaten, this.session.events, this.session.loot, this.session.homes)) {
         this.link.toSeat(id, msg);
       }
     }
