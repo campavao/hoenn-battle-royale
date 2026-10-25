@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Bots, health, STEP_MS, WALKUP_DELAY_MS, type BotsOptions, type Decision, type PlayerView } from './brain';
+import { Bots, health, STEP_MS, WALKUP_DELAY_MS, type BotsOptions, type Decision, type DuelOutcome, type PlayerView } from './brain';
 import { dealBots, Grade, MAX_SEATS } from './roster';
 import { dealParty, grownUp, rungForPhase } from './party';
 import { World, type Spot, type WorldMap } from './world';
@@ -7,6 +7,7 @@ import { pageCell, toRom } from './space';
 import { mulberry32 } from '../match/clock';
 import type { MapRef, Msg, PackedMon } from '../net/wire';
 import type { Stack } from './bag';
+import { restoreBots, snapBots } from '../match/hostsnap';
 
 function grid(rows: string[]): string {
   const cells = rows.join('').split('').map(Number);
@@ -570,6 +571,34 @@ describe('a bot heading for another map', () => {
     const { sent } = run(1, 60);
     const crossings = sent.filter((m) => m.t === 'place').length - 1; // the first put it down
     expect(crossings).toBeLessThan(4);
+  });
+});
+
+describe('a bot and a player on one tile', () => {
+  // HBR-37 (Cam's 10-20 play-test): after Cam's fight, DRAKE walked onto Cam's tile and
+  // stood there. A corridor one cell wide, the bot at its west end, the only place to go
+  // its east end, and a player in a battle (busy, so not a fight) in the middle of it.
+  it('never steps onto a player, busy or not (HBR-37)', () => {
+    const LANE: WorldMap = {
+      id: 'LANE', group: 0, num: 3, w: 8, h: 1, section: 'S', outdoor: true,
+      grid: grid(['00000000']), seams: [],
+    };
+    const world = new World([LANE]);
+    const sent: Msg[] = [];
+    const bots = new Bots({
+      world,
+      targets: [{ mapId: 'LANE', x: 7, y: 0 }],
+      mapRef: () => ({ group: 0, num: 3 }),
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      engage: { players: () => [{ seat: 0, mapId: 'LANE', x: 3, y: 0, dir: 3, busy: true }] },
+    });
+    const dealt = dealBots(1, 1, [0], [{ mapId: 'LANE', map: { group: 0, num: 3 }, x: 0, y: 0 }]);
+    bots.start(dealt, 0);
+    for (let t = STEP_MS; t <= 30_000; t += STEP_MS) bots.tick(t);
+    const steps = sent.filter((m) => m.t === 'step') as { x: number }[];
+    expect(steps.map((m) => m.x)).toContain(2);
+    expect(steps.map((m) => m.x)).not.toContain(3);
   });
 });
 
@@ -1154,12 +1183,17 @@ describe('the hunt', () => {
     return visited;
   }
 
+  // Next to them, never on them (HBR-37): a trainer's tile is nobody else's.
+  const beside = (s: Spot): boolean => s.map === 'PATH' && Math.abs(s.x - FAR.x) + Math.abs(s.y - FAR.y) === 1;
+
   it('walks to whoever is left once the field is down to three', () => {
-    expect(field(3)).toContainEqual({ map: 'PATH', x: FAR.x, y: FAR.y });
+    const visited = field(3);
+    expect(visited.some(beside)).toBe(true);
+    expect(visited).not.toContainEqual({ map: 'PATH', x: FAR.x, y: FAR.y });
   });
 
   it('does not hunt while the room is full', () => {
-    expect(field(12)).not.toContainEqual({ map: 'PATH', x: FAR.x, y: FAR.y });
+    expect(field(12).some(beside)).toBe(false);
   });
 });
 
@@ -1425,6 +1459,155 @@ describe('two bots meeting', () => {
     // formula guessed.
     expect(bots.partyOf(left)[0].hp).toBe(7);
     expect(sent.some((m) => m.t === 'out')).toBe(true);
+  });
+
+  // A pair three cells apart down one column; the north one faces south, at the other.
+  function apart(settle: NonNullable<BotsOptions['settle']>) {
+    const world = new World([FIELD, PATH]);
+    const sent: { at: number; m: Msg }[] = [];
+    let now = 0;
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push({ at: now, m }),
+      rng: mulberry32(7),
+      deal: () => [{ ...MON }],
+      seed: 4242,
+      settle,
+    });
+    const dealt = dealBots(1, 2, [0], [
+      { mapId: 'FIELD', map: REFS.FIELD, x: 2, y: 0 },
+      { mapId: 'FIELD', map: REFS.FIELD, x: 2, y: 3 },
+    ]);
+    bots.start(dealt, 0);
+    // North first, whichever seat the deal put there.
+    const seats = dealt.map((b) => b.seat).sort((a, b) => bots.spotOf(a)!.y - bots.spotOf(b)!.y);
+    const run = (until: number) => {
+      for (now += 50; now <= until; now += 50) bots.tick(now);
+      now -= 50;
+    };
+    return { bots, sent, seats, run, clock: () => now };
+  }
+
+  it('walks up to the other before the duel starts (HBR-36)', async () => {
+    let askedAt: number | undefined;
+    let where: (Spot | undefined)[] = [];
+    const t = apart(async () => {
+      askedAt = t.clock();
+      where = t.seats.map((s) => t.bots.spotOf(s));
+      return null;
+    });
+    t.run(5000);
+    const [north, south] = t.seats;
+    const walk = t.sent.filter((e) => e.m.t === 'step' && (e.m as { seat: number }).seat === north);
+    expect(walk.map((e) => (e.m as { y: number }).y)).toEqual([1, 2]);
+    expect(askedAt, 'the duel starts once it is beside the other').toBeGreaterThanOrEqual(walk[1].at);
+    expect(where).toEqual([{ map: 'FIELD', x: 2, y: 2 }, { map: 'FIELD', x: 2, y: 3 }]);
+    expect(t.sent.some((e) => e.m.t === 'step' && (e.m as { seat: number }).seat === south)).toBe(false);
+  });
+
+  it('holds the outcome until the fight has played out at real speed (HBR-43)', async () => {
+    // 600 of the instance's frames is ten seconds of fight; it ran them in one.
+    let answer: ((v: DuelOutcome) => void) | undefined;
+    const t = apart((a, b) => new Promise((resolve) => (answer = () => resolve({
+      winner: b.seat, loser: a.seat, a: [{ hp: 0, status: 0 }], b: [{ hp: 7, status: 0 }], frames: 600, ranMs: 1000,
+    }))));
+    t.run(5000);
+    expect(answer, 'the duel is in the instance').toBeDefined();
+    answer!({} as DuelOutcome);
+    await Promise.resolve();
+    await Promise.resolve();
+    const answeredAt = t.clock();
+    t.run(answeredAt + 9000 + 3000 - 100);
+    expect(t.bots.count(), 'the watched fight is still on').toBe(2);
+    expect(t.sent.some((e) => e.m.t === 'out')).toBe(false);
+    t.run(answeredAt + 9000 + 3000 + 100);
+    expect(t.bots.count()).toBe(1);
+    expect(t.sent.filter((e) => e.m.t === 'out')).toHaveLength(1);
+  });
+
+  it('lands what the instance said over a host reload mid play-out, not a seeded guess (HBR-43)', async () => {
+    let answer: (() => void) | undefined;
+    const t = apart((a, b) => new Promise((resolve) => (answer = () => resolve({
+      winner: b.seat, loser: a.seat, a: [{ hp: 0, status: 0 }], b: [{ hp: 7, status: 0 }], frames: 600, ranMs: 1000,
+    }))));
+    t.run(5000);
+    answer!();
+    await Promise.resolve();
+    await Promise.resolve();
+    const snap = JSON.parse(JSON.stringify(snapBots(t.bots, t.clock())));
+
+    const sent: Msg[] = [];
+    const back = new Bots({
+      world: new World([FIELD, PATH]),
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [{ ...MON }],
+      seed: 4242,
+      settle: () => new Promise(() => {}),
+    });
+    restoreBots(back, snap, 0);
+    for (let now = 50; now <= 11_000; now += 50) back.tick(now);
+    expect(back.count(), 'still playing out after the reload').toBe(2);
+    for (let now = 11_050; now <= 13_000; now += 50) back.tick(now);
+    expect(back.count()).toBe(1);
+    const winner = t.seats.find((s) => back.spotOf(s) !== undefined)!;
+    expect(back.partyOf(winner)[0].hp).toBe(7);
+  });
+
+  it('keeps a bot in its fight with a player over a host reload, through JSON (#128 review)', () => {
+    const player: PlayerView = { seat: 0, mapId: 'FIELD', x: 2, y: 3, dir: 2 };
+    const opts = (sent: Msg[]): BotsOptions => ({
+      world: new World([FIELD, PATH]),
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [{ ...MON }],
+      engage: { players: () => [player] },
+    });
+    const bots = new Bots(opts([]));
+    const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 2, y: 1 }]);
+    bots.start(dealt, 0);
+    for (let t = STEP_MS; t <= 4000; t += STEP_MS) bots.tick(t);
+    player.busy = true; // the fight is on in their ROM
+    bots.tick(4000 + STEP_MS);
+    const snap = JSON.parse(JSON.stringify(snapBots(bots, 4000 + STEP_MS)));
+    expect(snap.fights, 'a fight with the player, no nonce').toEqual([[dealt[0].seat, 0, expect.any(Number), true, null]]);
+
+    const sent: Msg[] = [];
+    const back = new Bots(opts(sent));
+    restoreBots(back, snap, 0);
+    for (let now = 50; now <= 10_000; now += 50) back.tick(now);
+    expect(sent.filter((m) => m.t === 'step'), 'still standing in its fight').toEqual([]);
+    expect(sent.some((m) => m.t === 'busy' && (m as { kind?: string }).kind === undefined)).toBe(false);
+  });
+
+  it('walks round a player standing in open ground, not up to them and stuck (HBR-37 review)', () => {
+    const OPEN: WorldMap = {
+      id: 'OPEN', group: 0, num: 4, w: 9, h: 3, section: 'S', outdoor: true,
+      grid: grid(['000000000', '000000000', '000000000']), seams: [],
+    };
+    const bots = new Bots({
+      world: new World([OPEN]),
+      targets: [{ mapId: 'OPEN', x: 8, y: 1 }],
+      mapRef: () => ({ group: 0, num: 4 }),
+      send: () => {},
+      rng: mulberry32(7),
+      engage: { players: () => [{ seat: 0, mapId: 'OPEN', x: 4, y: 1, dir: 3, busy: true }] },
+    });
+    const dealt = dealBots(1, 1, [0], [{ mapId: 'OPEN', map: { group: 0, num: 4 }, x: 0, y: 1 }]);
+    bots.start(dealt, 0);
+    const visited: Spot[] = [];
+    for (let t = STEP_MS; t <= 60_000; t += STEP_MS) {
+      bots.tick(t);
+      visited.push(bots.spotOf(dealt[0].seat)!);
+    }
+    expect(visited.some((v) => v.x > 4), 'past the player').toBe(true);
+    expect(visited).not.toContainEqual({ map: 'OPEN', x: 4, y: 1 });
   });
 
   it('falls back to the seeded resolver when the proxy cannot (POK-238)', async () => {

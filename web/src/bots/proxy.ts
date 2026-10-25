@@ -36,6 +36,10 @@ export interface DuelOutcome {
   b: { hp: number; status: number }[];
   usedA: number[];
   usedB: number[];
+  /** The instance's frames for this fight, and the wall-clock ms it took to run them:
+   *  what the room needs to let the fight play out for a watcher (brain.ts playOutMs). */
+  frames: number;
+  ranMs: number;
 }
 
 /** What the instance has done, for the `#perf` readout and the soak (POK-247): the
@@ -247,6 +251,7 @@ export class ProxyDuels {
     }
 
     const from = this.counts.frames;
+    const began = Date.now();
     emu.resume();
     const result = await this.awaitResult(emu, mailbox, [a.seat, b.seat], this.opts.deadlineFrames ?? DEADLINE_FRAMES, this.opts.deadlineMs ?? DEADLINE_MS);
     // Idle until the next meeting. Here, after the await, and not in the frame listener
@@ -277,6 +282,8 @@ export class ProxyDuels {
       b: result.b,
       usedA: result.usedA ?? [],
       usedB: result.usedB ?? [],
+      frames: this.counts.frames - from,
+      ranMs: Date.now() - began,
     };
   }
 

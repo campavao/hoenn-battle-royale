@@ -55,7 +55,9 @@ describe('readSides', () => {
     mem.set(SYM.gBattleTypeFlags, flags);
     mem.set(SYM.gBrBattle + BATTLE_MENU, menu);
     mem.set(SYM.gPlayerPartyCount, 1);
-    mem.set(SYM.gEnemyPartyCount, 2);
+    // Nothing in a battle sets gEnemyPartyCount (only trade.c does): a bot's card
+    // leaves it 0 (battle-sides.txt), and the balls come from the party itself.
+    mem.set(SYM.gEnemyPartyCount, 0);
     const sides = new Array(SIDES_SIZE).fill(0xff);
     sides[0] = 77;
     sides[1] = 71;
