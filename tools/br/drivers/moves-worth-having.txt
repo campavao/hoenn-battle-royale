@@ -41,11 +41,12 @@ tap A
 wait 200
 shot fight
 expect u16 gBattleMons 101
-# SPARK (209), SWIFT (129), CHARGE (268), MIRROR COAT (243): its one STAB attack, a second
+# SPARK (209), SWIFT (129), ROLLOUT (205), MIRROR COAT (243): its one STAB attack, a second
 # type to hit with, and no SELFDESTRUCT (120) or EXPLOSION (153) in any slot. By the book
-# this was SWIFT, EXPLOSION, MIRROR COAT and LIGHT SCREEN.
+# this was SWIFT, EXPLOSION, MIRROR COAT and LIGHT SCREEN. The third was CHARGE until a
+# ball's mon came from its own seed (HBR-52): these IVs make ROLLOUT worth more.
 expect u16 gBattleMons+0x0C 209
 expect u16 gBattleMons+0x0E 129
-expect u16 gBattleMons+0x10 268
+expect u16 gBattleMons+0x10 205
 expect u16 gBattleMons+0x12 243
 say moves worth having ok
