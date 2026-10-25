@@ -20,7 +20,7 @@ import type { PadPrefsControl } from './ui/padprefs';
 import { moveInfo, type Rom } from './battle/movebook';
 import { favourite, readTally, tallyMsg, zeroTally, type MatchTally } from './match/tally';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
-import { battleSeats, cutTo, nameBstart, romReplaying, Spectate } from './match/spectate';
+import { battleSeats, cutTo, nameBstart, romReplaying, Spectate, watchName } from './match/spectate';
 import type { Results } from './match/results';
 import { EndGrace } from './match/grace';
 import { MatchSession } from './match/session';
@@ -2124,7 +2124,7 @@ function watchOf(bridge: Bridge, spectate: Spectate): SheetModel['watch'] {
   const me = bridge.roster.get(bridge.seat);
   if (me === undefined || me.alive) return null;
   const on = spectate.watchingSeat();
-  return { name: on === null ? null : bridge.roster.nameOf(on) };
+  return { name: on === null ? null : watchName(on, spectate.watchingBattle(), (s) => bridge.roster.nameOf(s)) };
 }
 
 /** PREV / NEXT: the next trainer still in, round the field. */
