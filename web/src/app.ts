@@ -58,7 +58,6 @@ import { AwayDoor } from './match/away';
 import { Stage, type DrawnScreen, type Look } from './ui/stage';
 import { ParadeHold, ReplayHold } from './ui/results-hold';
 import type { ResultsModel } from './ui/results';
-import { FrameMeter, PerfProbe, frameLine, perfLines } from './ui/fps';
 import { KeyLegend } from './ui/keys';
 import { stageKey } from './ui/roomkeys';
 import { TEXT_RED, wrapText } from './ui/emerald';
@@ -1351,9 +1350,19 @@ function proxyCounts() {
   return proxyDuels?.stats ?? null;
 }
 
+/** The readout's meters, a chunk of their own: a build shows them only with #perf. */
+let fpsUi: typeof import('./ui/fps') | undefined;
+
 function wireFps(emu: Emulator): void {
   const perf = perfWanted(location.hash);
   if (!import.meta.env.DEV && !perf) return;
+  void import('./ui/fps').then((ui) => {
+    fpsUi = ui;
+    meterFps(emu, perf, ui);
+  });
+}
+
+function meterFps(emu: Emulator, perf: boolean, { PerfProbe, frameLine, perfLines }: typeof import('./ui/fps')): void {
   const el = $('#fps') as HTMLElement;
   el.hidden = false;
   // ...and how many frame listeners have thrown: the emulator reports each one's first
@@ -4761,7 +4770,7 @@ async function main(): Promise<void> {
   // Dev only, for the e2e harness (POK-220): solo play never builds a Bridge, so this
   // is the only way in to read the emulator's memory from outside the page.
   // `perf` makes a meter of the spec's own (POK-247), read from the moment it asks.
-  if (import.meta.env.DEV) (window as unknown as { __hbr?: unknown }).__hbr = { emu, perf: () => new PerfProbe(emu, proxyCounts, { log: () => {} }) };
+  if (import.meta.env.DEV) (window as unknown as { __hbr?: unknown }).__hbr = { emu, perf: () => new fpsUi!.PerfProbe(emu, proxyCounts, { log: () => {} }) };
 
   // The proxy's own instance is not booted here -- only made available. It costs a
   // second wasm core and a second copy of the ROM, so it is paid for on the first bot
