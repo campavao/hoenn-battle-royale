@@ -267,6 +267,9 @@ let sheet: DrawnScreen | null = null;
 let sheetOpen = false;
 /** The line under the room's: SAFARI / SAFE: PLACE · 8 left · 1:23, while a match is on. */
 let matchStrip: string | null = null;
+/** Counts matches for the sheet's chips: one more at each director's start, and each
+ *  time a guest's strip comes back from none. Only its changes matter. */
+let matchNo = 0;
 /** The sheet's chip (ui/screens.ts SheetModel.chips): the legendary's line, from the
  *  match's books once there are some, and the lead's HP while the fog is on us, read off
  *  the ROM while the sheet sits beside the game and the ROM's corner is off. */
@@ -319,6 +322,7 @@ function openSheet(open: boolean): void {
 
 function setStrip(text: string | null): void {
   if (matchStrip === text) return;
+  if (matchStrip === null && text !== null) matchNo++;
   matchStrip = text;
   redrawSheet();
 }
@@ -430,6 +434,7 @@ function makeSheet(part: () => SheetPart, about: () => FeedbackAbout): DrawnScre
     },
     look: desktop() ? 'dock' : 'overlay',
     strip: matchStrip,
+    match: matchNo,
     chips: [legendOf(), fogHp, eyesChip].filter((chip): chip is string => chip !== null),
     note: '',
     muted: settings.muted,
@@ -2279,6 +2284,7 @@ function renderMatchStrip(state: DirectorState, who: StripWho): void {
  *  then mirrors its `state` into `gBrHud`'s two page-writes fields and the HTML
  *  strip. Returns a disposer. */
 function startDirectorLoop(emu: Emulator, hudBase: number | undefined, director: Director, who: StripWho): () => void {
+  matchNo++;
   const pump = () => {
     director.tick();
     const state = director.state;

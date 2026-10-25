@@ -102,13 +102,11 @@ describe('the sheet', () => {
   it("forgets the last match's chips once it is over", () => {
     const fresh = sheetScreen(() => model({ chips: [] }));
     const top = fresh.paint(fakeCanvas().canvas, 480).widgets.filter((w) => w.parent === 'match-roster')[0].rect.y;
-    let m = model({ chips: ['WATTSON has the legendary'] });
+    let m = model({ match: 1, chips: ['WATTSON has the legendary'] });
     const screen = sheetScreen(() => m);
     const seatY = () => screen.paint(fakeCanvas().canvas, 480).widgets.filter((w) => w.parent === 'match-roster')[0].rect.y;
-    seatY();
-    m = model({ strip: null, chips: [] });
-    seatY();
-    m = model({ chips: [] });
+    expect(seatY()).toBeGreaterThan(top);
+    m = model({ match: 2, chips: [] });
     expect(seatY()).toBe(top);
   });
 

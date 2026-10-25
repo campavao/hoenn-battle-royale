@@ -530,6 +530,8 @@ export interface SheetModel {
    *  the fog is on us -- which the ROM's corner said, until a desktop took the corner off
    *  the map for sitting on the people round the player. Empty, no chip. */
   chips?: string[];
+  /** Which match this is, a new number each match: the chips' box starts over with it. */
+  match?: number;
   note: string;
   seats: RoomSeat[];
   card: TrainerCard | null;
@@ -659,6 +661,7 @@ export function sheetScreen(model: () => SheetModel): DrawnScreen {
   // had them, so the seats under it stay put: the legendary's line going and coming
   // moved the whole panel ~40 px each time (10-20 play-test #22, HBR-55).
   let chipRows = 0;
+  let lastMatch: number | undefined;
   return {
     look: () => model().look,
     back() {
@@ -689,8 +692,13 @@ export function sheetScreen(model: () => SheetModel): DrawnScreen {
         y += ROW_H;
       }
       const chips = m.chips ?? [];
-      // Forgotten between matches (no strip), so the next one opens with no gap.
-      chipRows = m.strip === null ? 0 : Math.max(chipRows, chips.length);
+      // Forgotten with the match, so the next one opens with no gap: by its number, since
+      // nothing paints a shut sheet between two matches.
+      if (m.match !== lastMatch) {
+        lastMatch = m.match;
+        chipRows = 0;
+      }
+      chipRows = Math.max(chipRows, chips.length);
       if (chips.length > 0) {
         const frame = { x: 0, y: y + 2, w: W, h: chipRows * ROW_H + 8 };
         c.drawFrame(frame);
