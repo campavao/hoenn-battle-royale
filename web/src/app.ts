@@ -118,7 +118,6 @@ import { FieldView, GBA_H, MAIN_CALLBACK2, askBand, measureLayout, romBand, worl
 import { speciesName } from './bots/party';
 import { ProxyDuels } from './bots/proxy';
 import {
-  careerLine,
   exportCareer,
   importCareer,
   cleanName,
@@ -2014,7 +2013,7 @@ function renderResults(
     /** The champion's, by seat, once their page has said it. */
     tallies: ReadonlyMap<number, TallyMsg>;
   },
-  shown: { career: string; held: boolean; again: ResultsModel['again']; menu?: () => void },
+  shown: { held: boolean; again: ResultsModel['again']; menu?: () => void },
 ): void {
   const mine = books.results.forSeat(seat, performance.now());
   if (!mine.ended || shown.held) return;
@@ -2032,7 +2031,6 @@ function renderResults(
   const champ = mine.winner;
   const model: ResultsModel = {
     view: resultsView(mine, books.fieldSize, seat, nameOf, books.seed),
-    career: shown.career,
     fame: fameOf(champ, seat, champ === undefined ? undefined : books.parties.get(champ), nameOf, speciesName),
     standings: standingsOf(books.results.standings(), seat, nameOf),
     record: linesOf(seat, books.tally ? tallyMsg(seat, books.tally) : undefined),
@@ -2365,8 +2363,6 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     pollMs: SOLO_PARADE_POLL_MS,
     onOver: () => drawResults(),
   });
-  /** The career line the match produced, for the results. */
-  let career = '';
   let host: HostRole | null = null;
   /** The way out of solo: the lobby, having let go of the match -- its director's loop,
    *  its bots' pump -- the way the room's teardownHost does, rather than leaving it all to
@@ -2407,8 +2403,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       },
     },
     {
-      decided: (line) => {
-        career = line;
+      decided: () => {
         drawResults();
       },
       // The champion's team under the results, as the room draws it (POK-331 #26): our
@@ -2434,7 +2429,6 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
         tallies: session.tallies,
       },
       {
-        career,
         held: paraded.holds(mine.winner, 0) || (mine.ended && replay.holds()),
         // No room to go back to: the lobby, now or when the grace is up.
         again: { label: 'MAIN MENU', id: 'results-lobby', onPress: leaveSolo },
@@ -3099,8 +3093,6 @@ function wireRoom(
   // Every other way out of the match (LEAVE, the results' MENU, a closed tab) unloads the
   // page; the socket is still open as it goes.
   window.addEventListener('pagehide', sendJank);
-  /** The career line the match produced, for the results. */
-  let career = '';
   /** How far our counts have gone to the room this match (TallyMsg), once we took it:
    *  0 not yet, 1 as it was decided, 2 after our parade. */
   let tallySaid = 0;
@@ -3133,7 +3125,6 @@ function wireRoom(
         tallies: session.tallies,
       },
       {
-        career,
         held,
         again: { label: 'PLAY AGAIN', id: 'play-again', disabled: returning, onPress: () => void returnToRoom() },
         menu: () => backToLobby(),
@@ -3197,8 +3188,7 @@ function wireRoom(
           jankStart = readJank((a, bits) => emu.read(a, bits), gBrJank);
         }
       },
-      decided: (line) => {
-        career = line;
+      decided: () => {
         // Over: a reload from the results is an ordinary one, back into the room.
         noteOutOfMatch();
         drawResults();
@@ -4203,10 +4193,6 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
       art: r.art,
       onPress: () => press(r.action),
     });
-    const record = () => {
-      const career = loadCareer();
-      return career.matches > 0 ? careerLine(career) : 'your name';
-    };
 
     let panPending = false;
     const main = menuScreen(() => ({
@@ -4234,7 +4220,7 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
       },
       note: note || leftNote || (online ? '' : emptyNote(false)),
       noteId: 'lobby-note',
-      trainer: { name: careerName(), skin: careerSkin(), record: record(), onPress: () => stage.push(trainer) },
+      trainer: { name: careerName(), skin: careerSkin(), onPress: () => stage.push(trainer) },
     }));
     // The TRAINER CARD (POK-335): name, portrait and record on Emerald's own card, your
     // lines and the settings in the rows under it.

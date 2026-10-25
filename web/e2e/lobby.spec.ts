@@ -186,10 +186,10 @@ test('the host gets the room controls and START, and the guest does not', async 
     await guest.goto(`/#join=${code}&noauto&fast&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
 
-    // The host's four controls, and the line under them saying what START would make.
+    // The host's four controls. The seats say what START would make, so no line does (HBR-51).
     await expect(host.locator('#room-controls')).toBeVisible({ timeout: 30_000 });
     await expect(host.locator('#room-max')).toContainText('MAX');
-    await expect(host.locator('#room-note')).toContainText(/START: 2 trainers/);
+    await expect(host.locator('#room-note')).not.toContainText('START');
     await host.screenshot({ path: path.join(OUT_DIR, 'room-host.png') });
 
     // The guest has none of them -- just the wait.
@@ -277,7 +277,6 @@ test('FILL OFF deals a match of the people in the room and no bots', async ({ br
     await expect(host.locator('#room-fill')).toContainText(/FILL \d+/, { timeout: 30_000 });
     await host.locator('#room-fill').click();
     await expect(host.locator('#room-fill')).toHaveText('FILL OFF');
-    await expect(host.locator('#room-note')).toHaveText('START: 2 trainers.');
 
     await host.locator('#room-start').click();
     await host.waitForFunction(
@@ -424,7 +423,8 @@ test('the lobby is where you say who you are', async ({ page }) => {
   // Who you are is the strip under the ways in (POK-320); pressing it opens your rows.
   const strip = page.locator('#lobby-trainer');
   await expect(strip).toBeVisible({ timeout: 60_000 });
-  await expect(strip).toContainText('your name');
+  // Just the name: the record line under it read as wins (HBR-51).
+  await expect(strip).toHaveText('CAM');
   await strip.click();
   const rows = page.locator('#trainer-rows button');
 

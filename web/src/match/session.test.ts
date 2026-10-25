@@ -134,7 +134,6 @@ describe("one match's books (POK-330 #42)", () => {
     expect(loadLog(store)[0].winner).toBe(29);
     expect(loadCareer(store)).toMatchObject({ matches: 1, wins: 0, best: 2 });
     expect(view.decided).toHaveBeenCalledTimes(1);
-    expect(view.decided).toHaveBeenCalledWith('1 played · 0 won · best 2nd');
     expect(toRom).toEqual([{ t: 'result', seat: 29, outcome: 'win' }]);
     expect(session.recorded).toBe(true);
 
@@ -536,7 +535,7 @@ describe('solo, on the same books', () => {
     expect(session.results.forSeat(31, 0).placement).toBe(3);
     expect(session.results.forSeat(30, 0).placement).toBe(2);
     expect(view.decided).toHaveBeenCalledTimes(1);
-    expect(view.decided).toHaveBeenCalledWith('1 played · 1 won · best 1st');
+    expect(loadCareer(store)).toMatchObject({ matches: 1, wins: 1, best: 1 });
     expect(loadLog(store)).toHaveLength(1);
     expect(loadLog(store)[0].winner).toBe(0);
     expect(toRom).toEqual([{ t: 'result', seat: 0, outcome: 'win' }]);

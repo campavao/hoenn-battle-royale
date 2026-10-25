@@ -25,7 +25,9 @@ test('a solo match ends on its results, and MAIN MENU goes back to the lobby', a
   await expect(page.locator('#results-panel')).toBeVisible({ timeout: 300_000 });
   expect(await page.evaluate((base) => (window as unknown as { __hbr: { emu: { read(a: number, b: number): number } } }).__hbr.emu.read(base, 8), loadSymbols().gBrMatch), 'the Hall of Fame came and went (BR_PHASE_DONE)').toBe(5);
   await expect(page.locator('#results-line')).toHaveText(/seed \d+/);
-  await expect(page.locator('#results-career')).toHaveText(/^1 played/);
+  // The match went into the career; the results no longer print it (HBR-51).
+  await expect(page.locator('#results-career')).toHaveCount(0);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('hbr:career') ?? '{}').matches)).toBe(1);
   await expect(page.locator('#results-record')).toContainText('RINGS');
 
   // The round was written down, with the bots in it and every one of them out but the winner.

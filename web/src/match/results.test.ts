@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Results } from './results';
-import { careerLine, loadCareer, ordinal, recordMatch } from './career';
+import { loadCareer, ordinal, recordMatch } from './career';
 
 function memStore(): Pick<Storage, 'getItem' | 'setItem'> {
   const mem = new Map<string, string>();
@@ -123,11 +123,6 @@ describe('the career record', () => {
     const store = memStore();
     store.setItem('hbr:career', 'not json at all');
     expect(loadCareer(store)).toEqual({ matches: 0, wins: 0 });
-  });
-
-  it('reads as a line', () => {
-    expect(careerLine({ matches: 12, wins: 3, best: 2 })).toBe('12 played · 3 won · best 2nd');
-    expect(careerLine({ matches: 0, wins: 0 })).toBe('0 played · 0 won');
   });
 
   it('ordinals the awkward ones', () => {

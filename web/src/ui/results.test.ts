@@ -38,7 +38,6 @@ describe('what the results say', () => {
   it('keeps the ids the page always had, for a test and a screen reader', () => {
     const model: ResultsModel = {
       view: resultsView({ ended: true, winner: 2, placement: 2, survived: 30 }, 8, 1, nameOf, 7),
-      career: '1 played · 0 won · best 2nd',
       fame: { title: 'The champion: MAY', mons: ['MUDKIP Lv12'] },
       standings: [],
       record: [{ label: 'RINGS', value: '2' }],
@@ -49,7 +48,8 @@ describe('what the results say', () => {
     const byId = (id: string) => painted.widgets.find((w) => w.id === id);
     expect(painted.containers).toContainEqual({ id: 'results-panel', cls: 'results' });
     expect(byId('results-line')?.text).toMatch(/seed 7$/);
-    expect(byId('results-career')?.text).toBe('1 played · 0 won · best 2nd');
+    // HBR-51: no career line ("1 played" read as wins).
+    expect(byId('results-career')).toBeUndefined();
     expect(byId('results-record')?.text).toContain('RINGS 2');
     byId('play-again')!.onPress!();
     expect(model.again!.onPress).toHaveBeenCalled();
@@ -73,7 +73,6 @@ describe('what the results say', () => {
     expect(standings[2]).toEqual({ place: '3rd', name: 'P1', me: true });
     const model: ResultsModel = {
       view: resultsView({ ended: true, winner: 2, placement: 3, survived: 30 }, 5, 1, nameOf),
-      career: '',
       fame: { title: 'The champion: MAY', mons: ['MUDKIP Lv100', 'SPINDA Lv100', 'SKARMORY Lv100', 'SPINDA Lv100', 'RAYQUAZA Lv100'] },
       standings,
       record: [{ label: 'RINGS', value: '2' }, { label: 'CAUGHT', value: '1' }, { label: 'STEPS', value: '748' }, { label: 'FAVORITE', value: 'MR. MIME', wide: true }],
@@ -109,7 +108,6 @@ describe('what the results say', () => {
     const standings = Array.from({ length: 32 }, (_, i) => ({ place: `${i + 1}th`, name: `TRAINER${i}`, me: i === 30 }));
     const model: ResultsModel = {
       view: resultsView({ ended: true, winner: 2, placement: 31, survived: 30 }, 32, 1, nameOf),
-      career: '1 played · 0 won · best 31st',
       fame: null,
       standings,
       record: [...Array.from({ length: 8 }, (_, i) => ({ label: `N${i}`, value: '1' })), { label: 'FAVORITE', value: 'MR. MIME', wide: true }, { label: 'TOP MOVE', value: 'CONFUSION', wide: true }],
@@ -128,7 +126,6 @@ describe('what the results say', () => {
   it("names the champion over their stats when their team has not come", () => {
     const model: ResultsModel = {
       view: resultsView({ ended: true, winner: 2, placement: 3, survived: 30 }, 8, 1, nameOf),
-      career: '',
       fame: null,
       standings: [],
       record: [],
@@ -146,7 +143,6 @@ describe('what the results say', () => {
   it('has one page for a draw: nobody to show a team or stats of', () => {
     const model: ResultsModel = {
       view: resultsView({ ended: true, survived: 30 }, 4, 1, nameOf),
-      career: '',
       fame: null,
       standings: [],
       record: [],
@@ -162,7 +158,6 @@ describe('what the results say', () => {
     const menu = vi.fn();
     const model: ResultsModel = {
       view: resultsView({ ended: true, winner: 2, placement: 2, survived: 30 }, 8, 1, nameOf),
-      career: '1 played · 0 won · best 2nd',
       fame: null,
       standings: [],
       record: [],

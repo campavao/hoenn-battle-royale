@@ -1,5 +1,5 @@
 // The results, drawn (POK-320): where you came, how long you lasted, who won and with
-// what, what the match did to your career, and what you did in it -- the Hall of Fame
+// what, and what you did in it -- the Hall of Fame
 // line and the record card, in Emerald's frame where they were a panel of HTML.
 //
 // The champion's come after their ROM's own Hall of Fame parade, not over it: the ticket
@@ -161,8 +161,6 @@ function paintRecord(c: EmeraldCanvas, y: number, rows: readonly RecordRow[]): n
 
 export interface ResultsModel {
   view: ResultsView;
-  /** The career line the match produced, which recordMatch folds it into. */
-  career: string;
   fame: Fame | null;
   /** Everybody's place, best first. */
   standings: Standing[];
@@ -195,11 +193,11 @@ function standingsGrid(standings: readonly Standing[], free: number): { cols: nu
   return { cols, rows: Math.ceil(shown.length / cols), shown };
 }
 
-/** Rows the standings have on the first page: what is left under the title, the record,
- *  the career line and the buttons. */
+/** Rows the standings have on the first page: what is left under the title, the record
+ *  and the buttons. */
 function standingsFree(m: ResultsModel, h: number): number {
   const framed = (rows: number) => layoutRows(0, rows).frame.h + 4;
-  const rest = 28 + (m.record.length > 0 ? framed(recordRows(m.record).length) : 0) + framed(1) + 28;
+  const rest = 28 + (m.record.length > 0 ? framed(recordRows(m.record).length) : 0) + 28;
   return Math.floor((h - rest - 20) / ROW_H) - (m.view.survived === undefined ? 0 : 1);
 }
 
@@ -229,19 +227,19 @@ function paintStandings(c: EmeraldCanvas, y: number, survived: string | undefine
   return lay.frame.y + lay.frame.h;
 }
 
-/** How far down the first page's footer ends: the title, the standings, the record and
- *  the career line, each a frame and a gap. */
+/** How far down the first page ends: the title, the standings and the record, each a
+ *  frame and a gap. No career line (HBR-51): "16 played" read as wins. */
 function matchBottom(m: ResultsModel, h: number): number {
   const framed = (rows: number) => layoutRows(0, rows).frame.h + 4;
   const standings = (m.view.survived === undefined ? 0 : 1) + standingsGrid(m.standings, standingsFree(m, h)).rows;
-  return 28 + framed(standings) + (m.record.length > 0 ? framed(recordRows(m.record).length) : 0) + framed(1);
+  return 28 + framed(standings) + (m.record.length > 0 ? framed(recordRows(m.record).length) : 0);
 }
 
 /** The place column: "8th" and a space. */
 const PLACE_W = 28;
 
 /** The results screen. The mirror keeps the ids the page always had: #results-panel,
- *  #results-line, #results-career, #results-fame, #results-record, #play-again -- the
+ *  #results-line, #results-fame, #results-record, #play-again -- the
  *  first page holds all of them but the fame, which is the second's. */
 export function resultsScreen(model: () => ResultsModel): DrawnScreen {
   let page: ResultsPage = 'match';
@@ -286,10 +284,6 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
         });
         y = bottom + 4;
         record('results-record', m.record);
-        // The footer: what the match did to the career.
-        const foot = paintRows(c, y, [{ label: m.career || ' ', id: 'results-career', cls: 'results-career', color: TEXT_BLUE }]);
-        widgets.push(...foot.widgets.map((w) => (w.id === 'results-career' ? { ...w, text: m.career } : w)));
-        y = foot.bottom + 4;
       } else {
         if (m.fame) {
           // The champion's team, two to a row, under whose it is.
