@@ -20,7 +20,7 @@ import { loadHoenn } from '../../web/src/bots/hoenn';
 import type { Spot } from '../../web/src/bots/world';
 
 const DATA = path.resolve(import.meta.dirname, '../../web/src/data');
-type Row = { map: string; x: number; y: number; off?: 1; door?: number };
+type Row = { map: string; x: number; y: number; off?: 1; door?: number; open?: 1 };
 const landing = (JSON.parse(fs.readFileSync(path.join(DATA, 'landing.json'), 'utf8')) as Row[])
   // The doorsteps below are rebuilt from scratch every run, so a previous run's are not
   // flooded as if they were ordinary cells.
@@ -101,6 +101,26 @@ for (const cell of landing) {
   }
 }
 
+// ---- open ground (HBR-41) -----------------------------------------------------------
+//
+// Where a legendary may stand. Cam, 2026-10-20, after a KYOGRE between two columns of
+// trees: "only spawn it at the centre of a 3x3 area of walkable tiles", no ledges. Plain
+// ground and tall grass, the two classes the exporter deals landing cells from, all
+// round the cell; a ledge, water, a tree or a door anywhere in the nine is not open.
+const GROUND = new Set([0, 7]);
+let open = 0;
+for (const cell of landing) {
+  delete cell.open;
+  if (cell.off) continue;
+  let all = true;
+  for (let dy = -1; dy <= 1 && all; dy++)
+    for (let dx = -1; dx <= 1 && all; dx++) all = GROUND.has(world.cell(cell.map, cell.x + dx, cell.y + dy));
+  if (all) {
+    cell.open = 1;
+    open++;
+  }
+}
+
 // ---- doorsteps (POK-307) ----------------------------------------------------------
 //
 // Cam, after a drop that put him on the wrong map entirely: "if a location cannot be
@@ -142,6 +162,7 @@ steps.sort((a, b) => (a.door ?? 9) - (b.door ?? 9));
 landing.push(...steps);
 
 fs.writeFileSync(path.join(DATA, 'landing.json'), JSON.stringify(landing));
+console.log(`${open} landing cells on open ground`);
 console.log(`${steps.length} doorsteps, for the sections the flood left with nothing`);
 console.log(`${reach.size} cells there and back from Littleroot`);
 console.log(`${off} of ${landing.length} landing cells marked off (${Math.round((off / landing.length) * 100)}%)`);
