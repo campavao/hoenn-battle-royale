@@ -167,8 +167,9 @@ export class MatchSession {
   /** The champion's, as their page said them (TallyMsg): by seat, since the `tally` can
    *  land before the `win` that says whose results it is. */
   readonly tallies = new Map<number, TallyMsg>();
-  /** The champion's Hall of Fame has been handed to our ROM (POK-417): once a match. */
-  private famed = false;
+  /** The champion's Hall of Fame and our ROM (POK-417): 0 not handed yet, 1 handed and
+   *  still taking a newer team, 2 shut for the match. */
+  private famed = 0;
   /** Who took the match, once it is decided. */
   private winner: number | undefined;
   /** Hoenn's own trainers beaten this match, newest last and at most BEATEN_KEPT (POK-331
@@ -325,7 +326,7 @@ export class MatchSession {
       this.results.start(this.field, now);
       this.record.start();
       this.booked = false;
-      this.famed = false;
+      this.famed = 0;
       this.tally = null;
       this.deps.tally?.zero();
       this.forgetBeaten();
@@ -423,17 +424,20 @@ export class MatchSession {
    *  and their name. The team is the `party` that came after the win -- their ROM sends
    *  it as its own parade starts, the host for a bot -- never one kept from a peek
    *  mid-match, which is the team they had then. Our own win is the ROM's own parade off
-   *  the RESULT. Once a match; the ROM waits for a quiet field itself, and says done
-   *  (BR_PHASE_DONE) either way. */
+   *  the RESULT. The `fame` goes once a match; the ROM waits for a quiet field itself,
+   *  and says done (BR_PHASE_DONE) either way. A newer team goes after it (HBR-44): the
+   *  ROM reads the team as its parade starts, and the first one after a win can be the
+   *  team from before the last catch -- Cam's champion's Rayquaza was left out. */
   private fameToRom(seat: number): void {
     const me = this.deps.mySeat();
     const winner = this.winner;
-    if (this.famed || me === null || winner === undefined || seat !== winner || winner === me) return;
+    if (this.famed > 1 || me === null || winner === undefined || seat !== winner || winner === me) return;
     if (this.deps.fameWanted?.() === false) return;
     const party = this.parties.get(winner);
     if (!party || party.length === 0) return;
-    this.famed = true;
     this.deps.toRom({ t: 'party', seat: winner, mons: party });
+    if (this.famed) return;
+    this.famed = 1;
     this.deps.toRom({ t: 'fame', seat: winner, name: this.deps.nameOf(winner) });
   }
 
@@ -457,7 +461,7 @@ export class MatchSession {
   endMatch(): void {
     this.settleTally();
     // A champion's team that lands while the ROM starts over is last match's: no parade.
-    this.famed = true;
+    this.famed = 2;
     Object.assign(this.match, freshMatch());
     this.lootTable = new Loot();
     this.lootMap = null;
@@ -480,7 +484,7 @@ export class MatchSession {
    *  somebody else's. */
   forgetResult(): void {
     this.booked = false;
-    this.famed = false;
+    this.famed = 0;
     this.parties.clear();
     this.tallies.clear();
   }
