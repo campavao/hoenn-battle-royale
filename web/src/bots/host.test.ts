@@ -129,6 +129,19 @@ describe('the host deals its bots (POK-330 #42)', () => {
     });
   });
 
+  // HBR-45: a bot champion's results said what the room saw and nothing its ROM would
+  // have counted, because it has none.
+  it("says what its own bots did, counted as they walk, and nobody else's", () => {
+    const { hb } = host();
+    expect(hb.tallyFor(0)).toBeNull(); // the player's seat
+    const seat = hb.seats[0];
+    expect(hb.tallyFor(seat)).toEqual({ t: 'tally', seat, steps: 0, won: 0, caught: 0, items: 0, mon: hb.bots.partyOf(seat)[0].species });
+    hb.drop();
+    for (let t = 1; t <= 60; t++) hb.tick(t * STEP_MS);
+    const steps = hb.seats.map((s) => (hb.tallyFor(s) as { steps: number }).steps);
+    expect(steps.some((n) => n > 0), 'somebody walked').toBe(true);
+  });
+
   // Cam's rule: a bot's bag is what it picked up or bought, nothing dealt. The deal
   // handed a rookie a POTION and an ace three and two X items, and every ring moved put
   // a free potion in every bag.

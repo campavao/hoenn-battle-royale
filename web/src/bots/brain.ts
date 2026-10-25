@@ -250,6 +250,21 @@ export interface Walker {
   /** The slots an event's trader filled (speed-up 6b), and with what: the rung's re-deal
    *  is by slot, and would hand the traded one back. */
   traded?: Map<number, number>;
+  /** What it did this match, for the results if it takes it (HBR-45): the counts a
+   *  player's ROM keeps in gBrTally, as far as a bot does any of it. */
+  counts?: BotCounts;
+}
+
+export interface BotCounts {
+  steps: number;
+  won: number;
+  caught: number;
+  items: number;
+}
+
+function counted(walker: Walker, key: keyof BotCounts, n = 1): void {
+  const c = (walker.counts ??= { steps: 0, won: 0, caught: 0, items: 0 });
+  c[key] += n;
 }
 
 /** A player as the roster knows them -- where they are and which way they are looking.
@@ -603,6 +618,12 @@ export class Bots {
     return this.walkers.find((w) => w.bot.seat === seat)?.party ?? [];
   }
 
+  /** What a bot did this match, for the results when it takes it (HBR-45). */
+  countsOf(seat: number): BotCounts | undefined {
+    const walker = this.walkers.find((w) => w.bot.seat === seat);
+    return walker && (walker.counts ?? { steps: 0, won: 0, caught: 0, items: 0 });
+  }
+
   /** The party a fight left behind. The ROM that fought the bot reports it under the
    *  bot's own seat, because it is the only thing that watched the fight happen.
    *  `from` is the seat whose ROM sent it (bots/adapt.ts): a report from anybody but
@@ -619,6 +640,7 @@ export class Bots {
     // not drop its items or Pokemon". A bot the fog takes goes out through `bleed`;
     // this is the same ending by the other road.
     if (mons.some((mon) => mon.hp > 0)) {
+      counted(walker, 'won');
       // Standing: the fight is over and the bot won it. The party is the one report a
       // ROM always sends when a bot fight ends (br_bot.c, before `spent` and `result`),
       // so it is what lets the bot walk again.
@@ -638,6 +660,7 @@ export class Bots {
 
     if (!walker || !this.heardFrom(walker, from)) return;
     spend(walker.bag, items);
+    counted(walker, 'items', items.length);
   }
 
   /** Is `from` the ROM that fought this bot last? Undefined is the page speaking for
@@ -998,6 +1021,7 @@ export class Bots {
     }
     if (this.restHere(walker, now)) return;
     walker.stepIndex++;
+    counted(walker, 'steps');
     const wasMap = walker.at.map;
     walker.at = step.to;
     walker.facing = DIR_WIRE[step.dir];
@@ -1177,6 +1201,7 @@ export class Bots {
     const mon = spill.mons[0];
     if (walker.party.length < 6 && mix(walker.bot.seat, mon.key) % 3 === 0) {
       walker.party.push(tradedMon(mon.species, this.phase));
+      counted(walker, 'caught');
       this.note(walker, 'legend', `caught ${mon.species}`);
       return;
     }
@@ -1336,6 +1361,7 @@ export class Bots {
     const lost = won === walker ? other : walker;
 
     won.party = result.winnerParty;
+    counted(won, 'won');
     // A winner that turns straight round is how a queue of fights starts: Kanto gives
     // it twelve seconds, whatever its grade says about appetite (POK-273).
     won.engageAfter = now + Math.max(cooldownFor(won.bot), DUEL_COOLDOWN_MS);
@@ -1393,6 +1419,8 @@ export class Bots {
 
           spend(walker.bag, out.usedA ?? []);
           spend(other.bag, out.usedB ?? []);
+          counted(walker, 'items', out.usedA?.length ?? 0);
+          counted(other, 'items', out.usedB?.length ?? 0);
 
           this.applyDuel(walker, other, {
             winner: out.winner,
@@ -1441,6 +1469,7 @@ export class Bots {
 
     if (drunk === null) return false;
     walker.quaffAfter = now + QUAFF_COOLDOWN_MS;
+    counted(walker, 'items');
     this.note(walker, 'quaff', `item ${drunk}`);
     return true;
   }
