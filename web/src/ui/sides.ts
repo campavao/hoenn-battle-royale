@@ -136,7 +136,7 @@ export function readSides(emu: SidesRead, sym: (name: string) => number | undefi
     foe: {
       pic: raw[SIDES_FOE_PIC],
       name: romName(raw.subarray(SIDES_FOE_NAME, SIDES_MINE_NAME)),
-      // Not gEnemyPartyCount: only trade.c sets it, so a battle leaves it 0 (HBR-35, every
+      // Not gEnemyPartyCount: only the trade screen sets it, so a battle leaves it 0 (HBR-35, every
       // bot's six balls hollow). An empty slot is a zeroed mon, and has no max HP.
       balls: partyBalls(emu.bytes(enemy!, PARTY_SIZE * MON_SIZE), PARTY_SIZE),
     },

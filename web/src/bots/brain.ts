@@ -193,8 +193,9 @@ export interface Fight {
   /** A proxy duel's draw, for the seeded resolver to settle it with after a reload. */
   nonce?: number;
   /** A proxy duel the instance has answered, held until it has played out for anyone
-   *  watching (HBR-43): when, and what then. */
-  due?: { at: number; apply: () => void };
+   *  watching (HBR-43): when, what it said (kept over a reload, hostsnap.ts), and what
+   *  lands then. */
+  due?: { at: number; answer: Answer; apply: () => void };
 }
 
 const DIR_WIRE: Record<SeamDir, 1 | 2 | 3 | 4> = {
@@ -306,6 +307,15 @@ export interface DuelOutcome {
    *  at 8x a fight is over long before it has played out for a watcher (HBR-43). */
   frames?: number;
   ranMs?: number;
+}
+
+/** A proxy duel's answer, by seat: who won, what the winner has left, mon for mon in
+ *  the order it was sent, and what each side spent out of its bag. */
+export interface Answer {
+  winner: number;
+  loser: number;
+  left: { hp: number; status: number }[];
+  used: [seat: number, items: number[]][];
 }
 
 /** Past a fight's own length at 60 frames a second: a watcher's replay starts a moment
@@ -529,6 +539,8 @@ export class Bots {
   /** solid()'s answer for each bot, for this tick: the ground changes between ticks, not
    *  between one bot's routes. */
   private solidThisTick = new Map<number, Set<number>>();
+  /** playerSpots()'s answer for this tick. */
+  private playersThisTick: Set<string> | null = null;
   /** Nothing starts another bot-vs-bot fight before this (POK-273). Room-wide, not
    *  per bot: what needed slowing down was the rate the field eliminated itself at,
    *  and that is a property of the room. */
@@ -867,6 +879,7 @@ export class Bots {
     this.now = now;
     this.budget = NODES_PER_TICK;
     this.solidThisTick.clear();
+    this.playersThisTick = null;
     this.expireFights(now);
     // Both loops walk a snapshot: the fog and a lost duel both take a bot out of the
     // list mid-pass, and splicing the array being iterated skips whoever came next.
@@ -1132,6 +1145,9 @@ export class Bots {
     }
     // Every trader standing, as in the ROM, not only the ones this bot could still use.
     for (const t of this.opts.traders?.() ?? []) add(t.mapId, t.x, t.y);
+    // ...and every player, so a route goes round one standing on it rather than stopping
+    // there for good (HBR-37: taken() turns the step down).
+    for (const p of this.opts.engage?.players() ?? []) add(p.mapId, p.x, p.y);
     return out;
   }
 
@@ -1421,28 +1437,10 @@ export class Bots {
       (w) => [w, this.hold(w, (w === walker ? other : walker).bot.seat, now, expire)] as const,
     );
     for (const [, fight] of held) fight.nonce = nonce;
-    const fought = (out: DuelOutcome | null) => {
-      const then = this.now;
+    const fought = (answer: Answer | null) => {
       if (!finish()) return;
-      if (out) {
-        const wonIsWalker = out.winner === walker.bot.seat;
-        const left = wonIsWalker ? out.a : out.b;
-        const winner = wonIsWalker ? walker : other;
-
-        spend(walker.bag, out.usedA ?? []);
-        spend(other.bag, out.usedB ?? []);
-
-        this.applyDuel(walker, other, {
-          winner: out.winner,
-          loser: out.loser,
-          // What the fight actually left, mon for mon, in the order it was sent.
-          winnerParty: winner.party.map((mon, i) =>
-            left[i] ? { ...mon, hp: Math.min(mon.maxHp, left[i].hp), status: left[i].status } : mon,
-          ),
-        }, then);
-        return;
-      }
-      this.applyDuel(walker, other, resolve(), then);
+      if (answer) this.settleAnswered(walker, other, answer, this.now);
+      else this.applyDuel(walker, other, resolve(), this.now);
     };
     const begin = () => {
       // Both bags go in with them (POK-237): what a bot spends in here is gone from the
@@ -1453,12 +1451,18 @@ export class Bots {
       )
         .catch(() => null)
         .then((out) => {
+          const answer: Answer | null = out && {
+            winner: out.winner,
+            loser: out.loser,
+            left: out.winner === walker.bot.seat ? out.a : out.b,
+            used: [[walker.bot.seat, out.usedA ?? []], [other.bot.seat, out.usedB ?? []]],
+          };
           const wait = out ? playOutMs(out) : 0;
-          if (wait <= 0) {
-            fought(out);
+          if (!answer || wait <= 0) {
+            fought(answer);
             return;
           }
-          const due = { at: this.now + wait, apply: () => fought(out) };
+          const due = { at: this.now + wait, answer, apply: () => fought(answer) };
           for (const [w, fight] of held) if (this.fighting.get(w.bot.seat) === fight) fight.due = due;
         });
     };
@@ -1468,6 +1472,24 @@ export class Bots {
     if (this.walkUp(walker, at(other), mine, now)) mine.walked = begin;
     else if (this.walkUp(other, at(walker), theirs, now)) theirs.walked = begin;
     else begin();
+  }
+
+  /** What a proxy duel's answer does to the pair: each bag spends what it used, the
+   *  winner keeps what the fight left it, and the loser goes. */
+  private settleAnswered(x: Walker, y: Walker, answer: Answer, now: number): void {
+    const winner = answer.winner === x.bot.seat ? x : y;
+    for (const [seat, items] of answer.used) {
+      const w = seat === x.bot.seat ? x : seat === y.bot.seat ? y : undefined;
+      if (w) spend(w.bag, items);
+    }
+    this.applyDuel(x, y, {
+      winner: answer.winner,
+      loser: answer.loser,
+      winnerParty: winner.party.map((mon, i) => {
+        const left = answer.left[i];
+        return left ? { ...mon, hp: Math.min(mon.maxHp, left.hp), status: left.status } : mon;
+      }),
+    }, now);
   }
 
   /** Standing at a nurse's counter with something to heal. The page is the bot's
@@ -1643,13 +1665,14 @@ export class Bots {
     ].filter((e) => e.mapId !== walker.at.map);
     if (events.length > 0 && this.aimAcrossMaps(walker, events, now)) return;
     // Hunt when the field is down to a few. A player's own cell is the target, so
-    // the route ends in somebody's eyeline whether or not they are looking.
+    // the route ends in somebody's eyeline whether or not they are looking -- beside
+    // them: the last step is their cell (HBR-37).
     if ((this.opts.alive?.() ?? 99) <= HUNT_AT) {
       for (const player of this.opts.engage?.players() ?? []) {
         if (player.busy) continue;
         const path = this.route(walker, { map: player.mapId, x: player.x, y: player.y }, WANDER_BUDGET);
-        if (path.found && path.steps.length > 0) {
-          walker.path = path;
+        if (path.found && path.steps.length > 1) {
+          walker.path = { ...path, steps: path.steps.slice(0, -1) };
           walker.stepIndex = 0;
           this.note(walker, 'hunt', `seat ${player.seat}`);
           return;
@@ -1899,10 +1922,16 @@ export class Bots {
   /** Is another bot, or a player, standing here? A player in a battle or a menu too: a
    *  bot walked onto Cam's tile while he fought and stood on him after (HBR-37). */
   private taken(spot: Spot, self: Walker): boolean {
-    return (
-      this.walkers.some((w) => w !== self && sameSpot(w.at, spot)) ||
-      (this.opts.engage?.players() ?? []).some((p) => p.mapId === spot.map && p.x === spot.x && p.y === spot.y)
-    );
+    return this.walkers.some((w) => w !== self && sameSpot(w.at, spot)) || this.playerSpots().has(spotKey(spot));
+  }
+
+  /** Where every player stands, for this tick: the ground changes between ticks. */
+  private playerSpots(): Set<string> {
+    if (this.playersThisTick) return this.playersThisTick;
+    const out = new Set<string>();
+    for (const p of this.opts.engage?.players() ?? []) out.add(spotKey({ map: p.mapId, x: p.x, y: p.y }));
+    this.playersThisTick = out;
+    return out;
   }
 
   /** Would this step trade places with a bot walking the other way? Neither of them

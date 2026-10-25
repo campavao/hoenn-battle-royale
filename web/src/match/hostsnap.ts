@@ -11,7 +11,7 @@
 // It reaches into the director and the brain for what they keep private, which nothing
 // else should: it is here, in the chunk only a match loads (match/resume.ts), rather than
 // as their own methods, because main.js has no room for it.
-import { PROXY_TIMEOUT_MS, STEP_MS, type Bots, type Fight, type Walker } from '../bots/brain';
+import { PROXY_TIMEOUT_MS, STEP_MS, type Answer, type Bots, type Fight, type Walker } from '../bots/brain';
 import { duel } from '../bots/duel';
 import { botGround, type HostBots } from '../bots/host';
 import { mulberry32, type Rng } from './clock';
@@ -183,8 +183,10 @@ export interface WalkerSnap extends Omit<Walker, 'path' | 'stepIndex' | 'nextSte
 
 export interface BotsSnap {
   walkers: WalkerSnap[];
-  /** Each held bot: who it is fighting, how long ago that began, and a proxy duel's draw. */
-  fights: [seat: number, opponent: number, ago: number, started: boolean, nonce?: number][];
+  /** Each held bot: who it is fighting, how long ago that began, a proxy duel's draw, and
+   *  the instance's answer to one still playing out for its watchers, with how long it
+   *  has left to (HBR-43). */
+  fights: [seat: number, opponent: number, ago: number, started: boolean, nonce?: number, due?: [answer: Answer, left: number]][];
   nonce: number;
   traded: number[];
   duelAfter: number;
@@ -201,7 +203,11 @@ export function snapBots(b: Bots, now: number): BotsSnap {
       traded: traded && [...traded],
       foughtLegends: foughtLegends && [...foughtLegends],
     })),
-    fights: [...b['fighting']].map(([seat, f]) => [seat, f.opponent, now - f.since, f.started, f.nonce]),
+    fights: [...b['fighting']].map(([seat, f]) => {
+      const row: BotsSnap['fights'][number] = [seat, f.opponent, now - f.since, f.started, f.nonce];
+      if (f.due) row.push([f.due.answer, Math.max(0, f.due.at - now)]);
+      return row;
+    }),
     nonce: b['nonce'],
     traded: [...b['tradedKeys']],
     duelAfter: b['duelAfter'] - now,
@@ -236,12 +242,12 @@ export function restoreBots(b: Bots, snap: BotsSnap, now: number, out: ReadonlyS
     b['place'](walker);
   }
   const find = (seat: number) => b['walkers'].find((w) => w.bot.seat === seat);
-  for (const [seat, opponent, ago, started, nonce] of snap.fights) {
+  for (const [seat, opponent, ago, started, nonce, due] of snap.fights) {
     const walker = find(seat);
     const other = find(opponent);
     if (!walker || b['fighting'].has(seat)) continue;
     if (nonce !== undefined) {
-      if (other) reproxy(b, walker, other, nonce, now);
+      if (other) reproxy(b, walker, other, nonce, now, due);
       continue;
     }
     b['fighting'].set(seat, { opponent, since: now - ago, started });
@@ -253,21 +259,29 @@ export function restoreBots(b: Bots, snap: BotsSnap, now: number, out: ReadonlyS
 }
 
 /** A proxy duel the instance will never answer now, held past its time so the next tick's
- *  expireFights settles it off the seed. */
-function reproxy(b: Bots, x: Walker, y: Walker, nonce: number, now: number): void {
+ *  expireFights settles it off the seed. One it had answered, still playing out for its
+ *  watchers, lands what the instance said when it is due: the seed could name the other
+ *  bot, under a fight the room watched that one lose (HBR-43). */
+function reproxy(b: Bots, x: Walker, y: Walker, nonce: number, now: number, due?: [answer: Answer, left: number]): void {
   const pair = [x, y];
+  const settle = () => {
+    const live = pair.filter((p, j) => b['fighting'].get(p.bot.seat) === fights[j]);
+    for (const p of live) b['release'](p.bot.seat);
+    if (live.length < 2 || !b['walkers'].includes(x) || !b['walkers'].includes(y)) return;
+    if (due) {
+      b['settleAnswered'](x, y, due[0], b['now']);
+      return;
+    }
+    const side = (p: Walker) => ({ seat: p.bot.seat, party: p.party });
+    b['applyDuel'](x, y, duel(b['opts'].seed ?? 0, side(x), side(y), nonce), b['now']);
+  };
   const fights = pair.map((w, i): Fight => ({
     opponent: pair[1 - i].bot.seat,
     since: now - PROXY_TIMEOUT_MS - 1,
     started: true,
-    proxy: () => {
-      const live = pair.filter((p, j) => b['fighting'].get(p.bot.seat) === fights[j]);
-      for (const p of live) b['release'](p.bot.seat);
-      if (live.length < 2 || !b['walkers'].includes(x) || !b['walkers'].includes(y)) return;
-      const side = (p: Walker) => ({ seat: p.bot.seat, party: p.party });
-      b['applyDuel'](x, y, duel(b['opts'].seed ?? 0, side(x), side(y), nonce), b['now']);
-    },
+    proxy: settle,
     nonce,
+    ...(due ? { due: { at: now + due[1], answer: due[0], apply: settle } } : {}),
   }));
   pair.forEach((w, i) => {
     b['fighting'].set(w.bot.seat, fights[i]);
