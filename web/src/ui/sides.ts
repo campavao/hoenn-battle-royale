@@ -123,8 +123,7 @@ export function readSides(emu: SidesRead, sym: (name: string) => number | undefi
   const party = sym('gPlayerParty');
   const partyCount = sym('gPlayerPartyCount');
   const enemy = sym('gEnemyParty');
-  const enemyCount = sym('gEnemyPartyCount');
-  if ([main, flags, sides, br, party, partyCount, enemy, enemyCount].some((a) => a === undefined)) return null;
+  if ([main, flags, sides, br, party, partyCount, enemy].some((a) => a === undefined)) return null;
   if (!(emu.read(main! + MAIN_IN_BATTLE_BYTE, 8) & MAIN_IN_BATTLE_BIT)) return null;
   const type = emu.read(flags!, 32);
   if (!(type & BATTLE_TYPE_TRAINER) || type & BATTLE_TYPE_RECORDED) return null;
@@ -137,7 +136,9 @@ export function readSides(emu: SidesRead, sym: (name: string) => number | undefi
     foe: {
       pic: raw[SIDES_FOE_PIC],
       name: romName(raw.subarray(SIDES_FOE_NAME, SIDES_MINE_NAME)),
-      balls: partyBalls(emu.bytes(enemy!, PARTY_SIZE * MON_SIZE), emu.read(enemyCount!, 8)),
+      // Not gEnemyPartyCount: only trade.c sets it, so a battle leaves it 0 (HBR-35, every
+      // bot's six balls hollow). An empty slot is a zeroed mon, and has no max HP.
+      balls: partyBalls(emu.bytes(enemy!, PARTY_SIZE * MON_SIZE), PARTY_SIZE),
     },
     mine: {
       pic: raw[SIDES_MINE_PIC],
