@@ -99,6 +99,19 @@ describe('the sheet', () => {
     expect(seatY()).toBe(withChip);
   });
 
+  it("forgets the last match's chips once it is over", () => {
+    const fresh = sheetScreen(() => model({ chips: [] }));
+    const top = fresh.paint(fakeCanvas().canvas, 480).widgets.filter((w) => w.parent === 'match-roster')[0].rect.y;
+    let m = model({ chips: ['WATTSON has the legendary'] });
+    const screen = sheetScreen(() => m);
+    const seatY = () => screen.paint(fakeCanvas().canvas, 480).widgets.filter((w) => w.parent === 'match-roster')[0].rect.y;
+    seatY();
+    m = model({ strip: null, chips: [] });
+    seatY();
+    m = model({ chips: [] });
+    expect(seatY()).toBe(top);
+  });
+
   it("keeps the drawer's ids: the room's line, the strip, the seats, LEAVE and the settings", () => {
     const { painted, byId } = paint(model());
     const containers = (painted.containers ?? []).map((c) => c.id);

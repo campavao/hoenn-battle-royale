@@ -689,7 +689,8 @@ export function sheetScreen(model: () => SheetModel): DrawnScreen {
         y += ROW_H;
       }
       const chips = m.chips ?? [];
-      chipRows = Math.max(chipRows, chips.length);
+      // Forgotten between matches (no strip), so the next one opens with no gap.
+      chipRows = m.strip === null ? 0 : Math.max(chipRows, chips.length);
       if (chips.length > 0) {
         const frame = { x: 0, y: y + 2, w: W, h: chipRows * ROW_H + 8 };
         c.drawFrame(frame);

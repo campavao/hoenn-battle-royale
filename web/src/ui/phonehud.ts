@@ -451,11 +451,16 @@ export class PhoneHud {
           c.drawText(s, x, 19, TEXT_GRAY);
         }
       });
+    // Off the field the dock is still up for OFF_FIELD_GRACE frames, but a tap there
+    // would land on a battle or a menu: it does nothing until the field is back.
+    const field = (act: (v: HudView) => void) => () => {
+      if (this.view?.onField) act(this.view);
+    };
     this.buttons = {
-      party: button('hud-party', 'Party', () => deps.onParty()),
-      map: button('hud-map', 'Map', () => deps.onMap()),
-      start: button('hud-start', 'Start', () => deps.onStart()),
-      ctx: button('hud-ctx', 'Select', () => this.view && deps.onUse(this.view.ctx.item)),
+      party: button('hud-party', 'Party', field(() => deps.onParty())),
+      map: button('hud-map', 'Map', field(() => deps.onMap())),
+      start: button('hud-start', 'Start', field(() => deps.onStart())),
+      ctx: button('hud-ctx', 'Select', field((v) => deps.onUse(v.ctx.item))),
     };
     this.party = dockWin(this.buttons.party, () => ITEM_POKE_BALL, () => 'PARTY', () => null);
     this.map = dockWin(this.buttons.map, () => ITEM_TOWN_MAP, () => 'MAP', () => null);
