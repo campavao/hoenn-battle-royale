@@ -504,8 +504,9 @@ bool8 BrBattle_HandleRun(void)
         return TRUE;
     }
     gCurrentTurnActionNumber = gBattlersCount;
-    // The publisher's getaway in a turned replay too: "Wild <MON> fled!" is a wild one's.
-    if (BrBattle_HomeSide(gBattlerAttacker) == B_SIDE_PLAYER)
+    // A replay's runner is a trainer whichever side the screen has them on: "Wild <MON>
+    // fled!" is a wild one's line, and the getaway says who left (BrBattle_BufferString).
+    if (GetBattlerSide(gBattlerAttacker) == B_SIDE_PLAYER || (gBattleTypeFlags & BATTLE_TYPE_RECORDED_LINK))
         gBattleOutcome = B_OUTCOME_RAN;
     else
         gBattleOutcome = B_OUTCOME_MON_FLED;
@@ -739,6 +740,9 @@ static const u8 sText_NewPage[] = _("\p");
 // cable's own word for the one holding the GBA, and a watcher is neither of them.
 static const u8 sText_ReplayWon[] = _("{B_LINK_PLAYER_NAME} defeated\n{B_LINK_OPPONENT1_NAME}!");
 static const u8 sText_ReplayLost[] = _("{B_LINK_OPPONENT1_NAME} defeated\n{B_LINK_PLAYER_NAME}!");
+// A replay's RUN, by name: on a turned replay a bare "Got away safely!" read as if the
+// trainer we follow had left, whoever ran (HBR-53 review).
+static const u8 sText_ReplayRan[] = _("{B_LINK_SCR_TRAINER_NAME} got away safely!");
 static const u8 sText_ReplayDrew[] = _("{B_LINK_PLAYER_NAME} and {B_LINK_OPPONENT1_NAME}\nbattled to a draw!");
 // A bot whose lines never arrived still says something when it slides back in: pret's
 // own speech for TRAINER_NONE is whatever the last trainerbattle script left behind.
@@ -823,6 +827,12 @@ bool8 BrBattle_BufferString(u16 stringId)
     // message for good. The AI's script already set the battler, so it gets our line.
     if (stringId == STRINGID_TRAINER1USEDITEM && gTrainerBattleOpponent_A == TRAINER_LINK_OPPONENT)
         stringId = BR_STRINGID_USED_ITEM;
+    if (stringId == STRINGID_GOTAWAYSAFELY && Spectating() && (gBattleTypeFlags & BATTLE_TYPE_RECORDED_LINK))
+    {
+        gBattleScripting.battler = gBattlerAttacker;
+        BattleStringExpandPlaceholdersToDisplayedString(sText_ReplayRan);
+        return TRUE;
+    }
     if (stringId == STRINGID_GOTAWAYSAFELY && BrMatch_FightOver())
     {
         BattleStringExpandPlaceholdersToDisplayedString(sText_MatchWon);
@@ -933,7 +943,8 @@ u32 BrBattle_OpponentPic(u32 pic)
 }
 
 // A replay turned for the watched trainer (HBR-53, BrSpectate's EnterSpectate): pret's
-// own view of a link battle from its other side, the slave's. Battler 0, the publisher,
+// own view of a link battle from its other side, the slave's. Strictly any RECORDED_LINK
+// replay without IS_MASTER, but a spectator's is the only kind this game plays. Battler 0, the publisher,
 // is on the far side and battler 1 has its back to the camera; ids, records and the RNG
 // are the fight's as they were, which is what keeps it in step.
 bool8 BrBattle_ReplayTurned(void)

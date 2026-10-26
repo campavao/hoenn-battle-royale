@@ -60,21 +60,31 @@ expect u8 gBrSpectate+5 1
 # its mon in the near party. The 00 first is CAM's engine's no-fog answer for turn one.
 expect u8 gBattleMons+0x19 6
 expect u8 gBattleMons+0x71 6
-pokebytes gDecompressionBuffer+400 00 01 00 06 00 01 4B 00 00 00 01 05 01 4B 00 40 00
-mailsend gBrMailbox 19 gDecompressionBuffer+400 17
+# Behind the actions, the fighter's check of turn one (spectate-check.txt): both mons are
+# species 0x115 at 20 HP, 2 * (0x115 * 31 + 20) = 0x433E. The replay's own sum agrees.
+pokebytes gDecompressionBuffer+400 00 01 00 06 00 01 4B 00 00 00 01 05 01 4B 00 40 00 C0 03 01 3E 43
+mailsend gBrMailbox 19 gDecompressionBuffer+400 22
 waitfor u8 gBattleMons+0x71 7 2400
 waitfor u8 gBattleMons+0x19 7 2400
 expect u8 gBattleMons+0x19 7
 expect u8 gBattleMons+0x71 7
+expect u16 gBrJank+10 1
+expect u16 gBrJank+12 0
 expect u8 gBrSpectate+5 1
 wait 600
-# Turn three: CAM RUNs with a POKe DOLL; CAN FIGHTs. One run, one getaway, and the
-# replay ends as the fight did.
-pokebytes gDecompressionBuffer+400 00 01 00 03 00 03 01 01 03 00 00 00
+# Turn three: CAN, the trainer we follow, RUNs with a POKe DOLL; CAM FIGHTs. One run, one
+# getaway, said by name -- not "Wild TREECKO fled!", which a side-1 runner was given, nor a
+# bare "Got away safely!" that reads as ours whoever ran. "CAN got away safely!"
+pokebytes gDecompressionBuffer+400 00 01 00 04 00 00 00 01 01 02 03 01
 mailsend gBrMailbox 19 gDecompressionBuffer+400 12
 waitfor u16 gBrBattle+6 1 2400
 expect u16 gBrBattle+4 1
 expect u16 gBrBattle+6 1
+waitfor u32 gDisplayedStringBattle+4 0x00E8E3DB 1200
+wait 60
+shot turned-ran
+expect u32 gDisplayedStringBattle 0x00C8BBBD
+expect u32 gDisplayedStringBattle+4 0x00E8E3DB
 waitfor u8 gBrSpectate+5 0 2400
 expect u8 gBrSpectate+5 0
 expect u16 gBrJank+12 0
