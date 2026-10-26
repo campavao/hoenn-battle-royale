@@ -433,6 +433,9 @@ u8 BrSpectate_SideSkin(u8 side)
 
     if (!gBrSpectate.watching || side > 1)
         return BR_NO_SEAT;
+    // `side` is the screen's; the bytes are in the fight's order, publisher first.
+    if (BrBattle_ReplayTurned())
+        side ^= BIT_SIDE;
     seat = (sPendGenders[side] & BR_BSTART_SEAT_MASK) >> BR_BSTART_SEAT_SHIFT;
     if (seat == 0 || seat > BR_MAX_SEATS || !gBrSeats[seat - 1].present)
         return BR_NO_SEAT;
@@ -490,6 +493,18 @@ static u16 UnpackParty(const u8 *d, u16 avail, struct Pokemon *party)
 
 // Into the replay, straight off the fade (BrField_Leave hands the overworld's windows
 // back first; skipping that is what made the spectate crash the sound driver on agbcc).
+// Whoever we follow is the one with their back to the camera, as if we were them (HBR-53,
+// Cam: "spectating already looks like we are that player"). The publisher is always side
+// 0, so it is side 1's seat that turns the replay round. Only a fight between two trainers
+// has a side 1 to turn to; a wild POKeMON's is never turned.
+static bool8 WatchingSideOne(void)
+{
+    u8 seat = (sPendGenders[1] & BR_BSTART_SEAT_MASK) >> BR_BSTART_SEAT_SHIFT;
+
+    return (sPendFlags & BATTLE_TYPE_LINK) && !(sPendFlags & BATTLE_TYPE_DOUBLE)
+        && seat != 0 && seat - 1 == gBrSpectate.follow;
+}
+
 static void EnterSpectate(void)
 {
     // One run at a time, the record's own [battler, count, bytes] shape, in 62-byte
@@ -505,7 +520,7 @@ static void EnterSpectate(void)
     genders[1] = sPendGenders[1] & BR_BSTART_GENDER;
     BrRing_SetBattleFog(sPendFog);
     RecordedBattle_StartSpectate(sPendSeed, sPendFlags, sPendParties,
-        sPendParties + PARTY_SIZE, sPendNames, genders, CB2_BrReturnFromSpectate);
+        sPendParties + PARTY_SIZE, sPendNames, genders, WatchingSideOne(), CB2_BrReturnFromSpectate);
     early = PEND_EARLY;
     for (battler = 0; battler < MAX_BATTLERS_COUNT; battler++)
     {

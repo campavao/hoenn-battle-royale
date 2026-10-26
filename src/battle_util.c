@@ -333,7 +333,11 @@ void HandleAction_UseItem(void)
     {
         gBattlescriptCurrInstr = gBattlescriptsForRunningByItem[0]; // BattleScript_RunByUsingItem
     }
+#if BR
+    else if (BrBattle_HomeSide(gBattlerAttacker) == B_SIDE_PLAYER) // a turned replay's publisher too (HBR-53)
+#else
     else if (GetBattlerSide(gBattlerAttacker) == B_SIDE_PLAYER)
+#endif
     {
         gBattlescriptCurrInstr = gBattlescriptsForUsingItem[0]; // BattleScript_PlayerUsesItem
     }

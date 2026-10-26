@@ -679,7 +679,7 @@ void PlayRecordedBattle(void (*CB2_After)(void))
 // RecordedBattle_GetBattlerAction blocks a turn behind instead of quitting. `battler`
 // values ride in playersBattlers; multiplayerId 0 watches from the challenger's side.
 void RecordedBattle_StartSpectate(u32 seed, u32 flags, struct Pokemon *pParty,
-    struct Pokemon *eParty, const u8 *names, const u8 *genders, void (*CB2_After)(void))
+    struct Pokemon *eParty, const u8 *names, const u8 *genders, bool8 turned, void (*CB2_After)(void))
 {
     struct RecordedBattleSave *save = AllocZeroed(sizeof(struct RecordedBattleSave));
     u8 i;
@@ -723,6 +723,20 @@ void RecordedBattle_StartSpectate(u32 seed, u32 flags, struct Pokemon *pParty,
     {
         save->battleFlags = flags;
         save->opponentA = 0;
+    }
+    // Turned for the trainer we follow when they are side 1 (HBR-53): the slave's own
+    // replay of a link battle, which pret plays from multiplayerId and no IS_MASTER.
+    // Battler 1 has its back to the camera and battler 0 faces it; the parties go where
+    // the screen puts them, while the names, the battlers and the record stay the fight's.
+    else if (turned)
+    {
+        for (i = 0; i < PARTY_SIZE; i++)
+        {
+            save->playerParty[i] = eParty[i];
+            save->opponentParty[i] = pParty[i];
+        }
+        save->battleFlags &= ~(BATTLE_TYPE_RECORDED_IS_MASTER | BATTLE_TYPE_IS_MASTER);
+        save->multiplayerId = 1;
     }
     // A replay plays at a pace a watcher can follow, animations on and MID text, whatever
     // the room set (POK-366): a link one through BrBattle_AnimationsOff and
