@@ -860,7 +860,7 @@ EWRAM_DATA u8 gBrGhostMark[BR_MAX_SEATS] = {0}; // named for the drivers (emote-
 // already refuses a trainer who is in a menu or a battle -- that is POK-230's rule --
 // and nothing showed it, so a trainer standing still in a fight looked exactly like one
 // standing still waiting to take yours. Emerald's own trainer-sight icons do the job:
-// "?" for a menu, and crossed swords for a fight with another trainer (POK-372: the "!" is
+// "?" for a menu, and "VS" for a fight with another trainer (POK-372: the "!" is
 // the spotter's alone, as Emerald's is).
 //
 // trainer_see.c's icon sprite keeps the field effect's id in data[7] and the object's

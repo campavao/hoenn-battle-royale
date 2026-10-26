@@ -364,8 +364,24 @@ export class SignCue {
   }
 }
 
+/** Frames off the field before the HUD steps aside. A door's map load leaves
+ *  CB2_Overworld for about 9 frames, and the HUD blinked off for them (Cam's 10-23
+ *  video, HBR-60); a battle or a menu is off it for good, and hides a moment later. */
+export const OFF_FIELD_GRACE = 15;
+
+/** Whether the HUD is off the field, a frame at a time, with OFF_FIELD_GRACE's grace. */
+export class OffField {
+  private frames = 0;
+
+  step(onField: boolean): boolean {
+    this.frames = onField ? 0 : this.frames + 1;
+    return this.frames > OFF_FIELD_GRACE;
+  }
+}
+
 export class PhoneHud {
   private view: HudView | null = null;
+  private readonly offField = new OffField();
   private scale = 1;
   private readonly signCue = new SignCue();
   private readonly sign: Win;
@@ -400,10 +416,16 @@ export class PhoneHud {
     this.sign = new Win(box('hud-sign'), SIGN_W, SIGN_H, (c, redo) => {
       const v = this.view;
       if (!v) return;
-      c.drawPicture(picture(`/ui/popup-${v.theme}.png`, redo), 0, 0, SIGN_W, SIGN_H, 0, 0);
+      // The name only on its plate: a theme not loaded yet drew the bare name for a few
+      // frames on landing in Slateport (Cam's 10-23 video, HBR-60). The load redraws.
+      const plate = picture(`/ui/popup-${v.theme}.png`, redo);
+      if (!plate.complete || plate.naturalWidth === 0) return;
+      c.drawPicture(plate, 0, 0, SIGN_W, SIGN_H, 0, 0);
       const name = fitText(v.place, SIGN_W - 16);
       c.drawTextCentred(name, SIGN_W / 2, 13, TEXT_DARK);
     });
+    // Every plate up front, so a new section's sign is whole on its first frame.
+    for (const theme of new Set(['wood', ...Object.values(THEMES)])) picture(`/ui/popup-${theme}.png`, () => undefined);
     this.fog = new Win(box('hud-fog'), FOG_W, fogHeight(3), (c) => {
       const v = this.view;
       if (!v) return;
@@ -429,11 +451,16 @@ export class PhoneHud {
           c.drawText(s, x, 19, TEXT_GRAY);
         }
       });
+    // Off the field the dock is still up for OFF_FIELD_GRACE frames, but a tap there
+    // would land on a battle or a menu: it does nothing until the field is back.
+    const field = (act: (v: HudView) => void) => () => {
+      if (this.view?.onField) act(this.view);
+    };
     this.buttons = {
-      party: button('hud-party', 'Party', () => deps.onParty()),
-      map: button('hud-map', 'Map', () => deps.onMap()),
-      start: button('hud-start', 'Start', () => deps.onStart()),
-      ctx: button('hud-ctx', 'Select', () => this.view && deps.onUse(this.view.ctx.item)),
+      party: button('hud-party', 'Party', field(() => deps.onParty())),
+      map: button('hud-map', 'Map', field(() => deps.onMap())),
+      start: button('hud-start', 'Start', field(() => deps.onStart())),
+      ctx: button('hud-ctx', 'Select', field((v) => deps.onUse(v.ctx.item))),
     };
     this.party = dockWin(this.buttons.party, () => ITEM_POKE_BALL, () => 'PARTY', () => null);
     this.map = dockWin(this.buttons.map, () => ITEM_TOWN_MAP, () => 'MAP', () => null);
@@ -464,8 +491,9 @@ export class PhoneHud {
 
   update(v: HudView): void {
     this.view = v;
-    this.deps.top.classList.toggle('off-field', !v.onField);
-    this.deps.dock.classList.toggle('off-field', !v.onField);
+    const off = this.offField.step(v.onField);
+    this.deps.top.classList.toggle('off-field', off);
+    this.deps.dock.classList.toggle('off-field', off);
     const signKey = `${v.theme}|${v.place}`;
     if (this.signCue.next(signKey)) {
       this.sign.show(signKey);

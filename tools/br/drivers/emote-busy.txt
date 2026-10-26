@@ -28,7 +28,7 @@ expectge u8 gBrGhostMark+1 1
 wait 240
 shot question
 expectge u8 gBrGhostMark+1 1
-# into a fight: the "?" comes down and crossed swords go up in its place (POK-372: the
+# into a fight: the "?" comes down and "VS" goes up in its place (POK-372: the
 # "!" is the spotter's alone)
 pokebytes gBrMailbox+0x1098 11 05 02 00 00 01 02
 poke u16 gBrMailbox+0x0C 3

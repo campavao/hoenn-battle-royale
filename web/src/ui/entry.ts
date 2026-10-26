@@ -39,6 +39,9 @@ export interface EntryState {
   pos: number;
 }
 
+/** The line under the keys: they take a tap, the keyboard types, and A and B. */
+export const ENTRY_HELP = 'Tap the keys or type.  A: OK  B: BACK';
+
 /** An entry, holding `text` already (a name to change): what the shape holds of it. */
 export function newEntry(shape: EntryShape, text = ''): EntryState {
   const slots = Array.from({ length: shape.length }, (_, i): string | null => {
@@ -244,7 +247,9 @@ export function entryScreen(model: () => EntryModel): DrawnScreen {
           { label: 'BACK', id: 'entry-back', onPress: () => m.onBack() },
         ]).map((w) => ({ ...w, cursor: null })),
       );
-      c.drawTextCentred('UP/DOWN: LETTER  A: OK  B: BACK', W / 2, by + 28, TEXT_GRAY);
+      // The keys above are the way in now: tapped, typed, or walked with the pad (HBR-50:
+      // the line still described only the pad's UP/DOWN scrub).
+      c.drawTextCentred(ENTRY_HELP, W / 2, by + 28, TEXT_WHITE);
       return { widgets, containers: [{ id: 'entry-slots' }, { id: 'entry-keys' }] };
     },
   };

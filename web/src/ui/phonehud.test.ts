@@ -22,6 +22,8 @@ import {
   safeWay,
   signFor,
   type HudView,
+  OffField,
+  OFF_FIELD_GRACE,
 } from './phonehud';
 import { measure, TEXT_RED } from './emerald';
 import { HUD } from '../net/hud';
@@ -216,5 +218,19 @@ describe('the sign comes up on a new section', () => {
     expect(cue.next('wood|ROUTE 110')).toBe(true);
     cue.reset();
     expect(cue.next('wood|ROUTE 110')).toBe(true);
+  });
+});
+
+describe('off the field', () => {
+  // Cam's 10-23 video (HBR-60): a door's map load is ~9 frames off CB2_Overworld, and
+  // the HUD blinked off for them.
+  it('rides out a map load, and steps aside for a battle', () => {
+    const off = new OffField();
+    const door = Array.from({ length: 9 }, () => off.step(false));
+    expect(door.some(Boolean)).toBe(false);
+    expect(off.step(true)).toBe(false);
+    const battle = Array.from({ length: OFF_FIELD_GRACE + 1 }, () => off.step(false));
+    expect(battle[OFF_FIELD_GRACE - 1]).toBe(false);
+    expect(battle[OFF_FIELD_GRACE]).toBe(true);
   });
 });

@@ -86,6 +86,30 @@ describe('watchStepKey', () => {
 });
 
 describe('the sheet', () => {
+  // 10-20 play-test #22 (HBR-55): the seats jumped ~40 px as the legendary's line came
+  // and went. Once the chips' box has had a row, it keeps it.
+  it('keeps the seats where they were when a chip goes', () => {
+    let m = model({ chips: ['WATTSON has the legendary'] });
+    const screen = sheetScreen(() => m);
+    const seatY = () => screen.paint(fakeCanvas().canvas, 480).widgets.filter((w) => w.parent === 'match-roster')[0].rect.y;
+    const withChip = seatY();
+    m = model({ chips: [] });
+    expect(seatY()).toBe(withChip);
+    m = model({ chips: ['WATTSON has the legendary'] });
+    expect(seatY()).toBe(withChip);
+  });
+
+  it("forgets the last match's chips once it is over", () => {
+    const fresh = sheetScreen(() => model({ chips: [] }));
+    const top = fresh.paint(fakeCanvas().canvas, 480).widgets.filter((w) => w.parent === 'match-roster')[0].rect.y;
+    let m = model({ match: 1, chips: ['WATTSON has the legendary'] });
+    const screen = sheetScreen(() => m);
+    const seatY = () => screen.paint(fakeCanvas().canvas, 480).widgets.filter((w) => w.parent === 'match-roster')[0].rect.y;
+    expect(seatY()).toBeGreaterThan(top);
+    m = model({ match: 2, chips: [] });
+    expect(seatY()).toBe(top);
+  });
+
   it("keeps the drawer's ids: the room's line, the strip, the seats, LEAVE and the settings", () => {
     const { painted, byId } = paint(model());
     const containers = (painted.containers ?? []).map((c) => c.id);
