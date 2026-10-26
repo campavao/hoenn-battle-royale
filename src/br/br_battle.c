@@ -28,6 +28,7 @@
 #include "constants/items.h"
 #include "constants/songs.h"
 #include "br/br_mailbox.h"
+#include "br/br_duel.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
 #include "br/br_ghosts.h"
@@ -318,12 +319,13 @@ u8 BrBattle_LinkTextSpeed(void)
 
 // SLOW keeps pret's hold; MID and FAST give a line about two thirds and a third of it.
 // Long enough to read a line at a glance, and the same on both ROMs of a link battle,
-// which got one TEXT at START.
+// which got one TEXT at START. A watcher and the proxy instance keep pret's (see
+// BrBattle_Wait).
 u8 BrBattle_AutoScrollFrames(void)
 {
     if (!gMain.inBattle)
         return 49;
-    if (Spectating())
+    if (Spectating() || BrDuel_IsProxy())
         return 49;
     switch (gSaveBlock2Ptr->optionsTextSpeed)
     {
@@ -340,10 +342,12 @@ u8 BrBattle_AutoScrollFrames(void)
 // pauses between battle lines, no new setting. The battle script's waits are the pauses
 // (waitmessage after a line, pause between beats: the cry before a faint, the 32 before
 // the end of a turn); MID keeps three quarters of each and FAST half, so the faint's
-// 64-frame hold is 32. A watcher keeps pret's, as AutoScrollFrames does.
+// 64-frame hold is 32. A watcher keeps pret's, as AutoScrollFrames does, and so does
+// the proxy instance: the room holds a bot duel's outcome for the proxy's frames
+// (brain.ts playOutMs), and those frames have to be the watcher's.
 u16 BrBattle_Wait(u16 frames)
 {
-    if (!gMain.inBattle || Spectating())
+    if (!gMain.inBattle || Spectating() || BrDuel_IsProxy())
         return frames;
     switch (gSaveBlock2Ptr->optionsTextSpeed)
     {
