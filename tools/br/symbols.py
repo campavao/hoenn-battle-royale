@@ -37,6 +37,8 @@ ENGINE_SYMBOLS = [
     # (web/src/touch.ts localBattler).
     "gBattlerPositions",
     "gAnimScriptActive", "gAnimVisualTaskCount", "gAnimSoundTaskCount", "gAnimScriptCallback", "gBattleSpritesDataPtr", "gBattleAnimAttacker", "gBattleAnimTarget", "gBattleScripting", "gBattlescriptCurrInstr", "gCurrentMove",
+    # The battle script's waitmessage/pause counter: the trimmed waits (battle-waits.txt, HBR-39).
+    "gPauseCounterBattle",
     # Scratch a driver can build a wire message in before mailsend pushes it.
     "gDecompressionBuffer", "gBrZone",
     # The party screen as a move is taught (tm-teach-full.txt), and the way back it keeps

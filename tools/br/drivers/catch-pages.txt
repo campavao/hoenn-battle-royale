@@ -157,7 +157,7 @@ tap B
 wait 30
 tap B
 wait 30
-poke u32 gRngValue 0x4BF543F6
+poke u32 gRngValue 2
 tap A
 wait 30
 tap A

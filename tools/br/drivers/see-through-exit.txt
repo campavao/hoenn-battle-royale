@@ -44,7 +44,7 @@ wait 300
 expect u8 gBrSeeThrough+1 1
 # "Got away safely!" off: the battle fades out and leaves
 tap A
-wait 76
+wait 32
 # mid-fade the key is still the key: a fade moved it to a dark blue, no key, a band
 expect u16 0x05000000 0x7C00
 expect u16 0x05000042 0x7C00

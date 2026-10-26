@@ -2,6 +2,7 @@
 #if BR
 #include "br/br_levels.h"
 #include "br/br_catch.h"
+#include "br/br_battle.h"
 #endif
 #include "battle.h"
 #include "battle_message.h"
@@ -2171,6 +2172,9 @@ static void Cmd_waitmessage(void)
         else
         {
             u16 toWait = T2_READ_16(gBattlescriptCurrInstr + 1);
+#if BR
+            toWait = BrBattle_Wait(toWait); // shorter on a faster TEXT (HBR-39)
+#endif
             if (++gPauseCounterBattle >= toWait)
             {
                 gPauseCounterBattle = 0;
@@ -3924,6 +3928,9 @@ static void Cmd_pause(void)
     if (gBattleControllerExecFlags == 0)
     {
         u16 value = T2_READ_16(gBattlescriptCurrInstr + 1);
+#if BR
+        value = BrBattle_Wait(value); // shorter on a faster TEXT (HBR-39)
+#endif
         if (++gPauseCounterBattle >= value)
         {
             gPauseCounterBattle = 0;
