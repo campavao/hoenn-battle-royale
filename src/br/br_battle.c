@@ -470,7 +470,7 @@ bool8 BrBattle_HandleRun(void)
     u8 how = gBattleBufferB[gBattlerAttacker][2];
 
     // The match is over and ours (BrMatch_FightOver): out, from anything, at once.
-    if (how == BR_RUN_OVER && GetBattlerSide(gBattlerAttacker) == B_SIDE_PLAYER)
+    if (how == BR_RUN_OVER && BrBattle_HomeSide(gBattlerAttacker) == B_SIDE_PLAYER)
     {
         gCurrentTurnActionNumber = gBattlersCount;
         gBattleOutcome = B_OUTCOME_RAN;
@@ -490,7 +490,7 @@ bool8 BrBattle_HandleRun(void)
     // selection: you paid and got a coin toss (POK-293). So it gets the same rule.
     // Against a wild Pokemon RUN is left to pret, because the Zone is not somebody
     // else's time; and the AI's side never runs from a trainer.
-    else if (GetBattlerSide(gBattlerAttacker) != B_SIDE_PLAYER
+    else if (BrBattle_HomeSide(gBattlerAttacker) != B_SIDE_PLAYER
           || !(gBattleTypeFlags & BATTLE_TYPE_TRAINER))
     {
         return FALSE;
@@ -504,7 +504,9 @@ bool8 BrBattle_HandleRun(void)
         return TRUE;
     }
     gCurrentTurnActionNumber = gBattlersCount;
-    if (GetBattlerSide(gBattlerAttacker) == B_SIDE_PLAYER)
+    // A replay's runner is a trainer whichever side the screen has them on: "Wild <MON>
+    // fled!" is a wild one's line, and the getaway says who left (BrBattle_BufferString).
+    if (GetBattlerSide(gBattlerAttacker) == B_SIDE_PLAYER || (gBattleTypeFlags & BATTLE_TYPE_RECORDED_LINK))
         gBattleOutcome = B_OUTCOME_RAN;
     else
         gBattleOutcome = B_OUTCOME_MON_FLED;
@@ -689,12 +691,14 @@ u16 BrBattle_ReplayItem(u8 battler, const u8 *rec)
     // A stream that ended in the middle reads 0xFF for what never came: nothing to play.
     if (rec[0] > 0x7F || rec[1] > 0x7F || item >= ITEMS_COUNT)
         return ITEM_NONE;
-    if (GetBattlerSide(battler) == B_SIDE_PLAYER)
+    // By the side each fought from, on the party the screen has them in: a turned replay
+    // (BrBattle_ReplayTurned) has the publisher's in gEnemyParty.
+    if (BrBattle_HomeSide(battler) == B_SIDE_PLAYER)
     {
         // The fighter's bag put it straight on the mon before the turn -- the party menu,
         // or the active mon for an X item -- and the engine's player branch does nothing
         // more, so this is the whole of it: the same call, on the same mon.
-        UseItemOn(battler, gPlayerParty, rec[2], item, rec[3]);
+        UseItemOn(battler, BrBattle_PartyOf(battler), rec[2], item, rec[3]);
     }
     else if (rec[2] & BR_ITEM_PEER)
     {
@@ -702,7 +706,7 @@ u16 BrBattle_ReplayItem(u8 battler, const u8 *rec)
         // (BrBattle_PeerItem), which leaves the AI's branch nothing to do.
         *(gBattleStruct->AI_itemType + battler / 2) = 0;
         *(gBattleStruct->AI_itemFlags + battler / 2) = 0;
-        UseItemOn(battler, gEnemyParty, rec[2] & ~BR_ITEM_PEER, item, rec[3]);
+        UseItemOn(battler, BrBattle_PartyOf(battler), rec[2] & ~BR_ITEM_PEER, item, rec[3]);
     }
     else
     {
@@ -736,6 +740,9 @@ static const u8 sText_NewPage[] = _("\p");
 // cable's own word for the one holding the GBA, and a watcher is neither of them.
 static const u8 sText_ReplayWon[] = _("{B_LINK_PLAYER_NAME} defeated\n{B_LINK_OPPONENT1_NAME}!");
 static const u8 sText_ReplayLost[] = _("{B_LINK_OPPONENT1_NAME} defeated\n{B_LINK_PLAYER_NAME}!");
+// A replay's RUN, by name: on a turned replay a bare "Got away safely!" read as if the
+// trainer we follow had left, whoever ran (HBR-53 review).
+static const u8 sText_ReplayRan[] = _("{B_LINK_SCR_TRAINER_NAME} got away safely!");
 static const u8 sText_ReplayDrew[] = _("{B_LINK_PLAYER_NAME} and {B_LINK_OPPONENT1_NAME}\nbattled to a draw!");
 // A bot whose lines never arrived still says something when it slides back in: pret's
 // own speech for TRAINER_NONE is whatever the last trainerbattle script left behind.
@@ -820,6 +827,12 @@ bool8 BrBattle_BufferString(u16 stringId)
     // message for good. The AI's script already set the battler, so it gets our line.
     if (stringId == STRINGID_TRAINER1USEDITEM && gTrainerBattleOpponent_A == TRAINER_LINK_OPPONENT)
         stringId = BR_STRINGID_USED_ITEM;
+    if (stringId == STRINGID_GOTAWAYSAFELY && Spectating() && (gBattleTypeFlags & BATTLE_TYPE_RECORDED_LINK))
+    {
+        gBattleScripting.battler = gBattlerAttacker;
+        BattleStringExpandPlaceholdersToDisplayedString(sText_ReplayRan);
+        return TRUE;
+    }
     if (stringId == STRINGID_GOTAWAYSAFELY && BrMatch_FightOver())
     {
         BattleStringExpandPlaceholdersToDisplayedString(sText_MatchWon);
@@ -927,6 +940,34 @@ u32 BrBattle_OpponentPic(u32 pic)
         pic = BrSkin_Pic(gBrSeats[seat].skin, pic);
     NoteSides(pic);
     return pic;
+}
+
+// A replay turned for the watched trainer (HBR-53, BrSpectate's EnterSpectate): pret's
+// own view of a link battle from its other side, the slave's. Strictly any RECORDED_LINK
+// replay without IS_MASTER, but a spectator's is the only kind this game plays. Battler 0, the publisher,
+// is on the far side and battler 1 has its back to the camera; ids, records and the RNG
+// are the fight's as they were, which is what keeps it in step.
+bool8 BrBattle_ReplayTurned(void)
+{
+    return (gBattleTypeFlags & BATTLE_TYPE_RECORDED_LINK)
+        && !(gBattleTypeFlags & BATTLE_TYPE_RECORDED_IS_MASTER);
+}
+
+// The side a battler fought from in the fight itself, whichever side the screen puts it
+// on: what decides whose bag an item came out of, and who ran.
+u8 BrBattle_HomeSide(u8 battler)
+{
+    u8 side = GetBattlerSide(battler);
+
+    if (BrBattle_ReplayTurned())
+        side ^= BIT_SIDE;
+    return side;
+}
+
+// A battler's party, by the side the screen has it on: the parties follow the screen.
+struct Pokemon *BrBattle_PartyOf(u8 battler)
+{
+    return GetBattlerSide(battler) == B_SIDE_PLAYER ? gPlayerParty : gEnemyParty;
 }
 
 u8 BrBattle_FoeOf(u8 battler, u8 target)

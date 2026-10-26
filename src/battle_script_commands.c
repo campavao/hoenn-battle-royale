@@ -6326,7 +6326,11 @@ static void Cmd_hpthresholds2(void)
 static void Cmd_useitemonopponent(void)
 {
     gBattlerInMenuId = gBattlerAttacker;
+#if BR
+    PokemonUseItemEffects(&BrBattle_PartyOf(gBattlerAttacker)[gBattlerPartyIndexes[gBattlerAttacker]], gLastUsedItem, gBattlerPartyIndexes[gBattlerAttacker], 0, TRUE); // a turned replay's AI is on the near side (HBR-53)
+#else
     PokemonUseItemEffects(&gEnemyParty[gBattlerPartyIndexes[gBattlerAttacker]], gLastUsedItem, gBattlerPartyIndexes[gBattlerAttacker], 0, TRUE);
+#endif
     gBattlescriptCurrInstr++;
 }
 

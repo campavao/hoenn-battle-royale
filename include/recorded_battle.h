@@ -19,7 +19,7 @@ void RecordedBattle_RecordAllBattlerData(u8 *src);
 u8 RecordedBattle_BufferSpectateDelta(u8 *dst, u8 cap); // POK-233: the spectator action stream
 struct Pokemon;
 void RecordedBattle_StartSpectate(u32 seed, u32 flags, struct Pokemon *pParty,
-    struct Pokemon *eParty, const u8 *names, const u8 *genders, void (*CB2_After)(void));
+    struct Pokemon *eParty, const u8 *names, const u8 *genders, bool8 turned, void (*CB2_After)(void));
 // Appends one streamed delta ([battler, count, bytes...] runs, `n` bytes of them) to
 // the record the replay reads from. Its own write cursor, so it never disturbs the read.
 void RecordedBattle_FeedSpectate(const u8 *delta, u8 n);

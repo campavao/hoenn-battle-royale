@@ -1,0 +1,91 @@
+# spectate-turned: the trainer we follow has their back to the camera (HBR-53, Cam:
+# "whoever we are spectating should be the player closest to the camera"). The publisher
+# is always battler 0, so following side 1 turns the replay round: pret's own replay of a
+# link battle from the slave's side, multiplayerId 1 and no RECORDED_IS_MASTER. Battler
+# ids, the record and the RNG stay the fight's, so every item, the run and the drift check
+# play as spectate-items.txt's do -- only the screen and the parties are the other way.
+#
+# spectate-items.txt's fight, with side 1 (CAN) as seat 1 (gender byte 05: (1 + 1) << 1 |
+# FEMALE) and the camera following seat 1. CAN's one mon sits at 5 HP, and so does CAM's
+# second.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gBrSpectate+8 01
+pokebytes gDecompressionBuffer 00 01 78 56 34 12 0E 00 00 00 BD BB C7 FF 00 00 00 00 BD BB C8 FF 00 00 00 00 00 05 02
+copy gDecompressionBuffer+29 gPlayerParty 100
+copy gDecompressionBuffer+129 gPlayerParty 100
+pokebytes gDecompressionBuffer+215 05 00
+pokebytes gDecompressionBuffer+229 01
+copy gDecompressionBuffer+230 gPlayerParty 100
+pokebytes gDecompressionBuffer+316 05 00
+mailsend gBrMailbox 18 gDecompressionBuffer 330
+wait 10
+expect u8 gBrSpectate+5 1
+waitfor u8 gBattlerPositions 1 600
+# Turned: battler 1, CAN, is B_POSITION_PLAYER_LEFT and battler 0, CAM, faces us.
+expect u8 gBattlerPositions 1
+expect u8 gBattlerPositions+1 0
+expectbits u32 gBattleTypeFlags 0x80000000 0
+# The parties went with the screen: CAN's 5 HP mon is the player's, CAM's two the enemy's.
+expect u16 gPlayerParty+0x56 5
+expect u16 gEnemyParty+186 5
+# Turn one. CAM (battler 0) drinks a POTION into its benched mon from its bag, which the
+# turned screen has on the far side: the player's branch still, by the side it fought
+# from (BrBattle_HomeSide). CAN (battler 1) is an AI here, and its POTION is the AI's:
+# type 2 (AI_ITEM_HEAL_HP), whose useitemonopponent reads the mon from the near party now.
+pokebytes gDecompressionBuffer+400 00 01 00 05 01 0D 00 01 00 01 05 01 0D 00 02 00
+mailsend gBrMailbox 19 gDecompressionBuffer+400 16
+# "CAM used", a new line, "POTION!" -- CAM's "sent out" came first, from the far side.
+waitfor u32 gDisplayedStringBattle+8 0xCEC9CAFE 2400
+expect u32 gDisplayedStringBattle 0x00C7BBBD
+expect u32 gDisplayedStringBattle+4 0xD8D9E7E9
+expect u32 gDisplayedStringBattle+8 0xCEC9CAFE
+expect u32 gDisplayedStringBattle+12 0xABC8C9C3
+waitforge u16 gEnemyParty+186 19 1200
+expectge u16 gEnemyParty+186 19
+# "CAN used", a new line, "POTION!"
+waitfor u32 gDisplayedStringBattle 0x00C8BBBD 1200
+expect u32 gDisplayedStringBattle+4 0xD8D9E7E9
+expect u32 gDisplayedStringBattle+8 0xCEC9CAFE
+expect u32 gDisplayedStringBattle+12 0xABC8C9C3
+waitforge u16 gBattleMons+0x80 19 1200
+wait 200
+shot turned-items
+expectge u16 gBattleMons+0x80 19
+expectge u16 gPlayerParty+0x56 19
+expect u8 gBrSpectate+5 1
+# Turn two: an X ATTACK each, nobody hurt. CAM's from its bag onto the mon that is out
+# (slot 0, on the far party now); CAN's from a person's bag (BR_ITEM_PEER | slot 0) onto
+# its mon in the near party. The 00 first is CAM's engine's no-fog answer for turn one.
+expect u8 gBattleMons+0x19 6
+expect u8 gBattleMons+0x71 6
+# Behind the actions, the fighter's check of turn one (spectate-check.txt): both mons are
+# species 0x115 at 20 HP, 2 * (0x115 * 31 + 20) = 0x433E. The replay's own sum agrees.
+pokebytes gDecompressionBuffer+400 00 01 00 06 00 01 4B 00 00 00 01 05 01 4B 00 40 00 C0 03 01 3E 43
+mailsend gBrMailbox 19 gDecompressionBuffer+400 22
+waitfor u8 gBattleMons+0x71 7 2400
+waitfor u8 gBattleMons+0x19 7 2400
+expect u8 gBattleMons+0x19 7
+expect u8 gBattleMons+0x71 7
+expect u16 gBrJank+10 1
+expect u16 gBrJank+12 0
+expect u8 gBrSpectate+5 1
+wait 600
+# Turn three: CAN, the trainer we follow, RUNs with a POKe DOLL; CAM FIGHTs. One run, one
+# getaway, said by name -- not "Wild TREECKO fled!", which a side-1 runner was given, nor a
+# bare "Got away safely!" that reads as ours whoever ran. "CAN got away safely!"
+pokebytes gDecompressionBuffer+400 00 01 00 04 00 00 00 01 01 02 03 01
+mailsend gBrMailbox 19 gDecompressionBuffer+400 12
+waitfor u16 gBrBattle+6 1 2400
+expect u16 gBrBattle+4 1
+expect u16 gBrBattle+6 1
+waitfor u32 gDisplayedStringBattle+4 0x00E8E3DB 1200
+wait 110
+shot turned-ran
+expect u32 gDisplayedStringBattle 0x00C8BBBD
+expect u32 gDisplayedStringBattle+4 0x00E8E3DB
+waitfor u8 gBrSpectate+5 0 2400
+expect u8 gBrSpectate+5 0
+expect u16 gBrJank+12 0
+say spectate turned ok
