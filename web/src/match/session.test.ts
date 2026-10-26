@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BEATEN_KEPT, MatchSession, type SessionDeps, type SessionView } from './session';
+import { homeKey } from './events';
 import { EndGrace } from './grace';
 import { Director, type DirectorWorld } from './director';
 import { botRows } from './lifecycle';
@@ -432,6 +433,25 @@ describe("one match's books (POK-330 #42)", () => {
     expect(session.record.forSeat(7).trainers).toBe(1);
     session.endMatch();
     expect(session.beaten).toEqual([]);
+  });
+
+  // HBR-34. What a house's or a floor's trader holds lives only in each ROM, so the host
+  // keeps the latest word on each, for a seat that walks in on the match.
+  it('keeps the latest word on each house and floor trader for a late seat, and forgets it with the match', () => {
+    const { session } = books();
+    const floor = homeKey(0x83);
+    session.note(start([0, 7]), 'page');
+    session.note({ t: 'pickup', seat: 7, key: floor }, { from: 7 }); // the host's yes: busy
+    session.note({ t: 'pickup', seat: 7, key: floor, item: 252, n: 1 }, { from: 7 }); // he holds TREECKO
+    session.note({ t: 'pickup', seat: 0, key: homeKey(5) }, 'rom'); // a house's gift, gone
+    session.note({ t: 'pickup', seat: 0, key: homeKey(5) | 0x40 }, 'rom'); // an ask, not a word on him
+    session.note({ t: 'pickup', seat: 0, key: 0x0701 }, 'rom'); // a ball off a spill
+    expect(session.homes).toEqual([
+      { t: 'pickup', seat: 7, key: floor, item: 252, n: 1 },
+      { t: 'pickup', seat: 0, key: homeKey(5) },
+    ]);
+    session.note(start([0, 7], 99), 'page');
+    expect(session.homes).toEqual([]);
   });
 
   it("keeps drawing the champion's team through the reboot, and forgets it after", () => {
