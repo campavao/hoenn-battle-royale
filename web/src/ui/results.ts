@@ -1,5 +1,5 @@
 // The results, drawn (POK-320): where you came, how long you lasted, who won and with
-// what, what the match did to your career, and what you did in it -- the Hall of Fame
+// what, and what you did in it -- the Hall of Fame
 // line and the record card, in Emerald's frame where they were a panel of HTML.
 //
 // The champion's come after their ROM's own Hall of Fame parade, not over it: the ticket
@@ -16,7 +16,8 @@
 // the start, and this file is fetched the first time results go up (POK-407).
 import { ordinal } from '../match/career';
 import type { RecordLine } from '../match/record';
-import { favourite, type MatchTally, type TallyNames } from '../match/tally';
+import type { TallyNames } from '../match/tally';
+import type { TallyMsg } from '../net/wire';
 import type { MatchResult } from '../match/results';
 import { TEXT_BLUE, TEXT_DARK, type EmeraldCanvas, fitText, measure } from './emerald';
 import { ROW_H, W, layoutRows, paintButtons, paintRows, paintTitle, type ButtonSpec } from './screens';
@@ -28,31 +29,27 @@ export interface ResultsView {
   /** The big line: YOU WON!, 3RD OF 8, or A DRAW. */
   headline: string;
   /** Everything in one line, as the page always said it -- what #results-line reads. The
-   *  seed is last: it is the question anybody asks about a round afterwards (POK-248). */
+   *  seed is last: it is the question anybody asks about a round afterwards (POK-248).
+   *  It is the mirror's alone: on the screen it was a number nobody reads (Cam's 10-20
+   *  play-test, #13). */
   line: string;
-  rows: { label: string; value: string }[];
+  /** How long you lasted, over the standings. */
+  survived?: string;
 }
 
 function clock(secs: number): string {
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
 }
 
-/** What the results say about `seat`'s match. */
+/** What the results say about `seat`'s match. Not who won: the champion's page says it
+ *  under their team, and a row saying it again was the 10-20 play-test's "Winner DRAKE"
+ *  over "The champion: DRAKE". */
 export function resultsView(mine: MatchResult, seats: number, seat: number, nameOf: (seat: number) => string, seed?: number): ResultsView {
   const parts: string[] = [];
-  const rows: { label: string; value: string }[] = [];
   if (mine.placement !== undefined) parts.push(`${ordinal(mine.placement)} of ${seats}`);
-  if (mine.survived !== undefined) {
-    parts.push(`survived ${clock(mine.survived)}`);
-    rows.push({ label: 'Survived', value: clock(mine.survived) });
-  }
-  if (mine.winner !== undefined) {
-    parts.push(mine.winner === seat ? 'you won' : `${nameOf(mine.winner)} won`);
-    rows.push({ label: 'Winner', value: mine.winner === seat ? 'You' : nameOf(mine.winner) });
-  } else {
-    parts.push('a draw');
-    rows.push({ label: 'Winner', value: 'Nobody' });
-  }
+  if (mine.survived !== undefined) parts.push(`survived ${clock(mine.survived)}`);
+  if (mine.winner !== undefined) parts.push(mine.winner === seat ? 'you won' : `${nameOf(mine.winner)} won`);
+  else parts.push('a draw');
   if (seed !== undefined) parts.push(`seed ${seed}`);
   const headline =
     mine.winner !== undefined && mine.winner === seat
@@ -62,7 +59,19 @@ export function resultsView(mine: MatchResult, seats: number, seat: number, name
         : mine.winner === undefined
           ? 'A draw'
           : 'Results';
-  return { headline, line: parts.join(' · '), rows };
+  return { headline, line: parts.join(' · '), survived: mine.survived === undefined ? undefined : clock(mine.survived) };
+}
+
+/** One trainer's place, for the standings. */
+export interface Standing {
+  place: string;
+  name: string;
+  me: boolean;
+}
+
+/** Everybody's place (Cam's 10-20 play-test, #15: "see what place Matt came in"). */
+export function standingsOf(placed: readonly { seat: number; placement: number }[], seat: number, nameOf: (seat: number) => string): Standing[] {
+  return placed.map((p) => ({ place: ordinal(p.placement), name: nameOf(p.seat), me: p.seat === seat }));
 }
 
 export interface Fame {
@@ -87,18 +96,16 @@ export function fameOf(
 
 /** The match's own lines, for the results under the Hall of Fame. Every count is said,
  *  zero too -- "0 caught" is an answer to the question Cam asked -- and a favourite only
- *  once there is one. */
-export function tallyLines(t: MatchTally, names: TallyNames): RecordLine[] {
+ *  once there is one. Ours or the champion's, in the shape the room hears it (tallyMsg). */
+export function tallyLines(t: Omit<TallyMsg, 't' | 'seat'>, names: TallyNames): RecordLine[] {
   const lines: RecordLine[] = [
     { label: 'WON', value: String(t.won) },
     { label: 'CAUGHT', value: String(t.caught) },
     { label: 'STEPS', value: String(t.steps) },
     { label: 'ITEMS', value: String(t.items) },
   ];
-  const mon = favourite(t.mons);
-  if (mon !== undefined) lines.push({ label: 'FAVORITE', value: names.species(mon), wide: true });
-  const move = favourite(t.moves);
-  const moveName = move === undefined ? undefined : names.move(move);
+  if (t.mon !== undefined) lines.push({ label: 'FAVORITE', value: names.species(t.mon), wide: true });
+  const moveName = t.move === undefined ? undefined : names.move(t.move);
   if (moveName) lines.push({ label: 'TOP MOVE', value: moveName, wide: true });
   return lines;
 }
@@ -155,7 +162,13 @@ function paintRecord(c: EmeraldCanvas, y: number, rows: readonly RecordRow[]): n
 export interface ResultsModel {
   view: ResultsView;
   fame: Fame | null;
+  /** Everybody's place, best first. */
+  standings: Standing[];
+  /** Ours: the room's counts and our ROM's. */
   record: RecordLine[];
+  /** The champion's, when it is somebody else (Cam's 10-20 play-test, #12): what the room
+   *  saw of them, and what their ROM counted once their page has said it (TallyMsg). */
+  champion?: { name: string; lines: RecordLine[] };
   /** PLAY AGAIN in a room; solo's MAIN MENU (id `results-lobby`, as the e2e has it). */
   again: { label: string; id: string; disabled?: boolean; onPress(): void } | null;
   /** MAIN MENU, beside PLAY AGAIN: a room's results were the one screen with no way off
@@ -163,55 +176,149 @@ export interface ResultsModel {
   menu?: () => void;
 }
 
+/** The results' two pages: where everybody came and what you did, then the champion's
+ *  team and what they did. One page held them all until the 10-20 play-test asked for
+ *  everybody's place and the champion's stats too, which a 320-high screen has no room
+ *  for under the rest. */
+export type ResultsPage = 'match' | 'champion';
+
+/** The standings as a grid: two columns, three once two run past the rows the screen
+ *  has left, and past that the best of them and our own line (a room seats up to 32). */
+function standingsGrid(standings: readonly Standing[], free: number): { cols: number; rows: number; shown: Standing[] } {
+  const rows = Math.max(1, free);
+  const cols = standings.length <= 2 * rows ? 2 : 3;
+  let shown = standings.slice(0, cols * rows);
+  const me = standings.find((s) => s.me);
+  if (me && !shown.includes(me)) shown = [...shown.slice(0, -1), me];
+  return { cols, rows: Math.ceil(shown.length / cols), shown };
+}
+
+/** Rows the standings have on the first page: what is left under the title, the record
+ *  and the buttons. */
+function standingsFree(m: ResultsModel, h: number): number {
+  const framed = (rows: number) => layoutRows(0, rows).frame.h + 4;
+  const rest = 28 + (m.record.length > 0 ? framed(recordRows(m.record).length) : 0) + 28;
+  return Math.floor((h - rest - 20) / ROW_H) - (m.view.survived === undefined ? 0 : 1);
+}
+
+function paintStandings(c: EmeraldCanvas, y: number, survived: string | undefined, grid: ReturnType<typeof standingsGrid>): number {
+  const lay = layoutRows(y, (survived === undefined ? 0 : 1) + grid.rows);
+  c.drawFrame(lay.frame);
+  let row = 0;
+  if (survived !== undefined) {
+    const r = lay.rows[row++];
+    c.drawText('Survived', r.x + 8, r.y, TEXT_DARK);
+    c.drawText(survived, r.x + r.w - measure(survived), r.y, TEXT_DARK);
+  }
+  // Down each column, then the next, the way the record reads.
+  for (let i = 0; i < grid.rows; i++, row++) {
+    const r = lay.rows[row];
+    const x0 = r.x + 8;
+    const step = Math.floor((r.x + r.w - x0 + COL_GAP) / grid.cols);
+    for (let col = 0; col < grid.cols; col++) {
+      const s = grid.shown[i + col * grid.rows];
+      if (!s) continue;
+      const from = x0 + col * step;
+      const color = s.me ? TEXT_BLUE : TEXT_DARK;
+      c.drawText(s.place, from, r.y, color);
+      c.drawText(fitText(s.name, step - COL_GAP - PLACE_W), from + PLACE_W, r.y, color);
+    }
+  }
+  return lay.frame.y + lay.frame.h;
+}
+
+/** How far down the first page ends: the title, the standings and the record, each a
+ *  frame and a gap. No career line (HBR-51): "16 played" read as wins. */
+function matchBottom(m: ResultsModel, h: number): number {
+  const framed = (rows: number) => layoutRows(0, rows).frame.h + 4;
+  const standings = (m.view.survived === undefined ? 0 : 1) + standingsGrid(m.standings, standingsFree(m, h)).rows;
+  return 28 + framed(standings) + (m.record.length > 0 ? framed(recordRows(m.record).length) : 0);
+}
+
+/** The place column: "8th" and a space. */
+const PLACE_W = 28;
+
 /** The results screen. The mirror keeps the ids the page always had: #results-panel,
- *  #results-line, #results-fame, #results-record, #play-again. */
+ *  #results-line, #results-fame, #results-record, #play-again -- the
+ *  first page holds all of them but the fame, which is the second's. */
 export function resultsScreen(model: () => ResultsModel): DrawnScreen {
+  let page: ResultsPage = 'match';
   return {
     paint(c, h): Painted {
       const m = model();
       const widgets: Widget[] = [];
+      const second = m.fame !== null || m.champion !== undefined;
+      if (!second) page = 'match';
       let y = 6;
       paintTitle(c, fitText(m.view.headline, W - 8), y);
       widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.view.headline, cls: 'results-head', cursor: null });
       y += 22;
 
-      // The match. No career line under the record: "16 played" read as wins (HBR-51),
-      // and the trainer's rows keep it. No seed either (HBR-46): #results-line still says it.
-      const top = y;
-      const match = paintRows(c, y, m.view.rows.map((r) => ({ label: r.label, detail: r.value })));
-      widgets.push({ rect: { x: 0, y: top, w: W, h: match.bottom - top }, text: m.view.line, id: 'results-line', cls: 'results-line', cursor: null });
-      widgets.push(...match.widgets);
-      y = match.bottom + 4;
-
-      if (m.fame) {
-        // The champion's team, two to a row, under whose it is.
-        const pairs: { label: string; detail?: string }[] = [];
-        for (let i = 0; i < m.fame.mons.length; i += 2) pairs.push({ label: m.fame.mons[i], detail: m.fame.mons[i + 1] });
-        const fameTop = y;
-        const fame = paintRows(c, y, [{ label: m.fame.title, color: TEXT_BLUE }, ...pairs]);
-        widgets.push({ rect: { x: 0, y: fameTop, w: W, h: fame.bottom - fameTop }, text: `${m.fame.title}: ${m.fame.mons.join(', ')}`, id: 'results-fame', cls: 'results-fame', cursor: null });
-        y = fame.bottom + 4;
-      }
-
-      if (m.record.length > 0) {
-        const recTop = y;
+      const record = (id: string, lines: readonly RecordLine[]) => {
+        if (lines.length === 0) return;
+        const top = y;
         // Two columns of counts, so the room's and the ROM's both fit (POK-416); a name
         // gets a row of its own.
-        const bottom = paintRecord(c, y, recordRows(m.record));
+        const bottom = paintRecord(c, y, recordRows(lines));
+        widgets.push({ rect: { x: 0, y: top, w: W, h: bottom - top }, text: lines.map((l) => `${l.label} ${l.value}`).join(' · '), id, cls: 'results-record', cursor: null });
+        y = bottom + 4;
+      };
+
+      if (page === 'match') {
+        const top = y;
+        const grid = standingsGrid(m.standings, standingsFree(m, h));
+        const bottom = paintStandings(c, y, m.view.survived, grid);
         widgets.push({
-          rect: { x: 0, y: recTop, w: W, h: bottom - recTop },
-          text: m.record.map((l) => `${l.label} ${l.value}`).join(' · '),
-          id: 'results-record',
-          cls: 'results-record',
+          rect: { x: 0, y: 6, w: W, h: ROW_H },
+          text: m.view.line,
+          id: 'results-line',
+          cls: 'results-line',
+          cursor: null,
+        });
+        widgets.push({
+          rect: { x: 0, y: top, w: W, h: bottom - top },
+          text: m.standings.map((s) => `${s.place} ${s.name}`).join(' · '),
+          id: 'results-standings',
+          cls: 'results-standings',
           cursor: null,
         });
         y = bottom + 4;
+        record('results-record', m.record);
+      } else {
+        if (m.fame) {
+          // The champion's team, two to a row, under whose it is.
+          const pairs: { label: string; detail?: string }[] = [];
+          for (let i = 0; i < m.fame.mons.length; i += 2) pairs.push({ label: m.fame.mons[i], detail: m.fame.mons[i + 1] });
+          const fameTop = y;
+          const fame = paintRows(c, y, [{ label: m.fame.title, color: TEXT_BLUE }, ...pairs]);
+          widgets.push({ rect: { x: 0, y: fameTop, w: W, h: fame.bottom - fameTop }, text: `${m.fame.title}: ${m.fame.mons.join(', ')}`, id: 'results-fame', cls: 'results-fame', cursor: null });
+          y = fame.bottom + 4;
+        }
+        if (m.champion) {
+          // Their team has not come (yet): the page still says whose stats these are.
+          if (!m.fame) {
+            paintRows(c, y, [{ label: `The champion: ${m.champion.name}`, color: TEXT_BLUE }]);
+            y += layoutRows(0, 1).frame.h + 4;
+          }
+          record('results-champion', m.champion.lines);
+        }
       }
-
 
       const buttons: ButtonSpec[] = [];
       if (m.again) buttons.push({ label: m.again.label, id: m.again.id, disabled: m.again.disabled, onPress: m.again.onPress });
       if (m.menu) buttons.push({ label: 'MAIN MENU', id: 'results-menu', onPress: m.menu });
+      if (second) {
+        const other: ResultsPage = page === 'match' ? 'champion' : 'match';
+        buttons.push({
+          label: other === 'match' ? 'RANKING' : 'CHAMPION',
+          id: 'results-page',
+          onPress: () => {
+            page = other;
+          },
+        });
+      }
+      // Where the first page ends, on both: the buttons stay put as the pages turn.
+      if (second) y = Math.max(y, matchBottom(m, h));
       if (buttons.length) widgets.push(...paintButtons(c, Math.min(y, h - 28), buttons));
       return { widgets, containers: [{ id: 'results-panel', cls: 'results' }] };
     },

@@ -509,6 +509,12 @@ export class HostRole {
         this.link.toRoom(party);
         this.session.note(party, 'page');
       }
+      // ...and what it did, which no ROM counted either (HBR-45).
+      const tally = champ !== null && champ !== this.link.seat ? this.bots.tallyFor(champ) : null;
+      if (tally) {
+        this.link.toRoom(tally);
+        this.session.note(tally, 'page');
+      }
     }
     if (msg.t === 'ring') {
       // The first ring IS the buzzer: it is what ends the opening in the ROM

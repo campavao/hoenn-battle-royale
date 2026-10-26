@@ -1,21 +1,18 @@
 // The results, drawn (POK-320): what they say, and when the champion gets to see them.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EndGrace } from '../match/grace';
-import { ParadeHold, ReplayHold, fameOf, resultsScreen, resultsView, type ResultsModel } from './results';
+import { ParadeHold, ReplayHold, fameOf, resultsScreen, resultsView, standingsOf, type ResultsModel } from './results';
 import { fakeCanvas } from './fakecanvas';
 
 const nameOf = (seat: number) => (seat === 2 ? 'MAY' : `P${seat}`);
 
 describe('what the results say', () => {
-  it('says where you came, how long you lasted, who won and the seed, in one line and in rows', () => {
+  it('says where you came, how long you lasted, who won and the seed in one line, and only how long on the screen', () => {
     const v = resultsView({ ended: true, winner: 2, placement: 3, survived: 192 }, 8, 1, nameOf, 7);
     expect(v.headline).toBe('3rd of 8');
     expect(v.line).toBe('3rd of 8 · survived 3:12 · MAY won · seed 7');
-    expect(v.rows).toEqual([
-      { label: 'Survived', value: '3:12' },
-      { label: 'Winner', value: 'MAY' },
-    ]);
-    expect(v.rows.some((r) => r.label === 'Seed'), 'the seed is in the line only (HBR-46)').toBe(false);
+    expect(v.survived).toBe('3:12');
+    expect(Object.keys(v).sort(), 'no Winner row and no seed footer (10-20 play-test, #13)').toEqual(['headline', 'line', 'survived']);
   });
 
   it('crowns you, and calls a draw a draw', () => {
@@ -42,20 +39,117 @@ describe('what the results say', () => {
     const model: ResultsModel = {
       view: resultsView({ ended: true, winner: 2, placement: 2, survived: 30 }, 8, 1, nameOf, 7),
       fame: { title: 'The champion: MAY', mons: ['MUDKIP Lv12'] },
+      standings: [],
       record: [{ label: 'RINGS', value: '2' }],
       again: { label: 'PLAY AGAIN', id: 'play-again', onPress: vi.fn() },
     };
-    const painted = resultsScreen(() => model).paint(fakeCanvas().canvas, 320);
+    const screen = resultsScreen(() => model);
+    let painted = screen.paint(fakeCanvas().canvas, 320);
     const byId = (id: string) => painted.widgets.find((w) => w.id === id);
     expect(painted.containers).toContainEqual({ id: 'results-panel', cls: 'results' });
     expect(byId('results-line')?.text).toMatch(/seed 7$/);
     // HBR-51: no career line ("1 played" read as wins).
     expect(byId('results-career')).toBeUndefined();
-    expect(byId('results-fame')?.text).toContain('MUDKIP Lv12');
     expect(byId('results-record')?.text).toContain('RINGS 2');
     byId('play-again')!.onPress!();
     expect(model.again!.onPress).toHaveBeenCalled();
     for (const w of painted.widgets) expect(w.rect.y + w.rect.h, w.text).toBeLessThanOrEqual(320);
+    // The team is the second page's.
+    expect(byId('results-fame')).toBeUndefined();
+    byId('results-page')!.onPress!();
+    painted = screen.paint(fakeCanvas().canvas, 320);
+    expect(byId('results-fame')?.text).toContain('MUDKIP Lv12');
+    expect(byId('results-page')?.text).toBe('RANKING');
+  });
+
+  // Cam's 10-20 play-test, #12 and #15: "see what place Matt came in", and "how many
+  // Pokemon did Drake catch, how many steps did Drake take".
+  it("puts everybody's place on the first page and the champion's stats under their team on the second", () => {
+    const standings = standingsOf(
+      [{ seat: 2, placement: 1 }, { seat: 5, placement: 2 }, { seat: 1, placement: 3 }, { seat: 0, placement: 4 }, { seat: 3, placement: 5 }],
+      1,
+      nameOf,
+    );
+    expect(standings[2]).toEqual({ place: '3rd', name: 'P1', me: true });
+    const model: ResultsModel = {
+      view: resultsView({ ended: true, winner: 2, placement: 3, survived: 30 }, 5, 1, nameOf),
+      fame: { title: 'The champion: MAY', mons: ['MUDKIP Lv100', 'SPINDA Lv100', 'SKARMORY Lv100', 'SPINDA Lv100', 'RAYQUAZA Lv100'] },
+      standings,
+      record: [{ label: 'RINGS', value: '2' }, { label: 'CAUGHT', value: '1' }, { label: 'STEPS', value: '748' }, { label: 'FAVORITE', value: 'MR. MIME', wide: true }],
+      champion: { name: 'MAY', lines: [{ label: 'RINGS', value: '6' }, { label: 'CAUGHT', value: '4' }, { label: 'STEPS', value: '2100' }, { label: 'FAVORITE', value: 'FERALIGATR', wide: true }] },
+      again: { label: 'PLAY AGAIN', id: 'play-again', onPress: vi.fn() },
+      menu: vi.fn(),
+    };
+    const screen = resultsScreen(() => model);
+    const { canvas, texts } = fakeCanvas();
+    let painted = screen.paint(canvas, 320);
+    const byId = (id: string) => painted.widgets.find((w) => w.id === id);
+    expect(byId('results-standings')?.text).toBe('1st MAY · 2nd P5 · 3rd P1 · 4th P0 · 5th P3');
+    expect(byId('results-champion')).toBeUndefined();
+    expect(texts.map((t) => t.text)).not.toContain('Winner');
+    for (const w of painted.widgets) expect(w.rect.y + w.rect.h, w.text).toBeLessThanOrEqual(320);
+    const buttons = painted.widgets.filter((w) => w.onPress);
+    expect(buttons.map((b) => b.text)).toEqual(['PLAY AGAIN', 'MAIN MENU', 'CHAMPION']);
+    for (let i = 1; i < buttons.length; i++) expect(buttons[i].rect.x, 'no overlap').toBeGreaterThanOrEqual(buttons[i - 1].rect.x + buttons[i - 1].rect.w);
+    expect(buttons[0].rect.x).toBeGreaterThanOrEqual(0);
+    expect(buttons[2].rect.x + buttons[2].rect.w).toBeLessThanOrEqual(240);
+
+    const placesAt = byId('results-page')!.rect;
+    byId('results-page')!.onPress!();
+    painted = screen.paint(fakeCanvas().canvas, 320);
+    expect(byId('results-page')!.rect, 'the buttons stay put as the page turns').toEqual(placesAt);
+    expect(byId('results-champion')?.text).toBe('RINGS 6 · CAUGHT 4 · STEPS 2100 · FAVORITE FERALIGATR');
+    expect(byId('results-fame')?.text).toContain('RAYQUAZA Lv100');
+    expect(byId('results-standings')).toBeUndefined();
+    for (const w of painted.widgets) expect(w.rect.y + w.rect.h, w.text).toBeLessThanOrEqual(320);
+  });
+
+  it('fits a full room of 32 on a 320-high screen, our own place always on it', () => {
+    const standings = Array.from({ length: 32 }, (_, i) => ({ place: `${i + 1}th`, name: `TRAINER${i}`, me: i === 30 }));
+    const model: ResultsModel = {
+      view: resultsView({ ended: true, winner: 2, placement: 31, survived: 30 }, 32, 1, nameOf),
+      fame: null,
+      standings,
+      record: [...Array.from({ length: 8 }, (_, i) => ({ label: `N${i}`, value: '1' })), { label: 'FAVORITE', value: 'MR. MIME', wide: true }, { label: 'TOP MOVE', value: 'CONFUSION', wide: true }],
+      champion: { name: 'MAY', lines: [{ label: 'RINGS', value: '6' }] },
+      again: { label: 'PLAY AGAIN', id: 'play-again', onPress: vi.fn() },
+      menu: vi.fn(),
+    };
+    const { canvas, texts, frames } = fakeCanvas();
+    const painted = resultsScreen(() => model).paint(canvas, 320);
+    for (const w of painted.widgets) expect(w.rect.y + w.rect.h, w.text).toBeLessThanOrEqual(320);
+    const buttonsAt = painted.widgets.find((w) => w.id === 'results-page')!.rect.y;
+    for (const f of frames.filter((f) => f.y < buttonsAt)) expect(f.y + f.h, 'no frame under the buttons').toBeLessThanOrEqual(buttonsAt);
+    expect(texts.some((t) => t.text === '31th'), 'our own place').toBe(true);
+  });
+
+  it("names the champion over their stats when their team has not come", () => {
+    const model: ResultsModel = {
+      view: resultsView({ ended: true, winner: 2, placement: 3, survived: 30 }, 8, 1, nameOf),
+      fame: null,
+      standings: [],
+      record: [],
+      champion: { name: 'MAY', lines: [{ label: 'RINGS', value: '6' }] },
+      again: null,
+    };
+    const screen = resultsScreen(() => model);
+    let painted = screen.paint(fakeCanvas().canvas, 320);
+    painted.widgets.find((w) => w.id === 'results-page')!.onPress!();
+    const { canvas, texts } = fakeCanvas();
+    painted = screen.paint(canvas, 320);
+    expect(texts.map((t) => t.text)).toContain('The champion: MAY');
+  });
+
+  it('has one page for a draw: nobody to show a team or stats of', () => {
+    const model: ResultsModel = {
+      view: resultsView({ ended: true, survived: 30 }, 4, 1, nameOf),
+      fame: null,
+      standings: [],
+      record: [],
+      again: null,
+    };
+    const painted = resultsScreen(() => model).paint(fakeCanvas().canvas, 320);
+    expect(painted.widgets.find((w) => w.id === 'results-page')).toBeUndefined();
   });
 
   // 2026-10-07 play-test: "there is no menu button after a game, meaning there is no way to
@@ -65,6 +159,7 @@ describe('what the results say', () => {
     const model: ResultsModel = {
       view: resultsView({ ended: true, winner: 2, placement: 2, survived: 30 }, 8, 1, nameOf),
       fame: null,
+      standings: [],
       record: [],
       again: { label: 'PLAY AGAIN', id: 'play-again', onPress: vi.fn() },
       menu,

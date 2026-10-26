@@ -83,4 +83,13 @@ export class Results {
   eliminationOrder(): number[] {
     return [...this.order];
   }
+
+  /** Every seat with a place, best first (Cam's 10-20 play-test: "see what place Matt came
+   *  in"). A seat still standing in a draw has none, and is left off. */
+  standings(): { seat: number; placement: number }[] {
+    const out: { seat: number; placement: number }[] = [];
+    if (this.winner !== undefined) out.push({ seat: this.winner, placement: 1 });
+    for (let i = this.order.length - 1; i >= 0; i--) out.push({ seat: this.order[i], placement: this.field - i });
+    return out;
+  }
 }

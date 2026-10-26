@@ -149,6 +149,8 @@ export interface HostBots {
   setRing: (ring: { sx: number; sy: number; r: number }, phase: number) => void;
   /** A bot's team, for answering a peek about it. Null for a seat we do not own. */
   partyFor: (seat: number) => Msg | null;
+  /** A bot champion's counts, for the room's results (HBR-45): no ROM counts them. */
+  tallyFor: (seat: number) => Msg | null;
   /** One beat of the pump. */
   tick: (now: number) => void;
   /** What a reload writes down and puts back (match/hostsnap.ts, HBR-20). */
@@ -323,6 +325,13 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
       // ...and what it is carrying (POK-297): a bot's bag lives here and nowhere else.
       const items = bots.bagOf(seat).slice(0, PARTY_BAG_MAX).map((s) => ({ id: s.id, n: Math.min(99, s.n) }));
       return { t: 'party', seat, mons, bag: { money: bots.moneyOf(seat), items: items.filter((s) => s.n > 0) } };
+    },
+    tallyFor: (seat: number) => {
+      const counts = bots.countsOf(seat);
+      if (!seatsDealt.has(seat) || !counts) return null;
+      // Its lead is the one it fought with most: a bot's first standing mon goes out first.
+      const lead = bots.partyOf(seat)[0];
+      return { t: 'tally', seat, ...counts, ...(lead ? { mon: lead.species } : {}) };
     },
     tick,
     st,

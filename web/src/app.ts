@@ -12,13 +12,13 @@ import { Mailbox, MAILBOX } from './net/mailbox';
 import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
 import { RomPort } from './net/romport';
-import type { BstartMsg, Msg, PackedMon, StartMsg, TurnMsg } from './net/wire';
+import type { BstartMsg, Msg, PackedMon, StartMsg, TallyMsg, TurnMsg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
 import { HUD, HUD_PAGE, readFogHp, writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
 import type { HudWorld } from './ui/phonehud';
 import type { PadPrefsControl } from './ui/padprefs';
 import { moveInfo, type Rom } from './battle/movebook';
-import { favourite, readTally, zeroTally, type MatchTally } from './match/tally';
+import { favourite, readTally, tallyMsg, zeroTally, type MatchTally } from './match/tally';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
 import { battleSeats, cutTo, nameBstart, romReplaying, Spectate } from './match/spectate';
 import type { Results } from './match/results';
@@ -58,7 +58,6 @@ import { AwayDoor } from './match/away';
 import { Stage, type DrawnScreen, type Look } from './ui/stage';
 import { ParadeHold, ReplayHold } from './ui/results-hold';
 import type { ResultsModel } from './ui/results';
-import { FrameMeter, PerfProbe, frameLine, perfLines } from './ui/fps';
 import { KeyLegend } from './ui/keys';
 import { stageKey } from './ui/roomkeys';
 import { TEXT_RED, wrapText } from './ui/emerald';
@@ -1350,9 +1349,19 @@ function proxyCounts() {
   return proxyDuels?.stats ?? null;
 }
 
+/** The readout's meters, a chunk of their own: a build shows them only with #perf. */
+let fpsUi: typeof import('./ui/fps') | undefined;
+
 function wireFps(emu: Emulator): void {
   const perf = perfWanted(location.hash);
   if (!import.meta.env.DEV && !perf) return;
+  void import('./ui/fps').then((ui) => {
+    fpsUi = ui;
+    meterFps(emu, perf, ui);
+  });
+}
+
+function meterFps(emu: Emulator, perf: boolean, { PerfProbe, frameLine, perfLines }: typeof import('./ui/fps')): void {
   const el = $('#fps') as HTMLElement;
   el.hidden = false;
   // ...and how many frame listeners have thrown: the emulator reports each one's first
@@ -2009,6 +2018,8 @@ function renderResults(
     seed?: number;
     /** What our own ROM counted (POK-416), null without gBrTally. */
     tally: MatchTally | null;
+    /** The champion's, by seat, once their page has said it. */
+    tallies: ReadonlyMap<number, TallyMsg>;
   },
   shown: { held: boolean; again: ResultsModel['again']; menu?: () => void },
 ): void {
@@ -2021,12 +2032,17 @@ function renderResults(
     void loadResultsUi();
     return;
   }
-  const { fameOf, resultsScreen, resultsView } = resultsUi;
+  const { fameOf, resultsScreen, resultsView, standingsOf, tallyLines } = resultsUi;
   const nameOf = (s: number) => roster.nameOf(s);
+  const names = { species: speciesName, move: moveNameOf };
+  const linesOf = (s: number, tally: TallyMsg | undefined) => [...recordLines(books.record.forSeat(s)), ...(tally ? tallyLines(tally, names) : [])];
+  const champ = mine.winner;
   const model: ResultsModel = {
     view: resultsView(mine, books.fieldSize, seat, nameOf, books.seed),
-    fame: fameOf(mine.winner, seat, mine.winner === undefined ? undefined : books.parties.get(mine.winner), nameOf, speciesName),
-    record: [...recordLines(books.record.forSeat(seat)), ...(books.tally ? resultsUi.tallyLines(books.tally, { species: speciesName, move: moveNameOf }) : [])],
+    fame: fameOf(champ, seat, champ === undefined ? undefined : books.parties.get(champ), nameOf, speciesName),
+    standings: standingsOf(books.results.standings(), seat, nameOf),
+    record: linesOf(seat, books.tally ? tallyMsg(seat, books.tally) : undefined),
+    champion: champ === undefined || champ === seat ? undefined : { name: nameOf(champ), lines: linesOf(champ, books.tallies.get(champ)) },
     again: shown.again,
     menu: shown.menu,
   };
@@ -2418,6 +2434,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
         fieldSize: session.fieldSize,
         seed,
         tally: session.tally,
+        tallies: session.tallies,
       },
       {
         held: paraded.holds(mine.winner, 0) || (mine.ended && replay.holds()),
@@ -3084,6 +3101,9 @@ function wireRoom(
   // Every other way out of the match (LEAVE, the results' MENU, a closed tab) unloads the
   // page; the socket is still open as it goes.
   window.addEventListener('pagehide', sendJank);
+  /** How far our counts have gone to the room this match (TallyMsg), once we took it:
+   *  0 not yet, 1 as it was decided, 2 after our parade. */
+  let tallySaid = 0;
   /** The results, drawn from the match's books over the room's roster. */
   const drawResults = (): void => {
     // A dead end's notice is the last screen for this room: nothing is drawn over it.
@@ -3091,6 +3111,15 @@ function wireRoom(
     const seat = bridge.seat;
     session.settleTally();
     const mine = session.results.forSeat(seat, performance.now());
+    const held = paraded.holds(mine.winner, seat) || (mine.ended && replay.holds());
+    // The champion says what their ROM counted, for everybody else's results (Cam's 10-20
+    // play-test, #12): as the match is decided, while the room is still in it, and again
+    // once the parade is over and the last win has been counted.
+    const due = held ? 1 : 2;
+    if (mine.ended && mine.winner === seat && session.tally && tallySaid < due) {
+      tallySaid = due;
+      bridge.relay.all(tallyMsg(seat, session.tally));
+    }
     renderResults(
       seat,
       bridge.roster,
@@ -3101,9 +3130,10 @@ function wireRoom(
         fieldSize: session.fieldSize,
         seed: match.seed,
         tally: session.tally,
+        tallies: session.tallies,
       },
       {
-        held: paraded.holds(mine.winner, seat) || (mine.ended && replay.holds()),
+        held,
         again: { label: 'PLAY AGAIN', id: 'play-again', disabled: returning, onPress: () => void returnToRoom() },
         menu: () => backToLobby(),
       },
@@ -3158,6 +3188,7 @@ function wireRoom(
     },
     {
       started: () => {
+        tallySaid = 0;
         if (rereadAt) return; // a reload's books: the screen is put up once they are read
         hideRoomScreen();
         if (gBrJank !== undefined) {
@@ -4733,7 +4764,7 @@ async function main(): Promise<void> {
   // Dev only, for the e2e harness (POK-220): solo play never builds a Bridge, so this
   // is the only way in to read the emulator's memory from outside the page.
   // `perf` makes a meter of the spec's own (POK-247), read from the moment it asks.
-  if (import.meta.env.DEV) (window as unknown as { __hbr?: unknown }).__hbr = { emu, perf: () => new PerfProbe(emu, proxyCounts, { log: () => {} }) };
+  if (import.meta.env.DEV) (window as unknown as { __hbr?: unknown }).__hbr = { emu, perf: () => new fpsUi!.PerfProbe(emu, proxyCounts, { log: () => {} }) };
 
   // The proxy's own instance is not booted here -- only made available. It costs a
   // second wasm core and a second copy of the ROM, so it is paid for on the first bot
