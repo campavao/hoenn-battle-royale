@@ -224,6 +224,68 @@ describe('what the results say', () => {
     expect(texts.some((t) => t.text === '31th'), 'our own place').toBe(true);
   });
 
+  // Cam's 10-26 play-test: "a single column rather than three columns", which cut every
+  // name to four letters, "and make it scrollable".
+  it('lists the standings one to a row, whole names, scrolled by the D-pad or by hand', () => {
+    const names = ['MAY', 'CAM', 'PHOEBE', 'BIRCH', 'FLANNERY', 'ROXANNE', 'TABITHA', 'RILEY', 'SHELLY', 'WALLACE', 'NORMAN', 'LIZA', 'COURTNEY', 'WATTSON', 'LANETTE', 'SCOTT', 'WALLY', 'ARCHIE', 'CAMERON', 'DRAKE', 'BILL', 'TATE', 'STEVEN', 'WINONA', 'BRAWLY', 'MATT', 'DEVON'];
+    const standings = names.map((name, i) => ({ place: `${i + 1}th`, name, me: name === 'CAM' }));
+    const model: ResultsModel = {
+      view: resultsView({ ended: true, winner: 2, placement: 2, survived: 1398 }, 27, 1, nameOf),
+      fame: null,
+      standings,
+      record: [{ label: 'RINGS', value: '2' }, { label: 'CAUGHT', value: '1' }],
+      again: { label: 'PLAY AGAIN', id: 'play-again', onPress: vi.fn() },
+      menu: vi.fn(),
+    };
+    const screen = resultsScreen(() => model);
+    const paint = () => {
+      const fake = fakeCanvas();
+      return { painted: screen.paint(fake.canvas, 320), texts: fake.texts.map((t) => t.text), places: fake.texts.filter((t) => /^\d+th$/.test(t.text)) };
+    };
+    let { painted, texts, places } = paint();
+    expect(new Set(places.map((p) => p.x)).size, 'one column').toBe(1);
+    const rows = places.length;
+    expect(rows).toBeGreaterThan(5);
+    expect(rows).toBeLessThan(27);
+    expect(texts.slice(texts.indexOf('1th'), texts.indexOf('1th') + 2)).toEqual(['1th', 'MAY']);
+    for (const name of names.slice(0, rows)) expect(texts, name).toContain(name);
+    expect(texts).toContain('↓');
+    expect(texts).not.toContain('↑');
+    const list = painted.widgets.find((w) => w.id === 'results-standings')!;
+    expect(list.scroll).toBeDefined();
+    for (const w of painted.widgets) expect(w.rect.y + w.rect.h, w.text).toBeLessThanOrEqual(320);
+
+    // Down a row: 2nd at the top, ↑ now too.
+    expect(screen.key!('down', null)).toBe(true);
+    ({ texts, places } = paint());
+    expect(places[0].text).toBe('2th');
+    expect(texts).toContain('↑');
+    // A drag far past the end stops on the last row, DEVON, and the arrow down goes.
+    expect(list.scroll!(100)).toBe(true);
+    ({ painted, texts, places } = paint());
+    expect(places[places.length - 1].text).toBe('27th');
+    expect(texts).toContain('DEVON');
+    expect(texts).not.toContain('↓');
+    expect(painted.widgets.find((w) => w.id === 'results-standings')!.scroll!(1), 'no further').toBe(false);
+    expect(screen.key!('up', null)).toBe(true);
+    ({ places } = paint());
+    expect(places[places.length - 1].text).toBe('26th');
+  });
+
+  it('starts the list where our own place is, when it is past the window', () => {
+    const standings = Array.from({ length: 27 }, (_, i) => ({ place: `${i + 1}th`, name: `T${i}`, me: i === 25 }));
+    const model: ResultsModel = {
+      view: resultsView({ ended: true, winner: 2, placement: 26, survived: 30 }, 27, 1, nameOf),
+      fame: null,
+      standings,
+      record: [],
+      again: { label: 'PLAY AGAIN', id: 'play-again', onPress: vi.fn() },
+    };
+    const { canvas, texts } = fakeCanvas();
+    resultsScreen(() => model).paint(canvas, 320);
+    expect(texts.map((t) => t.text)).toContain('26th');
+  });
+
   it("names the champion over their stats when their team has not come", () => {
     const model: ResultsModel = {
       view: resultsView({ ended: true, winner: 2, placement: 3, survived: 30 }, 8, 1, nameOf),

@@ -271,15 +271,26 @@ export interface ResultsModel {
  *  for under the rest. */
 export type ResultsPage = 'match' | 'champion' | 'stats';
 
-/** The standings as a grid: two columns, three once two run past the rows the screen
- *  has left, and past that the best of them and our own line (a room seats up to 32). */
-function standingsGrid(standings: readonly Standing[], free: number): { cols: number; rows: number; shown: Standing[] } {
-  const rows = Math.max(1, free);
-  const cols = standings.length <= 2 * rows ? 2 : 3;
-  let shown = standings.slice(0, cols * rows);
-  const me = standings.find((s) => s.me);
-  if (me && !shown.includes(me)) shown = [...shown.slice(0, -1), me];
-  return { cols, rows: Math.ceil(shown.length / cols), shown };
+/** The standings, one to a row (Cam's 10-26 play-test: three columns cut every name to
+ *  four letters). As many as the screen has rows for; past that the list scrolls --
+ *  the wheel or a finger over it, or the D-pad -- from `top`, the first row shown. */
+interface StandingsView {
+  rows: number;
+  top: number;
+  shown: Standing[];
+}
+
+function standingsView(standings: readonly Standing[], free: number, top: number): StandingsView {
+  const rows = Math.min(standings.length, Math.max(1, free));
+  const at = Math.max(0, Math.min(top, standings.length - rows));
+  return { rows, top: at, shown: standings.slice(at, at + rows) };
+}
+
+/** Where the list starts the first time it is shown: from the top, unless that leaves
+ *  our own place under the window, in which case it is the last row in it. */
+function firstTop(standings: readonly Standing[], rows: number): number {
+  const me = standings.findIndex((s) => s.me);
+  return me < rows ? 0 : me - rows + 1;
 }
 
 /** Rows the standings have on the first page: what is left under the title, the record
@@ -290,8 +301,11 @@ function standingsFree(m: ResultsModel, h: number): number {
   return Math.floor((h - rest - 20) / ROW_H) - (m.view.survived === undefined ? 0 : 1);
 }
 
-function paintStandings(c: EmeraldCanvas, y: number, survived: string | undefined, grid: ReturnType<typeof standingsGrid>): number {
-  const lay = layoutRows(y, (survived === undefined ? 0 : 1) + grid.rows);
+/** The arrows' column at the right of a row, when there is more above or below. */
+const ARROW_W = 8;
+
+function paintStandings(c: EmeraldCanvas, y: number, survived: string | undefined, view: StandingsView, total: number): number {
+  const lay = layoutRows(y, (survived === undefined ? 0 : 1) + view.rows);
   c.drawFrame(lay.frame);
   let row = 0;
   if (survived !== undefined) {
@@ -299,19 +313,20 @@ function paintStandings(c: EmeraldCanvas, y: number, survived: string | undefine
     c.drawText('Survived', r.x + 8, r.y, TEXT_DARK);
     c.drawText(survived, r.x + r.w - measure(survived), r.y, TEXT_DARK);
   }
-  // Down each column, then the next, the way the record reads.
-  for (let i = 0; i < grid.rows; i++, row++) {
-    const r = lay.rows[row];
+  const more = total > view.rows;
+  view.shown.forEach((s, i) => {
+    const r = lay.rows[row + i];
     const x0 = r.x + 8;
-    const step = Math.floor((r.x + r.w - x0 + COL_GAP) / grid.cols);
-    for (let col = 0; col < grid.cols; col++) {
-      const s = grid.shown[i + col * grid.rows];
-      if (!s) continue;
-      const from = x0 + col * step;
-      const color = s.me ? TEXT_BLUE : TEXT_DARK;
-      c.drawText(s.place, from, r.y, color);
-      c.drawText(fitText(s.name, step - COL_GAP - PLACE_W), from + PLACE_W, r.y, color);
-    }
+    const x1 = r.x + r.w - (more ? ARROW_W : 0);
+    const color = s.me ? TEXT_BLUE : TEXT_DARK;
+    c.drawText(s.place, x0, r.y, color);
+    c.drawText(fitText(s.name, x1 - x0 - PLACE_W), x0 + PLACE_W, r.y, color);
+  });
+  if (more) {
+    const first = lay.rows[row];
+    const last = lay.rows[row + view.rows - 1];
+    if (view.top > 0) c.drawText('↑', first.x + first.w - ARROW_W + 1, first.y, TEXT_DARK);
+    if (view.top + view.rows < total) c.drawText('↓', last.x + last.w - ARROW_W + 1, last.y, TEXT_DARK);
   }
   return lay.frame.y + lay.frame.h;
 }
@@ -320,7 +335,7 @@ function paintStandings(c: EmeraldCanvas, y: number, survived: string | undefine
  *  frame and a gap. No career line (HBR-51): "16 played" read as wins. */
 function matchBottom(m: ResultsModel, h: number): number {
   const framed = (rows: number) => layoutRows(0, rows).frame.h + 4;
-  const standings = (m.view.survived === undefined ? 0 : 1) + standingsGrid(m.standings, standingsFree(m, h)).rows;
+  const standings = (m.view.survived === undefined ? 0 : 1) + standingsView(m.standings, standingsFree(m, h), 0).rows;
   return 28 + framed(standings) + (m.record.length > 0 ? framed(recordRows(m.record).length) : 0);
 }
 
@@ -343,19 +358,38 @@ function buttonsAt(m: ResultsModel, h: number): number {
   return Math.max(matchBottom(m, h), champion);
 }
 
-/** The place column: "8th" and a space. */
-const PLACE_W = 28;
+/** The place column: "28th" and a space. */
+const PLACE_W = 32;
 
 /** The results screen. The mirror keeps the ids the page always had: #results-panel,
  *  #results-line, #results-fame, #results-record, #play-again -- the
  *  first page holds all of them but the fame, which is the second's. */
 export function resultsScreen(model: () => ResultsModel): DrawnScreen {
   let page: ResultsPage = 'match';
+  /** The standings' first row shown; null until they are first drawn. */
+  let listTop: number | null = null;
+  /** How many rows they have now, and how many there are, for the D-pad. */
+  let listRows = 0;
+  let listTotal = 0;
+  const scroll = (by: number): boolean => {
+    if (listTop === null || listTotal <= listRows) return false;
+    const next = Math.max(0, Math.min(listTop + by, listTotal - listRows));
+    if (next === listTop) return false;
+    listTop = next;
+    return true;
+  };
   /** The card a tap opened, on the champion's page. */
   let open: number | null = null;
   return {
     back() {
       open = null;
+    },
+    // Up and down move the standings when they run past their window: the buttons are a
+    // row, so the two were doing nothing there.
+    key(k) {
+      if (page !== 'match' || (k !== 'up' && k !== 'down')) return false;
+      scroll(k === 'up' ? -1 : 1);
+      return listTotal > listRows;
     },
     paint(c, h): Painted {
       const m = model();
@@ -385,8 +419,13 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
 
       if (page === 'match') {
         const top = y;
-        const grid = standingsGrid(m.standings, standingsFree(m, h));
-        const bottom = paintStandings(c, y, m.view.survived, grid);
+        const free = standingsFree(m, h);
+        if (listTop === null && m.standings.length > 0) listTop = firstTop(m.standings, Math.min(m.standings.length, Math.max(1, free)));
+        const view = standingsView(m.standings, free, listTop ?? 0);
+        if (listTop !== null) listTop = view.top;
+        listRows = view.rows;
+        listTotal = m.standings.length;
+        const bottom = paintStandings(c, y, m.view.survived, view, m.standings.length);
         widgets.push({
           rect: { x: 0, y: 6, w: W, h: ROW_H },
           text: m.view.line,
@@ -400,6 +439,8 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
           id: 'results-standings',
           cls: 'results-standings',
           cursor: null,
+          // The window takes the wheel and a finger's drag (Cam's 10-26 play-test).
+          scroll: listTotal > listRows ? scroll : undefined,
         });
         y = bottom + 4;
         record('results-record', m.record);
