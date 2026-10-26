@@ -1486,7 +1486,11 @@ let proxyDuels: ProxyDuels | null = null;
  *  an unpatched ROM or a chunk that would not load (every duel then falls back to the
  *  seeded resolver). Rooms are made long after boot, so a duel all but never waits. */
 let proxyLoad: Promise<ProxyDuels | null> | null = null;
-const proxyFight = (a: DuelSide, b: DuelSide) => proxyLoad!.then((d) => (d ? d.fight(a, b) : null));
+/** ...whose outcome waits for the fight to play out at real speed (HBR-43), except at a
+ *  dev pace: a 37-second duel held in 15-second fog phases kept bots out of the fog long
+ *  enough that a test's match ran past its time. No frames, no wait (playOutMs). */
+const proxyFight = (a: DuelSide, b: DuelSide) =>
+  proxyLoad!.then((d) => (d ? d.fight(a, b) : null)).then((out) => (out && paceOptions() ? { ...out, frames: 0 } : out));
 /** Where the proxy's fight goes as it happens (POK-300). The instance is made before
  *  there is a room to tell; the room path sets this when it has one. */
 let proxyStream: ((msg: BstartMsg | TurnMsg, sides: [number, number]) => void) | null = null;
