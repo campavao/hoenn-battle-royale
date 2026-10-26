@@ -130,6 +130,11 @@ describe('the drawn screen\'s DOM copy (POK-330 #33)', () => {
     list.fire('pointerdown', { pointerId: 7, clientY: 200 });
     byId('again').fire('pointermove', { pointerId: 7, clientY: 130 });
     expect(moved).toEqual([3, 1, -1, 2]);
+    // A mouse let go outside the panel: the next move with no button held ends it.
+    list.fire('pointerdown', { pointerId: 8, clientY: 200, pointerType: 'mouse', buttons: 1 });
+    list.fire('pointermove', { pointerId: 8, clientY: 100, pointerType: 'mouse', buttons: 0 });
+    list.fire('pointermove', { pointerId: 8, clientY: 0, pointerType: 'mouse', buttons: 0 });
+    expect(moved).toEqual([3, 1, -1, 2]);
     list.fire('pointerup', { pointerId: 7 });
     list.fire('pointermove', { pointerId: 7, clientY: 0 });
     expect(moved, 'nothing after the finger lifts').toHaveLength(4);

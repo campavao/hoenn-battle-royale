@@ -272,6 +272,35 @@ describe('what the results say', () => {
     expect(places[places.length - 1].text).toBe('26th');
   });
 
+  it('keeps our own place in the window as others go out, until the player scrolls', () => {
+    // Best first, so each trainer out after us is a row above ours (app.ts updates the
+    // model while the screen is up).
+    const model: ResultsModel = {
+      view: resultsView({ ended: false, placement: 20, survived: 30 }, 27, 1, nameOf),
+      fame: null,
+      standings: [],
+      record: [],
+      again: null,
+    };
+    const screen = resultsScreen(() => model);
+    const paint = () => {
+      const { canvas, texts } = fakeCanvas();
+      screen.paint(canvas, 320);
+      return texts.map((t) => t.text);
+    };
+    const others = Array.from({ length: 26 }, (_, i) => ({ place: `${i + 1}th`, name: `T${i}`, me: false }));
+    for (let above = 19; above <= 26; above++) {
+      model.standings = [...others.slice(0, above), { place: `${above + 1}th`, name: 'ME', me: true }];
+      expect(paint(), `with ${above} above`).toContain('ME');
+    }
+    // Scrolled to the top by hand, it stays there.
+    for (let i = 0; i < 30; i++) screen.key!('up', null);
+    model.standings = [...others, { place: '27th', name: 'ME', me: true }];
+    const texts = paint();
+    expect(texts).toContain('1th');
+    expect(texts).not.toContain('ME');
+  });
+
   it('starts the list where our own place is, when it is past the window', () => {
     const standings = Array.from({ length: 27 }, (_, i) => ({ place: `${i + 1}th`, name: `T${i}`, me: i === 25 }));
     const model: ResultsModel = {

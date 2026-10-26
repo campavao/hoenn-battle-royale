@@ -301,8 +301,10 @@ function standingsFree(m: ResultsModel, h: number): number {
   return Math.floor((h - rest - 20) / ROW_H) - (m.view.survived === undefined ? 0 : 1);
 }
 
-/** The arrows' column at the right of a row, when there is more above or below. */
-const ARROW_W = 8;
+/** The arrows' column at the right of a row, when there is more above or below: the
+ *  glyph and a gap before it. */
+const ARROW = measure('↓');
+const ARROW_W = ARROW + 2;
 
 function paintStandings(c: EmeraldCanvas, y: number, survived: string | undefined, view: StandingsView, total: number): number {
   const lay = layoutRows(y, (survived === undefined ? 0 : 1) + view.rows);
@@ -325,8 +327,8 @@ function paintStandings(c: EmeraldCanvas, y: number, survived: string | undefine
   if (more) {
     const first = lay.rows[row];
     const last = lay.rows[row + view.rows - 1];
-    if (view.top > 0) c.drawText('↑', first.x + first.w - ARROW_W + 1, first.y, TEXT_DARK);
-    if (view.top + view.rows < total) c.drawText('↓', last.x + last.w - ARROW_W + 1, last.y, TEXT_DARK);
+    if (view.top > 0) c.drawText('↑', first.x + first.w - ARROW, first.y, TEXT_DARK);
+    if (view.top + view.rows < total) c.drawText('↓', last.x + last.w - ARROW, last.y, TEXT_DARK);
   }
   return lay.frame.y + lay.frame.h;
 }
@@ -368,6 +370,9 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
   let page: ResultsPage = 'match';
   /** The standings' first row shown; null until they are first drawn. */
   let listTop: number | null = null;
+  /** The player moved it: until then it follows our own place, which slides down a row
+   *  each time somebody else is out while the screen is up. */
+  let scrolled = false;
   /** How many rows they have now, and how many there are, for the D-pad. */
   let listRows = 0;
   let listTotal = 0;
@@ -376,6 +381,7 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
     const next = Math.max(0, Math.min(listTop + by, listTotal - listRows));
     if (next === listTop) return false;
     listTop = next;
+    scrolled = true;
     return true;
   };
   /** The card a tap opened, on the champion's page. */
@@ -420,7 +426,7 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
       if (page === 'match') {
         const top = y;
         const free = standingsFree(m, h);
-        if (listTop === null && m.standings.length > 0) listTop = firstTop(m.standings, Math.min(m.standings.length, Math.max(1, free)));
+        if (!scrolled && m.standings.length > 0) listTop = firstTop(m.standings, Math.min(m.standings.length, Math.max(1, free)));
         const view = standingsView(m.standings, free, listTop ?? 0);
         if (listTop !== null) listTop = view.top;
         listRows = view.rows;

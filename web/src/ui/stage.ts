@@ -165,7 +165,9 @@ export class Mirror {
       const el = scroller(ev.target);
       if (!el) return;
       ev.preventDefault();
-      const dy = ev.deltaMode === 1 ? ev.deltaY * rowPx() : ev.deltaY;
+      // Lines are rows; a page (Firefox's "scroll a page") is the list's own height.
+      const page = (this.scrolls.get(el)?.rect.h ?? ROW_PX) * this.scale;
+      const dy = ev.deltaMode === 1 ? ev.deltaY * rowPx() : ev.deltaMode === 2 ? ev.deltaY * page : ev.deltaY;
       // A turn the other way starts afresh: what was left of the last one is not owed.
       if (Math.sign(dy) !== Math.sign(wheel)) wheel = 0;
       wheel += dy;
@@ -179,10 +181,18 @@ export class Mirror {
     let drag: { el: HTMLElement; id: number; y: number } | null = null;
     hits.addEventListener('pointerdown', (ev) => {
       const el = scroller(ev.target);
-      if (el) drag = { el, id: ev.pointerId, y: ev.clientY };
+      if (!el) return;
+      drag = { el, id: ev.pointerId, y: ev.clientY };
+      // Its up comes here even off the panel, or a mouse let go outside would leave the
+      // list following the pointer about.
+      el.setPointerCapture?.(ev.pointerId);
     });
     hits.addEventListener('pointermove', (ev) => {
       if (!drag || drag.id !== ev.pointerId) return;
+      if (ev.pointerType === 'mouse' && ev.buttons === 0) {
+        drag = null;
+        return;
+      }
       const rows = Math.trunc((drag.y - ev.clientY) / rowPx());
       if (rows === 0) return;
       drag.y -= rows * rowPx();
