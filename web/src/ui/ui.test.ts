@@ -122,6 +122,26 @@ describe('the drawn screens (POK-320)', () => {
     }
   });
 
+  it('says why an empty list is empty inside its window, over the buttons (HBR-49)', async () => {
+    const { menuScreen } = await import('./screens');
+    const { fakeCanvas } = await import('./fakecanvas');
+    const { emptyNote } = await import('../match/lobby');
+    const fake = fakeCanvas();
+    const painted = menuScreen(() => ({
+      title: 'LOBBIES',
+      rows: [],
+      note: emptyNote(true),
+      noteId: 'lobby-rooms-note',
+      buttons: [{ label: 'HOST', id: 'lobbies-host', onPress: () => undefined }],
+    })).paint(fake.canvas, 320);
+    const note = painted.widgets.find((w) => w.id === 'lobby-rooms-note')!.rect;
+    const list = fake.frames.find((f) => f.y > 0 && f.w === 240)!;
+    expect(note.y, 'in the window').toBeGreaterThan(list.y);
+    expect(note.y + note.h, 'in the window').toBeLessThanOrEqual(list.y + list.h);
+    expect(fake.texts.map((t) => t.text)).toContain(emptyNote(true));
+    expect(painted.widgets.find((w) => w.id === 'lobbies-host')!.rect.y).toBeGreaterThanOrEqual(list.y + list.h);
+  });
+
   it("seats Kanto's 2x4, and a bigger MAX in more rows", async () => {
     const { layoutSeats, SEAT_W, SEAT_H } = await import('./screens');
     const eight = layoutSeats(24, 8);
