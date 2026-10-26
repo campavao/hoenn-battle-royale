@@ -328,6 +328,25 @@ describe('the page that runs the match (POK-330 #42)', () => {
     host.dispose();
   });
 
+  // HBR-34 review: a seat back from a blip mid-claim must not read its own earlier grant as
+  // the host's yes to the claim it is waiting on (br_loot.c HomeClaimAnswered).
+  it('hands a newcomer each trader\'s newest word, but not its own', () => {
+    const room = hosting();
+    const host = room.deal();
+    host.begin();
+    const mine: Msg = { t: 'pickup', seat: 3, key: 0x8c00 | 2 };
+    const theirs: Msg = { t: 'pickup', seat: 1, key: 0x8c80 | 5 };
+    room.recv(3, mine);
+    room.recv(1, theirs);
+    room.frames().length = 0;
+    const homes = (id: number) => room.frames().filter((f) => f.id === id && f.m?.t === 'pickup').map((f) => f.m);
+    host.greet([0, 1, 3]); // seat 2 is gone, so it is caught up when it comes back
+    expect(homes(3)).toEqual([theirs]);
+    host.greet([0, 1, 2, 3]);
+    expect(homes(2)).toEqual([mine, theirs]);
+    host.dispose();
+  });
+
   // POK-331 #4: a trainer beaten while a seat's socket was down still stood on its screen.
   it('hands a newcomer the trainers beaten so far, the room\'s and our own ROM\'s', () => {
     const room = hosting();
