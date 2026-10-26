@@ -1,10 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { encodeGen3 } from '../text/gen3';
-import { battleId, battleSeats, CACHE_MAX_BYTES, cutTo, EYE_WINDOW_MS, nameBstart, PEEK_INTERVAL_MS, NO_SEAT, romReplaying, Spectate } from './spectate';
+import { fitText } from '../ui/emerald';
+import { W } from '../ui/screens';
+import { battleId, battleSeats, CACHE_MAX_BYTES, cutTo, EYE_WINDOW_MS, nameBstart, PEEK_INTERVAL_MS, NO_SEAT, romReplaying, Spectate, watchName } from './spectate';
 import type { Msg } from '../net/wire';
 
 const bstart = (battle: number): Msg => ({ t: 'bstart', battle, data: [1, 2, 3] });
 const turn = (battle: number): Msg => ({ t: 'turn', battle, data: [0, 1, 0] });
+
+describe('the watch strip (HBR-53)', () => {
+  const nameOf = (s: number) => ['MATT', 'DRAKE', 'MAY'][s];
+  it('names both trainers in a fight, ours first, whoever sent the replay', () => {
+    expect(watchName(0, null, nameOf)).toBe('MATT');
+    expect(watchName(0, battleId(0, 1), nameOf)).toBe('MATT vs DRAKE');
+    expect(watchName(1, battleId(0, 1), nameOf)).toBe('DRAKE vs MATT');
+  });
+  it('names one for a wild fight, or a fight we are not following', () => {
+    expect(watchName(1, battleId(1, NO_SEAT), nameOf)).toBe('DRAKE');
+    expect(watchName(2, battleId(0, 1), nameOf)).toBe('MAY');
+  });
+  it('fits the strip with two of the longest names', () => {
+    const line = `WATCHING ${watchName(0, battleId(0, 1), () => 'WWWWWWW')}`;
+    expect(fitText(line, W - 8)).toBe(line);
+  });
+});
 
 describe('battle ids', () => {
   it('packs the seat pair low then high, either way round', () => {

@@ -943,10 +943,17 @@ export function menuScreen(model: () => MenuModel): DrawnScreen {
       }
       const list = paintRows(c, y, m.rows, m.rowsId);
       widgets.push(...list.widgets);
-      y = list.bottom + 2;
-      const noteRect = paintNote(c, m.note, y);
-      widgets.push({ rect: noteRect, text: m.note, id: m.noteId, cursor: null });
-      y += ROW_H + 2;
+      if (m.rows.length === 0 && m.note) {
+        // An empty list says why in its own window (HBR-49), not under a blank one.
+        const noteRect = paintNote(c, fitText(m.note, W - 24), y + 8 + Math.floor(ROW_H / 2), TEXT_DARK);
+        widgets.push({ rect: noteRect, text: m.note, id: m.noteId, cursor: null });
+        y = list.bottom + 4;
+      } else {
+        y = list.bottom + 2;
+        const noteRect = paintNote(c, m.note, y);
+        widgets.push({ rect: noteRect, text: m.note, id: m.noteId, cursor: null });
+        y += ROW_H + 2;
+      }
       if (m.trainer) {
         widgets.push(paintTrainer(c, y, 48, m.trainer));
         y += 52;

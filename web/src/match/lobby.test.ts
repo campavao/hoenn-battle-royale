@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { fitText } from '../ui/emerald';
+import { W } from '../ui/screens';
 import { FEEDBACK_ROW, HOWTO_ROW, countdown, emptyNote, fixedRows, isRoomCode, playRows, roomRows } from './lobby';
 import type { RoomListing } from '../net/relay';
 
@@ -94,8 +96,11 @@ describe('the room rows', () => {
 
 describe('the empty list', () => {
   it('says what to do about it either way', () => {
-    expect(emptyNote(true)).toContain('QUICK PLAY');
+    expect(emptyNote(true)).toContain('HOST');
     expect(emptyNote(false)).toContain('QUICK PLAY');
+  });
+  it('fits the note line whole (HBR-49: it was cut off at "fil…")', () => {
+    for (const online of [true, false]) expect(fitText(emptyNote(online), W - 8)).toBe(emptyNote(online));
   });
 });
 

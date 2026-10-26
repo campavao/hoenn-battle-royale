@@ -431,6 +431,9 @@ export class Stage {
     }
     if (k === 'b') {
       this.screen?.back?.();
+      // A screen's back can change it in place (the results close a card) and not
+      // show a new one, so the stage draws what it is now.
+      this.paintNow();
       return true;
     }
     if (k === 'up' || k === 'down' || k === 'left' || k === 'right') {

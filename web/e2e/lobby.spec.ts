@@ -527,6 +527,20 @@ test('QUICK PLAY hosts a game when there is nothing to join', async ({ page }) =
   await page.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
 });
 
+test('LOBBIES, empty, says so in full and HOST makes a room from there (HBR-49)', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto(`/#rom=${romHashParam()}`);
+  const lobbies = page.locator('#lobby-rows button', { hasText: 'LOBBIES' });
+  await expect(lobbies).toBeVisible({ timeout: 60_000 });
+  await lobbies.click();
+  await expect(page.locator('#lobby-rooms-note')).toHaveText('No open rooms. HOST opens one.', { timeout: 30_000 });
+  const hostIt = page.locator('#lobbies-host');
+  await expect(hostIt).toBeEnabled({ timeout: 30_000 });
+  await page.screenshot({ path: path.join(OUT_DIR, 'lobbies-empty.png') });
+  await hostIt.click();
+  await expect(page.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+});
+
 test('JOIN BY CODE cannot type a code the relay could never have issued (POK-240)', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto(`/#rom=${romHashParam()}`);

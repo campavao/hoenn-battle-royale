@@ -200,6 +200,21 @@ describe("one match's books (POK-330 #42)", () => {
     expect(toRom.filter((m) => m.t === 'fame')).toHaveLength(1);
   });
 
+  // HBR-44: the champion's Rayquaza was missing from the parade. The ROM reads the team
+  // as the parade starts, so a newer one still goes to it -- without a second `fame`.
+  it("hands our ROM the champion's newest team, not the first one after the win", () => {
+    const { session, toRom } = books();
+    session.note(start([0, 7]), 'page');
+    session.note({ t: 'win', seat: 7 }, 'page');
+    session.note({ t: 'party', seat: 7, mons: [mon, mon] }, { from: 7 });
+    session.note({ t: 'party', seat: 7, mons: [mon, mon, mon] }, { from: 7 });
+    expect(toRom.filter((m) => m.t === 'fame')).toHaveLength(1);
+    expect(toRom.filter((m) => m.t === 'party').at(-1)).toEqual({ t: 'party', seat: 7, mons: [mon, mon, mon] });
+    session.endMatch();
+    session.note({ t: 'party', seat: 7, mons: [mon] }, { from: 7 });
+    expect(toRom.filter((m) => m.t === 'party').at(-1)?.mons, 'not once the ROM starts over').toHaveLength(3);
+  });
+
   it("parades nothing for a team that lands once the results gave up on it, or once the ROM starts over", () => {
     let wanted = true;
     const late = books({ fameWanted: () => wanted });
