@@ -81,7 +81,7 @@ waitfor u16 gBrBattle+6 1 2400
 expect u16 gBrBattle+4 1
 expect u16 gBrBattle+6 1
 waitfor u32 gDisplayedStringBattle+4 0x00E8E3DB 1200
-wait 60
+wait 110
 shot turned-ran
 expect u32 gDisplayedStringBattle 0x00C8BBBD
 expect u32 gDisplayedStringBattle+4 0x00E8E3DB
