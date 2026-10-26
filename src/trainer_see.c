@@ -71,7 +71,8 @@ static const u8 sEmotion_HeartGfx[] = INCGFX_U8("graphics/field_effects/pics/emo
 // bubble. It rides the exclamation/question sprite as a third frame rather than a
 // sprite of its own -- same size, same palette, same bobbing callback.
 static const u8 sEmotion_BrBootGfx[] = INCGFX_U8("graphics/field_effects/pics/emotion_boot.png", ".4bpp");
-// A trainer in a fight with another trainer (POK-372): crossed swords, a fourth frame.
+// A trainer in a fight with another trainer (POK-372): a fourth frame, "VS". It was
+// crossed swords, which at 10x10 read as a missing-icon box (10-20 play-test #21, HBR-54).
 static const u8 sEmotion_BrVsGfx[] = INCGFX_U8("graphics/field_effects/pics/emotion_vs.png", ".4bpp");
 #endif
 

@@ -166,3 +166,11 @@ describe('the profile rows', () => {
     expect(off[4].detail).toBe('OFF');
   });
 });
+
+describe('the empty lobby note', () => {
+  it('fits on one line of the page', async () => {
+    const { measure } = await import('../ui/emerald');
+    const { W } = await import('../ui/screens');
+    for (const online of [true, false]) expect(measure(emptyNote(online))).toBeLessThanOrEqual(W - 8);
+  });
+});

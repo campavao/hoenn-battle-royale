@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   CODE_ENTRY,
+  ENTRY_HELP,
   NAME_ENTRY,
   PASS_ENTRY,
   deleteChar,
@@ -158,5 +159,13 @@ describe('the entry screen', () => {
     expect(entryText(model.state)).toBe('ABC');
     // Nothing on it takes the stage's own cursor: the entry has the keys itself.
     expect(painted.widgets.every((w) => w.cursor === null)).toBe(true);
+  });
+});
+
+describe('the help line', () => {
+  it('fits on one line of the page', async () => {
+    const { measure } = await import('./emerald');
+    const { W } = await import('./screens');
+    expect(measure(ENTRY_HELP)).toBeLessThanOrEqual(W - 8);
   });
 });

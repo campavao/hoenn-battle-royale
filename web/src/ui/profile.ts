@@ -236,11 +236,11 @@ export function lookScreen(model: () => LookModel): DrawnScreen {
       c.drawTextCentred(name, mid, 34, TEXT_WHITE);
       widgets.push({ rect: { x: right, y: 34, w: W - right, h: ROW_H }, text: name, id: 'look-name', cursor: null });
       const note = lookNote(m.browsing, m.wins, m.worn);
-      if (note) c.drawTextCentred(note, mid, 50, open ? TEXT_GRAY : TEXT_RED);
+      if (note) c.drawTextCentred(note, mid, 50, open ? TEXT_WHITE : TEXT_RED);
       widgets.push({ rect: { x: right, y: 50, w: W - right, h: ROW_H }, text: note, id: 'look-note', cursor: null });
       // A locked one is only looked at: say what you still wear (#50's review).
       const wearing = m.browsing === m.worn ? '' : `wearing ${SKINS[m.worn] ?? ''}`;
-      if (wearing) c.drawTextCentred(wearing, mid, 66, TEXT_GRAY);
+      if (wearing) c.drawTextCentred(wearing, mid, 66, TEXT_WHITE);
       widgets.push({ rect: { x: right, y: 66, w: W - right, h: ROW_H }, text: wearing, id: 'look-wearing', cursor: null });
 
       // The strip: the one you are on in the middle, lit; a locked one faded.

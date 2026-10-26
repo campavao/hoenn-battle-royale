@@ -4,29 +4,32 @@
 # one-wide passage (loot-solid.txt), but a cache sits where floors.py put it, out of the
 # way, so it is solid whatever it holds.
 #
-# house-cache.txt's room: PETALBURG CITY's HOUSE1 under seed 0x12345678, the cache TM24
-# THUNDERBOLT on the table at the map's (3,5) since #8; the boot leaves us on (3,6), right
-# under it. We carry a TM24 already, so A would say "Already have" and leave it.
+# PETALBURG CITY's HOUSE2 under seed 0x12345678: no table there, so floors.py put the cache
+# TM23 IRON TAIL on the floor at the map's (5,4), and nothing but the cache stands there
+# (with no match on, the same walk ends on (5,4)). HOUSE1's cache moved onto a table in #8,
+# which stops a step on its own, so this room is the one that says the cache does (HBR-32).
+# We start on (5,5), right under it, carrying a TM23 already, so A would say "Already
+# have" and leave it.
 wait 30
-pokebytes gBrMailbox+0x2018 81 00 08 02 03 00 06 00 BD BB C7 FF
+pokebytes gBrMailbox+0x2018 81 00 08 03 05 00 05 00 BD BB C7 FF
 wait 400
 poke u8 gBrMatch 2
 poke u32 gBrMatch+8 0x12345678
 wait 30
-expect u16 gBrLoot 0x8D21
-expect u16 gBrLoot+6 312
-# a TM24 in the TMs pocket, its count the balls' (bag counts are kept encrypted)
-poke u16 *gSaveBlock1Ptr+0x690 312
+expect u16 gBrLoot 0x8D22
+expect u16 gBrLoot+6 311
+# a TM23 in the TMs pocket, its count the balls' (bag counts are kept encrypted)
+poke u16 *gSaveBlock1Ptr+0x690 311
 copy *gSaveBlock1Ptr+0x692 *gSaveBlock1Ptr+0x652 2
-expect u16 *gSaveBlock1Ptr 3
-expect u16 *gSaveBlock1Ptr+2 6
+expect u16 *gSaveBlock1Ptr 5
+expect u16 *gSaveBlock1Ptr+2 5
 # north: the cache stops us
 hold UP 16
 wait 20
 hold UP 16
 wait 20
 shot stopped
-expect u16 *gSaveBlock1Ptr 3
-expect u16 *gSaveBlock1Ptr+2 6
+expect u16 *gSaveBlock1Ptr 5
+expect u16 *gSaveBlock1Ptr+2 5
 expect u8 gBrLoot+11 3
 say cache solid ok
