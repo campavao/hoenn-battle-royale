@@ -3,9 +3,9 @@ import { botRows, botSeatsOf, catchUp, dealPlan, departedSeats, freshMatch, loot
 import { Loot } from './loot';
 import { dealBots } from '../bots/roster';
 import type { RosterEvent } from '../net/relay';
-import type { EventMsg, Msg, SpillMsg, StartMsg } from '../net/wire';
+import type { EventMsg, Msg, PickupMsg, SpillMsg, StartMsg } from '../net/wire';
 import { mulberry32 } from './clock';
-import { eventDrop, eventKey } from './events';
+import { eventDrop, eventKey, homeKey } from './events';
 
 const room = (members: RosterEvent['members']): RosterEvent => ({ code: 'ABC123', host: 0, open: false, max: 8, pass: false, members });
 
@@ -178,6 +178,16 @@ describe('catching a seat up on the match', () => {
     expect(spills.flatMap((s) => s.mons.map((m) => m.key))).toEqual([eventKey(0, 0), eventKey(0, 1)]);
     expect(out.filter((m) => m.t === 'pickup')).toEqual([{ t: 'pickup', seat: 1, key: eventKey(1, 0) }]);
     expect(catchUp(1, { clockLeft: 90, placements: [] }, [], [], loot)).toEqual([]);
+  });
+
+  // HBR-34: a house's or a floor's trader holds what he was last given only in each ROM,
+  // so a seat that walks in late saw his seed Pokemon until the next trade.
+  it('hands over what each house and floor trader holds now, after the events', () => {
+    const homes: PickupMsg[] = [
+      { t: 'pickup', seat: 7, key: homeKey(0x83), item: 252, n: 1 },
+      { t: 'pickup', seat: 1, key: homeKey(5) },
+    ];
+    expect(catchUp(1, { clockLeft: 90, placements: [7] }, [], [], undefined, homes)).toEqual([{ t: 'out', seat: 7 }, ...homes]);
   });
 });
 

@@ -444,11 +444,14 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         // delay after it, which stepped it (field.ts bgFadeY, POK-435).
         const fw10 = emu.read(s.gPaletteFade + k.FADE_TOGGLE_WORD, 16);
         const normal = fadeActive && !fastMode;
-        if (normal && toggleWord !== null && !toggleBit) {
+        // Learned only while it blends, the mask set: a fade's finishing frames count in
+        // the other build's bit (field.ts toggleBlending, HBR-56).
+        const blending = normal && selected !== 0;
+        if (blending && toggleWord !== null && !toggleBit) {
           const flip = (toggleWord ^ fw10) & k.FADE_TOGGLE_BITS;
           if (flip !== 0 && (flip & (flip - 1)) === 0) toggleBit = flip;
         }
-        toggleWord = normal ? fw10 : null;
+        toggleWord = blending ? fw10 : null;
         if (!normal || selected === 0 || !toggleBit) lastBgY = null;
         else if (fw10 & toggleBit) lastBgY = fadeY;
         const bgY = lastBgY ?? fadeY;

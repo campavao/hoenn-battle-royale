@@ -6,7 +6,7 @@
 // room's worst bugs were those decisions going wrong. They are pure functions here, which
 // is also the first step of pulling the match out of that closure (#42).
 import type { RosterEvent } from '../net/relay';
-import type { EventMsg, MapRef, Msg, NpcOutMsg, SpillMsg } from '../net/wire';
+import type { EventMsg, MapRef, Msg, NpcOutMsg, PickupMsg, SpillMsg } from '../net/wire';
 import { dealBots, MAX_SEATS } from '../bots/roster';
 import type { DirectorState } from './director';
 import { isFinalRingPhase } from './clock';
@@ -263,13 +263,16 @@ export function departedSeats(
  *  again: `beaten` is the session's, the newest a ROM remembers. And the events dropped
  *  meanwhile: each `event` for its mark on the MAP, what of them is still lying anywhere
  *  (the loot owed below is only the map it stands on), and a `pickup` for each legendary
- *  already gone, so that mark arrives gray. */
+ *  already gone, so that mark arrives gray. And what each house's and floor's trader holds
+ *  now (HBR-34): each ROM keeps it from the trade's `pickup` and nowhere else, so a seat
+ *  that missed one saw his seed Pokemon until the next. */
 export function catchUp(
   hostSeat: number,
   state: Pick<DirectorState, 'ring' | 'clockLeft' | 'placements'>,
   beaten: readonly NpcOutMsg[] = [],
   events: readonly EventMsg[] = [],
   loot?: { matching(want: (key: number) => boolean): SpillMsg[]; has(key: number): boolean },
+  homes: readonly PickupMsg[] = [],
 ): Msg[] {
   const out: Msg[] = [];
   if (state.ring) {
@@ -284,6 +287,7 @@ export function catchUp(
     out.push(...loot.matching(isEventKey));
     for (const e of events) if (!loot.has(e.key)) out.push({ t: 'pickup', seat: hostSeat, key: e.key });
   }
+  out.push(...homes);
   return out;
 }
 
