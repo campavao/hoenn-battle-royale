@@ -116,7 +116,7 @@ import {
 } from './pad';
 import { FieldView, GBA_H, MAIN_CALLBACK2, askBand, measureLayout, romBand, worldBand, type FieldLayout, type FieldPicture } from './field';
 import { speciesName } from './bots/party';
-import { ProxyDuels } from './bots/proxy';
+import type { DuelSide, ProxyDuels } from './bots/proxy';
 import {
   exportCareer,
   importCareer,
@@ -1490,6 +1490,15 @@ function careerName(): string {
  *  duel, so a page that never runs bots never pays for it. Null on an unpatched ROM,
  *  which has no BrDuel to talk to. */
 let proxyDuels: ProxyDuels | null = null;
+/** ...in a chunk of its own, so main.js fits its budget: loading from boot, and null on
+ *  an unpatched ROM or a chunk that would not load (every duel then falls back to the
+ *  seeded resolver). Rooms are made long after boot, so a duel all but never waits. */
+let proxyLoad: Promise<ProxyDuels | null> | null = null;
+/** ...whose outcome waits for the fight to play out at real speed (HBR-43), except at a
+ *  dev pace: a 37-second duel held in 15-second fog phases kept bots out of the fog long
+ *  enough that a test's match ran past its time. No frames, no wait (playOutMs). */
+const proxyFight = (a: DuelSide, b: DuelSide) =>
+  proxyLoad!.then((d) => (d ? d.fight(a, b) : null)).then((out) => (out && paceOptions() ? { ...out, frames: 0 } : out));
 /** Where the proxy's fight goes as it happens (POK-300). The instance is made before
  *  there is a room to tell; the room path sets this when it has one. */
 let proxyStream: ((msg: BstartMsg | TurnMsg, sides: [number, number]) => void) | null = null;
@@ -1502,9 +1511,8 @@ const PROXY_WARM_MS = 5_000;
  *  (POK-247). Its first boot is a whole second core -- 110-150 ms of main thread on a
  *  throttled phone -- and it used to land on the match's first bot-vs-bot meeting. */
 function warmProxy(bots: number): void {
-  const duels = proxyDuels;
-  if (!duels || bots === 0) return;
-  setTimeout(() => void duels.warm(), PROXY_WARM_MS);
+  if (bots === 0) return;
+  void proxyLoad?.then((duels) => duels && setTimeout(() => void duels.warm(), PROXY_WARM_MS));
 }
 
 /** Which of the four trainer sprites is your ghost on everybody else's screen. */
@@ -2453,7 +2461,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     // no way to ask for it, so every solo look cost the full two-minute opening.
     options: paceOptions(),
     zonePool: () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), plan.seed),
-    settle: proxyDuels ? (a, b) => (proxyDuels as ProxyDuels).fight(a, b) : undefined,
+    settle: proxyLoad ? proxyFight : undefined,
     // The match narrated, as a room's host narrates it (POK-331 #26): Kanto's solo is the
     // room with nobody in it, and its ticker says everything a room's does.
     narration: { mine: careerVoiceLines },
@@ -2955,7 +2963,7 @@ function wireRoom(
         pace: { textSpeed: controls.textSpeed, animations: controls.animations },
       },
       zonePool: () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), plan.seed),
-      settle: proxyDuels ? (a, b) => (proxyDuels as ProxyDuels).fight(a, b) : undefined,
+      settle: proxyLoad ? proxyFight : undefined,
       // The room hears the match narrated, our own seat in the voice its profile picked.
       narration: { mine: careerVoiceLines },
       // ...and asks again every few seconds while the tab is hidden: a stand-down with
@@ -4762,7 +4770,7 @@ async function main(): Promise<void> {
   // second wasm core and a second copy of the ROM, so it is paid for on the first bot
   // -vs-bot meeting, in the one tab that runs the bots (POK-238).
   if (usingPatched && mailboxBase !== undefined) {
-    proxyDuels = new ProxyDuels({
+    proxyLoad = import('./bots/proxy').then(({ ProxyDuels }) => (proxyDuels = new ProxyDuels({
       mailboxBase,
       boot: async () => {
         // Headless: a second core with a window would resize the first's canvas -- SDL
@@ -4785,7 +4793,7 @@ async function main(): Promise<void> {
       writeBoot: (e, base) => writeBootBlock(e as Emulator, base, PROXY_NAME),
       onNote: (what) => console.info('[proxy]', what),
       onStream: (msg, sides) => proxyStream?.(msg, sides),
-    });
+    })), () => null);
   }
 
   // Input first, and before anything that waits: the wiring used to sit after the
