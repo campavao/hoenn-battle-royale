@@ -1,4 +1,4 @@
-# bot-voice-beaten: bot-voice.txt with the bot's TREECKO on 1 HP, so we win and it
+# bot-voice-beaten: bot-voice.txt with the bot's TREECKO on 1 HP (and Lv. 2), so we win and it
 # says its lose line, GOOD FIGHT., where pret's trainer says its defeat speech.
 #
 # bot-voice: a bot says its own lines in the fight (2026-10-05 play-test: "the chosen
@@ -12,7 +12,7 @@ wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
 poke u8 gBrMatch 2
-pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 01 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 02 01 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
 mailsend gBrMailbox 23 gDecompressionBuffer 106
 wait 10
 # the three lines: seat 1F, kind, length, text
@@ -42,7 +42,9 @@ shot intro
 tap A
 wait 40
 shot intro-line
-# FIGHT, POUND: one hit, "<PLAYER> defeated PKMN TRAINER BOT!", and its line.
+# FIGHT, POUND: one hit, "<PLAYER> defeated PKMN TRAINER BOT!", and its line. The
+# bot's TREECKO is Lv. 2, slower than ours, so it never moves first: at the same level the
+# speed tie went either way by build (agbcc and modern), and so did the line count.
 tap A
 wait 50
 tap A
@@ -50,13 +52,9 @@ wait 50
 tap A
 wait 50
 tap A
-wait 50
+waitfor u8 gBrBattle+8 1 300
 tap A
-wait 50
-tap A
-wait 50
-tap A
-wait 50
+waitfor u8 gBrBattle+8 2 120
 tap A
 wait 50
 tap A

@@ -18,22 +18,21 @@ mailsend gBrMailbox 2 gDecompressionBuffer 11
 pokebytes gDecompressionBuffer 1F 00 00 00
 mailsend gBrMailbox 5 gDecompressionBuffer 4
 wait 400
+# the intro's lines scroll themselves; their length follows TEXT (HBR-39), so wait for
+# the action menu rather than pressing through them on fixed frames
 tap A
 wait 100
-tap A
-wait 100
-tap A
-wait 100
-expect u8 gBrBattle+8 1
+waitfor u8 gBrBattle+8 1 900
 # the foe holds it
 expect u16 gBattleMons+0x86 200
 # FIGHT, POUND; the turn runs to its end and LEFTOVERS gives a little back
 tap A
-wait 30
+waitfor u8 gBrBattle+8 2 120
 tap A
-wait 30
-wait 600
-# POUND took it to 7; Leftovers gave 1 back at the end of the turn
-expect u16 gBattleMons+0x80 8
+# POUND's damage is a roll, so the check is Emerald's own line at the end of the turn:
+# "Foe TREECKO's LEFTOVERS / restored its HP a little!" ("FTOV" at byte 16)
+waitfor u32 gDisplayedStringBattle+16 0xD0C9CEC0 900
+wait 60
+expectle u16 gBattleMons+0x80 9
 shot leftovers
 say bot held item ok
