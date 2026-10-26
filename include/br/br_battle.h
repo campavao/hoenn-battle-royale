@@ -113,6 +113,12 @@ void BrBattle_PhoneAutoScroll(void);
 // text.c: TRUE where that autoScroll is the phone's, not a link's -- the letters keep the
 // room's TEXT pace, not autoScroll's fixed 3 frames a letter, which halved TEXT FAST.
 bool8 BrBattle_PhoneTextPace(void);
+// battle_main.c: a battle ran to its result. Counts it for the match's stats, and puts
+// its fog away: gBrRing.battleFog said this fight was in the fog, and the page draws the
+// fog behind a fight that is (HBR-38), so left set it fogged every menu and every
+// unpublished wild fight after it.
+void BrBattle_Finished(void);
+
 // battle_main.c: tear a battle down that the engine cannot end on its own, and hand
 // the trainer back to gMain.savedCallback. Only br_netlink.c calls it: a peer that
 // never answered, or one that went out mid-fight.

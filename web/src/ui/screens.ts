@@ -788,7 +788,7 @@ export interface MenuModel {
   note: string;
   noteId?: string;
   /** Who you are, on a strip under the rows; pressing it opens the trainer's rows. */
-  trainer?: { name: string; skin: number; record: string; onPress: () => void };
+  trainer?: { name: string; skin: number; onPress: () => void };
   buttons?: ButtonSpec[];
   onBack?: () => void;
   /** The rows as tiles, two to a line under a wide first one (HBR-30). */
@@ -889,9 +889,10 @@ function paintTrainer(c: EmeraldCanvas, y: number, h: number, t: NonNullable<Men
   const sheet = skinSheet(t.skin);
   const pad = Math.floor((h - 32) / 2);
   if (sheet) c.drawSprite(sheet.gfx, inset + 16, y + pad);
-  c.drawText(fitText(t.name, W - 56 - 2 * inset), inset + 40, y + pad, TEXT_BLUE);
-  c.drawText(fitText(t.record, W - 56 - 2 * inset), inset + 40, y + pad + 16, TEXT_GRAY);
-  return { rect: box, text: `${t.name} ${t.record}`, id: 'lobby-trainer', onPress: t.onPress, cursor: { x: inset + 4, y: y + pad + 10 } };
+  // The name alone, level with the sprite: the "12 played" line under it read as wins
+  // (HBR-51), and the trainer's own rows have the record.
+  c.drawText(fitText(t.name, W - 56 - 2 * inset), inset + 40, y + pad + 8, TEXT_BLUE);
+  return { rect: box, text: t.name, id: 'lobby-trainer', onPress: t.onPress, cursor: { x: inset + 4, y: y + pad + 10 } };
 }
 
 export function menuScreen(model: () => MenuModel): DrawnScreen {

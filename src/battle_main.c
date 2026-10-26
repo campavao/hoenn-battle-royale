@@ -1,7 +1,4 @@
 #include "global.h"
-#if BR
-#include "br/br_tally.h"
-#endif
 #include "battle.h"
 #include "battle_anim.h"
 #include "battle_ai_script_commands.h"
@@ -5244,7 +5241,7 @@ static void HandleEndTurn_FinishBattle(void)
         }
 
 #if BR
-        BrTally_BattleEnd(); // won and caught, for the match's stats (POK-416)
+        BrBattle_Finished(); // the match's stats (POK-416), and the fight's fog put away
 #endif
         RecordedBattle_SetPlaybackFinished();
         BeginFastPaletteFade(3);

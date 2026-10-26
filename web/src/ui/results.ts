@@ -31,9 +31,6 @@ export interface ResultsView {
    *  seed is last: it is the question anybody asks about a round afterwards (POK-248). */
   line: string;
   rows: { label: string; value: string }[];
-  /** The seed, for the footer under the record (Cam's 10-19 play-test, #29): a number
-   *  you look up, not a stat of the match. */
-  seed?: string;
 }
 
 function clock(secs: number): string {
@@ -65,7 +62,7 @@ export function resultsView(mine: MatchResult, seats: number, seat: number, name
         : mine.winner === undefined
           ? 'A draw'
           : 'Results';
-  return { headline, line: parts.join(' · '), rows, seed: seed === undefined ? undefined : String(seed) };
+  return { headline, line: parts.join(' · '), rows };
 }
 
 export interface Fame {
@@ -157,8 +154,6 @@ function paintRecord(c: EmeraldCanvas, y: number, rows: readonly RecordRow[]): n
 
 export interface ResultsModel {
   view: ResultsView;
-  /** The career line the match produced, which recordMatch folds it into. */
-  career: string;
   fame: Fame | null;
   record: RecordLine[];
   /** PLAY AGAIN in a room; solo's MAIN MENU (id `results-lobby`, as the e2e has it). */
@@ -169,7 +164,7 @@ export interface ResultsModel {
 }
 
 /** The results screen. The mirror keeps the ids the page always had: #results-panel,
- *  #results-line, #results-career, #results-fame, #results-record, #play-again. */
+ *  #results-line, #results-fame, #results-record, #play-again. */
 export function resultsScreen(model: () => ResultsModel): DrawnScreen {
   return {
     paint(c, h): Painted {
@@ -180,7 +175,8 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
       widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.view.headline, cls: 'results-head', cursor: null });
       y += 22;
 
-      // The match. What it did to the career and its seed are the footer, under the record.
+      // The match. No career line under the record: "16 played" read as wins (HBR-51),
+      // and the trainer's rows keep it. No seed either (HBR-46): #results-line still says it.
       const top = y;
       const match = paintRows(c, y, m.view.rows.map((r) => ({ label: r.label, detail: r.value })));
       widgets.push({ rect: { x: 0, y: top, w: W, h: match.bottom - top }, text: m.view.line, id: 'results-line', cls: 'results-line', cursor: null });
@@ -212,13 +208,6 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
         y = bottom + 4;
       }
 
-      // The footer: what the match did to the career, and its seed.
-      const foot = paintRows(c, y, [
-        { label: m.career || ' ', id: 'results-career', cls: 'results-career', color: TEXT_BLUE },
-        ...(m.view.seed === undefined ? [] : [{ label: 'Seed', detail: m.view.seed }]),
-      ]);
-      widgets.push(...foot.widgets.map((w) => (w.id === 'results-career' ? { ...w, text: m.career } : w)));
-      y = foot.bottom + 4;
 
       const buttons: ButtonSpec[] = [];
       if (m.again) buttons.push({ label: m.again.label, id: m.again.id, disabled: m.again.disabled, onPress: m.again.onPress });

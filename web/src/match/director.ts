@@ -66,6 +66,9 @@ export interface LandingCell {
   /** A building's doorstep rather than an ordinary cell, ranked 0 centre, 1 mart,
    *  2 gym, 3 any other door (POK-307). These arrive separately, as `doorsteps`. */
   door?: number;
+  /** Set by `tools/br/landing-reach.ts` on a cell whose eight neighbours are plain ground
+   *  or grass too: where an event's legendary may stand (HBR-41). */
+  open?: 1;
 }
 
 /** One regionmap.json section: a rectangle on the 28x15 Hoenn region map. */
@@ -99,10 +102,10 @@ export interface DirectorWorld {
 interface SectionCells {
   id: string;
   section: RegionSection;
-  cells: { map: MapRef; x: number; y: number }[];
+  cells: Cell[];
 }
 
-type Cell = { map: MapRef; x: number; y: number };
+type Cell = { map: MapRef; x: number; y: number; open?: 1 };
 
 /** Joins the three world files into "every outdoor section that has at least one
  *  landing cell", the pool both the drop (POK-223) and the ring (POK-224) draw from
@@ -121,7 +124,7 @@ function buildOutdoorSections(world: DirectorWorld): SectionCells[] {
       entry = { id: m.section, section, cells: [] };
       bySection.set(m.section, entry);
     }
-    entry.cells.push({ map: { group: m.group, num: m.num }, x: cell.x, y: cell.y });
+    entry.cells.push({ map: { group: m.group, num: m.num }, x: cell.x, y: cell.y, open: cell.open });
   }
   return Array.from(bySection.values());
 }
@@ -623,9 +626,16 @@ export class Director {
     const within = (r: number) => this.sections.filter((s) => sectionInside(s.section, { sx, sy, r }));
     const inside = next > 0 ? within(next) : [];
     const pool = inside.length > 0 ? inside : next > 0 ? within(RING_RADII[this.ringIndex]) : [];
-    const section = pool.length > 0 ? pool[pickIndex(this.rng, pool.length)] : this.ringSection;
+    // The legendary stands on the anchor, so a section with open ground round a cell
+    // first (Cam's 2026-10-20 play-test: a KYOGRE boxed in by trees).
+    const roomy = pool.filter((s) => s.cells.some((c) => c.open));
+    const from = roomy.length > 0 ? roomy : pool;
+    const section = from.length > 0 ? from[pickIndex(this.rng, from.length)] : this.ringSection;
     if (!section || section.section.num === undefined) return;
-    const anchor = this.freeCell(section.cells, false) ?? section.cells[pickIndex(this.rng, section.cells.length)];
+    const anchor =
+      this.freeCell(section.cells.filter((c) => c.open), false) ??
+      this.freeCell(section.cells, false) ??
+      section.cells[pickIndex(this.rng, section.cells.length)];
     const cells = clusterCells(section.cells, anchor, EVENT_CELLS, (c) => this.dealtCells.has(cellKey(c)));
     for (const c of cells) this.dealtCells.add(cellKey({ map: anchor.map, x: c.x, y: c.y }));
     for (const msg of eventDrop(this.rng, {

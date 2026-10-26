@@ -220,6 +220,9 @@ describe('the proxy duel instance', () => {
       b: [{ hp: 11, status: 0 }],
       usedA: [],
       usedB: [],
+      // The fight's length in the instance's frames, for the room to play it out (HBR-43).
+      frames: 3,
+      ranMs: expect.any(Number),
     });
   });
 

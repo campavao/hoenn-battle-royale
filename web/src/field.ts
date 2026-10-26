@@ -271,9 +271,14 @@ export const WEATHER_EVA = 0x730;
 export const WEATHER_EVB = 0x732;
 export const WEATHER_FOG_HORIZONTAL = 6;
 const FOG_TILE = 64;
-/** `struct BrRing` (include/br/br_ring.h): outside, and the frames to the next bleed. */
+/** `struct BrRing` (include/br/br_ring.h): outside, the frames to the next bleed, and
+ *  whether the fight on now is fought in the fog. */
 export const RING_OUTSIDE = 5;
 export const RING_TIMER = 8;
+export const RING_BATTLE_FOG = 31;
+/** Where FogHorizontal_Main's blend settles (Weather_SetTargetBlendCoeffs(12, 8, 3)). */
+export const FOG_EVA = 12;
+export const FOG_EVB = 8;
 /** `struct BrPatch` (include/br/br_patch.h): the map its patches are for, the sprite the
  *  ROM drew each one with (MAX_SPRITES when none). gBrPatchTaken is a bit per patch key
  *  past PATCH_KEY_BASE, 0x400 of them. */
@@ -1232,17 +1237,18 @@ export class FieldView {
     const fade = seen.fade;
     this.fadeBg = seen.bg;
     const pick = this.sym('gBrPick');
+    const onField = main !== undefined && cb2 !== undefined && (emu.read(main + MAIN_CALLBACK2, 32) & ~1) === cb2
+      && !(pick !== undefined && emu.read(pick + PICK_ACTIVE, 8) !== 0);
     const cam: Camera = {
       ...pos,
       fade: fade.y,
       fadeColor: fade.color,
       fadeActive: fade.active,
       sprites: [],
-      fog: this.readFog(),
+      fog: this.readFog(onField, ring),
       outside: ring !== undefined && emu.read(ring + RING_OUTSIDE, 8) !== 0,
       ringTimer: ring === undefined ? 0 : emu.read(ring + RING_TIMER, 16),
-      onField: main !== undefined && cb2 !== undefined && (emu.read(main + MAIN_CALLBACK2, 32) & ~1) === cb2
-        && !(pick !== undefined && emu.read(pick + PICK_ACTIVE, 8) !== 0),
+      onField,
       layout: emu.read(this.sym('gMapHeader')!, 32),
     };
     cam.sprites = this.people(cam, p);
@@ -1331,14 +1337,21 @@ export class FieldView {
     return { onField: c.onField, rom: this.ghosts.rom, walkers: this.walkers.sprites(c, lcdOrigin(c), () => true, false, this.wetOn(c)), drawn: this.ghosts.drawn, seats: this.walkers.seats() };
   }
 
-  private readFog(): Fog | null {
+  /** The map's fog, or off the field the fog the fight is in. A ring that closes on you
+   *  mid-fight fogs the fight at its next turn, but the map's weather only changes back
+   *  on the field (br_ring.c ApplyWeather), so the map behind a see-through battle stayed
+   *  clear (HBR-38, Cam's 2026-10-20 play-test: "it should be dimmed and essentially
+   *  show the fog"). That fog is drawn at the blend the weather's settles at. */
+  private readFog(onField: boolean, ring: number | undefined): Fog | null {
     const weather = this.sym('gWeather');
     const offY = this.sym('gSpriteCoordOffsetY');
     if (weather === undefined || offY === undefined) return null;
     const { emu } = this.deps;
-    if (emu.read(weather + WEATHER_CURR, 8) !== WEATHER_FOG_HORIZONTAL) return null;
-    const eva = emu.read(weather + WEATHER_EVA, 16);
-    const evb = emu.read(weather + WEATHER_EVB, 16);
+    const fogged = emu.read(weather + WEATHER_CURR, 8) === WEATHER_FOG_HORIZONTAL;
+    const fight = !onField && ring !== undefined && (emu.read(ring + RING_BATTLE_FOG, 8) !== 0 || emu.read(ring + RING_OUTSIDE, 8) !== 0);
+    if (!fogged && !fight) return null;
+    const eva = fogged ? emu.read(weather + WEATHER_EVA, 16) : FOG_EVA;
+    const evb = fogged ? emu.read(weather + WEATHER_EVB, 16) : FOG_EVB;
     if (!eva) return null;
     const { x, y } = fogOrigin(emu.read(weather + WEATHER_FOG_X, 16), ((emu.read(offY, 16) << 16) >> 16));
     return { x, y, eva, evb };

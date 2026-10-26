@@ -15,7 +15,7 @@ import type { Bots } from '../bots/brain';
 import type { RosterEvent } from '../net/relay';
 import type { EventMsg, Msg, NpcOutMsg, PackedMon, SpillMsg, TickerMsg } from '../net/wire';
 import { bossAt } from './bosses';
-import { addCareerTotals, careerLine, recordMatch } from './career';
+import { addCareerTotals, recordMatch } from './career';
 import { DEFAULT_FOG_SECS } from './director';
 import type { EndGrace } from './grace';
 import { botRows, freshMatch, noteMatch, type MatchSnapshot } from './lifecycle';
@@ -82,8 +82,8 @@ export interface SessionDeps {
 export interface SessionView {
   /** A match is on. */
   started?(): void;
-  /** Our match was decided: draw the results, with the career line under them. */
-  decided(careerLine: string): void;
+  /** Our match was decided, and recordMatch has folded it into the career: draw the results. */
+  decided(): void;
   /** A team arrived after the results were drawn: the champion's parade (POK-243).
    *  Not optional: solo went without it, and its champion's team was never drawn. */
   partyLate(): void;
@@ -344,7 +344,8 @@ export class MatchSession {
     if (round) saveMatch(round, this.deps.store);
     const mine = this.results.forSeat(me, now);
     this.tally = this.deps.tally?.read() ?? null;
-    this.view.decided(careerLine(recordMatch(mine.placement, this.deps.store, this.careerCounts(me))));
+    recordMatch(mine.placement, this.deps.store, this.careerCounts(me));
+    this.view.decided();
     // And the ROM is told who won (POK-243's parade, POK-281). `win` is a page-side
     // verdict with no codec, so it has never crossed to any ROM: the Hall of Fame has
     // been reachable only by a driver poking the RESULT slot by hand, which is exactly

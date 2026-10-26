@@ -1182,6 +1182,9 @@ static void HallOfFame_PrintMonInfo(struct HallofFameMon *currMon, u8 unused1, u
     }
     else
     {
+#if BR
+        BrHof_PrintMonName(0, text, currMon->species, currMon->personality, sMonInfoTextColors); // no "FERALIGATR/FERALIGATR"
+#else
         width = GetStringRightAlignXOffset(FONT_NORMAL, text, 0x80);
         AddTextPrinterParameterized3(0, FONT_NORMAL, width, 1, sMonInfoTextColors, TEXT_SKIP_DRAW, text);
 
@@ -1205,6 +1208,7 @@ static void HallOfFame_PrintMonInfo(struct HallofFameMon *currMon, u8 unused1, u
 
         stringPtr[0] = EOS;
         AddTextPrinterParameterized3(0, FONT_NORMAL, 0x80, 1, sMonInfoTextColors, TEXT_SKIP_DRAW, text);
+#endif
 
         stringPtr = StringCopy(text, gText_Level);
         ConvertIntToDecimalStringN(stringPtr, currMon->lvl, STR_CONV_MODE_LEFT_ALIGN, 3);
