@@ -176,6 +176,35 @@ describe('what the results say', () => {
     expect(painted.widgets.filter((w) => w.id?.startsWith('fame-card-'))).toHaveLength(6);
   });
 
+  it("a card holds any ten-letter name whole, and its summary's four moves stay over BACK", () => {
+    const party = [{ species: 160, level: 100, nickname: 'WWWWWWWWWW', hp: 1, maxHp: 300, shiny: true, moves: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }] }];
+    const model: ResultsModel = {
+      view: resultsView({ ended: true, winner: 2, placement: 3, survived: 30 }, 8, 1, nameOf),
+      fame: fameOf(2, 1, party, nameOf, () => 'FERALIGATR', (id) => ['', 'HYDRO PUMP', 'SURF', 'STRENGTH', 'ICE BEAM'][id]),
+      standings: [],
+      record: [],
+      champion: { name: 'MAY', lines: [{ label: 'WON', value: '3' }] },
+      again: { label: 'PLAY AGAIN', id: 'play-again', onPress: vi.fn() },
+      menu: vi.fn(),
+    };
+    const screen = resultsScreen(() => model);
+    screen.paint(fakeCanvas().canvas, 320).widgets.find((w) => w.id === 'results-page')!.onPress!();
+    let fake = fakeCanvas();
+    let painted = screen.paint(fake.canvas, 320);
+    expect(fake.texts.some((t) => t.text === 'WWWWWWWWWW'), 'the name, not cut').toBe(true);
+    painted.widgets.find((w) => w.id === 'fame-card-0')!.onPress!();
+    fake = fakeCanvas();
+    painted = screen.paint(fake.canvas, 320);
+    const summary = painted.widgets.find((w) => w.id === 'fame-summary')!.rect;
+    const back = painted.widgets.find((w) => w.id === 'fame-back')!.rect;
+    expect(summary.y + summary.h, 'the moves end over BACK').toBeLessThanOrEqual(back.y);
+    for (const mv of ['HYDRO PUMP', 'SURF', 'STRENGTH', 'ICE BEAM']) expect(fake.texts.some((t) => t.text === mv), mv).toBe(true);
+    // The lines beside the picture start past it: the picture is at x 8, 64 wide.
+    const beside = fake.texts.filter((t) => ['Lv100', 'HP 1/300', 'Shiny'].includes(t.text));
+    expect(beside).toHaveLength(3);
+    for (const t of beside) expect(t.x, t.text).toBeGreaterThanOrEqual(8 + 64 + 4);
+  });
+
   it('fits a full room of 32 on a 320-high screen, our own place always on it', () => {
     const standings = Array.from({ length: 32 }, (_, i) => ({ place: `${i + 1}th`, name: `TRAINER${i}`, me: i === 30 }));
     const model: ResultsModel = {

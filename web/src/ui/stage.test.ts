@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { Mirror, type Painted, type Widget } from './stage';
+import { describe, expect, it, vi } from 'vitest';
+import { Mirror, Stage, type Painted, type Widget } from './stage';
 
 // The DOM copy against a fake DOM: just the calls Mirror makes, and a click that goes to
 // its target and then up through the parents, the way a browser delivers one.
@@ -239,5 +239,18 @@ describe('a field in the copy (POK-428)', () => {
     const box = byId('feedback-text') as unknown as { readOnly: boolean; disabled: boolean };
     expect(box.readOnly).toBe(true);
     expect(box.disabled).toBe(false);
+  });
+});
+
+describe('B on a screen', () => {
+  it('draws the screen again, for a back that changes it in place (the results close a card)', () => {
+    // Just the fields key() reads: a Stage proper wants a canvas.
+    const back = vi.fn();
+    const stage = Object.create(Stage.prototype) as Stage;
+    Object.assign(stage, { screen: { back }, root: { hidden: false } });
+    const paintNow = vi.spyOn(stage, 'paintNow').mockImplementation(() => {});
+    expect(stage.key('b')).toBe(true);
+    expect(back).toHaveBeenCalledOnce();
+    expect(paintNow).toHaveBeenCalledOnce();
   });
 });

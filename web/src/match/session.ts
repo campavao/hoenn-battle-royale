@@ -425,9 +425,10 @@ export class MatchSession {
    *  it as its own parade starts, the host for a bot -- never one kept from a peek
    *  mid-match, which is the team they had then. Our own win is the ROM's own parade off
    *  the RESULT. The `fame` goes once a match; the ROM waits for a quiet field itself,
-   *  and says done (BR_PHASE_DONE) either way. A newer team goes after it (HBR-44): the
-   *  ROM reads the team as its parade starts, and the first one after a win can be the
-   *  team from before the last catch -- Cam's champion's Rayquaza was left out. */
+   *  and says done (BR_PHASE_DONE) either way. Every newer team goes after it until the
+   *  match ends (HBR-44): the first one after a win can be from before the champion's
+   *  last catch (a peek answered after the win, mid-battle), and Cam's champion's
+   *  Rayquaza was left out. The ROM takes the last one before its parade starts. */
   private fameToRom(seat: number): void {
     const me = this.deps.mySeat();
     const winner = this.winner;
