@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_VIEW_SIZE, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandOf, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, PAD_GAP, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach, unseenFade, fieldDimmed, RING_BATTLE_FOG, FOG_EVA, FOG_EVB, WEATHER_CURR, WEATHER_EVA, WEATHER_EVB, WEATHER_FOG_HORIZONTAL } from './field';
+import { FIELD_VIEW_SIZE, measureLayout, widerBand, worldBand, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandOf, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, PAD_GAP, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach, unseenFade, fieldDimmed, RING_BATTLE_FOG, FOG_EVA, FOG_EVB, WEATHER_CURR, WEATHER_EVA, WEATHER_EVB, WEATHER_FOG_HORIZONTAL } from './field';
 import { standsAbove } from './field-extra';
 import type { Band } from './emu';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
@@ -197,13 +197,15 @@ describe('the picture past the LCD (POK-319)', () => {
       expect(viewport).toBeGreaterThan(sprites);
       expect(fn).toMatch(/askedBand = asked;/);
       // ...and the whole window over it, from a core that draws the world (HBR-27).
-      expect(fn.indexOf('askedBand = worldBand(matchLayout())')).toBeGreaterThan(fn.indexOf('worldOn = emu.setWorld(worldAt)'));
-      expect(fn.indexOf('askedBand = worldBand(matchLayout())')).toBeLessThan(viewport);
+      // The window grown to its screen too: the band is a boot's size (Cam's 2026-10-26 play-test).
+      const whole = 'askedBand = widerBand(worldBand(matchLayout()), worldBand(matchLayout(true)))';
+      expect(fn.indexOf(whole)).toBeGreaterThan(fn.indexOf('worldOn = emu.setWorld(worldAt)'));
+      expect(fn.indexOf(whole)).toBeLessThan(viewport);
       // The match's layout, whatever is up when it is measured: in-match, and docked on a desktop.
       const measure = appSource.slice(appSource.indexOf('function matchLayout('), appSource.indexOf('function askForBand('));
       expect(measure).toMatch(/classList\.add\('in-match'\)/);
       expect(measure).toMatch(/classList\.toggle\('docked', desktop\(\)\)/);
-      expect(measure).toMatch(/measureLayout\(\$\('#screen-wrap'\)[^)]*, \$\('#pad'\)/);
+      expect(measure).toMatch(/measureLayout\(\$\('#screen-wrap'\)[^)]*, \$\('#pad'\)[^;]*, grown\)/);
       // PLAY AGAIN asks again, before the boot that takes it.
       const again = appSource.slice(appSource.indexOf('async function returnToRoom()'));
       expect(again.indexOf('askForBand(emu);')).toBeGreaterThan(0);
@@ -675,6 +677,36 @@ describe('the picture in the box', () => {
       const got = askBand(layoutField(0, 0), ROM);
       got.top = 0;
       expect(ROM.band.top, 'a copy').toBe(104);
+    });
+  });
+
+  describe('the whole window covers the window grown to its screen (Cam, 2026-10-26)', () => {
+    // A window booted at 1000x900 on a 1278x1392 screen (1.5x), then made bigger: the
+    // band is a boot's size, and past it the field showed stills -- still water.
+    const pointer = (fine: boolean) => () => ({ matches: fine });
+    const view = { devicePixelRatio: 1.5, innerWidth: 1000, innerHeight: 900, screen: { width: 1278, height: 1392, availWidth: 1278, availHeight: 1352 }, matchMedia: pointer(true) };
+    const box = { clientWidth: 712, clientHeight: 900, ownerDocument: { defaultView: view } } as unknown as HTMLElement;
+    it('measures the box as big as the window can get, and as it is without asking', () => {
+      expect(measureLayout(box, null)).toEqual(layoutField(712, 900, 0, 1.5, 1278));
+      expect(measureLayout(box, null, undefined, true)).toEqual(layoutField(712 + 278, 900 + 452, 0, 1.5, 1278));
+    });
+    it('asks for the grown band, each side the wider', () => {
+      const now = worldBand(measureLayout(box, null));
+      const grown = worldBand(measureLayout(box, null, undefined, true));
+      expect(grown.right).toBeGreaterThan(now.right);
+      expect(grown.bottom).toBeGreaterThan(now.bottom);
+      expect(widerBand(now, grown)).toEqual(grown);
+      expect(widerBand({ left: 8, top: 0, right: 0, bottom: 64 }, { left: 0, top: 16, right: 24, bottom: 8 })).toEqual({ left: 8, top: 16, right: 24, bottom: 64 });
+    });
+    it('a phone on its side asks for what it shows: its screen reads upright (iOS), and its window does not resize', () => {
+      const ios = { devicePixelRatio: 3, innerWidth: 844, innerHeight: 350, screen: { width: 390, height: 844, availWidth: 390, availHeight: 844 }, matchMedia: pointer(false) };
+      const phone = { clientWidth: 844, clientHeight: 350, ownerDocument: { defaultView: ios } } as unknown as HTMLElement;
+      expect(worldBand(measureLayout(phone, null, undefined, true))).toEqual(worldBand(measureLayout(phone, null)));
+    });
+    it('a window already filling its screen asks for what it shows', () => {
+      const full = { ...view, innerWidth: 1278, innerHeight: 1352 };
+      const filled = { clientWidth: 990, clientHeight: 1352, ownerDocument: { defaultView: full } } as unknown as HTMLElement;
+      expect(measureLayout(filled, null, undefined, true)).toEqual(measureLayout(filled, null));
     });
   });
 
