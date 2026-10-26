@@ -591,8 +591,9 @@ export function layoutField(boxW: number, boxH: number, bottomInset = 0, dpr = 1
 
 /** The layout a box gives the picture: the box's size, less the pad when it floats over
  *  the box's bottom (a phone in a match), as FieldView lays out with. `liveAbove`: the
- *  ROM's band's top, as layoutField takes it. */
-export function measureLayout(box: HTMLElement, pad: HTMLElement | null | undefined, liveAbove?: number): FieldLayout {
+ *  ROM's band's top, as layoutField takes it. `grown`: the box as big as its window can
+ *  get on this screen, by what the window is short of the screen's available area. */
+export function measureLayout(box: HTMLElement, pad: HTMLElement | null | undefined, liveAbove?: number, grown = false): FieldLayout {
   let inset = 0;
   if (pad && getComputedStyle(pad).position === 'absolute') inset = pad.getBoundingClientRect().height;
   const view = box.ownerDocument?.defaultView;
@@ -603,7 +604,9 @@ export function measureLayout(box: HTMLElement, pad: HTMLElement | null | undefi
   const glass = screen && screen.width > 0 && screen.height > 0
     ? Math.min(screen.width, screen.height)
     : view ? Math.min(view.innerWidth, view.innerHeight) : undefined;
-  return layoutField(box.clientWidth, box.clientHeight, inset, dpr, glass, liveAbove);
+  const growW = grown && view && screen ? Math.max(0, screen.availWidth - view.innerWidth) : 0;
+  const growH = grown && view && screen ? Math.max(0, screen.availHeight - view.innerHeight) : 0;
+  return layoutField(box.clientWidth + growW, box.clientHeight + growH, inset, dpr, glass, liveAbove);
 }
 
 /** The band to ask the core for (POK-329): the rows above and below the LCD this layout
@@ -662,6 +665,11 @@ export function worldBand(lay: FieldLayout): Band {
     right: eights(lay.cols - lay.lcdCol - GBA_W, WORLD_SIDE_MAX),
     bottom: eights(lay.rows - lay.lcdRow - GBA_H + TILE, WORLD_ROWS_MAX),
   };
+}
+
+/** The band covering both: each side the larger. */
+export function widerBand(a: Band, b: Band): Band {
+  return { left: Math.max(a.left, b.left), top: Math.max(a.top, b.top), right: Math.max(a.right, b.right), bottom: Math.max(a.bottom, b.bottom) };
 }
 
 /** How much of a layout's map a band's picture covers, in GBA pixels. */

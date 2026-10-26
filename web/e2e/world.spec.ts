@@ -131,6 +131,30 @@ test('after: a 1920x1080 desktop in Rustboro, the whole window from the map grid
   }
 });
 
+// The band is sized at boot (Cam's 2026-10-26 play-test): a window made bigger after it
+// showed the stills past the boot's band -- the ocean standing still, cut off square
+// where the core's picture ended. So the boot asks for the window grown to its screen.
+test('a window made bigger mid-match: the core still draws all of it', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const sym = loadSymbols();
+  const ctx = await browser.newContext({ viewport: { width: 1000, height: 700 }, screen: { width: 1600, height: 1000 } });
+  try {
+    const page = await ctx.newPage();
+    await land(page, sym, '');
+    await page.setViewportSize({ width: 1600, height: 1000 });
+    await page.waitForTimeout(1_000);
+    const pic = await savePicture(page, 'grown');
+    await page.screenshot({ path: path.join(OUT_DIR, 'grown.png') });
+    const lay = await page.evaluate(() => (window as unknown as { __hbr: { field: { placement: { cols: number; rows: number; lcdCol: number; lcdRow: number } } } }).__hbr.field.placement);
+    expect(pic.left, 'every column left of the LCD').toBeGreaterThanOrEqual(lay.lcdCol);
+    expect(pic.width - pic.left, '...and right of it').toBeGreaterThanOrEqual(lay.cols - lay.lcdCol);
+    expect(pic.top, 'every row above it').toBeGreaterThanOrEqual(lay.lcdRow);
+    expect(pic.height - pic.top, '...and below it').toBeGreaterThanOrEqual(lay.rows - lay.lcdRow);
+  } finally {
+    await ctx.close();
+  }
+});
+
 // Past the grid (HBR-27 step 2): the 10-20 play-test's seams were where the backup grid's
 // seven metatiles of each neighbour ran out (feedback item 2). The core now walks the
 // map's connections itself, so every neighbour on screen is drawn from its own layout --

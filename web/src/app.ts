@@ -114,7 +114,7 @@ import {
   type AxisSense,
   type StickMap,
 } from './pad';
-import { FieldView, GBA_H, MAIN_CALLBACK2, askBand, measureLayout, romBand, worldBand, type FieldLayout, type FieldPicture } from './field';
+import { FieldView, GBA_H, MAIN_CALLBACK2, askBand, measureLayout, romBand, widerBand, worldBand, type FieldLayout, type FieldPicture } from './field';
 import { speciesName } from './bots/party';
 import type { DuelSide, ProxyDuels } from './bots/proxy';
 import {
@@ -1711,7 +1711,7 @@ function padScale(pad: HTMLElement): number {
  *  field only opens past the picture in a match (body.in-match), with the sheet docked
  *  beside it on a desktop (body.docked). Both classes are put on for the measure and
  *  back as they were before anything is drawn. */
-function matchLayout(): FieldLayout {
+function matchLayout(grown = false): FieldLayout {
   const body = document.body;
   const was = { inMatch: body.classList.contains('in-match'), docked: body.classList.contains('docked') };
   body.classList.add('in-match');
@@ -1722,7 +1722,7 @@ function matchLayout(): FieldLayout {
   const s = root.style.getPropertyValue('--s');
   root.style.setProperty('--s', String(padScale($('#pad') as HTMLElement)));
   try {
-    return measureLayout($('#screen-wrap') as HTMLElement, $('#pad') as HTMLElement, liveAbove());
+    return measureLayout($('#screen-wrap') as HTMLElement, $('#pad') as HTMLElement, liveAbove(), grown);
   } finally {
     body.classList.toggle('in-match', was.inMatch);
     body.classList.toggle('docked', was.docked);
@@ -1761,7 +1761,10 @@ function askForBand(emu: Emulator): void {
   // core still draws the LCD's sprites and its own rows from. A core too old to shows the
   // LCD alone (FieldView.clip); the first boot reloads for a new one (refreshCore).
   worldOn = emu.setWorld(worldAt);
-  if (worldOn) askedBand = worldBand(matchLayout());
+  // The band is sized at boot, so it covers the window grown to the screen too: a window
+  // made bigger mid-match showed the stills past the boot's band, water standing still
+  // and cut off square where the core's picture ended (Cam's 2026-10-26 play-test).
+  if (worldOn) askedBand = widerBand(worldBand(matchLayout()), worldBand(matchLayout(true)));
   emu.setViewport(askedBand);
 }
 
