@@ -592,7 +592,8 @@ export function layoutField(boxW: number, boxH: number, bottomInset = 0, dpr = 1
 /** The layout a box gives the picture: the box's size, less the pad when it floats over
  *  the box's bottom (a phone in a match), as FieldView lays out with. `liveAbove`: the
  *  ROM's band's top, as layoutField takes it. `grown`: the box as big as its window can
- *  get on this screen, by what the window is short of the screen's available area. */
+ *  get on this screen, by what the window is short of the screen's available area: on a
+ *  desktop (a fine pointer) only. */
 export function measureLayout(box: HTMLElement, pad: HTMLElement | null | undefined, liveAbove?: number, grown = false): FieldLayout {
   let inset = 0;
   if (pad && getComputedStyle(pad).position === 'absolute') inset = pad.getBoundingClientRect().height;
@@ -604,8 +605,11 @@ export function measureLayout(box: HTMLElement, pad: HTMLElement | null | undefi
   const glass = screen && screen.width > 0 && screen.height > 0
     ? Math.min(screen.width, screen.height)
     : view ? Math.min(view.innerWidth, view.innerHeight) : undefined;
-  const growW = grown && view && screen ? Math.max(0, screen.availWidth - view.innerWidth) : 0;
-  const growH = grown && view && screen ? Math.max(0, screen.availHeight - view.innerHeight) : 0;
+  // Only a window that resizes: a phone's is its glass, and its screen reads upright on
+  // its side too (iOS), so a phone would ask for rows it never shows, every frame.
+  const resizes = grown && !!view && !!screen && !!view.matchMedia?.('(pointer: fine)').matches;
+  const growW = resizes ? Math.max(0, screen.availWidth - view.innerWidth) : 0;
+  const growH = resizes ? Math.max(0, screen.availHeight - view.innerHeight) : 0;
   return layoutField(box.clientWidth + growW, box.clientHeight + growH, inset, dpr, glass, liveAbove);
 }
 

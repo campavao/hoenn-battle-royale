@@ -683,7 +683,8 @@ describe('the picture in the box', () => {
   describe('the whole window covers the window grown to its screen (Cam, 2026-10-26)', () => {
     // A window booted at 1000x900 on a 1278x1392 screen (1.5x), then made bigger: the
     // band is a boot's size, and past it the field showed stills -- still water.
-    const view = { devicePixelRatio: 1.5, innerWidth: 1000, innerHeight: 900, screen: { width: 1278, height: 1392, availWidth: 1278, availHeight: 1352 } };
+    const pointer = (fine: boolean) => () => ({ matches: fine });
+    const view = { devicePixelRatio: 1.5, innerWidth: 1000, innerHeight: 900, screen: { width: 1278, height: 1392, availWidth: 1278, availHeight: 1352 }, matchMedia: pointer(true) };
     const box = { clientWidth: 712, clientHeight: 900, ownerDocument: { defaultView: view } } as unknown as HTMLElement;
     it('measures the box as big as the window can get, and as it is without asking', () => {
       expect(measureLayout(box, null)).toEqual(layoutField(712, 900, 0, 1.5, 1278));
@@ -696,6 +697,11 @@ describe('the picture in the box', () => {
       expect(grown.bottom).toBeGreaterThan(now.bottom);
       expect(widerBand(now, grown)).toEqual(grown);
       expect(widerBand({ left: 8, top: 0, right: 0, bottom: 64 }, { left: 0, top: 16, right: 24, bottom: 8 })).toEqual({ left: 8, top: 16, right: 24, bottom: 64 });
+    });
+    it('a phone on its side asks for what it shows: its screen reads upright (iOS), and its window does not resize', () => {
+      const ios = { devicePixelRatio: 3, innerWidth: 844, innerHeight: 350, screen: { width: 390, height: 844, availWidth: 390, availHeight: 844 }, matchMedia: pointer(false) };
+      const phone = { clientWidth: 844, clientHeight: 350, ownerDocument: { defaultView: ios } } as unknown as HTMLElement;
+      expect(worldBand(measureLayout(phone, null, undefined, true))).toEqual(worldBand(measureLayout(phone, null)));
     });
     it('a window already filling its screen asks for what it shows', () => {
       const full = { ...view, innerWidth: 1278, innerHeight: 1352 };
