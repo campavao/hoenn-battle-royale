@@ -139,6 +139,8 @@ describe('the drawn screens (POK-320)', () => {
     expect(note.y, 'in the window').toBeGreaterThan(list.y);
     expect(note.y + note.h, 'in the window').toBeLessThanOrEqual(list.y + list.h);
     expect(fake.texts.map((t) => t.text)).toContain(emptyNote(true));
+    // ...whole, in the window's text area (the frame's 8 px a side, and some air).
+    expect(measure(emptyNote(true))).toBeLessThanOrEqual(240 - 24);
     expect(painted.widgets.find((w) => w.id === 'lobbies-host')!.rect.y).toBeGreaterThanOrEqual(list.y + list.h);
   });
 
