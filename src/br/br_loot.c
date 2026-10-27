@@ -2486,13 +2486,23 @@ void BrLoot_Init(void)
     BrNet_On(BR_MSG_NPCOUT, HandleNpcOut);
 }
 
+// The boxes a drop's screen or a PC left out, settled once the field is ours again.
+static void BoxesTick(void)
+{
+    if (gBrMatch.phase == BR_PHASE_NONE)
+        sBoxesOut = FALSE; // the match is over: nothing to settle, nobody to tell
+    else if (!ScriptContext_IsEnabled())
+        SettleBoxes(); // after a PC's own menu, too
+}
+
 void BrLoot_Tick(void)
 {
     u8 i, n, count = 0, spawned = 0, ghosts, limit, keep, shown;
 
     if (sGiveBackLen != 0)
         SendGiveBack(); // before TryTake below can put a PICKUP in front of it
-    TickList();
+    if (sListWait != 0 || sListReady)
+        TickList();
     if (!BrField_OverworldRunning())
     {
         // The objects are kept track of. A map load does take the table with it, and
@@ -2505,6 +2515,22 @@ void BrLoot_Tick(void)
     }
     BrBalls_Tick(); // this house's cache, if we just walked into one
     BrField_ShareObjects(&ghosts, &limit);
+    // Nothing on the ground anywhere, as on most frames: nothing to draw or name. The
+    // agbcc build ends a seam's map load a few cycles short of a VBlank (seam-midframe),
+    // so the empty frame is kept cheap.
+    for (i = 0; i < BR_MAX_LOOT && gBrLoot.items[i].kind == BR_LOOT_NONE; i++)
+        ;
+    if (i == BR_MAX_LOOT)
+    {
+        gBrLoot.count = 0;
+        gBrLoot.spawned = 0;
+        DespawnForThisMap();
+        TickSpoils();
+        if (sBoxesOut && !FuncIsActiveTask(Task_OpenPile))
+            BoxesTick();
+        DropHeldLine();
+        return;
+    }
     shown = ShownMask();
     for (i = 0, n = 0; i < BR_MAX_LOOT; i++)
         if (shown & (1 << i))
@@ -2535,13 +2561,8 @@ void BrLoot_Tick(void)
     gBrLoot.spawned = spawned;
     DespawnForThisMap();
     TickSpoils();
-    if (!FuncIsActiveTask(Task_OpenPile))
-    {
-        if (sBoxesOut && gBrMatch.phase == BR_PHASE_NONE)
-            sBoxesOut = FALSE; // the match is over: nothing to settle, nobody to tell
-        if (sBoxesOut && !ScriptContext_IsEnabled())
-            SettleBoxes(); // after a PC's own menu, too
-    }
+    if (sBoxesOut && !FuncIsActiveTask(Task_OpenPile))
+        BoxesTick();
     HoldLineForReach();
     TryTake();
 }
