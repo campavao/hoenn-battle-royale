@@ -104,9 +104,12 @@ export function readTeam(party: Uint8Array, count: number): { species: number; l
   return out;
 }
 
-/** Our team as the spill the winner would have sent: our keys, round where we stand, off
- *  any cell a piece already lies on (our bag among them) -- the ring the ROM's own spill
- *  walks. Null with nothing to drop, or a map the world does not have. */
+/** Our team as the spill the winner would have sent: our keys, in our bag (Cam,
+ *  2026-10-27, HBR-82: "we should just keep the Pokemon in the bag"). Every ball on the
+ *  bag's own cell, the way the ROM stacks a team on its bag (br_loot.c's SpillOwn); with
+ *  no bag of ours down here, on the first cell of the ring round where we stand that
+ *  nobody else's piece lies on. Null with nothing to drop, or a map the world does not
+ *  have. */
 export function teamSpill(
   me: number,
   team: { species: number; level: number }[],
@@ -116,16 +119,26 @@ export function teamSpill(
   loot: Loot,
 ): SpillMsg | null {
   if (team.length === 0 || mapId === undefined) return null;
-  const from = toPage(romCell(at.x, at.y));
-  const taken = (x: number, y: number) => loot.at(at.map, toRom(pageCell(x, y))) !== undefined;
-  const cells = spillCells(world, mapId, from.x, from.y, team.length, taken);
+  const bag = loot.cellOf((me << 8) | 0xff);
+  let cell: { x: number; y: number };
+  if (bag && bag.map.group === at.map.group && bag.map.num === at.map.num) {
+    cell = { x: bag.x, y: bag.y };
+  } else {
+    const from = toPage(romCell(at.x, at.y));
+    const taken = (x: number, y: number) => {
+      const key = loot.at(at.map, toRom(pageCell(x, y)));
+      return key !== undefined && !isOwnKey(key, me);
+    };
+    const page = spillCells(world, mapId, from.x, from.y, 1, taken)[0];
+    cell = toRom(pageCell(page.x, page.y));
+  }
   return {
     t: 'spill',
     seat: me,
     map: at.map,
-    mons: cells.map((cell, i) => {
-      const rom = toRom(pageCell(cell.x, cell.y));
-      return { key: (me << 8) | i, x: rom.x, y: rom.y, species: team[i].species, level: team[i].level };
-    }),
+    mons: team.slice(0, 6).map((mon, i) => ({ key: (me << 8) | i, x: cell.x, y: cell.y, species: mon.species, level: mon.level })),
   };
 }
+
+/** One of a trainer's own drop: a team ball or the bag, under the seat's own keys. */
+export const isOwnKey = (key: number, seat: number): boolean => key < 0x2000 && key >> 8 === seat;

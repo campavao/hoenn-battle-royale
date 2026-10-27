@@ -374,14 +374,27 @@ export function droppedPeople(k: Known): Person[] {
     // br_ghosts.c's Spawn clamps a skin it does not know to the first.
     out.push({ gfx: SKIN_GFX[s.skin] ?? SKIN_GFX[0], dir: s.dir, x: s.x - MAP_OFFSET, y: s.y - MAP_OFFSET, seat: s.seat });
   }
+  // A cell is drawn as its head, br_loot.c's Head: the bag while there is one, else its
+  // lowest row; more than one piece on it is a team in its bag, drawn as the bag (HBR-82).
+  const cell = (l: Loot) => `${l.group}.${l.num}.${l.x}.${l.y}`;
+  const onCell = new Map<string, Loot[]>();
+  for (const l of k.loot) {
+    if (l.kind === LOOT_NONE) continue;
+    const list = onCell.get(cell(l)) ?? [];
+    list.push(l);
+    onCell.set(cell(l), list);
+  }
   for (const l of k.loot) {
     if (l.kind === LOOT_NONE || !here(l.group, l.num) || live(LOOT_LOCAL_ID_BASE + l.slot)) continue;
     if (inObjectView(k.pos, l.x, l.y)) continue;
+    const stack = onCell.get(cell(l)) ?? [l];
+    const head = stack.find((o) => o.kind === LOOT_BAG) ?? stack.reduce((a, b) => (b.slot < a.slot ? b : a));
+    if (head !== l) continue;
     const gift = l.key !== undefined && (l.key & 0xf000) === GIFT_KEY_BASE;
     const legend = l.kind === LOOT_MON && l.key !== undefined ? legendGfx(l.key, l.species) : undefined;
     const gfx = gift
       ? GIFT_GFX[l.key! % GIFT_GFX.length]
-      : legend ?? (l.kind === LOOT_BAG && l.species === 0 ? GFX_BIRCHS_BAG : GFX_ITEM_BALL);
+      : legend ?? ((l.kind === LOOT_BAG && l.species === 0) || stack.length > 1 ? GFX_BIRCHS_BAG : GFX_ITEM_BALL);
     out.push({ gfx, dir: DIR_SOUTH, x: l.x - MAP_OFFSET, y: l.y - MAP_OFFSET });
   }
   for (const t of k.traders ?? []) {

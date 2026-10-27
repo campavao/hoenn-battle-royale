@@ -1288,9 +1288,15 @@ describe('a bot caught in the fog', () => {
     const [bot] = dealBots(1, 1, [], [{ mapId: 'SEA', map: { group: 0, num: 7 }, x: 2, y: 2 }]);
     bots.start([bot], 0);
     for (let t = STEP_MS; t <= 60_000; t += STEP_MS) bots.tick(t);
-    const spill = sent.find((m) => m.t === 'spill') as { mons: unknown[]; bag?: { key: number } } | undefined;
+    const spill = sent.find((m) => m.t === 'spill') as
+      | { mons: { x: number; y: number }[]; bag?: { key: number; x: number; y: number } }
+      | undefined;
     expect(spill?.mons).toHaveLength(2);
     expect(spill?.bag?.key).toBe((bot.seat << 8) | 0xff);
+    // One cell, the team in its bag (HBR-82): the ROM draws the stack as the bag and opens
+    // it on POKeMON or BAG.
+    const cells = new Set([...spill!.mons, spill!.bag!].map((c) => `${c.x},${c.y}`));
+    expect(cells.size).toBe(1);
   });
 
   // POK-388: a winner's spoils were lying where the bot fell, and its spill went on top
@@ -1320,7 +1326,7 @@ describe('a bot caught in the fog', () => {
     for (let t = STEP_MS; t <= 60_000 && !sent.some((m) => m.t === 'spill'); t += STEP_MS) bots.tick(t);
     const spill = sent.find((m) => m.t === 'spill') as { mons: { x: number; y: number }[]; bag?: { x: number; y: number } };
     const where = [...spill.mons, spill.bag!].map((c) => `${c.x},${c.y}`);
-    expect(where).toHaveLength(2);
+    expect(where).toHaveLength(2); // the one ball and its bag, on the one cell
     for (const cell of where) expect(balls.has(cell), `${cell} already had a ball`).toBe(false);
   });
 

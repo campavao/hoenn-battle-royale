@@ -40,6 +40,7 @@
 #include "br/br_event.h"
 #include "br/br_story.h"
 #include "br/br_items.h"
+#include "br/br_bagmenu.h"
 #include "br/br_loot.h"
 #include "br/br_legend.h"
 #include "br/br_gym.h"
@@ -124,6 +125,53 @@ static bool8 OneThing(const struct BrLootItem *it)
     return it->kind == BR_LOOT_BAG && it->species != ITEM_NONE;
 }
 
+// A trainer's drop is one bag with their team in it (Cam, 2026-10-27, HBR-82: "we should
+// just keep the Pokemon in the bag"): every piece of it lies on one cell, the bag's
+// (SpillOwn, DropSpoils, the page's bots and owed teams). A cell is drawn and pressed as
+// its head -- the bag while there is one, else its lowest row -- and the rest lie under
+// it until the head is opened (TryTake). Anything else keeps a cell of its own (CellFree).
+static bool8 SameCell(const struct BrLootItem *a, const struct BrLootItem *b)
+{
+    return b->kind != BR_LOOT_NONE && a->mapGroup == b->mapGroup && a->mapNum == b->mapNum
+        && a->x == b->x && a->y == b->y;
+}
+
+static struct BrLootItem *Head(const struct BrLootItem *it)
+{
+    struct BrLootItem *first = NULL;
+    u8 i;
+
+    for (i = 0; i < BR_MAX_LOOT; i++)
+    {
+        if (!SameCell(it, &gBrLoot.items[i]))
+            continue;
+        if (gBrLoot.items[i].kind == BR_LOOT_BAG)
+            return &gBrLoot.items[i];
+        if (first == NULL)
+            first = &gBrLoot.items[i];
+    }
+    return first;
+}
+
+// More than one piece on its cell: a team in its bag, or a team whose bag has gone.
+static bool8 Packed(const struct BrLootItem *it)
+{
+    u8 i, n = 0;
+
+    for (i = 0; i < BR_MAX_LOOT; i++)
+        if (SameCell(it, &gBrLoot.items[i]))
+            n++;
+    return n > 1;
+}
+
+// The cell's bag, or NULL for balls alone.
+static struct BrLootItem *BagOn(const struct BrLootItem *it)
+{
+    struct BrLootItem *head = Head(it);
+
+    return head != NULL && head->kind == BR_LOOT_BAG ? head : NULL;
+}
+
 // Who stands for a gift, by its key's low two bits (field-ghosts.ts draws the same).
 static const u8 sGiftGfx[] = {
     OBJ_EVENT_GFX_OLD_MAN,
@@ -132,30 +180,42 @@ static const u8 sGiftGfx[] = {
     OBJ_EVENT_GFX_POKEFAN_F,
 };
 
-static void Spawn(struct BrLootItem *it)
+// What a piece is drawn as, and how it stands.
+static u8 Gfx(const struct BrLootItem *it, u8 *movement)
 {
-    // Birch's bag is the one bag-shaped object event Emerald has; a team is balls.
-    u8 gfx = it->kind == BR_LOOT_BAG && !OneThing(it) ? OBJ_EVENT_GFX_BIRCHS_BAG : OBJ_EVENT_GFX_ITEM_BALL;
-    u8 movement = MOVEMENT_TYPE_NONE;
     u8 person = BrStory_Person(it);
     u8 legend = BrLegend_Gfx(it);
-    u8 id;
+    // Birch's bag is the one bag-shaped object event Emerald has; a ball alone is a ball,
+    // and a team still packed is its bag.
+    u8 gfx = (it->kind == BR_LOOT_BAG && !OneThing(it)) || Packed(it) ? OBJ_EVENT_GFX_BIRCHS_BAG
+                                                                      : OBJ_EVENT_GFX_ITEM_BALL;
+
+    *movement = MOVEMENT_TYPE_NONE;
 
     if (BR_LOOT_IS_GIFT(it->key) || BR_LOOT_IS_HOME(it->key))
     {
         gfx = sGiftGfx[it->key % ARRAY_COUNT(sGiftGfx)];
-        movement = MOVEMENT_TYPE_FACE_DOWN;
+        *movement = MOVEMENT_TYPE_FACE_DOWN;
     }
     else if (person != 0)
     {
         gfx = person;
-        movement = MOVEMENT_TYPE_FACE_DOWN;
+        *movement = MOVEMENT_TYPE_FACE_DOWN;
     }
     else if (legend != 0)
     {
         gfx = legend; // stood there to be fought, not lying there to be taken (br_legend.h)
-        movement = MOVEMENT_TYPE_FACE_DOWN;
+        *movement = MOVEMENT_TYPE_FACE_DOWN;
     }
+    return gfx;
+}
+
+static void Spawn(struct BrLootItem *it)
+{
+    u8 movement;
+    u8 gfx = Gfx(it, &movement);
+    u8 id;
+
     id = SpawnSpecialObjectEventParameterized(gfx, movement, LocalId(it),
                                               it->x, it->y, MapGridGetElevationAt(it->x, it->y));
 
@@ -170,31 +230,57 @@ static bool8 InView(const struct BrLootItem *it)
     return it->kind != BR_LOOT_NONE && OnCurrentMap(it) && BrField_InObjectView(it->x, it->y);
 }
 
-u8 BrLoot_Wanted(void)
+// The rows that get an object, a bit a row: in view and their cell's head. Once a tick,
+// not once a question -- the agbcc build has no frame to spare (seam-midframe).
+static u8 ShownMask(void)
 {
-    u8 i, n = 0;
+    u8 i, shown = 0;
 
     for (i = 0; i < BR_MAX_LOOT; i++)
-        if (InView(&gBrLoot.items[i]))
+        if (InView(&gBrLoot.items[i]) && Head(&gBrLoot.items[i]) == &gBrLoot.items[i])
+            shown |= 1 << i;
+    return shown;
+}
+
+// Spawned as a ball or a bag it no longer is: a head whose cell came unpacked, or packed.
+// Only those two: a person or a legendary never shares a cell, and Gfx asks after both.
+static bool8 Stale(struct BrLootItem *it)
+{
+    struct ObjectEvent *obj = LootObject(it);
+    u8 want;
+
+    if (obj == NULL || (obj->graphicsId != OBJ_EVENT_GFX_BIRCHS_BAG && obj->graphicsId != OBJ_EVENT_GFX_ITEM_BALL))
+        return FALSE;
+    want = (it->kind == BR_LOOT_BAG && !OneThing(it)) || Packed(it) ? OBJ_EVENT_GFX_BIRCHS_BAG
+                                                                    : OBJ_EVENT_GFX_ITEM_BALL;
+    return obj->graphicsId != want;
+}
+
+u8 BrLoot_Wanted(void)
+{
+    u8 i, n = 0, shown = ShownMask();
+
+    for (i = 0; i < BR_MAX_LOOT; i++)
+        if (shown & (1 << i))
             n++;
     return n;
 }
 
 // The pieces in view that get an object, as a bit a row: all of them when there is
 // room, else the `limit` nearest the middle of the view, the lower row first on a tie.
-static u8 Keep(u8 limit)
+static u8 Keep(u8 limit, u8 shown)
 {
     u8 i, j, nearer, keep = 0;
     u16 d, e;
 
     for (i = 0; i < BR_MAX_LOOT; i++)
     {
-        if (!InView(&gBrLoot.items[i]))
+        if (!(shown & (1 << i)))
             continue;
         d = BrField_ViewDistance(gBrLoot.items[i].x, gBrLoot.items[i].y);
         for (j = 0, nearer = 0; j < BR_MAX_LOOT && nearer < limit; j++)
         {
-            if (j == i || !InView(&gBrLoot.items[j]))
+            if (j == i || !(shown & (1 << j)))
                 continue;
             e = BrField_ViewDistance(gBrLoot.items[j].x, gBrLoot.items[j].y);
             if (e < d || (e == d && j < i))
@@ -404,6 +490,10 @@ static EWRAM_DATA struct BrLootItem sGivenBag = {0};
 static EWRAM_DATA u8 sGiveBack[BR_GIVE_BACK_MAX] = {0};
 static EWRAM_DATA u8 sGiveBackLen = 0;
 
+// The give-back's bag is walked over (BrLoot_Solid): what our pockets could not hold. One
+// left by choice from the BAG's list stays solid, for its list. IWRAM: EWRAM is full.
+static bool8 sGiveBackNoRoom;
+
 // Out to the room first, then onto our own ground, as every spill is. FALSE when the ring
 // is full: the held give-back stays held.
 static bool8 SendGiveBack(void)
@@ -415,7 +505,7 @@ static bool8 SendGiveBack(void)
     ParseSpill(sGiveBack, sGiveBackLen);
     // Only what our pockets could not hold is in it, so A here would only say NO ROOM
     // again: we walk over it (BrLoot_Solid). Anybody else's ROM finds it solid, and theirs.
-    for (i = 0; i < BR_MAX_LOOT; i++)
+    for (i = 0; i < BR_MAX_LOOT && sGiveBackNoRoom; i++)
     {
         if (gBrLoot.items[i].kind == BR_LOOT_BAG && gBrLoot.items[i].key == BrWire_ReadU16(sGiveBack + 5))
             gBrLoot.items[i].noRoom = TRUE;
@@ -428,52 +518,15 @@ static const u8 sText_NoRoom[] = _("No room for it");
 static const u8 sText_NoRoomRest[] = _("No room for the rest");
 // Defined with Take(): the FOUND line, and under it the NO ROOM one.
 
-// GIVE: the page handing over what was in a bag we just took. The line and the money
-// are already said by Take(); this is the rest of it arriving a frame later, which is
-// what "one press" means when the contents live on the other side of the mailbox.
-//
-// A stack goes in whole or not at all, and what does not fit stays on the ground for the
-// next trainer -- Kanto's rule (lootTakeAll, "The rest won't fit."). The pickup has gone
-// out by now, so staying is the bag spilled again, under its own key on its own cell,
-// with only the rest in it. AddBagItem's FALSE used to go unread, and a full pocket
-// threw the rest away for the whole room (POK-331 #6).
-static void HandleGive(const u8 *payload, u8 len)
+// What is left of the bag Take() last took, `left` rows of (id u16, n u8), back down as
+// it was: the bag spilled again, under its own key on its own cell, with only the rest in
+// it. The pickup has gone out by now.
+static void PutBack(const u8 *rows, u8 left, bool8 noRoom)
 {
-    const u8 *d;
-    u8 n = BrWire_Unframe(payload, len, &d);
     u8 buf[BR_GIVE_BACK_MAX];
-    u8 count, i, left = 0;
+    u8 i;
     u16 at = 12;
 
-    if (n < 1)
-        return;
-    count = d[0];
-    if (count > 8 || (u16)(1 + 3 * count) > n)
-        return;
-    for (i = 0; i < count; i++)
-    {
-        const u8 *row = d + 1 + 3 * i;
-        u16 item = BrWire_ReadU16(row);
-
-        if (item == ITEM_NONE || row[2] == 0 || AddBagItem(item, row[2]))
-            continue;
-        buf[at++] = row[0];
-        buf[at++] = row[1];
-        buf[at++] = row[2];
-        left++;
-    }
-    if (left == 0)
-    {
-        sGivenBag.kind = BR_LOOT_NONE;
-        return;
-    }
-    PlaySE(SE_FAILURE);
-    if (sGivenBag.kind != BR_LOOT_BAG)
-    {
-        BrHud_Box(sText_NoRoom); // no bag of ours to put it back in: nothing to point at
-        return;
-    }
-    BrHud_Box(OneThing(&sGivenBag) ? sText_NoRoom : sText_NoRoomRest); // it goes back down as it was
     buf[0] = gBrMySeat;
     buf[1] = sGivenBag.mapGroup;
     buf[2] = sGivenBag.mapNum;
@@ -483,6 +536,8 @@ static void HandleGive(const u8 *payload, u8 len)
     BrWire_WriteU16(buf + 7, (u16)sGivenBag.x);
     BrWire_WriteU16(buf + 9, (u16)sGivenBag.y);
     buf[11] = left;
+    for (i = 0; i < 3 * left; i++)
+        buf[at++] = rows[i];
     buf[at++] = 0; // money: Take() paid it out already
     buf[at++] = 0;
     buf[at++] = 0;
@@ -498,7 +553,122 @@ static void HandleGive(const u8 *payload, u8 len)
     for (i = 0; i < at; i++)
         sGiveBack[i] = buf[i];
     sGiveBackLen = at;
+    sGiveBackNoRoom = noRoom;
     SendGiveBack();
+}
+
+// A stack goes in whole or not at all, and what does not fit stays on the ground for the
+// next trainer -- Kanto's rule (lootTakeAll, "The rest won't fit."). AddBagItem's FALSE
+// used to go unread, and a full pocket threw the rest away for the whole room (POK-331 #6).
+static void GiveRows(const u8 *rows, u8 count)
+{
+    u8 left[8 * 3];
+    u8 i, n = 0;
+
+    for (i = 0; i < count; i++)
+    {
+        const u8 *row = rows + 3 * i;
+        u16 item = BrWire_ReadU16(row);
+
+        if (item == ITEM_NONE || row[2] == 0 || AddBagItem(item, row[2]))
+            continue;
+        left[3 * n] = row[0];
+        left[3 * n + 1] = row[1];
+        left[3 * n + 2] = row[2];
+        n++;
+    }
+    if (n == 0)
+    {
+        sGivenBag.kind = BR_LOOT_NONE;
+        return;
+    }
+    PlaySE(SE_FAILURE);
+    if (sGivenBag.kind != BR_LOOT_BAG)
+    {
+        BrHud_Box(sText_NoRoom); // no bag of ours to put it back in: nothing to point at
+        return;
+    }
+    BrHud_Box(OneThing(&sGivenBag) ? sText_NoRoom : sText_NoRoomRest); // it goes back down as it was
+    PutBack(left, n, TRUE);
+}
+
+// A trainer's bag opens on its list (HBR-82: "Bag brings you to an easy to pick up list
+// w/ a quick action to take all"). Take() sends the PICKUP and pays the money, the GIVE
+// brings the rows, and the field shows them once it is free (BrLoot_Tick). Frames the
+// GIVE is waited for: the page sends none for a bag with nothing in it, only cash.
+// IWRAM, all of it.
+#define BR_LIST_WAIT_FRAMES 120
+static u8 sListWait;
+static bool8 sListReady;
+static u8 sListCount;
+static u8 sListRows[8 * 3];
+
+// GIVE: the page handing over what was in a bag we just took. The line and the money
+// are already said by Take(); this is the rest of it arriving a frame later, which is
+// what "one press" means when the contents live on the other side of the mailbox.
+static void HandleGive(const u8 *payload, u8 len)
+{
+    const u8 *d;
+    u8 n = BrWire_Unframe(payload, len, &d);
+    u8 count, i;
+
+    if (n < 1)
+        return;
+    count = d[0];
+    if (count > 8 || (u16)(1 + 3 * count) > n)
+        return;
+    if (sListWait == 0 || sGivenBag.kind != BR_LOOT_BAG)
+    {
+        GiveRows(d + 1, count);
+        return;
+    }
+    sListWait = 0;
+    sListCount = 0;
+    for (i = 0; i < count; i++)
+    {
+        const u8 *row = d + 1 + 3 * i;
+
+        if (BrWire_ReadU16(row) == ITEM_NONE || row[2] == 0)
+            continue;
+        sListRows[3 * sListCount] = row[0];
+        sListRows[3 * sListCount + 1] = row[1];
+        sListRows[3 * sListCount + 2] = row[2];
+        sListCount++;
+    }
+    sListReady = sListCount != 0;
+    if (!sListReady)
+        sGivenBag.kind = BR_LOOT_NONE;
+}
+
+// The list's GIVE, shown when nothing else has the field. Gone from the field -- a
+// challenge, a battle, the match ending -- it goes back down as the bag, as a list the
+// challenge closed does (br_bagmenu.c): nothing in it was picked yet.
+static void TickList(void)
+{
+    if (sListWait != 0)
+        sListWait--;
+    if (!sListReady)
+        return;
+    if (!BrField_OverworldRunning() || gBrNetlink.pendingPeer != 0xFF)
+    {
+        sListReady = FALSE;
+        BrLoot_BagListed(sListRows, sListCount);
+        return;
+    }
+    if (ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked() || BrField_Leaving() || BrBagMenu_Up())
+        return;
+    sListReady = FALSE;
+    BrBagMenu_List(sListRows, sListCount);
+}
+
+void BrLoot_BagListed(const u8 *rows, u8 left)
+{
+    if (left == 0 || sGivenBag.kind != BR_LOOT_BAG)
+    {
+        sGivenBag.kind = BR_LOOT_NONE;
+        return;
+    }
+    PutBack(rows, left, FALSE);
 }
 
 static void HandleSpill(const u8 *payload, u8 len)
@@ -553,7 +723,7 @@ struct BrLootItem *BrLoot_At(s16 x, s16 y)
         struct BrLootItem *it = &gBrLoot.items[i];
 
         if (it->kind != BR_LOOT_NONE && OnCurrentMap(it) && it->x == x && it->y == y)
-            return it;
+            return Head(it); // the bag a team lies in, or the cell's one piece
     }
     return NULL;
 }
@@ -564,9 +734,10 @@ struct BrLootItem *BrLoot_At(s16 x, s16 y)
 // ledge is not, so a trainer who goes out at sea still leaves their team behind, and the
 // page's match/loot.ts deals a bot's spill by the collision rule too (POK-330 #67). A
 // cell that already has a piece on it is skipped, here and in the page's spillCells
-// (POK-388): BrLoot_At answers with the first row on a cell, so a ball dropped on another
-// was a ball nobody could see or take until the one on top was gone. Kanto scatters within two tiles. The cells go out in the message,
-// so nobody reading it has to walk the ring again.
+// (POK-388): a cell shows one piece, so a ball dropped on another was a ball nobody could
+// see or take until the one on top was gone. A trainer's own drop is the one stack, team
+// in its bag (DropCell). Kanto scatters within two tiles. The cells go out in the
+// message, so nobody reading it has to walk the ring again.
 static const s8 sSpillDx[] = { 0, 1, -1, 0,  0, 1, -1,  1, -1, 2, -2,  0,  0 };
 static const s8 sSpillDy[] = { 0, 0,  0, 1, -1, 1,  1, -1, -1, 0,  0,  2, -2 };
 #define BR_SPILL_CELLS (sizeof(sSpillDx) / sizeof(sSpillDx[0]))
@@ -645,6 +816,37 @@ static bool8 NextCellAround(s16 ox, s16 oy, u8 *i, const s16 *usedX, const s16 *
     return FALSE;
 }
 
+// A cell for a trainer's drop: open ground, no warp, and nothing on it but that trainer's
+// own -- the winner's spoils can land before the loser's bag does, and belong in it.
+// Keys under 0x2000 are a trainer's team and bag, the seat in the high byte.
+static bool8 DropCellFree(s16 x, s16 y, u8 seat)
+{
+    const struct BrLootItem *on = BrLoot_At(x, y);
+
+    if (MapGridGetCollisionAt(x, y) != 0 || OnWarp(x, y))
+        return FALSE;
+    return on == NULL || (on->key < 0x2000 && BR_LOOT_KEY_SEAT(on->key) == seat);
+}
+
+// The one cell a trainer's drop goes on: the first of the ring round (ox, oy) free for it,
+// else (ox, oy) itself -- nothing leaves a match.
+static void DropCell(s16 ox, s16 oy, u8 seat, s16 *x, s16 *y)
+{
+    u8 i;
+
+    for (i = 0; i < BR_SPILL_CELLS; i++)
+    {
+        if (DropCellFree(ox + sSpillDx[i], oy + sSpillDy[i], seat))
+        {
+            *x = ox + sSpillDx[i];
+            *y = oy + sSpillDy[i];
+            return;
+        }
+    }
+    *x = ox;
+    *y = oy;
+}
+
 // BrLoot_TeamTaken's flag: the next SpillOwn leaves the team out.
 static EWRAM_DATA bool8 sTeamTaken = FALSE;
 
@@ -659,13 +861,15 @@ void BrLoot_TeamTaken(bool8 taken)
 void BrLoot_SpillOwn(void)
 {
     u8 buf[96];
-    s16 usedX[BR_SPILL_CELLS], usedY[BR_SPILL_CELLS];
     struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
-    s16 ox = self->currentCoords.x, oy = self->currentCoords.y;
+    s16 x, y;
     u16 len = 0, key;
-    u8 count = 0, used = 0, cell = 0, i;
+    u8 count = 0, i, j;
     u32 money;
 
+    // Team and bag on one cell, ours or the first free one round it: the team is in the
+    // bag (HBR-82), and the bag opens on POKeMON or BAG (TryTake).
+    DropCell(self->currentCoords.x, self->currentCoords.y, gBrMySeat, &x, &y);
     buf[len++] = gBrMySeat;
     buf[len++] = gSaveBlock1Ptr->location.mapGroup;
     buf[len++] = gSaveBlock1Ptr->location.mapNum;
@@ -674,15 +878,8 @@ void BrLoot_SpillOwn(void)
     // only the bag is ours to drop.
     for (i = 0; i < PARTY_SIZE && !sTeamTaken; i++)
     {
-        s16 x, y;
-
         if (GetMonData(&gPlayerParty[i], MON_DATA_SPECIES, NULL) == SPECIES_NONE)
             break;
-        if (!NextCell(ox, oy, &cell, usedX, usedY, used, &x, &y))
-            break; // nowhere left within reach: the rest of the team stays in its balls
-        usedX[used] = x;
-        usedY[used] = y;
-        used++;
         // The key is ours alone for the match: our seat in the high byte.
         key = BR_LOOT_KEY_OWN(gBrMySeat, count);
         BrWire_WriteU16(buf + len, key);
@@ -694,38 +891,22 @@ void BrLoot_SpillOwn(void)
         count++;
     }
     buf[3] = count;
-    // The bag, on the next free cell.
-    {
-        s16 bx, by;
-
-        if (NextCell(ox, oy, &cell, usedX, usedY, used, &bx, &by))
-        {
-        buf[len++] = 1;
-        BrWire_WriteU16(buf + len, BR_LOOT_KEY_BAG(gBrMySeat));
-        BrWire_WriteU16(buf + len + 2, (u16)bx);
-        BrWire_WriteU16(buf + len + 4, (u16)by);
-        len += 6;
-        buf[len++] = 0; // itemCount: the bag's contents ride with the pickup
-        money = GetMoney(&gSaveBlock1Ptr->money);
-        buf[len++] = money & 0xFF;
-        buf[len++] = (money >> 8) & 0xFF;
-        buf[len++] = (money >> 16) & 0xFF;
-        buf[len++] = (money >> 24) & 0xFF;
-        for (i = 0; i < PLAYER_NAME_LENGTH && gSaveBlock2Ptr->playerName[i] != EOS; i++)
-            ;
-        buf[len++] = i;
-        {
-            u8 j;
-
-            for (j = 0; j < i; j++)
-                buf[len++] = gSaveBlock2Ptr->playerName[j];
-        }
-        }
-        else
-        {
-            buf[len++] = 0;
-        }
-    }
+    buf[len++] = 1;
+    BrWire_WriteU16(buf + len, BR_LOOT_KEY_BAG(gBrMySeat));
+    BrWire_WriteU16(buf + len + 2, (u16)x);
+    BrWire_WriteU16(buf + len + 4, (u16)y);
+    len += 6;
+    buf[len++] = 0; // itemCount: the bag's contents ride with the pickup
+    money = GetMoney(&gSaveBlock1Ptr->money);
+    buf[len++] = money & 0xFF;
+    buf[len++] = (money >> 8) & 0xFF;
+    buf[len++] = (money >> 16) & 0xFF;
+    buf[len++] = (money >> 24) & 0xFF;
+    for (i = 0; i < PLAYER_NAME_LENGTH && gSaveBlock2Ptr->playerName[i] != EOS; i++)
+        ;
+    buf[len++] = i;
+    for (j = 0; j < i; j++)
+        buf[len++] = gSaveBlock2Ptr->playerName[j];
     BrWire_SendLarge(BR_MSG_SPILL, buf, len);
     // Nobody hears their own message come back off the relay, so put ours down here.
     ParseSpill(buf, len);
@@ -916,6 +1097,15 @@ static bool8 InPile(const struct BrLootItem *it)
     if (it->kind != BR_LOOT_MON || (it->key & BR_LOOT_KEY_NOBODY) || !OnCurrentMap(it))
         return FALSE;
     return dx >= -BR_PILE_REACH && dx <= BR_PILE_REACH && dy >= -BR_PILE_REACH && dy <= BR_PILE_REACH
+        && !BrStory_Guarded(it) && !Packed(it); // a team in its bag opens from the bag
+}
+
+// A ball for the screen: in reach, or with `cell` named, one of the team lying on it.
+static bool8 Pileable(const struct BrLootItem *it, const struct BrLootItem *cell)
+{
+    if (cell == NULL)
+        return InPile(it);
+    return it->kind == BR_LOOT_MON && !(it->key & BR_LOOT_KEY_NOBODY) && SameCell(cell, it)
         && !BrStory_Guarded(it);
 }
 
@@ -958,20 +1148,20 @@ static void Task_OpenPile(u8 taskId)
     SetMainCallback2(CB2_BrSwap);
 }
 
-// A on a drop's ball with another in reach: a copy of each in the PC's first box, and the
-// swap screen up. FALSE leaves the press to Take's one ball. The spoils menu's pick is one ball,
-// and Take's alone.
-static bool8 OpenPile(const struct BrLootItem *pressed)
+// A on a drop's ball with another in reach, or POKeMON on a bag's cell (`cell`): a copy of
+// each in the PC's first box, and the swap screen up. FALSE leaves the press to Take's one
+// ball. The spoils menu's pick is one ball, and Take's alone.
+static bool8 OpenPile(const struct BrLootItem *pressed, const struct BrLootItem *cell)
 {
     struct Pokemon mon;
     u8 i, n = 0, slot = 0;
 
-    if (sBoxesOut || !InPile(pressed))
+    if (sBoxesOut || (cell == NULL && !InPile(pressed)))
         return FALSE; // the last box is not settled yet
     for (i = 0; i < BR_MAX_LOOT; i++)
-        if (InPile(&gBrLoot.items[i]))
+        if (Pileable(&gBrLoot.items[i], cell))
             n++;
-    if (n < 2)
+    if (n < (cell != NULL ? 1 : 2))
         return FALSE;
     sPileCount = 0;
     // The pressed ball first, so it is on the screen it opened however many lie about.
@@ -979,7 +1169,7 @@ static bool8 OpenPile(const struct BrLootItem *pressed)
     {
         const struct BrLootItem *it = i == 0 ? pressed : &gBrLoot.items[i - 1];
 
-        if ((i != 0 && it == pressed) || !InPile(it))
+        if ((i != 0 && it == pressed) || !Pileable(it, cell))
             continue;
         if (sPileCount == PARTY_SIZE)
             break; // the screen's drop side is six, a whole team
@@ -993,6 +1183,8 @@ static bool8 OpenPile(const struct BrLootItem *pressed)
         sPileKey[sPileCount] = it->key;
         sPilePersonality[sPileCount++] = GetMonData(&mon, MON_DATA_PERSONALITY, NULL);
     }
+    if (sPileCount == 0)
+        return FALSE; // a PC box with no room left in it
     sBoxesOut = TRUE;
     DropHeldLine();
     PlaySE(SE_PC_ON);
@@ -1379,20 +1571,46 @@ static void HoldLineForReach(void)
         DropHeldLine();
         return;
     }
-    if (it->key == sHeldKey && it->species == sHeldWhat)
+    if (it->key == sHeldKey && (Packed(it) ? 0xFFFF : it->species) == sHeldWhat)
         return;
     sHeldKey = it->key;
-    sHeldWhat = it->species;
+    sHeldWhat = Packed(it) ? 0xFFFF : it->species; // a team in its bag is the bag
     // A sentence, not a bare name (Cam's 2026-10-19 play-test: "WHISCASH" alone on the
     // ticker read as a line with its verb missing).
     p = StringCopy(line, sText_Take);
-    if (OneThing(it) || it->kind == BR_LOOT_ITEM)
+    if (Packed(it))
+        StringCopy(p, sText_TheBag);
+    else if (OneThing(it) || it->kind == BR_LOOT_ITEM)
         StringCopy(p, GetItemName(it->species));
     else if (it->kind == BR_LOOT_BAG)
         StringCopy(p, sText_TheBag);
     else
         StringCopy(p, gSpeciesNames[TakenSpecies(it)]);
     BrHud_Hold(line);
+}
+
+// The bag the POKeMON / BAG box was opened on, for its cell. IWRAM.
+static struct BrLootItem sChosen;
+
+// A trainer's own bag, dropped going out or put back by a taker: its key's low byte 0xFF
+// in a seat's space. A TM forgotten is a bag of one, and is still one press.
+static bool8 TrainersBag(const struct BrLootItem *it)
+{
+    return it->kind == BR_LOOT_BAG && it->key < 0x2000 && (it->key & 0xFF) == 0xFF && !OneThing(it);
+}
+
+// The bag taken, and its GIVE shown as a list (HandleGive) rather than poured in.
+static void TakeToList(struct BrLootItem *it)
+{
+    u8 taken = gBrLoot.taken;
+
+    Take(it);
+    // Only for the PICKUP that went: a refused press leaves the next GIVE to pour.
+    if (gBrLoot.taken != taken)
+    {
+        sListWait = BR_LIST_WAIT_FRAMES;
+        sListReady = FALSE;
+    }
 }
 
 // A on the cell we stand on or the one we face. The loot has no script of its own --
@@ -1418,8 +1636,49 @@ static void TryTake(void)
         return;
     gMain.newKeys &= ~A_BUTTON;
     gMain.newAndRepeatedKeys &= ~A_BUTTON;
-    if (!OpenPile(it))
+    // A trainer's team in its bag: POKeMON or BAG, and with the bag gone, the team's
+    // screen (HBR-82).
+    if (Packed(it))
+    {
+        if (it->kind == BR_LOOT_BAG)
+        {
+            DropHeldLine();
+            PlaySE(SE_SELECT);
+            sChosen = *it;
+            BrBagMenu_Choose(it->key);
+        }
+        else if (!OpenPile(it, it))
+        {
+            Take(it);
+        }
+        return;
+    }
+    if (TrainersBag(it))
+        TakeToList(it);
+    else if (!OpenPile(it, NULL))
         Take(it);
+}
+
+void BrLoot_BagChosen(u16 key, u8 choice)
+{
+    struct BrLootItem *bag = Find(key);
+    struct BrLootItem *head;
+
+    // Somebody else's A can have got there while the box was up: the bag gone, the team
+    // can still be lying in its cell, and POKeMON still opens on it.
+    if (choice == BR_BAGMENU_POKEMON)
+    {
+        head = bag != NULL ? bag : Head(&sChosen);
+        if (head == NULL || !OnCurrentMap(head) || !OpenPile(head, head))
+            PlaySE(SE_FAILURE);
+        return;
+    }
+    if (bag == NULL || bag->kind != BR_LOOT_BAG || !OnCurrentMap(bag))
+    {
+        PlaySE(SE_FAILURE);
+        return;
+    }
+    TakeToList(bag);
 }
 
 // Solid when A would take it (Cam, 2026-10-18: "let's make all items collidable. I hate
@@ -1439,6 +1698,8 @@ bool8 BrLoot_Solid(u8 localId)
     it = &gBrLoot.items[localId - BR_LOOT_LOCAL_ID_BASE];
     if (it->kind == BR_LOOT_NONE)
         return FALSE;
+    if (Packed(it))
+        return TRUE; // a team in its bag: A always opens it
     if (BR_LOOT_IS_GIFT(it->key) || BR_LOOT_IS_HOME(it->key) || BrStory_Person(it))
         return TRUE;
     // A room's cache sits where floors.py put it, never in the way (br_balls.c), so it
@@ -2021,25 +2282,27 @@ void BrLoot_WonFrom(u8 seat)
         sSpoilsState = BR_SPOILS_DROP;
 }
 
-// Round our own feet, one cell out (BrLoot_Released's reason: a ball under us is taken
-// by an A that was meant for something else), and never on the loser's own cell, where
-// their bag is about to land.
+// In the loser's bag, on the cell it falls on (HBR-82): the loser's own, when they went
+// down on our map, else beside us -- one cell out (BrLoot_Released's reason: a ball under
+// us is taken by an A that was meant for something else).
 static void DropSpoils(void)
 {
     u8 buf[4 + PARTY_SIZE * 9 + 1];
-    s16 usedX[BR_SPILL_CELLS], usedY[BR_SPILL_CELLS];
+    s16 usedX[1], usedY[1];
     struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
     const struct BrSeat *loser = &gBrSeats[sSpoilsSeat];
     u16 len = 0;
-    u8 count = 0, used = 0, cell = 0, i;
+    u8 count = 0, cell = 0, i;
     s16 x, y;
 
     if (loser->mapGroup == gSaveBlock1Ptr->location.mapGroup
      && loser->mapNum == gSaveBlock1Ptr->location.mapNum)
     {
-        usedX[0] = loser->x;
-        usedY[0] = loser->y;
-        used = 1;
+        DropCell(loser->x, loser->y, sSpoilsSeat, &x, &y);
+    }
+    else if (!NextCellAround(self->currentCoords.x, self->currentCoords.y, &cell, usedX, usedY, 0, &x, &y))
+    {
+        DropCell(self->currentCoords.x, self->currentCoords.y, sSpoilsSeat, &x, &y);
     }
     buf[len++] = gBrMySeat; // who is saying so: the relay only takes a spill as our own
     buf[len++] = gSaveBlock1Ptr->location.mapGroup;
@@ -2047,11 +2310,6 @@ static void DropSpoils(void)
     len++; // count, below
     for (i = 0; i < sSpoilsCount; i++)
     {
-        if (!NextCellAround(self->currentCoords.x, self->currentCoords.y, &cell, usedX, usedY, used, &x, &y))
-            break; // boxed in: the rest stay in their balls, as a spill of our own would
-        usedX[used] = x;
-        usedY[used] = y;
-        used++;
         BrWire_WriteU16(buf + len, BR_LOOT_KEY_OWN(sSpoilsSeat, i));
         BrWire_WriteU16(buf + len + 2, (u16)x);
         BrWire_WriteU16(buf + len + 4, (u16)y);
@@ -2212,6 +2470,8 @@ void BrLoot_Init(void)
     BrGym_Init();
     sGivenBag.kind = BR_LOOT_NONE;
     sGiveBackLen = 0;
+    sListWait = 0;
+    sListReady = FALSE;
     sSpoilsState = BR_SPOILS_NONE;
     sTeamTaken = FALSE;
     sBoxesOut = FALSE;
@@ -2226,12 +2486,23 @@ void BrLoot_Init(void)
     BrNet_On(BR_MSG_NPCOUT, HandleNpcOut);
 }
 
+// The boxes a drop's screen or a PC left out, settled once the field is ours again.
+static void BoxesTick(void)
+{
+    if (gBrMatch.phase == BR_PHASE_NONE)
+        sBoxesOut = FALSE; // the match is over: nothing to settle, nobody to tell
+    else if (!ScriptContext_IsEnabled())
+        SettleBoxes(); // after a PC's own menu, too
+}
+
 void BrLoot_Tick(void)
 {
-    u8 i, count = 0, spawned = 0, ghosts, limit, keep;
+    u8 i, n, count = 0, spawned = 0, ghosts, limit, keep, shown;
 
     if (sGiveBackLen != 0)
         SendGiveBack(); // before TryTake below can put a PICKUP in front of it
+    if (sListWait != 0 || sListReady)
+        TickList();
     if (!BrField_OverworldRunning())
     {
         // The objects are kept track of. A map load does take the table with it, and
@@ -2244,14 +2515,34 @@ void BrLoot_Tick(void)
     }
     BrBalls_Tick(); // this house's cache, if we just walked into one
     BrField_ShareObjects(&ghosts, &limit);
-    keep = BrLoot_Wanted() <= limit ? 0xFF : Keep(limit);
+    // Nothing on the ground anywhere, as on most frames: nothing to draw or name. The
+    // agbcc build ends a seam's map load a few cycles short of a VBlank (seam-midframe),
+    // so the empty frame is kept cheap.
+    for (i = 0; i < BR_MAX_LOOT && gBrLoot.items[i].kind == BR_LOOT_NONE; i++)
+        ;
+    if (i == BR_MAX_LOOT)
+    {
+        gBrLoot.count = 0;
+        gBrLoot.spawned = 0;
+        DespawnForThisMap();
+        TickSpoils();
+        if (sBoxesOut && !FuncIsActiveTask(Task_OpenPile))
+            BoxesTick();
+        DropHeldLine();
+        return;
+    }
+    shown = ShownMask();
+    for (i = 0, n = 0; i < BR_MAX_LOOT; i++)
+        if (shown & (1 << i))
+            n++;
+    keep = n <= limit ? 0xFF : Keep(limit, shown);
     // Out of view, off this map or past the share: let go first, so a nearer piece has
     // the slot this frame (POK-330 #48).
     for (i = 0; i < BR_MAX_LOOT; i++)
     {
         struct BrLootItem *it = &gBrLoot.items[i];
 
-        if (it->kind != BR_LOOT_NONE && !(InView(it) && (keep & (1 << i))))
+        if (it->kind != BR_LOOT_NONE && (!(shown & keep & (1 << i)) || Stale(it)))
             Despawn(it);
     }
     for (i = 0; i < BR_MAX_LOOT; i++)
@@ -2261,7 +2552,7 @@ void BrLoot_Tick(void)
         if (it->kind == BR_LOOT_NONE)
             continue;
         count++;
-        if (InView(it) && (keep & (1 << i)) && LootObject(it) == NULL)
+        if ((shown & keep & (1 << i)) && LootObject(it) == NULL)
             Spawn(it);
         if (it->objId != BR_NO_OBJ)
             spawned++;
@@ -2270,13 +2561,8 @@ void BrLoot_Tick(void)
     gBrLoot.spawned = spawned;
     DespawnForThisMap();
     TickSpoils();
-    if (!FuncIsActiveTask(Task_OpenPile))
-    {
-        if (sBoxesOut && gBrMatch.phase == BR_PHASE_NONE)
-            sBoxesOut = FALSE; // the match is over: nothing to settle, nobody to tell
-        if (sBoxesOut && !ScriptContext_IsEnabled())
-            SettleBoxes(); // after a PC's own menu, too
-    }
+    if (sBoxesOut && !FuncIsActiveTask(Task_OpenPile))
+        BoxesTick();
     HoldLineForReach();
     TryTake();
 }

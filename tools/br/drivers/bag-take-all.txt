@@ -1,0 +1,53 @@
+# bag-take-all: a trainer's bag with no team in it opens straight on its list (HBR-82:
+# "Bag brings you to an easy to pick up list w/ a quick action to take all"), and TAKE ALL
+# takes every stack that fits. One that does not stays in the list, and goes back down as
+# the bag when the list closes.
+#
+# Seat 3's bag alone on the cell we face (12,17), south of where we stand (12,16).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# the ITEMS pocket, all thirty slots: POTION..BLACK FLUTE (13..42), one of each
+pokebytes *gSaveBlock1Ptr+0x560 0D 00 01 00 0E 00 01 00 0F 00 01 00 10 00 01 00 11 00 01 00 12 00 01 00 13 00 01 00 14 00 01 00 15 00 01 00 16 00 01 00 17 00 01 00 18 00 01 00 19 00 01 00 1A 00 01 00 1B 00 01 00 1C 00 01 00 1D 00 01 00 1E 00 01 00 1F 00 01 00 20 00 01 00 21 00 01 00 22 00 01 00 23 00 01 00 24 00 01 00 25 00 01 00 26 00 01 00 27 00 01 00 28 00 01 00 29 00 01 00 2A 00 01 00
+# SPILL: no mons, hasBag 01, key 0x03FF, (12,17), no items, money 100, no name
+pokebytes gBrMailbox+0x1018 0B 11 0E 00 00 03 00 09 00 01 FF 03 0C 00 11 00 00 64 00 00 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrLoot+0xA0 1
+expect u8 gBrLoot+0xA1 1
+tap A
+wait 20
+# no POKeMON / BAG to ask: the bag is taken, and the list waits for its GIVE
+expect u8 gBrLoot+0xA2 1
+expect u8 gBrLoot+0xA0 0
+expectmsg 10 u16 1 0x03FF
+# GIVE [count 3] (ORAN BERRY x2) (ESCAPE ROPE x1) (TM06 x1): the ESCAPE ROPE needs a slot
+# the ITEMS pocket does not have (a NUGGET would be sold on the spot, br_items.c)
+pokebytes gDecompressionBuffer 03 8B 00 02 55 00 01 26 01 01
+mailsend gBrMailbox 30 gDecompressionBuffer 10
+wait 40
+shot list
+# TAKE ALL: the berries and the TM are in, the ESCAPE ROPE stays with a buzz, the list up
+tap A
+wait 20
+expect u16 *gSaveBlock1Ptr+0x790 139
+expect u16 *gSaveBlock1Ptr+0x690 294
+expect u16 *gSaveBlock1Ptr+0x5D4 42
+expect u32 gMain+4 CB2_Overworld+1
+expect u8 gBrLoot+0xA0 0
+shot took-all
+# room in the last slot, and TAKE ALL again: the ESCAPE ROPE goes in and the list closes,
+# with nothing to put back
+poke u16 *gSaveBlock1Ptr+0x5D4 0
+tap A
+wait 30
+expect u16 *gSaveBlock1Ptr+0x5D4 85
+expect u8 gBrLoot+0xA0 0
+expect u32 gMain+4 CB2_Overworld+1
+shot closed
+# and the field is ours
+hold UP 20
+wait 30
+expectne u16 gBrOwnPos+4 0x10
+say bag take all ok

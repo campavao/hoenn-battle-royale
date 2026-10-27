@@ -43,7 +43,9 @@ const SPILL_DY = [0, 0, 0, 1, -1, 1, 1, -1, -1, 0, 0, 2, -2];
  *  A bot's spill used to put every ball on the dropper's own cell. That is one visible
  *  ball (BrLoot_At returns the first row it matches) with the rest of the team stacked
  *  underneath it, and the BAG under those -- which is why a beaten bot looked like it
- *  dropped one Pokemon and no bag at all. The ROM has always scattered its own.
+ *  dropped one Pokemon and no bag at all. Since HBR-82 a trainer's drop is one cell
+ *  again on purpose -- the team in its bag, which the ROM draws as the bag and opens on
+ *  POKeMON or BAG -- and the ring is only where that cell is found.
  *
  *  And on the same cells the ROM would pick. This used to skip anything nobody could
  *  stand on, which is water too: a player beaten at sea drops their team on the waves,
@@ -179,6 +181,13 @@ export class Loot {
     const bag = this.pieces.get(key)?.bag;
 
     return bag ? bag.items.map((s) => ({ ...s })) : undefined;
+  }
+
+  /** Where this piece lies, in the ROM's space, or undefined for one not on the ground. */
+  cellOf(key: number): { map: MapRef; x: number; y: number } | undefined {
+    const piece = this.pieces.get(key);
+    const cell = piece?.mon ?? piece?.bag;
+    return piece && cell ? { map: piece.map, x: cell.x, y: cell.y } : undefined;
   }
 
   /** How many pieces are still on the ground anywhere. */

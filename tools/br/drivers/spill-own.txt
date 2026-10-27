@@ -18,8 +18,13 @@ wait 5200
 # the spill
 expect u8 gBrRing+7 1
 expect u8 gBrMatch 3
-# one ball for the one mon, plus the bag, both standing on this map
+# one ball for the one mon, plus the bag, on one cell: the team is in the bag (HBR-82),
+# so the one object on this map is the bag (row 1), and the ball lies under it
 expect u8 gBrLoot+0xA0 2
-expect u8 gBrLoot+0xA1 2
+expect u8 gBrLoot+0xA1 1
+expect u8 gBrLoot+11 1
+expect u8 gBrLoot+31 2
+expect u8 gBrLoot+12 0xFF
+expectne u8 gBrLoot+32 0xFF
 shot spilled-own
 say spill own ok
