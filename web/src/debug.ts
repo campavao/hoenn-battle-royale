@@ -4,7 +4,7 @@
 //
 // Pure functions over the hash string, like hash.ts, so the cycle can be pinned without a
 // browser. app.ts reads and writes `location` around them.
-import type { devPace } from './hash';
+import { textOf, type devPace } from './hash';
 
 /** One switch. `choices` are what the hash can say for it, in the order a press steps
  *  through them: `null` is the key absent, `''` a bare key (`#fast`), anything else its
@@ -56,8 +56,7 @@ export function cycleFlag(hash: string, flag: DebugFlag): string {
   const next = flag.choices[(flag.choices.indexOf(params.get(flag.key)) + 1) % flag.choices.length];
   if (next === null) params.delete(flag.key);
   else params.set(flag.key, next);
-  // `a&b`, as hash.ts writes a door: a bare key is a bare key.
-  return params.toString().replace(/=(?=&|$)/g, '');
+  return textOf(params);
 }
 
 /** What the row says on its right for the hash. A pace row says the pace the page will
@@ -73,4 +72,17 @@ export function flagDetail(flag: DebugFlag, hash: string, pace: ReturnType<typeo
   if (value === null) return flag.off ?? 'OFF';
   if (value === '') return 'ON';
   return flag.secs ? `${value}s` : value;
+}
+
+/** The trainer card's DEBUG MENU: whether the main menu has its DEBUG tile, off unless
+ *  this browser turned it on. app.ts's debugMenuOn reads the same key. */
+const DEBUG_MENU_KEY = 'hbr-debug-menu';
+
+export function toggleDebugMenu(store: Storage): void {
+  try {
+    if (store.getItem(DEBUG_MENU_KEY) === '1') store.removeItem(DEBUG_MENU_KEY);
+    else store.setItem(DEBUG_MENU_KEY, '1');
+  } catch {
+    // A browser that keeps nothing keeps the default.
+  }
 }

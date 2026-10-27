@@ -2,7 +2,8 @@
 // STATS, and the DEBUG switches the card's DEBUG MENU puts on the main menu. A chunk of
 // their own, fetched soon after boot (app.ts's lazyScreen), the way the results are
 // (POK-407): main.js has a budget, and these are only ever a press away.
-import { DEBUG_FLAGS, cycleFlag, flagDetail } from '../debug';
+import { DEBUG_FLAGS, cycleFlag, flagDetail, toggleDebugMenu } from '../debug';
+import type { devPace } from '../hash';
 import { CARD_BADGES, SKINS, SKIN_UNLOCK_WINS, WARDROBE, cardBadges, cardStars, ordinal, skinUnlocked, type CareerTotals } from '../match/career';
 import { favourite, type TallyNames } from '../match/tally';
 import type { RecordLine } from '../match/record';
@@ -347,41 +348,41 @@ export function statsScreen(model: () => StatsModel): DrawnScreen {
 
 // ---- DEBUG ----------------------------------------------------------------------------------
 
-export interface DebugModel {
-  /** location.hash, which the rows read and step. */
-  hash: string;
-  /** The pace the page would run off it (app.ts's paceOptions): none in a build. */
-  pace: { safariSecs?: number; fogSecs?: number } | undefined;
-  /** A dev server's page, which reads every flag; a build greys what it would not read. */
-  dev: boolean;
-  /** The hash with one flag stepped (no `#`), and whether it only applies after a reload. */
-  onSet: (hash: string, reload: boolean) => void;
-  onFresh: () => void;
-  onSpikeB: () => void;
-  onBack: () => void;
-}
+export { toggleDebugMenu };
 
-export function debugScreen(model: () => DebugModel): DrawnScreen {
-  return menuScreen(() => {
-    const m = model();
-    return {
-      title: 'DEBUG',
-      rows: [
-        ...DEBUG_FLAGS.map((flag): RowSpec => ({
-          label: flag.label,
-          detail: flagDetail(flag, m.hash, m.pace),
-          id: `debug-${flag.key}`,
-          disabled: flag.dev && !m.dev,
-          onPress: () => m.onSet(cycleFlag(m.hash, flag), flag.reload === true),
-        })),
-        { label: 'CLEAR CACHE', detail: 'drops the flags', id: 'debug-fresh', onPress: m.onFresh },
-        { label: 'SPIKE B', detail: 'TS overworld', id: 'debug-spike-b', onPress: m.onSpikeB },
-      ],
-      rowsId: 'debug-rows',
-      note: m.dev ? 'Each applies to the next match.' : 'Grey rows need a dev server.',
-      noteId: 'debug-note',
-      buttons: [{ label: 'BACK', id: 'debug-back', onPress: m.onBack }],
-      onBack: m.onBack,
-    };
-  });
+/** DEBUG (Cam, 2026-10-27: "a main menu option rather than manually editing the url"):
+ *  each row steps one hash flag, so the URL says what was picked and a link with it still
+ *  works. Here rather than in app.ts for main.js's budget. `pace` is app.ts's paceOptions,
+ *  the pace the page would run off the hash: none in a build, which greys every row but
+ *  PERF -- a build reads none of the others. */
+export function debugScreen(pace: () => ReturnType<typeof devPace>, redraw: () => void, back: () => void): DrawnScreen {
+  const dev = import.meta.env.DEV;
+  const reload = (hash: string) => {
+    history.replaceState(null, '', `#${hash}`);
+    location.reload();
+  };
+  return menuScreen(() => ({
+    title: 'DEBUG',
+    rows: [
+      ...DEBUG_FLAGS.map((flag): RowSpec => ({
+        label: flag.label,
+        detail: flagDetail(flag, location.hash, pace()),
+        id: `debug-${flag.key}`,
+        disabled: flag.dev && !dev,
+        onPress: () => {
+          const hash = cycleFlag(location.hash, flag);
+          if (flag.reload) return reload(hash);
+          history.replaceState(null, '', `#${hash}`);
+          redraw();
+        },
+      })),
+      { label: 'CLEAR CACHE', detail: 'drops the flags', id: 'debug-fresh', onPress: () => reload('fresh') },
+      { label: 'SPIKE B', detail: 'TS overworld', id: 'debug-spike-b', onPress: () => location.assign(`${import.meta.env.BASE_URL}spike-b/`) },
+    ],
+    rowsId: 'debug-rows',
+    note: dev ? 'Each applies to the next match.' : 'Grey rows need a dev server.',
+    noteId: 'debug-note',
+    buttons: [{ label: 'BACK', id: 'debug-back', onPress: back }],
+    onBack: back,
+  }));
 }

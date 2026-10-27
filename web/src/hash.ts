@@ -20,7 +20,7 @@ function paramsOf(hash: string): URLSearchParams {
 }
 
 /** `a=&b` rather than URLSearchParams' `a=&b=`: a door with no value is a bare key. */
-function textOf(params: URLSearchParams): string {
+export function textOf(params: URLSearchParams): string {
   return params.toString().replace(/=(?=&|$)/g, '');
 }
 

@@ -408,24 +408,14 @@ function setSeeThrough(on: boolean): void {
   }
 }
 
-/** Whether the main menu has its DEBUG tile: the trainer card's DEBUG MENU, off unless
- *  this browser turned it on. */
-const DEBUG_MENU_KEY = 'hbr-debug-menu';
-
+/** Whether the main menu has its DEBUG tile: the trainer card's DEBUG MENU, which
+ *  debug.ts's toggleDebugMenu sets. Not imported from there: debug.ts would come into
+ *  main.js with it. */
 function debugMenuOn(): boolean {
   try {
-    return localStorage.getItem(DEBUG_MENU_KEY) === '1';
+    return localStorage.getItem('hbr-debug-menu') === '1';
   } catch {
     return false;
-  }
-}
-
-function setDebugMenu(on: boolean): void {
-  try {
-    if (on) localStorage.setItem(DEBUG_MENU_KEY, '1');
-    else localStorage.removeItem(DEBUG_MENU_KEY);
-  } catch {
-    // A browser that keeps nothing keeps the default.
   }
 }
 
@@ -4132,7 +4122,8 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
           stage.push(myStats);
           return;
         case 'debugmenu':
-          setDebugMenu(!debugMenuOn());
+          // From the trainer card, which is the profile chunk's: it is here.
+          profileUi?.toggleDebugMenu(localStorage);
           redraw();
           return;
         case 'debug':
@@ -4322,22 +4313,7 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
     /** DEBUG (Cam, 2026-10-27: "a main menu option rather than manually editing the
      *  url"): each row steps one hash flag, so the URL says what was picked and a link
      *  with it still works. */
-    const debug = profileScreen((ui) => ui.debugScreen(() => ({
-      hash: location.hash,
-      pace: paceOptions(),
-      dev: import.meta.env.DEV,
-      onSet: (hash, reload) => {
-        history.replaceState(null, '', `#${hash}`);
-        if (reload) location.reload();
-        else redraw();
-      },
-      onFresh: () => {
-        history.replaceState(null, '', '#fresh');
-        location.reload();
-      },
-      onSpikeB: () => location.assign(`${import.meta.env.BASE_URL}spike-b/`),
-      onBack: () => stage.pop(),
-    })));
+    const debug = profileScreen((ui) => ui.debugScreen(paceOptions, redraw, () => stage.pop()));
     const lobbies = menuScreen(() => ({
       title: 'LOBBIES',
       rows: roomRows(rooms).map(row),
