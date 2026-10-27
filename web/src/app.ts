@@ -4524,7 +4524,7 @@ function wirePhoneHud(
   touch: TouchLayer,
   rom: Uint8Array | null,
 ): void {
-  const { BAG_POSITION_POCKET, BattleMenu, PadPrefsControl, PhoneHud, battleWantsNoPad, inBattle, readBattleBag, readBattleView, readHudView } = ui;
+  const { BAG_POSITION_POCKET, BattleMenu, MovesWindow, OffField, PadPrefsControl, PhoneHud, battleWantsNoPad, inBattle, readBattleBag, readBattleView, readFieldMoves, readHudView } = ui;
   const top = $('#hud') as HTMLElement;
   const pad = $('#pad') as HTMLElement;
   const root = $('#screen-playing') as HTMLElement;
@@ -4541,6 +4541,11 @@ function wirePhoneHud(
     onUse: (item) => touch.useOnField(item),
   });
   ($('#hud-menu') as HTMLButtonElement).addEventListener('click', () => openSheet(!sheetOpen));
+  // A computer's field moves (HBR-78): the phone's are in the HUD, which a computer hides.
+  const deskMoves = new MovesWindow($('#moves') as HTMLElement);
+  const deskOff = new OffField();
+  const mainBase = symbols.get('gMain');
+  const overworld = symbols.get('CB2_Overworld');
   const menuRoot = $('#battle-menu') as HTMLElement;
   const tables = rom ? { bytes: rom, sym: (n: string) => symbols.get(n) } : null;
   const battle = new BattleMenu({
@@ -4572,6 +4577,7 @@ function wirePhoneHud(
     battle.setScale(s);
     // Right under the picture, where field.ts put it.
     const lay = measureLayout(wrap, pad, liveAbove());
+    deskMoves.setScale(lay.scale);
     const top = Math.round((lay.lcdRow + GBA_H) * lay.scale + 4 * s);
     menuRoot.style.top = `${top}px`;
     // ...and what the box (which clips it) has left under that, past the home bar (the
@@ -4631,6 +4637,12 @@ function wirePhoneHud(
     }
     const noPad = shown && battleWantsNoPad(emu, (n) => symbols.get(n), tables);
     if (noPad !== padOff) document.body.classList.toggle('battle-no-pad', (padOff = noPad));
+    if (computer?.matches) {
+      // As the phone's HUD steps aside: after OFF_FIELD_GRACE frames off the field, so a
+      // door's map load does not blink it.
+      const away = deskOff.step(mainBase !== undefined && overworld !== undefined && (emu.read(mainBase + MAIN_CALLBACK2, 32) & ~1) === overworld);
+      deskMoves.update(document.body.classList.contains('in-match') && !away ? readFieldMoves(emu, (n) => symbols.get(n)) : []);
+    }
     if (!shown) {
       hudOff();
       return;

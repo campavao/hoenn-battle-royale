@@ -41,6 +41,7 @@ import engageH from '../../include/br/br_engage.h?raw';
 import lootH from '../../include/br/br_loot.h?raw';
 import menuH from '../../include/br/br_menu.h?raw';
 import levelsH from '../../include/br/br_levels.h?raw';
+import hmH from '../../include/br/br_hm.h?raw';
 import startMenuC from '../../src/start_menu.c?raw';
 import popupC from '../../src/map_name_popup.c?raw';
 import levelsC from '../../src/br/br_levels.c?raw';
@@ -538,6 +539,10 @@ describe("the BR structs the page reads at an offset", () => {
     expect(phone.RING_PLACE_MAX).toBe(define(ringH, 'BR_RING_PLACE_MAX'));
     expect(phone.LEVELS_ROD).toBe(layout(levelsH, 'BrLevels').at.rod);
     expect(phone.HUD_FOG_FRAMES).toBe(layout(hudH, 'BrHud').at.fogFrames);
+    const hm = layout(hmH, 'BrHmView').at;
+    expect([phone.HM_CAN, phone.HM_READY]).toEqual([hm.can, hm.ready]);
+    const hmBit = (n: string) => Number(new RegExp(`#define\\s+BR_HM_${n}\\s+\\(1 << (\\d+)\\)`).exec(hmH)![1]);
+    expect(phone.fieldMoves(0xff, 0).map((m) => m.hm)).toEqual(['CUT', 'FLY', 'SURF', 'STRENGTH', 'WATERFALL', 'DIVE'].map(hmBit));
     const list = /enum\s*\{([\s\S]*?)\};/.exec(itemsH)![1].replace(/\/\/.*$/gm, '');
     const ids = list.split(',').map((x) => x.trim()).filter(Boolean);
     expect([phone.ITEM_MACH_BIKE, phone.ITEM_ACRO_BIKE, phone.ITEM_POKE_BALL, phone.ITEM_TOWN_MAP]).toEqual(
