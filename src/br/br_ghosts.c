@@ -101,6 +101,8 @@ static bool8 OnCurrentMap(const struct BrSeat *s)
         && s->mapNum == gSaveBlock1Ptr->location.mapNum;
 }
 
+static void DropBlobOf(u8 objId);
+
 static struct ObjectEvent *GhostObject(u8 seat)
 {
     struct BrSeat *s = &gBrSeats[seat];
@@ -112,6 +114,11 @@ static struct ObjectEvent *GhostObject(u8 seat)
     // A map load wipes the object table under us; the local id is the proof it is still ours.
     if (!obj->active || obj->localId != BR_GHOST_LOCAL_ID_BASE + seat)
     {
+        // ...and the camera's cull (RemoveObjectEventsOutsideView) takes the object off
+        // before we hear it left the view, but not the SURF blob it rode: that floated on
+        // the sea, and the ghost's next spawn got a second (Cam's 10-27 play-test).
+        if (s->objId != gPlayerAvatar.objectEventId)
+            DropBlobOf(s->objId);
         s->objId = BR_NO_OBJ;
         return NULL;
     }
@@ -345,16 +352,21 @@ static struct Sprite *SurfBlob(u8 objId)
     return NULL;
 }
 
+static void DropBlobOf(u8 objId)
+{
+    struct Sprite *blob = SurfBlob(objId);
+
+    if (blob != NULL)
+        DestroySprite(blob);
+}
+
 static void DropBlob(u8 seat)
 {
     struct ObjectEvent *obj = GhostObject(seat);
-    struct Sprite *blob;
 
     if (obj == NULL)
         return;
-    blob = SurfBlob(gBrSeats[seat].objId);
-    if (blob != NULL)
-        DestroySprite(blob);
+    DropBlobOf(gBrSeats[seat].objId);
     gSprites[obj->spriteId].y2 = 0;
 }
 
