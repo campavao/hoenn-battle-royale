@@ -22,6 +22,8 @@ export class Speaker {
   private paused = true;
   /** When the ring last had sound, or the speaker last unpaused. */
   private soundAt = 0;
+  /** When the worklet last ticked: one whose process() never runs sends none at all. */
+  private tickAt = 0;
   /** No sound for STARVED_MS while it should have had some: warned once. */
   starved = false;
 
@@ -31,17 +33,30 @@ export class Speaker {
   ) {
     // Ticks stop while a context is suspended: the wait for sound starts when it runs.
     context.addEventListener('statechange', () => {
-      if (context.state === 'running') this.soundAt = performance.now();
+      if (context.state === 'running') this.soundAt = this.tickAt = performance.now();
     });
     node.port.onmessage = (e: MessageEvent<SpeakerTick>) => {
       const now = performance.now();
+      this.tickAt = now;
       if (e.data.played > 0) this.soundAt = now;
-      else if (!this.paused && !this.starved && this.context.state === 'running' && now - this.soundAt > STARVED_MS) {
-        this.starved = true;
-        console.warn('hbr: the speaker has had no sound from the core for 2 s');
-      }
+      else this.checkStarved(now - this.soundAt);
       for (const l of this.listeners) l(e.data);
     };
+    // No tick at all is no sound too, and nothing else would say so.
+    setInterval(() => {
+      if (this.checkStarved(performance.now() - this.tickAt)) {
+        const silent: SpeakerTick = { frames: 0, played: 0, late: false, cut: false, skipped: 0, heard: false, dropped: 0 };
+        for (const l of this.listeners) l(silent);
+      }
+    }, 1000);
+  }
+
+  /** Whether `quietMs` without sound, now, made the speaker starved (once). */
+  private checkStarved(quietMs: number): boolean {
+    if (this.paused || this.starved || this.context.state !== 'running' || quietMs <= STARVED_MS) return false;
+    this.starved = true;
+    console.warn('hbr: the speaker has had no sound from the core for 2 s');
+    return true;
   }
 
   /** The core's speaker on a worklet, or null where it cannot be: an older core, a
@@ -89,7 +104,7 @@ export class Speaker {
    *  again after. It starts paused: no game yet. */
   pause(paused: boolean): void {
     this.paused = paused;
-    if (!paused) this.soundAt = performance.now();
+    if (!paused) this.soundAt = this.tickAt = performance.now();
     this.node.port.postMessage({ paused } satisfies SpeakerMessage);
   }
 
