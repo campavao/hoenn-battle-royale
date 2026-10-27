@@ -35,6 +35,12 @@ export interface AudioTick {
   late: boolean;
   cut: boolean;
   state: AudioContextState;
+  /** The worklet speaker (HBR-59): frames of stale sound it jumped over... */
+  skipped?: number;
+  /** ...whether any of the buffer was not silence... */
+  heard?: boolean;
+  /** ...and whether it has gone 2 s with no sound from the core while it should have. */
+  starved?: boolean;
 }
 
 /** What a meter listens to (Emulator.onAudio). */
@@ -114,6 +120,13 @@ export interface AudioStats {
   /** The longest wait between two callbacks, ms: past two buffers, one was missed. */
   maxGapMs: number;
   bufferMs: number;
+  /** Frames of stale sound the worklet jumped over: a skip the player hears. */
+  skipped: number;
+  /** Buffers with any sound in them (the worklet's; SDL's count none). */
+  heard: number;
+  /** The worklet speaker went 2 s without sound from the core while it should have had
+   *  some: the game is mute. Stays once set. */
+  starved: boolean;
   /** The context's state at the last callback; 'none' before any. A suspended context
    *  runs no callbacks at all (SDL feeds it from a timer), so 0 late means nothing then. */
   state: AudioContextState | 'none';
@@ -125,6 +138,9 @@ export class AudioMeter {
   private callbacks = 0;
   private late = 0;
   private cut = 0;
+  private skipped = 0;
+  private heard = 0;
+  private starved = false;
   private maxGap = 0;
   private lastAt: number | null = null;
   private bufferMs = 0;
@@ -135,6 +151,9 @@ export class AudioMeter {
       this.callbacks++;
       if (tick.late) this.late++;
       if (tick.cut) this.cut++;
+      this.skipped += tick.skipped ?? 0;
+      if (tick.heard) this.heard++;
+      if (tick.starved) this.starved = true;
       if (this.lastAt !== null) this.maxGap = Math.max(this.maxGap, tick.at - this.lastAt);
       this.lastAt = tick.at;
       this.bufferMs = tick.bufferMs;
@@ -148,6 +167,9 @@ export class AudioMeter {
       callbacks: this.callbacks,
       late: this.late,
       cut: this.cut,
+      skipped: this.skipped,
+      heard: this.heard,
+      starved: this.starved,
       maxGapMs: this.maxGap,
       bufferMs: this.bufferMs,
       state: this.state,
@@ -156,6 +178,8 @@ export class AudioMeter {
       this.callbacks = 0;
       this.late = 0;
       this.cut = 0;
+      this.skipped = 0;
+      this.heard = 0;
       this.maxGap = 0;
     }
     return out;

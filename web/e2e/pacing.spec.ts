@@ -21,8 +21,8 @@ const OUT_DIR = path.resolve(__dirname, 'out');
 
 type HbrWindow = {
   __hbr: {
-    emu: { read(a: number, w: 8 | 16 | 32): number; holdLead(n: number): () => void; onFrame(l: () => void): () => void; lostWrites: number };
-    perf(): { sample(reset?: boolean): { frames: { fps: number; p95: number; work: { mean: number } }; audio: { callbacks: number; late: number; cut: number; state: string } } };
+    emu: { read(a: number, w: 8 | 16 | 32): number; setVolume(v: number): void; holdLead(n: number): () => void; onFrame(l: () => void): () => void; lostWrites: number };
+    perf(): { sample(reset?: boolean): { frames: { fps: number; p95: number; work: { mean: number } }; audio: { callbacks: number; late: number; cut: number; skipped: number; heard: number; starved: boolean; state: string } } };
   };
   __busyMs: number;
   __rafs: number;
@@ -70,7 +70,7 @@ function busyMainThread(): void {
 }
 
 type Case = (typeof CASES)[number];
-async function measure(page: Page, counter: number, c: Case): Promise<Case & { rom: number; emu: number; p95: number; work: number; raf: number; lost: number; audio: { callbacks: number; late: number; cut: number; state: string } }> {
+async function measure(page: Page, counter: number, c: Case): Promise<Case & { rom: number; emu: number; p95: number; work: number; raf: number; lost: number; audio: { callbacks: number; late: number; cut: number; skipped: number; heard: number; starved: boolean; state: string } }> {
   return page.evaluate(
     async ([a, ms, c]) => {
       const w = window as unknown as HbrWindow;
@@ -122,9 +122,25 @@ test('a busy phone page does not slow the game', async ({ browser }) => {
     for (const c of CASES) {
       const r = await measure(page, counter, c);
       const how = `${c.lead ? `, lead ${c.lead}` : ''}${c.listener ? `, listeners ${c.listener} ms` : ''}`;
-      console.log(`busy ${c.busy} ms a rAF${how}: rom ${r.rom.toFixed(1)} fps, emulator ${r.emu.toFixed(1)} fps, frame p95 ${r.p95.toFixed(1)} ms, page work ${r.work.toFixed(2)} ms, rAF ${r.raf.toFixed(1)}/s, writes lost ${r.lost}, audio ${r.audio.callbacks} buffers ${r.audio.late} late ${r.audio.cut} cut (${r.audio.state})`);
+      console.log(`busy ${c.busy} ms a rAF${how}: rom ${r.rom.toFixed(1)} fps, emulator ${r.emu.toFixed(1)} fps, frame p95 ${r.p95.toFixed(1)} ms, page work ${r.work.toFixed(2)} ms, rAF ${r.raf.toFixed(1)}/s, writes lost ${r.lost}, audio ${r.audio.callbacks} buffers ${r.audio.late} late ${r.audio.cut} cut ${r.audio.skipped} skipped ${r.audio.heard} heard (${r.audio.state})`);
       runs.push(r);
     }
+    // The volume is the core's own mix, so the worklet hears it: at 0, nothing but silence.
+    // Last, since it leaves the game muted.
+    const heardAt = (volume: number) =>
+      page.evaluate(async (v) => {
+        const w = window as unknown as HbrWindow;
+        w.__hbr.emu.setVolume(v);
+        await new Promise((r) => setTimeout(r, 500));
+        const probe = w.__hbr.perf();
+        await new Promise((r) => setTimeout(r, 1500));
+        const a = probe.sample().audio;
+        return a;
+      }, volume);
+    const muted = await heardAt(0);
+    console.log(`volume 0: ${muted.callbacks} buffers, ${muted.heard} with sound`);
+    expect(muted.callbacks, 'the speaker kept playing at volume 0').toBeGreaterThan(20);
+    expect(muted.heard, 'volume 0 is silence').toBe(0);
     fs.writeFileSync(path.join(OUT_DIR, 'pacing.json'), `${JSON.stringify(runs, null, 2)}\n`);
     // The page drains the ROM's messages less often when it sees fewer frames: none lost.
     expect(await dropped(), 'no message the ROM sent was dropped').toBe(droppedBefore);
@@ -134,6 +150,8 @@ test('a busy phone page does not slow the game', async ({ browser }) => {
       expect(r.audio.state, 'the AudioContext is running').toBe('running');
       // One at most: the speaker's first lead can land just past a window's start.
       expect(r.audio.late, `the speaker never ran dry with ${how}`).toBeLessThanOrEqual(1);
+      expect(r.audio.skipped, `the speaker jumped over no sound with ${how}`).toBe(0);
+      expect(r.audio.starved, 'the speaker is not mute').toBe(false);
     }
   } finally {
     await ctx.close();

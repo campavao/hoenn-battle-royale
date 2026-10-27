@@ -24,7 +24,12 @@ export interface Played {
   frames: number;
   /** The ring ran dry while playing: the speaker heard a gap. */
   under: boolean;
+  /** Frames of stale sound jumped over: a ring that filled while nobody played it. */
+  skipped: number;
 }
+
+/** Leads of sound in the ring past which the reader skips to the newest one. */
+export const SKIP_LEADS = 3;
 
 /** Reads the ring. `header` is the u32 view at the ring's address, `samples` the s16 view
  *  just past the header. */
@@ -50,12 +55,15 @@ export class RingReader {
       if (paused) this.playing = false;
       left.fill(0);
       right.fill(0);
-      return { frames: 0, under: false };
+      return { frames: 0, under: false, skipped: 0 };
     }
     // Far past the lead -- a context that was suspended while the core ran on, or a
-    // ring the core filled while nobody played it: the newest lead of it, not a second
-    // of stale sound.
-    if (fill > 2 * lead || fill > RING_FRAMES) {
+    // ring the core filled while nobody played it: the newest lead of it, not stale
+    // sound. Past the core's own bursts: four frames of catch-up on top of the lead
+    // stay under it.
+    let skipped = 0;
+    if (fill > SKIP_LEADS * lead || fill > RING_FRAMES) {
+      skipped = fill - lead;
       read = (write - lead) >>> 0;
       fill = lead;
     }
@@ -71,7 +79,7 @@ export class RingReader {
     Atomics.store(this.header, RING_READ, (read + n) >>> 0);
     const under = n < want;
     if (under) this.playing = false;
-    return { frames: n, under };
+    return { frames: n, under, skipped };
   }
 }
 
@@ -114,10 +122,16 @@ export class CutDetector {
 export interface SpeakerTick {
   /** Frames of the tick, played or silent. */
   frames: number;
+  /** ...and of those, the ones the ring had sound for. */
+  played: number;
   /** A quantum in it ran the ring dry. */
   late: boolean;
   /** Sound stopped dead in it. */
   cut: boolean;
+  /** Frames of stale sound jumped over in it. */
+  skipped: number;
+  /** Any sample in it was not silence: the core's own mix, so volume 0 is never heard. */
+  heard: boolean;
   /** The core's dropped count, when the tick was made. */
   dropped: number;
 }

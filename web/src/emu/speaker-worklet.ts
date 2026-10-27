@@ -13,9 +13,10 @@ export type SpeakerMessage = { memory: SharedArrayBuffer; ring: number } | { pau
 class Speaker extends AudioWorkletProcessor {
   private reader: RingReader | null = null;
   private header: Uint32Array | null = null;
-  private paused = false;
+  /** Until the page says a game is running (Emulator.boot). */
+  private paused = true;
   private readonly cuts = new CutDetector();
-  private tick: SpeakerTick = { frames: 0, late: false, cut: false, dropped: 0 };
+  private tick: SpeakerTick = Speaker.empty();
   private quanta = 0;
 
   constructor() {
@@ -31,6 +32,10 @@ class Speaker extends AudioWorkletProcessor {
     };
   }
 
+  private static empty(): SpeakerTick {
+    return { frames: 0, played: 0, late: false, cut: false, skipped: 0, heard: false, dropped: 0 };
+  }
+
   process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
     const out = outputs[0];
     if (!out?.length || !this.reader || !this.header) return true;
@@ -41,12 +46,15 @@ class Speaker extends AudioWorkletProcessor {
     // Paused, the game makes no sound and nobody is listening for it.
     if (this.paused) return true;
     this.tick.frames += left.length;
+    this.tick.played += played.frames;
     if (played.under) this.tick.late = true;
+    this.tick.skipped += played.skipped;
     if (this.cuts.feed(left, right)) this.tick.cut = true;
+    if (!this.tick.heard) for (let i = 0; i < left.length && !this.tick.heard; i++) this.tick.heard = left[i] !== 0 || right[i] !== 0;
     if (++this.quanta >= TICK_QUANTA) {
       this.tick.dropped = this.header[RING_DROPPED];
       this.port.postMessage(this.tick);
-      this.tick = { frames: 0, late: false, cut: false, dropped: 0 };
+      this.tick = Speaker.empty();
       this.quanta = 0;
     }
     return true;

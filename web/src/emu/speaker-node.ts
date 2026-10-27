@@ -13,45 +13,70 @@ export interface SpeakerCore {
   HEAPU8: Uint8Array;
 }
 
+/** With the context running and a game unpaused, this long with no sound out of the
+ *  ring is a speaker that will not play: say so (the audio meter's `starved`). */
+const STARVED_MS = 2000;
+
 export class Speaker {
   private listeners = new Set<(tick: SpeakerTick) => void>();
+  private paused = true;
+  /** When the ring last had sound, or the speaker last unpaused. */
+  private soundAt = 0;
+  /** No sound for STARVED_MS while it should have had some: warned once. */
+  starved = false;
 
   private constructor(
     readonly context: AudioContext,
     private readonly node: AudioWorkletNode,
   ) {
+    // Ticks stop while a context is suspended: the wait for sound starts when it runs.
+    context.addEventListener('statechange', () => {
+      if (context.state === 'running') this.soundAt = performance.now();
+    });
     node.port.onmessage = (e: MessageEvent<SpeakerTick>) => {
+      const now = performance.now();
+      if (e.data.played > 0) this.soundAt = now;
+      else if (!this.paused && !this.starved && this.context.state === 'running' && now - this.soundAt > STARVED_MS) {
+        this.starved = true;
+        console.warn('hbr: the speaker has had no sound from the core for 2 s');
+      }
       for (const l of this.listeners) l(e.data);
     };
   }
 
   /** The core's speaker on a worklet, or null where it cannot be: an older core, a
-   *  browser without AudioWorklet, or memory that is not shared. Must run before the
-   *  core's first loadGame, which is when the core opens SDL's audio otherwise. */
+   *  browser without AudioWorklet, memory that is not shared, or a worklet that would not
+   *  take it. Must run before the core's first loadGame. The core is told to leave SDL's
+   *  audio closed only once the worklet holds the ring, so on any failure SDL plays. */
   static async open(core: SpeakerCore): Promise<Speaker | null> {
     if (!core._brAudioWorkletAt || typeof AudioWorkletNode === 'undefined') return null;
     const memory = core.HEAPU8.buffer;
     if (typeof SharedArrayBuffer === 'undefined' || !(memory instanceof SharedArrayBuffer)) return null;
-    let context: AudioContext;
+    let context: AudioContext | null = null;
     try {
       context = new AudioContext({ latencyHint: 'interactive' });
       await context.audioWorklet.addModule(workletUrl);
-    } catch {
+      const node = new AudioWorkletNode(context, 'hbr-speaker', { numberOfInputs: 0, outputChannelCount: [2] });
+      // The ring's address, with nothing switched yet (a rate of 0).
+      node.port.postMessage({ memory, ring: core._brAudioWorkletAt(0) } satisfies SpeakerMessage);
+      node.connect(context.destination);
+      core._brAudioWorkletAt(context.sampleRate);
+      const speaker = new Speaker(context, node);
+      speaker.resumeOnGesture();
+      return speaker;
+    } catch (err) {
+      console.warn('hbr: no AudioWorklet speaker, SDL plays instead', err);
+      void context?.close().catch(() => {});
       return null;
     }
-    const node = new AudioWorkletNode(context, 'hbr-speaker', { numberOfInputs: 0, outputChannelCount: [2] });
-    node.connect(context.destination);
-    const ring = core._brAudioWorkletAt(context.sampleRate);
-    node.port.postMessage({ memory, ring } satisfies SpeakerMessage);
-    const speaker = new Speaker(context, node);
-    speaker.resumeOnGesture();
-    return speaker;
   }
 
-  /** A browser starts an AudioContext suspended until the player touches the page. */
+  /** A browser starts an AudioContext suspended until the player touches the page, and
+   *  iOS interrupts one for a call or another app's sound. */
   private resumeOnGesture(): void {
     const resume = () => {
-      if (this.context.state !== 'suspended') return;
+      const state: string = this.context.state;
+      if (state !== 'suspended' && state !== 'interrupted') return;
       void this.context.resume().catch(() => {});
     };
     for (const type of ['pointerdown', 'keydown', 'touchend'] as const) {
@@ -61,8 +86,10 @@ export class Speaker {
   }
 
   /** Paused, the worklet plays silence and counts nothing, and waits for a lead of sound
-   *  again after. */
+   *  again after. It starts paused: no game yet. */
   pause(paused: boolean): void {
+    this.paused = paused;
+    if (!paused) this.soundAt = performance.now();
     this.node.port.postMessage({ paused } satisfies SpeakerMessage);
   }
 

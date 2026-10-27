@@ -26,10 +26,10 @@ describe('the speaker reading the core\'s sound ring (HBR-59)', () => {
     const { reader, write } = ring(256);
     const [l, r] = quantum();
     write(200);
-    expect(reader.play(l, r, false)).toEqual({ frames: 0, under: false });
+    expect(reader.play(l, r, false)).toEqual({ frames: 0, under: false, skipped: 0 });
     expect(l.every((v) => v === 0)).toBe(true);
     write(100);
-    expect(reader.play(l, r, false)).toEqual({ frames: 128, under: false });
+    expect(reader.play(l, r, false)).toEqual({ frames: 128, under: false, skipped: 0 });
     expect(l[0]).toBe(0.5);
     expect(r[127]).toBe(0.5);
   });
@@ -39,11 +39,18 @@ describe('the speaker reading the core\'s sound ring (HBR-59)', () => {
     const [l, r] = quantum();
     write(200);
     reader.play(l, r, false);
-    expect(reader.play(l, r, false)).toEqual({ frames: 72, under: true });
+    expect(reader.play(l, r, false)).toEqual({ frames: 72, under: true, skipped: 0 });
     expect(l[71]).toBe(0.5);
     expect(l[72]).toBe(0);
     write(100);
     expect(reader.play(l, r, false).frames).toBe(0);
+  });
+
+  it('rides out a burst of the core\'s catch-up without skipping', () => {
+    const { reader, write } = ring(256);
+    const [l, r] = quantum();
+    write(256 + 4 * 128);
+    expect(reader.play(l, r, false).skipped).toBe(0);
   });
 
   it('skips to the newest lead when the ring filled while nobody played it', () => {
@@ -51,7 +58,7 @@ describe('the speaker reading the core\'s sound ring (HBR-59)', () => {
     const [l, r] = quantum();
     write(1000, 1000);
     write(256, 16384);
-    reader.play(l, r, false);
+    expect(reader.play(l, r, false)).toEqual({ frames: 128, under: false, skipped: 1000 });
     expect(l[0]).toBe(0.5);
     expect(header[RING_READ]).toBe(1000 + 128);
   });
@@ -61,7 +68,7 @@ describe('the speaker reading the core\'s sound ring (HBR-59)', () => {
     const [l, r] = quantum();
     write(300);
     reader.play(l, r, false);
-    expect(reader.play(l, r, true)).toEqual({ frames: 0, under: false });
+    expect(reader.play(l, r, true)).toEqual({ frames: 0, under: false, skipped: 0 });
     expect(header[RING_READ]).toBe(128);
     expect(reader.play(l, r, false).frames).toBe(0);
     write(100);

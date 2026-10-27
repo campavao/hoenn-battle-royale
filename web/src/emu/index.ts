@@ -262,7 +262,16 @@ export class Emulator {
   private useSpeaker(speaker: Speaker | null): void {
     this.speaker = speaker;
     speaker?.onTick((t) => {
-      const tick: AudioTick = { at: performance.now(), bufferMs: (t.frames * 1000) / speaker.context.sampleRate, late: t.late, cut: t.cut, state: speaker.context.state };
+      const tick: AudioTick = {
+        at: performance.now(),
+        bufferMs: (t.frames * 1000) / speaker.context.sampleRate,
+        late: t.late,
+        cut: t.cut,
+        state: speaker.context.state,
+        skipped: t.skipped,
+        heard: t.heard,
+        starved: speaker.starved,
+      };
       for (const l of this.audioListeners) l(tick);
     });
   }
