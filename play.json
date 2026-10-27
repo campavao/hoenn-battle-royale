@@ -1,12 +1,12 @@
 {
- "readAt": "2026-10-27T03:58:14.604Z",
+ "readAt": "2026-10-27T04:37:16.049Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "H3GR3W",
    "at": "2026-10-27T03:34:03.162Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-10-27T03:58:30.183Z",
+   "secs": 1467,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -25,7 +25,6 @@
      "secs": 1353
     }
    ],
-   "live": true,
    "exact": true
   },
   {
