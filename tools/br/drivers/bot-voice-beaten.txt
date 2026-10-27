@@ -45,6 +45,10 @@ shot intro-line
 # FIGHT, POUND: one hit, "<PLAYER> defeated PKMN TRAINER BOT!", and its line. The
 # bot's TREECKO is Lv. 2, slower than ours, so it never moves first: at the same level the
 # speed tie went either way by build (agbcc and modern), and so did the line count.
+# The rolls are pinned too: a published fight's generator no longer turns on the frame
+# (HBR-63), so this is the turn's seed whatever came before it, and its POUND is no
+# critical hit.
+poke u32 gRngValue 0
 tap A
 wait 50
 tap A

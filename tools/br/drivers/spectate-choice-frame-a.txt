@@ -1,0 +1,32 @@
+# spectate-choice-frame-a: a published fight's opponent chooses from a stream stirred with
+# the frame count (HBR-63 review). The choice cannot draw on the battle's generator -- its
+# replay rolls nothing for it -- and Random2's state alone starts at 0 on every boot and
+# moves only with the animations, so every fresh session's first wild POKeMON picked the
+# same move. spectate-choice-frame-a and -b are one fight at two frame counts, and the
+# wild POKeMON's first move differs between them.
+#
+# spectate-replay-wild.txt's walk onto the Route 102 patch, with gMain.vblankCounter1 set.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gMain+0x20 1000
+pokebytes gBrPatch+16 1A 00
+pokebytes gBrPatch+32 10 00
+poke u8 gBrPatch+4 1
+tap LEFT
+wait 4
+tap LEFT
+wait 600
+expect u16 gBattleTypeFlags 4
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+# the first TURN: our FIGHT and move, then the wild POKeMON's action, its move and target
+expect u16 gBrSpectate 1
+expectmsg 19 u8 10 1

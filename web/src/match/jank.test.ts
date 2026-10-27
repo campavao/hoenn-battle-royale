@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { JANK_FIELDS, jankMessage, readJank, type JankCounts } from './jank';
+import { JANK_FIELDS, jankMessage, jankVersion, readJank, type JankCounts } from './jank';
 
 const zero = (): JankCounts => Object.fromEntries(JANK_FIELDS.map((f) => [f, 0])) as JankCounts;
 
@@ -20,5 +20,15 @@ describe('jank (POK-376)', () => {
   it('wraps a u16 that rolled over, and says nothing for a quiet match', () => {
     expect(jankMessage('1', { ...zero(), watched: 0xfffe }, { ...zero(), watched: 2 })?.watched).toBe(4);
     expect(jankMessage('1', zero(), zero())).toBeNull();
+  });
+  it('names the build in a form the relay keeps (HBR-63)', () => {
+    // relay/server.js's `jank` case: /^[\w.+-]{1,16}$/, or the line says "?"
+    const kept = (v: string) => /^[\w.+-]{1,16}$/.test(v);
+    const sha1 = 'f3ae088181bf583e55daf962a92bb46f4f1d07b7';
+    expect(kept(sha1)).toBe(false);
+    expect(jankVersion(sha1, 3)).toBe('f3ae088');
+    expect(kept(jankVersion(sha1, 3))).toBe(true);
+    expect(jankVersion(undefined, 3)).toBe('3');
+    expect(jankVersion(undefined, undefined)).toBe('?');
   });
 });

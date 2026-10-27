@@ -993,6 +993,80 @@ static const u8 sText_TimesHalf[] = _("×0.5");
 static const u8 sText_TimesQuarter[] = _("×0.25");
 static const u8 sText_Times0[] = _("×0");
 
+// A link battle's slave runs no battle engine (InitLinkBtlControllers leaves its
+// gBattleMainFunc a dummy): the master's fills gBattleMons, and ours kept whatever the
+// last battle left there. The move menu read the foe's types out of it -- Cam's 10-27
+// play-test, THUNDER on an AMPHAROS said "ELECTR x1" -- and the phone's menu reads both
+// mons' names, types, moves and PP. The controllers do keep both parties and which slot
+// is out, so the parts those read are filled from there: when a slot changes, and again
+// as each menu opens, for the PP the last turn spent. Not every frame: a fill is a dozen
+// GetMonData decrypts a mon, and the agbcc build lagged its bag and party menu with them.
+// Nothing else writes these on a slave: the link controllers carry no gBattleMons. What
+// only the master's engine changes -- Transform, Conversion, Color Change, Trace, Skill
+// Swap, Mimic -- the slave never hears of, so after one it shows the party's own types,
+// ability and moves.
+static void FillFromParty(u8 battler)
+{
+    struct BattlePokemon *bm = &gBattleMons[battler];
+    struct Pokemon *mon;
+    u16 species;
+    u8 i;
+
+    if (GetBattlerSide(battler) == B_SIDE_PLAYER)
+        mon = &gPlayerParty[gBattlerPartyIndexes[battler]];
+    else
+        mon = &gEnemyParty[gBattlerPartyIndexes[battler]];
+    species = GetMonData(mon, MON_DATA_SPECIES);
+    if (species == SPECIES_NONE || species >= NUM_SPECIES)
+        return;
+    bm->species = species;
+    bm->types[0] = gSpeciesInfo[species].types[0];
+    bm->types[1] = gSpeciesInfo[species].types[1];
+    bm->ability = GetAbilityBySpecies(species, GetMonData(mon, MON_DATA_ABILITY_NUM));
+    GetMonData(mon, MON_DATA_NICKNAME, bm->nickname);
+    StringGet_Nickname(bm->nickname);
+    for (i = 0; i < MAX_MON_MOVES; i++)
+    {
+        bm->moves[i] = GetMonData(mon, MON_DATA_MOVE1 + i);
+        bm->pp[i] = GetMonData(mon, MON_DATA_PP1 + i);
+    }
+    bm->ppBonuses = GetMonData(mon, MON_DATA_PP_BONUSES);
+}
+
+static bool8 LinkSlave(void)
+{
+    return (gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_IS_MASTER)) == BATTLE_TYPE_LINK
+        && !(gBattleTypeFlags & (BATTLE_TYPE_RECORDED | BATTLE_TYPE_DOUBLE));
+}
+
+// The party slot each battler was last filled from, + 1 (0: not yet this battle), and
+// the menu up when we last looked.
+static u8 sFilledSlot[MAX_BATTLERS_COUNT];
+static u8 sFillMenu;
+
+void BrBattle_FillSlaveMons(void)
+{
+    u8 battler;
+    bool8 opened;
+
+    if (!gMain.inBattle || !LinkSlave())
+    {
+        for (battler = 0; battler < MAX_BATTLERS_COUNT; battler++)
+            sFilledSlot[battler] = 0;
+        sFillMenu = 0;
+        return;
+    }
+    opened = gBrBattle.menu != sFillMenu && (gBrBattle.menu == BR_MENU_ACTION || gBrBattle.menu == BR_MENU_MOVE);
+    sFillMenu = gBrBattle.menu;
+    for (battler = 0; battler < gBattlersCount; battler++)
+    {
+        if (!opened && sFilledSlot[battler] == gBattlerPartyIndexes[battler] + 1)
+            continue;
+        FillFromParty(battler);
+        sFilledSlot[battler] = gBattlerPartyIndexes[battler] + 1;
+    }
+}
+
 // The move's multiplier on the foe's types, in sixteenths: the type chart's rows for the
 // move's type and either of the foe's, Foresight's past the marker too, as
 // web/src/battle/movebook.ts's effectiveness() reads it for the phone.
@@ -1032,7 +1106,7 @@ bool8 BrBattle_MoveTypeLine(u16 move)
     // SEISMIC TOSS, SUPER FANG...), the two whose type is not their listed NORMAL, and a
     // foe that FORESIGHT has opened up.
     if (gBattleMoves[move].power <= 1 || move == MOVE_HIDDEN_POWER || move == MOVE_WEATHER_BALL
-     || (gBattleTypeFlags & BATTLE_TYPE_DOUBLE) || (gBattleMons[foe].status2 & STATUS2_FORESIGHT))
+     || (gBattleTypeFlags & BATTLE_TYPE_DOUBLE) || (!LinkSlave() && (gBattleMons[foe].status2 & STATUS2_FORESIGHT)))
         return FALSE;
     mul = Sixteenths(type, foe);
     if (type == TYPE_GROUND && gBattleMons[foe].ability == ABILITY_LEVITATE)

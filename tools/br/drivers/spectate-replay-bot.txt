@@ -1,0 +1,145 @@
+# spectate-replay-bot: a bot fight, fought for real and published, replays on a second
+# ROM turn for turn (HBR-63). spectate-replay-wild.txt's check on a trainer battle: the
+# bot's side is Emerald's trainer AI, which rolls for its scores and ties where the
+# replay, handed the bot's choice, rolls nothing.
+# checked-by: tools/br/replay-check.py
+#
+# bot-fight.txt's staging: seat 31's TREKO, its ghost on our map, its CHALLENGE.
+drain gBrMailbox log
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 300
+expect u8 gBrBotFight+2 1
+expect u8 gBrSpectate+4 1
+# FIGHT and the first move, turn after turn, until one side faints: A every 154 frames
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+hold A 4
+wait 150
+# the fight was fought, turn after turn, and the field is back
+expectge u16 gBrSpectate 3
