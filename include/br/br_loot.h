@@ -215,6 +215,12 @@ void BrLoot_PcInterrupted(void);
 // a pile mon would fight (and spill as ours) while its ball is still down. FALSE when the
 // out ring is full: try again next frame.
 bool8 BrLoot_SettleNow(void);
+
+// A trainer's bag box answered (br_bagmenu.h): BR_BAGMENU_POKEMON opens the swap screen on
+// the team lying in the bag under `key`, BR_BAGMENU_BAG takes it and lists what was in it.
+void BrLoot_BagChosen(u16 key, u8 choice);
+// The list closed with `left` rows of (id u16, n u8) not taken: back down as the bag.
+void BrLoot_BagListed(const u8 *rows, u8 left);
 // The box menu offers RELEASE only outside a match.
 bool8 BrLoot_PcCanRelease(void);
 // One item on the ground beside us, for anybody, and the room told: the TM a mon of ours

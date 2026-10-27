@@ -102,11 +102,11 @@ describe('reading our team out of RAM', () => {
 });
 
 describe('the team, put down where we stand', () => {
-  it("rings our own cell in the ROM's space, our keys, off the bag", () => {
+  it('puts the team in our bag, on its cell, under our keys (HBR-82)', () => {
     const world = new World([{ id: 'FIELD', group: 0, num: 9, w: 9, h: 9, section: 'S', outdoor: true, grid: '81x0', seams: [] }]);
     const loot = new Loot();
-    // Our bag, dropped on our own cell (12,12 live = 5,5 on the map).
-    loot.note({ t: 'spill', seat: ME, map: MAP, mons: [], bag: { key: (ME << 8) | 0xff, x: 12, y: 12, items: [], money: 1, name: 'CAM' } });
+    // Our bag, dropped a cell east of where we stand (13,12 live = 6,5 on the map).
+    loot.note({ t: 'spill', seat: ME, map: MAP, mons: [], bag: { key: (ME << 8) | 0xff, x: 13, y: 12, items: [], money: 1, name: 'CAM' } });
     const spill = teamSpill(ME, [{ species: 277, level: 5 }, { species: 131, level: 9 }], { map: MAP, x: 12, y: 12 }, world, 'FIELD', loot);
     expect(spill).toEqual({
       t: 'spill',
@@ -114,9 +114,20 @@ describe('the team, put down where we stand', () => {
       map: MAP,
       mons: [
         { key: ME << 8, x: 13, y: 12, species: 277, level: 5 },
-        { key: (ME << 8) | 1, x: 11, y: 12, species: 131, level: 9 },
+        { key: (ME << 8) | 1, x: 13, y: 12, species: 131, level: 9 },
       ],
     });
+  });
+
+  it("with no bag of ours down, stacks on our own cell, off somebody else's piece", () => {
+    const world = new World([{ id: 'FIELD', group: 0, num: 9, w: 9, h: 9, section: 'S', outdoor: true, grid: '81x0', seams: [] }]);
+    const loot = new Loot();
+    expect(teamSpill(ME, [{ species: 277, level: 5 }], { map: MAP, x: 12, y: 12 }, world, 'FIELD', loot)?.mons).toEqual([
+      { key: ME << 8, x: 12, y: 12, species: 277, level: 5 },
+    ]);
+    // A ball of seat 7's on our cell: the ring's next cell, east.
+    loot.note({ t: 'spill', seat: 7, map: MAP, mons: [{ key: 7 << 8, x: 12, y: 12, species: 1, level: 5 }] });
+    expect(teamSpill(ME, [{ species: 277, level: 5 }], { map: MAP, x: 12, y: 12 }, world, 'FIELD', loot)?.mons[0]).toMatchObject({ x: 13, y: 12 });
     expect(teamSpill(ME, [], { map: MAP, x: 12, y: 12 }, world, 'FIELD', loot)).toBeNull();
   });
 });
