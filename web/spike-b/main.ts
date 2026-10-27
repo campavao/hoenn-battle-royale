@@ -100,6 +100,8 @@ const FACE = { 1: 0, 2: 1, 3: 2, 4: 2 } as Record<number, number>;
 interface Actor {
   id: number;
   name: string;
+  /** The wardrobe index (SKIN_GFX): what the ROM draws this trainer as in a battle. */
+  skin: number;
   gfx: number;
   /** Position, facing and the action in flight: sim.ts's, the ROM's rules, for everyone. */
   m: Mover;
@@ -216,7 +218,8 @@ function tickActor(a: Actor): void {
   if (a === player && !a.m.action) {
     if (a.arriving) {
       a.arriving = false;
-      if (classAt(a.m.spot) === 7 && Math.random() < 0.12) startBattle('wild', null);
+      // Grass encounters wait on a real wild battle from the ROM: through the trainer
+      // path they opened as "TRAINER WILD would like to battle!" (Cam, 2026-10-27).
     }
     if (pressed.has('a')) talk();
   }
@@ -234,12 +237,13 @@ function talk(): void {
     const og = global(o.m.spot);
     return !!og && !!g && og.gx === g.gx && og.gy === g.gy;
   });
-  if (other) startBattle('trainer', other);
+  if (other) startBattle(other);
 }
 
 // ---- the battle handoff: the real ROM fights, the page waits ---------------------------
 
 const battleEl = document.getElementById('battle')!;
+document.getElementById('intro-go')!.addEventListener('click', () => document.getElementById('intro')!.remove());
 const battleNote = document.getElementById('battle-note')!;
 const gbaCanvas = document.getElementById('gba') as HTMLCanvasElement;
 let rom: RomBattles | null = null;
@@ -247,34 +251,35 @@ let artMs = 0;
 let battle: { foe: Actor | null; shownAt: number } | null = null;
 const handoff: number[] = []; // ms from the trigger to the ROM's first battle frame, and back
 
-// Emerald's internal species ids (not the dex's): what lives around Littleroot.
-const WILD = [286, 288, 290, 289]; // POOCHYENA ZIGZAGOON WURMPLE (and a LINOONE)
 function mon(species: number, level: number): PackedMon {
+  const hp = level * 3 + 10;
   return {
-    species, level, hp: 1, maxHp: 1, status: 0, moves: [{ id: 33, pp: 35, ppUps: 0 }], heldItem: 0,
+    species, level, hp, maxHp: hp, status: 0, moves: [{ id: 33, pp: 35, ppUps: 0 }], heldItem: 0,
     otId: 0, personality: (species * 2654435761) >>> 0, exp: 0, nickname: '', ot: '',
   };
 }
 
-function startBattle(kind: 'wild' | 'trainer', foe: Actor | null): void {
+function startBattle(foe: Actor): void {
   player.battling = true;
-  if (foe) {
-    foe.battling = true;
-    foe.m.facing = foe.m.moveDir = ({ 1: 2, 2: 1, 3: 4, 4: 3 } as Record<number, number>)[player.m.facing];
-  }
+  foe.battling = true;
+  foe.m.facing = foe.m.moveDir = ({ 1: 2, 2: 1, 3: 4, 4: 3 } as Record<number, number>)[player.m.facing];
   held.clear();
   battle = { foe, shownAt: performance.now() };
-  battleEl.classList.add('on');
   if (!rom) {
-    battleNote.textContent = 'The ROM is still booting (or web/public/spike-rom is missing).';
+    battleEl.classList.add('on');
+    battleNote.textContent = 'The game is still loading. Try again in a moment.';
     setTimeout(endBattle, 1500);
     return;
   }
   battleNote.textContent = '';
   const t0 = performance.now();
-  const party = kind === 'wild' ? [mon(WILD[Math.floor(Math.random() * WILD.length)], 3)] : [mon(286, 5), mon(288, 5)];
+  // POOCHYENA and ZIGZAGOON (Emerald's internal species ids, not the dex's).
+  const party = [mon(286, 5), mon(288, 5)];
   const firstFrame = rom.emu.onFrame(() => { handoff.push(performance.now() - t0); firstFrame(); });
-  void rom.fight(kind === 'wild' ? 'WILD' : foe!.name.split(' ')[0].slice(0, 7), party).then(endBattle);
+  // The page keeps the screen until the ROM's battle is up: before that the hidden ROM
+  // is still standing in its own Littleroot, which is what showed through ("teleported
+  // back to my house", Cam).
+  void rom.fight(foe.name, party, foe.skin, () => battleEl.classList.add('on')).then(endBattle);
 }
 
 function endBattle(): void {
@@ -310,9 +315,10 @@ let devW = 1, devH = 1;
 const modeBtn = document.getElementById('mode')!;
 
 function fitZoom(): number {
-  // about fifteen tiles tall, the way the whole-window build shows a desktop
-  const h = devH;
-  return Math.max(1, Math.floor(h / (TILE * 15)));
+  // The game's own view: the GBA's 15 x 10 tiles fit the window, the way the game
+  // scales its picture (portrait phones get 15 across, not 15 tall: Cam found that
+  // "more zoomed in than normal").
+  return Math.max(1, Math.floor(Math.min(devW / 15, devH / 10) / TILE));
 }
 
 function resize(): void {
@@ -585,16 +591,18 @@ function loop(now: number): void {
 
 // ---- boot -----------------------------------------------------------------------------
 
-const BOT_GFX = Object.entries(SHEETS)
-  .filter(([k, v]) => k !== '0' && v.w === 16 && v.h === 32 && v.frames >= 9)
-  .map(([k]) => Number(k));
+// The wardrobe (br_ghosts.c sSkinGraphics, career.ts SKINS): a bot wears a skin so the
+// trainer you walk up to is the trainer the ROM puts in the battle.
+const SKIN_GFX = [0, 89, 100, 105, 55, 45, 31, 32, 42, 43, 21, 22, 25, 18, 35, 47];
+const SKIN_NAME = ['BRENDAN', 'MAY', 'BRENDAN', 'MAY', 'HIKER', 'BEAUTY', 'CAMPER', 'PICNIC', 'SWIMMER', 'SWIMMER', 'EXPERT', 'EXPERT', 'POKEFAN', 'POKEFAN', 'JOEY', 'LASS'];
+const botSkin = (n: number) => 4 + (n % 12);
 
 async function boot(): Promise<void> {
   const hoenn = new WorldIndex(((await import('./data/world.json')).default as { maps: WorldMap[] }).maps);
   world = hoenn.world;
   placed = layout(hoenn.maps);
   baseStep = stepFn(world);
-  player = { id: 0, name: 'YOU', gfx: 0, m: newMover({ map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 }, DIR_SOUTH) };
+  player = { id: 0, name: 'YOU', skin: 0, gfx: 0, m: newMover({ map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 }, DIR_SOUTH) };
   actors.push(player);
   follow = player;
   // Bots all over Hoenn, so a spectator sees the whole map playing out.
@@ -610,17 +618,17 @@ async function boot(): Promise<void> {
     if (c !== 0 && c !== 7) continue;
     if (actors.some((a) => a.m.spot.map === p.m.id && a.m.spot.x === x && a.m.spot.y === y)) continue;
     // near Littleroot, a handful close enough to walk up to
-    const gfx = BOT_GFX[Math.floor(r() * BOT_GFX.length)];
+    const skin = botSkin(Math.floor(r() * 12));
     actors.push({
-      id, name: `${SHEETS[String(gfx)].name.toUpperCase()} ${id}`, gfx, m: newMover({ map: p.m.id, x, y }, 1 + Math.floor(r() * 4)),
+      id, name: SKIN_NAME[skin], skin, gfx: SKIN_GFX[skin], m: newMover({ map: p.m.id, x, y }, 1 + Math.floor(r() * 4)),
       bot: { rng: (id * 2654435761) >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1, left: 0, walk: false },
     });
     id += 1;
   }
   // three bots right next to you in Littleroot, to walk up to and battle
   for (const [x, y] of [[7, 12], [13, 13], [11, 16]]) {
-    const gfx = BOT_GFX[(id * 7) % BOT_GFX.length];
-    actors.push({ id, name: `TRAINER ${id}`, gfx, m: newMover({ map: 'MAP_LITTLEROOT_TOWN', x, y }, DIR_SOUTH), bot: { rng: id * 97 + 1, wait: 30, dir: 1, left: 0, walk: false } });
+    const skin = botSkin(id * 7);
+    actors.push({ id, name: SKIN_NAME[skin], skin, gfx: SKIN_GFX[skin], m: newMover({ map: 'MAP_LITTLEROOT_TOWN', x, y }, DIR_SOUTH), bot: { rng: id * 97 + 1, wait: 30, dir: 1, left: 0, walk: false } });
     id += 1;
   }
   let files: Awaited<ReturnType<typeof loadRom>>;

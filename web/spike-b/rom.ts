@@ -24,7 +24,7 @@ export let lastStart: { ms: number; frames: number } | null = null;
 
 export interface RomBattles {
   /** Fight `name`'s party. Resolves when the ROM is back on the field. */
-  fight(name: string, mons: PackedMon[]): Promise<void>;
+  fight(name: string, mons: PackedMon[], skin: number, onStart: () => void): Promise<void>;
   press(k: GbaKey): void;
   release(k: GbaKey): void;
   emu: Emulator;
@@ -99,18 +99,24 @@ export async function bootRom({ emu, rom, sym }: RomFiles): Promise<RomBattles> 
   emu.pause();
 
   const fightAt = sym('gBrBotFight');
+  let fights = 0;
   return {
     emu,
     press: (k) => emu.press(k),
     release: (k) => emu.release(k),
-    async fight(name, mons) {
+    async fight(name, mons, skin, onStart) {
+      const mine = ++fights;
       emu.resume();
+      // Emerald's battle loop: set once the battle screen itself runs, after the swirl
+      // that is drawn over the hidden ROM's own field.
+      const mainFunc = sym('gBattleMainFunc');
+      emu.write(mainFunc, 0, 32);
       const send = (msg: Parameters<typeof packSlot>[0]) => {
         for (const s of packSlot(msg)) box.push(s.type, s.payload);
       };
       send({ t: 'trainer', seat: FOE_SEAT, name, mons });
       await frames(emu, 10);
-      send({ t: 'place', v: PROTOCOL, seat: FOE_SEAT, map: { group: 0, num: 9 }, x: 20, y: 8, f: 1, st: 'alive' });
+      send({ t: 'place', v: PROTOCOL, seat: FOE_SEAT, map: { group: 0, num: 9 }, x: 20, y: 8, f: 1, st: 'alive', sprite: String(skin) });
       send({ t: 'challenge', seat: FOE_SEAT, opponent: ME, nonce: 0 });
       // In, then out: the bot fight's own running flag.
       const t0 = performance.now();
@@ -119,9 +125,11 @@ export async function bootRom({ emu, rom, sym }: RomFiles): Promise<RomBattles> 
       await until(emu, () => emu.read(fightAt + 2, 8) === 1, 600);
       count();
       lastStart = { ms: performance.now() - t0, frames: n };
+      await until(emu, () => emu.read(mainFunc, 32) !== 0, 600);
+      onStart();
       await until(emu, () => emu.read(fightAt + 2, 8) === 0, 60 * 60 * 10);
-      await frames(emu, 30);
-      emu.pause();
+      // Back on its field: the page takes the screen now, the ROM settles out of sight.
+      void frames(emu, 30).then(() => { if (fights === mine) emu.pause(); });
     },
   };
 }
