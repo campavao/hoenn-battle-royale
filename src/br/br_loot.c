@@ -230,41 +230,49 @@ static bool8 InView(const struct BrLootItem *it)
     return it->kind != BR_LOOT_NONE && OnCurrentMap(it) && BrField_InObjectView(it->x, it->y);
 }
 
-// In view and its cell's head: what gets an object.
-static bool8 Shown(const struct BrLootItem *it)
+// The rows that get an object, a bit a row: in view and their cell's head. Once a tick,
+// not once a question -- the agbcc build has no frame to spare (seam-midframe).
+static u8 ShownMask(void)
 {
-    return InView(it) && Head(it) == it;
+    u8 i, shown = 0;
+
+    for (i = 0; i < BR_MAX_LOOT; i++)
+        if (InView(&gBrLoot.items[i]) && Head(&gBrLoot.items[i]) == &gBrLoot.items[i])
+            shown |= 1 << i;
+    return shown;
 }
 
-// Spawned as something it no longer is: a head whose cell came unpacked, or packed.
+// Spawned as a ball or a bag it no longer is: a head whose cell came unpacked, or packed.
+// Only those two: a person or a legendary never shares a cell, and Gfx asks after both.
 static bool8 Stale(struct BrLootItem *it)
 {
     struct ObjectEvent *obj = LootObject(it);
-    u8 movement;
+    u8 want;
 
-    return obj != NULL && obj->graphicsId != Gfx(it, &movement);
+    if (obj == NULL || (obj->graphicsId != OBJ_EVENT_GFX_BIRCHS_BAG && obj->graphicsId != OBJ_EVENT_GFX_ITEM_BALL))
+        return FALSE;
+    want = (it->kind == BR_LOOT_BAG && !OneThing(it)) || Packed(it) ? OBJ_EVENT_GFX_BIRCHS_BAG
+                                                                    : OBJ_EVENT_GFX_ITEM_BALL;
+    return obj->graphicsId != want;
 }
 
 u8 BrLoot_Wanted(void)
 {
-    u8 i, n = 0;
+    u8 i, n = 0, shown = ShownMask();
 
     for (i = 0; i < BR_MAX_LOOT; i++)
-        if (Shown(&gBrLoot.items[i]))
+        if (shown & (1 << i))
             n++;
     return n;
 }
 
 // The pieces in view that get an object, as a bit a row: all of them when there is
 // room, else the `limit` nearest the middle of the view, the lower row first on a tie.
-static u8 Keep(u8 limit)
+static u8 Keep(u8 limit, u8 shown)
 {
-    u8 i, j, nearer, keep = 0, shown = 0;
+    u8 i, j, nearer, keep = 0;
     u16 d, e;
 
-    for (i = 0; i < BR_MAX_LOOT; i++)
-        if (Shown(&gBrLoot.items[i]))
-            shown |= 1 << i;
     for (i = 0; i < BR_MAX_LOOT; i++)
     {
         if (!(shown & (1 << i)))
@@ -2480,7 +2488,7 @@ void BrLoot_Init(void)
 
 void BrLoot_Tick(void)
 {
-    u8 i, count = 0, spawned = 0, ghosts, limit, keep;
+    u8 i, n, count = 0, spawned = 0, ghosts, limit, keep, shown;
 
     if (sGiveBackLen != 0)
         SendGiveBack(); // before TryTake below can put a PICKUP in front of it
@@ -2497,14 +2505,18 @@ void BrLoot_Tick(void)
     }
     BrBalls_Tick(); // this house's cache, if we just walked into one
     BrField_ShareObjects(&ghosts, &limit);
-    keep = BrLoot_Wanted() <= limit ? 0xFF : Keep(limit);
+    shown = ShownMask();
+    for (i = 0, n = 0; i < BR_MAX_LOOT; i++)
+        if (shown & (1 << i))
+            n++;
+    keep = n <= limit ? 0xFF : Keep(limit, shown);
     // Out of view, off this map or past the share: let go first, so a nearer piece has
     // the slot this frame (POK-330 #48).
     for (i = 0; i < BR_MAX_LOOT; i++)
     {
         struct BrLootItem *it = &gBrLoot.items[i];
 
-        if (it->kind != BR_LOOT_NONE && (!(Shown(it) && (keep & (1 << i))) || Stale(it)))
+        if (it->kind != BR_LOOT_NONE && (!(shown & keep & (1 << i)) || Stale(it)))
             Despawn(it);
     }
     for (i = 0; i < BR_MAX_LOOT; i++)
@@ -2514,7 +2526,7 @@ void BrLoot_Tick(void)
         if (it->kind == BR_LOOT_NONE)
             continue;
         count++;
-        if (Shown(it) && (keep & (1 << i)) && LootObject(it) == NULL)
+        if ((shown & keep & (1 << i)) && LootObject(it) == NULL)
             Spawn(it);
         if (it->objId != BR_NO_OBJ)
             spawned++;

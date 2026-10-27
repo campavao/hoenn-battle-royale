@@ -128,7 +128,8 @@ struct BrLoot
     /* 0x00 */ struct BrLootItem items[BR_MAX_LOOT]; // 160 bytes
     /* 0xA0 */ u8 count;    // rows in use, for drivers
     /* 0xA1 */ u8 spawned;  // objects on this map right now, for drivers
-    /* 0xA2 */ u8 taken;    // pieces this player has picked up, for drivers
+    /* 0xA2 */ u8 taken;    // pieces this player has picked up, for drivers and for
+                            // TakeToList, as its proof the PICKUP went
     /* 0xA3 */ u8 gone;     // beaten trainers this sweep has taken off a map, for drivers
     /* 0xA4 */ u8 freed;    // Pokemon this player has released (POK-294) and TMs their
                             // mons forgot (BrLoot_DropItem), and the low half of those
