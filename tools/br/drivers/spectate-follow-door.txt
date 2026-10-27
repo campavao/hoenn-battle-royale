@@ -1,0 +1,44 @@
+# spectate-follow-door: a watcher goes through a door with the trainer it follows, not
+# after them (Cam's 2026-10-27 play-test, HBR-69: "going from area to area ... it lags
+# behind somewhat. Should be instantaneous"). Their PLACE on the far side comes only after
+# their own door, fade and load -- about 70 frames after the STEP onto the door tile --
+# and the cut used to start there. Now the STEP onto a tile that warps whoever steps on it
+# takes us through the same warp at once, and their PLACE finds us where they come out.
+#
+# LITTLEROOT (0:9). Seat 1 below the house door at (12,15), object coords (0C,10); the
+# door is (0C,0F) and goes to the house's 1F (1:0), coming out at (0F,0F) as the boot's own
+# walk through it does.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0C 00 10 00 02 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 10
+pokebytes gBrMailbox+0x1058 14 04 01 00 00 01
+poke u16 gBrMailbox+0x0C 2
+wait 90
+expect u8 gBrSpectate+8 1
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 9
+# STEP up onto the door tile: we are through it before their PLACE says so
+pokebytes gBrMailbox+0x1098 03 0B 08 00 00 01 02 0C 00 0F 00 00 09
+poke u16 gBrMailbox+0x0C 3
+wait 40
+shot ahead
+expect u8 *gSaveBlock1Ptr+4 1
+expect u8 *gSaveBlock1Ptr+5 0
+# standing on the house's door mat, (0F,0F) less MAP_OFFSET, where they come out
+expect u16 *gSaveBlock1Ptr+0 8
+expect u16 *gSaveBlock1Ptr+2 8
+# ...and their PLACE inside, a second later, is ridden where it lands, with no cut back
+# to the town in between
+wait 30
+expect u8 *gSaveBlock1Ptr+5 0
+pokebytes gBrMailbox+0x10D8 02 0E 0B 00 00 01 01 01 00 0F 00 0F 00 02 01 01
+poke u16 gBrMailbox+0x0C 4
+wait 60
+expect u8 *gSaveBlock1Ptr+4 1
+expect u8 *gSaveBlock1Ptr+5 0
+expectge u8 gBrSpectate+9 1
+shot inside
+say spectate follow door ok

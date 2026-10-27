@@ -1,0 +1,66 @@
+# spectate-follow-door-hold: the times a watcher does NOT go through a door ahead of the
+# trainer it follows (spectate-follow-door is the time it does; review of PR #153).
+#   - a PLACE that puts their ghost on a door tile, or a turn there: nobody walked onto it
+#   - a door the match keeps shut (BrMatch_IsDoorClosed): they stay this side of it
+#   - gone ahead and their PLACE never comes: after BR_FOLLOW_AHEAD_FRAMES the cut goes
+#     back to where the roster says they are, and the ghost put on the door there does
+#     not take us through it again
+#
+# LITTLEROOT (0:9), the same seat 1 as spectate-follow-door. Brendan's house door is
+# (0C,0F) in object coords and goes to 1:0; the lab's is (0E,17) and is shut all match.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0C 00 10 00 02 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 10
+pokebytes gBrMailbox+0x1058 14 04 01 00 00 01
+poke u16 gBrMailbox+0x0C 2
+wait 90
+expect u8 gBrSpectate+8 1
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 9
+# PLACEd onto the house door: still in town
+pokebytes gBrMailbox+0x1098 02 0E 0B 00 00 01 01 00 09 0C 00 0F 00 02 01 01
+poke u16 gBrMailbox+0x0C 3
+wait 90
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 9
+# ...and turning there is held movement too, but not a walk: still in town
+pokebytes gBrMailbox+0x10D8 04 07 04 00 00 01 03 00 00
+poke u16 gBrMailbox+0x0C 4
+wait 90
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 9
+# below the lab and up onto its shut door: still in town
+pokebytes gBrMailbox+0x1118 02 0E 0B 00 00 01 01 00 09 0E 00 18 00 02 01 01
+poke u16 gBrMailbox+0x0C 5
+wait 90
+pokebytes gBrMailbox+0x1158 03 0B 08 00 00 01 02 0E 00 17 00 00 09
+poke u16 gBrMailbox+0x0C 6
+wait 90
+shot shut
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 9
+# back below the house and up through its door: ahead of them, into 1:0...
+pokebytes gBrMailbox+0x1198 02 0E 0B 00 00 01 01 00 09 0C 00 10 00 02 01 01
+poke u16 gBrMailbox+0x0C 7
+wait 90
+pokebytes gBrMailbox+0x11D8 03 0B 08 00 00 01 02 0C 00 0F 00 00 09
+poke u16 gBrMailbox+0x0C 8
+wait 40
+expect u8 *gSaveBlock1Ptr+4 1
+expect u8 *gSaveBlock1Ptr+5 0
+# ...and no PLACE comes: still inside short of the 300 frames, back in town after them
+wait 200
+expect u8 *gSaveBlock1Ptr+4 1
+expect u8 *gSaveBlock1Ptr+5 0
+wait 160
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 9
+# on the door tile there, put and not walked: no second trip
+wait 150
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 9
+shot back
+say spectate follow door hold ok
