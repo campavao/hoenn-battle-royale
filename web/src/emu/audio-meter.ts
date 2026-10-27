@@ -1,7 +1,11 @@
 // What the speaker heard (POK-247): every audio callback of the core, and which of them
 // crackled.
 //
-// There is no worklet. The core's sound is SDL2's ScriptProcessorNode, which asks the
+// Since HBR-59 the speaker is an AudioWorklet (speaker.ts), which reads the core's sound
+// ring on the audio thread and reports a tick per 1024 frames: late when the ring ran dry,
+// cut as below. What follows is the SDL2 fallback, for a browser with no AudioWorklet.
+//
+// The core's sound there is SDL2's ScriptProcessorNode, which asks the
 // MAIN thread for its next buffer -- 1024 samples at 48 kHz, about 21 ms -- so any task
 // on the page longer than that can make the speaker click, and nothing measured it. Two
 // ways a buffer goes wrong, and both are counted here:

@@ -10,6 +10,7 @@
 // files and frames, nothing about save blocks or the match.
 
 import { tapNode, type AudioTick, type SdlAudio } from './audio-meter';
+import type { Speaker } from './speaker-node';
 
 export type GbaKey = 'a' | 'b' | 'select' | 'start' | 'right' | 'left' | 'up' | 'down' | 'r' | 'l';
 
@@ -103,6 +104,9 @@ export interface CoreModule {
   _brSetFrameLead?(lead: number): void;
   /** Runs of the page's writes dropped because the game wrote those bytes first. */
   _brLostWrites?(): number;
+  /** Before loadGame: the speaker is the page's AudioWorklet at `rate` Hz (speaker-node.ts),
+   *  not SDL's. Returns the address of the sound ring it reads. */
+  _brAudioWorkletAt?(rate: number): number;
   HEAPU8: Uint8Array;
   /** SDL2's audio output, once a game's thread has opened it (audio-meter.ts). */
   SDL2?: SdlAudio;
@@ -201,6 +205,8 @@ export class Emulator {
   private audioListeners = new Set<(tick: AudioTick) => void>();
   /** The output node audio-meter.ts is listening to; SDL makes a new one every boot. */
   private tappedAudio: ScriptProcessorNode | null = null;
+  /** The core's speaker on an AudioWorklet (HBR-59), or null: SDL's, on the main thread. */
+  private speaker: Speaker | null = null;
   private halts = 0;
   /** Frames the game has run, whether or not the page saw each (HBR-59). */
   private ranFrames = 0;
@@ -245,8 +251,20 @@ export class Emulator {
     m.setCoreSettings?.({ rewindEnable: false, autoSaveStateEnable: false, restoreAutoSaveStateOnLoad: false });
     await m.FSInit();
     const emu = new Emulator(m, headless);
+    // Nobody hears a headless core. The page's own plays on the audio thread (HBR-59),
+    // set up before the first loadGame, which would otherwise open SDL's.
+    // A chunk of its own: main.js is near its budget (vite.config.ts).
+    if (!headless) emu.useSpeaker(await (await import('./speaker-node')).Speaker.open(m));
     await emu.dropLegacyPatched();
     return emu;
+  }
+
+  private useSpeaker(speaker: Speaker | null): void {
+    this.speaker = speaker;
+    speaker?.onTick((t) => {
+      const tick: AudioTick = { at: performance.now(), bufferMs: (t.frames * 1000) / speaker.context.sampleRate, late: t.late, cut: t.cut, state: speaker.context.state };
+      for (const l of this.audioListeners) l(tick);
+    });
   }
 
   /** The patched image an older shell stored in IndexedDB (POK-330 #40): gone the first
@@ -455,7 +473,10 @@ export class Emulator {
     // loadGame builds a new core, and its RAM with it: the old views point at nothing.
     this.views = null;
     this.muteOldSpeaker();
+    // No game while the old one goes and the new one starts: not a gap anybody hears.
+    this.speaker?.pause(true);
     if (!this.m.loadGame(path)) throw new Error('loadGame failed');
+    this.speaker?.pause(false);
     // The keyboard is the page's alone (bindKeyboard). Left on, SDL hears it too, through
     // mGBA's own map -- X is A there and Z is B, the page's the other way round -- so X
     // pressed A a frame after the page's B, and Z B after its A: B closing the START menu
@@ -537,6 +558,7 @@ export class Emulator {
   /** What the page writes while paused is in the game's RAM when it resumes. */
   pause(): void {
     this.m.pauseGame();
+    this.speaker?.pause(true);
     this.m._brSync?.(0);
     this.paused = true;
     this.halts++;
@@ -545,6 +567,7 @@ export class Emulator {
   resume(): void {
     this.m._brSync?.(0);
     this.m.resumeGame();
+    this.speaker?.pause(false);
     this.paused = false;
     this.quiet = false;
   }
@@ -641,7 +664,7 @@ export class Emulator {
       const ms = performance.now() - started;
       for (const l of this.workListeners) l(ms);
     }
-    if (!this.audioListeners.size) return;
+    if (!this.audioListeners.size || this.speaker) return;
     const sdl = this.m.SDL2;
     const node = sdl?.audio?.scriptProcessorNode;
     if (!node || !sdl.audioContext || node === this.tappedAudio) return;

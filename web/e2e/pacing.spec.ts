@@ -7,7 +7,10 @@
 // in series and a busy page slowed the game (at 4x throttle, 8 ms a rAF gave 44.7 fps,
 // 12 ms 38.5). Now the core gives the page a few ms and runs on. Two more cases: a tap
 // walk, which keeps the core at most 2 frames ahead (touch.ts WALK_LEAD), and a page
-// whose frame listeners themselves take 5 ms, past the core's wait, every frame.
+// whose frame listeners themselves take 5 ms, past the core's wait, every frame. The
+// speaker is an AudioWorklet reading the core's sound ring, so a busy page does not make
+// it run dry either (on SDL's ScriptProcessorNode the same cases had 1-20 late buffers in
+// 8 s).
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
@@ -19,7 +22,7 @@ const OUT_DIR = path.resolve(__dirname, 'out');
 type HbrWindow = {
   __hbr: {
     emu: { read(a: number, w: 8 | 16 | 32): number; holdLead(n: number): () => void; onFrame(l: () => void): () => void; lostWrites: number };
-    perf(): { sample(reset?: boolean): { frames: { fps: number; p95: number; work: { mean: number } } } };
+    perf(): { sample(reset?: boolean): { frames: { fps: number; p95: number; work: { mean: number } }; audio: { callbacks: number; late: number; cut: number; state: string } } };
   };
   __busyMs: number;
   __rafs: number;
@@ -67,7 +70,7 @@ function busyMainThread(): void {
 }
 
 type Case = (typeof CASES)[number];
-async function measure(page: Page, counter: number, c: Case): Promise<Case & { rom: number; emu: number; p95: number; work: number; raf: number; lost: number }> {
+async function measure(page: Page, counter: number, c: Case): Promise<Case & { rom: number; emu: number; p95: number; work: number; raf: number; lost: number; audio: { callbacks: number; late: number; cut: number; state: string } }> {
   return page.evaluate(
     async ([a, ms, c]) => {
       const w = window as unknown as HbrWindow;
@@ -89,8 +92,9 @@ async function measure(page: Page, counter: number, c: Case): Promise<Case & { r
       const l0 = w.__hbr.emu.lostWrites;
       await new Promise((r) => setTimeout(r, ms));
       const secs = (performance.now() - t0) / 1000;
-      const f = probe.sample().frames;
-      const out = { ...c, rom: (w.__hbr.emu.read(a, 32) - v0) / secs, emu: f.fps, p95: f.p95, work: f.work.mean, raf: (w.__rafs - r0) / secs, lost: w.__hbr.emu.lostWrites - l0 };
+      const sample = probe.sample();
+      const f = sample.frames;
+      const out = { ...c, rom: (w.__hbr.emu.read(a, 32) - v0) / secs, emu: f.fps, p95: f.p95, work: f.work.mean, raf: (w.__rafs - r0) / secs, lost: w.__hbr.emu.lostWrites - l0, audio: sample.audio };
       off();
       letGo();
       return out;
@@ -118,14 +122,18 @@ test('a busy phone page does not slow the game', async ({ browser }) => {
     for (const c of CASES) {
       const r = await measure(page, counter, c);
       const how = `${c.lead ? `, lead ${c.lead}` : ''}${c.listener ? `, listeners ${c.listener} ms` : ''}`;
-      console.log(`busy ${c.busy} ms a rAF${how}: rom ${r.rom.toFixed(1)} fps, emulator ${r.emu.toFixed(1)} fps, frame p95 ${r.p95.toFixed(1)} ms, page work ${r.work.toFixed(2)} ms, rAF ${r.raf.toFixed(1)}/s, writes lost ${r.lost}`);
+      console.log(`busy ${c.busy} ms a rAF${how}: rom ${r.rom.toFixed(1)} fps, emulator ${r.emu.toFixed(1)} fps, frame p95 ${r.p95.toFixed(1)} ms, page work ${r.work.toFixed(2)} ms, rAF ${r.raf.toFixed(1)}/s, writes lost ${r.lost}, audio ${r.audio.callbacks} buffers ${r.audio.late} late ${r.audio.cut} cut (${r.audio.state})`);
       runs.push(r);
     }
     fs.writeFileSync(path.join(OUT_DIR, 'pacing.json'), `${JSON.stringify(runs, null, 2)}\n`);
     // The page drains the ROM's messages less often when it sees fewer frames: none lost.
     expect(await dropped(), 'no message the ROM sent was dropped').toBe(droppedBefore);
     for (const r of runs) {
-      expect(r.rom, `the game at full speed with ${JSON.stringify({ busy: r.busy, lead: r.lead, listener: r.listener })}`).toBeGreaterThan(GBA_FPS - 2);
+      const how = JSON.stringify({ busy: r.busy, lead: r.lead, listener: r.listener });
+      expect(r.rom, `the game at full speed with ${how}`).toBeGreaterThan(GBA_FPS - 2);
+      expect(r.audio.state, 'the AudioContext is running').toBe('running');
+      // One at most: the speaker's first lead can land just past a window's start.
+      expect(r.audio.late, `the speaker never ran dry with ${how}`).toBeLessThanOrEqual(1);
     }
   } finally {
     await ctx.close();
