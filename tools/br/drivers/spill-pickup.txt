@@ -28,12 +28,16 @@ poke u16 gBrMailbox+0x0C 3
 wait 20
 expect u8 gBrLoot+0xA0 3
 # and taking one ourselves: a ball is lying on the cell we already face (south, the way
-# the warp left us), so A takes it with no walking at all.
+# the warp left us), so A takes it with no walking at all. Alone: two or more in reach
+# are a drop, and A opens its swap screen (drop-swap), so the third goes first.
+pokebytes gBrMailbox+0x10D8 0A 0B 08 00 00 01 03 00 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 4
+wait 20
 expect u8 gPlayerPartyCount 1
 tap A
 wait 30
 expect u8 gPlayerPartyCount 2
-expect u8 gBrLoot+0xA0 2
+expect u8 gBrLoot+0xA0 1
 expect u8 gBrLoot+0xA2 1
 shot took
 say spill pickup ok

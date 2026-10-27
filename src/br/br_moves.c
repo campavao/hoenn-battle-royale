@@ -144,17 +144,18 @@ void BrMoves_Forgetting(struct Pokemon *mon, u8 slot)
         BrLoot_DropItem(item);
 }
 
-// The TM waiting for the teach screen (ITEM_NONE: none), how many the bag held when it
+// The TM waiting for the teach screen, or the hold item for the GIVE one (ITEM_NONE: none), how many the bag held when it
 // was armed, the frames it has waited, and whether the party screen up now is the one
 // opened for it. The screen opens only once the bag holds one more than it did: a pickup
 // that never lands (no room, a GIVE bounced) times out instead of opening later for a
 // copy the player already had. One TM at a time; a second armed first wins the slot and
-// the earlier one just stays in the bag.
+// the earlier one just stays in the bag. A hold item off the ground waits the same way
+// for the bag's GIVE screen instead (BrMoves_HoldSoon): what it is says which screen.
 static EWRAM_DATA u16 sTeach = ITEM_NONE;
 static EWRAM_DATA u16 sTeachHad = 0;
 static EWRAM_DATA u16 sTeachAge = 0;
 static EWRAM_DATA bool8 sTeaching = FALSE;
-static EWRAM_DATA u16 sTeachItem = ITEM_NONE; // the TM the screen up now is for
+static EWRAM_DATA u16 sTeachItem = ITEM_NONE; // the TM or hold item the screen up now is for
 static EWRAM_DATA u16 sTeachCount = 0;        // and how many the bag held as it opened
 
 #define TEACH_WAIT_FRAMES (60 * 15) // a GIVE's round trip, and the found-item jingle
@@ -190,8 +191,14 @@ void BrMoves_TeachSoon(u16 item)
     sTeachAge = 0;
 }
 
-// data[0]: the TM, kept here rather than read back from gSpecialVar_ItemId, which a
-// script that took the field during the fade may have written.
+void BrMoves_HoldSoon(u16 item)
+{
+    BrMoves_TeachSoon(item);
+}
+
+// data[0]: the item, kept here rather than read back from gSpecialVar_ItemId, which a
+// script that took the field during the fade may have written. Anything but a TM is a
+// hold item, for the bag's GIVE screen rather than its TM one.
 static void Task_OpenTeach(u8 taskId)
 {
     u16 item = gTasks[taskId].data[0];
@@ -213,11 +220,16 @@ static void Task_OpenTeach(u8 taskId)
         return;
     }
     gSpecialVar_ItemId = item;
-    gItemUseCB = ItemUseCB_TMHM;
     sTeaching = TRUE;
     sTeachItem = item;
     sTeachCount = CountTotalItemQuantityInBag(item);
     CleanupOverworldWindowsAndTilemaps();
+    if (!BrMoves_IsTm(item))
+    {
+        SetMainCallback2(CB2_ChooseMonToGiveItem);
+        return;
+    }
+    gItemUseCB = ItemUseCB_TMHM;
     SetMainCallback2(CB2_ShowPartyMenuForItemUse);
 }
 
@@ -304,12 +316,12 @@ static void SayKept(u16 item)
     u8 *last = line + BR_HUD_LINE_MAX;
     u8 *p;
 
-    p = BrHud_Append(line, last, gMoveNames[ItemIdToBattleMoveId(item)]);
+    p = BrHud_Append(line, last, BrMoves_IsTm(item) ? gMoveNames[ItemIdToBattleMoveId(item)] : GetItemName(item));
     BrHud_Append(p, last, sText_WentInBag);
     BrHud_Say(line);
 }
 
-// The party screen's exit, taught or not.
+// The party screen's exit, taught or given or not.
 static void CB2_TeachDone(void)
 {
     if (sTeachItem != ITEM_NONE && CountTotalItemQuantityInBag(sTeachItem) >= sTeachCount)

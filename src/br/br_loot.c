@@ -54,6 +54,11 @@
 #include "text_window.h"
 #include "text.h"
 #include "palette.h"
+#include "pokemon_storage_system.h"
+#include "field_screen_effect.h"
+#include "field_weather.h"
+#include "map_name_popup.h"
+#include "br/br_swap.h"
 
 // The spoils box's frame: the HUD's own copy of the standard frame, in the palette
 // nothing on the field loads over -- the peek box's (br_spectate.c).
@@ -511,6 +516,7 @@ static void HandleSpillCont(const u8 *payload, u8 len)
 // PICKUP: somebody took it (or part of a bag). A bare key -- no item named -- is the
 // whole piece leaving the ground; with an item, the rest is still there.
 static bool8 HomeClaimAnswered(u16 key, u8 seat);
+static void NotePileTaken(u16 key);
 
 static void HandlePickup(const u8 *payload, u8 len)
 {
@@ -529,6 +535,7 @@ static void HandlePickup(const u8 *payload, u8 len)
     BrPatch_NoteTaken(BrWire_ReadU16(d + 1)); // ...and a patch somebody's battle started on
     BrEvent_NoteTaken(BrWire_ReadU16(d + 1), d[0]); // ...and an event's legendary, for its mark
     BrLegend_NoteTaken(BrWire_ReadU16(d + 1), d[0]); // ...and one we are fighting too
+    NotePileTaken(BrWire_ReadU16(d + 1)); // ...and one a drop's screen is showing us
     it = Find(BrWire_ReadU16(d + 1));
     if (it == NULL)
         return;
@@ -880,6 +887,277 @@ static u16 TakenSpecies(const struct BrLootItem *it)
     return BrLevels_GrowUp(&mon);
 }
 
+// A PC was opened mid-match: once the field is ours again the boxes are settled
+// (SettleBoxes), and nothing is left in them.
+static bool8 sBoxesOut;
+// The balls a drop's screen (br_swap.c) was opened on: each one's key, BR_HELD_NONE once somebody else
+// took it while the box was up, and the personality MakeTaken gave its mon, which is how
+// the box and the party are told apart from what was ours. The balls stay on the ground
+// until the box closes. IWRAM, all of it: EWRAM has no byte to spare.
+// An entry SettleBoxes has done with: no key is ever this.
+#define BR_PILE_SETTLED 0xFFFE
+static u16 sPileKey[BR_MAX_LOOT];
+static u32 sPilePersonality[BR_MAX_LOOT];
+static u8 sPileCount;
+
+// How far from us a ball can lie and still be in the pile: a spill reaches two cells
+// out from where it fell (sSpillDx), and we stand beside its edge.
+#define BR_PILE_REACH 4
+
+// A trainer's drop: a ball under a player's key, their team or one they let go of. A
+// beaten Hoenn trainer's, the match's own prizes and an event's are each taken one A at a
+// time, first come, as before.
+static bool8 InPile(const struct BrLootItem *it)
+{
+    struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
+    s16 dx = it->x - self->currentCoords.x;
+    s16 dy = it->y - self->currentCoords.y;
+
+    if (it->kind != BR_LOOT_MON || (it->key & BR_LOOT_KEY_NOBODY) || !OnCurrentMap(it))
+        return FALSE;
+    return dx >= -BR_PILE_REACH && dx <= BR_PILE_REACH && dy >= -BR_PILE_REACH && dy <= BR_PILE_REACH
+        && !BrStory_Guarded(it);
+}
+
+// The pile entry this mon came out of, or -1 for one that was ours.
+static s8 PileEntry(u32 personality)
+{
+    u8 i;
+
+    for (i = 0; i < sPileCount; i++)
+        if (sPileKey[i] != BR_PILE_SETTLED && sPilePersonality[i] == personality)
+            return i;
+    return -1;
+}
+
+// PICKUP of a ball the box is showing: somebody else has it now.
+static void NotePileTaken(u16 key)
+{
+    u8 i;
+
+    for (i = 0; i < sPileCount; i++)
+        if (sPileKey[i] == key)
+            sPileKey[i] = BR_HELD_NONE;
+}
+
+static void Task_OpenPile(u8 taskId)
+{
+    if (gPaletteFade.active)
+        return;
+    DestroyTask(taskId);
+    if (gMain.callback2 != CB2_Overworld || ScriptContext_IsEnabled())
+    {
+        // Something took the field during the fade. The balls never left the ground, and
+        // SettleBoxes takes their copies back out of the box.
+        UnlockPlayerFieldControls();
+        if (gMain.callback2 == CB2_Overworld)
+            FadeScreen(FADE_FROM_BLACK, 0);
+        return;
+    }
+    CleanupOverworldWindowsAndTilemaps();
+    SetMainCallback2(CB2_BrSwap);
+}
+
+// A on a drop's ball with another in reach: a copy of each in the PC's first box, and the
+// swap screen up. FALSE leaves the press to Take's one ball. The spoils menu's pick is one ball,
+// and Take's alone.
+static bool8 OpenPile(const struct BrLootItem *pressed)
+{
+    struct Pokemon mon;
+    u8 i, n = 0, slot = 0;
+
+    if (sBoxesOut || !InPile(pressed))
+        return FALSE; // the last box is not settled yet
+    for (i = 0; i < BR_MAX_LOOT; i++)
+        if (InPile(&gBrLoot.items[i]))
+            n++;
+    if (n < 2)
+        return FALSE;
+    sPileCount = 0;
+    // The pressed ball first, so it is on the screen it opened however many lie about.
+    for (i = 0; i <= BR_MAX_LOOT; i++)
+    {
+        const struct BrLootItem *it = i == 0 ? pressed : &gBrLoot.items[i - 1];
+
+        if ((i != 0 && it == pressed) || !InPile(it))
+            continue;
+        if (sPileCount == PARTY_SIZE)
+            break; // the screen's drop side is six, a whole team
+        while (slot < IN_BOX_COUNT && GetBoxMonDataAt(0, slot, MON_DATA_SPECIES) != SPECIES_NONE)
+            slot++;
+        if (slot == IN_BOX_COUNT)
+            break;
+        MakeTaken(&mon, it);
+        BrLevels_Settle(&mon);
+        SetBoxMonAt(0, slot, &mon.box);
+        sPileKey[sPileCount] = it->key;
+        sPilePersonality[sPileCount++] = GetMonData(&mon, MON_DATA_PERSONALITY, NULL);
+    }
+    sBoxesOut = TRUE;
+    DropHeldLine();
+    PlaySE(SE_PC_ON);
+    HideMapNamePopUpWindow();
+    LockPlayerFieldControls();
+    FadeScreen(FADE_TO_BLACK, 0);
+    CreateTask(Task_OpenPile, 10);
+    return TRUE;
+}
+
+void BrLoot_PcInterrupted(void)
+{
+    if (gBrMatch.phase != BR_PHASE_NONE)
+        sBoxesOut = TRUE;
+}
+
+MainCallback BrLoot_PcExit(MainCallback callback)
+{
+    if (gBrMatch.phase != BR_PHASE_NONE)
+        sBoxesOut = TRUE;
+    return callback;
+}
+
+bool8 BrLoot_PcCanRelease(void)
+{
+    return gBrMatch.phase == BR_PHASE_NONE;
+}
+
+// The box closed. A drop's mon now in the party leaves the ground for everybody, as one A
+// on its ball would have; one somebody else took meanwhile leaves the party instead, while
+// that leaves anybody in it. A drop's mon still in a box is still on the ground, and the
+// copy goes. What is left in the boxes was ours, and goes down beside us as released balls
+// in the spoils' order, the diagonals first, so the way out stays open: one SPILL, five at
+// most, since the party keeps one. A held item goes in the bag, or down beside them with no
+// room: the wire's row has no field for it. A full out ring tries again next frame, and
+// every step is safe to repeat. Two trainers who both withdraw one ball from the same
+// pile within a relay round trip both keep it, as two A presses on one frame always have.
+//
+// One of ours goes back into the party in place of a mon somebody else took first.
+static void SwapInOurs(struct Pokemon *slot)
+{
+    u8 b, s;
+
+    for (b = 0; b < TOTAL_BOXES_COUNT; b++)
+    {
+        for (s = 0; s < IN_BOX_COUNT; s++)
+        {
+            if (GetBoxMonDataAt(b, s, MON_DATA_SPECIES) == SPECIES_NONE
+             || PileEntry(GetBoxMonDataAt(b, s, MON_DATA_PERSONALITY)) >= 0)
+                continue;
+            BoxMonAtToMon(b, s, slot);
+            ZeroBoxMonAt(b, s);
+            return;
+        }
+    }
+}
+
+static bool8 SettleBoxes(void)
+{
+    u8 buf[4 + PARTY_SIZE * 9 + 1];
+    u8 boxAt[PARTY_SIZE], slotAt[PARTY_SIZE];
+    s16 usedX[PARTY_SIZE], usedY[PARTY_SIZE];
+    struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
+    struct BrLootItem *it;
+    u8 b, s, i, n = 0, cell = 0;
+    bool8 more = FALSE;
+    u16 len = 4;
+    s16 x, y;
+    s8 j;
+
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        if (GetMonData(&gPlayerParty[i], MON_DATA_SPECIES, NULL) == SPECIES_NONE)
+            continue;
+        j = PileEntry(GetMonData(&gPlayerParty[i], MON_DATA_PERSONALITY, NULL));
+        if (j < 0)
+            continue;
+        if (sPileKey[j] == BR_HELD_NONE)
+        {
+            ZeroMonData(&gPlayerParty[i]); // theirs: they took the ball first
+            if (CountPartyMons() == 0)
+                SwapInOurs(&gPlayerParty[i]); // and the party keeps one of ours
+        }
+        else
+        {
+            if (!BrWire_CanHold(BR_PICKUP_LEN))
+                return FALSE;
+            it = Find(sPileKey[j]);
+            if (it != NULL)
+                SendPickup(it);
+            else
+                BrLoot_SendTaken(sPileKey[j]); // let go of our table by a spill, still down
+        }
+        sPileKey[j] = BR_PILE_SETTLED;
+    }
+    CompactPartySlots();
+    CalculatePlayerPartyCount();
+    for (b = 0; b < TOTAL_BOXES_COUNT; b++)
+    {
+        for (s = 0; s < IN_BOX_COUNT; s++)
+        {
+            u16 species = GetBoxMonDataAt(b, s, MON_DATA_SPECIES);
+
+            if (species == SPECIES_NONE)
+                continue;
+            if (PileEntry(GetBoxMonDataAt(b, s, MON_DATA_PERSONALITY)) >= 0)
+            {
+                ZeroBoxMonAt(b, s); // still on the ground, or somebody else's now
+                continue;
+            }
+            if (n == PARTY_SIZE)
+            {
+                more = TRUE; // a SPILL's worth already: the next frame's
+                continue;
+            }
+            if (!NextCellAround(self->currentCoords.x, self->currentCoords.y, &cell, usedX, usedY, n, &x, &y))
+            {
+                x = self->currentCoords.x; // nowhere free in reach: down where we stand
+                y = self->currentCoords.y;
+            }
+            usedX[n] = x;
+            usedY[n] = y;
+            BrWire_WriteU16(buf + len, BR_LOOT_KEY_RELEASED(gBrMySeat, (u8)(gBrLoot.freed + n)));
+            BrWire_WriteU16(buf + len + 2, (u16)x);
+            BrWire_WriteU16(buf + len + 4, (u16)y);
+            BrWire_WriteU16(buf + len + 6, species);
+            buf[len + 8] = GetLevelFromBoxMonExp(GetBoxedMonPtr(b, s)); // GetBoxMonLevelAt answers 0 without BUGFIX
+            len += 9;
+            boxAt[n] = b;
+            slotAt[n++] = s;
+        }
+    }
+    if (n != 0)
+    {
+        buf[0] = gBrMySeat;
+        buf[1] = gSaveBlock1Ptr->location.mapGroup;
+        buf[2] = gSaveBlock1Ptr->location.mapNum;
+        buf[3] = n;
+        buf[len++] = 0; // no bag
+        if (!BrWire_SendLarge(BR_MSG_SPILL, buf, len))
+            return FALSE;
+        ParseSpill(buf, len);
+        gBrLoot.freed += n;
+        for (i = 0; i < n; i++)
+        {
+            u16 held = GetBoxMonDataAt(boxAt[i], slotAt[i], MON_DATA_HELD_ITEM);
+
+            if (held != ITEM_NONE && !AddBagItem(held, 1))
+                BrLoot_DropItem(held);
+            ZeroBoxMonAt(boxAt[i], slotAt[i]);
+        }
+    }
+    if (more)
+        return FALSE;
+    sPileCount = 0;
+    sBoxesOut = FALSE;
+    BrSpectate_SendParty(); // the team changed: spectators and the director want it
+    return TRUE;
+}
+
+bool8 BrLoot_SettleNow(void)
+{
+    return !sBoxesOut || SettleBoxes();
+}
+
 static void Take(struct BrLootItem *it)
 {
     u8 line[BR_HUD_LINE_MAX + 2];
@@ -965,6 +1243,8 @@ static void Take(struct BrLootItem *it)
         sGivenBag = *it; // where its GIVE puts back what does not fit
         if (OneThing(it) && BrMoves_IsTm(it->species))
             BrMoves_TeachSoon(it->species); // once its GIVE has bagged it; a bounced GIVE times out
+        else if (OneThing(it) && BrItems_Holds(it->species))
+            BrMoves_HoldSoon(it->species);
         SendPickup(it);
         return;
     }
@@ -993,6 +1273,8 @@ static void Take(struct BrLootItem *it)
         }
         if (BrMoves_IsTm(item))
             BrMoves_TeachSoon(item);
+        else if (BrItems_Holds(item))
+            BrMoves_HoldSoon(item);
         AddBagItem(item, count); // and no "Found X!": the chime and the held line say it
         PlaySE(SE_PIN);
         SendPickup(it);
@@ -1136,7 +1418,8 @@ static void TryTake(void)
         return;
     gMain.newKeys &= ~A_BUTTON;
     gMain.newAndRepeatedKeys &= ~A_BUTTON;
-    Take(it);
+    if (!OpenPile(it))
+        Take(it);
 }
 
 // Solid when A would take it (Cam, 2026-10-18: "let's make all items collidable. I hate
@@ -1931,6 +2214,8 @@ void BrLoot_Init(void)
     sGiveBackLen = 0;
     sSpoilsState = BR_SPOILS_NONE;
     sTeamTaken = FALSE;
+    sBoxesOut = FALSE;
+    sPileCount = 0;
     sSpillAsm.buf = sSpillBuf;
     sSpillAsm.cap = sizeof(sSpillBuf);
     sSpillAsm.type = 0;
@@ -1985,6 +2270,13 @@ void BrLoot_Tick(void)
     gBrLoot.spawned = spawned;
     DespawnForThisMap();
     TickSpoils();
+    if (!FuncIsActiveTask(Task_OpenPile))
+    {
+        if (sBoxesOut && gBrMatch.phase == BR_PHASE_NONE)
+            sBoxesOut = FALSE; // the match is over: nothing to settle, nobody to tell
+        if (sBoxesOut && !ScriptContext_IsEnabled())
+            SettleBoxes(); // after a PC's own menu, too
+    }
     HoldLineForReach();
     TryTake();
 }

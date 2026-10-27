@@ -14,6 +14,7 @@
 #include "text.h"
 #include "data.h"
 #include "constants/items.h"
+#include "constants/hold_effects.h"
 #include "constants/pokemon.h"
 #include "constants/songs.h"
 #include "br/br_hud.h"
@@ -204,6 +205,11 @@ bool8 BrItems_Fits(u16 item)
     return CheckBagHasSpace(item, count);
 }
 
+bool8 BrItems_Holds(u16 item)
+{
+    return gBrMatch.phase != BR_PHASE_NONE && GetItemHoldEffect(item) != HOLD_EFFECT_NONE;
+}
+
 bool8 BrItems_Arrive(u16 *item, u16 count)
 {
     u8 line[BR_HUD_LINE_MAX + 2];
@@ -245,6 +251,8 @@ static u8 Found(u16 *item, u16 *count)
 
     if (BrItems_Pickup(item, count, NULL) == BR_ITEMS_TO_BAG)
     {
+        if (BrItems_Holds(*item))
+            BrMoves_HoldSoon(*item); // once pret's script has bagged it
         // pret's lines say "found one", so a pile is taken and said here; with no room
         // the script goes on to pret's own "the BAG is full".
         if (*count > 1 && AddBagItem(*item, *count))
