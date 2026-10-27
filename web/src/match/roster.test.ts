@@ -183,11 +183,20 @@ describe('watchers', () => {
     expect(roster.alive().map((e) => e.seat)).toEqual([2, 5]);
   });
 
-  it('stand up once the relay seats them for the next match', () => {
+  it('stand up for the next match once the relay seats them, not at the win', () => {
     const roster = new Roster();
     roster.applyRoster(WATCHED);
     roster.applyRoster({ ...ROOM, members: [...ROOM.members, { id: 7, name: 'CAM' }] });
+    expect(roster.get(7)?.alive, 'the unlock at the win').toBe(false);
+    roster.endMatch();
     expect(roster.get(7)?.alive).toBe(true);
+  });
+
+  it('still watching at PLAY AGAIN stay down', () => {
+    const roster = new Roster();
+    roster.applyRoster(WATCHED);
+    roster.endMatch();
+    expect(roster.get(7)?.alive).toBe(false);
   });
 
   it('who fell in the match they watched stay fallen', () => {

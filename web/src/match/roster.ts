@@ -87,17 +87,17 @@ export class Roster {
    *  except the match's bots, which the relay never lists (seatBots). Position/facing/
    *  alive state is left alone -- the relay roster doesn't carry it -- until a
    *  place/step/face/out message fills it in. A watcher is the one exception: the
-   *  relay's `spectate` is the whole of it, and seated for the next match, they stand. */
+   *  relay's `spectate` sits it down. Seated at the unlock, it stands with everybody
+   *  else at endMatch() or the next `start`, as somebody out does, not at the `win`. */
   applyRoster(msg: RosterEvent): void {
     const seen = new Set<number>();
     for (const m of msg.members) {
       seen.add(m.id);
-      const was = this.watchers.has(m.id);
       if (m.spectate) this.watchers.add(m.id);
       else this.watchers.delete(m.id);
       const e = this.entry(m.id);
       e.name = m.name;
-      if (was !== (m.spectate === true)) e.alive = this.standing(m.id);
+      if (m.spectate) e.alive = false;
     }
     for (const seat of this.watchers) if (!seen.has(seat)) this.watchers.delete(seat);
     for (const seat of Array.from(this.entries.keys())) {

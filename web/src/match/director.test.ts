@@ -514,6 +514,20 @@ describe("the host's own reload (HBR-20)", () => {
     expect(reloaded.director.state.placements).toEqual([2]);
   });
 
+  it('after the take-over has already put the outs in, keeps each once (HBR-75 review)', () => {
+    const a = harness([0, 1, 2, 3], 7, { safariSecs: 5, fogSecs: 10 });
+    a.director.start();
+    a.advance(5000);
+    a.fireOut(2);
+    const snap = JSON.parse(JSON.stringify(snapDirector(a.director, a.now())));
+    const b = harness([0, 1, 2, 3], 7, { safariSecs: 5, fogSecs: 10 });
+    // HostRole.begin: resume() off the wire first, then the page's own snapshot. Seat 3
+    // went out while the page was reloading.
+    b.director.resume({ ringPhase: 1, centre: { sx: 4, sy: 11 }, secsLeftInPhase: 5, out: [2, 3] });
+    restoreDirector(b.director, snap, 0);
+    expect(b.director.state.placements).toEqual([2, 3]);
+  });
+
   it('counts the time the tab was away: a ring that fell due meanwhile goes out on the next tick', () => {
     const a = harness([0, 1], 3, { safariSecs: 5, fogSecs: 10 });
     a.director.start();
