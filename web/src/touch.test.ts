@@ -131,6 +131,23 @@ describe('a tap on a battle menu walks the cursor there and presses A', () => {
     expect(emu.held, 'nothing left held').toBe(0);
   });
 
+  it("holds and gaps are the game's frames, not the page's: a busy page sees one in three (HBR-59)", () => {
+    const emu = new FakeEmu() as FakeEmu & { ran: number };
+    emu.ran = 0;
+    emu.menu = MENU_ACTION;
+    const { tap } = layer(emu);
+    tap(200, 148);
+    const held: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      emu.ran += 3;
+      emu.frame();
+      held.push(emu.held);
+    }
+    expect(emu.chosen).toBe(3);
+    // Each tap is held its three frames (one page frame), then its three-frame gap (one more).
+    expect(held.slice(0, 6)).toEqual([1 << KEY_BIT.right, 0, 0, 1 << KEY_BIT.down, 0, 0]);
+  });
+
   it('a move: the second one, and never an empty slot', () => {
     const emu = new FakeEmu();
     emu.menu = MENU_MOVE;

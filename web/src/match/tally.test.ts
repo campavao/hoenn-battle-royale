@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { lifetimeLines } from '../ui/profile';
 import { tallyLines } from '../ui/results';
-import { favourite, readTally, tallyMsg, TALLY_BYTES, zeroTally } from './tally';
+import { favourite, readTally, tallyMsg, TALLY_BYTES } from './tally';
 
 /** gBrTally as include/br/br_tally.h lays it out, in a byte array the test holds. */
 function ram(fill: (view: DataView) => void) {
@@ -37,15 +37,6 @@ describe("what our own ROM counted of the match (POK-416)", () => {
       v.setUint8(43, 5);
     });
     expect(readTally(read, 0)).toEqual({ steps: 312, won: 4, caught: 2, items: 3, mons: { 277: 9, 280: 2 }, moves: { 1: 6, 33: 5 } });
-  });
-
-  it('zeroes all of it for a new match', () => {
-    const { bytes, read, write } = ram((v) => {
-      for (let i = 0; i < TALLY_BYTES; i++) v.setUint8(i, 0xab);
-    });
-    zeroTally(write, 0);
-    expect(bytes.every((b) => b === 0)).toBe(true);
-    expect(readTally(read, 0)).toEqual({ steps: 0, won: 0, caught: 0, items: 0, mons: {}, moves: {} });
   });
 
   it('names the favourite the one used most, a tie going to the lower id', () => {

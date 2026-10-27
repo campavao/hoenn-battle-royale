@@ -5,7 +5,7 @@
 
 // What you did in a match that only the ROM sees (POK-416). Cam: "record and show stats
 // like how many battles won, favorite pokemon, favorite move, distance traveled, pokemon
-// caught, items used". The page zeroes this as a match starts and reads it once the
+// caught, items used". START zeroes this (br_match.c) and the page reads it once the
 // match is decided (web/src/match/tally.ts), the way it reads gBrJank -- nothing goes on
 // the wire. Everything the room already sees (RINGS, TRAINERS, DUELS, TOOK) is counted
 // off the wire by web/src/match/record.ts instead.
@@ -41,6 +41,8 @@ BR_SIZE(BrTally, 52)
 
 extern struct BrTally gBrTally;
 
+// br_match.c: a match starts.
+void BrTally_Reset(void);
 // field_control_avatar.c: the player took a step.
 void BrTally_Step(void);
 // battle_util.c: `battler` is using `move`.

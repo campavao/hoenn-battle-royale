@@ -79,10 +79,30 @@ export interface CoreModule {
    *  (left, top) inside it -- and its pixels a row; 0 with no game. */
   _brPicturePtr?(): number;
   _brPictureStride?(): number;
-  /** Present the frame to the canvas from the frame-ended callback, where the core
-   *  thread is paused: what the page drew in that callback and the picture are then
+  /** Present the frame to the canvas from the frame-ended callback: the picture of the
+   *  frame _brTakeFrame took, so what the page drew in that callback and the picture are
    *  the same frame. Older cores lack it and present on their own tick. */
   _brPresent?(): void;
+  /** The frame-ended callback runs while the core runs the next frame (HBR-59). First in
+   *  it: the newest finished frame becomes the page's copy of work RAM (_brWramPtr) and
+   *  the picture. Returns the frames the game ran since the last one taken, 0 for none. */
+  _brTakeFrame?(): number;
+  /** Last in it, always. The core waits a few ms for it: in time, what the page wrote and
+   *  the keys it holds reach the game before the next frame, as they always did; late, at
+   *  the end of the frame it is running. Six frames ahead, it waits for good. */
+  _brFrameDone?(): void;
+  /** With the core paused, the page's writes straight into the game's RAM (or dropped,
+   *  `discard` 1) and its copy remade from it; a no-op unless paused. */
+  _brSync?(discard: number): void;
+  /** 1: the core waits on every frame's callback, so the page sees every one. */
+  _brSetLockstep?(on: number): void;
+  /** The keys the page holds (KEY_BIT order), for the game from the next frame boundary,
+   *  with the page's writes. Older cores take buttonPress at once instead. */
+  _brSetKeys?(keys: number): void;
+  /** At most `lead` frames ahead of the page (0: the core's default). */
+  _brSetFrameLead?(lead: number): void;
+  /** Runs of the page's writes dropped because the game wrote those bytes first. */
+  _brLostWrites?(): number;
   HEAPU8: Uint8Array;
   /** SDL2's audio output, once a game's thread has opened it (audio-meter.ts). */
   SDL2?: SdlAudio;
@@ -182,6 +202,10 @@ export class Emulator {
   /** The output node audio-meter.ts is listening to; SDL makes a new one every boot. */
   private tappedAudio: ScriptProcessorNode | null = null;
   private halts = 0;
+  /** Frames the game has run, whether or not the page saw each (HBR-59). */
+  private ranFrames = 0;
+  private lockstepHolds = 0;
+  private leads: number[] = [];
   /** A headless core's sound has been paused since its last boot or resume. */
   private quiet = false;
   /** What boot() last loaded, so reboot() can load it again. */
@@ -442,28 +466,35 @@ export class Emulator {
     this.running = true;
     // addCoreCallbacks is a no-op until a core exists, so this must follow loadGame.
     this.m.addCoreCallbacks({
-      // This runs inside a synchronous proxy from the core's thread: a throw out of it
-      // never completes the call, and the core waits on it for good -- the game frozen,
-      // the mailbox undrained, nothing on screen (POK-330 #35). So no listener's bug
-      // gets out of here, and the picture is presented whatever happened.
+      // The core waits on _brFrameDone a few ms (HBR-59), and for good once it is six
+      // frames ahead: a throw past it would freeze the game, the mailbox
+      // undrained, nothing on screen (POK-330 #35). So no listener's bug gets out of
+      // here, and the picture is presented whatever happened.
       videoFrameEndedCallback: () => {
         const started = this.workListeners.size ? performance.now() : -1;
-        // The views are remade once a frame, not once a boot. loadGame returns before the
-        // core thread has swapped cores, so the old core's last frames still run
-        // listeners, and a read there kept the dead core's RAM for the whole next match:
-        // the replay's mailbox never woke and PLAY AGAIN hung on the results panel.
-        this.views = null;
         try {
-          for (const l of this.frameListeners) {
-            try {
-              l();
-            } catch (err) {
-              this.listenerFailed(l, err);
+          const ran = this.m._brTakeFrame?.() ?? 1;
+          if (ran === 0) return;
+          this.ranFrames += ran;
+          // The views are remade once a frame, not once a boot. loadGame returns before
+          // the core thread has swapped cores, so the old core's last frames still run
+          // listeners, and a read there kept the dead core's RAM for the whole next
+          // match: the replay's mailbox never woke and PLAY AGAIN hung on the results panel.
+          this.views = null;
+          try {
+            for (const l of this.frameListeners) {
+              try {
+                l();
+              } catch (err) {
+                this.listenerFailed(l, err);
+              }
             }
+          } finally {
+            // The listeners drew around the picture for this frame; now the picture.
+            this.m._brPresent?.();
           }
         } finally {
-          // The listeners drew around the picture for this frame; now the picture.
-          this.m._brPresent?.();
+          this.m._brFrameDone?.();
         }
         try {
           this.afterFrame(started);
@@ -503,13 +534,16 @@ export class Emulator {
     if (node) node.onaudioprocess = null;
   }
 
+  /** What the page writes while paused is in the game's RAM when it resumes. */
   pause(): void {
     this.m.pauseGame();
+    this.m._brSync?.(0);
     this.paused = true;
     this.halts++;
   }
 
   resume(): void {
+    this.m._brSync?.(0);
     this.m.resumeGame();
     this.paused = false;
     this.quiet = false;
@@ -532,8 +566,8 @@ export class Emulator {
   }
 
   /** After every frame, how long the page's own part of it took on the main thread,
-   *  in ms: the frame listeners and the present. The core thread waits on all of it
-   *  (POK-247). Returns an unsubscribe. */
+   *  in ms: the frame listeners and the present (POK-247). The core waits on the part of
+   *  it that outlasts its next frame (HBR-59). Returns an unsubscribe. */
   onFrameWork(listener: (ms: number) => void): () => void {
     this.workListeners.add(listener);
     return () => this.workListeners.delete(listener);
@@ -550,6 +584,48 @@ export class Emulator {
    *  boot, a stop, a crash -- so a meter does not read the gap across one as a frame. */
   get pauses(): number {
     return this.halts;
+  }
+
+  /** Lockstep (HBR-59) while anyone holds it: the game waits on the page's every frame, so
+   *  the page sees each one and a busy page slows the game -- as a check of every frame
+   *  needs. Otherwise a page that is
+   *  late is handed the newest frame and the game keeps its speed. Returns the release. */
+  holdLockstep(): () => void {
+    if (this.lockstepHolds++ === 0) this.m._brSetLockstep?.(1);
+    let held = true;
+    return () => {
+      if (!held) return;
+      held = false;
+      if (--this.lockstepHolds === 0) this.m._brSetLockstep?.(0);
+    };
+  }
+
+  /** The core at most `frames` ahead of the page while held (HBR-59): a tap walk turns as
+   *  a step begins, so its keys must land within the step, which lockstep would also do
+   *  but at the cost of the game's speed. The smallest hold wins. Returns the release. */
+  holdLead(frames: number): () => void {
+    const set = () => this.m._brSetFrameLead?.(this.leads.length ? Math.min(...this.leads) : 0);
+    this.leads.push(frames);
+    set();
+    let held = true;
+    return () => {
+      if (!held) return;
+      held = false;
+      this.leads.splice(this.leads.indexOf(frames), 1);
+      set();
+    };
+  }
+
+  /** Runs of the page's RAM writes the core dropped, the game having written those bytes
+   *  after the frame the page read (HBR-59); 0 for an older core. */
+  get lostWrites(): number {
+    return this.m._brLostWrites?.() ?? 0;
+  }
+
+  /** Frames the game has run so far: more than the page's frames when it was too busy to
+   *  see every one (HBR-59). */
+  get ran(): number {
+    return this.ranFrames;
   }
 
   private afterFrame(started: number): void {
@@ -619,7 +695,8 @@ export class Emulator {
       return;
     }
     this.held |= bit;
-    this.m.buttonPress(key);
+    if (this.m._brSetKeys) this.m._brSetKeys(this.held);
+    else this.m.buttonPress(key);
   }
 
   release(key: GbaKey): void {
@@ -627,7 +704,8 @@ export class Emulator {
     this.diverted &= ~bit;
     if (!(this.held & bit)) return;
     this.held &= ~bit;
-    this.m.buttonUnpress(key);
+    if (this.m._brSetKeys) this.m._brSetKeys(this.held);
+    else this.m.buttonUnpress(key);
   }
 
   /** Sets the whole key state from a bitmask (KEY_BIT order); only changed keys are sent. */
@@ -691,11 +769,12 @@ export class Emulator {
   }
 
   // ---- memory -----------------------------------------------------------------------
-  // Views over the shared heap, made once per boot and kept (POK-330 #65): the frame
-  // listeners make ~290 reads a frame while the core thread waits on them, and a wasm
-  // call plus two allocations for each was all overhead. A view is dropped when the
-  // core is rebuilt, stopped or crashes (its RAM moves with it), and remade when the
-  // heap itself is replaced (memory growth).
+  // The page's copy of work RAM (HBR-59): the last frame it took, as the game left it,
+  // with the page's own writes on top; those reach the game at the next frame boundary
+  // (_brFrameDone). Views over the shared heap, made once per boot and kept (POK-330 #65):
+  // the frame listeners make ~290 reads a frame, and a wasm call plus two allocations
+  // for each was all overhead. A view is dropped when the core is rebuilt, stopped or
+  // crashes, and remade when the heap itself is replaced (memory growth).
 
   private heapViews(): NonNullable<Emulator['views']> {
     const heap = this.m.HEAPU8;
@@ -737,7 +816,7 @@ export class Emulator {
     for (let i = 0; i < width / 8; i++) view[off + i] = (value >>> (8 * i)) & 0xff;
   }
 
-  /** Bytes at a GBA bus address, as a view (writes go straight to the core). */
+  /** Bytes at a GBA bus address, as a view (writes reach the game as write()'s do). */
   bytes(addr: number, len: number): Uint8Array {
     const off = addr - (addr >= IWRAM_BASE ? IWRAM_BASE : EWRAM_BASE);
     return this.viewAt(addr).subarray(off, off + len);
@@ -795,6 +874,8 @@ export class Emulator {
       this.m.FS.writeFile(path, bytes);
       const ok = this.m.loadState(RESUME_SLOT);
       this.m.FS.unlink(path);
+      // What the page wrote since the pause was for the machine this replaced.
+      this.m._brSync?.(1);
       return ok;
     } catch {
       return false;
@@ -810,9 +891,8 @@ export class Emulator {
   }
 
   /** The picture as the core drew it, band and all, copied out of the heap: what the
-   *  e2e holds the band to (POK-329), in DEV only. Take it in a frame listener, where
-   *  the core's thread is paused; anywhere else the core may be halfway into the next
-   *  frame. Null on a core without the exports, or with nothing loaded. */
+   *  e2e holds the band to (POK-329), in DEV only. The frame the page last took, the one
+   *  its RAM is (HBR-59). Null on a core without the exports, or with nothing loaded. */
   picture(): Picture | null {
     if (!import.meta.env.DEV) return null;
     const ptr = this.m._brPicturePtr?.() ?? 0;
@@ -828,8 +908,8 @@ export class Emulator {
   }
 
   /** The LCD's 240x160 of the picture into `out` as RGBA (alpha whatever the core left):
-   *  the see-through battle's keyed copy (field.ts). Take it in a frame listener, as
-   *  picture(). False on a core without the exports, or with nothing loaded. */
+   *  the see-through battle's keyed copy (field.ts), from the same frame as picture().
+   *  False on a core without the exports, or with nothing loaded. */
   lcdPixels(out: Uint8ClampedArray): boolean {
     const ptr = this.m._brPicturePtr?.() ?? 0;
     const stride = this.m._brPictureStride?.() ?? 0;

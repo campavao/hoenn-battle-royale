@@ -30,6 +30,7 @@
 #include "br/br_netlink.h"
 #include "br/br_field.h"
 #include "br/br_hof.h"
+#include "br/br_tally.h"
 
 EWRAM_DATA struct BrMatch gBrMatch = {0};
 // START can span slots once there are more than six spawn rows. The buffer is on the
@@ -48,6 +49,9 @@ static void ParseStart(const u8 *d, u16 n)
 
     if (n < 10)
         return;
+    // A new match counts from nothing. The ROM zeroes it, not the page: a page that is
+    // frames behind could see its 52 zero bytes dropped by a step it never saw (HBR-59).
+    BrTally_Reset();
     gBrMatch.seed = d[0] | (d[1] << 8) | (d[2] << 16) | ((u32)d[3] << 24);
     count = d[4];
     gBrMatch.safariSecs = BrWire_ReadU16(d + 5);
