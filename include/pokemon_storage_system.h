@@ -58,8 +58,8 @@ bool32 CheckBoxMonSanityAt(u32 boxId, u32 boxPosition);
 u32 CountStorageNonEggMons(void);
 u32 CountAllStorageMons(void);
 #if BR
-void BrStorage_MoveMons(void); // the box, OPTION_MOVE_MONS, from the field: a drop's (br_loot.c)
 bool8 BrStorage_Up(void); // the box is the screen up now (br_netlink.c)
+bool8 BrStorage_Holding(void); // ...with a mon in hand, which lives only in the screen's memory
 #endif
 bool32 AnyStorageMonWithMove(u16 move);
 

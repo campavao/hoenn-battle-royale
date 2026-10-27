@@ -210,6 +210,9 @@ void BrLoot_Released(struct Pokemon *mon);
 // CB2_ExitPokeStorage's field callback: the field for a drop's box, else `callback`, the
 // PC's own menu. Mid-match it marks the boxes to be emptied onto the ground.
 MainCallback BrLoot_PcExit(MainCallback callback);
+// A battle is starting from the box, so CB2_ExitPokeStorage will not run: the boxes settle
+// once the field is back, all the same.
+void BrLoot_PcInterrupted(void);
 // The box menu offers RELEASE only outside a match.
 bool8 BrLoot_PcCanRelease(void);
 // One item on the ground beside us, for anybody, and the room told: the TM a mon of ours

@@ -581,9 +581,6 @@ EWRAM_DATA static bool8 sAutoActionOn = 0;
 
 // Main tasks
 static void EnterPokeStorage(u8);
-#if BR
-void BrStorage_MoveMons(void) { EnterPokeStorage(OPTION_MOVE_MONS); } // a drop's POKeMON, from the field (br_loot.c)
-#endif
 static void Task_InitPokeStorage(u8);
 static void Task_PlaceMon(u8);
 static void Task_ChangeScreen(u8);
@@ -2004,7 +2001,8 @@ static void CB2_PokeStorage(void)
     BuildOamBuffer();
 }
 #if BR
-bool8 BrStorage_Up(void) { return gMain.callback2 == CB2_PokeStorage; } // a challenge never cuts a box off (br_netlink.c)
+bool8 BrStorage_Up(void) { return gMain.callback2 == CB2_PokeStorage; } // a challenge waits out a mon in hand (br_netlink.c)
+bool8 BrStorage_Holding(void) { return sIsMonBeingMoved; }
 #endif
 
 static void EnterPokeStorage(u8 boxOption)

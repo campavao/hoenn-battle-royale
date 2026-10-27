@@ -58,6 +58,7 @@
 #include "field_screen_effect.h"
 #include "field_weather.h"
 #include "map_name_popup.h"
+#include "br/br_swap.h"
 
 // The spoils box's frame: the HUD's own copy of the standard frame, in the palette
 // nothing on the field loads over -- the peek box's (br_spectate.c).
@@ -886,9 +887,6 @@ static u16 TakenSpecies(const struct BrLootItem *it)
     return BrLevels_GrowUp(&mon);
 }
 
-// A drop's box (BrLoot_PcExit): the screen is opening or up, and the field it goes back
-// to is ours rather than a PC's menu.
-static bool8 sPileOpen;
 // A PC was opened mid-match: once the field is ours again the boxes are settled
 // (SettleBoxes), and nothing is left in them.
 static bool8 sBoxesOut;
@@ -896,11 +894,10 @@ static bool8 sBoxesOut;
 // took it while the box was up, and the personality MakeTaken gave its mon, which is how
 // the box and the party are told apart from what was ours. The balls stay on the ground
 // until the box closes. IWRAM, all of it: EWRAM has no byte to spare.
+#define BR_PILE_SETTLED 0xFFFE // an entry SettleBoxes has done with: no key is ever this
 static u16 sPileKey[BR_MAX_LOOT];
 static u32 sPilePersonality[BR_MAX_LOOT];
 static u8 sPileCount;
-
-static const u8 sText_DropBox[] = _("DROP");
 
 // How far from us a ball can lie and still be in the pile: a spill reaches two cells
 // out from where it fell (sSpillDx), and we stand beside its edge.
@@ -927,7 +924,7 @@ static s8 PileEntry(u32 personality)
     u8 i;
 
     for (i = 0; i < sPileCount; i++)
-        if (sPilePersonality[i] == personality)
+        if (sPileKey[i] != BR_PILE_SETTLED && sPilePersonality[i] == personality)
             return i;
     return -1;
 }
@@ -957,7 +954,7 @@ static void Task_OpenPile(u8 taskId)
         return;
     }
     CleanupOverworldWindowsAndTilemaps();
-    BrStorage_MoveMons();
+    SetMainCallback2(CB2_BrSwap);
 }
 
 // A on a drop's ball with another in reach: a copy of each in the PC's first box, and the
@@ -982,6 +979,8 @@ static bool8 OpenPile(const struct BrLootItem *pressed)
 
         if (!InPile(it))
             continue;
+        if (sPileCount == PARTY_SIZE)
+            break; // the screen's drop side is six, a whole team
         while (slot < IN_BOX_COUNT && GetBoxMonDataAt(0, slot, MON_DATA_SPECIES) != SPECIES_NONE)
             slot++;
         if (slot == IN_BOX_COUNT)
@@ -992,9 +991,6 @@ static bool8 OpenPile(const struct BrLootItem *pressed)
         sPileKey[sPileCount] = it->key;
         sPilePersonality[sPileCount++] = GetMonData(&mon, MON_DATA_PERSONALITY, NULL);
     }
-    gPokemonStoragePtr->currentBox = 0;
-    StringCopy(GetBoxNamePtr(0), sText_DropBox);
-    sPileOpen = TRUE;
     sBoxesOut = TRUE;
     DropHeldLine();
     PlaySE(SE_PC_ON);
@@ -1005,14 +1001,17 @@ static bool8 OpenPile(const struct BrLootItem *pressed)
     return TRUE;
 }
 
+void BrLoot_PcInterrupted(void)
+{
+    if (gBrMatch.phase != BR_PHASE_NONE)
+        sBoxesOut = TRUE;
+}
+
 MainCallback BrLoot_PcExit(MainCallback callback)
 {
     if (gBrMatch.phase != BR_PHASE_NONE)
         sBoxesOut = TRUE;
-    if (!sPileOpen)
-        return callback;
-    sPileOpen = FALSE;
-    return FieldCB_ReturnToFieldNoScript;
+    return callback;
 }
 
 bool8 BrLoot_PcCanRelease(void)
@@ -1027,7 +1026,28 @@ bool8 BrLoot_PcCanRelease(void)
 // in the spoils' order, the diagonals first, so the way out stays open: one SPILL, five at
 // most, since the party keeps one. A held item goes in the bag, or down beside them with no
 // room: the wire's row has no field for it. A full out ring tries again next frame, and
-// every step is safe to repeat.
+// every step is safe to repeat. Two trainers who both withdraw one ball from the same
+// pile within a relay round trip both keep it, as two A presses on one frame always have.
+//
+// One of ours goes back into the party in place of a mon somebody else took first.
+static void SwapInOurs(struct Pokemon *slot)
+{
+    u8 b, s;
+
+    for (b = 0; b < TOTAL_BOXES_COUNT; b++)
+    {
+        for (s = 0; s < IN_BOX_COUNT; s++)
+        {
+            if (GetBoxMonDataAt(b, s, MON_DATA_SPECIES) == SPECIES_NONE
+             || PileEntry(GetBoxMonDataAt(b, s, MON_DATA_PERSONALITY)) >= 0)
+                continue;
+            BoxMonAtToMon(b, s, slot);
+            ZeroBoxMonAt(b, s);
+            return;
+        }
+    }
+}
+
 static void SettleBoxes(void)
 {
     u8 buf[4 + PARTY_SIZE * 9 + 1];
@@ -1050,8 +1070,9 @@ static void SettleBoxes(void)
             continue;
         if (sPileKey[j] == BR_HELD_NONE)
         {
-            if (CalculatePlayerPartyCount() > 1)
-                ZeroMonData(&gPlayerParty[i]); // theirs: they took the ball first
+            ZeroMonData(&gPlayerParty[i]); // theirs: they took the ball first
+            if (CountPartyMons() == 0)
+                SwapInOurs(&gPlayerParty[i]); // and the party keeps one of ours
         }
         else
         {
@@ -1063,8 +1084,7 @@ static void SettleBoxes(void)
             else
                 BrLoot_SendTaken(sPileKey[j]); // let go of our table by a spill, still down
         }
-        sPilePersonality[j] = 0; // settled: the next pass treats it as ours
-        sPileKey[j] = BR_HELD_NONE;
+        sPileKey[j] = BR_PILE_SETTLED;
     }
     CompactPartySlots();
     CalculatePlayerPartyCount();
@@ -2186,6 +2206,8 @@ void BrLoot_Init(void)
     sGiveBackLen = 0;
     sSpoilsState = BR_SPOILS_NONE;
     sTeamTaken = FALSE;
+    sBoxesOut = FALSE;
+    sPileCount = 0;
     sSpillAsm.buf = sSpillBuf;
     sSpillAsm.cap = sizeof(sSpillBuf);
     sSpillAsm.type = 0;
@@ -2242,7 +2264,8 @@ void BrLoot_Tick(void)
     TickSpoils();
     if (!FuncIsActiveTask(Task_OpenPile))
     {
-        sPileOpen = FALSE; // no box up or on its way, whichever way the last one closed
+        if (sBoxesOut && gBrMatch.phase == BR_PHASE_NONE)
+            sBoxesOut = FALSE; // the match is over: nothing to settle, nobody to tell
         if (sBoxesOut && !ScriptContext_IsEnabled())
             SettleBoxes(); // after a PC's own menu, too
     }

@@ -271,11 +271,11 @@ static void TickPendingChallenge(void)
             gBrNetlink.pendingPeer = 0xFF;
         return;
     }
-    else if (BrStorage_Up())
+    else if (BrStorage_Up() && BrStorage_Holding())
     {
-        // The box: a battle from here loses whichever mon was in hand, which lives only
-        // in the screen's own memory. Declined, as one would be in a battle.
-        gBrNetlink.pendingPeer = 0xFF;
+        // The box with a mon in hand: a battle from here would lose it, since it lives
+        // only in the screen's own memory. The challenge waits until it is put down.
+        gBrNetlink.stableFrames = 0;
         return;
     }
     else
@@ -296,6 +296,10 @@ static void TickPendingChallenge(void)
             return;
         }
     }
+    // A box is a menu like any other, and the fight starts from it; the boxes settle on
+    // the field after it (br_loot.c).
+    if (BrStorage_Up())
+        BrLoot_PcInterrupted();
     // A staged bot is a trainer battle from here, as HandleChallenge's would have been.
     if (BrBot_IsStaged(gBrNetlink.pendingPeer))
     {
