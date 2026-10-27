@@ -24,6 +24,8 @@ export interface Metered {
   onFrameWork?(listener: (ms: number) => void): () => void;
   /** Goes up across a pause, a boot or a stop: the gap over one is not a frame. */
   readonly pauses?: number;
+  /** Frames the game has run, seen or not (HBR-59: a busy page sees fewer). */
+  readonly ran?: number;
 }
 
 /** Fixed bins, so a window costs the same however long it runs, and a quantile is good
@@ -75,6 +77,9 @@ export class Histogram {
 export interface FrameStats {
   frames: number;
   fps: number;
+  /** Frames a second the game ran: above `fps` when the page was too busy to see them all
+   *  (HBR-59). Equal to it on an emulator that does not say. */
+  game: number;
   /** Between one emulated frame and the next, as the page sees them arrive. */
   p50: number;
   p95: number;
@@ -90,6 +95,7 @@ export class FrameMeter {
   private frames = 0;
   private errors = 0;
   private since: number;
+  private ranSince: number;
   private readonly gaps = new Histogram(0.5, 200);
   private readonly work = new Histogram(0.1, 200);
   private lastFrame: number | null = null;
@@ -103,6 +109,7 @@ export class FrameMeter {
     log: (err: unknown) => void = (err) => console.error('[emu] a frame listener threw; the frame carries on without it', err),
   ) {
     this.since = now();
+    this.ranSince = emu.ran ?? 0;
     this.lastPauses = emu.pauses ?? 0;
     emu.onFrame(() => {
       this.frames++;
@@ -122,9 +129,12 @@ export class FrameMeter {
   /** The frames since the last read, and the listeners that have thrown so far. */
   stats(reset = true): FrameStats {
     const now = this.now();
+    const span = Math.max(1, now - this.since);
+    const ran = this.emu.ran;
     const out: FrameStats = {
       frames: this.frames,
-      fps: (this.frames * 1000) / Math.max(1, now - this.since),
+      fps: (this.frames * 1000) / span,
+      game: ran === undefined ? (this.frames * 1000) / span : ((ran - this.ranSince) * 1000) / span,
       p50: this.gaps.quantile(0.5),
       p95: this.gaps.quantile(0.95),
       p99: this.gaps.quantile(0.99),
@@ -139,6 +149,7 @@ export class FrameMeter {
     if (reset) {
       this.frames = 0;
       this.since = now;
+      this.ranSince = ran ?? 0;
       this.gaps.clear();
       this.work.clear();
     }
@@ -158,11 +169,13 @@ function ms(n: number): string {
   return n.toFixed(0);
 }
 
-/** `60 fps · p95 17 · max 34 ms`, and the listeners that threw. */
+/** `60 fps · p95 17 · max 34 ms`, the game's own rate when the page saw fewer frames
+ *  than it ran, and the listeners that threw. */
 export function frameLine(s: FrameStats): string {
   const times = s.frames > 1 && s.max > 0 ? ` · p95 ${ms(s.p95)} · max ${ms(s.max)} ms` : '';
+  const game = s.game - s.fps >= 1 ? ` · game ${s.game.toFixed(0)}` : '';
   const threw = s.threw === 0 ? '' : ` · ${s.threw} listener${s.threw === 1 ? '' : 's'} threw`;
-  return `${s.fps.toFixed(0)} fps${times}${threw}`;
+  return `${s.fps.toFixed(0)} fps${game}${times}${threw}`;
 }
 
 /** One reading of everything: a window of frames and audio, and the running totals. */

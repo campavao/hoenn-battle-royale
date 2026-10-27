@@ -331,15 +331,28 @@ declare namespace mGBA {
      *  Module.canvas is, and a second window would resize the first's canvas. */
     brHeadless?: boolean;
     /** Hoenn BR: present the frame to the canvas now. Call it from the video-frame-ended
-     *  callback, where the core thread is paused, after drawing whatever must match the
-     *  picture; from then on the run loop leaves presenting to the page. */
+     *  callback, after drawing whatever must match the picture; from then on the run loop
+     *  leaves presenting to the page. */
     _brPresent(): void;
+    /** Hoenn BR (HBR-59): the video-frame-ended callback runs while the core runs the next
+     *  frame. Call this first in it: the newest finished frame becomes the page's copy of
+     *  work RAM (_brWramPtr) and the picture _brPresent shows; 0 when there is none since
+     *  the last call. */
+    _brTakeFrame(): number;
+    /** Hoenn BR (HBR-59): call this last in the callback, always: the core waits on it
+     *  before it finishes the next frame. What the page wrote into its copy lands in the
+     *  game's RAM before the frame after starts. */
+    _brFrameDone(): void;
+    /** Hoenn BR (HBR-59): with the core paused, the page's writes straight into the game's
+     *  RAM and its copy remade from it. A no-op unless paused. */
+    _brSync(): void;
     /** Hoenn BR (POK-319): wasm heap offset of the picture's ABGR8888 pixels (the texture's
      *  top-left; the LCD is at (left, top) inside it), 0 with no game loaded. */
     _brPicturePtr(): number;
     /** Hoenn BR (POK-319): pixels per row of that picture. */
     _brPictureStride(): number;
-    /** Hoenn BR: wasm heap offset of GBA EWRAM (256 KiB), 0 when no GBA core is loaded. */
+    /** Hoenn BR: wasm heap offset of the page's copy of GBA EWRAM (256 KiB, HBR-59), 0 when
+     *  no GBA core is loaded. */
     _brWramPtr(): number;
     /** Hoenn BR: wasm heap offset of GBA IWRAM (32 KiB), 0 when no GBA core is loaded. */
     _brIwramPtr(): number;

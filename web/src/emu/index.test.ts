@@ -277,6 +277,46 @@ describe('Emulator', () => {
     }
   });
 
+  it('takes the newest frame first and hands it back last, a throw or not, and counts the frames the game ran (HBR-59)', async () => {
+    const { emu, m, frame, calls } = await make();
+    const ran = [2, 0, 1];
+    m._brTakeFrame = () => {
+      calls.push('take');
+      return ran.shift()!;
+    };
+    m._brFrameDone = () => void calls.push('done');
+    m._brPresent = () => void calls.push('present');
+    let seen = 0;
+    emu.onFrame(() => {
+      calls.push('listener');
+      if (seen++ === 0) throw new Error('bad pointer');
+    });
+    await emu.start(new Uint8Array([1]));
+    calls.length = 0;
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      frame();
+      frame(); // nothing new since the last: no listeners, no present
+      frame();
+    } finally {
+      logged.mockRestore();
+    }
+    expect(calls).toEqual(['take', 'listener', 'present', 'done', 'take', 'done', 'take', 'listener', 'present', 'done']);
+    expect(seen).toBe(2);
+    expect(emu.ran).toBe(3);
+  });
+
+  it('what the page writes paused reaches the game: synced after a pause and before a resume (HBR-59)', async () => {
+    const { emu, m, calls } = await make();
+    m._brSync = () => void calls.push('brSync');
+    await emu.start(new Uint8Array([1]));
+    calls.length = 0;
+    emu.pause();
+    emu.write(0x02000010, 7, 8);
+    emu.resume();
+    expect(calls).toEqual(['pause', 'brSync', 'brSync', 'resume']);
+  });
+
   it('onListenerError hears each listener\'s first throw instead of the console', async () => {
     const { emu, frame } = await make();
     const heard: string[] = [];
