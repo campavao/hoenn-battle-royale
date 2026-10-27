@@ -27,7 +27,10 @@ ENGINE_SYMBOLS = [
     "gMain", "gObjectEvents", "gPlayerAvatar", "gSprites", "gTasks",
     # The field camera's pixel scroll (Y, then X at +2): spike B's walk traces (web/spike-b/fixtures).
     "gTotalCameraPixelOffsetY",
-    "gBattleTypeFlags", "gBattleWeather", "gBattleOutcome", "gBattleMainFunc", "gBattlerControllerFuncs",
+    # ...and its marked spots, dealt the way br_patch.c deals them: which maps have a land
+    # or a water table, and the rustle's palette (web/spike-b/romart.ts).
+    "gWildMonHeaders", "gSpritePalette_GeneralFieldEffect1",
+    "gBattleTypeFlags", "gBattleWeather", "gBattleEnvironment", "gBattleOutcome", "gBattleMainFunc", "gBattlerControllerFuncs",
     "gLinkPlayers", "gBlockRecvBuffer", "gBlockSendBuffer", "gWirelessCommType",
     "gRngValue", "gSaveBlock1", "gSaveBlock2", "gNumSafariBalls",
     "gBattleCommunication", "gBattleControllerExecFlags", "gBattlersCount", "gBattleBufferA", "gBattleBufferB", "gBattleMons",

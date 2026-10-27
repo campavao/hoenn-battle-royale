@@ -13,16 +13,25 @@
       #stats { background: #000a; padding: 4px 8px; border-radius: 6px; white-space: pre; font-variant-numeric: tabular-nums; }
       #hud button { pointer-events: auto; background: #26313aee; color: #e8eef2; border: 1px solid #4c7a99; border-radius: 6px; padding: 6px 10px; font: inherit; }
       #hud button.on { background: #4c7a99; }
-      #pad { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 10px); display: none; justify-content: space-between; padding: 0 14px; pointer-events: none; }
+      #pad { z-index: 3; position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 10px); display: none; justify-content: space-between; padding: 0 calc(env(safe-area-inset-right) + 14px) 0 calc(env(safe-area-inset-left) + 14px); pointer-events: none; }
       @media (pointer: coarse) { #pad { display: flex; } }
       .dpad { display: grid; grid-template: repeat(3, 54px) / repeat(3, 54px); gap: 3px; pointer-events: auto; }
       .ab { display: flex; gap: 10px; align-items: flex-end; pointer-events: auto; }
       .k { display: grid; place-items: center; background: #26313acc; border-radius: 10px; color: #cfe3ef; font-weight: 700; touch-action: none; user-select: none; -webkit-user-select: none; }
       .k.down { background: #4c7a99; }
       .ab .k { width: 62px; height: 62px; border-radius: 50%; }
-      #battle { position: fixed; inset: 0; display: none; place-items: center; background: #000; }
+      #battle { z-index: 2; position: fixed; inset: 0; display: none; place-items: center; background: #000; }
+      /* A phone held upright: the battle at the top, the pad (which drives it) below. */
+      @media (orientation: portrait) { #battle { place-items: start center; padding-top: calc(env(safe-area-inset-top) + 56px); } }
+      #intro { z-index: 4; position: fixed; inset: 0; display: grid; place-items: center; background: #000c; padding: 16px; }
+      #intro div { max-width: 420px; background: #1b252c; border: 1px solid #4c7a99; border-radius: 10px; padding: 18px 20px; display: grid; gap: 10px; font-size: 15px; }
+      #intro b { font-size: 17px; }
+      #intro ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+      #intro button { justify-self: start; background: #4c7a99; color: #fff; border: 0; border-radius: 6px; padding: 8px 16px; font: inherit; font-weight: 700; }
       #battle.on { display: grid; }
       #battle canvas { image-rendering: pixelated; width: min(100vw, 150vh); aspect-ratio: 240 / 160; height: auto; }
+      /* A phone on its side: the battle between the pad's two halves, not under them. */
+      @media (orientation: landscape) and (pointer: coarse) { #battle canvas { width: min(calc(100vw - 2 * (env(safe-area-inset-left) + 200px)), 150vh); } }
       #battle .note { position: absolute; top: 12px; left: 12px; right: 12px; text-align: center; color: #9fb3c0; }
     </style>
   </head>
@@ -41,6 +50,18 @@
       <div class="ab"><div class="k" data-k="b">B</div><div class="k" data-k="a" style="margin-bottom:34px">A</div></div>
     </div>
     <div id="battle"><div class="note" id="battle-note"></div><canvas id="gba" width="240" height="160"></canvas></div>
+    <div id="intro"><div>
+      <b>Engine preview: our own overworld</b>
+      <span>Not the game, a test of how it could work. The world here is drawn by the page, with the real game's battles.</span>
+      <ul>
+        <li>Walk and run like Emerald (hold B to walk).</li>
+        <li>Face a trainer and press A to battle.</li>
+        <li>Step on a rustling patch of grass (or a dark ripple on water) for a wild Pokémon, as in the game.</li>
+        <li>Spectate, then drag and pinch to see all of Hoenn and everyone in it.</li>
+      </ul>
+      <span>Not here yet: items, the ring, other players, keeping what you catch.</span>
+      <button id="intro-go" type="button">Start</button>
+    </div></div>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

@@ -3,8 +3,10 @@
 // The page owns the overworld; this ROM stands parked in Littleroot behind it, hidden.
 // A fight is the path a bot fight already takes (br_bot.c, the bot-fight driver): a
 // TRAINER card puts the other side's party in gEnemyParty, a PLACE puts their ghost on
-// our map, and a CHALLENGE starts an ordinary trainer battle. When the ROM is back on
-// the field the fight is over, and the page takes the screen back.
+// our map, and a CHALLENGE starts an ordinary trainer battle. A wild battle is asked for
+// in gBrWildAsk (br_wild.h): the map the page's marked spot is on, and the ROM rolls it
+// from that map's own table. When the ROM is back on the field the battle is over, the
+// page takes the screen back, and the ROM is put back where it was parked.
 //
 // The ROM is the player's own, patched the way the game patches it (loadRom). In dev,
 // web/public/spike-rom/ (gitignored, never committed) can stand in for it.
@@ -19,12 +21,23 @@ import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.w
 const BOOT_MAP_TESTMON = 0x81;
 const ME = 0;
 const FOE_SEAT = 31;
+// include/br/br_wild.h.
+const WILD_ASKED = 1;
+const WILD_FIGHTING = 2;
+const WILD_DONE = 3;
 /** How long the last fight took to start: from the TRAINER card to the battle running. */
 export let lastStart: { ms: number; frames: number } | null = null;
 
+/** How a battle the page asked for went. `ok` false: the ROM never got into it (the page
+ *  keeps the screen, and nothing showed). */
+export interface Fought { ok: boolean; outcome: number; species: number; level: number }
+
 export interface RomBattles {
   /** Fight `name`'s party. Resolves when the ROM is back on the field. */
-  fight(name: string, mons: PackedMon[]): Promise<void>;
+  fight(name: string, mons: PackedMon[], skin: number, onStart: () => void): Promise<Fought>;
+  /** The wild battle a marked spot on map (group, num) starts; `behavior` is the spot's
+   *  metatile behaviour (water or land, and the backdrop). */
+  wild(group: number, num: number, behavior: number, onStart: () => void): Promise<Fought>;
   press(k: GbaKey): void;
   release(k: GbaKey): void;
   emu: Emulator;
@@ -85,7 +98,7 @@ function applyPatch(source: Uint8Array, patch: Uint8Array): Promise<Uint8Array> 
   });
 }
 
-export async function bootRom({ emu, rom, sym }: RomFiles): Promise<RomBattles> {
+export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promise<RomBattles> {
   await emu.startBytes(rom);
   const box = new Mailbox(emu, sym('gBrMailbox'));
 
@@ -95,33 +108,86 @@ export async function bootRom({ emu, rom, sym }: RomFiles): Promise<RomBattles> 
   const boot = [BOOT_MAP_TESTMON, 0, 0, 9, 5, 0, 8, 0, ...gen3('YOU'), 0xff];
   emu.bytes(box.base + MAILBOX.OFF_BOOT, boot.length).set(boot);
   await frames(emu, 400);
-  emu.write(sym('gBrMatch'), 2, 8); // mid-match: fights are allowed
-  emu.pause();
+  const match = sym('gBrMatch');
+  emu.write(match, 2, 8); // mid-match: fights are allowed
+  // The page's match seed: the national stand-ins on the routes are this match's
+  // (BrZone_NationalOn), as the spots the page deals are (bots/patches.ts).
+  emu.write(match + 8, seed >>> 0, 32);
+  await frames(emu, 2);
+  // Parked: every battle starts from here and comes back to it. Whatever a battle leaves
+  // on the hidden field -- a whiteout's walk home, a win's spoils, a catch -- is undone,
+  // so the next one is never refused (review of #157).
+  const parked = emu.snapshot();
+  if (!parked) throw new Error('the core would not save a state');
 
   const fightAt = sym('gBrBotFight');
+  const askAt = sym('gBrWildAsk');
+  const mainFunc = sym('gBattleMainFunc');
+  const outcomeAt = sym('gBattleOutcome');
+  const send = (msg: Parameters<typeof packSlot>[0]) => {
+    for (const s of packSlot(msg)) box.push(s.type, s.payload);
+  };
+
+  /** One battle: `kick` asks for it, `going` says the ROM took it, `over` that it is back
+   *  on the field. The page gets the screen at the battle's first frame (onStart) and
+   *  never before, so the hidden field never shows through. */
+  let broken = false;
+  async function battle(kick: () => void, going: () => boolean, over: () => boolean, onStart: () => void, after: () => Omit<Fought, 'ok'>): Promise<Fought> {
+    if (broken) throw new Error('the parked ROM could not be restored');
+    // Every battle from one state would roll the same: a fresh draw each time.
+    emu.write(sym('gRngValue'), (Math.random() * 2 ** 32) >>> 0, 32);
+    emu.write(mainFunc, 0, 32);
+    emu.resume();
+    const t0 = performance.now();
+    let n = 0;
+    const count = emu.onFrame(() => { n++; });
+    kick();
+    const took = await until(emu, going, 600);
+    count();
+    lastStart = { ms: performance.now() - t0, frames: n };
+    // Emerald's battle loop: set once the battle screen itself runs, after the swirl
+    // that is drawn over the hidden ROM's own field.
+    // A refused ask (DONE at once: no table for that spot) never draws a battle.
+    const shown = took && !over() && await until(emu, () => emu.read(mainFunc, 32) !== 0, 600);
+    if (!shown) console.warn('spike: no battle', { took, ask: [...emu.bytes(askAt, 8)], fighting: emu.read(fightAt + 2, 8), callback2: emu.read(sym('gMain') + 4, 32).toString(16) });
+    let result: Fought = { ok: false, outcome: 0, species: 0, level: 0 };
+    // However long it takes: a battle is never pulled out from under the player.
+    if (shown) {
+      onStart();
+      await until(emu, over, Infinity);
+      result = { ok: true, ...after() };
+    }
+    emu.pause();
+    // A ROM that could not be put back would start the next battle from whatever this
+    // one left on its field: no more battles from it.
+    if (!emu.restore(parked!)) broken = true;
+    return result;
+  }
+
   return {
     emu,
     press: (k) => emu.press(k),
     release: (k) => emu.release(k),
-    async fight(name, mons) {
-      emu.resume();
-      const send = (msg: Parameters<typeof packSlot>[0]) => {
-        for (const s of packSlot(msg)) box.push(s.type, s.payload);
-      };
-      send({ t: 'trainer', seat: FOE_SEAT, name, mons });
-      await frames(emu, 10);
-      send({ t: 'place', v: PROTOCOL, seat: FOE_SEAT, map: { group: 0, num: 9 }, x: 20, y: 8, f: 1, st: 'alive' });
-      send({ t: 'challenge', seat: FOE_SEAT, opponent: ME, nonce: 0 });
-      // In, then out: the bot fight's own running flag.
-      const t0 = performance.now();
-      let n = 0;
-      const count = emu.onFrame(() => { n++; });
-      await until(emu, () => emu.read(fightAt + 2, 8) === 1, 600);
-      count();
-      lastStart = { ms: performance.now() - t0, frames: n };
-      await until(emu, () => emu.read(fightAt + 2, 8) === 0, 60 * 60 * 10);
-      await frames(emu, 30);
-      emu.pause();
+    fight(name, mons, skin, onStart) {
+      // The path a bot fight takes: its card, its ghost beside us, its challenge. All three
+      // go on the ring in one go, on purpose: the ROM reads the ring in order, so the card
+      // is staged before the CHALLENGE that needs it (the fight is up in ~80 frames).
+      return battle(() => {
+        send({ t: 'trainer', seat: FOE_SEAT, name, mons });
+        send({ t: 'place', v: PROTOCOL, seat: FOE_SEAT, map: { group: 0, num: 9 }, x: 20, y: 8, f: 1, st: 'alive', sprite: String(skin) });
+        send({ t: 'challenge', seat: FOE_SEAT, opponent: ME, nonce: 0 });
+      }, () => emu.read(fightAt + 2, 8) === 1, () => emu.read(fightAt + 2, 8) === 0, onStart,
+      () => ({ outcome: emu.read(outcomeAt, 8), species: 0, level: 0 }));
+    },
+    wild(group, num, behavior, onStart) {
+      // br_wild.h: the map, then ASKED; FIGHTING once it is under way, DONE when it is over.
+      return battle(() => {
+        emu.write(askAt + 1, group, 8);
+        emu.write(askAt + 2, num, 8);
+        emu.write(askAt + 3, behavior, 8);
+        emu.write(askAt, WILD_ASKED, 8);
+      }, () => emu.read(askAt, 8) !== WILD_ASKED, () => emu.read(askAt, 8) === WILD_DONE, onStart,
+      () => ({ outcome: emu.read(askAt + 7, 8), species: emu.read(askAt + 4, 16), level: emu.read(askAt + 6, 8) }));
     },
   };
 }
