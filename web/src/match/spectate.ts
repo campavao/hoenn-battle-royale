@@ -108,6 +108,29 @@ export function battleSeats(battle: number): [number, number] {
   return [battle & 0xff, (battle >> 8) & 0xff];
 }
 
+/** gBrSpectate.catchUp (br_spectate.h's BR_CATCH_UP_*). TURNS: a fight joined late is
+ *  handed every turn so far and can only play them from the first. LAG: the fighter has
+ *  ended a turn the replay is still playing -- its text waits out timers the fighter taps
+ *  through (HBR-83). */
+export const CATCH_UP_TURNS = 1;
+export const CATCH_UP_LAG = 2;
+/** A late watch's backlog, silent, until the replay is level. */
+export const CATCH_UP_SPEED = 8;
+/** Behind by a turn, with its sound: what a bot duel's replay already plays at (Cam found
+ *  those too fast at more, 2026-10-18). */
+export const LAG_SPEED = 2;
+/** A bot duel's replay, behind the proxy that runs it at 8x: quick, and still a fight. */
+export const BOT_DUEL_SPEED = 2;
+
+/** The page's speed for our ROM's replay, `behind` its gBrSpectate.catchUp. A duel between
+ *  two bots is never caught up at CATCH_UP_SPEED: its proxy streams every turn ahead of
+ *  the replay, so it reads as behind for the whole fight. */
+export function spectatePace(behind: number, botDuel: () => boolean): number {
+  if (behind === CATCH_UP_TURNS) return botDuel() ? BOT_DUEL_SPEED : CATCH_UP_SPEED;
+  if (behind === CATCH_UP_LAG) return botDuel() ? BOT_DUEL_SPEED : LAG_SPEED;
+  return 1;
+}
+
 /** What our ROM says it is replaying (gBrSpectate), for duePeek's `romHas` -- or undefined
  *  while RAM cannot be believed: until the ROM has read everything the page queued for it
  *  (POK-330 #10). A tab in the background runs no frames while its peeks keep firing, so

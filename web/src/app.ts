@@ -20,7 +20,7 @@ import type { PadPrefsControl } from './ui/padprefs';
 import { moveInfo, type Rom } from './battle/movebook';
 import { favourite, readTally, tallyMsg, type MatchTally } from './match/tally';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
-import { battleSeats, cutTo, nameBstart, romReplaying, Spectate, watchName } from './match/spectate';
+import { battleSeats, CATCH_UP_SPEED, cutTo, nameBstart, romReplaying, Spectate, spectatePace, watchName } from './match/spectate';
 import type { Results } from './match/results';
 import { EndGrace } from './match/grace';
 import { MatchSession } from './match/session';
@@ -2155,20 +2155,11 @@ function romWatching(emu: Emulator, base: number | undefined): number | null | u
   return emu.read(base + 5, 8) !== 0 ? emu.read(base + 6, 16) : null;
 }
 
-/** How far our ROM's replay is behind the fight (gBrSpectate.catchUp, +15). TURNS (1): a
- *  fight joined late is handed every turn so far and can only play them from the first,
- *  so the page runs the core at CATCH_UP_SPEED, silent, until it is level. LAG (2): the
- *  fighter has ended a turn the replay is still playing -- its text waits out timers the
- *  fighter taps through -- and the page runs it at LAG_SPEED with its sound (HBR-63). */
+/** How far our ROM's replay is behind the fight (gBrSpectate.catchUp, +15): spectatePace's
+ *  `behind`. */
 function romCatchUp(emu: Emulator, base: number | undefined): number {
   return base === undefined ? 0 : emu.read(base + 15, 8);
 }
-const CATCH_UP_TURNS = 1;
-const CATCH_UP_LAG = 2;
-const CATCH_UP_SPEED = 8;
-const LAG_SPEED = 3;
-/** A bot duel's replay, behind the proxy that runs it at 8x: quick, and still a fight. */
-const BOT_DUEL_SPEED = 2;
 
 /** The spectator's own pump: re-ask the trainer we watch what they carry (the ask is
  *  also what tells them they are being watched), mirror how many are watching US into
@@ -2181,7 +2172,7 @@ function startSpectateLoop(
   spectateBase?: number,
   answerOwn?: (ask: Msg) => void,
 ): () => void {
-  // 1 at the fight's own pace, CATCH_UP_SPEED silent, or BOT_DUEL_SPEED / LAG_SPEED with sound.
+  // 1 at the fight's own pace, CATCH_UP_SPEED silent, or 2x with sound (spectatePace).
   let speed = 1;
   const pace = (to: number) => {
     speed = to;
@@ -2199,11 +2190,7 @@ function startSpectateLoop(
     watch != null && bridge.roster.isBot(watch & 0xff) && bridge.roster.isBot(watch >> 8);
   const id = setInterval(() => {
     const now = performance.now();
-    const behind = romCatchUp(emu, spectateBase);
-    const want =
-      behind === CATCH_UP_TURNS ? (botDuel(romWatching(emu, spectateBase)) ? BOT_DUEL_SPEED : CATCH_UP_SPEED)
-      : behind === CATCH_UP_LAG ? LAG_SPEED
-      : 1;
+    const want = spectatePace(romCatchUp(emu, spectateBase), () => botDuel(romWatching(emu, spectateBase)));
     if (want !== speed) pace(want);
     const ask = spectate.duePeek(bridge.seat, now, romReplaying(bridge.rom, () => romWatching(emu, spectateBase)));
     if (ask) {

@@ -1854,7 +1854,12 @@ void BrSpectate_Tick(void)
         n = RecordedBattle_SpectateBacklog();
         starved = RecordedBattle_TakeSpectateStarved();
         if (n > BR_CATCH_UP_ON)
+        {
+            // Lagging's counts start over when the backlog is played: they are not for it.
             gBrSpectate.catchUp = BR_CATCH_UP_TURNS;
+            sLagFrames = 0;
+            sSinceStarved = BR_LAG_FRAMES;
+        }
         else if (gBrSpectate.catchUp != BR_CATCH_UP_TURNS || n <= BR_CATCH_UP_OFF)
             gBrSpectate.catchUp = Lagging(n, starved) ? BR_CATCH_UP_LAG : 0;
         if (gMain.inBattle && sPendParties == NULL && RecordedBattle_IsSpectateLive())
@@ -1888,7 +1893,7 @@ void BrSpectate_Tick(void)
     gBrSpectate.catchUp = FALSE;
     // The sum of the turn that just ended, taken the frame it ended -- ahead of every
     // return below: a TURN or BSTART waiting on the ring, taken later, would sum the next
-    // turn's moves part done. It goes out with the next TURN.
+    // turn's moves part done. It goes out on its own below, ahead of the next turn's.
     if (gMain.inBattle && TurnEnded())
     {
         HoldCheck(&sMine, sCheckTurn, TurnSum());

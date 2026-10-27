@@ -27,8 +27,8 @@ struct BrSpectate
 
 // gBrSpectate.catchUp. TURNS: turns of the fight are waiting, a late watch's backlog --
 // the page runs the replay at 8x, silent. LAG: the fighter has ended a turn the replay is
-// still playing, or chosen one it has not reached -- 3x with its sound, until it is level
-// (HBR-63: the replay's text waits out its timers where the fighter taps through it, and
+// still playing, or chosen one it has not reached -- 2x with its sound, until it is level
+// (HBR-83: the replay's text waits out its timers where the fighter taps through it, and
 // a watched fight ran seconds behind and further each turn).
 #define BR_CATCH_UP_TURNS 1
 #define BR_CATCH_UP_LAG   2
