@@ -15,6 +15,9 @@
 import { loadHoenn } from '../src/bots/hoenn';
 import type { World, WorldMap, Spot } from '../src/bots/world';
 import { DIR_EAST, DIR_SOUTH, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from './sim';
+import { bootRom, lastStart, type RomBattles } from './rom';
+import type { GbaKey } from '../src/emu';
+import type { PackedMon } from '../src/net/wire';
 import spritesData from '../src/data/sprites.json';
 
 const TILE = 16;
@@ -223,30 +226,61 @@ function talk(): void {
   if (other) startBattle('trainer', other);
 }
 
-// ---- the battle handoff (phase 2 replaces the placeholder with the ROM) ---------------
+// ---- the battle handoff: the real ROM fights, the page waits ---------------------------
 
 const battleEl = document.getElementById('battle')!;
 const battleNote = document.getElementById('battle-note')!;
-let battle: { kind: string; foe: Actor | null; until: number } | null = null;
+const gbaCanvas = document.getElementById('gba') as HTMLCanvasElement;
+let rom: RomBattles | null = null;
+let battle: { foe: Actor | null; shownAt: number } | null = null;
+const handoff: number[] = []; // ms from the trigger to the ROM's first battle frame, and back
+
+// Emerald's internal species ids (not the dex's): what lives around Littleroot.
+const WILD = [286, 288, 290, 289]; // POOCHYENA ZIGZAGOON WURMPLE (and a LINOONE)
+function mon(species: number, level: number): PackedMon {
+  return {
+    species, level, hp: 1, maxHp: 1, status: 0, moves: [{ id: 33, pp: 35, ppUps: 0 }], heldItem: 0,
+    otId: 0, personality: (species * 2654435761) >>> 0, exp: 0, nickname: '', ot: '',
+  };
+}
 
 function startBattle(kind: 'wild' | 'trainer', foe: Actor | null): void {
-  battle = { kind, foe, until: frame + 120 };
   player.battling = true;
   if (foe) {
     foe.battling = true;
     foe.m.facing = foe.m.moveDir = ({ 1: 2, 2: 1, 3: 4, 4: 3 } as Record<number, number>)[player.m.facing];
   }
-  battleNote.textContent = kind === 'wild' ? 'A wild Pokémon! (the ROM fights this in phase 2)' : `${foe!.name} wants to battle! (the ROM fights this in phase 2)`;
+  held.clear();
+  battle = { foe, shownAt: performance.now() };
   battleEl.classList.add('on');
+  if (!rom) {
+    battleNote.textContent = 'The ROM is still booting (or web/public/spike-rom is missing).';
+    setTimeout(endBattle, 1500);
+    return;
+  }
+  battleNote.textContent = '';
+  const t0 = performance.now();
+  const party = kind === 'wild' ? [mon(WILD[Math.floor(Math.random() * WILD.length)], 3)] : [mon(286, 5), mon(288, 5)];
+  const firstFrame = rom.emu.onFrame(() => { handoff.push(performance.now() - t0); firstFrame(); });
+  void rom.fight(kind === 'wild' ? 'WILD' : foe!.name.split(' ')[0].slice(0, 7), party).then(endBattle);
+}
+
+function endBattle(): void {
+  battleEl.classList.remove('on');
+  player.battling = false;
+  if (battle?.foe) battle.foe.battling = false;
+  battle = null;
   held.clear();
 }
 
-function tickBattle(): void {
-  if (!battle || frame < battle.until) return;
-  battleEl.classList.remove('on');
-  player.battling = false;
-  if (battle.foe) battle.foe.battling = false;
-  battle = null;
+// While the ROM has the screen, the pad is the ROM's.
+const GBA_KEY: Record<string, GbaKey> = { up: 'up', down: 'down', left: 'left', right: 'right', a: 'a', b: 'b' };
+addEventListener('keydown', (e) => { const k = KEYMAP[e.key]; if (battle && rom && k) rom.press(GBA_KEY[k]); });
+addEventListener('keyup', (e) => { const k = KEYMAP[e.key]; if (rom && k) rom.release(GBA_KEY[k]); });
+for (const el of document.querySelectorAll<HTMLElement>('.k')) {
+  const k = el.dataset.k!;
+  el.addEventListener('pointerdown', () => { if (battle && rom) rom.press(GBA_KEY[k]); });
+  el.addEventListener('pointerup', () => rom?.release(GBA_KEY[k]));
 }
 
 // ---- camera + drawing -----------------------------------------------------------------
@@ -466,7 +500,6 @@ function loop(now: number): void {
     steps += 1;
     frame += 1;
     for (const a of actors) tickActor(a);
-    tickBattle();
     pressed.clear();
   }
   const t1 = performance.now();
@@ -483,6 +516,8 @@ function loop(now: number): void {
       `${fps.toFixed(0)} fps · p95 gap ${p95.toFixed(1)} ms\n` +
       `sim ${simMs.toFixed(2)} ms · draw ${drawMs.toFixed(2)} ms\n` +
       `${actors.length} trainers · ${here.map.replace('MAP_', '')} ${here.x},${here.y}` +
+      `\nROM ${rom ? (battle ? 'fighting' : 'paused, waiting to fight') : 'booting'}` +
+      (lastStart ? ` · battle up in ${lastStart.frames} frames (${lastStart.ms.toFixed(0)} ms)` : '') +
       (spectating ? `\nzoom ${zoom.toFixed(2)} · drag, pinch, tap a trainer` : '');
   }
   requestAnimationFrame(loop);
@@ -530,7 +565,8 @@ async function boot(): Promise<void> {
   }
   resize();
   requestAnimationFrame((t) => { last = t; loop(t); });
-  (window as unknown as { __spike: unknown }).__spike = { actors, placed, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startBattle };
+  bootRom(gbaCanvas).then((r) => { rom = r; }, (e) => console.warn('spike ROM not booted', e));
+  (window as unknown as { __spike: unknown }).__spike = { actors, placed, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startBattle, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; } };
 }
 
 void boot();
