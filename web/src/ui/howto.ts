@@ -1,4 +1,4 @@
-// HOW TO PLAY (POK-429): a match in seven panels, clicked through in a few seconds. Cam:
+// HOW TO PLAY (POK-429): a match in a few panels, clicked through in a few seconds. Cam:
 // "something a user can click thru quickly just to give them the broad strokes of how a
 // game plays out". Offered once after a player's first ROM import, and a row on the menu.
 // POK-430 gave it Cam's own sections and words, each over a picture out of the game's own
@@ -8,7 +8,7 @@ import { ROW_H, W, paintButtons, type ButtonSpec } from './screens';
 import type { DrawnScreen, Painted, Widget } from './stage';
 
 /** What a panel shows above its words: a picture off the sheet, and what moves on it. */
-export type Art = 'safari' | 'hoenn' | 'fog' | 'evolve' | 'battle' | 'event' | 'win';
+export type Art = 'safari' | 'hoenn' | 'encounter' | 'pickup' | 'fog' | 'evolve' | 'battle' | 'event' | 'win';
 
 export interface Panel {
   title: string;
@@ -26,6 +26,16 @@ export const PANELS: readonly Panel[] = [
     title: 'Where we flying?',
     text: 'Pick where in Hoenn you want to drop into. You can find items and Pokémon in houses now.',
     art: 'hoenn',
+  },
+  {
+    title: 'Encounters',
+    text: "Wild Pokémon don't jump out of the grass. Look for the dark patches in grass, caves and water, and step on one to battle what lives there. Once someone takes a patch, it's gone until the Fog moves.",
+    art: 'encounter',
+  },
+  {
+    title: 'Item pickups',
+    text: 'Grab the items you see on the ground. Vitamins boost your whole party on the spot, valuables turn into money, and a Poké Ball is a stack of six. Medicine from the Bag heals your whole party.',
+    art: 'pickup',
   },
   {
     title: 'Weezing Fog',
@@ -57,13 +67,22 @@ export const PANELS: readonly Panel[] = [
 /** tools/br/export-howto.py's sheet: its pictures, the screen's width and this tall. */
 export const SHEET = 'howto.png';
 export const ART_H = 150;
-const ROW: Partial<Record<Art, number>> = { safari: 0, hoenn: 1, fog: 2, battle: 3, event: 4 };
 /** The evolution backdrop's twelve frames, from the sheet's sixth picture down. */
 const EVO_Y = ART_H * 5;
 const EVO_FRAMES = 12;
 /** CHARMANDER, CHARMELEON, CHARIZARD, 64 square; the white ones a row under. */
 const MONS_Y = EVO_Y + ART_H * EVO_FRAMES;
 const MON = 64;
+/** Where each still picture starts on the sheet. */
+const ART_Y: Partial<Record<Art, number>> = {
+  safari: 0,
+  hoenn: ART_H,
+  fog: ART_H * 2,
+  battle: ART_H * 3,
+  event: ART_H * 4,
+  encounter: MONS_Y + MON * 2,
+  pickup: MONS_Y + MON * 2 + ART_H,
+};
 
 const TEXT_W = W - 24;
 const FOG_TILE = 64;
@@ -189,8 +208,8 @@ export function howToScreen(model: () => HowToModel): DrawnScreen {
         r.x + r.w <= words.x || r.x >= words.x + words.w || r.y + r.h <= words.y || r.y >= words.y + words.h;
       if (panel.art === 'win') for (const p of confetti(t, all.x, all.w, h)) if (clear(p.r)) c.fillRect(p.r, p.color);
 
-      const row = ROW[panel.art];
-      if (row !== undefined) c.drawUiPicture(SHEET, 0, row * ART_H, W, ART_H, art.x, art.y);
+      const artY = ART_Y[panel.art];
+      if (artY !== undefined) c.drawUiPicture(SHEET, 0, artY, W, ART_H, art.x, art.y);
       const you = skinSheet(m.skin);
       if (panel.art === 'fog') {
         // You, on Route 101, as the fog rolls over it.
