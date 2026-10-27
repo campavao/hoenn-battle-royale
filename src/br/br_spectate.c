@@ -1455,6 +1455,8 @@ void BrSpectate_LetGo(void)
     gBrSpectate.followed = 0;
 }
 
+static void ResetAhead(void);
+
 void BrSpectate_Follow(u8 seat)
 {
     if (seat != BR_NO_SEAT && (seat >= BR_MAX_SEATS || seat == gBrMySeat))
@@ -1485,6 +1487,7 @@ void BrSpectate_Follow(u8 seat)
     }
     gBrSpectate.follow = seat;
     gBrSpectate.shotSecs = 0;
+    ResetAhead();
 }
 
 static void HandleFollow(const u8 *payload, u8 len)
@@ -1527,13 +1530,23 @@ static void FieldCB_FollowArrive(void)
 static u8 sAheadGroup;
 static u8 sAheadNum;
 static u16 sAheadFrames;
-// The followed ghost's cell as last seen, and whether it walked there: the engine keeps
-// previousCoords only while a step plays. sSeenSprite is its sprite + 1, 0 for none yet.
-static u8 sSeenSprite;
-static s16 sSeenX;
-static s16 sSeenY;
-static bool8 sWalkedIn;
+// Where the followed ghost's last walk took it, recorded while the step plays and
+// cleared once the ghost and camera are at rest and it was not a door. A PLACE or a
+// drift snap that puts a ghost on a door tile moves it with no step, so it never goes
+// ahead. sStepSprite is the ghost's sprite + 1, 0 for none.
+static u8 sStepSprite;
+static s16 sStepX;
+static s16 sStepY;
 
+static void ResetAhead(void)
+{
+    sAheadFrames = 0;
+    sStepSprite = 0;
+}
+
+// Only the warps a walk onto takes at once. The rest that warp on a step -- Lavaridge's
+// B1F and 1F, the Aqua Hideout and Mossdeep gym pads, Mt Pyre's holes -- run a script or
+// an effect first, and keep the old wait for the PLACE.
 static bool8 WarpsOnStep(s16 x, s16 y)
 {
     u8 behavior = MapGridGetMetatileBehaviorAt(x, y);
@@ -1549,7 +1562,10 @@ static bool8 GoAhead(const struct ObjectEvent *ghost)
     s16 y = ghost->currentCoords.y;
     u8 i;
 
-    if (events == NULL || !sWalkedIn || !WarpsOnStep(x, y))
+    if (events == NULL || sStepSprite != ghost->spriteId + 1 || sStepX != x || sStepY != y)
+        return FALSE;
+    sStepSprite = 0;
+    if (!WarpsOnStep(x, y))
         return FALSE;
     for (i = 0; i < events->warpCount; i++)
     {
@@ -1559,6 +1575,8 @@ static bool8 GoAhead(const struct ObjectEvent *ghost)
             continue;
         if (w->mapNum == MAP_NUM(MAP_DYNAMIC))
             return FALSE; // where it goes is the walker's own last map: their PLACE says
+        if (BrMatch_IsDoorClosed(w->mapGroup, w->mapNum))
+            return FALSE; // the match keeps it shut, and they stay this side of it
         SetWarpDestination(w->mapGroup, w->mapNum, w->warpId, -1, -1);
         sAheadGroup = w->mapGroup;
         sAheadNum = w->mapNum;
@@ -1599,7 +1617,7 @@ static void FollowTick(void)
     if (!BrField_OverworldRunning())
     {
         gBrSpectate.warpWait = 0;
-        sSeenSprite = 0; // a map load hands the sprites out again
+        sStepSprite = 0; // a map load hands the sprites out again
     }
     if (!BrField_OverworldRunning() || ScriptContext_IsEnabled())
         return;
@@ -1737,19 +1755,15 @@ static void FollowTick(void)
     // on while the warp loaded, and were drawn at the top or the right of the screen from
     // then on (2026-10-06 play-test). So the view jumps onto them first -- both at rest,
     // a whole number of tiles apart -- and it does again if they ever drift apart.
-    if (sSeenSprite != ghost->spriteId + 1)
+    if (ghost->heldMovementActive && !ghost->heldMovementFinished)
     {
-        sSeenSprite = ghost->spriteId + 1;
-        sWalkedIn = FALSE;
+        // A walk sets currentCoords to where it ends as it starts.
+        sStepSprite = ghost->spriteId + 1;
+        sStepX = ghost->currentCoords.x;
+        sStepY = ghost->currentCoords.y;
+        return;
     }
-    else if (ghost->currentCoords.x != sSeenX || ghost->currentCoords.y != sSeenY)
-    {
-        sWalkedIn = TRUE;
-    }
-    sSeenX = ghost->currentCoords.x;
-    sSeenY = ghost->currentCoords.y;
-    if ((ghost->heldMovementActive && !ghost->heldMovementFinished)
-     || gFieldCamera.x != 0 || gFieldCamera.y != 0)
+    if (gFieldCamera.x != 0 || gFieldCamera.y != 0)
         return;
     if (GoAhead(ghost))
         return;
@@ -1809,6 +1823,7 @@ void BrSpectate_Init(void)
     sPeekWin = WINDOW_NONE;
     sPeekSeat = BR_NO_SEAT;
     gBrSpectate.follow = BR_NO_SEAT;
+    ResetAhead();
 }
 
 void BrSpectate_OnResult(u8 seat)

@@ -270,27 +270,41 @@ static const struct BrClosedDoor sClosedDoors[] =
     { MAP_GROUP(MAP_EVER_GRANDE_CITY_HALL5),               MAP_NUM(MAP_EVER_GRANDE_CITY_HALL5),               sText_LeagueClosed },
 };
 
-bool8 BrMatch_DoorClosed(u8 mapGroup, u8 mapNum)
+static const struct BrClosedDoor *ClosedDoor(u8 mapGroup, u8 mapNum)
 {
     u8 i;
 
     for (i = 0; i < ARRAY_COUNT(sClosedDoors); i++)
     {
         if (sClosedDoors[i].group == mapGroup && sClosedDoors[i].num == mapNum)
-        {
-            // Leaning on the door holds the direction, so this is asked every frame.
-            // The box's own life is the throttle -- it re-says itself the moment the
-            // last one has faded, and never re-dirties the window mid-display.
-            if (gBrHud.boxFrames == 0)
-                BrHud_Box(sClosedDoors[i].line);
-            // The field takes our TRUE as a script or a warp started, and locks the
-            // controls for it to let go of. Neither started, so nothing did: Cam leant
-            // on the lab once and never moved again (POK-432). This one lets go.
-            ScriptContext_SetupScript(BR_EventScript_DoorClosed);
-            return TRUE;
-        }
+            return &sClosedDoors[i];
     }
-    return FALSE;
+    return NULL;
+}
+
+// The same list, asked without saying so: a watcher deciding whether the trainer it
+// follows is about to go through (br_spectate.c).
+bool8 BrMatch_IsDoorClosed(u8 mapGroup, u8 mapNum)
+{
+    return ClosedDoor(mapGroup, mapNum) != NULL;
+}
+
+bool8 BrMatch_DoorClosed(u8 mapGroup, u8 mapNum)
+{
+    const struct BrClosedDoor *closed = ClosedDoor(mapGroup, mapNum);
+
+    if (closed == NULL)
+        return FALSE;
+    // Leaning on the door holds the direction, so this is asked every frame.
+    // The box's own life is the throttle -- it re-says itself the moment the
+    // last one has faded, and never re-dirties the window mid-display.
+    if (gBrHud.boxFrames == 0)
+        BrHud_Box(closed->line);
+    // The field takes our TRUE as a script or a warp started, and locks the
+    // controls for it to let go of. Neither started, so nothing did: Cam leant
+    // on the lab once and never moved again (POK-432). This one lets go.
+    ScriptContext_SetupScript(BR_EventScript_DoorClosed);
+    return TRUE;
 }
 
 void BrMatch_Init(void)
