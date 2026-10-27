@@ -1371,6 +1371,14 @@ let fpsUi: typeof import('./ui/fps') | undefined;
 function wireFps(emu: Emulator): void {
   const perf = perfWanted(location.hash);
   if (!import.meta.env.DEV && !perf) return;
+  // #perf's band, before the first boot sizes the picture's band to what is left
+  // (askForBand): the readout comes in a chunk of its own, later (index.html .fps.perf).
+  // ...and out of the picture's box, whose shake (field.ts) is a transform: that makes
+  // the box the readout's containing block, and the band moved down onto the picture.
+  if (perf) {
+    document.body.classList.add('perf-band');
+    document.body.append($('#fps') as HTMLElement);
+  }
   void import('./ui/fps').then((ui) => {
     fpsUi = ui;
     meterFps(emu, perf, ui);

@@ -6,6 +6,14 @@
 
 extern const u8 gBrVersionString[];
 
+// IntrMain_Buffer's size in words (src/main.c): IntrMain (src/crt0.s), copied there to run
+// from IWRAM, is 0x15C bytes, and pret's 0x800-byte buffer left the rest unused. That
+// rest is the stack's: it grows down from sp_sys into whatever IWRAM ends with, and BR's
+// own IWRAM had cut it to 796 bytes on agbcc. A deep enough frame wrote over gBrTally,
+// the last thing there, and the results said WON 769 and STEPS 30608 (Cam, 2026-10-27).
+// tools/br/ram-headroom.py holds the stack to a floor and IntrMain to this.
+#define BR_INTR_MAIN_WORDS 0x80
+
 void BrInit(void);
 void BrFrame(void);
 // main.c, the main loop's last call before WaitForVBlank: the frame's work is done.

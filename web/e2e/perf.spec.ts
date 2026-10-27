@@ -166,6 +166,14 @@ async function hostsAMatch(browser: Browser, run: (typeof RUNS)[number]): Promis
       await host.screenshot({ path: path.join(OUT_DIR, `${run.file}-host.png`) });
       // The #perf readout is up, with the whole page's line under this second's.
       await expect(host.locator('#fps')).toContainText(/fps[\s\S]*all \d+ frames/);
+      // ...in a band of its own above the picture (2026-10-27): under a phone's status bar,
+      // where iOS blurred it, it had sat over the HUD and the results' title too.
+      // Mid-shake too (field.ts): a transform on the picture's box once made it the
+      // readout's containing block (CI, 2026-10-27).
+      await host.addStyleTag({ content: '#screen-wrap { transform: translate(0px, 0px); }' });
+      const readout = await host.locator('#fps').boundingBox();
+      const picture = await host.locator('#screen-wrap').boundingBox();
+      expect(readout && picture && readout.y + readout.height, 'the readout ends above the picture').toBeLessThanOrEqual((picture?.y ?? 0) + 0.5);
 
       // The floor, not a number: below this a GBA is visibly wrong, and a number would
       // be a thing to fight rather than a thing to know.
