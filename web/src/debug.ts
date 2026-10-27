@@ -23,21 +23,18 @@ export interface DebugFlag {
   /** Read once as the page starts (wireFps), so a press reloads to apply it. The rest
    *  are read when a match starts, which is after this menu. */
   reload?: boolean;
-  /** Read only by a dev server's page (import.meta.env.DEV): each one rigs a match.
-   *  devsurface.test.ts holds every reader to its guard. */
-  dev: boolean;
 }
 
 export const DEBUG_FLAGS: readonly DebugFlag[] = [
-  { key: 'perf', label: 'PERF METERS', choices: [null, ''], reload: true, dev: false },
-  { key: 'fast', label: 'FAST PACE', choices: [null, ''], dev: true },
-  { key: 'safari', label: 'SAFARI TIME', choices: [null, '25', '60', '120'], off: 'ROOM', secs: true, pace: 'safariSecs', dev: true },
-  { key: 'fog', label: 'FOG PHASE', choices: [null, '15', '30', '60'], off: 'ROOM', secs: true, pace: 'fogSecs', dev: true },
-  { key: 'seed', label: 'FIXED SEED', choices: [null, '1', '7', '42'], dev: true },
-  { key: 'nobots', label: 'NO BOTS', choices: [null, ''], dev: true },
-  { key: 'noauto', label: 'HOLD ROOM OPEN', choices: [null, ''], dev: true },
-  { key: 'testmon', label: 'TEST PARTY', choices: [null, ''], dev: true },
-  { key: 'away', label: 'AWAY TIMEOUT', choices: [null, '10', '30'], off: '2 MIN', secs: true, dev: true },
+  { key: 'perf', label: 'PERF METERS', choices: [null, ''], reload: true },
+  { key: 'fast', label: 'FAST PACE', choices: [null, ''] },
+  { key: 'safari', label: 'SAFARI TIME', choices: [null, '25', '60', '120'], off: 'ROOM', secs: true, pace: 'safariSecs' },
+  { key: 'fog', label: 'FOG PHASE', choices: [null, '15', '30', '60'], off: 'ROOM', secs: true, pace: 'fogSecs' },
+  { key: 'seed', label: 'FIXED SEED', choices: [null, '1', '7', '42'] },
+  { key: 'nobots', label: 'NO BOTS', choices: [null, ''] },
+  { key: 'noauto', label: 'HOLD ROOM OPEN', choices: [null, ''] },
+  { key: 'testmon', label: 'TEST PARTY', choices: [null, ''] },
+  { key: 'away', label: 'AWAY TIMEOUT', choices: [null, '10', '30'], off: '2 MIN', secs: true },
 ];
 
 function paramsOf(hash: string): URLSearchParams {

@@ -187,8 +187,8 @@ const BR_BOOT_MAP = 1;
 // Solo only (POK-222): warp straight into the Safari opening, skipping Littleroot --
 // there is no lobby to wait in when there's nobody else to wait for.
 const BR_BOOT_SAFARI = 2;
-// br_boot.h: ORed into the mode, hands the ROM a level 5 Treecko. Dev only, and only
-// on an explicit `#testmon` -- the e2e needs two seats able to actually fight before
+// br_boot.h: ORed into the mode, hands the ROM a level 5 Treecko. Only on an explicit
+// `#testmon` (the DEBUG screen's TEST PARTY) -- the e2e needs two seats able to actually fight before
 // anyone has caught anything.
 const BR_BOOT_FLAG_TESTMON = 0x80;
 const MALE = 0;
@@ -1489,7 +1489,7 @@ function waitForBoot(emu: Emulator, mailboxBase: number): Promise<void> {
  *  answer and hardcoded BR_BOOT_MAP instead, which quietly dropped the testmon flag --
  *  and with it the e2e harness's party -- on every replay. */
 function bootModeFor(mode: string): number {
-  const wantsTestMon = import.meta.env.DEV && new URLSearchParams(location.hash.slice(1)).has('testmon');
+  const wantsTestMon = new URLSearchParams(location.hash.slice(1)).has('testmon');
   return (mode === 'solo' ? BR_BOOT_SAFARI : BR_BOOT_MAP) | (wantsTestMon ? BR_BOOT_FLAG_TESTMON : 0);
 }
 
@@ -1665,7 +1665,7 @@ function renderRoomPanel(
 
 // ---- bots (POK-236) -----------------------------------------------------------------
 
-/** `#nobots` fills the room with nobody. A dev-only affordance like `#testmon`: an e2e
+/** `#nobots` fills the room with nobody. A test switch like `#testmon`: an e2e
  *  that is about two people needs the room to hold still, and eight bots walking into
  *  them is eight chances for the thing under test to be something else. */
 /** `#quick` runs the match at a pace a test can sit through: a 25-second opening
@@ -1679,9 +1679,13 @@ function renderRoomPanel(
  *  pace: Cam's play-test had eight fog phases inside two minutes while the room's own
  *  control said FOG 120s, and there was no time to catch anything. Two meanings, one
  *  word, and the one that lost was the game. `#safari=N` and `#fog=N` set either one
- *  (hash.ts's devPace). */
+ *  (hash.ts's devPace).
+ *
+ *  These test switches (and `#seed`, `#nobots`, `#noauto`, `#testmon`, `#away`) were read
+ *  in DEV only, as ways to rig a match. The DEBUG screen sets them, and Cam wants them on
+ *  the live site too (2026-10-27: "Everywhere is fine for now"). `#land` and `#rom` stay
+ *  DEV only: they are the harness's. */
 function paceOptions(): { safariSecs?: number; fogSecs?: number } | undefined {
-  if (!import.meta.env.DEV) return undefined;
   return devPace(location.hash);
 }
 
@@ -1833,7 +1837,7 @@ function writeFieldShown(emu: Emulator): void {
 }
 
 function botFill(): number {
-  return import.meta.env.DEV && new URLSearchParams(location.hash.slice(1)).has('nobots') ? 0 : BOT_FILL;
+  return new URLSearchParams(location.hash.slice(1)).has('nobots') ? 0 : BOT_FILL;
 }
 
 // ---- results (POK-228) --------------------------------------------------------------
@@ -2227,29 +2231,28 @@ function startSpectateLoop(
 
 // ---- the match director's page-side wiring (POK-222/223/224/228) ------------------------
 
-/** `#noauto` holds the room open instead. Dev only, like `#testmon`, `#nobots` and
+/** `#noauto` holds the room open instead. A test switch, like `#testmon`, `#nobots` and
  *  `#quick`: an e2e about one piece of a match needs the rest of it to stand still,
  *  and a director that starts under the test warps everybody out from under it. */
-/** `#seed=N` runs the match off a fixed seed instead of a fresh one. Dev only: it is
+/** `#seed=N` runs the match off a fixed seed instead of a fresh one. It is
  *  what makes a whole match reproducible -- the drop, the ring's centre, every bot's
  *  team and every duel come off it, so the same seed is the same match. */
 function fixedSeed(): number | null {
-  if (!import.meta.env.DEV) return null;
   const raw = new URLSearchParams(location.hash.slice(1)).get('seed');
   const n = raw === null ? NaN : Number(raw);
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
 function autoStarts(): boolean {
-  return !import.meta.env.DEV || !new URLSearchParams(location.hash.slice(1)).has('noauto');
+  return !new URLSearchParams(location.hash.slice(1)).has('noauto');
 }
 const DIRECTOR_TICK_MS = 1000; // coarser than the 5s clock/fogSecs cadence director.ts needs
 /** How often a director on a hidden tab asks the relay to hand the match on. */
 const STAND_DOWN_EVERY_MS = 5000;
 /** How long a host's tab is hidden before its waiting room comes off the list (away.ts):
- *  long enough to paste the code somewhere and come back. `#away=<secs>` in dev. */
+ *  long enough to paste the code somewhere and come back. `#away=<secs>` for a test. */
 function awayMs(): number {
-  const secs = import.meta.env.DEV ? Number(new URLSearchParams(location.hash.slice(1)).get('away')) : NaN;
+  const secs = Number(new URLSearchParams(location.hash.slice(1)).get('away'));
   return secs > 0 ? secs * 1000 : 2 * 60_000;
 }
 

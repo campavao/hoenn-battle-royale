@@ -67,10 +67,6 @@ describe('the DEBUG rows', () => {
     }
   });
 
-  it('leave only #perf readable in a build: the rest rig a match', () => {
-    expect(DEBUG_FLAGS.filter((f) => !f.dev).map((f) => f.key)).toEqual(['perf']);
-  });
-
   it('turn the tile on and off under the key app.ts reads for it', () => {
     const store = new Map<string, string>();
     const fake = {

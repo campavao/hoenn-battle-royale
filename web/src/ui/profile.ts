@@ -353,10 +353,8 @@ export { toggleDebugMenu };
 /** DEBUG (Cam, 2026-10-27: "a main menu option rather than manually editing the url"):
  *  each row steps one hash flag, so the URL says what was picked and a link with it still
  *  works. Here rather than in app.ts for main.js's budget. `pace` is app.ts's paceOptions,
- *  the pace the page would run off the hash: none in a build, which greys every row but
- *  PERF -- a build reads none of the others. */
+ *  the pace the page will run off the hash. */
 export function debugScreen(pace: () => ReturnType<typeof devPace>, redraw: () => void, back: () => void): DrawnScreen {
-  const dev = import.meta.env.DEV;
   const reload = (hash: string) => {
     history.replaceState(null, '', `#${hash}`);
     location.reload();
@@ -368,7 +366,6 @@ export function debugScreen(pace: () => ReturnType<typeof devPace>, redraw: () =
         label: flag.label,
         detail: flagDetail(flag, location.hash, pace()),
         id: `debug-${flag.key}`,
-        disabled: flag.dev && !dev,
         onPress: () => {
           const hash = cycleFlag(location.hash, flag);
           if (flag.reload) return reload(hash);
@@ -380,7 +377,7 @@ export function debugScreen(pace: () => ReturnType<typeof devPace>, redraw: () =
       { label: 'SPIKE B', detail: 'TS overworld', id: 'debug-spike-b', onPress: () => location.assign(`${import.meta.env.BASE_URL}spike-b/`) },
     ],
     rowsId: 'debug-rows',
-    note: dev ? 'Each applies to the next match.' : 'Grey rows need a dev server.',
+    note: 'Each applies to the next match.',
     noteId: 'debug-note',
     buttons: [{ label: 'BACK', id: 'debug-back', onPress: back }],
     onBack: back,
