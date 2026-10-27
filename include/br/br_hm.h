@@ -95,8 +95,8 @@ BR_SIZE(BrHmView, 4)
 // the field and while a script runs, and `can` keeps its last value there.
 extern struct BrHmView gBrHmView;
 
-// Every frame from BrFrame: `ready` each field frame, `can` every BR_HM_VIEW_FRAMES of
-// them (a party read decrypts every mon), and on the first.
+// Every frame from BrFrame: `ready` each field frame; `can` takes one mon's read every
+// BR_HM_VIEW_FRAMES of them (br_hm.c), so the whole party every dozen frames.
 void BrHm_Tick(void);
 
 #endif // GUARD_BR_HM_H

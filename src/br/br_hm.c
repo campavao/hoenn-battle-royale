@@ -84,35 +84,36 @@ static bool8 Can(u16 move)
 }
 
 EWRAM_DATA struct BrHmView gBrHmView = {0};
-static u8 sViewFrames; // until `can` is read off the party again (IWRAM: EWRAM is full)
+// `can` is read off the party one mon at a time, a mon every BR_HM_VIEW_FRAMES field
+// frames: a GetMonData decrypts the whole mon, and six at once in one frame cost the
+// agbcc build a frame (hud-vram-pc). IWRAM: EWRAM is full.
+static u8 sSlotCan[PARTY_SIZE];
+static u8 sSlot;
+static u8 sViewFrames;
 
-#define BR_HM_VIEW_FRAMES 16
+#define BR_HM_VIEW_FRAMES 2
 #define BR_HM_SHOWN (BR_HM_CUT | BR_HM_FLY | BR_HM_SURF | BR_HM_STRENGTH | BR_HM_WATERFALL | BR_HM_DIVE)
 
-// BrHm_Slot for all six at once: each mon read once, its four moves included (a
-// GetMonData decrypts the whole mon, and MonKnowsMove would read the four again per HM).
-static u8 PartyCan(void)
+// BrHm_Slot's rule for one mon and every shown HM: the mon read once, its four moves
+// included (MonKnowsMove would read the four again per HM).
+static u8 SlotCan(u8 slot)
 {
-    u8 slot, hm, i, can = 0;
+    u8 hm, i, can = 0;
     u16 moves[MAX_MON_MOVES];
+    u16 species = GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL);
 
-    for (slot = 0; slot < PARTY_SIZE; slot++)
+    if (species == SPECIES_NONE || GetMonData(&gPlayerParty[slot], MON_DATA_IS_EGG, NULL))
+        return 0;
+    for (i = 0; i < MAX_MON_MOVES; i++)
+        moves[i] = GetMonData(&gPlayerParty[slot], MON_DATA_MOVE1 + i, NULL);
+    for (hm = 0; hm < ARRAY_COUNT(sHmMoves); hm++)
     {
-        u16 species = GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL);
-
-        if (species == SPECIES_NONE || GetMonData(&gPlayerParty[slot], MON_DATA_IS_EGG, NULL))
+        if (!((BR_HM_SHOWN >> hm) & 1))
             continue;
-        for (i = 0; i < MAX_MON_MOVES; i++)
-            moves[i] = GetMonData(&gPlayerParty[slot], MON_DATA_MOVE1 + i, NULL);
-        for (hm = 0; hm < ARRAY_COUNT(sHmMoves); hm++)
-        {
-            if (!((BR_HM_SHOWN >> hm) & 1) || ((can >> hm) & 1))
-                continue;
-            for (i = 0; i < MAX_MON_MOVES && moves[i] != sHmMoves[hm]; i++)
-                ;
-            if (i < MAX_MON_MOVES || CouldLearn(species, hm))
-                can |= 1 << hm;
-        }
+        for (i = 0; i < MAX_MON_MOVES && moves[i] != sHmMoves[hm]; i++)
+            ;
+        if (i < MAX_MON_MOVES || CouldLearn(species, hm))
+            can |= 1 << hm;
     }
     return can;
 }
@@ -167,6 +168,9 @@ void BrHm_Tick(void)
     if (gBrMatch.phase != BR_PHASE_PLAY)
     {
         gBrHmView.can = gBrHmView.ready = 0;
+        for (sSlot = 0; sSlot < PARTY_SIZE; sSlot++)
+            sSlotCan[sSlot] = 0;
+        sSlot = 0;
         sViewFrames = 0;
         return;
     }
@@ -179,7 +183,14 @@ void BrHm_Tick(void)
     }
     if (sViewFrames == 0)
     {
-        gBrHmView.can = PartyCan();
+        u8 slot, can = 0;
+
+        sSlotCan[sSlot] = SlotCan(sSlot);
+        if (++sSlot == PARTY_SIZE)
+            sSlot = 0;
+        for (slot = 0; slot < PARTY_SIZE; slot++)
+            can |= sSlotCan[slot];
+        gBrHmView.can = can;
         sViewFrames = BR_HM_VIEW_FRAMES;
     }
     sViewFrames--;
