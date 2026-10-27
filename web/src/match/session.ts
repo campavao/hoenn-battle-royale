@@ -65,10 +65,11 @@ export interface SessionDeps {
   defaultFog?(): number;
   /** Where the career and the saved rounds go: localStorage on the page. */
   store: Pick<Storage, 'getItem' | 'setItem'>;
-  /** What our own ROM counted of the match (POK-416, gBrTally): zeroed as one starts and
-   *  read once it is decided, into the results and the career. Absent where the build
+  /** What our own ROM counted of the match (POK-416, gBrTally): zeroed by the ROM as one
+   *  starts (START, br_match.c) and read once it is decided, into the results and the
+   *  career. Absent where the build
    *  has no gBrTally, and the career then counts what the room saw. */
-  tally?: { zero(): void; read(): MatchTally };
+  tally?: { read(): MatchTally };
   /** Whether somebody else's Hall of Fame is still wanted in our ROM: not once the
    *  results have given up on it and gone up (ParadeHold), or it plays under them. */
   fameWanted?(): boolean;
@@ -328,7 +329,6 @@ export class MatchSession {
       this.booked = false;
       this.famed = 0;
       this.tally = null;
-      this.deps.tally?.zero();
       this.forgetBeaten();
     }
     this.results.note(msg, now);

@@ -14,7 +14,6 @@
 #include "br/br_match.h"
 #include "br/br_netlink.h"
 #include "br/br_bot.h"
-#include "br/br_hud.h"
 #include "br/br_field.h"
 #include "br/br_engage.h"
 #include "br/br_walkup.h"
@@ -99,10 +98,11 @@ static void ReportBusy(void)
 }
 
 // Does a straight look from (x, y) facing dir reach (tx, ty) within range, with no
-// blocking tile in between? Only a cell's collision bit blocks it: walls, trees and
-// buildings do, while water, ledges and tall grass do not -- in Emerald their behaviour
-// is what keeps a walker out, not their collision. So a pond is seen across, which the
-// page's bots/sight.ts matches (POK-330 #67; tools/br/drivers/sight-water.txt).
+// blocking tile in between? Only a cell's collision bit blocks it: walls, trees,
+// buildings and ledges (every ledge carries the bit) do, while water and tall grass do
+// not -- in Emerald their behaviour is what keeps a walker out, not their collision. So
+// a pond is seen across, which the page's bots/sight.ts matches (POK-330 #67;
+// tools/br/drivers/sight-water.txt).
 static bool8 Sees(s16 x, s16 y, u8 dir, s16 tx, s16 ty)
 {
     s16 dx = 0, dy = 0, i;
@@ -127,18 +127,6 @@ static bool8 Sees(s16 x, s16 y, u8 dir, s16 tx, s16 ty)
     return FALSE;
 }
 
-// Walking up to somebody in the Zone (POK-222). The eyeline is a match rule and the
-// opening is not the match, so nothing happened at all -- which looks exactly like a
-// bug from the inside: two contestants stand face to face and neither one's game
-// reacts. Now it says so, once in a while rather than every frame the pair are looking
-// at each other.
-static const u8 sText_NoBattlesHere[] = _("No battles in the\nSAFARI ZONE!");
-#define BR_SAFARI_SAY_FRAMES (8 * 60)
-static EWRAM_DATA u16 sSafariSaid = 0;
-
-// Anybody at all standing in our eyeline on this map. Deliberately not the engage's
-// own scan: that one has the seat ordering, the busy check and the flee lockout in it,
-// and none of those decide whether to say a sentence.
 // Where a peer's ghost IS, not where the wire says they got to.
 //
 // Kanto's rule, from its README: "a trainer is engaged on the cell your screen has DRAWN
@@ -169,36 +157,6 @@ static void DrawnAt(const struct BrSeat *s, s16 *x, s16 *y, u8 *dir)
     *x = s->x;
     *y = s->y;
     *dir = s->dir;
-}
-
-static bool8 LookingAtSomebody(void)
-{
-    u8 seat;
-    s16 sx, sy;
-    u8 sdir;
-
-    for (seat = 0; seat < BR_MAX_SEATS; seat++)
-    {
-        const struct BrSeat *s = &gBrSeats[seat];
-
-        if (!s->present || seat == gBrMySeat)
-            continue;
-        if (s->mapGroup != gBrOwnPos.mapGroup || s->mapNum != gBrOwnPos.mapNum)
-            continue;
-        DrawnAt(s, &sx, &sy, &sdir);
-        if (Sees(gBrOwnPos.x, gBrOwnPos.y, gBrOwnPos.dir, sx, sy)
-         || Sees(sx, sy, sdir, gBrOwnPos.x, gBrOwnPos.y))
-            return TRUE;
-    }
-    return FALSE;
-}
-
-static void SayNoBattlesHere(void)
-{
-    if (sSafariSaid != 0)
-        return;
-    sSafariSaid = BR_SAFARI_SAY_FRAMES;
-    BrHud_Box(sText_NoBattlesHere);
 }
 
 static bool8 CanEngage(void)
@@ -489,13 +447,6 @@ void BrEngage_Tick(void)
     ReportBusy();
     TickWait();
     TickSettle();
-    if (sSafariSaid != 0)
-        sSafariSaid--;
-    // In the Zone the eyeline does nothing, so this is the only thing that tells you
-    // why (POK-222).
-    if (gBrMatch.phase == BR_PHASE_SAFARI && gMain.callback2 == CB2_Overworld && !gMain.inBattle
-     && !ScriptContext_IsEnabled() && LookingAtSomebody())
-        SayNoBattlesHere();
     if (!CanEngage())
         return;
     for (seat = 0; seat < BR_MAX_SEATS; seat++)

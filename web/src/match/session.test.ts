@@ -255,13 +255,11 @@ describe("one match's books (POK-330 #42)", () => {
   });
 
   // POK-416: what our own ROM counted goes in the results and the career.
-  it('zeroes the ROM\'s counts as a match starts, and reads them into the career once it is decided', () => {
+  it('reads the ROM\'s counts into the career once the match is decided', () => {
     const tally = { steps: 120, won: 3, caught: 1, items: 2, mons: { 277: 4 }, moves: { 1: 4 } };
-    const zero = vi.fn();
     const read = vi.fn(() => tally);
-    const { session, store } = books({ tally: { zero, read } });
+    const { session, store } = books({ tally: { read } });
     session.note(start([0, 7]), 'page');
-    expect(zero).toHaveBeenCalledTimes(1);
     expect(session.tally).toBeNull();
     session.note({ t: 'npcout', seat: 0, map: ROUTE_101, localId: 3 }, 'rom');
     session.note({ t: 'win', seat: 0 }, 'page');
@@ -276,7 +274,7 @@ describe("one match's books (POK-330 #42)", () => {
   // counted the battle that won it.
   it('settles what the ROM counted after the verdict into the career once, before the results', () => {
     let tally: MatchTally = { steps: 120, won: 2, caught: 1, items: 2, mons: { 277: 4 }, moves: { 1: 4 } };
-    const { session, store } = books({ tally: { zero: vi.fn(), read: () => tally } });
+    const { session, store } = books({ tally: { read: () => tally } });
     session.note(start([0, 7]), 'page');
     session.note({ t: 'win', seat: 0 }, 'page');
     expect(loadCareer(store).totals).toMatchObject({ won: 2 });
@@ -291,7 +289,7 @@ describe("one match's books (POK-330 #42)", () => {
 
   it('settles nothing before a verdict', () => {
     const read = vi.fn(() => ({ steps: 1, won: 1, caught: 0, items: 0, mons: {}, moves: {} }));
-    const { session, store } = books({ tally: { zero: vi.fn(), read } });
+    const { session, store } = books({ tally: { read } });
     session.note(start([0, 7]), 'page');
     session.settleTally();
     expect(read).not.toHaveBeenCalled();

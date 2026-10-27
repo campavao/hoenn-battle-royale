@@ -331,17 +331,44 @@ declare namespace mGBA {
      *  Module.canvas is, and a second window would resize the first's canvas. */
     brHeadless?: boolean;
     /** Hoenn BR: present the frame to the canvas now. Call it from the video-frame-ended
-     *  callback, where the core thread is paused, after drawing whatever must match the
-     *  picture; from then on the run loop leaves presenting to the page. */
+     *  callback, after drawing whatever must match the picture; from then on the run loop
+     *  leaves presenting to the page. */
     _brPresent(): void;
+    /** Hoenn BR (HBR-59): the video-frame-ended callback runs while the core runs the next
+     *  frame. Call this first in it: the newest finished frame becomes the page's copy of
+     *  work RAM (_brWramPtr) and the picture _brPresent shows; 0 when there is none since
+     *  the last call. */
+    _brTakeFrame(): number;
+    /** Hoenn BR (HBR-59): call this last in the callback, always: the core waits on it
+     *  before it finishes the next frame. What the page wrote into its copy lands in the
+     *  game's RAM before the frame after starts. */
+    _brFrameDone(): void;
+    /** Hoenn BR (HBR-59): with the core paused, the page's writes straight into the game's
+     *  RAM (or dropped, `discard` 1: after a loadState) and its copy remade from it. A
+     *  no-op unless paused. */
+    _brSync(discard: number): void;
+    /** Hoenn BR (HBR-59): 1 has the core wait on every frame's callback, so the page sees
+     *  every frame (a headless core always does); 0 waits a few ms, then runs on. */
+    _brSetLockstep(on: number): void;
+    /** Hoenn BR (HBR-59): the keys the page holds, a GBA_KEY bitmask, for the game from the
+     *  next frame boundary along with the page's RAM writes. */
+    _brSetKeys(keys: number): void;
+    /** Hoenn BR (HBR-59): at most `lead` frames ahead of the page (0: the default, 6),
+     *  while a tap walk steers. */
+    _brSetFrameLead(lead: number): void;
+    /** Hoenn BR (HBR-59): runs of the page's RAM writes dropped since the core started,
+     *  because the game wrote those bytes after the frame the page read. */
+    _brLostWrites(): number;
     /** Hoenn BR (POK-319): wasm heap offset of the picture's ABGR8888 pixels (the texture's
      *  top-left; the LCD is at (left, top) inside it), 0 with no game loaded. */
     _brPicturePtr(): number;
     /** Hoenn BR (POK-319): pixels per row of that picture. */
     _brPictureStride(): number;
-    /** Hoenn BR: wasm heap offset of GBA EWRAM (256 KiB), 0 when no GBA core is loaded. */
+    /** Hoenn BR: wasm heap offset of the page's copy of GBA EWRAM (256 KiB, HBR-59), 0 when
+     *  no GBA core is loaded. */
     _brWramPtr(): number;
-    /** Hoenn BR: wasm heap offset of GBA IWRAM (32 KiB), 0 when no GBA core is loaded. */
+    /** Hoenn BR: wasm heap offset of the page's copy of GBA IWRAM (32 KiB, HBR-59), 0 when
+     *  no GBA core is loaded. */
     _brIwramPtr(): number;
     HEAPU8: Uint8Array;
     HEAPU16: Uint16Array;

@@ -115,12 +115,12 @@ WATER_BEHAVIORS = {
 }
 # MB_SHALLOW_WATER / MB_PUDDLE are walkable without Surf -> left as class 0.
 
-JUMP_DIR = {  # ledge behavior -> the direction you hop (S/N/W/E only, per ticket)
+JUMP_DIR = {  # ledge behavior -> the direction you hop
     "MB_JUMP_SOUTH": "S", "MB_JUMP_NORTH": "N", "MB_JUMP_WEST": "W", "MB_JUMP_EAST": "E",
-    # Diagonal ledges are rare (a handful of Fortree/Route maps); approximate them
-    # onto their vertical component since the schema only has 4 jump classes.
-    "MB_JUMP_SOUTHEAST": "S", "MB_JUMP_SOUTHWEST": "S",
-    "MB_JUMP_NORTHEAST": "N", "MB_JUMP_NORTHWEST": "N",
+    # The diagonals (MB_JUMP_SOUTHEAST and the rest, 77 cells) are left out: pret's
+    # GetLedgeJumpDirection asks only MetatileBehavior_IsJump{South,North,West,East},
+    # each one behavior, so a diagonal is never jumped and its collision bit makes it
+    # the wall it is in the ROM.
 }
 JUMP_CLASS = {"S": 3, "N": 4, "W": 5, "E": 6}
 
@@ -344,12 +344,16 @@ def export():
             collision = (val & MAPGRID_COLLISION_MASK) >> MAPGRID_COLLISION_SHIFT
             behavior = metatile_behavior_name(primary_behaviors, secondary_behaviors, metatile_id)
 
-            if collision != 0:
+            # The ledge before the collision bit: every ledge in Hoenn carries it (946 of
+            # 946), and the ROM asks ShouldJumpLedge before it looks at the collision
+            # (CheckForObjectEventCollision, field_player_avatar.c). Asked the other way
+            # round, every ledge was a wall to the bots, tap-to-walk and the landing reach.
+            if behavior in JUMP_DIR:
+                cls = JUMP_CLASS[JUMP_DIR[behavior]]
+            elif collision != 0:
                 cls = 1
             elif behavior in WATER_BEHAVIORS:
                 cls = 2
-            elif behavior in JUMP_DIR:
-                cls = JUMP_CLASS[JUMP_DIR[behavior]]
             elif behavior in GRASS_BEHAVIORS:
                 cls = 7
             elif behavior in IMPASSABLE_BEHAVIORS:

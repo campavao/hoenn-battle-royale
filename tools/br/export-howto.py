@@ -22,6 +22,10 @@ One sheet, 240 wide (the screen's width), its pictures 150 tall, top to bottom:
          Task_UpdateBgPalette runs while a POKéMON evolves (src/evolution_scene.c)
     2550 CHARMANDER, CHARMELEON, CHARIZARD, 64x64 each, in their own colours; under them,
          at 2614, the same three in white, the way they flash while they change
+    2678 encounters (br_patch.c): Route 101's grass with three of its darkened patches,
+         the tall grass's rustle in general_1's palette, and BRENDAN about to step on one
+    2828 item pickups: Route 101 with two item balls, a gold one and a fallen trainer's
+         bag (br_loot.c draws a bag as BIRCH's), BRENDAN about to take the nearest
 
 The field sprites are the sheets export-sprites.py wrote to web/public/field-sprites:
 standing south is frame 0, west frame 2; east is west mirrored, as the ROM draws it.
@@ -39,10 +43,11 @@ SPRITES = ROOT / "web/public/field-sprites"
 SHEETS = json.loads((ROOT / "web/src/data/sprites.json").read_text())
 
 BANG = ROOT / "graphics/field_effects/pics/emotion_exclamation.png"
+FX = ROOT / "graphics/field_effects"
 W, H = 240, 150
 EVO_FRAMES = range(13, 25)
 MONS = ["charmander", "charmeleon", "charizard"]
-SHEET_H = H * 5 + H * len(EVO_FRAMES) + 64 * 2
+SHEET_H = H * 5 + H * len(EVO_FRAMES) + 64 * 2 + H * 2
 
 GFX_BRENDAN, GFX_MAY, GFX_GENTLEMAN = 0, 89, 48
 GFX_ITEM_BALL, GFX_BIRCHS_BAG, GFX_GROUDON = 59, 97, 198
@@ -124,18 +129,43 @@ def gold_ball() -> Image.Image:
 
 
 def event() -> Image.Image:
-    # On whole tiles of the map (the crop is 16-aligned): a 16 wide piece fills its tile,
-    # a 32 wide one stands centred on it, and anything taller stands with its feet on it.
     im = Image.open(MAPS / "MAP_ROUTE111.png").convert("RGBA").crop((336, 848, 336 + W, 848 + H))
-
-    def put(piece: Image.Image, tx: int, ty: int) -> None:
-        im.alpha_composite(piece, (tx * 16 - (piece.width - 16) // 2, (ty + 1) * 16 - piece.height))
+    put = on_tiles(im)
 
     ball, gold, bag = frame(GFX_ITEM_BALL, 0), gold_ball(), frame(GFX_BIRCHS_BAG, 0)
     put(frame(GFX_GROUDON, 0), 7, 4)
     for tx, ty, piece in ((5, 5, ball), (9, 5, ball), (6, 6, gold), (7, 6, gold), (8, 6, gold), (4, 6, bag)):
         put(piece, tx, ty)
     put(frame(GFX_GENTLEMAN, 0), 10, 4)
+    return im
+
+
+def on_tiles(im: Image.Image):
+    """Stand a piece on a whole tile of `im` (cropped 16-aligned): a 16 wide piece fills
+    its tile, a 32 wide one stands centred on it, anything taller with its feet on it."""
+    def put(piece: Image.Image, tx: int, ty: int) -> None:
+        im.alpha_composite(piece, (tx * 16 - (piece.width - 16) // 2, (ty + 1) * 16 - piece.height))
+    return put
+
+
+def encounters() -> Image.Image:
+    im = Image.open(MAPS / "MAP_ROUTE101.png").convert("RGBA").crop((0, 32, W, 32 + H))
+    put = on_tiles(im)
+    # The rustle's second frame, the grass at its widest, reads best standing still.
+    patch = paletted(FX / "pics/br_patch_tall_grass.png", jasc(FX / "palettes/general_1.pal")).crop((16, 0, 32, 16))
+    for tx, ty in ((5, 2), (3, 1), (13, 3)):
+        put(patch, tx, ty)
+    put(frame(GFX_BRENDAN, 2), 6, 2)
+    return im
+
+
+def pickups() -> Image.Image:
+    im = Image.open(MAPS / "MAP_ROUTE101.png").convert("RGBA").crop((0, 160, W, 160 + H))
+    put = on_tiles(im)
+    ball = frame(GFX_ITEM_BALL, 0)
+    for tx, ty, piece in ((5, 3, ball), (9, 1, ball), (10, 4, gold_ball()), (8, 3, frame(GFX_BIRCHS_BAG, 0))):
+        put(piece, tx, ty)
+    put(frame(GFX_BRENDAN, 2), 6, 3)
     return im
 
 
@@ -197,6 +227,8 @@ def main():
     for i, (c, w) in enumerate(zip(colour, white)):
         sheet.paste(c, (i * 64, y))
         sheet.paste(w, (i * 64, y + 64))
+    for i, im in enumerate((encounters(), pickups())):
+        sheet.paste(im, (0, y + 128 + i * H))
     sheet.save(OUT, optimize=True)
     print(f"{OUT.relative_to(ROOT)} {sheet.size[0]}x{sheet.size[1]}, {OUT.stat().st_size} bytes")
 
