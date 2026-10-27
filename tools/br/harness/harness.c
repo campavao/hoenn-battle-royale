@@ -432,15 +432,18 @@ static int runLine(char* line) {
         // that type still in the out ring (a continuation's type has 0x80 set, so it
         // never matches) and reads the message's data at dataOff, across its
         // continuations. Draining does not matter: the page taking a slot leaves its
-        // bytes where they are until the ring comes round again.
+        // bytes where they are until the ring comes round again. `<type>#<n>` reads the
+        // n-th newest of that type instead (a turn's TURN, with its sum gone after it).
         uint32_t box, got, want = (uint32_t)strtoul(e, NULL, 0);
+        const char* nth = strchr(b, '#');
         int type = (int)strtoul(b, NULL, 0), w = widthOf(c), off = atoi(d), k, lo, hi = 0;
+        int skip = nth ? atoi(nth + 1) - 1 : 0;
         uint16_t head, first = 0;
         if ((w != 8 && w != 16) || off < 0 || !findSym("gBrMailbox", &box)) return 4;
         head = core->busRead16(core, box + 0x08);
         for (k = 1; k <= 64; ++k) {
             first = (uint16_t)(head - k);
-            if (core->busRead8(core, box + 0x18 + (uint32_t)(first % 64) * 64) == (uint8_t)type) break;
+            if (core->busRead8(core, box + 0x18 + (uint32_t)(first % 64) * 64) == (uint8_t)type && skip-- <= 0) break;
         }
         if (k > 64) { printf("line %d: EXPECT FAILED no type %d message in the out ring\n", lineNo, type); return 1; }
         lo = outMsgByte(box, first, off);
