@@ -111,9 +111,9 @@ describe('the audio meter (POK-247)', () => {
     emit(tick(21, true));
     emit(tick(90, false, true)); // two buffers missed
     emit(tick(111));
-    expect(meter.stats()).toEqual({ callbacks: 4, late: 1, cut: 1, maxGapMs: 69, bufferMs: 21.3, state: 'running' });
+    expect(meter.stats()).toEqual({ callbacks: 4, late: 1, cut: 1, skipped: 0, heard: 0, starved: false, maxGapMs: 69, bufferMs: 21.3, state: 'running' });
     emit(tick(132));
     // The gap from the last window's final callback still counts.
-    expect(meter.stats()).toEqual({ callbacks: 1, late: 0, cut: 0, maxGapMs: 21, bufferMs: 21.3, state: 'running' });
+    expect(meter.stats()).toEqual({ callbacks: 1, late: 0, cut: 0, skipped: 0, heard: 0, starved: false, maxGapMs: 21, bufferMs: 21.3, state: 'running' });
   });
 });
