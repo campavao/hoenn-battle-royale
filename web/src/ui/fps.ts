@@ -233,7 +233,9 @@ export function perfLines(now: PerfSample, all: PerfSample): string[] {
   const audio = (a: AudioStats) => {
     const line = a.callbacks === 0 ? `audio ${a.state === 'none' ? 'off' : a.state}` : `audio ${a.late} late ${a.cut} cut`;
     const skipped = a.skipped > 0 ? ` ${a.skipped} skipped` : '';
-    return `${line}${skipped}${a.starved ? ' MUTE' : ''}`;
+    // Ticks that stopped say nothing themselves: a speaker that has played and stopped.
+    const stopped = a.callbacks > 0 && a.state !== 'running' && a.state !== 'none' ? ` ${a.state.toUpperCase()}` : '';
+    return `${line}${skipped}${a.starved ? ' MUTE' : ''}${stopped}`;
   };
   const first = `${frameLine(now.frames)} · work ${now.frames.work.mean.toFixed(1)} ms · ${audio(now.audio)}`;
   const f = all.frames;

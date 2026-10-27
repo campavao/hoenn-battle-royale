@@ -46,6 +46,9 @@ export interface AudioTick {
 /** What a meter listens to (Emulator.onAudio). */
 export interface Heard {
   onAudio(listener: (tick: AudioTick) => void): () => void;
+  /** The speaker's state now, where it can say: a context that stopped sends no tick to
+   *  say so. */
+  audioState?(): AudioContextState | undefined;
 }
 
 /** The core's SDL2 audio, as emscripten leaves it on the Module. Made when a game's
@@ -146,7 +149,7 @@ export class AudioMeter {
   private bufferMs = 0;
   private state: AudioStats['state'] = 'none';
 
-  constructor(source: Heard) {
+  constructor(private readonly source: Heard) {
     source.onAudio((tick) => {
       this.callbacks++;
       if (tick.late) this.late++;
@@ -172,7 +175,7 @@ export class AudioMeter {
       starved: this.starved,
       maxGapMs: this.maxGap,
       bufferMs: this.bufferMs,
-      state: this.state,
+      state: this.source.audioState?.() ?? this.state,
     };
     if (reset) {
       this.callbacks = 0;

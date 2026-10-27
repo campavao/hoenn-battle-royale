@@ -196,6 +196,15 @@ describe('the #perf readout (POK-247)', () => {
     expect(second).toBe('all 0 frames · p95 0 p99 0 max 0 ms · work p95 0.0 ms · audio 0 late 0 cut 2205 skipped MUTE');
   });
 
+  it('says when the speaker played and then stopped, which no tick reports (HBR-59)', () => {
+    const gba = fakeEmu();
+    const probe = new PerfProbe(gba.emu, () => null, { now: () => 0, log: () => {}, heap: () => null });
+    gba.audio({ at: 0, bufferMs: 23.2, late: false, cut: false, state: 'running', skipped: 0, heard: true, starved: false });
+    gba.audio({ at: 0, bufferMs: 0, late: false, cut: false, state: 'interrupted' as AudioContextState, skipped: 0, heard: false, starved: false });
+    const [, second] = perfLines(probe.sample(false), probe.sample(false));
+    expect(second).toBe('all 0 frames · p95 0 p99 0 max 0 ms · work p95 0.0 ms · audio 0 late 0 cut INTERRUPTED');
+  });
+
   it('says so when the page has no audio running, no heap to read and no proxy', () => {
     const gba = fakeEmu();
     const probe = new PerfProbe(gba.emu, () => null, { now: () => 0, log: () => {}, heap: () => null });

@@ -151,6 +151,9 @@ export interface SpriteBand {
 /** A GBA has 256 rows of OAM y; the LCD is 160 of them. */
 const SPRITE_WINDOW_ROWS = 256 - 160;
 
+/** A headless core's sound, resampled into its own ring that nobody reads (create()). */
+const HEADLESS_AUDIO_RATE = 8000;
+
 /** The picture as the core drew it, for tests (POK-329): RGBA, `width` x `height`, the
  *  LCD's top-left at (`left`, `top`). */
 export interface Picture {
@@ -251,10 +254,15 @@ export class Emulator {
     m.setCoreSettings?.({ rewindEnable: false, autoSaveStateEnable: false, restoreAutoSaveStateOnLoad: false });
     await m.FSInit();
     const emu = new Emulator(m, headless);
-    // Nobody hears a headless core. The page's own plays on the audio thread (HBR-59),
-    // set up before the first loadGame, which would otherwise open SDL's.
-    // A chunk of its own: main.js is near its budget (vite.config.ts).
-    if (!headless) emu.useSpeaker(await (await import('./speaker-node')).Speaker.open(m));
+    // The page's own core plays on the audio thread (HBR-59), set up before the first
+    // loadGame, which would otherwise open SDL's. A chunk of its own: main.js is near its
+    // budget (vite.config.ts).
+    // Nobody hears a headless core, and it opens no speaker either: SDL's would be a second
+    // AudioContext, resumed by SDL's own tap listeners, and on an iPhone the page's sound
+    // stopped for good once the proxy's core booted (2026-10-27). Its sound goes to a ring
+    // nobody reads, at a rate that costs next to nothing to make.
+    if (headless) m._brAudioWorkletAt?.(HEADLESS_AUDIO_RATE);
+    else emu.useSpeaker(await (await import('./speaker-node')).Speaker.open(m));
     await emu.dropLegacyPatched();
     return emu;
   }
@@ -610,6 +618,12 @@ export class Emulator {
   onAudio(listener: (tick: AudioTick) => void): () => void {
     this.audioListeners.add(listener);
     return () => this.audioListeners.delete(listener);
+  }
+
+  /** The worklet speaker's context state now (audio-meter.ts's Heard); undefined for
+   *  SDL's, whose ticks carry it. */
+  audioState(): AudioContextState | undefined {
+    return this.speaker?.context.state;
   }
 
   /** Goes up whenever the frames stop for a reason of the page's own -- a pause, a
