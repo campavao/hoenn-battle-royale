@@ -76,7 +76,7 @@ export function flagDetail(flag: DebugFlag, hash: string, pace: ReturnType<typeo
 
 /** The trainer card's DEBUG MENU: whether the main menu has its DEBUG tile, off unless
  *  this browser turned it on. app.ts's debugMenuOn reads the same key. */
-const DEBUG_MENU_KEY = 'hbr-debug-menu';
+export const DEBUG_MENU_KEY = 'hbr-debug-menu';
 
 export function toggleDebugMenu(store: Storage): void {
   try {

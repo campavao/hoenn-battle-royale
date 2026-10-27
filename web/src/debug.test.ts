@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DEBUG_FLAGS, cycleFlag, flagDetail } from './debug';
+import appSource from './app.ts?raw';
+import { DEBUG_FLAGS, DEBUG_MENU_KEY, cycleFlag, flagDetail, toggleDebugMenu } from './debug';
 import { devPace, perfWanted, withRoom } from './hash';
 import { measure } from './ui/emerald';
 import { W } from './ui/screens';
@@ -68,5 +69,20 @@ describe('the DEBUG rows', () => {
 
   it('leave only #perf readable in a build: the rest rig a match', () => {
     expect(DEBUG_FLAGS.filter((f) => !f.dev).map((f) => f.key)).toEqual(['perf']);
+  });
+
+  it('turn the tile on and off under the key app.ts reads for it', () => {
+    const store = new Map<string, string>();
+    const fake = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    } as Storage;
+    toggleDebugMenu(fake);
+    expect(store.get('hbr-debug-menu')).toBe('1');
+    toggleDebugMenu(fake);
+    expect(store.size).toBe(0);
+    // Spelled out there too, so debug.ts stays out of main.js.
+    expect(appSource).toContain(`localStorage.getItem('${DEBUG_MENU_KEY}') === '1'`);
   });
 });
