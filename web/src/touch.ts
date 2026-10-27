@@ -264,6 +264,9 @@ export class TouchLayer {
   private held: GbaKey | null = null;
   private heldFrames = 0;
   private holdFor = 0;
+  /** The game's frame count at the last frame this file saw: a busy page sees fewer frames
+   *  than the game runs (HBR-59), and a hold or a gap is in the game's frames. */
+  private ranAt = 0;
   private gapFor = 0;
   private queue: Press[] = [];
   private walk: { steps: { dir: SeamDir; to: Spot }[]; at: number; stall: number; from: Spot } | null = null;
@@ -613,6 +616,9 @@ export class TouchLayer {
 
   private frame(): void {
     const { emu } = this.deps;
+    const ran = emu.ran ?? this.ranAt + 1;
+    const frames = Math.max(1, ran - this.ranAt);
+    this.ranAt = ran;
     this.shownCamera = this.lastCamera;
     this.lastCamera = readCameraPos(emu, (name) => this.sym(name));
     // Whatever is down that this file did not press is the player, and the player wins.
@@ -637,11 +643,12 @@ export class TouchLayer {
       return;
     }
     if (this.held) {
-      if (++this.heldFrames >= this.holdFor) this.release();
+      this.heldFrames += frames;
+      if (this.heldFrames >= this.holdFor) this.release();
       return;
     }
     if (this.gapFor > 0) {
-      this.gapFor--;
+      this.gapFor -= frames;
       return;
     }
     if (this.queue.length) {

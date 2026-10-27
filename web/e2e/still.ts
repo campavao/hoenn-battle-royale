@@ -128,6 +128,7 @@ type StillEmu = {
   onFrame(fn: () => void): () => void;
   picture(): Pic | null;
   peopleBuffer?(bytes: number): Uint8Array | null;
+  setFrameLead?(frames: number): void;
 };
 type StillWindow = {
   __hbr: { emu: StillEmu };
@@ -456,6 +457,9 @@ export async function installStill(s: StillSetup): Promise<void> {
       prev2 = null;
       last = -Infinity;
       off?.();
+      // Every frame, as the game ran them: three in a row are compared, and the game waits
+      // on this page's checking rather than run ahead of it (HBR-59).
+      emu.setFrameLead?.(1);
       off = emu.onFrame(() => {
         const now = read();
         // The picture of this frame was drawn from the state read on the frame before it
@@ -483,6 +487,7 @@ export async function installStill(s: StillSetup): Promise<void> {
     stop() {
       off?.();
       off = null;
+      emu.setFrameLead?.(0);
       return report;
     },
     report() {

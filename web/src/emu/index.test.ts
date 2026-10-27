@@ -306,15 +306,20 @@ describe('Emulator', () => {
     expect(emu.ran).toBe(3);
   });
 
-  it('what the page writes paused reaches the game: synced after a pause and before a resume (HBR-59)', async () => {
+  it('what the page writes paused reaches the game: synced after a pause and before a resume, dropped by a restore (HBR-59)', async () => {
     const { emu, m, calls } = await make();
-    m._brSync = () => void calls.push('brSync');
+    m._brSync = (discard) => void calls.push(`brSync ${discard}`);
     await emu.start(new Uint8Array([1]));
     calls.length = 0;
     emu.pause();
     emu.write(0x02000010, 7, 8);
     emu.resume();
-    expect(calls).toEqual(['pause', 'brSync', 'brSync', 'resume']);
+    expect(calls).toEqual(['pause', 'brSync 0', 'brSync 0', 'resume']);
+    // A restore drops what was written for the machine it replaced.
+    emu.pause();
+    calls.length = 0;
+    expect(emu.restore(new Uint8Array([1, 2]))).toBe(true);
+    expect(calls).toEqual(['brSync 1']);
   });
 
   it('onListenerError hears each listener\'s first throw instead of the console', async () => {

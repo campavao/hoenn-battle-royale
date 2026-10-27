@@ -344,8 +344,12 @@ declare namespace mGBA {
      *  game's RAM before the frame after starts. */
     _brFrameDone(): void;
     /** Hoenn BR (HBR-59): with the core paused, the page's writes straight into the game's
-     *  RAM and its copy remade from it. A no-op unless paused. */
-    _brSync(): void;
+     *  RAM (or dropped, `discard` 1: after a loadState) and its copy remade from it. A
+     *  no-op unless paused. */
+    _brSync(discard: number): void;
+    /** Hoenn BR (HBR-59): the frames the core may finish ahead of the page, at least 1 (1 is
+     *  lockstep: the page sees every frame); 0 for the default, 6 (1 on a headless core). */
+    _brSetFrameLead(frames: number): void;
     /** Hoenn BR (POK-319): wasm heap offset of the picture's ABGR8888 pixels (the texture's
      *  top-left; the LCD is at (left, top) inside it), 0 with no game loaded. */
     _brPicturePtr(): number;
@@ -354,7 +358,8 @@ declare namespace mGBA {
     /** Hoenn BR: wasm heap offset of the page's copy of GBA EWRAM (256 KiB, HBR-59), 0 when
      *  no GBA core is loaded. */
     _brWramPtr(): number;
-    /** Hoenn BR: wasm heap offset of GBA IWRAM (32 KiB), 0 when no GBA core is loaded. */
+    /** Hoenn BR: wasm heap offset of the page's copy of GBA IWRAM (32 KiB, HBR-59), 0 when
+     *  no GBA core is loaded. */
     _brIwramPtr(): number;
     HEAPU8: Uint8Array;
     HEAPU16: Uint16Array;

@@ -1645,7 +1645,7 @@ index 751e8b1..59daede 100644
  	-s ENVIRONMENT='web,worker' \
  	-s PTHREAD_POOL_SIZE=5 \
 diff --git a/src/platform/wasm/main.c b/src/platform/wasm/main.c
-index 14d9a8a..2beb866 100644
+index 14d9a8a..d727078 100644
 --- a/src/platform/wasm/main.c
 +++ b/src/platform/wasm/main.c
 @@ -12,6 +12,10 @@
@@ -1667,7 +1667,7 @@ index 14d9a8a..2beb866 100644
  DEFINE_WRAPPER(videoFrameStarted)
  
  /**
-@@ -146,6 +149,654 @@ EMSCRIPTEN_KEEPALIVE float getVolume() {
+@@ -146,6 +149,674 @@ EMSCRIPTEN_KEEPALIVE float getVolume() {
  		return 0.0;
  }
  
@@ -1691,11 +1691,16 @@ index 14d9a8a..2beb866 100644
 +static mColor* brDrawBuffer = NULL;
 +static size_t brDrawBufferSize = 0;
 +static mColor* brPictures[2] = { NULL, NULL };
++// The picture's size, as the loaded game's buffers were made: the band the page asks for
++// next (brSetViewport) is the next loadGame's, and the running core keeps this one.
++static unsigned brPictureW = 0;
++static unsigned brPictureH = 0;
 +// Once the page has called brPresent() from the frame-ended callback, the run loop
 +// stops presenting on its own: the page presents the picture of the frame it took
-+// (brTakeFrame), so what it draws around the picture is the same frame as the picture. Left to the run loop, the upload lands on the browser's animation tick
-+// while the core runs on, and the picture can be a frame ahead of the page's drawing
-+// (a 4 px step between the map copy and the band while walking, 2026-09-18).
++// (brTakeFrame), so what it draws around the picture is the same frame as the picture.
++// The run loop presents the same one, on the browser's animation tick, which can land
++// before the page has drawn around it (a 4 px step between the map copy and the band
++// while walking, 2026-09-18).
 +static bool brPagePresents = false;
 +// Hoenn BR (POK-329): the sprite window the page declared with brSetSpriteBand, -1 for
 +// none. Without one the band is the window when it is 256 rows (160 + 96), and there is
@@ -1745,17 +1750,19 @@ index 14d9a8a..2beb866 100644
 +// of the picture at each frame's end, posts the page's callback if none is waiting, and
 +// runs the next frame. The page takes the newest finished frame when its callback runs,
 +// so a busy page sees fewer frames while the game keeps its speed; the core waits only
-+// when the page is BR_FRAME_LEAD frames behind finishing one. A headless core waits
-+// every frame: the proxy's duel is driven frame by frame (bots/proxy.ts tap), at 8x.
++// when the page is brFrameLead frames behind finishing one. A headless core is never
++// more than a frame ahead: the proxy's duel is driven frame by frame (bots/proxy.ts
++// tap), at 8x, so the page sees every one of its frames.
 +// The page reads and writes its own copy (brShadowRam, what brWramPtr points at); what
 +// it changed since it took a frame (against brPristineRam) goes to the core as
-+// (offset, old, new) and lands at the next frame's end, unless the game wrote that byte
-+// meanwhile -- the game's write was the later one. Everything under brFrameLock: the
-+// core writes brFrameRam, the picture and the log; the page the rest.
++// (offset, value) and lands at the next frame's end, over whatever the game wrote there
++// meanwhile: the page's write is a value it means the game to see, and the fields it
++// writes that the game writes too are counters it resets (app.ts zeroTally) and a
++// multi-byte value must not land half. Everything under brFrameLock: the core writes
++// brFrameRam, the picture and the log; the page the rest.
 +#define BR_RAM_SIZE (GBA_SIZE_EWRAM + GBA_SIZE_IWRAM)
 +struct BrWrite {
 +	uint32_t at;
-+	uint8_t was;
 +	uint8_t now;
 +};
 +static uint8_t brFrameRam[BR_RAM_SIZE];
@@ -1764,7 +1771,8 @@ index 14d9a8a..2beb866 100644
 +static struct BrWrite* brWrites = NULL;
 +static size_t brWritesLen = 0;
 +static size_t brWritesCap = 0;
-+#define BR_FRAME_LEAD (brHeadless ? 1u : 6u)
++#define BR_FRAME_LEAD 6u
++static uint32_t brFrameLead = BR_FRAME_LEAD;
 +static uint32_t brFrameSeq = 0;
 +static uint32_t brTakenSeq = 0;
 +// The frame the page last finished (brFrameDone).
@@ -1827,11 +1835,12 @@ index 14d9a8a..2beb866 100644
 +	if (!renderer->core || !renderer->outputBuffer) {
 +		return 0;
 +	}
++	// Headless, the buffer the core draws into, mid-frame: nothing reads it but a test.
 +	return (uint32_t) (uintptr_t) (brHeadless ? brDrawBuffer : brPictures[brShown]);
 +}
 +
 +EMSCRIPTEN_KEEPALIVE int brPictureStride() {
-+	return GBA_VIDEO_HORIZONTAL_PIXELS + brBandLeft + brBandRight;
++	return brPictureW;
 +}
 +
 +static void _brPictureSize(unsigned* w, unsigned* h) {
@@ -1846,6 +1855,8 @@ index 14d9a8a..2beb866 100644
 +	unsigned w, h;
 +	int i;
 +	_brPictureSize(&w, &h);
++	brPictureW = w;
++	brPictureH = h;
 +	if (brDrawBufferSize < (size_t) w * h) {
 +		brDrawBufferSize = (size_t) w * h;
 +		free(brDrawBuffer);
@@ -1863,8 +1874,7 @@ index 14d9a8a..2beb866 100644
 +
 +// The picture the page last took, to the canvas. The core never writes that one.
 +static void _brPresentFrame(void) {
-+	unsigned w, h;
-+	_brPictureSize(&w, &h);
++	unsigned w = brPictureW, h = brPictureH;
 +
 +	SDL_Rect rect = { .x = 0, .y = 0, .w = w, .h = h };
 +
@@ -2147,7 +2157,6 @@ index 14d9a8a..2beb866 100644
 +				brWritesCap = cap;
 +			}
 +			brWrites[brWritesLen].at = at;
-+			brWrites[brWritesLen].was = brPristineRam[at];
 +			brWrites[brWritesLen].now = brShadowRam[at];
 +			++brWritesLen;
 +			brPristineRam[at] = brShadowRam[at];
@@ -2160,14 +2169,11 @@ index 14d9a8a..2beb866 100644
 +	return at < GBA_SIZE_EWRAM ? (uint8_t*) gba->memory.wram + at : (uint8_t*) gba->memory.iwram + (at - GBA_SIZE_EWRAM);
 +}
 +
-+// The log into the game's RAM, where the game has not written the byte since.
++// The log into the game's RAM.
 +static void _brApplyWrites(void) {
 +	size_t i;
 +	for (i = 0; i < brWritesLen; ++i) {
-+		uint8_t* live = _brLiveRam(brWrites[i].at);
-+		if (*live == brWrites[i].was) {
-+			*live = brWrites[i].now;
-+		}
++		*_brLiveRam(brWrites[i].at) = brWrites[i].now;
 +	}
 +	brWritesLen = 0;
 +}
@@ -2191,18 +2197,15 @@ index 14d9a8a..2beb866 100644
 +	if (!callbackStorage.videoFrameEnded) {
 +		brDoneSeq = brFrameSeq;
 +	}
-+	while (brFrameSeq - brDoneSeq >= BR_FRAME_LEAD && !_brStopAsked()) {
++	while (brFrameSeq - brDoneSeq >= brFrameLead && !_brStopAsked()) {
 +		ConditionWaitTimed(&brFrameCond, &brFrameLock, 1);
 +	}
 +	_brApplyWrites();
 +	_brCopyLiveRam(brFrameRam);
 +	if (!brHeadless) {
-+		unsigned w, h;
-+		_brPictureSize(&w, &h);
 +		brFinished = brShown ^ 1;
-+		memcpy(brPictures[brFinished], brDrawBuffer, (size_t) w * h * BYTES_PER_PIXEL);
++		memcpy(brPictures[brFinished], brDrawBuffer, (size_t) brPictureW * brPictureH * BYTES_PER_PIXEL);
 +	}
-+	brFrameDrawn[1] = 0;
 +	MutexLock(_brPeopleLock());
 +	if (!GBAVideoSoftwareRendererBrDrawn(brFrameDrawn, sizeof(brFrameDrawn) / sizeof(brFrameDrawn[0]))) {
 +		brFrameDrawn[0] = 0;
@@ -2238,7 +2241,8 @@ index 14d9a8a..2beb866 100644
 +	MutexLock(_brFrameLock());
 +	brPosted = false;
 +	_brCollectWrites();
-+	fresh = (int) (brFrameSeq - brTakenSeq);
++	// A callback the core posted before quitGame: there is no frame for it.
++	fresh = renderer->core ? (int) (brFrameSeq - brTakenSeq) : 0;
 +	if (fresh) {
 +		memcpy(brShadowRam, brFrameRam, BR_RAM_SIZE);
 +		memcpy(brPristineRam, brFrameRam, BR_RAM_SIZE);
@@ -2264,19 +2268,35 @@ index 14d9a8a..2beb866 100644
 +
 +// Hoenn BR (HBR-59): with the core paused, the page's writes straight into the game's RAM
 +// and its copy made from that RAM, so what the page writes paused is there when the game
-+// resumes, and what it reads after a loadState is the state loaded. A no-op unless paused.
-+EMSCRIPTEN_KEEPALIVE void brSync(void) {
++// resumes. `discard` drops them instead: after a loadState they were written to a
++// machine that is gone, and what the page reads is the state loaded. A no-op unless
++// paused.
++EMSCRIPTEN_KEEPALIVE void brSync(int discard) {
 +	if (!renderer->core || !renderer->thread || !mCoreThreadIsPaused(renderer->thread)) {
 +		return;
 +	}
 +	MutexLock(_brFrameLock());
-+	_brCollectWrites();
-+	_brApplyWrites();
++	if (discard) {
++		brWritesLen = 0;
++	} else {
++		_brCollectWrites();
++		_brApplyWrites();
++	}
 +	_brCopyLiveRam(brFrameRam);
 +	memcpy(brShadowRam, brFrameRam, BR_RAM_SIZE);
 +	memcpy(brPristineRam, brFrameRam, BR_RAM_SIZE);
 +	brTakenSeq = brFrameSeq;
 +	brDoneSeq = brFrameSeq;
++	MutexUnlock(&brFrameLock);
++}
++
++// Hoenn BR (HBR-59): how many frames the core may finish ahead of the page, at least 1;
++// 0 for the default. 1 is lockstep, one frame behind: the page sees every frame, and a
++// busy page slows the game (a test that compares every frame, e2e/still.ts).
++EMSCRIPTEN_KEEPALIVE void brSetFrameLead(int frames) {
++	MutexLock(_brFrameLock());
++	brFrameLead = frames > 0 ? (uint32_t) frames : brHeadless ? 1u : BR_FRAME_LEAD;
++	ConditionWake(&brFrameCond);
 +	MutexUnlock(&brFrameLock);
 +}
 +
@@ -2322,7 +2342,7 @@ index 14d9a8a..2beb866 100644
  EMSCRIPTEN_KEEPALIVE int getMainLoopTimingMode() {
  	int mode = -1;
  	int value = -1;
-@@ -427,28 +1078,31 @@ EMSCRIPTEN_KEEPALIVE bool loadGame(const char* name, const char* savePathOverrid
+@@ -427,28 +1098,31 @@ EMSCRIPTEN_KEEPALIVE bool loadGame(const char* name, const char* savePathOverrid
  	mSDLInitBindingsGBA(&renderer->core->inputMap);
  
  	unsigned w, h;
@@ -2371,7 +2391,7 @@ index 14d9a8a..2beb866 100644
  
  	emscripten_resume_main_loop();
  	return true;
-@@ -518,7 +1172,7 @@ addCoreCallbacks(void (*alarmCallbackPtr)(void*), void (*coreCrashedCallbackPtr)
+@@ -518,7 +1192,7 @@ addCoreCallbacks(void (*alarmCallbackPtr)(void*), void (*coreCrashedCallbackPtr)
  		if (saveDataUpdatedCallbackPtr)
  			callbacks.savedataUpdated = wrapped_savedataUpdated;
  		if (videoFrameEndedCallbackPtr)
@@ -2380,7 +2400,7 @@ index 14d9a8a..2beb866 100644
  		if (videoFrameStartedCallbackPtr)
  			callbacks.videoFrameStarted = wrapped_videoFrameStarted;
  
-@@ -744,19 +1398,9 @@ void runLoop() {
+@@ -744,19 +1418,9 @@ void runLoop() {
  				};
  			}
  			if (mCoreSyncWaitFrameStart(&renderer->thread->impl->sync)) {
@@ -2403,12 +2423,15 @@ index 14d9a8a..2beb866 100644
  			}
  			mCoreSyncWaitFrameEnd(&renderer->thread->impl->sync);
  		}
-@@ -860,11 +1504,16 @@ int main() {
+@@ -860,11 +1524,19 @@ int main() {
  
  	mLogSetDefaultLogger(&logCtx);
  
 +	// Hoenn BR: a page's second instance draws to nothing (see brHeadless above).
 +	brHeadless = EM_ASM_INT({ return Module.brHeadless ? 1 : 0; }) != 0;
++	if (brHeadless) {
++		brFrameLead = 1;
++	}
 +	// (Video init only registers display modes; the canvas is touched by a window.)
  	SDL_Init(SDL_INIT_VIDEO);
 -	renderer->window = SDL_CreateWindow(NULL, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
@@ -2425,10 +2448,10 @@ index 14d9a8a..2beb866 100644
  	// exclude specific key events
  	SDL_SetEventFilter(excludeKeys, NULL);
 diff --git a/src/platform/wasm/mgba.d.ts b/src/platform/wasm/mgba.d.ts
-index edad1b1..754c7f4 100644
+index edad1b1..306e8cc 100644
 --- a/src/platform/wasm/mgba.d.ts
 +++ b/src/platform/wasm/mgba.d.ts
-@@ -296,6 +296,69 @@ declare namespace mGBA {
+@@ -296,6 +296,74 @@ declare namespace mGBA {
       * @returns Current volume multiplier.
       */
      getVolume(): number;
@@ -2480,8 +2503,12 @@ index edad1b1..754c7f4 100644
 +     *  game's RAM before the frame after starts. */
 +    _brFrameDone(): void;
 +    /** Hoenn BR (HBR-59): with the core paused, the page's writes straight into the game's
-+     *  RAM and its copy remade from it. A no-op unless paused. */
-+    _brSync(): void;
++     *  RAM (or dropped, `discard` 1: after a loadState) and its copy remade from it. A
++     *  no-op unless paused. */
++    _brSync(discard: number): void;
++    /** Hoenn BR (HBR-59): the frames the core may finish ahead of the page, at least 1 (1 is
++     *  lockstep: the page sees every frame); 0 for the default, 6 (1 on a headless core). */
++    _brSetFrameLead(frames: number): void;
 +    /** Hoenn BR (POK-319): wasm heap offset of the picture's ABGR8888 pixels (the texture's
 +     *  top-left; the LCD is at (left, top) inside it), 0 with no game loaded. */
 +    _brPicturePtr(): number;
@@ -2490,7 +2517,8 @@ index edad1b1..754c7f4 100644
 +    /** Hoenn BR: wasm heap offset of the page's copy of GBA EWRAM (256 KiB, HBR-59), 0 when
 +     *  no GBA core is loaded. */
 +    _brWramPtr(): number;
-+    /** Hoenn BR: wasm heap offset of GBA IWRAM (32 KiB), 0 when no GBA core is loaded. */
++    /** Hoenn BR: wasm heap offset of the page's copy of GBA IWRAM (32 KiB, HBR-59), 0 when
++     *  no GBA core is loaded. */
 +    _brIwramPtr(): number;
 +    HEAPU8: Uint8Array;
 +    HEAPU16: Uint16Array;

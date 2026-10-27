@@ -87,12 +87,14 @@ export interface CoreModule {
    *  it: the newest finished frame becomes the page's copy of work RAM (_brWramPtr) and
    *  the picture. Returns the frames the game ran since the last one taken, 0 for none. */
   _brTakeFrame?(): number;
-  /** Last in it, always: the core waits on this before it finishes the next frame, and
-   *  what the page wrote reaches the game's RAM before the one after starts. */
+  /** Last in it, always: the core waits on this once it is six frames ahead, and what the
+   *  page wrote reaches the game's RAM at the end of the frame it is running. */
   _brFrameDone?(): void;
-  /** With the core paused, the page's writes straight into the game's RAM and its copy
-   *  remade from it; a no-op unless paused. */
-  _brSync?(): void;
+  /** With the core paused, the page's writes straight into the game's RAM (or dropped,
+   *  `discard` 1) and its copy remade from it; a no-op unless paused. */
+  _brSync?(discard: number): void;
+  /** How many frames the core may finish ahead of the page: 1 is lockstep, 0 the default. */
+  _brSetFrameLead?(frames: number): void;
   HEAPU8: Uint8Array;
   /** SDL2's audio output, once a game's thread has opened it (audio-meter.ts). */
   SDL2?: SdlAudio;
@@ -454,8 +456,8 @@ export class Emulator {
     this.running = true;
     // addCoreCallbacks is a no-op until a core exists, so this must follow loadGame.
     this.m.addCoreCallbacks({
-      // The core runs the next frame meanwhile (HBR-59), and waits on _brFrameDone before
-      // it finishes that one: a throw past it would freeze the game, the mailbox
+      // The core runs on meanwhile (HBR-59), and waits on _brFrameDone once it is six
+      // frames ahead: a throw past it would freeze the game, the mailbox
       // undrained, nothing on screen (POK-330 #35). So no listener's bug gets out of
       // here, and the picture is presented whatever happened.
       videoFrameEndedCallback: () => {
@@ -525,13 +527,13 @@ export class Emulator {
   /** What the page writes while paused is in the game's RAM when it resumes. */
   pause(): void {
     this.m.pauseGame();
-    this.m._brSync?.();
+    this.m._brSync?.(0);
     this.paused = true;
     this.halts++;
   }
 
   resume(): void {
-    this.m._brSync?.();
+    this.m._brSync?.(0);
     this.m.resumeGame();
     this.paused = false;
     this.quiet = false;
@@ -572,6 +574,13 @@ export class Emulator {
    *  boot, a stop, a crash -- so a meter does not read the gap across one as a frame. */
   get pauses(): number {
     return this.halts;
+  }
+
+  /** How far the game may run ahead of the page's frames (HBR-59): 1 hands the page every
+   *  frame and lets a busy page slow the game, as a check of every frame needs; 0 is the
+   *  default, a few frames, so a busy page sees fewer frames and the game keeps its speed. */
+  setFrameLead(frames: number): void {
+    this.m._brSetFrameLead?.(frames);
   }
 
   /** Frames the game has run so far: more than the page's frames when it was too busy to
@@ -720,12 +729,11 @@ export class Emulator {
 
   // ---- memory -----------------------------------------------------------------------
   // The page's copy of work RAM (HBR-59): the last frame it took, as the game left it,
-  // with the page's own writes on top; those reach the game before the frame after the
-  // one it is running starts. Views over the shared heap, made once per boot and kept
-  // (POK-330 #65): the frame listeners make ~290 reads a frame, and a wasm call plus two
-  // allocations for each was all overhead. A view is dropped when the
-  // core is rebuilt, stopped or crashes (its RAM moves with it), and remade when the
-  // heap itself is replaced (memory growth).
+  // with the page's own writes on top; those reach the game at the end of the frame it
+  // is running. Views over the shared heap, made once per boot and kept (POK-330 #65):
+  // the frame listeners make ~290 reads a frame, and a wasm call plus two allocations
+  // for each was all overhead. A view is dropped when the core is rebuilt, stopped or
+  // crashes, and remade when the heap itself is replaced (memory growth).
 
   private heapViews(): NonNullable<Emulator['views']> {
     const heap = this.m.HEAPU8;
@@ -767,7 +775,7 @@ export class Emulator {
     for (let i = 0; i < width / 8; i++) view[off + i] = (value >>> (8 * i)) & 0xff;
   }
 
-  /** Bytes at a GBA bus address, as a view (writes go straight to the core). */
+  /** Bytes at a GBA bus address, as a view (writes reach the game as write()'s do). */
   bytes(addr: number, len: number): Uint8Array {
     const off = addr - (addr >= IWRAM_BASE ? IWRAM_BASE : EWRAM_BASE);
     return this.viewAt(addr).subarray(off, off + len);
@@ -825,7 +833,8 @@ export class Emulator {
       this.m.FS.writeFile(path, bytes);
       const ok = this.m.loadState(RESUME_SLOT);
       this.m.FS.unlink(path);
-      this.m._brSync?.();
+      // What the page wrote since the pause was for the machine this replaced.
+      this.m._brSync?.(1);
       return ok;
     } catch {
       return false;

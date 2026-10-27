@@ -25,6 +25,8 @@ type HbrWindow = {
 
 /** gMain.vblankCounter1: the ROM's own count of the frames it has run. */
 const VBLANK_COUNTER1 = 0x20;
+/** gBrMailbox.dropped: messages the ROM could not queue for the page, its ring full. */
+const MAILBOX_DROPPED = 0x14;
 const MEASURE_MS = 8000;
 /** A GBA's frame rate: 16.78 MHz over 280896 cycles a frame. */
 const GBA_FPS = 59.73;
@@ -79,10 +81,13 @@ test('a busy phone page does not slow the game', async ({ browser }) => {
     await page.addInitScript(busyMainThread);
     const cdp = await ctx.newCDPSession(page);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: THROTTLE });
-    const counter = loadSymbols().gMain + VBLANK_COUNTER1;
+    const sym = loadSymbols();
+    const counter = sym.gMain + VBLANK_COUNTER1;
+    const dropped = () => page.evaluate((a) => (window as unknown as HbrWindow).__hbr.emu.read(a, 32), sym.gBrMailbox + MAILBOX_DROPPED);
     await page.goto(`/#solo&perf&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 30_000 });
     await page.waitForFunction((a) => (window as unknown as HbrWindow).__hbr.emu.read(a, 32) > 600, counter, { timeout: 60_000 });
+    const droppedBefore = await dropped();
     const runs = [];
     for (const busy of BUSY_MS) {
       const r = await measure(page, counter, busy);
@@ -90,6 +95,8 @@ test('a busy phone page does not slow the game', async ({ browser }) => {
       runs.push(r);
     }
     fs.writeFileSync(path.join(OUT_DIR, 'pacing.json'), `${JSON.stringify(runs, null, 2)}\n`);
+    // The page drains the ROM's messages less often when it sees fewer frames: none lost.
+    expect(await dropped(), 'no message the ROM sent was dropped').toBe(droppedBefore);
     for (const r of runs) {
       expect(r.rom, `the game at full speed with ${r.busy} ms of page work a rAF`).toBeGreaterThan(GBA_FPS - 2);
     }
