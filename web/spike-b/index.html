@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <title>HBR spike B: our overworld</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: #000; color: #e8eef2; font: 13px/1.35 system-ui, sans-serif; overflow: hidden; }
+      #world { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; image-rendering: pixelated; }
+      #hud { position: fixed; top: calc(env(safe-area-inset-top) + 6px); left: 8px; right: 8px; display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; pointer-events: none; }
+      #stats { background: #000a; padding: 4px 8px; border-radius: 6px; white-space: pre; font-variant-numeric: tabular-nums; }
+      #hud button { pointer-events: auto; background: #26313aee; color: #e8eef2; border: 1px solid #4c7a99; border-radius: 6px; padding: 6px 10px; font: inherit; }
+      #hud button.on { background: #4c7a99; }
+      #pad { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 10px); display: none; justify-content: space-between; padding: 0 14px; pointer-events: none; }
+      @media (pointer: coarse) { #pad { display: flex; } }
+      .dpad { display: grid; grid-template: repeat(3, 54px) / repeat(3, 54px); gap: 3px; pointer-events: auto; }
+      .ab { display: flex; gap: 10px; align-items: flex-end; pointer-events: auto; }
+      .k { display: grid; place-items: center; background: #26313acc; border-radius: 10px; color: #cfe3ef; font-weight: 700; touch-action: none; user-select: none; -webkit-user-select: none; }
+      .k.down { background: #4c7a99; }
+      .ab .k { width: 62px; height: 62px; border-radius: 50%; }
+      #battle { position: fixed; inset: 0; display: none; place-items: center; background: #000; }
+      #battle.on { display: grid; }
+      #battle canvas { image-rendering: pixelated; width: min(100vw, 150vh); aspect-ratio: 240 / 160; height: auto; }
+      #battle .note { position: absolute; top: 12px; left: 12px; right: 12px; text-align: center; color: #9fb3c0; }
+    </style>
+  </head>
+  <body>
+    <canvas id="world"></canvas>
+    <div id="hud">
+      <div id="stats">loading…</div>
+      <button id="mode" type="button">Spectate (V)</button>
+    </div>
+    <div id="pad">
+      <div class="dpad">
+        <span></span><div class="k" data-k="up">▲</div><span></span>
+        <div class="k" data-k="left">◀</div><span></span><div class="k" data-k="right">▶</div>
+        <span></span><div class="k" data-k="down">▼</div><span></span>
+      </div>
+      <div class="ab"><div class="k" data-k="b">B</div><div class="k" data-k="a" style="margin-bottom:34px">A</div></div>
+    </div>
+    <div id="battle"><div class="note" id="battle-note"></div><canvas id="gba" width="240" height="160"></canvas></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

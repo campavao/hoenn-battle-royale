@@ -93,6 +93,9 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return; // the relay, and anything else, is not ours
   const path = url.pathname;
+  // Engine spike B (/spike-b/): left to the network. Its hashed files sit outside
+  // /assets/, where nothing would ever prune them.
+  if (path.startsWith('/spike-b/')) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(networkFirst(event, request, { page: true }));
