@@ -993,6 +993,56 @@ static const u8 sText_TimesHalf[] = _("×0.5");
 static const u8 sText_TimesQuarter[] = _("×0.25");
 static const u8 sText_Times0[] = _("×0");
 
+// A link battle's slave runs no battle engine (InitLinkBtlControllers leaves its
+// gBattleMainFunc a dummy): the master's fills gBattleMons, and ours kept whatever the
+// last battle left there. The move menu read the foe's types out of it -- Cam's 10-27
+// play-test, THUNDER on an AMPHAROS said "ELECTR x1" -- and the phone's menu reads both
+// mons' names, types, moves and PP. The controllers do keep both parties and which slot
+// is out, so the parts those read are filled from there, every frame of the fight.
+static void FillFromParty(u8 battler)
+{
+    struct BattlePokemon *bm = &gBattleMons[battler];
+    struct Pokemon *mon;
+    u16 species;
+    u8 i;
+
+    if (GetBattlerSide(battler) == B_SIDE_PLAYER)
+        mon = &gPlayerParty[gBattlerPartyIndexes[battler]];
+    else
+        mon = &gEnemyParty[gBattlerPartyIndexes[battler]];
+    species = GetMonData(mon, MON_DATA_SPECIES);
+    if (species == SPECIES_NONE || species >= NUM_SPECIES)
+        return;
+    bm->species = species;
+    bm->types[0] = gSpeciesInfo[species].types[0];
+    bm->types[1] = gSpeciesInfo[species].types[1];
+    bm->ability = GetAbilityBySpecies(species, GetMonData(mon, MON_DATA_ABILITY_NUM));
+    GetMonData(mon, MON_DATA_NICKNAME, bm->nickname);
+    StringGet_Nickname(bm->nickname);
+    for (i = 0; i < MAX_MON_MOVES; i++)
+    {
+        bm->moves[i] = GetMonData(mon, MON_DATA_MOVE1 + i);
+        bm->pp[i] = GetMonData(mon, MON_DATA_PP1 + i);
+    }
+    bm->ppBonuses = GetMonData(mon, MON_DATA_PP_BONUSES);
+}
+
+static bool8 LinkSlave(void)
+{
+    return (gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_IS_MASTER)) == BATTLE_TYPE_LINK
+        && !(gBattleTypeFlags & (BATTLE_TYPE_RECORDED | BATTLE_TYPE_DOUBLE));
+}
+
+void BrBattle_FillSlaveMons(void)
+{
+    u8 battler;
+
+    if (!gMain.inBattle || !LinkSlave())
+        return;
+    for (battler = 0; battler < gBattlersCount; battler++)
+        FillFromParty(battler);
+}
+
 // The move's multiplier on the foe's types, in sixteenths: the type chart's rows for the
 // move's type and either of the foe's, Foresight's past the marker too, as
 // web/src/battle/movebook.ts's effectiveness() reads it for the phone.
@@ -1032,7 +1082,7 @@ bool8 BrBattle_MoveTypeLine(u16 move)
     // SEISMIC TOSS, SUPER FANG...), the two whose type is not their listed NORMAL, and a
     // foe that FORESIGHT has opened up.
     if (gBattleMoves[move].power <= 1 || move == MOVE_HIDDEN_POWER || move == MOVE_WEATHER_BALL
-     || (gBattleTypeFlags & BATTLE_TYPE_DOUBLE) || (gBattleMons[foe].status2 & STATUS2_FORESIGHT))
+     || (gBattleTypeFlags & BATTLE_TYPE_DOUBLE) || (!LinkSlave() && (gBattleMons[foe].status2 & STATUS2_FORESIGHT)))
         return FALSE;
     mul = Sixteenths(type, foe);
     if (type == TYPE_GROUND && gBattleMons[foe].ability == ABILITY_LEVITATE)
