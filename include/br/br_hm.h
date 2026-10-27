@@ -2,6 +2,7 @@
 #define GUARD_BR_HM_H
 
 #include "global.h"
+#include "br/br_config.h"
 
 // Field moves without the HMs (2026-10-13, the speed-up redesign: "get rid of the need
 // for HMs, make it easy to get around"): walk into water and you are surfing, walk up a
@@ -68,5 +69,34 @@ bool8 BrHm_SkipCutIn(void);
 // but a rod only facing water (br_hm.c). UseRegisteredKeyItemOnField, ahead of its
 // registered-item test.
 void BrHm_SelectBike(void);
+
+// The page's field-move icons (Cam's 10-27 play-test, HBR-78: "icons on the screen to
+// indicate when you can do things like Surf, Fly, Cut"). Bit n is HM n+1's move, as
+// sHmMoves has them: CUT, FLY, SURF, STRENGTH, WATERFALL, DIVE. FLASH is on for everybody
+// (br_boot.c) and the smash rocks are gone (br_strip.c), so neither bit is ever set.
+#define BR_HM_CUT       (1 << 0)
+#define BR_HM_FLY       (1 << 1)
+#define BR_HM_SURF      (1 << 2)
+#define BR_HM_STRENGTH  (1 << 3)
+#define BR_HM_WATERFALL (1 << 6)
+#define BR_HM_DIVE      (1 << 7)
+
+struct BrHmView
+{
+    /* 0 */ u8 can;   // somebody in the party could use it (BrHm_Slot)
+    /* 1 */ u8 ready; // ...and it would work on what we face or stand on, this frame
+    /* 2 */ u8 pad[2]; // a struct rounds to 4 bytes on both compilers
+};
+BR_OFFSET(BrHmView, can, 0)
+BR_OFFSET(BrHmView, ready, 1)
+BR_SIZE(BrHmView, 4)
+
+// Both 0 outside the match proper (the Safari, out, a ROM with no match); `ready` is 0 off
+// the field and while a script runs, and `can` keeps its last value there.
+extern struct BrHmView gBrHmView;
+
+// Every frame from BrFrame: `ready` each field frame; `can` takes one mon's read every
+// BR_HM_VIEW_FRAMES of them (br_hm.c), so the whole party every dozen frames.
+void BrHm_Tick(void);
 
 #endif // GUARD_BR_HM_H

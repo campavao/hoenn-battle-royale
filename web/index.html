@@ -208,7 +208,7 @@
          width. In a match on the page's upright layout, which a tablet keeps on its side too: a
          phone on its side (the short landscape below) and a computer keep the old row.
          The D-pad and A/B go see-through, and can be moved, faded and hidden (--dpad-*, --ab-*, --pad-alpha, body.pad-hidden). */
-      #hud, .dock { display: none; }
+      #hud, .dock, #moves { display: none; }
       .pad-edit[hidden] { display: none; }
       #hud canvas, .dock canvas, .pad-edit canvas { display: block; image-rendering: pixelated; }
       @media not all and (orientation: landscape) and (max-height: 520px) {
@@ -220,6 +220,10 @@
         .hud-sign { position: absolute; left: calc(var(--s, 1.5) * 4px); top: calc(var(--s, 1.5) * 4px); transition: opacity 300ms, visibility 300ms; }
         .hud-sign.gone { opacity: 0; visibility: hidden; }
         .hud-fog { position: absolute; right: calc(var(--s, 1.5) * 4px); top: calc(var(--s, 1.5) * 4px); }
+        /* The field moves' symbols (HBR-78), down the right edge under the fog window (its
+           tallest, four lines, is 72 GBA pixels). */
+        .hud-moves { position: absolute; right: calc(var(--s, 1.5) * 4px); top: calc(var(--s, 1.5) * 80px); }
+        .hud-moves.gone { display: none; }
         body.in-match #pad { padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); row-gap: 0; }
         body.in-match #pad .sys { display: none; }
         body.in-match .dock {
@@ -416,6 +420,8 @@
         #keys .k-a { grid-area: a; } #keys .k-b { grid-area: b; }
         #keys .k-select { grid-area: sel; } #keys .k-start { grid-area: start; }
         body.in-match #keys[hidden] { display: none; }
+        /* A computer's field moves (HBR-78), down the field's top right at its scale. */
+        body.in-match #moves:not(.gone) { display: block; position: absolute; right: 8px; top: 8px; pointer-events: none; z-index: 1; }
         body.in-match #keys[data-mode='row'] {
           grid-template: none / none; grid-template-areas: none;
           grid-auto-flow: column; grid-auto-columns: auto; grid-auto-rows: 24px;
@@ -472,6 +478,8 @@
           <div id="keys" aria-hidden="true"></div>
           <!-- A phone's HUD over the field (ui/phonehud.ts): the route sign, the fog window. -->
           <div id="hud" aria-hidden="true"></div>
+          <!-- A computer's field moves (ui/phonehud.ts MovesWindow): the field's top right. -->
+          <div id="moves" class="gone" aria-hidden="true"></div>
           <!-- A phone's battle menu (ui/battlemenu.ts): under the picture, over the pad. -->
           <div id="battle-menu" class="battle-menu" hidden></div>
         </div>

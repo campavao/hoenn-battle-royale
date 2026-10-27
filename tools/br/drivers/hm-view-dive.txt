@@ -1,0 +1,17 @@
+# hm-view-dive: gBrHmView's DIVE (HBR-78) on hm-dive's ROUTE 126 deep water, which has a
+# map below. TESTSWIM's MUDKIP could DIVE. Down there coming back up is free, so nothing
+# is ready; and `can` stays through the dive's warp rather than going to 0.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 21 00 00 29 28 00 09 00 BD BB C7 FF
+wait 400
+expectbits u8 gPlayerAvatar 0x08 0x08
+expect u8 gBrHmView 0xCC
+expect u8 gBrHmView+1 0x80
+shot dive-spot
+tap A
+wait 400
+expectbits u8 gPlayerAvatar 0x10 0x10
+expect u8 gBrHmView 0xCC
+expect u8 gBrHmView+1 0x00
+say hm view dive ok

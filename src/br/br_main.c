@@ -10,6 +10,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_boot.h"
 #include "br/br_ring.h"
+#include "br/br_hm.h"
 #include "br/br_hud.h"
 #include "br/br_match.h"
 #include "br/br_hof.h"
@@ -96,6 +97,7 @@ void BrFrame(void)
     BrDuel_Tick();
     BrRing_Tick();
     BrHud_Tick();
+    BrHm_Tick();
     BrMatch_Tick();
     BrHof_Tick();
     BrLevels_Tick();

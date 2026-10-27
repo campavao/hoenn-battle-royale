@@ -19,6 +19,9 @@ import {
   SignCue,
   fogPhase,
   readHudView,
+  fieldMoves,
+  HM_CAN,
+  HM_READY,
   safeWay,
   signFor,
   type HudView,
@@ -26,6 +29,7 @@ import {
   OFF_FIELD_GRACE,
 } from './phonehud';
 import { measure, TEXT_RED } from './emerald';
+import { FIELD_ICONS, ICON_COLORS, ICON_SIZE } from './fieldicons';
 import { HUD } from '../net/hud';
 import { encodeGen3 } from '../text/gen3';
 
@@ -84,6 +88,7 @@ describe('the sign and the fog window', () => {
     safe: null,
     ctx: { label: 'BIKE', item: ITEM_MACH_BIKE, enabled: true },
     party: 1,
+    moves: [],
     ...over,
   });
   const text = (v: HudView) => fogLines(v).map((l) => [l.left?.text ?? '', l.right?.text ?? '']);
@@ -151,6 +156,7 @@ describe('the HUD read off the ROM', () => {
     gBrRing: 0x5000,
     gBrLevels: 0x6000,
     gPlayerPartyCount: 0x7000,
+    gBrHmView: 0x8000,
   };
   const ram = new Map<number, number>();
   const put = (addr: number, v: number, bytes: number) => {
@@ -200,6 +206,31 @@ describe('the HUD read off the ROM', () => {
     put(SYM.gBrRing + RING_R, 0xff, 1);
     put(SYM.gMain + 4, 0x08009999, 4);
     expect(readHudView(emu, (n) => SYM[n], world)).toMatchObject({ ring: 'Fog everywhere', fogEverywhere: true, onField: false });
+  });
+
+  it("reads the field moves off gBrHmView: the party's, the one facing in blue (HBR-78)", () => {
+    ram.clear();
+    // CUT, SURF and WATERFALL could be used; facing water, SURF would work
+    put(SYM.gBrHmView + HM_CAN, 0b0100_0101, 1);
+    put(SYM.gBrHmView + HM_READY, 0b0000_0100, 1);
+    expect(readHudView(emu, (n) => SYM[n], world)!.moves).toEqual([
+      { name: 'CUT', hm: 0, ready: false },
+      { name: 'SURF', hm: 2, ready: true },
+      { name: 'WATERFALL', hm: 6, ready: false },
+    ]);
+    expect(readHudView(emu, (n) => (n === 'gBrHmView' ? undefined : SYM[n]), world)!.moves, 'an older patch').toEqual([]);
+  });
+
+  it('never lists FLASH or ROCK SMASH, and every move has a whole 16x16 symbol in known colours', () => {
+    expect(fieldMoves(0xff, 0).map((m) => m.name)).toEqual(['CUT', 'FLY', 'SURF', 'STRENGTH', 'WATERFALL', 'DIVE']);
+    for (const m of fieldMoves(0xff, 0)) {
+      const rows = FIELD_ICONS[m.name];
+      expect(rows, m.name).toHaveLength(ICON_SIZE);
+      for (const row of rows) {
+        expect(row, m.name).toHaveLength(ICON_SIZE);
+        for (const ch of row) expect(ch === '.' || ch in ICON_COLORS, `${m.name} '${ch}'`).toBe(true);
+      }
+    }
   });
 
   it('nothing without the symbols, and no world yet is no sign and a grey BIKE', () => {
