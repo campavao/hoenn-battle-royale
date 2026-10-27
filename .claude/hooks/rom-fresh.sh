@@ -8,12 +8,14 @@
 #
 # Play-test bugs came back "fixed" because the tab ran a ROM older than the fix. The
 # hook's input is JSON on stdin; the mark lives in the temp dir, keyed by session, so
-# nothing lands in the tree.
+# nothing lands in the tree. Only C and asm count: map JSON and graphics edits are not
+# checked.
 set -u
 
 input="$(cat)"
 # stdin, not argv: Windows python mangles the backslashes in a JSON path passed as an arg.
-field() { printf '%s' "$input" | python -c "import json,sys;d=json.load(sys.stdin);print(eval('d'+sys.argv[1]))" "$1" 2>/dev/null; }
+PY="$(command -v python3 || command -v python)"
+field() { printf '%s' "$input" | "$PY" -c "import json,sys;d=json.load(sys.stdin);print(eval('d'+sys.argv[1]))" "$1" 2>/dev/null; }
 
 ROOT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 session="$(field "['session_id']")"
