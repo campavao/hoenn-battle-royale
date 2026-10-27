@@ -2,6 +2,7 @@
 // own managers are up and before the first frame, and BrFrame from the main loop
 // every frame. Everything else in src/br/ hangs off the systems these two start.
 #include "global.h"
+#include "br/br_swap.h"
 #include "br/br_config.h"
 #include "br/br_main.h"
 #include "br/br_mailbox.h"
@@ -71,6 +72,7 @@ void BrHeapReset(void)
     BrBot_HeapReset();
     BrDuel_HeapReset();
     BrMatch_HeapReset();
+    BrSwap_HeapReset();
 }
 
 EWRAM_DATA u8 gBrMidFrame = 0;

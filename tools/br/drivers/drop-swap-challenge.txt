@@ -1,0 +1,45 @@
+# drop-swap-challenge: a bot's challenge that lands while a drop's screen is up starts the
+# fight from it, as from any menu, but the screen settles first (review of #146). The
+# MUDKIP moved to our party leaves the ground (its PICKUP) before the fight, so it fights
+# as ours and never exists twice; the bot's staged team in gEnemyParty is untouched by
+# the screen.
+#
+# drop-swap's SPILL (MUDKIP, TORCHIC, ZIGZAGOON and a bag), and bot-challenge-bag's bot 31.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+expect u8 gBrBotFight 1
+pokebytes gDecompressionBuffer 01 00 09 03 01 00 0C 00 10 00 1B 01 05 02 00 0D 00 0F 00 18 01 05 03 00 0D 00 10 00 20 01 05 01 04 00 0B 00 0F 00
+mailsend gBrMailbox 11 gDecompressionBuffer 38
+wait 30
+expect u8 gBrLoot+0xA0 4
+tap A
+wait 120
+expectne u32 gMain+4 CB2_Overworld+1
+# MUDKIP over to us
+tap A
+wait 30
+expect u8 gPlayerPartyCount 2
+expect u8 gBrLoot+0xA2 0
+shot moved
+# the bot's ghost on our map, then its CHALLENGE: parked while the screen settles
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 6
+expect u8 gBrBotFight+2 0
+wait 300
+# the fight is on, against the staged TREECKO card, and MUDKIP's ball was taken first
+expect u8 gBrBotFight+2 1
+expect u8 gEnemyParty+8 0xCE
+expect u8 gBrLoot+0xA2 1
+expectmsg 10 u16 1 1
+expect u8 gPlayerPartyCount 2
+shot fighting
+say drop swap challenge ok

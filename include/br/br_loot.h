@@ -211,6 +211,10 @@ MainCallback BrLoot_PcExit(MainCallback callback);
 // A battle is starting from the box, so CB2_ExitPokeStorage will not run: the boxes settle
 // once the field is back, all the same.
 void BrLoot_PcInterrupted(void);
+// A battle is starting from the drop's screen: its moves count before the fight does, or
+// a pile mon would fight (and spill as ours) while its ball is still down. FALSE when the
+// out ring is full: try again next frame.
+bool8 BrLoot_SettleNow(void);
 // The box menu offers RELEASE only outside a match.
 bool8 BrLoot_PcCanRelease(void);
 // One item on the ground beside us, for anybody, and the room told: the TM a mon of ours

@@ -12,5 +12,9 @@
 // Nothing is held anywhere but the party and the box, so a battle that starts from here
 // loses nothing.
 void CB2_BrSwap(void);
+// The screen is up now (br_netlink.c settles it before a battle starts from it).
+bool8 BrSwap_Up(void);
+// The heap is the next battle's (BrHeapReset): a battle from the screen leaves it.
+void BrSwap_HeapReset(void);
 
 #endif // GUARD_BR_SWAP_H

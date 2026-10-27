@@ -44,6 +44,7 @@
 
 struct BrSwap
 {
+    struct Pokemon drop[PARTY_SIZE];
     u16 tilemapBuffer[BG_SCREEN_SIZE / 2];
     u8 iconIds[2][PARTY_SIZE];
     u8 counts[2];
@@ -57,6 +58,8 @@ struct BrSwap
 };
 
 static struct BrSwap *sSwap;
+
+static void CB2_BrSwapRun(void);
 
 // The TRADE menu's own maps: the party boxes, and the stripes that scroll behind them.
 static const u16 sPartyBoxTilemap[] = INCBIN_U16("graphics/trade/party_box_map.bin");
@@ -86,11 +89,12 @@ static const u8 sBoxCoords[PARTY_SIZE * 2][2] = {
     {16,  3}, {23,  3}, {16,  8}, {23,  8}, {16, 13}, {23, 13},
 };
 
+// bg, charBaseIndex, mapBaseIndex, screenSize, paletteMode, priority, baseTile
 static const struct BgTemplate sBgTemplates[] = {
-    { .bg = 0, .charBaseIndex = 2, .mapBaseIndex = 31, .screenSize = 0, .paletteMode = 0, .priority = 0, .baseTile = 0 },
-    { .bg = 1, .charBaseIndex = 0, .mapBaseIndex = 5,  .screenSize = 0, .paletteMode = 0, .priority = 1, .baseTile = 0 },
-    { .bg = 2, .charBaseIndex = 0, .mapBaseIndex = 6,  .screenSize = 0, .paletteMode = 0, .priority = 2, .baseTile = 0 },
-    { .bg = 3, .charBaseIndex = 0, .mapBaseIndex = 7,  .screenSize = 0, .paletteMode = 0, .priority = 3, .baseTile = 0 },
+    { 0, 2, 31, 0, 0, 0, 0 },
+    { 1, 0,  5, 0, 0, 1, 0 },
+    { 2, 0,  6, 0, 0, 2, 0 },
+    { 3, 0,  7, 0, 0, 3, 0 },
 };
 
 static const struct WindowTemplate sWindowTemplates[] = {
@@ -109,10 +113,9 @@ static const struct WindowTemplate sWindowTemplates[] = {
     DUMMY_WIN_TEMPLATE,
 };
 
+// y, affineMode, objMode, mosaic, bpp, shape, x, matrixNum, size, tileNum, priority
 static const struct OamData sOamData_Cursor = {
-    .shape = SPRITE_SHAPE(64x32),
-    .size = SPRITE_SIZE(64x32),
-    .priority = 1,
+    0, 0, 0, 0, 0, SPRITE_SHAPE(64x32), 0, 0, SPRITE_SIZE(64x32), 0, 1,
 };
 static const union AnimCmd sAnim_Cursor[] = { ANIMCMD_FRAME(0, 5), ANIMCMD_END };
 static const union AnimCmd *const sAnims_Cursor[] = { sAnim_Cursor };
@@ -133,9 +136,10 @@ static u8 CountDrop(void)
 }
 
 // The drop's side as Pokemon, for the icons, levels and held items, and for its HP: a
-// mon of ours put down and picked up again keeps its hurts, which a box would heal.
-// gEnemyParty is nobody's outside a battle. The box is still what counts (written on
-// every move), so a battle that starts from here, which takes gEnemyParty, loses nothing.
+// mon of ours put down and picked up again keeps its hurts, which a box would heal. Its
+// own copy, not gEnemyParty, where a bot's staged team waits for its challenge. The box
+// is still what counts (written on every move), so a battle that starts from here loses
+// nothing.
 static void MirrorDrop(void)
 {
     u8 i;
@@ -143,9 +147,9 @@ static void MirrorDrop(void)
     for (i = 0; i < PARTY_SIZE; i++)
     {
         if (i < CountDrop())
-            BoxMonAtToMon(0, i, &gEnemyParty[i]);
+            BoxMonAtToMon(0, i, &sSwap->drop[i]);
         else
-            ZeroMonData(&gEnemyParty[i]);
+            ZeroMonData(&sSwap->drop[i]);
     }
 }
 
@@ -157,7 +161,7 @@ static void Count(void)
 
 static struct Pokemon *MonAt(u8 side, u8 i)
 {
-    return side == SIDE_PARTY ? &gPlayerParty[i] : &gEnemyParty[i];
+    return side == SIDE_PARTY ? &gPlayerParty[i] : &sSwap->drop[i];
 }
 
 // The box under a mon, with its level and gender in the tilemap trade.c's way.
@@ -180,6 +184,19 @@ static void DrawLevel(u8 side, u8 i)
     default:         symbol = 0x83; break;
     }
     sSwap->tilemapBuffer[(y - 1) * 32 + x + 1] = symbol;
+}
+
+static void SwapWithEnemyParty(void)
+{
+    u8 i;
+    struct Pokemon mon;
+
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        mon = gEnemyParty[i];
+        gEnemyParty[i] = sSwap->drop[i];
+        sSwap->drop[i] = mon;
+    }
 }
 
 static void PrintCentered(u8 windowId, const u8 *text, u8 width, u8 font)
@@ -238,7 +255,10 @@ static void Redraw(void)
         }
     }
     DrawHeldItemIconsForTrade(sSwap->counts, &sSwap->iconIds[0][0], SIDE_PARTY);
+    // party_menu.c draws the partner's from gEnemyParty: the drop there for the call only.
+    SwapWithEnemyParty();
     DrawHeldItemIconsForTrade(sSwap->counts, &sSwap->iconIds[0][0], SIDE_DROP);
+    SwapWithEnemyParty();
     CopyBgTilemapBufferToVram(1);
     if (sSwap->picked != NO_SLOT && sSwap->iconIds[SIDE_DROP][sSwap->picked] != SPRITE_NONE)
         gSprites[sSwap->iconIds[SIDE_DROP][sSwap->picked]].y2 = -4; // lifted, waiting for one of ours
@@ -275,17 +295,17 @@ static void TakeFromDrop(u8 i)
     {
         CopyBoxMonAt(0, j + 1, &mon);
         SetBoxMonAt(0, j, &mon);
-        gEnemyParty[j] = gEnemyParty[j + 1];
+        sSwap->drop[j] = sSwap->drop[j + 1];
     }
     ZeroBoxMonAt(0, PARTY_SIZE - 1);
-    ZeroMonData(&gEnemyParty[PARTY_SIZE - 1]);
+    ZeroMonData(&sSwap->drop[PARTY_SIZE - 1]);
 }
 
 static void ToDrop(u8 i)
 {
     u8 n = sSwap->counts[SIDE_DROP];
 
-    gEnemyParty[n] = gPlayerParty[i];
+    sSwap->drop[n] = gPlayerParty[i];
     SetBoxMonAt(0, n, &gPlayerParty[i].box);
     ZeroMonData(&gPlayerParty[i]);
     CompactPartySlots();
@@ -293,7 +313,7 @@ static void ToDrop(u8 i)
 
 static void ToParty(u8 i)
 {
-    gPlayerParty[sSwap->counts[SIDE_PARTY]] = gEnemyParty[i];
+    gPlayerParty[sSwap->counts[SIDE_PARTY]] = sSwap->drop[i];
     TakeFromDrop(i);
 }
 
@@ -301,8 +321,8 @@ static void Swap(u8 ours, u8 theirs)
 {
     struct Pokemon mon = gPlayerParty[ours];
 
-    gPlayerParty[ours] = gEnemyParty[theirs];
-    gEnemyParty[theirs] = mon;
+    gPlayerParty[ours] = sSwap->drop[theirs];
+    sSwap->drop[theirs] = mon;
     SetBoxMonAt(0, theirs, &mon.box);
 }
 
@@ -387,6 +407,16 @@ static void Press(void)
             sSwap->cursor = (side ^ 1) * PARTY_SIZE;
         PlaceCursor();
     }
+}
+
+bool8 BrSwap_Up(void)
+{
+    return gMain.callback2 == CB2_BrSwapRun;
+}
+
+void BrSwap_HeapReset(void)
+{
+    sSwap = NULL;
 }
 
 static void VBlankCB_BrSwap(void)

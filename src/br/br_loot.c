@@ -894,7 +894,8 @@ static bool8 sBoxesOut;
 // took it while the box was up, and the personality MakeTaken gave its mon, which is how
 // the box and the party are told apart from what was ours. The balls stay on the ground
 // until the box closes. IWRAM, all of it: EWRAM has no byte to spare.
-#define BR_PILE_SETTLED 0xFFFE // an entry SettleBoxes has done with: no key is ever this
+// An entry SettleBoxes has done with: no key is ever this.
+#define BR_PILE_SETTLED 0xFFFE
 static u16 sPileKey[BR_MAX_LOOT];
 static u32 sPilePersonality[BR_MAX_LOOT];
 static u8 sPileCount;
@@ -973,11 +974,12 @@ static bool8 OpenPile(const struct BrLootItem *pressed)
     if (n < 2)
         return FALSE;
     sPileCount = 0;
-    for (i = 0; i < BR_MAX_LOOT; i++)
+    // The pressed ball first, so it is on the screen it opened however many lie about.
+    for (i = 0; i <= BR_MAX_LOOT; i++)
     {
-        struct BrLootItem *it = &gBrLoot.items[i];
+        const struct BrLootItem *it = i == 0 ? pressed : &gBrLoot.items[i - 1];
 
-        if (!InPile(it))
+        if ((i != 0 && it == pressed) || !InPile(it))
             continue;
         if (sPileCount == PARTY_SIZE)
             break; // the screen's drop side is six, a whole team
@@ -1048,7 +1050,7 @@ static void SwapInOurs(struct Pokemon *slot)
     }
 }
 
-static void SettleBoxes(void)
+static bool8 SettleBoxes(void)
 {
     u8 buf[4 + PARTY_SIZE * 9 + 1];
     u8 boxAt[PARTY_SIZE], slotAt[PARTY_SIZE];
@@ -1077,7 +1079,7 @@ static void SettleBoxes(void)
         else
         {
             if (!BrWire_CanHold(BR_PICKUP_LEN))
-                return;
+                return FALSE;
             it = Find(sPileKey[j]);
             if (it != NULL)
                 SendPickup(it);
@@ -1131,7 +1133,7 @@ static void SettleBoxes(void)
         buf[3] = n;
         buf[len++] = 0; // no bag
         if (!BrWire_SendLarge(BR_MSG_SPILL, buf, len))
-            return;
+            return FALSE;
         ParseSpill(buf, len);
         gBrLoot.freed += n;
         for (i = 0; i < n; i++)
@@ -1144,10 +1146,16 @@ static void SettleBoxes(void)
         }
     }
     if (more)
-        return;
+        return FALSE;
     sPileCount = 0;
     sBoxesOut = FALSE;
     BrSpectate_SendParty(); // the team changed: spectators and the director want it
+    return TRUE;
+}
+
+bool8 BrLoot_SettleNow(void)
+{
+    return !sBoxesOut || SettleBoxes();
 }
 
 static void Take(struct BrLootItem *it)
