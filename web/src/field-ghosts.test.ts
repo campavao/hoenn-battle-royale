@@ -30,8 +30,9 @@ const known = (over: Partial<Known> = {}): Known => ({
 const npc = (over: Partial<Template> = {}): Template => ({ row: 2, localId: 3, gfx: 7, x: 20, y: 30, movementType: 1, flagId: 0, ...over });
 const seat = (n: number, over: Partial<Known['seats'][number]> = {}) =>
   ({ seat: n, present: true, skin: 5, group: MAP.group, num: MAP.num, x: 20 + MAP_OFFSET, y: 31 + MAP_OFFSET, dir: 4, ...over });
+// A cell of its own per row, a column apart: pieces sharing a cell are one stack.
 const ball = (slot: number, over: Partial<Known['loot'][number]> = {}) =>
-  ({ slot, kind: 1, species: 0, group: MAP.group, num: MAP.num, x: 12 + MAP_OFFSET, y: 10 + MAP_OFFSET, ...over });
+  ({ slot, kind: 1, species: 0, group: MAP.group, num: MAP.num, x: 12 + slot + MAP_OFFSET, y: 10 + MAP_OFFSET, ...over });
 
 describe("the people past the ROM's box (POK-318)", () => {
   it('a map person just past the box stands at their home tile, facing the way their movement type starts', () => {
@@ -102,6 +103,12 @@ describe("the people past the ROM's box (POK-318)", () => {
 
   it('the loot past the box: a bag is the bag and the rest are balls', () => {
     expect(droppedPeople(known({ loot: [ball(0, { kind: 2 }), ball(1, { kind: 1 }), ball(2, { kind: 3 })] })).map((p) => p.gfx)).toEqual([GFX_BIRCHS_BAG, GFX_ITEM_BALL, GFX_ITEM_BALL]);
+    // a team in its bag is one piece, the bag, whichever row it is (br_loot.c's Head, HBR-82)...
+    const at = { x: 12 + MAP_OFFSET };
+    expect(droppedPeople(known({ loot: [ball(0, at), ball(1, at), ball(2, { kind: 2, ...at })] }))).toEqual([{ gfx: GFX_BIRCHS_BAG, dir: 1, x: 12, y: 10 }]);
+    // ...and with the bag taken, two balls still in it are still drawn as the bag; one is a ball
+    expect(droppedPeople(known({ loot: [ball(0, at), ball(1, at)] })).map((p) => p.gfx)).toEqual([GFX_BIRCHS_BAG]);
+    expect(droppedPeople(known({ loot: [ball(1, at)] })).map((p) => p.gfx)).toEqual([GFX_ITEM_BALL]);
     // a bag holding one thing -- a TM a mon forgot -- is drawn as the ball it is (br_loot.c's OneThing)
     expect(droppedPeople(known({ loot: [ball(0, { kind: 2, species: 294 })] })).map((p) => p.gfx)).toEqual([GFX_ITEM_BALL]);
     expect(droppedPeople(known({ loot: [ball(0)] }))[0]).toMatchObject({ x: 12, y: 10 });

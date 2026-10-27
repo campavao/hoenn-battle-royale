@@ -1,0 +1,48 @@
+# bag-list-eight: a GIVE's most, eight stacks, is a list of nine rows with TAKE ALL, and
+# the box holds all of them on the screen (review of #152: at tile row 2 its frame ran
+# off the bottom). Seat 3's bag alone on the cell we face (12,17).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x1018 0B 11 0E 00 00 03 00 09 00 01 FF 03 0C 00 11 00 00 64 00 00 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+tap A
+wait 20
+expect u8 gBrLoot+0xA2 1
+# GIVE [count 8]: ORAN BERRY x2, LEPPA BERRY x1, ESCAPE ROPE x1, TM06 x1, X ATTACK x3,
+# GUARD SPEC. x1, DIRE HIT x1, SITRUS BERRY x2
+pokebytes gDecompressionBuffer 08 8B 00 02 8A 00 01 55 00 01 26 01 01 4B 00 03 49 00 01 4A 00 01 8E 00 02
+mailsend gBrMailbox 30 gDecompressionBuffer 25
+wait 40
+shot list-eight
+# eight DOWNs to the last row, SITRUS BERRY, and A: it is the BERRIES pocket's first
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+shot at-last
+tap A
+wait 20
+expect u16 *gSaveBlock1Ptr+0x790 142
+shot last-row
+# B: the seven left go back down as the bag
+tap B
+wait 30
+expectmsg 11 u16 5 0x03FF
+expectmsg 11 u8 11 7
+expect u8 gBrLoot+0xA0 1
+say bag list eight ok

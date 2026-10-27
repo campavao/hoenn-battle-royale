@@ -1,0 +1,100 @@
+# bag-choose: a trainer's team lies in their bag (Cam, 2026-10-27, HBR-82: "we should
+# just keep the Pokemon in the bag. Instead when clicking on a bag I guess it should give
+# options for POKEMON and BAG. Pokemon brings you to this new trade screen. Bag brings
+# you to an easy to pick up list w/ a quick action to take all").
+#
+# Seat 3's SPILL with TORCHIC (0x118), ZIGZAGOON (0x120) and the bag all on the cell we
+# face, (12,17), south of where we stand: one object, the bag, with the balls under it.
+# A asks POKeMON or BAG; POKeMON opens the swap screen on the two balls; BAG takes the
+# bag and lists its GIVE.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# SPILL: type 11, framed len 38 = hdr(23 00 00) + seat 03, group 00, num 09, count 02,
+# rows (key, x, y, species, level), then hasBag 01, key 0x03FF, (12,17), no items,
+# money 100, no name
+pokebytes gBrMailbox+0x1018 0B 26 23 00 00 03 00 09 02 00 03 0C 00 11 00 18 01 05 01 03 0C 00 11 00 20 01 05 01 FF 03 0C 00 11 00 00 64 00 00 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+# three rows, one object: the bag (row 2) is the cell's head
+expect u8 gBrLoot+0xA0 3
+expect u8 gBrLoot+0xA1 1
+expect u8 gBrLoot+12 0xFF
+expect u8 gBrLoot+32 0xFF
+expectne u8 gBrLoot+52 0xFF
+# and the ticker says "{A} Take the BAG": "the" at +0x22
+expect u8 gBrHud+0x0C 1
+expect u16 gBrHud+0x22 0xDCE8
+shot packed
+tap A
+wait 40
+shot chooser
+# nothing taken yet: the box is asking
+expect u8 gBrLoot+0xA2 0
+expect u8 gBrLoot+0xA0 3
+# POKeMON: the swap screen, the drop side the two balls
+tap A
+wait 150
+shot swap
+expectne u32 gMain+4 CB2_Overworld+1
+# A picks TORCHIC, START moves it over, B is done
+tap A
+wait 10
+tap START
+wait 30
+shot moved
+tap B
+wait 150
+expect u32 gMain+4 CB2_Overworld+1
+expect u8 gPlayerPartyCount 2
+# TORCHIC's ball is taken; ZIGZAGOON still lies in the bag, and the bag is still the head
+expect u8 gBrLoot+0xA2 1
+expect u8 gBrLoot+0xA0 2
+expect u8 gBrLoot+0xA1 1
+expect u8 gBrLoot+11 0
+expect u16 gBrLoot+26 0x120
+expectne u8 gBrLoot+52 0xFF
+shot after-swap
+# BAG: DOWN, A. The bag is taken (its PICKUP out, the cash in), and the list waits for
+# the GIVE.
+tap A
+wait 40
+tap DOWN
+wait 10
+tap A
+wait 20
+expect u8 gBrLoot+0xA2 2
+expect u8 gBrLoot+51 0
+expectmsg 10 u16 1 0x03FF
+# GIVE [count 2] (ORAN BERRY x2) (NUGGET x1)
+pokebytes gDecompressionBuffer 02 8B 00 02 6E 00 01
+mailsend gBrMailbox 30 gDecompressionBuffer 7
+wait 40
+shot list
+# nothing in the pockets until a row is picked
+expect u16 *gSaveBlock1Ptr+0x790 0
+# DOWN to ORAN BERRY, A: the berries are in, the row is gone
+tap DOWN
+wait 10
+tap A
+wait 20
+expect u16 *gSaveBlock1Ptr+0x790 139
+shot took-one
+# B: the NUGGET goes back down as the bag it was, under its key on its cell, solid (it
+# opens its list again), and with ZIGZAGOON under it the cell is packed again
+tap B
+wait 30
+expectmsg 11 u8 3 0
+expectmsg 11 u8 4 1
+expectmsg 11 u16 5 0x03FF
+expectmsg 11 u16 7 12
+expectmsg 11 u16 9 17
+expectmsg 11 u8 11 1
+expectmsg 11 u16 12 110
+expect u8 gBrLoot+0xA0 2
+expect u8 gBrLoot+0xA1 1
+expect u8 gBrLoot+53 0
+expect u32 gMain+4 CB2_Overworld+1
+shot left-behind
+say bag choose ok

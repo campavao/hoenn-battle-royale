@@ -94,16 +94,19 @@ expect u8 gBattleCommunication 2
 # The spectators' record of the turn: each battler USE_ITEM, POTION (0x0D, 0), then whom
 # it went to. Ours is slot 0, move 0; theirs is BR_ITEM_PEER | slot 0, so a replay uses it
 # on its copy of their mon rather than reading 0x40 as an AI's item type (spectate-items).
-expectmsg 19 u8 2 0
-expectmsg 19 u8 3 5
-expectmsg 19 u8 4 1
-expectmsg 19 u8 5 0x0D
-expectmsg 19 u8 7 0
-expectmsg 19 u8 8 0
-expectmsg 19 u8 9 1
-expectmsg 19 u8 10 5
-expectmsg 19 u8 11 1
-expectmsg 19 u8 12 0x0D
-expectmsg 19 u8 14 0x40
-expectmsg 19 u8 15 0
+# The newest TURN is the turn's sum, gone out on its own as it ended (HBR-83); the
+# record is the one before it.
+expectmsg 19 u8 2 0xC0
+expectmsg 19#2 u8 2 0
+expectmsg 19#2 u8 3 5
+expectmsg 19#2 u8 4 1
+expectmsg 19#2 u8 5 0x0D
+expectmsg 19#2 u8 7 0
+expectmsg 19#2 u8 8 0
+expectmsg 19#2 u8 9 1
+expectmsg 19#2 u8 10 5
+expectmsg 19#2 u8 11 1
+expectmsg 19#2 u8 12 0x0D
+expectmsg 19#2 u8 14 0x40
+expectmsg 19#2 u8 15 0
 say pvp items ok

@@ -73,8 +73,12 @@ web/e2e/out/
 web/test-results/
 web/playwright-report/
 
-# Agent worktrees live here (Claude Code); they are checkouts, not repo content.
-.claude/
+# Claude Code keeps worktrees, local settings and drafts in .claude/. Only the shared
+# config (settings.json, hooks/, launch.json) is tracked.
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+!.claude/launch.json
 
 .vercel
 

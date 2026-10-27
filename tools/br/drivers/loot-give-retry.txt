@@ -12,9 +12,11 @@ pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
 # the ITEMS pocket, all thirty slots: POTION..BLACK FLUTE (13..42), one of each
 pokebytes *gSaveBlock1Ptr+0x560 0D 00 01 00 0E 00 01 00 0F 00 01 00 10 00 01 00 11 00 01 00 12 00 01 00 13 00 01 00 14 00 01 00 15 00 01 00 16 00 01 00 17 00 01 00 18 00 01 00 19 00 01 00 1A 00 01 00 1B 00 01 00 1C 00 01 00 1D 00 01 00 1E 00 01 00 1F 00 01 00 20 00 01 00 21 00 01 00 22 00 01 00 23 00 01 00 24 00 01 00 25 00 01 00 26 00 01 00 27 00 01 00 28 00 01 00 29 00 01 00 2A 00 01 00
-# seat 3's bag on our own tile: key 0x03FF, (12,16), map 0:9, kind 2 (BR_LOOT_BAG),
+# A bag on our own tile that is not a trainer's -- key 0x4301 in the released space; a
+# trainer's opens on its list instead (bag-list.txt), and pours in like this only when
+# the field is gone before the list can show -- (12,16), map 0:9, kind 2 (BR_LOOT_BAG),
 # objId BR_NO_OBJ, money 1200 (0x4B0)
-pokebytes gBrLoot FF 03 0C 00 10 00 00 00 00 09 00 02 FF 00 00 00 B0 04 00 00
+pokebytes gBrLoot 01 43 0C 00 10 00 00 00 00 09 00 02 FF 00 00 00 B0 04 00 00
 wait 60
 tap A
 wait 20
@@ -41,20 +43,20 @@ expect u8 gBrLoot+11 0
 wait 30
 expect u8 gBrLoot+11 0
 # The page takes slots again, and the held SPILL goes out: under our seat, no mons, the
-# bag 0x03FF on (12,16) with the NUGGET in it...
+# bag 0x4301 on (12,16) with the NUGGET in it...
 drain gBrMailbox
 wait 3
 expectmsg 11 u8 0 0
 expectmsg 11 u8 3 0
 expectmsg 11 u8 4 1
-expectmsg 11 u16 5 0x03FF
+expectmsg 11 u16 5 0x4301
 expectmsg 11 u16 7 12
 expectmsg 11 u16 9 16
 expectmsg 11 u8 11 1
 expectmsg 11 u16 12 110
 expectmsg 11 u8 14 1
 # ...and lands on our own ground as it does: a bag with the cash already gone.
-expect u16 gBrLoot 0x03FF
+expect u16 gBrLoot 0x4301
 expect u8 gBrLoot+11 2
 expect u16 gBrLoot+2 12
 expect u16 gBrLoot+4 16
