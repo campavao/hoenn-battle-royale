@@ -1757,10 +1757,16 @@ static void FollowTick(void)
     // a whole number of tiles apart -- and it does again if they ever drift apart.
     if (ghost->heldMovementActive && !ghost->heldMovementFinished)
     {
-        // A walk sets currentCoords to where it ends as it starts.
-        sStepSprite = ghost->spriteId + 1;
-        sStepX = ghost->currentCoords.x;
-        sStepY = ghost->currentCoords.y;
+        // A walk sets currentCoords to where it ends as it starts, and previousCoords
+        // to where it began; a turn in place (a FACE) is held movement too, and leaves
+        // the two the same.
+        if (ghost->previousCoords.x != ghost->currentCoords.x
+         || ghost->previousCoords.y != ghost->currentCoords.y)
+        {
+            sStepSprite = ghost->spriteId + 1;
+            sStepX = ghost->currentCoords.x;
+            sStepY = ghost->currentCoords.y;
+        }
         return;
     }
     if (gFieldCamera.x != 0 || gFieldCamera.y != 0)
