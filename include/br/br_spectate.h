@@ -22,8 +22,16 @@ struct BrSpectate
     /* 12 */ u8 shotSecs; // the followed seat's shot clock, 0 = no choice pending
     /* 13 */ u8 peekPage; // which page of the peek box: team, a mon's moves, the bag (POK-297)
     /* 14 */ u8 warpWait; // frames a warp to the followed seat's map is left to get going
-    /* 15 */ u8 catchUp; // the replay is turns behind what has arrived: the page fast-forwards
+    /* 15 */ u8 catchUp; // BR_CATCH_UP_*: how far behind the fight the replay is, for the page's pace
 };
+
+// gBrSpectate.catchUp. TURNS: turns of the fight are waiting, a late watch's backlog --
+// the page runs the replay at 8x, silent. LAG: the fighter has ended a turn the replay is
+// still playing, or chosen one it has not reached -- 2x with its sound, until it is level
+// (HBR-83: the replay's text waits out its timers where the fighter taps through it, and
+// a watched fight ran seconds behind and further each turn).
+#define BR_CATCH_UP_TURNS 1
+#define BR_CATCH_UP_LAG   2
 
 // gBrSpectate.follow when nobody is being followed. Matches the wire's stop byte.
 #define BR_NO_SEAT 0xFF

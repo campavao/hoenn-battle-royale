@@ -128,7 +128,8 @@ struct BrLoot
     /* 0x00 */ struct BrLootItem items[BR_MAX_LOOT]; // 160 bytes
     /* 0xA0 */ u8 count;    // rows in use, for drivers
     /* 0xA1 */ u8 spawned;  // objects on this map right now, for drivers
-    /* 0xA2 */ u8 taken;    // pieces this player has picked up, for drivers
+    /* 0xA2 */ u8 taken;    // pieces this player has picked up, for drivers and for
+                            // TakeToList, as its proof the PICKUP went
     /* 0xA3 */ u8 gone;     // beaten trainers this sweep has taken off a map, for drivers
     /* 0xA4 */ u8 freed;    // Pokemon this player has released (POK-294) and TMs their
                             // mons forgot (BrLoot_DropItem), and the low half of those
@@ -215,6 +216,12 @@ void BrLoot_PcInterrupted(void);
 // a pile mon would fight (and spill as ours) while its ball is still down. FALSE when the
 // out ring is full: try again next frame.
 bool8 BrLoot_SettleNow(void);
+
+// A trainer's bag box answered (br_bagmenu.h): BR_BAGMENU_POKEMON opens the swap screen on
+// the team lying in the bag under `key`, BR_BAGMENU_BAG takes it and lists what was in it.
+void BrLoot_BagChosen(u16 key, u8 choice);
+// The list closed with `left` rows of (id u16, n u8) not taken: back down as the bag.
+void BrLoot_BagListed(const u8 *rows, u8 left);
 // The box menu offers RELEASE only outside a match.
 bool8 BrLoot_PcCanRelease(void);
 // One item on the ground beside us, for anybody, and the room told: the TM a mon of ours

@@ -65,6 +65,29 @@ ROMs, so a driver run right after a clean needs a rebuild first.
   `C:\Users\cam95\Documents\Github\gen1recomp-multiplayer\mods\battle_royale` with a
   1131-line README. When a ticket cites `lib/<file>.lua`, read that file before designing.
 
+## A fix is done when it is in the ROM Cam runs
+
+Play-test bugs have come back as "fixed" because the tab ran an older ROM. Before you
+call a fix done:
+
+- C changed → rebuild (`make modern` for dev), then run the driver against that ROM.
+  A `.claude/hooks/rom-fresh.sh` Stop hook blocks the turn's end once if this session
+  edited C newer than the built ROM.
+- The shell needs it → re-run `tools/br/dev-patch.sh` so `web/public/patch/` names the
+  new ROM, and check the page's version line reads `rom <sha>` with no `STALE`, in dev
+  *and* on the live site after a deploy (`br-version.json`'s `romSha1`, docs/DEPLOY.md).
+- Say which ROM sha you verified on. "Fixed" without one is unverified.
+
+After parallel streams merge, run the whole web e2e suite (`cd web && npx playwright
+test`; `play-again`, `tap` and `spectate` broke last time) and `cd relay && node --test`
+on Node 22, before calling the batch done.
+
+## Game rules Cam has set
+
+- Keep the ferries and harbours (Slateport, Lilycove) open, even when closing the Battle
+  Frontier (`src/br/br_boot.c`).
+- Simulate every battle. Never settle a duel with a coin flip.
+
 ## How you talk
 
 The user is often on a phone. Lead with state (done / running / needs you), one line per

@@ -21,6 +21,7 @@ import { FIELD_CUT, FIELD_STRENGTH, sameSpot, spotKey, type Field, type SeamDir,
 import { pageCell, toRom, type PageCell } from './space';
 import { PROTOCOL, type MapRef, type Msg, type Outcome, type PackedMon, type SpillMsg } from '../net/wire';
 import { spillCells } from '../match/loot';
+import { isOwnKey } from '../match/owed';
 import { isEventKey } from '../match/events';
 
 /** One tile per walk animation, whatever the host's tab is doing.
@@ -966,30 +967,31 @@ export class Bots {
     walker.legend = undefined;
     const map = this.opts.mapRef(walker.at.map);
     if (map && walker.party.length > 0) {
-      // Scattered, not stacked. Every piece used to be written to the dropper's own
-      // cell -- which is ONE visible ball (BrLoot_At returns the first row it matches)
-      // with the rest of the team underneath it and the bag under those, so a beaten bot
-      // looked like it dropped a single Pokemon and no bag at all. The ROM has always
-      // scattered its own spill; this is the same ring, in the same order.
+      // One cell: the team in the bag (Cam, 2026-10-27, HBR-82: "we should just keep the
+      // Pokemon in the bag"). The ROM draws a cell's stack as the bag and opens it as
+      // POKeMON or BAG (br_loot.c), and stacks a player's own the same way (SpillOwn).
       //
-      // `teamTaken`: a ROM beat it and has dropped the team itself, under these same keys,
-      // round the winner. Then the bag goes down alone, on the bot's own cell -- the cell
-      // that ROM keeps its spoils off.
+      // `teamTaken`: a ROM beat it and puts the team down itself, under these same keys,
+      // on the bot's own cell (DropSpoils). Then the bag goes down alone, on that cell.
       const party = teamTaken ? [] : walker.party.slice(0, 6);
-      // Off any cell a piece already lies on: a winner's spoils beside the bot, or another
-      // trainer's spill (POK-388).
-      const taken = (x: number, y: number): boolean => this.opts.loot?.at(walker.at.map, pageCell(x, y)) !== undefined;
-      const cells = spillCells(this.opts.world, walker.at.map, walker.at.x, walker.at.y, party.length + 1, taken);
+      // Off any cell somebody else's piece lies on (POK-388); the bot's own -- the
+      // winner's spoils, landed first -- is the cell it wants.
+      const seat = walker.bot.seat;
+      const taken = (x: number, y: number): boolean => {
+        const key = this.opts.loot?.at(walker.at.map, pageCell(x, y));
+        return key !== undefined && !isOwnKey(key, seat);
+      };
+      const cell = spillCells(this.opts.world, walker.at.map, walker.at.x, walker.at.y, 1, taken)[0];
       const spill: SpillMsg = {
         t: 'spill',
         seat: walker.bot.seat,
         map,
         // The ROM's key convention: the dropper's seat in the high byte, so keys never
         // collide between trainers (br_loot.c).
-        mons: party.slice(0, cells.length).map((mon, i) => ({
+        mons: party.map((mon, i) => ({
           key: ((walker.bot.seat & 0xff) << 8) | i,
-          x: cells[i].x,
-          y: cells[i].y,
+          x: cell.x,
+          y: cell.y,
           species: mon.species,
           level: mon.level,
         })),
@@ -997,19 +999,16 @@ export class Bots {
       // And its bag, which is the point of it having had one (POK-237): the X ATTACKs
       // it did not get to pop are lying there for whoever beat it. Key 0xFF is the
       // ROM's own for a whiteout's bag (br_loot.c), clear of the mons' 0..5.
-      // The bag takes the cell after the team's. Nowhere left to put it means no bag
-      // rather than a bag nobody can reach: a piece sharing a cell with another is a
-      // piece that does not exist.
       // An empty bag still goes down when there is a purse in it: a bot's bag starts
       // empty now (POK-322), and beating one has always paid its cash -- the ROM pays a
       // bag's money whatever is in it (br_loot.c, Take).
       const money = purse(this.phase, walker.bot.grade);
       const items = carried(walker.party, walker.bag);
-      if ((items.length > 0 || money > 0) && cells.length > party.length) {
+      if (items.length > 0 || money > 0) {
         spill.bag = {
           key: ((walker.bot.seat & 0xff) << 8) | 0xff,
-          x: cells[party.length].x,
-          y: cells[party.length].y,
+          x: cell.x,
+          y: cell.y,
           items,
           money,
           name: walker.bot.name.slice(0, 7),

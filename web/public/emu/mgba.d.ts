@@ -359,6 +359,11 @@ declare namespace mGBA {
     /** Hoenn BR (HBR-59): runs of the page's RAM writes dropped since the core started,
      *  because the game wrote those bytes after the frame the page read. */
     _brLostWrites(): number;
+    /** Hoenn BR (HBR-59): before loadGame, the speaker is the page's AudioWorklet at
+     *  `rate` Hz, not SDL's ScriptProcessorNode. Returns the address of the ring the
+     *  worklet reads: u32 write, read, dropped, rate, lead, 3 spare, then 8192 stereo
+     *  s16 frames. */
+    _brAudioWorkletAt(rate: number): number;
     /** Hoenn BR (POK-319): wasm heap offset of the picture's ABGR8888 pixels (the texture's
      *  top-left; the LCD is at (left, top) inside it), 0 with no game loaded. */
     _brPicturePtr(): number;

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { encodeGen3 } from '../text/gen3';
 import { fitText } from '../ui/emerald';
 import { W } from '../ui/screens';
-import { battleId, battleSeats, CACHE_MAX_BYTES, cutTo, EYE_WINDOW_MS, nameBstart, PEEK_INTERVAL_MS, NO_SEAT, romReplaying, Spectate, watchName } from './spectate';
+import { battleId, battleSeats, CACHE_MAX_BYTES, cutTo, EYE_WINDOW_MS, nameBstart, PEEK_INTERVAL_MS, NO_SEAT, romReplaying, Spectate, spectatePace, watchName, BOT_DUEL_SPEED, CATCH_UP_LAG, CATCH_UP_SPEED, CATCH_UP_TURNS, LAG_SPEED } from './spectate';
 import type { Msg } from '../net/wire';
 
 const bstart = (battle: number): Msg => ({ t: 'bstart', battle, data: [1, 2, 3] });
@@ -424,5 +424,19 @@ describe('a fight in front of the camera (POK-365)', () => {
     expect(cutTo(battleId(29, NO_SEAT), 9, seats)).toBeNull(); // we stand nowhere
     expect(cutTo(battleId(5, NO_SEAT), 1, seats)).toBeNull();
     expect(cutTo(battleId(29, NO_SEAT), 1, seats)).toBeNull(); // a wild one beside us
+  });
+});
+
+describe('spectatePace', () => {
+  it('runs a late watch at catch-up speed, a turn behind at LAG_SPEED, level at 1x', () => {
+    expect(spectatePace(0, () => false)).toBe(1);
+    expect(spectatePace(CATCH_UP_TURNS, () => false)).toBe(CATCH_UP_SPEED);
+    expect(spectatePace(CATCH_UP_LAG, () => false)).toBe(LAG_SPEED);
+  });
+
+  it('keeps a bot duel at BOT_DUEL_SPEED however far behind it reads', () => {
+    expect(spectatePace(CATCH_UP_TURNS, () => true)).toBe(BOT_DUEL_SPEED);
+    expect(spectatePace(CATCH_UP_LAG, () => true)).toBe(BOT_DUEL_SPEED);
+    expect(spectatePace(0, () => true)).toBe(1);
   });
 });

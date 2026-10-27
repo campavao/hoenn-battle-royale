@@ -1,0 +1,30 @@
+# spectate-lag: a watcher's replay that the fight has got a turn ahead of says so, and the
+# page runs it faster until it is level (HBR-63). The replay waits out every line's timer
+# where the fighter taps through, so it finished each turn a second or two behind. The
+# fighter's TURN with its sum now goes out as its turn ends, before it chooses the next:
+# the replay counts turn 1 ended on the fighter's ROM while its own is still playing and
+# sets gBrSpectate.catchUp to BR_CATCH_UP_LAG (2), and back to 0 once it is waiting on
+# the fighter again.
+#
+# spectate-replay-bot's fight, its BSTART, turn 1 and turn 1's sum handed over on the
+# frames they went out on (6 later); the replay's own turn 1 is still playing then.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 505
+pokebytes gDecompressionBuffer 00 1F F6 8F FD EA 0E 00 00 00 BD BB C7 FF FF FF FF FF BC C9 CE FF FF FF FF FF 02 40 01 7C B1 00 0B 00 00 F9 B2 CE CC BF BF BD C5 C9 FF 80 63 02 02 BD BB C7 FF 00 00 00 00 2D C7 00 00 7C B1 F9 B9 7C B1 F9 B9 7C B1 F9 B9 69 B0 F9 B9 FB B1 F9 B9 7C F7 F9 B9 7D B1 D2 B9 7C B1 F9 B9 5F AF F9 B9 7C B1 7C 98 05 B9 BD 8E 7C B1 F9 B9 00 00 00 00 05 FF 14 00 14 00 09 00 08 00 0C 00 0C 00 0B 00 01 6E A1 92 FC 00 00 F9 B2 CE CC BF BF BD C5 C9 FF 00 00 02 02 BD BB C7 FF 00 00 00 00 30 C1 00 00 6F A1 40 4E 6E A1 6B 4E 4D BF 6B 4E 7B A0 6B 4E E9 A1 6B 4E 6E E7 6B 4E 6E A1 6B 4E 6E A1 6B 4E 6E A1 6B 4E 6E A1 EE 6F DA 5B 67 71 6E A1 6B 4E 00 00 00 00 05 FF 14 00 14 00 0A 00 0A 00 0E 00 0C 00 0A 00
+mailsend gBrMailbox 18 gDecompressionBuffer 230
+wait 836
+pokebytes gDecompressionBuffer 00 1F 00 03 00 00 01 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+wait 286
+pokebytes gDecompressionBuffer 00 1F C0 03 01 32 43
+mailsend gBrMailbox 19 gDecompressionBuffer 7
+wait 10
+expect u8 gBrSpectate+15 2
+wait 400
+# played to the end of turn 1 and waiting on turn 2's choices: level, not lagging (its
+# turn counter moves on once they come)
+expect u8 gBrSpectate+15 0
+expect u8 gBattleResults+0x13 0
+expect u16 gBrJank+12 0
+say spectate lag ok

@@ -101,6 +101,12 @@ static EWRAM_DATA struct BrTurnCheck sMine = {0};
 // The battle's turn counter as last summed: by a fighter, the last turn it sent the sum
 // of; by a replay, the last turn it summed its own.
 static u8 sCheckTurn;
+// The last turn the fighter has said it ended (a check's turn), and the frames the replay
+// has had choices waiting that it has not reached (BR_CATCH_UP_LAG).
+static u8 sTheirTurn;
+static u8 sLagFrames;
+static u8 sSinceStarved;
+#define BR_LAG_FRAMES 30
 // BR_CHECK_ARMED: the counter has been seen at 0 in this battle. Until
 // BattleStartClearSetData zeroes it, some frames into the battle, it is the last battle's
 // count, and summing that "turn" would hold a sum of nothing against the fighter's real one.
@@ -144,6 +150,9 @@ static void ClearChecks(void)
     for (i = 0; i < BR_CHECK_SLOTS; i++)
         sTheirs[i].have = FALSE;
     sMine.have = FALSE;
+    sTheirTurn = 0;
+    sLagFrames = 0;
+    sSinceStarved = BR_LAG_FRAMES;
     sCheckTurn = 0;
     sCheckFlags &= ~BR_CHECK_ARMED;
 }
@@ -187,6 +196,39 @@ static bool8 MatchChecks(void)
     return TRUE;
 }
 
+// Is the replay behind the fight it shows? The fighter has ended a turn the replay is still
+// playing -- its check came the frame that turn ended -- or has chosen the next one and
+// the replay has not got to the choice: bytes waiting longer than reading them takes.
+// Never while the replay is waiting on the stream: it has played all it was given, and
+// the fight's turn counter moves for the replay only once the next choices arrive. The
+// engine asks for the missing byte only every few frames, so a read that found nothing
+// in the last BR_LAG_FRAMES still counts as waiting.
+static bool8 Lagging(u16 backlog, bool8 starved)
+{
+    if (starved)
+        sSinceStarved = 0;
+    else if (sSinceStarved < BR_LAG_FRAMES)
+        sSinceStarved++;
+    if (sSinceStarved < BR_LAG_FRAMES)
+    {
+        sLagFrames = 0;
+        return FALSE;
+    }
+    if ((sCheckFlags & BR_CHECK_ARMED) && sTheirTurn > sCheckTurn)
+        return TRUE;
+    if (backlog == 0)
+    {
+        sLagFrames = 0;
+        return FALSE;
+    }
+    if (sLagFrames < BR_LAG_FRAMES)
+    {
+        sLagFrames++;
+        return FALSE;
+    }
+    return TRUE;
+}
+
 // A wait on the stream is over: was it a stall?
 static void EndWait(void)
 {
@@ -200,10 +242,9 @@ static void EndWait(void)
     sFedFrames = 0;
 }
 
-// The fighter's sum for the turn that just ended, after the next turn's actions in its
-// TURN: no message of its own, and nothing for a replay that is not checking to step
-// over but a run it already skips. A fight's last turn goes unchecked; its RESULT ends
-// the replay anyway. Returns the bytes added.
+// The fighter's sum for the turn that just ended, as a TURN of its own the frame the turn
+// ends (BR_CATCH_UP_LAG): nothing for a replay that is not checking to step over but a run
+// it already skips. Returns the bytes added.
 static u8 PutCheck(u8 *dst)
 {
     if (!sMine.have)
@@ -651,7 +692,11 @@ static void ParseTurn(const u8 *d, u16 n)
     for (i = 2; i + 1 < n; i += 2 + d[i + 1])
     {
         if (d[i] == BR_SPECTATE_CHECK && d[i + 1] == BR_SPECTATE_CHECK_LEN && i + 2 + BR_SPECTATE_CHECK_LEN <= n)
+        {
             HoldCheck(&sTheirs[d[i + 2] % BR_CHECK_SLOTS], d[i + 2], d[i + 3] | (d[i + 4] << 8));
+            if (d[i + 2] > sTheirTurn)
+                sTheirTurn = d[i + 2];
+        }
     }
     len = (n - 2 > 0xFF) ? 0xFF : (u8)(n - 2);
     if (sPendParties != NULL)
@@ -1883,6 +1928,7 @@ void BrSpectate_Tick(void)
 {
     u16 id;
     u16 n;
+    bool8 starved;
 
     FollowTick();
     if (gBrSpectate.watching || gBrSpectate.follow != BR_NO_SEAT)
@@ -1910,10 +1956,16 @@ void BrSpectate_Tick(void)
         // run us at speed until we get there. Hysteresis, so it does not flicker on the
         // turn or two a live replay is always behind by.
         n = RecordedBattle_SpectateBacklog();
+        starved = RecordedBattle_TakeSpectateStarved();
         if (n > BR_CATCH_UP_ON)
-            gBrSpectate.catchUp = TRUE;
-        else if (n <= BR_CATCH_UP_OFF)
-            gBrSpectate.catchUp = FALSE;
+        {
+            // Lagging's counts start over when the backlog is played: they are not for it.
+            gBrSpectate.catchUp = BR_CATCH_UP_TURNS;
+            sLagFrames = 0;
+            sSinceStarved = BR_LAG_FRAMES;
+        }
+        else if (gBrSpectate.catchUp != BR_CATCH_UP_TURNS || n <= BR_CATCH_UP_OFF)
+            gBrSpectate.catchUp = Lagging(n, starved) ? BR_CATCH_UP_LAG : 0;
         if (gMain.inBattle && sPendParties == NULL && RecordedBattle_IsSpectateLive())
         {
             if (TurnEnded())
@@ -1922,7 +1974,7 @@ void BrSpectate_Tick(void)
             // have. It ends here instead, and the watcher is back on the trainer's walk.
             if (!MatchChecks())
                 RecordedBattle_AbortSpectate();
-            if (RecordedBattle_TakeSpectateStarved() && gBrSpectate.shotSecs == 0 && (sCheckFlags & BR_CLOCK_SEEN))
+            if (starved && gBrSpectate.shotSecs == 0 && (sCheckFlags & BR_CLOCK_SEEN))
             {
                 if (sStarvedFrames < 0xFFFF)
                     sStarvedFrames++;
@@ -1945,7 +1997,7 @@ void BrSpectate_Tick(void)
     gBrSpectate.catchUp = FALSE;
     // The sum of the turn that just ended, taken the frame it ended -- ahead of every
     // return below: a TURN or BSTART waiting on the ring, taken later, would sum the next
-    // turn's moves part done. It goes out with the next TURN.
+    // turn's moves part done. It goes out on its own below, ahead of the next turn's.
     if (gMain.inBattle && TurnEnded())
     {
         HoldCheck(&sMine, sCheckTurn, TurnSum());
@@ -1990,6 +2042,20 @@ void BrSpectate_Tick(void)
         gBrSpectate.started = TRUE;
     }
     id = BattleId();
+
+    // The turn's sum goes the frame the turn ends, on its own, where it used to wait for
+    // the next turn's choices: a watcher still playing the turn learns from it that it is
+    // behind (BR_CATCH_UP_LAG). A check is no choice, so the choosing gate below is not
+    // for it.
+    if (sMine.have)
+    {
+        sTurnBuf[0] = id & 0xFF;
+        sTurnBuf[1] = id >> 8;
+        n = PutCheck(sTurnBuf + 2);
+        if (!SendTurn(2 + n))
+            sTurnLen = 2 + n;
+        return;
+    }
 
     // Not while the battlers are still choosing (POK-330 #12): a FIGHT backed out of is
     // taken back off the record, and a byte that is already on the wire cannot be -- the
