@@ -4,16 +4,17 @@
 # you to an easy to pick up list w/ a quick action to take all").
 #
 # Seat 3's SPILL with TORCHIC (0x118), ZIGZAGOON (0x120) and the bag all on the cell we
-# face (12,16): one object, the bag, with the balls under it. A asks POKeMON or BAG;
-# POKeMON opens the swap screen on the two balls; BAG takes the bag and lists its GIVE.
+# face, (12,17), south of where we stand: one object, the bag, with the balls under it.
+# A asks POKeMON or BAG; POKeMON opens the swap screen on the two balls; BAG takes the
+# bag and lists its GIVE.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
 poke u8 gBrMatch 2
 # SPILL: type 11, framed len 38 = hdr(23 00 00) + seat 03, group 00, num 09, count 02,
-# rows (key, x, y, species, level), then hasBag 01, key 0x03FF, (12,16), no items,
+# rows (key, x, y, species, level), then hasBag 01, key 0x03FF, (12,17), no items,
 # money 100, no name
-pokebytes gBrMailbox+0x1018 0B 26 23 00 00 03 00 09 02 00 03 0C 00 10 00 18 01 05 01 03 0C 00 10 00 20 01 05 01 FF 03 0C 00 10 00 00 64 00 00 00 00
+pokebytes gBrMailbox+0x1018 0B 26 23 00 00 03 00 09 02 00 03 0C 00 11 00 18 01 05 01 03 0C 00 11 00 20 01 05 01 FF 03 0C 00 11 00 00 64 00 00 00 00
 poke u16 gBrMailbox+0x0C 1
 wait 30
 # three rows, one object: the bag (row 2) is the cell's head
@@ -88,7 +89,7 @@ expectmsg 11 u8 3 0
 expectmsg 11 u8 4 1
 expectmsg 11 u16 5 0x03FF
 expectmsg 11 u16 7 12
-expectmsg 11 u16 9 16
+expectmsg 11 u16 9 17
 expectmsg 11 u8 11 1
 expectmsg 11 u16 12 110
 expect u8 gBrLoot+0xA0 2
