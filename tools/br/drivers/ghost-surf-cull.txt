@@ -20,7 +20,8 @@ poke u16 gBrMailbox+0x0C 2
 wait 90
 expect u8 gObjectEvents+0x74 0xCA
 expect u8 gObjectEvents+0x71 2
-# seat 2's blob is sprite 59, riding object 3 (data[2] at +0x32)
+# seat 2's blob is sprite 59, riding object 3 (data[2] at +0x32). The slot follows from every
+# sprite allocated before it: a new mark, weather or field effect in this setup moves it.
 expectbits u8 gSprites+0xFEA 0x01 0x01
 expect u8 gSprites+0xFDE 3
 # surf west to the shore: the box leaves seat 2 behind

@@ -325,6 +325,20 @@ static u8 SkinGraphic(u8 skin)
 // takes any object), and BRENDAN or MAY sit down on it as the player does. Everybody else
 // has no seated picture and rides it as they stand.
 
+// Under the sea BRENDAN and MAY take the diver's picture, as the player does
+// (PlayerAvatarTransition_Underwater): one palette for both, so the rival's are the same.
+static u8 UnderwaterGraphic(u8 gfx)
+{
+    switch (gfx)
+    {
+    case OBJ_EVENT_GFX_BRENDAN_NORMAL:
+    case OBJ_EVENT_GFX_RIVAL_BRENDAN_NORMAL: return OBJ_EVENT_GFX_BRENDAN_UNDERWATER;
+    case OBJ_EVENT_GFX_MAY_NORMAL:
+    case OBJ_EVENT_GFX_RIVAL_MAY_NORMAL:     return OBJ_EVENT_GFX_MAY_UNDERWATER;
+    }
+    return gfx;
+}
+
 static u8 SurfGraphic(u8 gfx)
 {
     switch (gfx)
@@ -376,19 +390,22 @@ static void SurfGhost(u8 seat)
     struct BrSeat *s = &gBrSeats[seat];
     struct ObjectEvent *obj = GhostObject(seat);
     u8 walk, gfx, id;
-    bool8 wet, changed;
+    bool8 under, wet, changed;
 
     if (obj == NULL)
         return;
-    // Under the sea every cell is water, as it is for the player (who dives as one
-    // picture): by the tile alone, the seabed stood them up and the seaweed sat them
-    // down, swapping picture and blob at every step (Cam's 10-27 play-test, "artifacting
-    // around the head" underwater).
-    wet = gMapHeader.mapType == MAP_TYPE_UNDERWATER
-       || MetatileBehavior_IsSurfableWaterOrUnderwater(
-            MapGridGetMetatileBehaviorAt(obj->currentCoords.x, obj->currentCoords.y));
+    // Under the sea a ghost is a diver on every cell, with no blob, as the player is. By
+    // the tile alone the seabed stood them up and the seaweed sat them on a blob, swapping
+    // picture and blob at every step (Cam's 10-27 play-test, "artifacting around the
+    // head" underwater).
+    under = gMapHeader.mapType == MAP_TYPE_UNDERWATER;
+    wet = !under && MetatileBehavior_IsSurfableWaterOrUnderwater(
+        MapGridGetMetatileBehaviorAt(obj->currentCoords.x, obj->currentCoords.y));
     walk = SkinGraphic(s->skin);
-    gfx = wet ? SurfGraphic(walk) : walk;
+    if (under)
+        gfx = UnderwaterGraphic(walk);
+    else
+        gfx = wet ? SurfGraphic(walk) : walk;
     changed = obj->graphicsId != gfx;
     if (changed)
         ObjectEventSetGraphicsId(obj, gfx);
