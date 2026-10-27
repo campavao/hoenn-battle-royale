@@ -147,7 +147,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     lastStart = { ms: performance.now() - t0, frames: n };
     // Emerald's battle loop: set once the battle screen itself runs, after the swirl
     // that is drawn over the hidden ROM's own field.
-    const shown = took && await until(emu, () => emu.read(mainFunc, 32) !== 0, 600);
+    // A refused ask (DONE at once: no table for that spot) never draws a battle.
+    const shown = took && !over() && await until(emu, () => emu.read(mainFunc, 32) !== 0, 600);
+    if (!shown) console.warn('spike: no battle', { took, ask: [...emu.bytes(askAt, 8)], fighting: emu.read(fightAt + 2, 8), callback2: emu.read(sym('gMain') + 4, 32).toString(16) });
     let result: Fought = { ok: false, outcome: 0, species: 0, level: 0 };
     // However long it takes: a battle is never pulled out from under the player.
     if (shown) {
@@ -184,7 +186,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         emu.write(askAt + 2, num, 8);
         emu.write(askAt + 3, behavior, 8);
         emu.write(askAt, WILD_ASKED, 8);
-      }, () => emu.read(askAt, 8) === WILD_FIGHTING, () => emu.read(askAt, 8) === WILD_DONE, onStart,
+      }, () => emu.read(askAt, 8) !== WILD_ASKED, () => emu.read(askAt, 8) === WILD_DONE, onStart,
       () => ({ outcome: emu.read(askAt + 7, 8), species: emu.read(askAt + 4, 16), level: emu.read(askAt + 6, 8) }));
     },
   };

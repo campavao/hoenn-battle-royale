@@ -316,7 +316,14 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
   // The page keeps the screen until the ROM's battle is up: before that the hidden ROM
   // is still standing in its own Littleroot, which is what showed through ("teleported
   // back to my house", Cam). A battle that never starts never takes the screen.
-  void run(rom, () => battleEl.classList.add('on')).then(endBattle, () => endBattle(null));
+  const r = rom;
+  void Promise.resolve()
+    .then(() => run(r, () => battleEl.classList.add('on')))
+    .then(endBattle, (e) => {
+      console.warn('spike battle failed', e);
+      endBattle(null);
+      lastResult = 'The battle engine stopped working. Reload the page to battle again.';
+    });
 }
 
 function startBattle(foe: Actor): void {
