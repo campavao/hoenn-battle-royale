@@ -34,7 +34,7 @@ interface Placed {
   cover?: HTMLCanvasElement;
   border?: HTMLCanvasElement;
   borderTint?: string;
-  mip?: HTMLCanvasElement;
+  mips?: HTMLCanvasElement[]; // 1/4, 1/8, 1/16, each averaged from the one before
   classes: Uint8Array;
 }
 
@@ -406,16 +406,25 @@ function frameOf(a: Actor): number {
 }
 
 
-function mip(p: Placed): HTMLCanvasElement {
-  const c = document.createElement('canvas');
-  c.width = Math.ceil((p.m.w * TILE) / 4);
-  c.height = Math.ceil((p.m.h * TILE) / 4);
-  const x = c.getContext('2d')!;
-  x.imageSmoothingEnabled = true;
-  x.imageSmoothingQuality = 'high';
-  x.drawImage(p.ground!, 0, 0, c.width, c.height);
-  x.drawImage(p.cover!, 0, 0, c.width, c.height);
-  return c;
+function mipFor(p: Placed, z: number): HTMLCanvasElement {
+  if (!p.mips) {
+    p.mips = [];
+    let src: HTMLCanvasElement | null = null;
+    for (const f of [4, 8, 16]) {
+      const c = document.createElement('canvas');
+      c.width = Math.ceil((p.m.w * TILE) / f);
+      c.height = Math.ceil((p.m.h * TILE) / f);
+      const x = c.getContext('2d')!;
+      x.imageSmoothingEnabled = true;
+      x.imageSmoothingQuality = 'high';
+      if (src) x.drawImage(src, 0, 0, c.width, c.height);
+      else { x.drawImage(p.ground!, 0, 0, c.width, c.height); x.drawImage(p.cover!, 0, 0, c.width, c.height); }
+      p.mips.push(c);
+      src = c;
+    }
+  }
+  // the biggest copy that is not shrunk again on screen (shrinking is what aliases)
+  return p.mips.find((_, i) => z * (4 << i) >= 0.9) ?? p.mips[2];
 }
 
 function tint(c: HTMLCanvasElement): string {
@@ -479,7 +488,7 @@ function draw(): void {
     if (x > vx1 || y > vy1 || x + p.m.w * TILE < vx0 || y + p.m.h * TILE < vy0) continue;
     visible.push(p);
     if ((p.ground || painted++ < 2) && paint(p)) {
-      if (far) ctx.drawImage(p.mip ??= mip(p), x, y, p.m.w * TILE, p.m.h * TILE);
+      if (far) ctx.drawImage(mipFor(p, z), x, y, p.m.w * TILE, p.m.h * TILE);
       else ctx.drawImage(p.ground!, x, y);
     }
   }
@@ -622,7 +631,7 @@ async function boot(): Promise<void> {
   requestAnimationFrame((t) => { last = t; loop(t); });
   // The rest of Hoenn, a map a tick, so zooming out never waits.
   const rest = [...placed.values()];
-  const next = () => { const p = rest.find((q) => !q.ground); if (p) { paint(p); setTimeout(next, 16); } };
+  const next = () => { const p = rest.find((q) => !q.mips); if (p) { paint(p); mipFor(p, 0); setTimeout(next, 16); } };
   setTimeout(next, 500);
   bootRom(gbaCanvas, files.rom, files.sym).then((r) => { rom = r; }, (e) => console.warn('spike ROM not booted', e));
   (window as unknown as { __spike: unknown }).__spike = { actors, placed, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startBattle, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; } };
