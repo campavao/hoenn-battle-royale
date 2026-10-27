@@ -23,7 +23,7 @@ test('a first import shows the panels once; the menu row shows them again', asyn
 
   await expect(page.locator('#howto-heading')).toHaveText('Start in Safari', { timeout: 60_000 });
   await page.screenshot({ path: path.join(OUT_DIR, 'howto-first.png') });
-  for (const heading of ['Where we flying?', 'Weezing Fog', 'Leveling up', 'Battles', 'Special events', 'How to win']) {
+  for (const heading of ['Where we flying?', 'Encounters', 'Item pickups', 'Weezing Fog', 'Leveling up', 'Battles', 'Special events', 'How to win']) {
     await page.locator('#howto-next').click();
     await expect(page.locator('#howto-heading')).toHaveText(heading);
   }
@@ -38,7 +38,7 @@ test('a first import shows the panels once; the menu row shows them again', asyn
   await page.locator('#lobby-rows button', { hasText: 'HOW TO PLAY' }).click();
   await expect(page.locator('#howto-heading')).toHaveText('Start in Safari');
   // A alone clicks through: the cursor starts on NEXT, and on DONE at the end.
-  for (let i = 0; i < 6; i++) await page.keyboard.press('z');
+  for (let i = 0; i < 8; i++) await page.keyboard.press('z');
   await expect(page.locator('#howto-heading')).toHaveText('How to win');
   await page.keyboard.press('z');
   await expect(page.locator('#lobby-rows button', { hasText: 'HOW TO PLAY' })).toBeVisible();
