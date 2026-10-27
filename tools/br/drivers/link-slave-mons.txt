@@ -48,5 +48,10 @@ expect u8 gBattleMons+0x79 0x0C
 expect u8 gBattleMons+0x7A 0x0C
 expectne u8 gBattleMons+0x88 0xFF
 expectne u16 gBattleMons+0x0C 0
+# ...once, not every frame (a dozen decrypts a mon lagged the agbcc build's bag): a
+# write after the fill stays until the slot changes or a menu opens
+pokebytes gBattleMons+0x79 07 07
+wait 2
+expect u8 gBattleMons+0x79 0x07
 copy gBattleTypeFlags gBrMailbox+0x1E00 1
 say link slave mons ok
