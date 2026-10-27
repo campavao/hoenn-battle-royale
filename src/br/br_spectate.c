@@ -56,6 +56,7 @@
 #include "constants/songs.h"
 #include "br/br_menu.h"
 #include "constants/easy_chat.h"
+#include "metatile_behavior.h"
 
 EWRAM_DATA struct BrSpectate gBrSpectate = {0};
 EWRAM_DATA struct BrJank gBrJank = {0};
@@ -1514,6 +1515,63 @@ static void FieldCB_FollowArrive(void)
     Overworld_PlaySpecialMapMusic();
 }
 
+// Through a door with them, not after them (Cam's 10-27 play-test, HBR-69: "going from
+// area to area ... it lags behind somewhat. Should be instantaneous"). Their PLACE on the
+// new map comes only once their own door, fade and load are done -- 70 frames after the
+// STEP onto the door tile -- and the cut started there. A ghost that walks onto a tile
+// that warps whoever steps on it is going where that warp goes, so we go now: the same
+// warp, and the same cut. Their PLACE finds us standing where they come out. A mat or a
+// stair that warps only on a press (an arrow warp) is not one: standing on it is not
+// leaving. A ghost put on such a tile -- arriving through it -- did not walk there.
+#define BR_FOLLOW_AHEAD_FRAMES 300
+static u8 sAheadGroup;
+static u8 sAheadNum;
+static u16 sAheadFrames;
+// The followed ghost's cell as last seen, and whether it walked there: the engine keeps
+// previousCoords only while a step plays. sSeenSprite is its sprite + 1, 0 for none yet.
+static u8 sSeenSprite;
+static s16 sSeenX;
+static s16 sSeenY;
+static bool8 sWalkedIn;
+
+static bool8 WarpsOnStep(s16 x, s16 y)
+{
+    u8 behavior = MapGridGetMetatileBehaviorAt(x, y);
+
+    return MetatileBehavior_IsWarpDoor(behavior) || MetatileBehavior_IsNonAnimDoor(behavior)
+        || MetatileBehavior_IsLadder(behavior) || MetatileBehavior_IsEscalator(behavior);
+}
+
+static bool8 GoAhead(const struct ObjectEvent *ghost)
+{
+    const struct MapEvents *events = gMapHeader.events;
+    s16 x = ghost->currentCoords.x;
+    s16 y = ghost->currentCoords.y;
+    u8 i;
+
+    if (events == NULL || !sWalkedIn || !WarpsOnStep(x, y))
+        return FALSE;
+    for (i = 0; i < events->warpCount; i++)
+    {
+        const struct WarpEvent *w = &events->warps[i];
+
+        if (w->x + MAP_OFFSET != x || w->y + MAP_OFFSET != y)
+            continue;
+        if (w->mapNum == MAP_NUM(MAP_DYNAMIC))
+            return FALSE; // where it goes is the walker's own last map: their PLACE says
+        SetWarpDestination(w->mapGroup, w->mapNum, w->warpId, -1, -1);
+        sAheadGroup = w->mapGroup;
+        sAheadNum = w->mapNum;
+        sAheadFrames = BR_FOLLOW_AHEAD_FRAMES;
+        CloseWatchMenu();
+        gFieldCallback = FieldCB_FollowArrive;
+        WarpIntoMap();
+        SetMainCallback2(CB2_LoadMap);
+        return TRUE;
+    }
+    return FALSE;
+}
+
 static void CutToSeat(const struct BrSeat *them)
 {
     // Warp coords carry no MAP_OFFSET; the roster's do, the way an object event holds
@@ -1539,7 +1597,10 @@ static void FollowTick(void)
     // Off the field -- a warp's map load among the rest -- the warp we asked for has
     // happened, or something bigger overtook it.
     if (!BrField_OverworldRunning())
+    {
         gBrSpectate.warpWait = 0;
+        sSeenSprite = 0; // a map load hands the sprites out again
+    }
     if (!BrField_OverworldRunning() || ScriptContext_IsEnabled())
         return;
     // The fog's line is being read on our own field first (BrRing_Telling): the watch
@@ -1602,6 +1663,15 @@ static void FollowTick(void)
             BrField_MoveCamera(x - (gSaveBlock1Ptr->pos.x + MAP_OFFSET), y - (gSaveBlock1Ptr->pos.y + MAP_OFFSET));
         }
         return;
+    }
+    // Gone through a door ahead of them: their PLACE is on its way here.
+    if (sAheadFrames != 0)
+    {
+        if (BrGhosts_LocalPos(gBrSpectate.follow, &x, &y)
+         || gSaveBlock1Ptr->location.mapGroup != sAheadGroup || gSaveBlock1Ptr->location.mapNum != sAheadNum)
+            sAheadFrames = 0;
+        else if (--sAheadFrames != 0)
+            return;
     }
     if (!BrGhosts_LocalPos(gBrSpectate.follow, &x, &y))
     {
@@ -1667,8 +1737,21 @@ static void FollowTick(void)
     // on while the warp loaded, and were drawn at the top or the right of the screen from
     // then on (2026-10-06 play-test). So the view jumps onto them first -- both at rest,
     // a whole number of tiles apart -- and it does again if they ever drift apart.
+    if (sSeenSprite != ghost->spriteId + 1)
+    {
+        sSeenSprite = ghost->spriteId + 1;
+        sWalkedIn = FALSE;
+    }
+    else if (ghost->currentCoords.x != sSeenX || ghost->currentCoords.y != sSeenY)
+    {
+        sWalkedIn = TRUE;
+    }
+    sSeenX = ghost->currentCoords.x;
+    sSeenY = ghost->currentCoords.y;
     if ((ghost->heldMovementActive && !ghost->heldMovementFinished)
      || gFieldCamera.x != 0 || gFieldCamera.y != 0)
+        return;
+    if (GoAhead(ghost))
         return;
     x = ghost->currentCoords.x - (gSaveBlock1Ptr->pos.x + MAP_OFFSET);
     y = ghost->currentCoords.y - (gSaveBlock1Ptr->pos.y + MAP_OFFSET);
