@@ -25,6 +25,8 @@ ENGINE_SYMBOLS = [
     # The opponent's balls beside a trainer battle (web/src/ui/sides.ts, #18).
     "gEnemyPartyCount",
     "gMain", "gObjectEvents", "gPlayerAvatar", "gSprites", "gTasks",
+    # The field camera's pixel scroll (Y, then X at +2): spike B's walk traces (web/spike-b/fixtures).
+    "gTotalCameraPixelOffsetY",
     "gBattleTypeFlags", "gBattleWeather", "gBattleOutcome", "gBattleMainFunc", "gBattlerControllerFuncs",
     "gLinkPlayers", "gBlockRecvBuffer", "gBlockSendBuffer", "gWirelessCommType",
     "gRngValue", "gSaveBlock1", "gSaveBlock2", "gNumSafariBalls",

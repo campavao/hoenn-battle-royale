@@ -277,6 +277,85 @@ describe('Emulator', () => {
     }
   });
 
+  it('takes the newest frame first and hands it back last, a throw or not, and counts the frames the game ran (HBR-59)', async () => {
+    const { emu, m, frame, calls } = await make();
+    const ran = [2, 0, 1];
+    m._brTakeFrame = () => {
+      calls.push('take');
+      return ran.shift()!;
+    };
+    m._brFrameDone = () => void calls.push('done');
+    m._brPresent = () => void calls.push('present');
+    let seen = 0;
+    emu.onFrame(() => {
+      calls.push('listener');
+      if (seen++ === 0) throw new Error('bad pointer');
+    });
+    await emu.start(new Uint8Array([1]));
+    calls.length = 0;
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      frame();
+      frame(); // nothing new since the last: no listeners, no present
+      frame();
+    } finally {
+      logged.mockRestore();
+    }
+    expect(calls).toEqual(['take', 'listener', 'present', 'done', 'take', 'done', 'take', 'listener', 'present', 'done']);
+    expect(seen).toBe(2);
+    expect(emu.ran).toBe(3);
+  });
+
+  it('keys go to the core as the whole mask, for the next frame boundary, on a core that latches them (HBR-59)', async () => {
+    const { emu, m, calls } = await make();
+    m._brSetKeys = (keys) => void calls.push(`keys ${keys}`);
+    await emu.start(new Uint8Array([1]));
+    calls.length = 0;
+    emu.press('a');
+    emu.press('right');
+    emu.release('a');
+    expect(calls).toEqual(['keys 1', 'keys 17', 'keys 16']);
+  });
+
+  it('lockstep is on while anyone holds it, and each release counts once (HBR-59)', async () => {
+    const { emu, m, calls } = await make();
+    m._brSetLockstep = (on) => void calls.push(`lockstep ${on}`);
+    const a = emu.holdLockstep();
+    const b = emu.holdLockstep();
+    a();
+    a();
+    expect(calls).toEqual(['lockstep 1']);
+    b();
+    expect(calls).toEqual(['lockstep 1', 'lockstep 0']);
+  });
+
+  it('the core takes the smallest lead held, and its default once none is (HBR-59)', async () => {
+    const { emu, m, calls } = await make();
+    m._brSetFrameLead = (lead) => void calls.push(`lead ${lead}`);
+    const a = emu.holdLead(3);
+    const b = emu.holdLead(2);
+    b();
+    b();
+    a();
+    expect(calls).toEqual(['lead 3', 'lead 2', 'lead 3', 'lead 0']);
+  });
+
+  it('what the page writes paused reaches the game: synced after a pause and before a resume, dropped by a restore (HBR-59)', async () => {
+    const { emu, m, calls } = await make();
+    m._brSync = (discard) => void calls.push(`brSync ${discard}`);
+    await emu.start(new Uint8Array([1]));
+    calls.length = 0;
+    emu.pause();
+    emu.write(0x02000010, 7, 8);
+    emu.resume();
+    expect(calls).toEqual(['pause', 'brSync 0', 'brSync 0', 'resume']);
+    // A restore drops what was written for the machine it replaced.
+    emu.pause();
+    calls.length = 0;
+    expect(emu.restore(new Uint8Array([1, 2]))).toBe(true);
+    expect(calls).toEqual(['brSync 1']);
+  });
+
   it('onListenerError hears each listener\'s first throw instead of the console', async () => {
     const { emu, frame } = await make();
     const heard: string[] = [];

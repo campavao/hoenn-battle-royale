@@ -161,7 +161,12 @@ export function restoreDirector(d: Director, snap: DirectorSnap, gone: number): 
   for (const id of snap.told) d['told'].add(id);
   d['aliveSeats'].clear();
   for (const seat of snap.alive) d['aliveSeats'].add(seat);
-  d['placements'].push(...snap.placements);
+  // resume() has already put the match's outs in; the snapshot's order goes first, and
+  // whoever went out while the page was away after it, each once.
+  const since = d['placements'].filter((seat) => !snap.placements.includes(seat));
+  d['placements'].length = 0;
+  d['placements'].push(...snap.placements, ...since);
+  for (const seat of since) d['aliveSeats'].delete(seat);
   for (const key of snap.dealt) d['dealtCells'].add(key);
 }
 

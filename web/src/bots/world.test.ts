@@ -93,14 +93,21 @@ describe('one step', () => {
     expect(world.step({ map: 'ROOM', x: 0, y: 1 }, 'west')).toBeNull();
   });
 
-  it('jumps a ledge the way it faces and walks past it any other way', () => {
+  it('jumps a ledge the way it faces and is a wall to it any other way', () => {
     const ledge = new World([
       { ...ROOM, id: 'L', seams: [], grid: grid(['00000', '03000', '00000', '00000']) },
     ]);
     // Facing south (class 3): stepping south onto it lands two cells on.
     expect(ledge.step({ map: 'L', x: 1, y: 0 }, 'south')).toEqual({ map: 'L', x: 1, y: 2 });
-    // From below, the same tile is just a tile you can stand on.
-    expect(ledge.step({ map: 'L', x: 1, y: 2 }, 'north')).toEqual({ map: 'L', x: 1, y: 1 });
+    // From below or the side it is a wall: every ledge carries the collision bit, and
+    // the ROM only lets you over it the way it faces.
+    expect(ledge.step({ map: 'L', x: 1, y: 2 }, 'north')).toBeNull();
+    expect(ledge.step({ map: 'L', x: 0, y: 1 }, 'east')).toBeNull();
+    expect(ledge.step({ map: 'L', x: 2, y: 1 }, 'west')).toBeNull();
+    expect(ledge.standable('L', 1, 1)).toBe(false);
+    // Nor does it land on a wall.
+    const short = new World([{ ...ROOM, id: 'S', seams: [], grid: grid(['000', '030', '010']), w: 3, h: 3 }]);
+    expect(short.step({ map: 'S', x: 1, y: 0 }, 'south')).toBeNull();
   });
 
   it('offers every direction that goes somewhere', () => {
@@ -156,6 +163,35 @@ describe('against the real Hoenn', () => {
 
   it('decodes every exported map', () => {
     for (const m of maps) expect(decodeGrid(m.grid, m.w * m.h).length).toBe(m.w * m.h);
+  });
+
+  // HBR-62: the exporter tested the collision bit first and every ledge came out a wall.
+  // A ledge is a ledge again, and every hop from where a trainer can stand lands where
+  // one can, on the same map -- the next exporter change that breaks that fails here.
+  it('has its ledges, and every hop off one lands on its own map where a trainer can stand', () => {
+    const AHEAD: Record<number, [number, number, (typeof DIRS)[number]]> = {
+      3: [0, 1, 'south'], 4: [0, -1, 'north'], 5: [-1, 0, 'west'], 6: [1, 0, 'east'],
+    };
+    let ledges = 0;
+    let hops = 0;
+    const stranded: string[] = [];
+    for (const m of maps) {
+      const grid = decodeGrid(m.grid, m.w * m.h);
+      for (let i = 0; i < grid.length; i++) {
+        const ahead = AHEAD[grid[i]];
+        if (!ahead) continue;
+        ledges++;
+        const [dx, dy, dir] = ahead;
+        const from = { map: m.id, x: (i % m.w) - dx, y: Math.floor(i / m.w) - dy };
+        if (!hoenn.standable(from.map, from.x, from.y)) continue;
+        hops++;
+        const to = hoenn.step(from, dir);
+        if (!to || to.map !== m.id || !hoenn.standable(to.map, to.x, to.y)) stranded.push(`${m.id} ${from.x},${from.y} ${dir}`);
+      }
+    }
+    expect(ledges).toBeGreaterThan(900);
+    expect(hops).toBeGreaterThan(700);
+    expect(stranded).toEqual([]);
   });
 
   it('every seam lands somewhere a trainer could have walked from', () => {
@@ -465,11 +501,14 @@ describe('heights', () => {
       expect(hoenn.standable('MAP_SAFARI_ZONE_NORTH', 22, 28)).toBe(true);
       expect(hoenn.step(north(22, 29), 'north', true, true)).toBeNull();
       expect(hoenn.step(north(22, 28), 'south', true, true)).toBeNull();
-      // The way down is the stairs at (22,23), and the route takes them.
+      // The way down is the ledges west of the stairs: east off (19,22), south off (20,23).
+      // Before the exporter asked the ledge first, every ledge was a wall and the route
+      // went by the stairs at (22,23).
       const path = findPath(hoenn, north(22, 29), north(22, 28), 4000, false, true);
       expect(path.found).toBe(true);
       expect(path.steps.length).toBeGreaterThan(10);
-      expect(path.steps.some((s) => s.to.x === 22 && s.to.y === 23)).toBe(true);
+      expect(path.steps.some((s) => s.dir === 'east' && s.to.x === 20 && s.to.y === 22)).toBe(true);
+      expect(path.steps.some((s) => s.dir === 'south' && s.to.x === 20 && s.to.y === 24)).toBe(true);
     });
 
     it('leaves the stairs open', () => {
@@ -720,10 +759,12 @@ describe('what a trainer can walk to without leaving the map', () => {
       expect(new Set(south.map((s) => s.map))).toEqual(new Set(['MAP_PETALBURG_CITY']));
     });
 
-    it('goes the long way round when that is the way: Route 115 south to Oldale by Meteor Falls', () => {
+    it('goes the long way round when that is the way: Route 115 south to Oldale by Rustboro', () => {
       // 203 regions settled: a cap of 200 found nothing, and the bot drifted (POK-331 #27 review).
+      // Down Route 115's ledges into Rustboro, as a player goes. While every ledge was a
+      // wall the only way was back through Meteor Falls.
       const over = hoenn.firstCrossing({ map: 'MAP_ROUTE115', x: 25, y: 40 }, 'MAP_OLDALE_TOWN', false, true)!;
-      expect(new Set(over.map((s) => s.map))).toEqual(new Set(['MAP_METEOR_FALLS_1F_1R']));
+      expect(new Set(over.map((s) => s.map))).toEqual(new Set(['MAP_RUSTBORO_CITY']));
     });
 
     it('has a crossing from every drop map to every other, with the kit a bot carries', () => {

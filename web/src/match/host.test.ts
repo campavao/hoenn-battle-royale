@@ -609,6 +609,10 @@ describe('the page that runs the match (POK-330 #42)', () => {
     const room = hosting();
     const host = room.deal({ fill: 4 }); // seven in it
     host.begin();
+    // A map each, so no two bots meet and fight before the batch is said: where the drop
+    // puts them moves with every re-export of the world, and a duel is one more out.
+    const apart = [...new Map(LANDING.map((c) => [c.map, c])).values()];
+    host.bots.seats.forEach((seat, i) => host.bots.bots.placeAt(seat, apart[i]));
     room.frames().length = 0;
     room.recv(1, { t: 'out', seat: 1 });
     vi.advanceTimersByTime(1_000);

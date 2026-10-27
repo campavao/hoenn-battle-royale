@@ -1,0 +1,44 @@
+# ledge-one-way: a ledge is jumped the way it faces and is a wall from every other side
+# (HBR-62). Every ledge in Hoenn carries the collision bit, and the ROM asks
+# ShouldJumpLedge before it looks at it (CheckForObjectEventCollision,
+# field_player_avatar.c). export-world.py asked the collision first and wrote every ledge
+# as a wall; bots/world.ts then let a trainer stand on one from any side. This pins the
+# ROM's half of what the page now models.
+#
+# Route 101 (group 0, num 16): a south-facing ledge at (8,13), ground at (8,12) above it,
+# (8,14) below it and (7,13) west of it. gBrOwnPos carries map coords + MAP_OFFSET (7).
+wait 30
+# BR_BOOT_MAP | TESTMON, male, Route 101, x=8, y=12: facing the ledge from above
+pokebytes gBrMailbox+0x2018 81 00 00 10 08 00 0C 00 BD BB C7 FF
+wait 400
+expect u8 gBrOwnPos 0
+expect u8 gBrOwnPos+1 16
+expect u16 gBrOwnPos+2 15
+expect u16 gBrOwnPos+4 19
+# Down onto it: the hop clears the ledge and lands two cells on, at (8,14).
+hold DOWN 20
+wait 60
+shot jumped
+expect u16 gBrOwnPos+2 15
+expect u16 gBrOwnPos+4 21
+# Back up into it from below: a wall. Long enough to walk two cells were it open.
+hold UP 40
+wait 30
+shot below
+expect u16 gBrOwnPos+2 15
+expect u16 gBrOwnPos+4 21
+# From the side, walking east along the ledge's row from (7,13): a wall too.
+hold LEFT 16
+wait 20
+expect u16 gBrOwnPos+2 14
+expect u16 gBrOwnPos+4 21
+hold UP 16
+wait 20
+expect u16 gBrOwnPos+2 14
+expect u16 gBrOwnPos+4 20
+hold RIGHT 40
+wait 30
+shot side
+expect u16 gBrOwnPos+2 14
+expect u16 gBrOwnPos+4 20
+say ledge one-way ok

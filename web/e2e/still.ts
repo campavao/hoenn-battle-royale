@@ -128,6 +128,7 @@ type StillEmu = {
   onFrame(fn: () => void): () => void;
   picture(): Pic | null;
   peopleBuffer?(bytes: number): Uint8Array | null;
+  holdLockstep?(): () => void;
 };
 type StillWindow = {
   __hbr: { emu: StillEmu; art(path: string): Promise<string> };
@@ -267,6 +268,7 @@ export async function installStill(s: StillSetup): Promise<void> {
   let fits = 0;
   let last = -Infinity;
   let off: (() => void) | null = null;
+  let unlock: (() => void) | null = null;
 
   /** Compares one picture with the still, from the camera and the OAM it was drawn from.
    *  The sprites are left out, and this frame's too, a pixel round. */
@@ -456,6 +458,10 @@ export async function installStill(s: StillSetup): Promise<void> {
       prev2 = null;
       last = -Infinity;
       off?.();
+      // Every frame, as the game ran them: three in a row are compared, and the game waits
+      // on this page's checking rather than run ahead of it (HBR-59, lockstep).
+      unlock?.();
+      unlock = emu.holdLockstep?.() ?? null;
       off = emu.onFrame(() => {
         const now = read();
         // The picture of this frame was drawn from the state read on the frame before it
@@ -483,6 +489,8 @@ export async function installStill(s: StillSetup): Promise<void> {
     stop() {
       off?.();
       off = null;
+      unlock?.();
+      unlock = null;
       return report;
     },
     report() {
