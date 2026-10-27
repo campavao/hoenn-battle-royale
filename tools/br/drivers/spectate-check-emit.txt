@@ -1,7 +1,8 @@
-# spectate-check-emit: a fighter sends its sum for each turn (POK-376), after the next
-# turn's actions in that TURN: C0 03, the ended turn's number, the sum low byte first.
-# spectate-turn.txt's loopback battle, two turns. The first TURN has nothing after its
-# actions -- no turn had ended -- and the second ends with turn 1's sum.
+# spectate-check-emit: a fighter sends its sum for each turn (POK-376) in a TURN of its
+# own as the turn ends: C0 03, the ended turn's number, the sum low byte first. It goes
+# before the next turn is chosen, so a watcher knows the fighter is a turn ahead (HBR-63).
+# spectate-turn.txt's loopback battle, two turns: the first turn's actions, turn 1's sum
+# alone, then the second turn's actions.
 drain gBrMailbox
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
@@ -26,18 +27,20 @@ expect u16 gBattleMons 0x115
 expect u16 gBattleMons+0x28 16
 expect u16 gBattleMons+0x58 0x115
 expect u16 gBattleMons+0x80 16
+expect u16 gBrSpectate 2
+expect u16 gBrSpectate+2 10
+expectmsg 19 u8 2 0xC0
+expectmsg 19 u8 3 3
+expectmsg 19 u8 4 1
+# 2 * 0x115 * 31 + 16 + 16
+expectmsg 19 u16 5 0x4336
 tap A
 wait 40
 tap A
 wait 200
-expect u16 gBrSpectate 2
+expect u16 gBrSpectate 3
 # action bytes only: the check is not counted with them
 expectge u16 gBrSpectate+2 20
 expectle u16 gBrSpectate+2 22
-expectmsg 19 u8 13 0xC0
-expectmsg 19 u8 14 3
-expectmsg 19 u8 15 1
-# 2 * 0x115 * 31 + 16 + 16
-expectmsg 19 u16 16 0x4336
 shot turn2
 say spectate check emit ok

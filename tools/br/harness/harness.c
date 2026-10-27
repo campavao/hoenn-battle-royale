@@ -256,9 +256,20 @@ static void runWatches(void) {
     }
 }
 
+// `pace <addr> <x1> <x2>`: the page's fast-forward, for a driver that times a replay
+// against its fight (HBR-63). While the u8 at addr is 1 every frame runs x1 frames, while
+// it is 2, x2 -- startSpectateLoop's speeds for gBrSpectate.catchUp. frameNo, the waits and
+// the watches stay in the page's frames.
+static uint32_t paceAddr = 0;
+static int paceX1 = 1, paceX2 = 1;
+
 static void runN(int n) {
     for (int i = 0; i < n; ++i) {
         core->runFrame(core);
+        if (paceAddr) {
+            int v = core->busRead8(core, paceAddr), extra = v == 1 ? paceX1 - 1 : v == 2 ? paceX2 - 1 : 0;
+            while (extra-- > 0) core->runFrame(core);
+        }
         frameNo++;
         if (drainAddr) {
             uint16_t head = core->busRead16(core, drainAddr + 0x8);
@@ -338,6 +349,7 @@ static int runLine(char* line) {
 
     if (strcmp(a, "say") == 0) { printf("%s\n", p + 3 + (p[3] == ' ')); return 0; }
     if (strcmp(a, "wait") == 0 && n >= 2) { runN(atoi(b)); return 0; }
+    if (strcmp(a, "pace") == 0 && n >= 4) { if (!parseAddr(b, &paceAddr)) return 4; paceX1 = atoi(c); paceX2 = atoi(d); return 0; }
     if (strcmp(a, "drain") == 0 && n >= 2) { if (!parseAddr(b, &drainAddr)) return 4; drainLog = n >= 3 && strcmp(c, "log") == 0; printf("draining the out ring at 0x%08X\n", drainAddr); return 0; }
     if (strcmp(a, "shot") == 0 && n >= 2) { shot(b); return 0; }
     if (strcmp(a, "state") == 0 && n >= 2) { return loadState(b) ? 0 : 3; }

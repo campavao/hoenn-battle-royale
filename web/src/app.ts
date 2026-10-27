@@ -2155,13 +2155,18 @@ function romWatching(emu: Emulator, base: number | undefined): number | null | u
   return emu.read(base + 5, 8) !== 0 ? emu.read(base + 6, 16) : null;
 }
 
-/** Whether our ROM's replay is turns behind what has arrived (gBrSpectate.catchUp, +15):
- *  a fight joined late is handed every turn so far and can only play them from the
- *  first, so the page runs the core at CATCH_UP_SPEED, silent, until it is level. */
-function romCatchingUp(emu: Emulator, base: number | undefined): boolean {
-  return base !== undefined && emu.read(base + 15, 8) !== 0;
+/** How far our ROM's replay is behind the fight (gBrSpectate.catchUp, +15). TURNS (1): a
+ *  fight joined late is handed every turn so far and can only play them from the first,
+ *  so the page runs the core at CATCH_UP_SPEED, silent, until it is level. LAG (2): the
+ *  fighter has ended a turn the replay is still playing -- its text waits out timers the
+ *  fighter taps through -- and the page runs it at LAG_SPEED with its sound (HBR-63). */
+function romCatchUp(emu: Emulator, base: number | undefined): number {
+  return base === undefined ? 0 : emu.read(base + 15, 8);
 }
+const CATCH_UP_TURNS = 1;
+const CATCH_UP_LAG = 2;
 const CATCH_UP_SPEED = 8;
+const LAG_SPEED = 3;
 /** A bot duel's replay, behind the proxy that runs it at 8x: quick, and still a fight. */
 const BOT_DUEL_SPEED = 2;
 
@@ -2176,7 +2181,7 @@ function startSpectateLoop(
   spectateBase?: number,
   answerOwn?: (ask: Msg) => void,
 ): () => void {
-  // 1 at the fight's own pace, CATCH_UP_SPEED silent, or BOT_DUEL_SPEED with sound.
+  // 1 at the fight's own pace, CATCH_UP_SPEED silent, or BOT_DUEL_SPEED / LAG_SPEED with sound.
   let speed = 1;
   const pace = (to: number) => {
     speed = to;
@@ -2194,8 +2199,11 @@ function startSpectateLoop(
     watch != null && bridge.roster.isBot(watch & 0xff) && bridge.roster.isBot(watch >> 8);
   const id = setInterval(() => {
     const now = performance.now();
-    const behind = romCatchingUp(emu, spectateBase);
-    const want = !behind ? 1 : botDuel(romWatching(emu, spectateBase)) ? BOT_DUEL_SPEED : CATCH_UP_SPEED;
+    const behind = romCatchUp(emu, spectateBase);
+    const want =
+      behind === CATCH_UP_TURNS ? (botDuel(romWatching(emu, spectateBase)) ? BOT_DUEL_SPEED : CATCH_UP_SPEED)
+      : behind === CATCH_UP_LAG ? LAG_SPEED
+      : 1;
     if (want !== speed) pace(want);
     const ask = spectate.duePeek(bridge.seat, now, romReplaying(bridge.rom, () => romWatching(emu, spectateBase)));
     if (ask) {
