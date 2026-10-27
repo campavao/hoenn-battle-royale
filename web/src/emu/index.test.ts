@@ -306,6 +306,29 @@ describe('Emulator', () => {
     expect(emu.ran).toBe(3);
   });
 
+  it('keys go to the core as the whole mask, for the next frame boundary, on a core that latches them (HBR-59)', async () => {
+    const { emu, m, calls } = await make();
+    m._brSetKeys = (keys) => void calls.push(`keys ${keys}`);
+    await emu.start(new Uint8Array([1]));
+    calls.length = 0;
+    emu.press('a');
+    emu.press('right');
+    emu.release('a');
+    expect(calls).toEqual(['keys 1', 'keys 17', 'keys 16']);
+  });
+
+  it('lockstep is on while anyone holds it, and each release counts once (HBR-59)', async () => {
+    const { emu, m, calls } = await make();
+    m._brSetLockstep = (on) => void calls.push(`lockstep ${on}`);
+    const a = emu.holdLockstep();
+    const b = emu.holdLockstep();
+    a();
+    a();
+    expect(calls).toEqual(['lockstep 1']);
+    b();
+    expect(calls).toEqual(['lockstep 1', 'lockstep 0']);
+  });
+
   it('what the page writes paused reaches the game: synced after a pause and before a resume, dropped by a restore (HBR-59)', async () => {
     const { emu, m, calls } = await make();
     m._brSync = (discard) => void calls.push(`brSync ${discard}`);

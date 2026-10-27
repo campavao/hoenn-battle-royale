@@ -265,8 +265,13 @@ export class TouchLayer {
   private heldFrames = 0;
   private holdFor = 0;
   /** The game's frame count at the last frame this file saw: a busy page sees fewer frames
-   *  than the game runs (HBR-59), and a hold or a gap is in the game's frames. */
+   *  than the game runs (HBR-59), and every hold, gap and wait here is in the game's frames. */
   private ranAt = 0;
+  /** The game's frames since the frame before this one: what every count here adds. */
+  private step = 1;
+  /** Lockstep held while a walk is on (HBR-59): it turns on the frame it lands, as the
+   *  game would see a thumb do, however busy the page is. */
+  private unlock: (() => void) | null = null;
   private gapFor = 0;
   private queue: Press[] = [];
   private walk: { steps: { dir: SeamDir; to: Spot }[]; at: number; stall: number; from: Spot } | null = null;
@@ -617,12 +622,12 @@ export class TouchLayer {
   private frame(): void {
     const { emu } = this.deps;
     const ran = emu.ran ?? this.ranAt + 1;
-    const frames = Math.max(1, ran - this.ranAt);
+    this.step = Math.max(1, ran - this.ranAt);
     this.ranAt = ran;
     this.shownCamera = this.lastCamera;
     this.lastCamera = readCameraPos(emu, (name) => this.sym(name));
     // Whatever is down that this file did not press is the player, and the player wins.
-    if (this.restore && ++this.restore.frames >= RESTORE_FRAMES) {
+    if (this.restore && (this.restore.frames += this.step) >= RESTORE_FRAMES) {
       emu.write(this.restore.addr, this.restore.item, 16);
       this.restore = null;
     }
@@ -630,7 +635,7 @@ export class TouchLayer {
     if (emu.keys() & ~mine) {
       // A dock press not yet down waits for the player's keys to come up, a while.
       const next = this.queue[0];
-      if (!this.held && next?.dock && ++next.dock.waited <= DOCK_WAIT_FRAMES) {
+      if (!this.held && next?.dock && (next.dock.waited += this.step) <= DOCK_WAIT_FRAMES) {
         this.walk = null;
         this.menu = null;
         return;
@@ -639,16 +644,19 @@ export class TouchLayer {
       return;
     }
     if (this.walk) {
+      this.unlock ??= emu.holdLockstep?.() ?? null;
       this.frameWalk();
+      if (!this.walk) this.letGo();
       return;
     }
+    this.letGo();
     if (this.held) {
-      this.heldFrames += frames;
+      this.heldFrames += this.step;
       if (this.heldFrames >= this.holdFor) this.release();
       return;
     }
     if (this.gapFor > 0) {
-      this.gapFor -= frames;
+      this.gapFor -= this.step;
       return;
     }
     if (this.queue.length) {
@@ -665,7 +673,7 @@ export class TouchLayer {
 
   private frameParty(): void {
     const p = this.party!;
-    if (!this.choosingMon() || ++p.frames > MENU_FRAMES) {
+    if (!this.choosingMon() || (p.frames += this.step) > MENU_FRAMES) {
       this.party = null;
       return;
     }
@@ -693,7 +701,7 @@ export class TouchLayer {
   private frameSelect(): void {
     const s = this.select!;
     const menu = this.selectMenu();
-    if (!menu || ++s.frames > MENU_FRAMES || s.row >= menu.n) {
+    if (!menu || (s.frames += this.step) > MENU_FRAMES || s.row >= menu.n) {
       this.select = null;
       return;
     }
@@ -732,7 +740,7 @@ export class TouchLayer {
       this.cancel();
       return;
     }
-    if (++w.stall > STALL_FRAMES) {
+    if ((w.stall += this.step) > STALL_FRAMES) {
       this.stalledToward = { ...step.to };
       this.cancel();
       return;
@@ -750,7 +758,7 @@ export class TouchLayer {
     const m = this.menu!;
     if (m.waiting) {
       // FIGHT was pressed: the move menu takes a few frames to come up.
-      if (!this.inBattle() || ++m.frames > OPEN_FRAMES) {
+      if (!this.inBattle() || (m.frames += this.step) > OPEN_FRAMES) {
         this.menu = null;
         return;
       }
@@ -758,7 +766,7 @@ export class TouchLayer {
       m.waiting = false;
       m.frames = 0;
     }
-    if (!this.inBattle() || this.battleMenu() !== m.which || ++m.frames > MENU_FRAMES) {
+    if (!this.inBattle() || this.battleMenu() !== m.which || (m.frames += this.step) > MENU_FRAMES) {
       this.menu = null;
       return;
     }
@@ -784,7 +792,7 @@ export class TouchLayer {
     this.startTable ??= startMenuTable(this.deps.rom, this.sym('gBrStartMenu'));
     const t = this.startTable;
     const callback = this.sym('gMenuCallback');
-    if (!t || callback === undefined || this.inBattle() || ++r.frames > START_FRAMES) {
+    if (!t || callback === undefined || this.inBattle() || (r.frames += this.step) > START_FRAMES) {
       this.startRow = null;
       return;
     }
@@ -841,5 +849,11 @@ export class TouchLayer {
     this.select = null;
     this.queue = [];
     this.release();
+    this.letGo();
+  }
+
+  private letGo(): void {
+    this.unlock?.();
+    this.unlock = null;
   }
 }

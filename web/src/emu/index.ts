@@ -87,14 +87,18 @@ export interface CoreModule {
    *  it: the newest finished frame becomes the page's copy of work RAM (_brWramPtr) and
    *  the picture. Returns the frames the game ran since the last one taken, 0 for none. */
   _brTakeFrame?(): number;
-  /** Last in it, always: the core waits on this once it is six frames ahead, and what the
-   *  page wrote reaches the game's RAM at the end of the frame it is running. */
+  /** Last in it, always. The core waits a few ms for it: in time, what the page wrote and
+   *  the keys it holds reach the game before the next frame, as they always did; late, at
+   *  the end of the frame it is running. Six frames ahead, it waits for good. */
   _brFrameDone?(): void;
   /** With the core paused, the page's writes straight into the game's RAM (or dropped,
    *  `discard` 1) and its copy remade from it; a no-op unless paused. */
   _brSync?(discard: number): void;
-  /** How many frames the core may finish ahead of the page: 1 is lockstep, 0 the default. */
-  _brSetFrameLead?(frames: number): void;
+  /** 1: the core waits on every frame's callback, so the page sees every one. */
+  _brSetLockstep?(on: number): void;
+  /** The keys the page holds (KEY_BIT order), for the game from the next frame boundary,
+   *  with the page's writes. Older cores take buttonPress at once instead. */
+  _brSetKeys?(keys: number): void;
   HEAPU8: Uint8Array;
   /** SDL2's audio output, once a game's thread has opened it (audio-meter.ts). */
   SDL2?: SdlAudio;
@@ -196,6 +200,7 @@ export class Emulator {
   private halts = 0;
   /** Frames the game has run, whether or not the page saw each (HBR-59). */
   private ranFrames = 0;
+  private lockstepHolds = 0;
   /** A headless core's sound has been paused since its last boot or resume. */
   private quiet = false;
   /** What boot() last loaded, so reboot() can load it again. */
@@ -456,7 +461,7 @@ export class Emulator {
     this.running = true;
     // addCoreCallbacks is a no-op until a core exists, so this must follow loadGame.
     this.m.addCoreCallbacks({
-      // The core runs on meanwhile (HBR-59), and waits on _brFrameDone once it is six
+      // The core waits on _brFrameDone a few ms (HBR-59), and for good once it is six
       // frames ahead: a throw past it would freeze the game, the mailbox
       // undrained, nothing on screen (POK-330 #35). So no listener's bug gets out of
       // here, and the picture is presented whatever happened.
@@ -576,11 +581,18 @@ export class Emulator {
     return this.halts;
   }
 
-  /** How far the game may run ahead of the page's frames (HBR-59): 1 hands the page every
-   *  frame and lets a busy page slow the game, as a check of every frame needs; 0 is the
-   *  default, a few frames, so a busy page sees fewer frames and the game keeps its speed. */
-  setFrameLead(frames: number): void {
-    this.m._brSetFrameLead?.(frames);
+  /** Lockstep (HBR-59) while anyone holds it: the game waits on the page's every frame, so
+   *  the page sees each one and a busy page slows the game -- as a check of every frame
+   *  needs, or a tap's walk that turns on the frame it arrives. Otherwise a page that is
+   *  late is handed the newest frame and the game keeps its speed. Returns the release. */
+  holdLockstep(): () => void {
+    if (this.lockstepHolds++ === 0) this.m._brSetLockstep?.(1);
+    let held = true;
+    return () => {
+      if (!held) return;
+      held = false;
+      if (--this.lockstepHolds === 0) this.m._brSetLockstep?.(0);
+    };
   }
 
   /** Frames the game has run so far: more than the page's frames when it was too busy to
@@ -656,7 +668,8 @@ export class Emulator {
       return;
     }
     this.held |= bit;
-    this.m.buttonPress(key);
+    if (this.m._brSetKeys) this.m._brSetKeys(this.held);
+    else this.m.buttonPress(key);
   }
 
   release(key: GbaKey): void {
@@ -664,7 +677,8 @@ export class Emulator {
     this.diverted &= ~bit;
     if (!(this.held & bit)) return;
     this.held &= ~bit;
-    this.m.buttonUnpress(key);
+    if (this.m._brSetKeys) this.m._brSetKeys(this.held);
+    else this.m.buttonUnpress(key);
   }
 
   /** Sets the whole key state from a bitmask (KEY_BIT order); only changed keys are sent. */
@@ -729,8 +743,8 @@ export class Emulator {
 
   // ---- memory -----------------------------------------------------------------------
   // The page's copy of work RAM (HBR-59): the last frame it took, as the game left it,
-  // with the page's own writes on top; those reach the game at the end of the frame it
-  // is running. Views over the shared heap, made once per boot and kept (POK-330 #65):
+  // with the page's own writes on top; those reach the game at the next frame boundary
+  // (_brFrameDone). Views over the shared heap, made once per boot and kept (POK-330 #65):
   // the frame listeners make ~290 reads a frame, and a wasm call plus two allocations
   // for each was all overhead. A view is dropped when the core is rebuilt, stopped or
   // crashes, and remade when the heap itself is replaced (memory growth).
