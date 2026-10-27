@@ -1,12 +1,12 @@
 {
- "readAt": "2026-10-27T00:50:44.219Z",
+ "readAt": "2026-10-27T01:23:20.558Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "5APPFB",
    "at": "2026-10-27T00:45:29.435Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-10-27T00:51:08.600Z",
+   "secs": 339,
    "door": "open",
    "mode": "host",
    "humans": 1,
@@ -16,8 +16,7 @@
    "joins": [],
    "versions": [],
    "installs": [],
-   "played": [],
-   "live": true
+   "played": []
   },
   {
    "code": "H37P2M",
@@ -38,13 +37,13 @@
   {
    "code": "BZET62",
    "at": "2026-10-27T00:05:28.332Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-10-27T01:21:08.923Z",
+   "secs": 4541,
    "door": "open",
    "mode": "host",
    "humans": 8,
    "together": 4,
-   "spectators": 1,
+   "spectators": 2,
    "matches": 3,
    "joins": [
     {
@@ -82,6 +81,10 @@
     {
      "t": "2026-10-27T00:50:10.757Z",
      "how": "code"
+    },
+    {
+     "t": "2026-10-27T01:11:07.547Z",
+     "how": "spectate"
     }
    ],
    "versions": [],
@@ -106,11 +109,10 @@
      "mode": "host",
      "trainers": 4,
      "watching": 0,
-     "secs": null
+     "secs": 1595
     }
    ],
-   "migrated": 7,
-   "live": true,
+   "migrated": 15,
    "exact": true
   },
   {
@@ -3077,6 +3079,21 @@
  ],
  "bounces": [
   {
+   "t": "2026-10-27T01:07:26.721Z",
+   "tried": "code",
+   "secs": 6
+  },
+  {
+   "t": "2026-10-27T01:07:18.707Z",
+   "tried": "code",
+   "secs": 33
+  },
+  {
+   "t": "2026-10-27T01:06:43.702Z",
+   "tried": "code",
+   "secs": 33
+  },
+  {
    "t": "2026-10-27T00:05:08.315Z",
    "tried": "code",
    "secs": 33
@@ -3133,6 +3150,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-10-27T01:17:18.277Z",
+   "code": "BZET62",
+   "v": "?",
+   "watched": 2531,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 3,
+   "longest": 252,
+   "checks": 3,
+   "drifts": 3,
+   "deploy": "f17ced14"
+  },
+  {
+   "t": "2026-10-27T01:07:26.455Z",
+   "code": null,
+   "v": "?",
+   "watched": 580,
+   "snaps": 5,
+   "cam": 5,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 3,
+   "drifts": 3,
+   "deploy": "f17ced14"
+  },
   {
    "t": "2026-10-27T00:49:47.221Z",
    "code": "BZET62",
