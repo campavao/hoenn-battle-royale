@@ -20,6 +20,11 @@ const STARVED_MS = 2000;
 /** How long a context gets to take a tap's resume() before the next tap remakes it. */
 const RESUME_WAIT_MS = 1000;
 
+/** Remakes that never ran before the speaker stops trying until one does, and the wait
+ *  between two: the first, then 5 s, then 10 s. */
+const REMAKE_TRIES = 3;
+const REMAKE_BACKOFF_MS = 5000;
+
 /** The worklet on a context, reading the ring at `ring` in `memory`. */
 async function wire(context: AudioContext, memory: SharedArrayBuffer, ring: number): Promise<AudioWorkletNode> {
   await context.audioWorklet.addModule(workletUrl);
@@ -41,9 +46,16 @@ export class Speaker {
   /** When a tap last asked the context to resume, while it still has not: a tap a second
    *  past that one makes a new context. 0 when none is pending. */
   private resumeAt = 0;
+  /** When the tap now under way began (pointerdown, keydown): a remake waits for a tap
+   *  that began a second after the resume it gives up on, not one held over it. */
+  private tapAt = 0;
   private remaking = false;
   /** Contexts made again after one would not resume. */
   remade = 0;
+  /** Remakes since a context last ran, and when the last one was: iOS can hold the
+   *  session through a whole call, and a tap a second is not a context a second. */
+  private tries = 0;
+  private remadeAt = 0;
 
   private constructor(
     private context_: AudioContext,
@@ -75,6 +87,7 @@ export class Speaker {
       if (context.state === 'running') {
         this.soundAt = this.tickAt = performance.now();
         this.resumeAt = 0;
+        this.tries = 0;
       }
     });
     node.port.onmessage = (e: MessageEvent<SpeakerTick>) => {
@@ -130,13 +143,16 @@ export class Speaker {
       const state: string = context.state;
       if (state !== 'suspended' && state !== 'interrupted') return;
       const now = performance.now();
-      if (this.resumeAt && now - this.resumeAt > RESUME_WAIT_MS) {
-        this.remake();
+      if (this.resumeAt && this.tapAt - this.resumeAt > RESUME_WAIT_MS) {
+        if (this.tries < REMAKE_TRIES && now - this.remadeAt >= this.tries * REMAKE_BACKOFF_MS) this.remake();
         return;
       }
       if (tapped && !this.resumeAt) this.resumeAt = now;
       void context.resume().catch(() => {});
     };
+    for (const type of ['pointerdown', 'touchstart', 'keydown'] as const) {
+      document.addEventListener(type, () => void (this.tapAt = performance.now()), { capture: true, passive: true });
+    }
     for (const type of ['pointerdown', 'pointerup', 'keydown', 'touchend', 'click'] as const) {
       document.addEventListener(type, () => resume(), { capture: true, passive: true });
     }
@@ -164,6 +180,8 @@ export class Speaker {
       return;
     }
     this.remaking = true;
+    this.tries++;
+    this.remadeAt = performance.now();
     void context.resume().catch(() => {});
     wire(context, this.memory, this.ring).then(
       (node) => {
@@ -173,6 +191,7 @@ export class Speaker {
         this.soundAt = this.tickAt = performance.now();
         this.remade++;
         console.warn(`hbr: the speaker's AudioContext was ${old.state}; made a new one`);
+        oldNode.port.onmessage = null;
         oldNode.disconnect();
         void old.close().catch(() => {});
       },

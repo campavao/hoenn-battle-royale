@@ -9,7 +9,9 @@ function fakeEmu() {
   const errors = new Set<(err: unknown) => void>();
   const work = new Set<(ms: number) => void>();
   const audio = new Set<(tick: AudioTick) => void>();
+  const speaker: { state?: AudioContextState } = {};
   const emu = {
+    audioState: () => speaker.state,
     pauses: 0,
     onFrame: (l: () => void) => {
       frames.add(l);
@@ -30,6 +32,7 @@ function fakeEmu() {
   };
   return {
     emu,
+    speaker,
     frame: (workMs = 0) => {
       frames.forEach((l) => l());
       work.forEach((l) => l(workMs));
@@ -199,9 +202,13 @@ describe('the #perf readout (POK-247)', () => {
   it('says when the speaker played and then stopped, which no tick reports (HBR-59)', () => {
     const gba = fakeEmu();
     const probe = new PerfProbe(gba.emu, () => null, { now: () => 0, log: () => {}, heap: () => null });
+    const all = new PerfProbe(gba.emu, () => null, { now: () => 0, log: () => {}, heap: () => null });
     gba.audio({ at: 0, bufferMs: 23.2, late: false, cut: false, state: 'running', skipped: 0, heard: true, starved: false });
-    gba.audio({ at: 0, bufferMs: 0, late: false, cut: false, state: 'interrupted' as AudioContextState, skipped: 0, heard: false, starved: false });
-    const [, second] = perfLines(probe.sample(false), probe.sample(false));
+    probe.sample(); // the second's window has the tick; the next one has none
+    // iOS stops the context: no tick says so, the speaker's own state does.
+    gba.speaker.state = 'interrupted' as AudioContextState;
+    const [first, second] = perfLines(probe.sample(), all.sample(false));
+    expect(first).toContain('audio interrupted');
     expect(second).toBe('all 0 frames · p95 0 p99 0 max 0 ms · work p95 0.0 ms · audio 0 late 0 cut INTERRUPTED');
   });
 
