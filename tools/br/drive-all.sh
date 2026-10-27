@@ -62,7 +62,8 @@ for d in "$HERE"/drivers/*.txt; do
   ok=1
   bash "$HERE/drive.sh" "$n" ${ROM:+"$ROM"} > "$log" 2>&1 || ok=0
   if [[ "$ok" -eq 1 && "$kind" == checked-by* ]]; then
-    python3 "$ROOT/${kind#checked-by }" < "$log" > "$log.check" 2>&1 || ok=0
+    # ROM goes along for a checker that drives a second run (replay-check.py)
+    ROM="$ROM" python3 "$ROOT/${kind#checked-by }" < "$log" > "$log.check" 2>&1 || ok=0
     cat "$log.check" >> "$log"
   fi
   label=""
