@@ -324,13 +324,17 @@ export function movesHeight(n: number): number {
 
 /** One chip: rounded by a pixel at each corner, light behind a move that works on what we
  *  face, dark and see-through behind one that does not, whose symbol is faded too. */
+export const MOVE_READY_RING = '#3870e0';
+
 function drawChip(c: EmeraldCanvas, name: string, ready: boolean, y: number): void {
   const n = MOVE_CHIP;
-  const fill = ready ? '#f8f8f8' : '#202838';
-  const alpha = ready ? 0.9 : 0.65;
+  // Ready: a white chip in a blue ring (HBR-78: the one that works is blue). Else dark.
+  const fill = ready ? MOVE_READY_RING : '#202838';
+  const alpha = ready ? 1 : 0.65;
   c.fillRect({ x: 1, y, w: n - 2, h: n }, fill, alpha);
   c.fillRect({ x: 0, y: y + 1, w: 1, h: n - 2 }, fill, alpha);
   c.fillRect({ x: n - 1, y: y + 1, w: 1, h: n - 2 }, fill, alpha);
+  if (ready) c.fillRect({ x: 2, y: y + 2, w: n - 4, h: n - 4 }, '#f8f8f8', 1);
   const rows = FIELD_ICONS[name] ?? [];
   rows.forEach((row, py) => {
     for (let px = 0; px < row.length; px++) {

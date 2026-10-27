@@ -84,6 +84,7 @@ static bool8 Can(u16 move)
 }
 
 EWRAM_DATA struct BrHmView gBrHmView = {0};
+static u8 sViewFrames; // until `can` is read off the party again (IWRAM: EWRAM is full)
 
 #define BR_HM_VIEW_FRAMES 16
 #define BR_HM_SHOWN (BR_HM_CUT | BR_HM_FLY | BR_HM_SURF | BR_HM_STRENGTH | BR_HM_WATERFALL | BR_HM_DIVE)
@@ -117,8 +118,7 @@ static u8 PartyCan(void)
 }
 
 // The cell we face, for the field moves that start by walking into it (BrHm_WalkInto, the
-// trees and boulders) or by A on the water: what would happen, without doing it. Loose in
-// one place: STRENGTH lights for any boulder, even one against a wall.
+// trees and boulders) or by A on the water: what would happen, without doing it.
 static u8 Ready(u8 can)
 {
     struct ObjectEvent *player = &gObjectEvents[gPlayerAvatar.objectEventId];
@@ -151,7 +151,13 @@ static u8 Ready(u8 can)
         if (gObjectEvents[id].graphicsId == OBJ_EVENT_GFX_CUTTABLE_TREE)
             ready |= can & BR_HM_CUT;
         else if (gObjectEvents[id].graphicsId == OBJ_EVENT_GFX_PUSHABLE_BOULDER)
-            ready |= can & BR_HM_STRENGTH;
+        {
+            // TryPushBoulder's test: the cell past the boulder is free and not a door.
+            MoveCoords(player->facingDirection, &x, &y);
+            if (GetCollisionAtCoords(&gObjectEvents[id], x, y, player->facingDirection) == COLLISION_NONE
+             && !MetatileBehavior_IsNonAnimDoor(MapGridGetMetatileBehaviorAt(x, y)))
+                ready |= can & BR_HM_STRENGTH;
+        }
     }
     return ready;
 }
@@ -161,7 +167,7 @@ void BrHm_Tick(void)
     if (gBrMatch.phase != BR_PHASE_PLAY)
     {
         gBrHmView.can = gBrHmView.ready = 0;
-        gBrHmView.frames = 0;
+        sViewFrames = 0;
         return;
     }
     // Off the field (a door's map load, a menu, a battle) the party stands: `can` stays,
@@ -171,12 +177,12 @@ void BrHm_Tick(void)
         gBrHmView.ready = 0;
         return;
     }
-    if (gBrHmView.frames == 0)
+    if (sViewFrames == 0)
     {
         gBrHmView.can = PartyCan();
-        gBrHmView.frames = BR_HM_VIEW_FRAMES;
+        sViewFrames = BR_HM_VIEW_FRAMES;
     }
-    gBrHmView.frames--;
+    sViewFrames--;
     gBrHmView.ready = Ready(gBrHmView.can);
 }
 

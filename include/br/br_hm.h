@@ -85,8 +85,7 @@ struct BrHmView
 {
     /* 0 */ u8 can;   // somebody in the party could use it (BrHm_Slot)
     /* 1 */ u8 ready; // ...and it would work on what we face or stand on, this frame
-    /* 2 */ u8 frames; // until `can` is read off the party again
-    /* 3 */ u8 pad;
+    /* 2 */ u8 pad[2]; // a struct rounds to 4 bytes on both compilers
 };
 BR_OFFSET(BrHmView, can, 0)
 BR_OFFSET(BrHmView, ready, 1)

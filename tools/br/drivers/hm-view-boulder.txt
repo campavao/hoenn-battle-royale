@@ -1,0 +1,35 @@
+# hm-view-boulder: STRENGTH's symbol lights only for a boulder that would move (HBR-78,
+# br_hm.c Ready: TryPushBoulder's test of the cell past it). hm-boulder's FIERY PATH: the
+# boulder at (10,15), open to the south and walled to the west; the boot's TREECKO could
+# learn CUT and STRENGTH, and we boot on (10,14), north of it.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 81 00 18 0E 0A 00 0E 00 BD BB C7 FF
+wait 400
+expect u16 *gSaveBlock1Ptr 10
+expect u16 *gSaveBlock1Ptr+2 14
+expect u8 gBrHmView 0x09
+# round to its east side, (11,15), and turn to face it (a hold of DOWN from the boot would
+# push it: we already face south): (9,15) is rock, so nothing is ready
+hold RIGHT 16
+wait 20
+hold DOWN 16
+wait 20
+expect u16 *gSaveBlock1Ptr 11
+expect u16 *gSaveBlock1Ptr+2 15
+hold LEFT 2
+wait 20
+expect u16 *gSaveBlock1Ptr 11
+expect u8 gBrHmView+1 0x00
+# back to (10,14) and turn south: (10,16) is free, so STRENGTH is ready
+hold UP 16
+wait 20
+hold LEFT 16
+wait 20
+expect u16 *gSaveBlock1Ptr 10
+expect u16 *gSaveBlock1Ptr+2 14
+hold DOWN 2
+wait 20
+expect u16 *gSaveBlock1Ptr+2 14
+expect u8 gBrHmView+1 0x08
+say hm view boulder ok
