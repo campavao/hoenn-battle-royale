@@ -431,6 +431,29 @@ describe('a tap on a bridge walks at the level we stand at (POK-331 #2 review)',
   });
 });
 
+describe('a tap on a ledge next to us (HBR-62)', () => {
+  // Route 101 (8, 13): a south-facing ledge, ground at (8, 12) above it and (8, 14) below.
+  function tapLedge(y: number, tapY: number): GbaKey[] {
+    const emu = new FieldEmu();
+    emu.map = { group: 0, num: 16 }; // MAP_ROUTE101
+    emu.camera = { x: 8, y, subX: 0, subY: 0 };
+    emu.own = { x: 8 + 7, y: y + 7, dir: 1 };
+    fieldLayer(emu)(120, tapY);
+    for (let i = 0; i < 40; i++) emu.frame();
+    return emu.pressed;
+  }
+
+  it('from above is the hop down: a walk south, not a press of A', () => {
+    const keys = tapLedge(12, 90);
+    expect(keys[0]).toBe('down');
+    expect(keys).not.toContain('a');
+  });
+
+  it('from below is a wall: face it and press A, as for anything else in the way', () => {
+    expect(tapLedge(14, 58)).toEqual(['up', 'a']);
+  });
+});
+
 // ---- a button for a start-menu row, against a fake ROM -------------------------------
 //
 // The rows the ROM built (POKeMON, BAG, MAP, the card, EXIT), a cursor that remembers

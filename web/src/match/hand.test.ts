@@ -61,10 +61,10 @@ describe('walksTo: where a drop can walk off to a cell the drop already deals', 
 
   it('runs towards the cells, not away from them: a pit you can jump into is not a way out', () => {
     // From the top the ledge drops you into the pit, so a flood OUT from the top reaches
-    // it; nothing in the pit reaches the top.
-    expect(on(walksTo(world, PIT, [{ x: 0, y: 0 }]), PIT)).toEqual(['0,0', '0,1']);
+    // it; nothing in the pit reaches the top. The ledge itself is never stood on.
+    expect(on(walksTo(world, PIT, [{ x: 0, y: 0 }]), PIT)).toEqual(['0,0']);
     // The other way round, everything up top gets down into it.
-    expect(on(walksTo(world, PIT, [{ x: 0, y: 2 }]), PIT)).toEqual(['0,0', '0,1', '0,2']);
+    expect(on(walksTo(world, PIT, [{ x: 0, y: 2 }]), PIT)).toEqual(['0,0', '0,2']);
   });
 });
 

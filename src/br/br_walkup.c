@@ -89,9 +89,9 @@ static bool8 InLine(u8 seat, s16 *dist, u8 *dir)
 }
 
 // A walk by `obj` one cell on is an ordinary step: nothing in the way, no ledge, and on
-// water as it was on water. The eyeline sees across a pond and over a ledge; a walk
-// does neither, so that is where the walk-up stops and the fight starts. The side that
-// waits asks it of the walker's ghost, so both sides judge the same walker's steps.
+// water as it was on water. The eyeline sees across a pond; a walk does not, so that
+// is where the walk-up stops and the fight starts. The side that waits asks it of the
+// walker's ghost, so both sides judge the same walker's steps.
 static bool8 CanStep(struct ObjectEvent *obj, u8 dir)
 {
     s16 x = obj->currentCoords.x, y = obj->currentCoords.y;
