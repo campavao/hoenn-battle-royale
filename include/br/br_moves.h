@@ -60,9 +60,14 @@ bool8 BrMoves_IsTm(u16 item);
 bool8 BrMoves_Teachable(u16 item);
 // Call before the TM goes in the bag: the screen waits for the bag to gain one.
 void BrMoves_TeachSoon(u16 item);
+// A hold item off the ground (Cam, 2026-10-27: "We should prompt to give an item to a
+// pokemon when picked up (only items that have hold effects)"): the same wait, then the
+// bag's own GIVE screen, "Give to which POKeMON?". B there keeps it in the bag, and the
+// ticker says so; a mon already holding something asks to switch, the old one to the bag.
+void BrMoves_HoldSoon(u16 item);
 void BrMoves_Tick(void);
-// CB2_ShowPartyMenuForItemUse's way back: to the field for a TM off the ground, else
-// `callback` (the bag).
+// The party screen's way back, CB2_ShowPartyMenuForItemUse's and CB2_ChooseMonToGiveItem's:
+// to the field for a TM or a hold item off the ground, else `callback` (the bag).
 MainCallback BrMoves_TeachExit(MainCallback callback);
 
 // The moves the player set by hand (Cam, 2026-10-20: "replace any moves the player didn't
