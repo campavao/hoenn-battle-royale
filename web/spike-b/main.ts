@@ -623,7 +623,13 @@ async function boot(): Promise<void> {
     actors.push({ id, name: `TRAINER ${id}`, gfx, m: newMover({ map: 'MAP_LITTLEROOT_TOWN', x, y }, DIR_SOUTH), bot: { rng: id * 97 + 1, wait: 30, dir: 1, left: 0, walk: false } });
     id += 1;
   }
-  const files = await loadRom();
+  let files: Awaited<ReturnType<typeof loadRom>>;
+  try {
+    files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; });
+  } catch (e) {
+    console.warn('spike ROM not loaded', e);
+    return;
+  }
   const t0 = performance.now();
   art = new RomArt(files.rom, files.sym);
   paint(placed.get('MAP_LITTLEROOT_TOWN')!);
@@ -634,7 +640,7 @@ async function boot(): Promise<void> {
   const rest = [...placed.values()];
   const next = () => { const p = rest.find((q) => !q.mips); if (p) { paint(p); mipFor(p, 0); setTimeout(next, 16); } };
   setTimeout(next, 500);
-  bootRom(gbaCanvas, files.rom, files.sym).then((r) => { rom = r; }, (e) => console.warn('spike ROM not booted', e));
+  bootRom(files).then((r) => { rom = r; }, (e) => console.warn('spike ROM not booted', e));
   (window as unknown as { __spike: unknown }).__spike = { actors, placed, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startBattle, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; } };
 }
 

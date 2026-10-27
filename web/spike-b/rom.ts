@@ -6,13 +6,15 @@
 // our map, and a CHALLENGE starts an ordinary trainer battle. When the ROM is back on
 // the field the fight is over, and the page takes the screen back.
 //
-// Dev only: the ROM and its symbols come from web/public/spike-rom/ (gitignored, never
-// committed), written by `make modern` + tools/br/symbols.py.
+// The ROM is the player's own, patched the way the game patches it (loadRom). In dev,
+// web/public/spike-rom/ (gitignored, never committed) can stand in for it.
 
 import { Emulator, type GbaKey } from '../src/emu';
 import { Mailbox, MAILBOX } from '../src/net/mailbox';
 import { packSlot } from '../src/net/slots';
 import { PROTOCOL, type PackedMon } from '../src/net/wire';
+import { loadCheckedRelease } from '../src/release';
+import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 
 const BOOT_MAP_TESTMON = 0x81;
 const ME = 0;
@@ -40,18 +42,50 @@ function gen3(text: string): number[] {
   return out;
 }
 
-/** The player's ROM and the build's symbols. In the spike both are dev files; the real
- *  page would take the ROM from IndexedDB with the patch applied, as the shell does now. */
-export async function loadRom(): Promise<{ rom: Uint8Array; sym: (name: string) => number }> {
-  const [rom, symbols] = await Promise.all([
-    fetch('/spike-rom/rom.gba').then((r) => r.arrayBuffer()).then((b) => new Uint8Array(b)),
-    fetch('/spike-rom/br-symbols.json').then((r) => r.json() as Promise<Record<string, string>>),
-  ]);
-  return { rom, sym: (n: string) => Number(symbols[n]) };
+export interface RomFiles { emu: Emulator; rom: Uint8Array; sym: (name: string) => number }
+
+/** The player's ROM, patched, and its build's symbols. Dev: web/public/spike-rom/ when it
+ *  is there. Otherwise the game's own way: the ROM the player picked on the main page
+ *  (stored in this browser) with the published patch applied and checked. */
+export async function loadRom(canvas: HTMLCanvasElement, say: (text: string) => void): Promise<RomFiles> {
+  const emu = await Emulator.create(canvas);
+  const dev = !import.meta.env.DEV ? null : await fetch('/spike-rom/br-symbols.json').then((r) => (r.ok && !r.headers.get('content-type')?.includes('html') ? r.json() : null), () => null) as Record<string, string> | null;
+  if (dev) {
+    const rom = new Uint8Array(await (await fetch('/spike-rom/rom.gba')).arrayBuffer());
+    return { emu, rom, sym: (n) => Number(dev[n]) };
+  }
+  if (!emu.hasRom()) {
+    say('Pick your ROM on the game page first (it stays in this browser), then come back here.');
+    throw new Error('no ROM stored');
+  }
+  say('Applying the patch to your ROM…');
+  const release = await loadCheckedRelease((patch) => applyPatch(emu.readRom(), patch));
+  if (release.status !== 'ready') {
+    say(`No patch published: ${release.reason}`);
+    throw new Error(release.reason);
+  }
+  const symbols = release.symbols;
+  return { emu, rom: release.rom, sym: (n) => symbols.get(n) ?? NaN };
 }
 
-export async function bootRom(canvas: HTMLCanvasElement, rom: Uint8Array, sym: (name: string) => number): Promise<RomBattles> {
-  const emu = await Emulator.create(canvas);
+function applyPatch(source: Uint8Array, patch: Uint8Array): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('../src/patch/bps.worker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (e: MessageEvent<PatchWorkerResponse>) => {
+      worker.terminate();
+      if (e.data.ok) resolve(e.data.result);
+      else reject(new Error(e.data.error));
+    };
+    worker.onerror = (e) => {
+      worker.terminate();
+      reject(new Error(e.message || 'patch worker crashed'));
+    };
+    const request: PatchWorkerRequest = { source, patch };
+    worker.postMessage(request, [source.buffer, patch.buffer]);
+  });
+}
+
+export async function bootRom({ emu, rom, sym }: RomFiles): Promise<RomBattles> {
   await emu.startBytes(rom);
   const box = new Mailbox(emu, sym('gBrMailbox'));
 
