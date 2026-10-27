@@ -5,6 +5,12 @@
 // player avatar and the player's object event every frame. walk-trace.json is that
 // output, one row a frame. This feeds sim.ts the same keys on the same frames and
 // fails on the first frame whose movement, tile or facing differs.
+//
+// Covered: flat-ground run and walk (B), a turn in place, a tap the way you face, a turn
+// mid-run, a wall bump and its cut-short, one ledge hop south. Not covered yet: surf,
+// doors and warps, sand/ice/slopes, the bike, walking into another trainer, two keys
+// held through a step's end, ledges taken east/west, and a seam between maps. The
+// start tile is set per trace (the first watched frame is a step south already begun).
 import { describe, expect, it } from 'vitest';
 import { World, type WorldMap } from '../src/bots/world';
 import worldJson from './data/world.json';

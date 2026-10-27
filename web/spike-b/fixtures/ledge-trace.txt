@@ -3,9 +3,9 @@ wait 30
 pokebytes gBrMailbox+0x2018 01 00 00 10 09 00 0B 00 BD BB C7 FF
 wait 400
 say ready
-watch 0x030046c0 4
-watch 0x02006860 8
-watch 0x02006620 36
+watch gTotalCameraPixelOffsetY 4
+watch gPlayerAvatar 8
+watch gObjectEvents 36
 say run-over-ledge
 hold down 50
 wait 30
