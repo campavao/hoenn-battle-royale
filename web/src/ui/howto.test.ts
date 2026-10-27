@@ -1,4 +1,4 @@
-// HOW TO PLAY (POK-429, POK-430, HBR-66): Cam's nine panels, NEXT through them, BACK and SKIP,
+// HOW TO PLAY (POK-429, POK-430, HBR-80): Cam's nine panels, NEXT through them, BACK and SKIP,
 // every word fits, and the pictures that move do.
 import { describe, expect, it, vi } from 'vitest';
 import { ART_H, EVOLVE_MS, FRAME_MS, HOWTO_KEY, PANELS, SHEET, confetti, evolveFrame, howToScreen, markHowToDue, takeHowToDue } from './howto';

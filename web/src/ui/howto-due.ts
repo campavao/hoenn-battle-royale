@@ -29,7 +29,7 @@ export function takeHowToDue(store: Storage): boolean {
  *  indicator ... dismisses after opening one time and reading all of it"). */
 export const HOWTO_READ_KEY = 'hbr:howto-read';
 /** Raised when panels are added, so the NEW comes back for them: '2' brought in
- *  Encounters and Item pickups (HBR-66). */
+ *  Encounters and Item pickups (HBR-80). */
 export const HOWTO_READ = '2';
 
 export function markHowToRead(store: Storage): void {

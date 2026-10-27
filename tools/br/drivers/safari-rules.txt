@@ -1,6 +1,6 @@
 # safari-rules: walking up to somebody in the Zone starts nothing and says nothing. The
 # eyeline is a match rule (br_engage.c) and the opening is not the match. POK-222 put up
-# "No battles in the SAFARI ZONE!" each time; Cam's 10-27 play-test took it off (HBR-65).
+# "No battles in the SAFARI ZONE!" each time; Cam's 10-27 play-test took it off (HBR-79).
 #
 # The opening's other rule -- encounters twice as often (wild_encounter.c's BR branch)
 # -- is deliberately not driven here: it is a doubled probability, so any driver that
