@@ -3,15 +3,16 @@
 #include "main.h"
 #include "battle.h"
 #include "battle_setup.h"
-#include "fieldmap.h"
-#include "field_player_avatar.h"
+#include "metatile_behavior.h"
+#include "overworld.h"
 #include "random.h"
 #include "script_pokemon_util.h"
 #include "wild_encounter.h"
 #include "constants/battle.h"
 #include "constants/items.h"
 #include "constants/maps.h"
-#include "constants/metatile_labels.h"
+#include "constants/map_types.h"
+#include "constants/weather.h"
 #include "constants/species.h"
 #include "constants/wild_encounter.h"
 #include "br/br_field.h"
@@ -85,9 +86,9 @@ static void CB2_EndWild(void)
 
 static void Start(void)
 {
-    const struct WildPokemonInfo *info = TableFor(gBrWildAsk.mapGroup, gBrWildAsk.mapNum, gBrWildAsk.water);
+    bool8 water = MetatileBehavior_IsSurfableWaterOrUnderwater(gBrWildAsk.behavior);
+    const struct WildPokemonInfo *info = TableFor(gBrWildAsk.mapGroup, gBrWildAsk.mapNum, water);
     u16 species;
-    s16 x, y;
 
     if (info == NULL)
     {
@@ -95,18 +96,13 @@ static void Start(void)
         gBrWildAsk.state = BR_WILD_DONE;
         return;
     }
-    species = info->wildPokemon[gBrWildAsk.water ? WaterSlot() : LandSlot()].species;
+    species = info->wildPokemon[water ? WaterSlot() : LandSlot()].species;
     // The opening's any-first-stage, or the route's national stand-in: CreateWildMon's.
     gBrWildAsk.species = BrZone_Pick();
     if (gBrWildAsk.species == SPECIES_NONE)
         gBrWildAsk.species = BrZone_NationalOn(species, gBrWildAsk.mapGroup, gBrWildAsk.mapNum);
     gBrWildAsk.level = BrLevels_WildLevel();
     CreateScriptedWildMon(gBrWildAsk.species, gBrWildAsk.level, ITEM_NONE);
-    // The battle's backdrop is read off the cell we stand on (BattleSetup_GetEnvironmentId):
-    // grass for a grass spot, the sea for water. Nobody sees this ROM's field, and the
-    // page puts it back the way it was after every fight.
-    PlayerGetDestCoords(&x, &y);
-    MapGridSetMetatileIdAt(x, y, gBrWildAsk.water ? METATILE_General_CalmWater : METATILE_General_TallGrass);
     gBrWildAsk.state = BR_WILD_FIGHTING;
     BattleSetup_StartWildBattle();
     sEnd = gMain.savedCallback;
@@ -117,4 +113,51 @@ void BrWild_Tick(void)
 {
     if (gBrWildAsk.state == BR_WILD_ASKED && BrField_OverworldRunning() && !gMain.inBattle)
         Start();
+}
+
+// BattleSetup_GetEnvironmentId, for the spot the page's trainer stands on rather than the
+// cell this hidden ROM does: that map's type and weather, the spot's behaviour.
+u8 BrWild_Environment(u8 environment)
+{
+    const struct MapHeader *header;
+    u8 tile = gBrWildAsk.behavior;
+
+    if (gBrWildAsk.state != BR_WILD_FIGHTING)
+        return environment;
+    header = Overworld_GetMapHeaderByGroupAndId(gBrWildAsk.mapGroup, gBrWildAsk.mapNum);
+    if (MetatileBehavior_IsTallGrass(tile))
+        return BATTLE_ENVIRONMENT_GRASS;
+    if (MetatileBehavior_IsLongGrass(tile))
+        return BATTLE_ENVIRONMENT_LONG_GRASS;
+    if (MetatileBehavior_IsSandOrDeepSand(tile))
+        return BATTLE_ENVIRONMENT_SAND;
+    switch (header->mapType)
+    {
+    case MAP_TYPE_UNDERGROUND:
+        if (MetatileBehavior_IsIndoorEncounter(tile))
+            return BATTLE_ENVIRONMENT_BUILDING;
+        if (MetatileBehavior_IsSurfableWaterOrUnderwater(tile))
+            return BATTLE_ENVIRONMENT_POND;
+        return BATTLE_ENVIRONMENT_CAVE;
+    case MAP_TYPE_INDOOR:
+    case MAP_TYPE_SECRET_BASE:
+        return BATTLE_ENVIRONMENT_BUILDING;
+    case MAP_TYPE_UNDERWATER:
+        return BATTLE_ENVIRONMENT_UNDERWATER;
+    case MAP_TYPE_OCEAN_ROUTE:
+        if (MetatileBehavior_IsSurfableWaterOrUnderwater(tile))
+            return BATTLE_ENVIRONMENT_WATER;
+        return BATTLE_ENVIRONMENT_PLAIN;
+    }
+    if (MetatileBehavior_IsDeepOrOceanWater(tile))
+        return BATTLE_ENVIRONMENT_WATER;
+    if (MetatileBehavior_IsSurfableWaterOrUnderwater(tile))
+        return BATTLE_ENVIRONMENT_POND;
+    if (MetatileBehavior_IsMountain(tile))
+        return BATTLE_ENVIRONMENT_MOUNTAIN;
+    if (gBrWildAsk.mapGroup == MAP_GROUP(MAP_ROUTE113) && gBrWildAsk.mapNum == MAP_NUM(MAP_ROUTE113))
+        return BATTLE_ENVIRONMENT_SAND;
+    if (header->weather == WEATHER_SANDSTORM)
+        return BATTLE_ENVIRONMENT_SAND;
+    return BATTLE_ENVIRONMENT_PLAIN;
 }

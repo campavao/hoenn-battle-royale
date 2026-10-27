@@ -66,6 +66,7 @@
 #include "br/br_levels.h"
 #include "br/br_battle.h"
 #include "br/br_spectate.h"
+#include "br/br_wild.h"
 #endif
 #include "cable_club.h"
 
@@ -678,6 +679,9 @@ static void CB2_InitBattleInternal(void)
     gBattle_BG3_Y = 0;
 
     gBattleEnvironment = BattleSetup_GetEnvironmentId();
+#if BR
+    gBattleEnvironment = BrWild_Environment(gBattleEnvironment); // spike B's spot, not this ROM's cell
+#endif
     if (gBattleTypeFlags & BATTLE_TYPE_RECORDED)
         gBattleEnvironment = BATTLE_ENVIRONMENT_BUILDING;
 

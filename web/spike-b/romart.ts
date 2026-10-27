@@ -145,6 +145,17 @@ export class RomArt {
     return { ground, cover, border: borderCv };
   }
 
+  /** The metatile behaviour of cell (x, y) on map (group, num), as the layout ships it:
+   *  what a marked spot is (br_wild.h asks with it). */
+  behavior(group: number, num: number, x: number, y: number): number {
+    const header = this.u32(this.u32(this.sym('gMapGroups') + group * 4) + num * 4);
+    const layout = this.u32(header);
+    const w = this.dv.getInt32(layout - ROM, true);
+    const mid = this.u16(this.u32(layout + 0xc) + (y * w + x) * 2) & 0x3ff;
+    const ts = this.tileset(this.u32(layout + (mid < 512 ? 0x10 : 0x14)));
+    return this.u16(ts.attrs + (mid < 512 ? mid : mid - 512) * 2) & 0xff;
+  }
+
   objectPalettes(): Map<number, number[]> {
     if (this.objPals) return this.objPals;
     const rom = this.rom;

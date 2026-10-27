@@ -1,7 +1,8 @@
 # spike-wild: spike B's page asks the hidden ROM for the wild battle a marked spot on
 # another map would start (br_wild.h). The ROM stands in Littleroot, as spike B parks it
 # (web/spike-b/rom.ts); the ask names ROUTE 102 (0:17), and the battle comes off Route
-# 102's land table, not Littleroot's (which has none). It runs on a grass backdrop, ends
+# 102's land table, not Littleroot's (which has none). The backdrop is the spot's own
+# (BrWild_Environment): grass for tall grass, the pond for Route 102's pond. It ends
 # with a run (a Poke Doll in the bag, run-wild-keeps-doll.txt), answers DONE with the
 # outcome, and a second ask starts a second battle from the field it came back to.
 wait 30
@@ -10,8 +11,8 @@ wait 400
 poke u8 gBrMatch 2
 poke u32 gBrMatch+8 4
 wait 2
-# map 0:17 on land, then ASKED
-pokebytes gBrWildAsk+1 00 11 00
+# map 0:17, a tall grass spot (MB_TALL_GRASS 0x02), then ASKED
+pokebytes gBrWildAsk+1 00 11 02
 poke u8 gBrWildAsk 1
 wait 10
 expect u8 gBrWildAsk 2
@@ -41,14 +42,13 @@ wait 300
 # DONE, B_OUTCOME_RAN
 expect u8 gBrWildAsk 3
 expect u8 gBrWildAsk+7 4
-# the same again on water: 0:17 has a water table too
-pokebytes gBrWildAsk+1 00 11 01
+# the same again on its pond (MB_POND_WATER 0x10): 0:17 has a water table too
+pokebytes gBrWildAsk+1 00 11 10
 poke u8 gBrWildAsk 1
 wait 10
 expect u8 gBrWildAsk 2
 wait 600
 shot water
-# BATTLE_ENVIRONMENT_WATER (4): the sea's backdrop, as most of Hoenn's water is (a
-# pond's own is POND; the ask says only water)
-expect u8 gBattleEnvironment 4
+# BATTLE_ENVIRONMENT_POND (5)
+expect u8 gBattleEnvironment 5
 say spike wild ok

@@ -35,8 +35,9 @@ export interface Fought { ok: boolean; outcome: number; species: number; level: 
 export interface RomBattles {
   /** Fight `name`'s party. Resolves when the ROM is back on the field. */
   fight(name: string, mons: PackedMon[], skin: number, onStart: () => void): Promise<Fought>;
-  /** The wild battle a marked spot on map (group, num) starts: grass, or water. */
-  wild(group: number, num: number, water: boolean, onStart: () => void): Promise<Fought>;
+  /** The wild battle a marked spot on map (group, num) starts; `behavior` is the spot's
+   *  metatile behaviour (water or land, and the backdrop). */
+  wild(group: number, num: number, behavior: number, onStart: () => void): Promise<Fought>;
   press(k: GbaKey): void;
   release(k: GbaKey): void;
   emu: Emulator;
@@ -130,7 +131,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   /** One battle: `kick` asks for it, `going` says the ROM took it, `over` that it is back
    *  on the field. The page gets the screen at the battle's first frame (onStart) and
    *  never before, so the hidden field never shows through. */
+  let broken = false;
   async function battle(kick: () => void, going: () => boolean, over: () => boolean, onStart: () => void, after: () => Omit<Fought, 'ok'>): Promise<Fought> {
+    if (broken) throw new Error('the parked ROM could not be restored');
     // Every battle from one state would roll the same: a fresh draw each time.
     emu.write(sym('gRngValue'), (Math.random() * 2 ** 32) >>> 0, 32);
     emu.write(mainFunc, 0, 32);
@@ -146,13 +149,16 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     // that is drawn over the hidden ROM's own field.
     const shown = took && await until(emu, () => emu.read(mainFunc, 32) !== 0, 600);
     let result: Fought = { ok: false, outcome: 0, species: 0, level: 0 };
+    // However long it takes: a battle is never pulled out from under the player.
     if (shown) {
       onStart();
-      await until(emu, over, 60 * 60 * 10);
+      await until(emu, over, Infinity);
       result = { ok: true, ...after() };
     }
     emu.pause();
-    emu.restore(parked!);
+    // A ROM that could not be put back would start the next battle from whatever this
+    // one left on its field: no more battles from it.
+    if (!emu.restore(parked!)) broken = true;
     return result;
   }
 
@@ -161,7 +167,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     press: (k) => emu.press(k),
     release: (k) => emu.release(k),
     fight(name, mons, skin, onStart) {
-      // The path a bot fight takes: its card, its ghost beside us, its challenge.
+      // The path a bot fight takes: its card, its ghost beside us, its challenge. All three
+      // go on the ring in one go, on purpose: the ROM reads the ring in order, so the card
+      // is staged before the CHALLENGE that needs it (the fight is up in ~80 frames).
       return battle(() => {
         send({ t: 'trainer', seat: FOE_SEAT, name, mons });
         send({ t: 'place', v: PROTOCOL, seat: FOE_SEAT, map: { group: 0, num: 9 }, x: 20, y: 8, f: 1, st: 'alive', sprite: String(skin) });
@@ -169,12 +177,12 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       }, () => emu.read(fightAt + 2, 8) === 1, () => emu.read(fightAt + 2, 8) === 0, onStart,
       () => ({ outcome: emu.read(outcomeAt, 8), species: 0, level: 0 }));
     },
-    wild(group, num, water, onStart) {
+    wild(group, num, behavior, onStart) {
       // br_wild.h: the map, then ASKED; FIGHTING once it is under way, DONE when it is over.
       return battle(() => {
         emu.write(askAt + 1, group, 8);
         emu.write(askAt + 2, num, 8);
-        emu.write(askAt + 3, water ? 1 : 0, 8);
+        emu.write(askAt + 3, behavior, 8);
         emu.write(askAt, WILD_ASKED, 8);
       }, () => emu.read(askAt, 8) === WILD_FIGHTING, () => emu.read(askAt, 8) === WILD_DONE, onStart,
       () => ({ outcome: emu.read(askAt + 7, 8), species: emu.read(askAt + 4, 16), level: emu.read(askAt + 6, 8) }));

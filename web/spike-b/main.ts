@@ -332,7 +332,7 @@ function startWild(at: { map: Placed; patch: Patch }): void {
   handOff(null, (r, onStart) => {
     // Taken as the battle starts, as BrPatch_Take does.
     taken.set(at.patch.key, frame);
-    return r.wild(m.group, m.num, isWater(m, at.patch.x, at.patch.y), onStart);
+    return r.wild(m.group, m.num, art!.behavior(m.group, m.num, at.patch.x, at.patch.y), onStart);
   });
 }
 
