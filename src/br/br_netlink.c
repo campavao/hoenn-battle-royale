@@ -299,8 +299,12 @@ static void TickPendingChallenge(void)
     }
     // The drop's screen settles first: the fight is with the party as it stands, and the
     // balls taken into it leave the ground before it starts (BrLoot_SettleNow).
-    if (BrSwap_Up() && !BrLoot_SettleNow())
-        return;
+    if (BrSwap_Up())
+    {
+        if (!BrLoot_SettleNow())
+            return;
+        BrSwap_Settled(); // and no more moves while the fight is on its way
+    }
     // A box is a menu like any other, and the fight starts from it; the boxes settle on
     // the field after it (br_loot.c).
     if (BrStorage_Up())

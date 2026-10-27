@@ -16,5 +16,7 @@ void CB2_BrSwap(void);
 bool8 BrSwap_Up(void);
 // The heap is the next battle's (BrHeapReset): a battle from the screen leaves it.
 void BrSwap_HeapReset(void);
+// The box was settled under the screen: no more moves, B still closes it.
+void BrSwap_Settled(void);
 
 #endif // GUARD_BR_SWAP_H

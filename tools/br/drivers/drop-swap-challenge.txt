@@ -2,7 +2,7 @@
 # fight from it, as from any menu, but the screen settles first (review of #146). The
 # MUDKIP moved to our party leaves the ground (its PICKUP) before the fight, so it fights
 # as ours and never exists twice; the bot's staged team in gEnemyParty is untouched by
-# the screen.
+# the screen. Once settled, the screen takes no more moves (re-review).
 #
 # drop-swap's SPILL (MUDKIP, TORCHIC, ZIGZAGOON and a bag), and bot-challenge-bag's bot 31.
 drain gBrMailbox
@@ -32,14 +32,23 @@ pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 00
 mailsend gBrMailbox 2 gDecompressionBuffer 11
 pokebytes gDecompressionBuffer 1F 00 00 00
 mailsend gBrMailbox 5 gDecompressionBuffer 4
-wait 6
-expect u8 gBrBotFight+2 0
+# The screen has sat still past BR_MENU_SETTLE: about 31 frames on, the screen settles
+# (MUDKIP's PICKUP) and the fight is on its way, the screen still up under its fade.
+# From the settle on it takes no moves (BrSwap_Settled), so A on the drop's side and on
+# ours changes nothing.
+wait 40
+expect u8 gBrLoot+0xA2 1
+tap A
+tap RIGHT
+tap A
+tap LEFT
+tap A
+expect u8 gPlayerPartyCount 2
+expect u8 gBrLoot+0xA2 1
 wait 300
 # the fight is on, against the staged TREECKO card, and MUDKIP's ball was taken first
 expect u8 gBrBotFight+2 1
 expect u8 gEnemyParty+8 0xCE
-expect u8 gBrLoot+0xA2 1
 expectmsg 10 u16 1 1
-expect u8 gPlayerPartyCount 2
 shot fighting
 say drop swap challenge ok

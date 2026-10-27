@@ -414,6 +414,22 @@ bool8 BrSwap_Up(void)
     return gMain.callback2 == CB2_BrSwapRun;
 }
 
+// The settle has run (a battle is on its way): the box is empty and the party is the
+// truth, so the screen shows that and takes no more moves. B still closes it.
+void BrSwap_Settled(void)
+{
+    if (sSwap == NULL || sSwap->state != 0)
+        return;
+    sSwap->state = 2;
+    sSwap->picked = NO_SLOT;
+    if (sSwap->messageUp)
+        HideMessage();
+    MirrorDrop();
+    Redraw();
+    sSwap->cursor = 0;
+    PlaceCursor();
+}
+
 void BrSwap_HeapReset(void)
 {
     sSwap = NULL;
@@ -444,7 +460,16 @@ static void CB2_BrSwapRun(void)
             SetMainCallback2(CB2_ReturnToField);
             return;
         }
-        if (sSwap->messageUp)
+        if (sSwap->state == 2)
+        {
+            if (JOY_NEW(B_BUTTON))
+            {
+                PlaySE(SE_SELECT);
+                BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
+                sSwap->state = 1;
+            }
+        }
+        else if (sSwap->messageUp)
         {
             if (JOY_NEW(A_BUTTON | B_BUTTON))
                 HideMessage();
