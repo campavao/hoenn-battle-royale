@@ -1556,7 +1556,7 @@ static void OpponentHandlePrintSelectionString(void)
 static void OpponentHandleChooseAction(void)
 {
 #if BR
-    BrSpectate_HoldRng(TRUE); // its replay reads this choice from the record, and rolls nothing for it
+    BrSpectate_HoldRng(TRUE); // its replay reads this choice from the record: it rolls on a generator of its own
 #endif
     AI_TrySwitchOrUseItem();
 #if BR

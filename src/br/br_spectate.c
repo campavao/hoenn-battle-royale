@@ -255,20 +255,30 @@ bool8 BrSpectate_Publishing(void)
                                  | BATTLE_TYPE_WALLY_TUTORIAL | BATTLE_TYPE_DOUBLE));
 }
 
-// The generator as the opponent's choice found it (BrSpectate_HoldRng). The AI rolls for
-// its scores, its ties and its switches, and a wild POKeMON rolls for its move; the
+// The battle's generator while the opponent chooses (BrSpectate_HoldRng). The AI rolls
+// for its scores, its ties and its switches, and a wild POKeMON rolls for its move; the
 // replay is handed the choice and rolls none of it, so every damage roll after the first
-// choice of a fight fought alone was another than the replay's (HBR-63).
-static u32 sChoiceRng;
+// choice of a fight fought alone was another than the replay's (HBR-63). The choice rolls
+// on Random2's generator instead -- its own stream, which no replay needs -- and the
+// battle's picks up where it was. Put back as it was instead, the turn's next rolls were
+// the choice's own over again: a wild POKeMON's `Random() & 3` move and the accuracy roll
+// after it, `Random() % 100`, agreed mod 4.
+static u32 sBattleRng;
 
 void BrSpectate_HoldRng(bool8 hold)
 {
     if (!BrSpectate_Publishing())
         return;
     if (hold)
-        sChoiceRng = gRngValue;
+    {
+        sBattleRng = gRngValue;
+        gRngValue = gRng2Value;
+    }
     else
-        gRngValue = sChoiceRng;
+    {
+        gRng2Value = gRngValue;
+        gRngValue = sBattleRng;
+    }
 }
 
 // A gender is 0 or 1; the player's carries the fight's fog above it.
