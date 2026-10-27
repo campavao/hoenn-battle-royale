@@ -96,6 +96,15 @@ describe('the audio meter (POK-247)', () => {
     expect(ticks[0].cut).toBe(true);
   });
 
+  it('reads the speaker\'s state now, which a stopped speaker sends no tick to say', () => {
+    let state: AudioContextState = 'running';
+    const source: Heard = { onAudio: () => () => {}, audioState: () => state };
+    const meter = new AudioMeter(source);
+    expect(meter.stats().state).toBe('running');
+    state = 'suspended';
+    expect(meter.stats().state).toBe('suspended');
+  });
+
   it('adds up a window, the longest gap with it, and starts the next from nothing', () => {
     let emit: (tick: AudioTick) => void = () => {};
     const source: Heard = {

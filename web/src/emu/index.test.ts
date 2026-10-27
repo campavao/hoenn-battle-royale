@@ -488,6 +488,14 @@ describe('Emulator', () => {
       expect(heard).not.toContain('shown');
     });
 
+    it('a headless core opens no speaker of its own: its sound goes to a ring nobody reads', async () => {
+      const rates: number[] = [];
+      const hidden = fakeCore();
+      hidden.m._brAudioWorkletAt = (rate) => (rates.push(rate), 0x1000);
+      await Emulator.create({} as HTMLCanvasElement, async () => hidden.m, true);
+      expect(rates).toEqual([8000]);
+    });
+
     it('counts every stop the page makes, so a meter skips the gap across it', async () => {
       const { emu } = await make();
       await emu.start(new Uint8Array([1]));
