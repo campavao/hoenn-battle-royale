@@ -40,12 +40,17 @@ function gen3(text: string): number[] {
   return out;
 }
 
-export async function bootRom(canvas: HTMLCanvasElement): Promise<RomBattles> {
+/** The player's ROM and the build's symbols. In the spike both are dev files; the real
+ *  page would take the ROM from IndexedDB with the patch applied, as the shell does now. */
+export async function loadRom(): Promise<{ rom: Uint8Array; sym: (name: string) => number }> {
   const [rom, symbols] = await Promise.all([
     fetch('/spike-rom/rom.gba').then((r) => r.arrayBuffer()).then((b) => new Uint8Array(b)),
     fetch('/spike-rom/br-symbols.json').then((r) => r.json() as Promise<Record<string, string>>),
   ]);
-  const sym = (n: string) => Number(symbols[n]);
+  return { rom, sym: (n: string) => Number(symbols[n]) };
+}
+
+export async function bootRom(canvas: HTMLCanvasElement, rom: Uint8Array, sym: (name: string) => number): Promise<RomBattles> {
   const emu = await Emulator.create(canvas);
   await emu.startBytes(rom);
   const box = new Mailbox(emu, sym('gBrMailbox'));

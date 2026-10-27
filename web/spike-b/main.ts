@@ -9,13 +9,14 @@
 // glued to an actor or dragged freely over the whole of Hoenn.
 //
 // Reuses the shell's own data: world.json through bots/world.ts (the same walkability,
-// ledges, heights and seams the bots already walk on) and the field-maps / field-sprites
-// stills. Nothing here is shell code.
+// ledges, heights and seams the bots already walk on). Every picture is cut from the
+// player's ROM in the browser (romart.ts): the site ships none. Nothing here is shell code.
 
 import { loadHoenn } from '../src/bots/hoenn';
 import type { World, WorldMap, Spot } from '../src/bots/world';
 import { DIR_EAST, DIR_SOUTH, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from './sim';
-import { bootRom, lastStart, type RomBattles } from './rom';
+import { bootRom, loadRom, lastStart, type RomBattles } from './rom';
+import { RomArt } from './romart';
 import type { GbaKey } from '../src/emu';
 import type { PackedMon } from '../src/net/wire';
 import spritesData from '../src/data/sprites.json';
@@ -29,9 +30,10 @@ interface Placed {
   m: WorldMap;
   gx: number; // tiles
   gy: number;
-  ground?: HTMLImageElement;
-  cover?: HTMLImageElement;
-  border?: HTMLImageElement;
+  ground?: HTMLCanvasElement;
+  cover?: HTMLCanvasElement;
+  border?: HTMLCanvasElement;
+  borderTint?: string;
   classes: Uint8Array;
 }
 
@@ -73,10 +75,17 @@ function layout(maps: WorldMap[]): Map<string, Placed> {
   return placed;
 }
 
-function img(src: string): HTMLImageElement {
-  const i = new Image();
-  i.src = src;
-  return i;
+let art: RomArt | null = null;
+/** A map's pictures, cut from the ROM the first time it is seen (~20 ms a map); the rest
+ *  are cut in the background after boot so a zoom-out never waits on them. */
+function paint(p: Placed): boolean {
+  if (p.ground) return true;
+  if (!art) return false;
+  const a = art.map(p.m.group, p.m.num);
+  p.ground = a.ground;
+  p.cover = a.cover;
+  p.border = a.border;
+  return true;
 }
 
 // ---- actors: the one source of position ------------------------------------------------
@@ -232,6 +241,7 @@ const battleEl = document.getElementById('battle')!;
 const battleNote = document.getElementById('battle-note')!;
 const gbaCanvas = document.getElementById('gba') as HTMLCanvasElement;
 let rom: RomBattles | null = null;
+let artMs = 0;
 let battle: { foe: Actor | null; shownAt: number } | null = null;
 const handoff: number[] = []; // ms from the trigger to the ROM's first battle frame, and back
 
@@ -291,18 +301,22 @@ let spectating = false;
 let follow: Actor;
 let cam = { x: 0, y: 0 }; // world pixel at the screen centre
 let zoom = 3; // device pixels per GBA pixel
+// The device's pixels. The canvas itself is smaller: drawn at the GBA's own pixels (one
+// canvas pixel per device pixel / floor(zoom)) and scaled up by CSS, nearest-neighbour.
+// A phone's 2.6M-pixel screen is then ~150k pixels of drawing, the same picture.
+let devW = 1, devH = 1;
 const modeBtn = document.getElementById('mode')!;
 
 function fitZoom(): number {
   // about fifteen tiles tall, the way the whole-window build shows a desktop
-  const h = canvas.height;
+  const h = devH;
   return Math.max(1, Math.floor(h / (TILE * 15)));
 }
 
 function resize(): void {
   const dpr = devicePixelRatio || 1;
-  canvas.width = Math.round(innerWidth * dpr);
-  canvas.height = Math.round(innerHeight * dpr);
+  devW = Math.round(innerWidth * dpr);
+  devH = Math.round(innerHeight * dpr);
   if (!spectating) zoom = fitZoom();
 }
 addEventListener('resize', resize);
@@ -361,8 +375,8 @@ canvas.addEventListener('wheel', (e) => {
 
 function followAt(clientX: number, clientY: number): void {
   const dpr = devicePixelRatio || 1;
-  const wx = cam.x + (clientX * dpr - canvas.width / 2) / zoom;
-  const wy = cam.y + (clientY * dpr - canvas.height / 2) / zoom;
+  const wx = cam.x + (clientX * dpr - devW / 2) / zoom;
+  const wy = cam.y + (clientY * dpr - devH / 2) / zoom;
   let best: Actor | null = null;
   let bestD = 24 / Math.min(1, zoom);
   for (const a of actors) {
@@ -391,11 +405,19 @@ function frameOf(a: Actor): number {
 }
 
 
-const sprites = new Map<number, HTMLImageElement>();
-function sheet(gfx: number): HTMLImageElement {
+function tint(c: HTMLCanvasElement): string {
+  const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+  const sum = [0, 0, 0];
+  for (let i = 0; i < d.length; i += 4) for (let j = 0; j < 3; j++) sum[j] += d[i + j];
+  const n = d.length / 4;
+  return `rgb(${sum.map((v) => Math.round(v / n)).join(',')})`;
+}
+
+const sprites = new Map<number, HTMLCanvasElement>();
+function sheet(gfx: number): HTMLCanvasElement | null {
   let s = sprites.get(gfx);
-  if (!s) { s = img(`/field-sprites/${gfx}.png`); sprites.set(gfx, s); }
-  return s;
+  if (!s && art) { s = art.sprite(gfx, SHEETS[String(gfx)].frames); sprites.set(gfx, s); }
+  return s ?? null;
 }
 
 function draw(): void {
@@ -404,7 +426,12 @@ function draw(): void {
     cam.x = p.x + 8;
     cam.y = p.y + 8;
   }
-  const W = canvas.width, H = canvas.height;
+  // Under one GBA pixel per CSS pixel (a spectator zoomed out), CSS pixels are plenty.
+  const dpr = devicePixelRatio || 1;
+  const k = zoom < dpr ? dpr : Math.floor(zoom);
+  const W = Math.ceil(devW / k), H = Math.ceil(devH / k);
+  if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+  const z = zoom / k;
   ctx.imageSmoothingEnabled = false;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#0d1a14';
@@ -412,27 +439,30 @@ function draw(): void {
   // Past every map's edge the GBA repeats the map's 2x2 border block (Route 101's
   // trees): tile the followed map's, aligned to its even coordinates.
   const home = placed.get((follow ?? player).m.spot.map)!;
-  home.border ??= img(`/field-maps/${home.m.id}.border.png`);
-  if (home.border.complete && home.border.naturalWidth) {
+  if (paint(home) && home.border && z < 0.5) {
+    // Far out the 32 px block is noise: one flat colour, its average.
+    home.borderTint ??= tint(home.border);
+    ctx.fillStyle = home.borderTint;
+    ctx.fillRect(0, 0, W, H);
+  } else if (home.border) {
     const pat = ctx.createPattern(home.border, 'repeat')!;
     const bx = home.gx * TILE, by = home.gy * TILE;
-    pat.setTransform(new DOMMatrix([zoom, 0, 0, zoom, Math.round(W / 2 - cam.x * zoom) + bx * zoom, Math.round(H / 2 - cam.y * zoom) + by * zoom]));
+    pat.setTransform(new DOMMatrix([z, 0, 0, z, Math.round(W / 2 - cam.x * z) + bx * z, Math.round(H / 2 - cam.y * z) + by * z]));
     ctx.fillStyle = pat;
     ctx.fillRect(0, 0, W, H);
   }
   // Whole-pixel camera at zoom >= 1, so tiles never shimmer.
-  const z = zoom;
   const ox = Math.round(W / 2 - cam.x * z);
   const oy = Math.round(H / 2 - cam.y * z);
   ctx.setTransform(z, 0, 0, z, ox, oy);
   const vx0 = -ox / z, vy0 = -oy / z, vx1 = vx0 + W / z, vy1 = vy0 + H / z;
   const visible: Placed[] = [];
+  let painted = 0;
   for (const p of placed.values()) {
     const x = p.gx * TILE, y = p.gy * TILE;
     if (x > vx1 || y > vy1 || x + p.m.w * TILE < vx0 || y + p.m.h * TILE < vy0) continue;
     visible.push(p);
-    p.ground ??= img(`/field-maps/${p.m.id}.png`);
-    if (p.ground.complete && p.ground.naturalWidth) ctx.drawImage(p.ground, x, y);
+    if ((p.ground || painted++ < 2) && paint(p)) ctx.drawImage(p.ground!, x, y);
   }
   const people = actors
     .map((a) => ({ a, p: pixelOf(a) }))
@@ -441,7 +471,7 @@ function draw(): void {
   for (const { a, p } of people) {
     const info = SHEETS[String(a.gfx)];
     const s = sheet(a.gfx);
-    if (!s.complete || !s.naturalWidth) continue;
+    if (!s) continue;
     const fr = frameOf(a);
     const dx = p.x + TILE / 2 - info.w / 2;
     const dy = p.y + TILE - info.h - p.lift;
@@ -455,7 +485,7 @@ function draw(): void {
     // Tall grass hides your feet: the ground's own grass tile over the sprite's bottom half.
     if (!a.m.action && classAt(a.m.spot) === 7) {
       const pl = placed.get(a.m.spot.map)!;
-      if (pl.ground?.complete) ctx.drawImage(pl.ground, a.m.spot.x * TILE, a.m.spot.y * TILE + 8, TILE, 8, p.x, p.y + 8, TILE, 8);
+      if (pl.ground) ctx.drawImage(pl.ground, a.m.spot.x * TILE, a.m.spot.y * TILE + 8, TILE, 8, p.x, p.y + 8, TILE, 8);
     }
     if (spectating && a === follow) {
       ctx.strokeStyle = '#ffd34d';
@@ -464,8 +494,7 @@ function draw(): void {
     }
   }
   for (const p of visible) {
-    p.cover ??= img(`/field-maps/${p.m.id}.cover.png`);
-    if (p.cover.complete && p.cover.naturalWidth) ctx.drawImage(p.cover, p.gx * TILE, p.gy * TILE);
+    if (p.cover) ctx.drawImage(p.cover, p.gx * TILE, p.gy * TILE);
   }
   // Zoomed far out, the sprites are specks: mark every trainer with a dot.
   if (z < 0.6) {
@@ -514,7 +543,7 @@ function loop(now: number): void {
     const here = player.m.spot;
     statsEl.textContent =
       `${fps.toFixed(0)} fps · p95 gap ${p95.toFixed(1)} ms\n` +
-      `sim ${simMs.toFixed(2)} ms · draw ${drawMs.toFixed(2)} ms\n` +
+      `sim ${simMs.toFixed(2)} ms · draw ${drawMs.toFixed(2)} ms · art from your ROM ${artMs.toFixed(0)} ms\n` +
       `${actors.length} trainers · ${here.map.replace('MAP_', '')} ${here.x},${here.y}` +
       `\nROM ${rom ? (battle ? 'fighting' : 'paused, waiting to fight') : 'booting'}` +
       (lastStart ? ` · battle up in ${lastStart.frames} frames (${lastStart.ms.toFixed(0)} ms)` : '') +
@@ -563,9 +592,18 @@ async function boot(): Promise<void> {
     actors.push({ id, name: `TRAINER ${id}`, gfx, m: newMover({ map: 'MAP_LITTLEROOT_TOWN', x, y }, DIR_SOUTH), bot: { rng: id * 97 + 1, wait: 30, dir: 1, left: 0, walk: false } });
     id += 1;
   }
+  const files = await loadRom();
+  const t0 = performance.now();
+  art = new RomArt(files.rom, files.sym);
+  paint(placed.get('MAP_LITTLEROOT_TOWN')!);
+  artMs = performance.now() - t0;
   resize();
   requestAnimationFrame((t) => { last = t; loop(t); });
-  bootRom(gbaCanvas).then((r) => { rom = r; }, (e) => console.warn('spike ROM not booted', e));
+  // The rest of Hoenn, a map a tick, so zooming out never waits.
+  const rest = [...placed.values()];
+  const next = () => { const p = rest.find((q) => !q.ground); if (p) { paint(p); setTimeout(next, 16); } };
+  setTimeout(next, 500);
+  bootRom(gbaCanvas, files.rom, files.sym).then((r) => { rom = r; }, (e) => console.warn('spike ROM not booted', e));
   (window as unknown as { __spike: unknown }).__spike = { actors, placed, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startBattle, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; } };
 }
 
