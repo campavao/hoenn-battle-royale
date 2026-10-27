@@ -32,15 +32,34 @@ export function artRequest(path: string, mapRef: (id: string) => { group: number
   return sheet ? { t: 'sheet', gfx: Number(name), frames: sheet.frames } : null;
 }
 
-let started: (worker: Worker) => void;
-const worker = new Promise<Worker>((ok) => (started = ok));
+let started: ((worker: Worker) => void) | null = null;
+let refused: (err: Error) => void;
+const worker = new Promise<Worker>((ok, no) => {
+  started = ok;
+  refused = no;
+});
+worker.catch(() => undefined); // each artUrl reports it
 const waiting = new Map<number, { ok: (url: string) => void; no: (err: Error) => void }>();
+// Each picture is cut once and kept for the page's life, as the PNGs were cached: all of
+// them come to about the 3.9 MB the site used to ship, and several images may share one.
 const urls = new Map<string, Promise<string>>();
 let nextId = 0;
+let dead: Error | null = null;
 
 /** Hands the ROM this tab runs, and its symbols, to the worker. Once per page. */
 export function useRomArt(rom: Uint8Array, symbols: Map<string, number>): void {
+  if (!started) return;
   const w = new Worker(new URL('./art.worker.ts', import.meta.url), { type: 'module' });
+  // A worker that died answers nothing again: everything waiting fails, as a 404 did.
+  w.onerror = (event) => {
+    const err = new Error(`art worker: ${event.message || 'crashed'}`);
+    console.warn('[art]', err.message);
+    for (const wait of waiting.values()) wait.no(err);
+    waiting.clear();
+    urls.clear();
+    w.terminate();
+    dead = err;
+  };
   w.onmessage = (event: MessageEvent<ArtWorkerResponse>) => {
     const r = event.data;
     const wait = waiting.get(r.id);
@@ -51,6 +70,13 @@ export function useRomArt(rom: Uint8Array, symbols: Map<string, number>): void {
   const msg: ArtWorkerRequest = { t: 'rom', rom, symbols: Object.fromEntries(symbols) };
   w.postMessage(msg); // a copy: the emulator keeps running on `rom`
   started(w);
+  started = null;
+}
+
+/** There is no ROM to cut from (an unpatched one, a crashed worker): every picture fails. */
+export function noRomArt(why: string): void {
+  started = null;
+  refused(new Error(why));
 }
 
 /** An object URL of `path`'s picture, cut from the ROM; rejects for a path it has not. */
@@ -58,6 +84,7 @@ export function artUrl(path: string): Promise<string> {
   let url = urls.get(path);
   if (!url) {
     url = Promise.all([worker, loadHoenn()]).then(([w]) => {
+      if (dead) throw dead;
       const req = artRequest(path, (id) => HOENN.byId.get(id));
       if (!req) throw new Error(`no art for ${path}`);
       const id = nextId++;
@@ -79,6 +106,9 @@ export function setPictureSrc(img: { src: string }, path: string): void {
   }
   artUrl(path).then(
     (url) => (img.src = url),
-    () => (img.src = 'data:,'),
+    (err: unknown) => {
+      console.warn('[art]', path, err instanceof Error ? err.message : err);
+      img.src = 'data:,';
+    },
   );
 }

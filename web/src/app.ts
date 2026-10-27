@@ -8,7 +8,7 @@ import { stallLine, watch } from './emu/watchdog';
 import { checkEmerald, isPrePatched, sha1Hex } from './rom/emerald';
 import { loadCheckedRelease, loadSidecars, type CheckedRelease, type ReleaseInfo } from './release';
 import type { PatchWorkerRequest, PatchWorkerResponse } from './patch/bps.worker';
-import { artUrl, useRomArt } from './art';
+import { artUrl, noRomArt, useRomArt } from './art';
 import { Mailbox, MAILBOX } from './net/mailbox';
 import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
@@ -4765,6 +4765,7 @@ async function main(): Promise<void> {
   // is asked for is the layout's (askForBand), measured once the playing screen is up.
   // The field's pictures are cut from this same image (HBR-66): the site ships none.
   if (usingPatched && symbols) useRomArt(bytes, symbols);
+  else noRomArt('an unpatched ROM has no field art');
   romPicture = romBand(bytes, symbols);
   oamTableAt = symbols?.get('gBrOamHi');
   fieldShownAt = symbols?.get('gBrFieldShown');

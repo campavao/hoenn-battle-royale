@@ -1,6 +1,6 @@
 # field-scroll: what the LCD shows of the map, at rest and mid-step, next to the camera
 # state the page reads to draw the field past the picture (POK-317). Each shot lined up
-# against web/public/field-maps/MAP_LITTLEROOT_TOWN.png gives the offset the page's
+# against Littleroot's still (render-maps.py, build/br-art/field-maps) gives the offset the page's
 # formula has to produce, so it is measured, not guessed.
 # capture-only: shots and camera dumps to measure against; the matching is done by hand
 wait 30
