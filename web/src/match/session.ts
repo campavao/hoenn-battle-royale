@@ -233,6 +233,11 @@ export class MatchSession {
     return [...this.homeList.values()];
   }
 
+  /** The seat holding the legendary under event key `key` (legends.ts), if known. */
+  legendHolder(key: number): number | undefined {
+    return this.legends.holder(key);
+  }
+
   /** The legendary chip's words (legends.ts), or null. */
   legend(): string | null {
     return this.legends.chip(this.events, this.lootTable, (seat) => this.deps.nameOf(seat));

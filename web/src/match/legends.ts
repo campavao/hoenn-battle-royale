@@ -56,6 +56,11 @@ export class LegendWatch {
     else if (msg.t === 'out') for (const [key, seat] of this.took) if (seat === msg.seat) this.took.delete(key);
   }
 
+  /** The seat whose PICKUP took `key` last, while they are still in. */
+  holder(key: number): number | undefined {
+    return this.took.get(key);
+  }
+
   /** The chip's words, or null with no legendary in the match yet. */
   chip(events: readonly EventMsg[], ground: { mon(key: number): { species: number } | undefined }, nameOf: (seat: number) => string): string | null {
     for (const e of [...events].sort((a, b) => b.n - a.n)) {

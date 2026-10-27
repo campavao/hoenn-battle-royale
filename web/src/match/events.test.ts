@@ -157,10 +157,20 @@ describe('a trade asks the host first (POK-392)', () => {
     const ask = (seat: number) => claims.answer({ t: 'pickup', seat, key: legendClaimKey(eventKey(1, 0)) });
     expect(ask(4)).toEqual({ reply: { t: 'pickup', seat: 4, key: eventKey(1, 0) }, granted: true });
     ground.delete(eventKey(1, 0)); // the books heard the yes
-    expect(ask(2), 'the second trainer at it: a no, naming somebody else').toEqual({ reply: { t: 'pickup', seat: 0, key: eventKey(1, 0) }, granted: false });
-    expect(ask(0)?.reply.seat, "never the asker's own seat").toBe(1);
+    expect(ask(2), 'the second trainer at it: a no, naming the one fighting it').toEqual({ reply: { t: 'pickup', seat: 4, key: eventKey(1, 0) }, granted: false });
+    expect(ask(4)?.reply.seat, "never the asker's own seat").toBe(0);
     ground.add(eventKey(1, 0)); // seat 4 ran: its SPILL put it back
     expect(ask(2)?.granted).toBe(true);
+    ground.delete(eventKey(1, 0));
+    expect(ask(6)?.reply.seat, 'the newest yes is who has it').toBe(2);
+    claims.note({ t: 'start', seed: 1, spawns: [] });
+    expect(ask(6)?.reply.seat, 'a new match forgets who').toBe(0);
+  });
+
+  it('a no from a host that never said yes names some other seat', () => {
+    const claims = new TraderClaims(() => false, () => false);
+    const ask = (seat: number) => claims.answer({ t: 'pickup', seat, key: legendClaimKey(eventKey(1, 0)) });
+    expect([ask(2)?.reply.seat, ask(0)?.reply.seat]).toEqual([0, 1]);
   });
 
   it("a trade nobody asked for is the one a later ask hears of; a new match forgets them all", () => {
