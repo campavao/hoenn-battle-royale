@@ -34,7 +34,7 @@ export const PANELS: readonly Panel[] = [
   },
   {
     title: 'Item pickups',
-    text: 'Grab the items you see on the ground. Vitamins boost your whole party on the spot, valuables turn into money, and a Poké Ball is a stack of six. Medicine from the Bag heals your whole party.',
+    text: 'Grab the items you see on the ground. Vitamins boost your whole party on the spot, valuables turn into money, and a ball is six Royale Balls. Medicine from the Bag heals your whole party.',
     art: 'pickup',
   },
   {
