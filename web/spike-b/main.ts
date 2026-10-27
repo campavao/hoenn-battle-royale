@@ -34,6 +34,7 @@ interface Placed {
   cover?: HTMLCanvasElement;
   border?: HTMLCanvasElement;
   borderTint?: string;
+  mip?: HTMLCanvasElement;
   classes: Uint8Array;
 }
 
@@ -405,6 +406,18 @@ function frameOf(a: Actor): number {
 }
 
 
+function mip(p: Placed): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = Math.ceil((p.m.w * TILE) / 4);
+  c.height = Math.ceil((p.m.h * TILE) / 4);
+  const x = c.getContext('2d')!;
+  x.imageSmoothingEnabled = true;
+  x.imageSmoothingQuality = 'high';
+  x.drawImage(p.ground!, 0, 0, c.width, c.height);
+  x.drawImage(p.cover!, 0, 0, c.width, c.height);
+  return c;
+}
+
 function tint(c: HTMLCanvasElement): string {
   const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
   const sum = [0, 0, 0];
@@ -455,6 +468,9 @@ function draw(): void {
   const ox = Math.round(W / 2 - cam.x * z);
   const oy = Math.round(H / 2 - cam.y * z);
   ctx.setTransform(z, 0, 0, z, ox, oy);
+  // Far out, each map is drawn from a quarter-size copy averaged once (mip), because
+  // nearest-neighbour shrinking turns trees into static and smoothing every frame is slow.
+  const far = z < 0.5;
   const vx0 = -ox / z, vy0 = -oy / z, vx1 = vx0 + W / z, vy1 = vy0 + H / z;
   const visible: Placed[] = [];
   let painted = 0;
@@ -462,7 +478,10 @@ function draw(): void {
     const x = p.gx * TILE, y = p.gy * TILE;
     if (x > vx1 || y > vy1 || x + p.m.w * TILE < vx0 || y + p.m.h * TILE < vy0) continue;
     visible.push(p);
-    if ((p.ground || painted++ < 2) && paint(p)) ctx.drawImage(p.ground!, x, y);
+    if ((p.ground || painted++ < 2) && paint(p)) {
+      if (far) ctx.drawImage(p.mip ??= mip(p), x, y, p.m.w * TILE, p.m.h * TILE);
+      else ctx.drawImage(p.ground!, x, y);
+    }
   }
   const people = actors
     .map((a) => ({ a, p: pixelOf(a) }))
@@ -494,15 +513,17 @@ function draw(): void {
     }
   }
   for (const p of visible) {
-    if (p.cover) ctx.drawImage(p.cover, p.gx * TILE, p.gy * TILE);
+    if (p.cover && !far) ctx.drawImage(p.cover, p.gx * TILE, p.gy * TILE);
   }
   // Zoomed far out, the sprites are specks: mark every trainer with a dot.
   if (z < 0.6) {
+    // in canvas pixels, whole ones, so the squares stay sharp
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     for (const a of [...actors.slice(1), player]) {
       const p = pixelOf(a);
       ctx.fillStyle = a === player ? '#ff3b3b' : a.battling ? '#ffd34d' : '#ffffff';
-      const r = (a === player ? 5 : 3) / z;
-      ctx.fillRect(p.x + 8 - r, p.y + 8 - r, r * 2, r * 2);
+      const r = a === player ? 5 : 3;
+      ctx.fillRect(Math.round(ox + (p.x + 8) * z) - r, Math.round(oy + (p.y + 8) * z) - r, r * 2, r * 2);
     }
   }
 }
