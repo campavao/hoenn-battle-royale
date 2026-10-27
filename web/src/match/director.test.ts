@@ -217,6 +217,13 @@ describe('picking up a match in progress (POK-252)', () => {
     expect(director.state.alive).toBe(2);
   });
 
+  it('keeps who went out, in order, for the standings a latecomer is caught up with (Cam 10-26)', () => {
+    const { director, fireOut } = harness([0, 1, 2, 3], 42, { safariSecs: 60, fogSecs: 30 });
+    director.resume({ ringPhase: 1, centre: { sx: 4, sy: 11 }, secsLeftInPhase: 30, out: [3, 2, 3] });
+    fireOut(1);
+    expect(director.state.placements).toEqual([3, 2, 1]);
+  });
+
   it('can be handed the opening instead, and finishes it', () => {
     const { director, sent, advance } = harness([0, 1], 42, { safariSecs: 60, fogSecs: 30 });
     director.resume({ ringPhase: 0, secsLeftInPhase: 3 });
@@ -505,6 +512,21 @@ describe("the host's own reload (HBR-20)", () => {
     expect(reloaded.sent).toEqual(straight.sent);
     expect(reloaded.director.state).toEqual(straight.director.state);
     expect(reloaded.director.state.placements).toEqual([2]);
+  });
+
+  it('after the take-over has already put the outs in, keeps each once (HBR-75 review)', () => {
+    const a = harness([0, 1, 2, 3], 7, { safariSecs: 5, fogSecs: 10 });
+    a.director.start();
+    a.advance(5000);
+    a.fireOut(2);
+    const snap = JSON.parse(JSON.stringify(snapDirector(a.director, a.now())));
+    const b = harness([0, 1, 2, 3], 7, { safariSecs: 5, fogSecs: 10 });
+    // HostRole.begin: resume() off the wire first, then the page's own snapshot. Seat 3
+    // went out while the page was reloading.
+    b.director.resume({ ringPhase: 1, centre: { sx: 4, sy: 11 }, secsLeftInPhase: 5, out: [2, 3] });
+    restoreDirector(b.director, snap, 0);
+    expect(b.director.state.placements).toEqual([2, 3]);
+    expect(b.director.state.alive, 'and seat 3 is not standing as well').toBe(2);
   });
 
   it('counts the time the tab was away: a ring that fell due meanwhile goes out on the next tick', () => {
