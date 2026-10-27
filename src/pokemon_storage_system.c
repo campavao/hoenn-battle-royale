@@ -41,6 +41,9 @@
 #include "constants/rgb.h"
 #include "constants/songs.h"
 #include "constants/pokemon_icon.h"
+#if BR
+#include "br/br_loot.h"
+#endif
 
 /*
     NOTE: This file is large. Some general groups of functions have
@@ -578,6 +581,9 @@ EWRAM_DATA static bool8 sAutoActionOn = 0;
 
 // Main tasks
 static void EnterPokeStorage(u8);
+#if BR
+void BrStorage_MoveMons(void) { EnterPokeStorage(OPTION_MOVE_MONS); } // a drop's POKeMON, from the field (br_loot.c)
+#endif
 static void Task_InitPokeStorage(u8);
 static void Task_PlaceMon(u8);
 static void Task_ChangeScreen(u8);
@@ -1692,6 +1698,9 @@ static void CB2_ExitPokeStorage(void)
 {
     sPreviousBoxOption = GetCurrentBoxOption();
     gFieldCallback = FieldTask_ReturnToPcMenu;
+#if BR
+    gFieldCallback = BrLoot_PcExit(gFieldCallback); // a drop's box goes back to the field; a match's boxes empty onto the ground
+#endif
     SetMainCallback2(CB2_ReturnToField);
 }
 
@@ -1994,6 +2003,9 @@ static void CB2_PokeStorage(void)
     AnimateSprites();
     BuildOamBuffer();
 }
+#if BR
+bool8 BrStorage_Up(void) { return gMain.callback2 == CB2_PokeStorage; } // a challenge never cuts a box off (br_netlink.c)
+#endif
 
 static void EnterPokeStorage(u8 boxOption)
 {
@@ -7667,6 +7679,9 @@ static bool8 SetMenuTexts_Mon(void)
     }
 
     SetMenuText(MENU_MARK);
+#if BR
+    if (BrLoot_PcCanRelease()) // nothing leaves a match
+#endif
     SetMenuText(MENU_RELEASE);
     SetMenuText(MENU_CANCEL);
     return TRUE;

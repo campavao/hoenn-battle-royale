@@ -57,6 +57,10 @@ bool8 CheckFreePokemonStorageSpace(void);
 bool32 CheckBoxMonSanityAt(u32 boxId, u32 boxPosition);
 u32 CountStorageNonEggMons(void);
 u32 CountAllStorageMons(void);
+#if BR
+void BrStorage_MoveMons(void); // the box, OPTION_MOVE_MONS, from the field: a drop's (br_loot.c)
+bool8 BrStorage_Up(void); // the box is the screen up now (br_netlink.c)
+#endif
 bool32 AnyStorageMonWithMove(u16 move);
 
 void ResetWaldaWallpaper(void);

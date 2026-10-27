@@ -24,6 +24,7 @@
 #include "constants/songs.h"
 #include "constants/trainers.h"
 #include "constants/characters.h"
+#include "pokemon_storage_system.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
@@ -268,6 +269,13 @@ static void TickPendingChallenge(void)
         if (Answer(gBrNetlink.pendingPeer,
                    BrBot_IsStaged(gBrNetlink.pendingPeer) ? BR_SETTLE_BOT : BR_SETTLE_LINK_ANSWER))
             gBrNetlink.pendingPeer = 0xFF;
+        return;
+    }
+    else if (BrStorage_Up())
+    {
+        // The box: a battle from here loses whichever mon was in hand, which lives only
+        // in the screen's own memory. Declined, as one would be in a battle.
+        gBrNetlink.pendingPeer = 0xFF;
         return;
     }
     else

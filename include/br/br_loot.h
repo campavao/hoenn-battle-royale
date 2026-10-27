@@ -2,6 +2,7 @@
 #define GUARD_BR_LOOT_H
 
 #include "br/br_config.h"
+#include "main.h"
 
 // Loot on the ground (POK-232): when a trainer goes out, their team lies where they
 // fell as Poké Balls and their bag as a bag. Kanto's rule -- the world is a record of
@@ -197,6 +198,20 @@ void BrLoot_TrainerBeaten(u16 trainerId, u8 localId);
 // lands as a ball at your feet, claimable by anyone -- trading up leaves a trace."
 // Nothing ever leaves a match.
 void BrLoot_Released(struct Pokemon *mon);
+// A pile of Pokemon on the ground opens the PC's MOVE POKeMON box (Cam, 2026-10-27:
+// "When picking up items from someone's drop, we should show the screen that looks like
+// the Trade screen, so you can easily transfer pokemon to your party and pokemon out of
+// it"). A on one of two or more balls within reach takes them all into the box, each
+// leaving the ground for everybody as one A on it would, and the box is the drop: move
+// any of them into the party, and any of the party out. Nothing leaves a match, so
+// whatever is in a box when the PC closes goes back down beside you as released balls
+// (BrLoot_PcExit), and RELEASE is not on the box's menu (BrLoot_PcCanRelease). Any PC
+// used mid-match plays by the same rule.
+// CB2_ExitPokeStorage's field callback: the field for a drop's box, else `callback`, the
+// PC's own menu. Mid-match it marks the boxes to be emptied onto the ground.
+MainCallback BrLoot_PcExit(MainCallback callback);
+// The box menu offers RELEASE only outside a match.
+bool8 BrLoot_PcCanRelease(void);
 // One item on the ground beside us, for anybody, and the room told: the TM a mon of ours
 // forgot (BrMoves_Forgetting). It goes out as a bag holding just that, under a key from
 // the released space.

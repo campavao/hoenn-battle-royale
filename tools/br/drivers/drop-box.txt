@@ -1,0 +1,85 @@
+# drop-box: a pile of balls opens the PC's MOVE POKeMON box (Cam, 2026-10-27: "When
+# picking up items from someone's drop, we should show the screen that looks like the
+# Trade screen, so you can easily transfer pokemon to your party and pokemon out of it").
+# A on one of two or more shows them all in a box named DROP; one goes to the party and
+# leaves the ground, one of ours goes in and lands beside us as a released ball, and the
+# rest never moved. RELEASE is not on the box's menu mid-match.
+#
+# spill-pickup's SPILL with three species: MUDKIP (0x11B) on the cell we face, TORCHIC
+# (0x118) and ZIGZAGOON (0x120) beside it, and the bag.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x1018 0B 29 26 00 00 01 00 09 03 01 00 0C 00 10 00 1B 01 05 02 00 0D 00 0F 00 18 01 05 03 00 0D 00 10 00 20 01 05 01 04 00 0B 00 0F 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrLoot+0xA0 4
+shot ground
+tap A
+wait 120
+shot box
+# the box is up, and the balls are still on the ground until it closes
+expectne u32 gMain+4 CB2_Overworld+1
+expect u8 gBrLoot+0xA0 4
+expect u8 gBrLoot+0xA2 0
+# MUDKIP: A, then WITHDRAW (MOVE, SUMMARY, WITHDRAW, MARK, CANCEL: no RELEASE)
+tap A
+wait 30
+shot menu
+tap DOWN
+wait 10
+tap DOWN
+wait 10
+tap A
+wait 120
+# PARTY POKeMON, TREECKO, STORE into DROP
+tap UP
+wait 20
+tap UP
+wait 20
+tap A
+wait 60
+tap A
+wait 30
+tap DOWN
+wait 10
+tap DOWN
+wait 10
+tap A
+wait 60
+tap A
+wait 90
+shot stored
+# out of the party panel, then "Continue BOX operations?" NO
+tap B
+wait 60
+tap B
+wait 60
+tap DOWN
+wait 10
+tap A
+wait 150
+shot field
+expect u32 gMain+4 CB2_Overworld+1
+# MUDKIP's ball is taken (its PICKUP out), TREECKO (277) is down in its row as the first
+# released ball at its level, on a diagonal (13,17); TORCHIC and ZIGZAGOON never moved,
+# keys and cells as they fell; the bag is where it was
+expect u8 gPlayerPartyCount 1
+expect u8 gBrLoot+0xA0 4
+expect u8 gBrLoot+0xA2 1
+expectmsg 10 u16 1 1
+expect u8 gBrLoot+0xA4 1
+expect u16 gBrLoot 0x4000
+expect u16 gBrLoot+6 277
+expect u8 gBrLoot+10 5
+expect u16 gBrLoot+20 2
+expect u16 gBrLoot+26 0x118
+expect u16 gBrLoot+40 3
+expect u16 gBrLoot+46 0x120
+expect u16 gBrLoot+60 4
+# and the field is ours: up, the side the balls leave open
+hold UP 20
+wait 30
+expectne u16 gBrOwnPos+4 0x10
+say drop box ok
