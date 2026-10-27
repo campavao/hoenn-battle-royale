@@ -100,7 +100,9 @@ def main(argv):
         if stack < STACK_FLOOR:
             low.append(f"the stack ({STACK_FLOOR} B)")
         fit = intr_main_fit(path)
-        if fit and fit[0] > fit[1]:
+        if fit is None or fit[0] <= 0:
+            low.append("IntrMain or IntrMain_Buffer not measurable in the map")
+        elif fit[0] > fit[1]:
             low.append(f"IntrMain ({fit[0]:#x} B) past IntrMain_Buffer ({fit[1]:#x} B)")
         mark = "**UNDER THE FLOOR**" if low else "ok"
         print(

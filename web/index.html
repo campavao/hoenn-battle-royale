@@ -154,17 +154,19 @@
       /* #perf (POK-247): over every screen, the results included, and in the way of no tap.
          Under the status bar, never in it: iOS blurs whatever sits there, and Cam's
          screenshot could not be read (2026-10-27). It gets a band of its own, so it
-         covers no HUD and no title either: five lines, a fixed height, because the
-         picture's band is sized once at boot (askForBand) and a readout that grew or
-         shrank with its numbers would move the picture every second. */
+         covers no HUD and no title either: five lines, a fixed band, because the
+         picture's band is sized once at boot (askForBand) and a band that grew or
+         shrank with the numbers would move the picture every second. A sixth line, on
+         a phone narrower than 360px, runs over the picture's top on its own black. */
       body.perf-band { --perf-h: 59px; }
       .fps.perf {
         position: fixed; z-index: 1000; top: env(safe-area-inset-top, 0px); left: 0; right: 0;
-        height: var(--perf-h); padding: 2px calc(6px + env(safe-area-inset-right)) 2px calc(6px + env(safe-area-inset-left));
+        min-height: var(--perf-h); padding: 2px calc(6px + env(safe-area-inset-right)) 2px calc(6px + env(safe-area-inset-left));
         font-size: 9px; line-height: 11px; background: #000; border-radius: 0;
         white-space: pre-line; pointer-events: none;
       }
       body.perf-band, body.perf-band #stage { padding-top: calc(env(safe-area-inset-top) + var(--perf-h)); }
+      body.perf-band .pad-edit { top: calc(var(--s, 1.5) * 52px + env(safe-area-inset-top) + var(--perf-h)); }
       /* The game stopped (POK-328, emu/watchdog.ts): over everything but #perf, with the
          line a screenshot has to carry and the two ways out. */
       .stall {
