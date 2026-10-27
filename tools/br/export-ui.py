@@ -182,10 +182,11 @@ def popup(theme: str) -> Image.Image:
 
 
 def popup_themes() -> dict:
-    """MAPSEC_* -> theme name, for every section the ROM gives a sign."""
+    """Each section the ROM gives a sign, its MAPSEC_ name without the MAPSEC_ -> its theme,
+    an index into POPUP_THEMES (kept short: main.js carries it)."""
     src = (ROOT / "src/map_name_popup.c").read_text(encoding="utf-8")
     body = re.search(r"sMapSectionToThemeId\[[^\]]*\]\s*=\s*\{([^}]*)\}", src).group(1)
-    return {m: t.lower() for m, t in re.findall(r"\[(MAPSEC_\w+)[^\]]*\]\s*=\s*MAPPOPUP_THEME_(\w+)", body)}
+    return {m: POPUP_THEMES.index(t.lower()) for m, t in re.findall(r"\[MAPSEC_(\w+)[^\]]*\]\s*=\s*MAPPOPUP_THEME_(\w+)", body)}
 
 
 def item_icons() -> Image.Image:
@@ -323,6 +324,7 @@ def main():
         "textPalettes": {f"pal{i}": jasc_pal(ROOT / f"graphics/text_window/text_pal{i}.pal") for i in (1, 2, 3, 4)},
         "skins": skins(),
         "popupThemes": popup_themes(),
+        "popupThemeNames": POPUP_THEMES,
         "itemIcons": {"cell": ICON_CELL, "cols": ICON_COLS},
         "typeIcons": {"w": TYPE_W, "h": TYPE_H},
     }

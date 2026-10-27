@@ -188,11 +188,14 @@ export function safeWay(at: { x: number; y: number; w: number; h: number }, cx: 
   if (dx !== 0 && 2 * Math.abs(dx) >= Math.abs(dy)) way += dx < 0 ? '←' : '→';
   return `Safe ${way}`;
 }
-const THEMES = uiData.popupThemes as Record<string, string>;
+/** A section (its MAPSEC_ name less MAPSEC_) -> its sign's theme, by its place in
+ *  popupThemeNames (tools/br/export-ui.py). */
+const THEMES = uiData.popupThemes as Record<string, number>;
+const THEME_NAMES = uiData.popupThemeNames;
 
 /** A section's sign: its name and its theme, wood when the ROM gives it none. */
 export function signFor(section: string): { name: string; theme: string } {
-  return { name: SECTIONS[section]?.name ?? '', theme: THEMES[section] ?? 'wood' };
+  return { name: SECTIONS[section]?.name ?? '', theme: THEME_NAMES[THEMES[section.replace('MAPSEC_', '')]] ?? 'wood' };
 }
 
 export interface HudRead {
@@ -524,7 +527,7 @@ export class PhoneHud {
       c.drawTextCentred(name, SIGN_W / 2, 13, TEXT_DARK);
     });
     // Every plate up front, so a new section's sign is whole on its first frame.
-    for (const theme of new Set(['wood', ...Object.values(THEMES)])) picture(`/ui/popup-${theme}.png`, () => undefined);
+    for (const theme of new Set(['wood', ...Object.values(THEMES).map((t) => THEME_NAMES[t])])) picture(`/ui/popup-${theme}.png`, () => undefined);
     this.fog = new Win(box('hud-fog'), FOG_W, fogHeight(3), (c) => {
       const v = this.view;
       if (!v) return;
