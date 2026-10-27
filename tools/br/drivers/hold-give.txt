@@ -1,0 +1,35 @@
+# hold-give: an item with a hold effect off the ground asks who should hold it (Cam,
+# 2026-10-27: "We should prompt to give an item to a pokemon when picked up (only items
+# that have hold effects)"). br_loot.c's Take arms BrMoves_HoldSoon, and once the item is
+# in the bag BrMoves_Tick opens the bag's own GIVE screen; giving it goes back to the
+# field with it held.
+#
+# A LUCKY PUNCH (0xDE) as an item ball on the cell we face, as tm-teach puts its TM.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u16 *gSaveBlock1Ptr+0x560 0
+pokebytes gBrLoot 01 00 0C 00 10 00 DE 00 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 60
+tap A
+wait 150
+shot give
+# taken, in the bag, and "Give to which POKeMON?" is up on its own
+expect u8 gBrLoot+0xA2 1
+expect u16 *gSaveBlock1Ptr+0x560 0xDE
+expectne u32 gMain+4 CB2_Overworld+1
+# TREECKO, then A past "TREECKO was given the LUCKY PUNCH to hold."
+tap A
+wait 90
+shot given
+tap A
+wait 120
+# out of the bag, and back on the field with the controls ours
+expect u16 *gSaveBlock1Ptr+0x560 0
+expect u32 gMain+4 CB2_Overworld+1
+shot field
+hold RIGHT 20
+wait 30
+expectne u16 gBrOwnPos+2 12
+say hold give ok

@@ -24,6 +24,7 @@
 #include "field_weather.h"
 #include "constants/field_weather.h"
 #include "pokemon.h"
+#include "random.h"
 #include "recorded_battle.h"
 #include "constants/species.h"
 #include "constants/items.h"
@@ -252,6 +253,35 @@ bool8 BrSpectate_Publishing(void)
     return gMain.inBattle && gBrMySeat < BR_MAX_SEATS
         && !(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED | BATTLE_TYPE_SAFARI
                                  | BATTLE_TYPE_WALLY_TUTORIAL | BATTLE_TYPE_DOUBLE));
+}
+
+// The battle's generator while the opponent chooses (BrSpectate_HoldRng). The AI rolls
+// for its scores, its ties and its switches, and a wild POKeMON rolls for its move; the
+// replay is handed the choice and rolls none of it, so every damage roll after the first
+// choice of a fight fought alone was another than the replay's (HBR-63). The choice rolls
+// on Random2's generator, stirred with the frame count: a stream of its own, which no
+// replay needs, and the battle's picks up where it was. Put back as it was instead, the
+// turn's next rolls were the choice's own over again: a wild POKeMON's `Random() & 3`
+// move and the accuracy roll after it, `Random() % 100`, agreed mod 4.
+static u32 sBattleRng;
+
+void BrSpectate_HoldRng(bool8 hold)
+{
+    if (!BrSpectate_Publishing())
+        return;
+    if (hold)
+    {
+        // Random2's state alone starts at 0 on every boot and moves only with the
+        // animations played: the same buttons, the same picks. The frame count is the
+        // timing the battle's generator used to give them, and only this ROM reads it.
+        sBattleRng = gRngValue;
+        gRngValue = gRng2Value ^ gMain.vblankCounter1 * 0x41C64E6D;
+    }
+    else
+    {
+        gRng2Value = gRngValue;
+        gRngValue = sBattleRng;
+    }
 }
 
 // A gender is 0 or 1; the player's carries the fight's fog above it.

@@ -47,6 +47,9 @@ poke u16 gBattleMons+0x64 1
 poke u16 gBattleMons+0x66 1
 poke u16 gBattleMons+0x68 1
 poke u16 gBattleMons+0x6A 1
+# ...and the rolls: a published fight's generator no longer turns on the frame (HBR-63), so
+# this is the turn's seed whatever came before it, and its POUND is no critical hit.
+poke u32 gRngValue 0
 tap A
 wait 50
 tap A

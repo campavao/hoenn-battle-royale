@@ -1,0 +1,27 @@
+# hold-cancel: B on the GIVE screen a hold item opened keeps it in the bag, and the
+# ticker says so; an item with no hold effect opens nothing (hold-give for the rest).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gBrLoot 01 00 0C 00 10 00 DE 00 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 60
+tap A
+wait 150
+expectne u32 gMain+4 CB2_Overworld+1
+tap B
+wait 150
+shot kept
+# still in the bag, and the field is ours
+expect u16 *gSaveBlock1Ptr+0x560 0xDE
+expect u32 gMain+4 CB2_Overworld+1
+# an ESCAPE ROPE (0x55) has no hold effect: bagged, and the field stays up
+pokebytes gBrLoot 02 00 0C 00 10 00 55 00 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 60
+tap A
+wait 150
+expect u8 gBrLoot+0xA2 2
+expect u16 *gSaveBlock1Ptr+0x564 0x55
+expect u32 gMain+4 CB2_Overworld+1
+shot rope
+say hold cancel ok

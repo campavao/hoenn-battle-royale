@@ -238,6 +238,9 @@ struct Pokemon *BrBattle_PartyOf(u8 battler);
 // play-test: the phone's move menu says it and the desktop's GBA box did not):
 // "GRASS ×2" in green, "FIRE ×0.5" in red. TRUE when it drew the line; FALSE leaves
 // pret's TYPE/ line to draw (a move that does no damage, a double battle).
+// A link battle's slave: the parts of gBattleMons the menus read, from the parties
+// (br_battle.c). Each frame, from BrFrame.
+void BrBattle_FillSlaveMons(void);
 bool8 BrBattle_MoveTypeLine(u16 move);
 
 #endif // GUARD_BR_BATTLE_H

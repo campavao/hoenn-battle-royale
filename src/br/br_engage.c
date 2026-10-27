@@ -24,6 +24,13 @@ static EWRAM_DATA u8 sBusyKind = 0;    // the kind we are settling on
 static EWRAM_DATA u8 sBusyStable = 0;  // frames it has held
 
 #define BR_BUSY_SETTLE 20
+// A menu has to hold far longer before it is one (Cam's 10-27 play-test: the "?" and
+// "VS" over a trainer's head "appear repeatedly ... as if we keep spawning them"). The
+// fade between a walk-up and its fight, the return to the field after one, a door and a
+// SURF all lock the field for a second or so, and each was a "?": a fight sent VS, ?,
+// VS, ?, and every one of those popped a new mark. Nothing engages on a menu -- only a
+// battle turns a challenge away -- so a short one can go unsaid.
+#define BR_BUSY_MENU_SETTLE 120
 
 // After a fight ends, neither of the pair re-engages for a grace so the escape a flee
 // promises is real; the fleer stays off the seat it fled from far longer (POK-231).
@@ -76,7 +83,7 @@ static void ReportBusy(void)
         sBusyStable = 0;
         return;
     }
-    if (sBusyStable < BR_BUSY_SETTLE)
+    if (sBusyStable < (kind == BR_BUSY_MENU ? BR_BUSY_MENU_SETTLE : BR_BUSY_SETTLE))
     {
         sBusyStable++;
         return;

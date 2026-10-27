@@ -15,6 +15,7 @@
 #include "constants/field_effects.h"
 #include "constants/event_objects.h"
 #include "constants/event_object_movement.h"
+#include "constants/map_types.h"
 #include "br/br_event.h"
 #include "br/br_ghosts.h"
 #include "br/br_loot.h"
@@ -101,6 +102,8 @@ static bool8 OnCurrentMap(const struct BrSeat *s)
         && s->mapNum == gSaveBlock1Ptr->location.mapNum;
 }
 
+static void DropBlobOf(u8 objId);
+
 static struct ObjectEvent *GhostObject(u8 seat)
 {
     struct BrSeat *s = &gBrSeats[seat];
@@ -112,6 +115,11 @@ static struct ObjectEvent *GhostObject(u8 seat)
     // A map load wipes the object table under us; the local id is the proof it is still ours.
     if (!obj->active || obj->localId != BR_GHOST_LOCAL_ID_BASE + seat)
     {
+        // ...and the camera's cull (RemoveObjectEventsOutsideView) takes the object off
+        // before we hear it left the view, but not the SURF blob it rode: that floated on
+        // the sea, and the ghost's next spawn got a second (Cam's 10-27 play-test).
+        if (s->objId != gPlayerAvatar.objectEventId)
+            DropBlobOf(s->objId);
         s->objId = BR_NO_OBJ;
         return NULL;
     }
@@ -317,6 +325,20 @@ static u8 SkinGraphic(u8 skin)
 // takes any object), and BRENDAN or MAY sit down on it as the player does. Everybody else
 // has no seated picture and rides it as they stand.
 
+// Under the sea BRENDAN and MAY take the diver's picture, as the player does
+// (PlayerAvatarTransition_Underwater): one palette for both, so the rival's are the same.
+static u8 UnderwaterGraphic(u8 gfx)
+{
+    switch (gfx)
+    {
+    case OBJ_EVENT_GFX_BRENDAN_NORMAL:
+    case OBJ_EVENT_GFX_RIVAL_BRENDAN_NORMAL: return OBJ_EVENT_GFX_BRENDAN_UNDERWATER;
+    case OBJ_EVENT_GFX_MAY_NORMAL:
+    case OBJ_EVENT_GFX_RIVAL_MAY_NORMAL:     return OBJ_EVENT_GFX_MAY_UNDERWATER;
+    }
+    return gfx;
+}
+
 static u8 SurfGraphic(u8 gfx)
 {
     switch (gfx)
@@ -345,16 +367,21 @@ static struct Sprite *SurfBlob(u8 objId)
     return NULL;
 }
 
+static void DropBlobOf(u8 objId)
+{
+    struct Sprite *blob = SurfBlob(objId);
+
+    if (blob != NULL)
+        DestroySprite(blob);
+}
+
 static void DropBlob(u8 seat)
 {
     struct ObjectEvent *obj = GhostObject(seat);
-    struct Sprite *blob;
 
     if (obj == NULL)
         return;
-    blob = SurfBlob(gBrSeats[seat].objId);
-    if (blob != NULL)
-        DestroySprite(blob);
+    DropBlobOf(gBrSeats[seat].objId);
     gSprites[obj->spriteId].y2 = 0;
 }
 
@@ -363,14 +390,22 @@ static void SurfGhost(u8 seat)
     struct BrSeat *s = &gBrSeats[seat];
     struct ObjectEvent *obj = GhostObject(seat);
     u8 walk, gfx, id;
-    bool8 wet, changed;
+    bool8 under, wet, changed;
 
     if (obj == NULL)
         return;
-    wet = MetatileBehavior_IsSurfableWaterOrUnderwater(
+    // Under the sea a ghost is a diver on every cell, with no blob, as the player is. By
+    // the tile alone the seabed stood them up and the seaweed sat them on a blob, swapping
+    // picture and blob at every step (Cam's 10-27 play-test, "artifacting around the
+    // head" underwater).
+    under = gMapHeader.mapType == MAP_TYPE_UNDERWATER;
+    wet = !under && MetatileBehavior_IsSurfableWaterOrUnderwater(
         MapGridGetMetatileBehaviorAt(obj->currentCoords.x, obj->currentCoords.y));
     walk = SkinGraphic(s->skin);
-    gfx = wet ? SurfGraphic(walk) : walk;
+    if (under)
+        gfx = UnderwaterGraphic(walk);
+    else
+        gfx = wet ? SurfGraphic(walk) : walk;
     changed = obj->graphicsId != gfx;
     if (changed)
         ObjectEventSetGraphicsId(obj, gfx);
@@ -878,6 +913,17 @@ static u8 MarkFor(u8 busy)
     return 0xFF;
 }
 
+// The mark a seat's ghost wears now. None over the trainer we are watching (Cam's 10-27
+// play-test: "tooltips appearing constantly when a player I'm spectating is doing
+// something"): the mark tells somebody walking up that they cannot engage, and a watcher
+// sees what that trainer is doing anyway -- every menu, sign and fight popped one.
+static u8 SeatMark(u8 seat)
+{
+    if (seat == gBrSpectate.follow)
+        return 0xFF;
+    return MarkFor(gBrSeatBusy[seat]);
+}
+
 // The seat's ghost already wears this mark.
 static bool8 Marked(u8 seat, u8 effect)
 {
@@ -902,7 +948,7 @@ bool8 BrGhosts_DropMark(struct Sprite *sprite, bool8 objectGone)
      || (MARK_EFFECT(sprite) != FLDEFF_BR_VS_ICON && MARK_EFFECT(sprite) != FLDEFF_QUESTION_MARK_ICON))
         return objectGone || sprite->animEnded;
     seat = localId - BR_GHOST_LOCAL_ID_BASE;
-    if (objectGone || MARK_EFFECT(sprite) != MarkFor(gBrSeatBusy[seat]))
+    if (objectGone || MARK_EFFECT(sprite) != SeatMark(seat))
     {
         if (gBrGhostMark[seat] == sprite - gSprites + 1)
             gBrGhostMark[seat] = 0;
@@ -941,7 +987,7 @@ static bool8 AimAtGhost(u8 seat)
 
 bool8 BrGhosts_Emote(u8 seat)
 {
-    u8 effect = seat < BR_MAX_SEATS ? MarkFor(gBrSeatBusy[seat]) : 0xFF;
+    u8 effect = seat < BR_MAX_SEATS ? SeatMark(seat) : 0xFF;
 
     if (effect == 0xFF || Marked(seat, effect) || !AimAtGhost(seat))
         return FALSE;

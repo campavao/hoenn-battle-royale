@@ -1,0 +1,43 @@
+# ghost-underwater: under the sea a ghost is a diver on every cell, as the diving player
+# is (Cam's 2026-10-27 play-test: "when underwater or surfacing, sometimes there is
+# artifacting around the head"). By the tile alone the seabed stood them up and the
+# seaweed sat them on a SURF blob, so every step between the two swapped picture and blob.
+# The player under the sea has the diver's picture and no blob
+# (PlayerAvatarTransition_Underwater); a BRENDAN ghost takes BRENDAN_UNDERWATER (111).
+#
+# ROUTE 126 (map 0:41) boots on the sea above UNDERWATER ROUTE 126 (0:51). Seat 2 (skin 0,
+# BRENDAN) is on the seabed at (47,17); we FOLLOW them down, and they walk south onto the
+# seaweed. Their ghost is object 1 (graphicsId at gObjectEvents+0x29). Sprite 59 is where
+# ghost-surf-cull.txt's blob lands; nothing else takes it before the seaweed's bubbles.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 21 00 00 29 28 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch+1 1
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 3C 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+pokebytes gBrMailbox+0x1058 02 0E 0B 00 00 02 01 00 33 2F 00 11 00 01 01 00
+poke u16 gBrMailbox+0x0C 2
+wait 5
+# FOLLOW seat 2
+pokebytes gBrMailbox+0x1098 14 04 01 00 00 02
+poke u16 gBrMailbox+0x0C 3
+wait 200
+expect u8 *gSaveBlock1Ptr+5 51
+expect u8 gBrSeats+41 1
+shot seabed
+# the diver on the bare seabed, no blob
+expect u8 gObjectEvents+0x29 111
+expectbits u8 gSprites+0xFEA 0x01 0x00
+# STEP south twice, onto the seaweed: still the diver
+pokebytes gBrMailbox+0x10D8 03 0B 08 00 00 02 01 2F 00 12 00 00 33
+poke u16 gBrMailbox+0x0C 4
+wait 16
+expect u8 gObjectEvents+0x29 111
+pokebytes gBrMailbox+0x1118 03 0B 08 00 00 02 01 2F 00 13 00 00 33
+poke u16 gBrMailbox+0x0C 5
+wait 30
+shot seaweed
+expect u8 gObjectEvents+0x29 111
+say ghost underwater ok

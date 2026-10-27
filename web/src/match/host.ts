@@ -163,6 +163,7 @@ export class HostRole {
     this.claims = new TraderClaims(
       (n) => session.events.some((e) => e.n === n && e.trader !== undefined),
       (key) => session.loot.has(key),
+      (key) => session.legendHolder(key),
     );
     const seed = this.seed;
     // Everybody in the room now was dealt in, or on a takeover has been hearing the match
@@ -398,7 +399,7 @@ export class HostRole {
       // Not a trader's word from the seat itself: its ROM acted on its own, and replayed it
       // would answer a claim of its still waiting on the host (HBR-34 review).
       const homes = this.session.homes.filter((h) => h.seat !== id);
-      for (const msg of catchUp(this.link.seat, state, this.session.beaten, this.session.events, this.session.loot, homes)) {
+      for (const msg of catchUp(this.link.seat, state, this.session.beaten, this.session.events, this.session.loot, homes, (key) => this.session.legendHolder(key))) {
         this.link.toSeat(id, msg);
       }
     }

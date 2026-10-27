@@ -129,7 +129,7 @@ import {
   saveProfile,
   SKINS,
 } from './match/career';
-import { JANK_LONGEST, jankMessage, readJank, type JankCounts } from './match/jank';
+import { JANK_LONGEST, jankMessage, jankVersion, readJank, type JankCounts } from './match/jank';
 import { loadStats, recordSolo, setStatsOff, statFlushed, statMessage } from './match/stats';
 import { HOENN, loadHoenn } from './bots/hoenn';
 import { MON_SIZE, readTeam, teamSpill } from './match/owed';
@@ -3102,7 +3102,7 @@ function wireRoom(
   let jankStart: JankCounts | null = null;
   const sendJank = (): void => {
     if (gBrJank === undefined || !jankStart) return;
-    const msg = jankMessage(patch ?? String(protocol ?? '?'), jankStart, readJank((a, bits) => emu.read(a, bits), gBrJank));
+    const msg = jankMessage(jankVersion(patch, protocol), jankStart, readJank((a, bits) => emu.read(a, bits), gBrJank));
     jankStart = null;
     if (msg) relay.send({ ...msg });
   };
