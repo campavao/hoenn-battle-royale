@@ -1,5 +1,5 @@
 {
- "readAt": "2026-10-27T00:16:17.638Z",
+ "readAt": "2026-10-27T00:33:26.384Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -12,7 +12,7 @@
    "humans": 5,
    "together": 4,
    "spectators": 0,
-   "matches": 1,
+   "matches": 2,
    "joins": [
     {
      "t": "2026-10-27T00:05:32.943Z",
@@ -29,6 +29,10 @@
     {
      "t": "2026-10-27T00:07:08.150Z",
      "how": "code"
+    },
+    {
+     "t": "2026-10-27T00:23:56.012Z",
+     "how": "code"
     }
    ],
    "versions": [],
@@ -39,9 +43,17 @@
      "mode": "host",
      "trainers": 4,
      "watching": 0,
+     "secs": 954
+    },
+    {
+     "t": "2026-10-27T00:25:56.765Z",
+     "mode": "host",
+     "trainers": 4,
+     "watching": 0,
      "secs": null
     }
    ],
+   "migrated": 1,
    "live": true,
    "exact": true
   },
@@ -3065,6 +3077,48 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-10-27T00:24:17.254Z",
+   "code": "BZET62",
+   "v": "?",
+   "watched": 836,
+   "snaps": 2,
+   "cam": 2,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 7,
+   "drifts": 6,
+   "deploy": "f17ced14"
+  },
+  {
+   "t": "2026-10-27T00:23:47.475Z",
+   "code": "BZET62",
+   "v": "?",
+   "watched": 829,
+   "snaps": 4,
+   "cam": 4,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 7,
+   "drifts": 5,
+   "deploy": "f17ced14"
+  },
+  {
+   "t": "2026-10-27T00:23:46.006Z",
+   "code": "BZET62",
+   "v": "?",
+   "watched": 0,
+   "snaps": 1,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 0,
+   "drifts": 0,
+   "deploy": "f17ced14"
+  },
   {
    "t": "2026-10-23T15:59:15.785Z",
    "code": "UVF49Z",
