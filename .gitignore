@@ -73,8 +73,10 @@ web/e2e/out/
 web/test-results/
 web/playwright-report/
 
-# Agent worktrees live here (Claude Code); they are checkouts, not repo content.
-.claude/
+# Agent worktrees live here (Claude Code); they are checkouts, not repo content. The rest
+# of .claude/ (settings.json, hooks/, launch.json) is shared config and is tracked.
+.claude/worktrees/
+.claude/settings.local.json
 
 .vercel
 
