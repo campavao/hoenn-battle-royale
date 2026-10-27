@@ -4,7 +4,7 @@
 //
 // Pure functions over the hash string, like hash.ts, so the cycle can be pinned without a
 // browser. app.ts reads and writes `location` around them.
-import { devPace } from './hash';
+import type { devPace } from './hash';
 
 /** One switch. `choices` are what the hash can say for it, in the order a press steps
  *  through them: `null` is the key absent, `''` a bare key (`#fast`), anything else its
@@ -60,11 +60,13 @@ export function cycleFlag(hash: string, flag: DebugFlag): string {
   return params.toString().replace(/=(?=&|$)/g, '');
 }
 
-/** What the row says on its right for the hash: the page's own reading of it where there
- *  is one (the pace), so the row cannot say ROOM while the match runs fast. */
-export function flagDetail(flag: DebugFlag, hash: string): string {
+/** What the row says on its right for the hash. A pace row says the pace the page will
+ *  run, devPace(hash) where the page reads it, so it cannot say ROOM while the match runs
+ *  fast. Handed in rather than worked out here: a second caller of devPace costs main.js
+ *  the copy the minifier had inlined, 330 bytes it does not have. */
+export function flagDetail(flag: DebugFlag, hash: string, pace: ReturnType<typeof devPace>): string {
   if (flag.pace) {
-    const secs = devPace(hash)?.[flag.pace];
+    const secs = pace?.[flag.pace];
     return secs === undefined ? (flag.off ?? 'OFF') : `${secs}s`;
   }
   const value = flagValue(hash, flag);

@@ -5,6 +5,8 @@ import { measure } from './ui/emerald';
 import { W } from './ui/screens';
 
 const flag = (key: string) => DEBUG_FLAGS.find((f) => f.key === key)!;
+/** What a row says for `hash`, with the pace the page would read off it. */
+const detail = (key: string, hash: string) => flagDetail(flag(key), hash, devPace(hash));
 
 describe('the DEBUG rows', () => {
   it('step a bare flag on and off, leaving the rest of the hash alone', () => {
@@ -37,18 +39,18 @@ describe('the DEBUG rows', () => {
   });
 
   it('say what each value means', () => {
-    expect(flagDetail(flag('fast'), '#fast')).toBe('ON');
-    expect(flagDetail(flag('fast'), '')).toBe('OFF');
-    expect(flagDetail(flag('safari'), '')).toBe('ROOM');
-    expect(flagDetail(flag('safari'), '#safari=60')).toBe('60s');
-    expect(flagDetail(flag('seed'), '#seed=7')).toBe('7');
-    expect(flagDetail(flag('away'), '')).toBe('2 MIN');
+    expect(detail('fast', '#fast')).toBe('ON');
+    expect(detail('fast', '')).toBe('OFF');
+    expect(detail('safari', '')).toBe('ROOM');
+    expect(detail('safari', '#safari=60')).toBe('60s');
+    expect(detail('seed', '#seed=7')).toBe('7');
+    expect(detail('away', '')).toBe('2 MIN');
   });
 
   it('say the pace #fast runs, not ROOM, under FAST PACE', () => {
-    expect(flagDetail(flag('safari'), '#fast')).toBe('25s');
-    expect(flagDetail(flag('fog'), '#fast')).toBe('15s');
-    expect(flagDetail(flag('fog'), '#fast&fog=60')).toBe('60s');
+    expect(detail('safari', '#fast')).toBe('25s');
+    expect(detail('fog', '#fast')).toBe('15s');
+    expect(detail('fog', '#fast&fog=60')).toBe('60s');
   });
 
   it('start every switch at off, and fit every label beside every value it can say', () => {
@@ -56,7 +58,7 @@ describe('the DEBUG rows', () => {
       expect(f.choices[0], f.key).toBeNull();
       for (const v of f.choices) {
         const hash = v === null ? '' : v === '' ? f.key : `${f.key}=${v}`;
-        const detail = flagDetail(f, hash);
+        const detail = flagDetail(f, hash, devPace(hash));
         // paintRows's room for a detail: the row inside the frame, less the cursor's slot,
         // the label and an 8px gap.
         expect(measure(detail), `${f.key} ${detail}`).toBeLessThanOrEqual(W - 16 - 8 - measure(f.label) - 8);

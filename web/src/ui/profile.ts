@@ -350,6 +350,8 @@ export function statsScreen(model: () => StatsModel): DrawnScreen {
 export interface DebugModel {
   /** location.hash, which the rows read and step. */
   hash: string;
+  /** The pace the page would run off it (app.ts's paceOptions): none in a build. */
+  pace: { safariSecs?: number; fogSecs?: number } | undefined;
   /** A dev server's page, which reads every flag; a build greys what it would not read. */
   dev: boolean;
   /** The hash with one flag stepped (no `#`), and whether it only applies after a reload. */
@@ -367,7 +369,7 @@ export function debugScreen(model: () => DebugModel): DrawnScreen {
       rows: [
         ...DEBUG_FLAGS.map((flag): RowSpec => ({
           label: flag.label,
-          detail: flagDetail(flag, m.hash),
+          detail: flagDetail(flag, m.hash, m.pace),
           id: `debug-${flag.key}`,
           disabled: flag.dev && !m.dev,
           onPress: () => m.onSet(cycleFlag(m.hash, flag), flag.reload === true),

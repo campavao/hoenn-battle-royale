@@ -630,7 +630,8 @@ test('DEBUG: a trainer-card setting puts a tile on the menu whose rows write the
   await fast.click();
   await expect(fast).toContainText('FAST PACE ON');
   const safari = page.locator('#debug-safari');
-  await expect(safari).toContainText('SAFARI TIME ROOM');
+  // What FAST PACE runs, rather than the ROOM it says on its own.
+  await expect(safari).toContainText('SAFARI TIME 25s');
   await safari.click();
   await expect(safari).toContainText('SAFARI TIME 25s');
   await safari.click();

@@ -4329,6 +4329,7 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
      *  with it still works. */
     const debug = profileScreen((ui) => ui.debugScreen(() => ({
       hash: location.hash,
+      pace: paceOptions(),
       dev: import.meta.env.DEV,
       onSet: (hash, reload) => {
         history.replaceState(null, '', `#${hash}`);
