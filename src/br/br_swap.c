@@ -282,9 +282,13 @@ static u8 CountBits(u8 bits)
 static void MovePicked(void)
 {
     u8 party = sSwap->counts[SIDE_PARTY], drop = sSwap->counts[SIDE_DROP];
-    u8 out = CountBits(sSwap->marked[SIDE_PARTY]), in = CountBits(sSwap->marked[SIDE_DROP]);
-    u8 i, n = 0, k = 0;
+    u8 out, in, i, n = 0, k = 0;
 
+    // Only picks on a mon count: a slot past either side's end is nobody (review of #146).
+    sSwap->marked[SIDE_PARTY] &= (1 << party) - 1;
+    sSwap->marked[SIDE_DROP] &= (1 << drop) - 1;
+    out = CountBits(sSwap->marked[SIDE_PARTY]);
+    in = CountBits(sSwap->marked[SIDE_DROP]);
     if (out + in == 0 || party - out + in == 0 || party - out + in > PARTY_SIZE || drop - in + out > PARTY_SIZE)
     {
         PlaySE(SE_FAILURE);
@@ -358,6 +362,7 @@ static void MoveCursor(s8 dx, s8 dy)
             sSwap->cursor = sSwap->lastCell;
             PlaySE(SE_SELECT);
             PlaceCursor();
+            KeepCursorOnAMon(); // a MOVE may have emptied the cell it left
         }
         return;
     }
@@ -410,6 +415,8 @@ static void Press(void)
         KeepCursorOnAMon();
         return;
     }
+    if (slot >= sSwap->counts[side])
+        return; // an empty cell: nobody to pick
     sSwap->marked[side] ^= 1 << slot;
     DrawBox(side, slot);
     CopyBgTilemapBufferToVram(1);

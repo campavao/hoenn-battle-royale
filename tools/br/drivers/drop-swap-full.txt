@@ -55,11 +55,57 @@ tap START
 wait 30
 shot swapped
 expect u8 gPlayerPartyCount 6
+# The review's sequence: party slots 4 and 5 picked, MOVE from the button empties slot 5;
+# UP from the button lands on a mon, not the emptied cell, and a pick can't be a phantom.
+# Then one of ours and the bag's three cross: 4 - 1 + 3 = 6 in the party, 1 in the bag,
+# seven in all as before, nobody lost.
+tap DOWN
+wait 10
+tap DOWN
+wait 10
+tap A
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 10
+tap DOWN
+wait 10
+shot onbutton
+tap A
+wait 30
+expect u8 gPlayerPartyCount 4
+tap UP
+wait 10
+tap A
+wait 10
+tap A
+wait 10
+tap A
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 10
+tap UP
+wait 10
+tap A
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 10
+shot overflow
+tap START
+wait 30
+shot afteroverflow
 tap B
 wait 150
 shot field
 expect u32 gMain+4 CB2_Overworld+1
+# six in the party (ours and five of the drop's, their PICKUPs out), the drop's
+# ZIGZAGOON still on the ground under its own key, none of ours released
 expect u8 gPlayerPartyCount 6
-
-expect u8 gBrLoot+0xA2 6
+expect u8 gBrLoot+0xA2 5
+expect u8 gBrLoot+0xA4 0
 say drop swap full ok
