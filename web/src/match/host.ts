@@ -163,6 +163,7 @@ export class HostRole {
     this.claims = new TraderClaims(
       (n) => session.events.some((e) => e.n === n && e.trader !== undefined),
       (key) => session.loot.has(key),
+      (key) => session.legendHolder(key),
     );
     const seed = this.seed;
     // Everybody in the room now was dealt in, or on a takeover has been hearing the match

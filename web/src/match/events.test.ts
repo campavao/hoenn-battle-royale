@@ -26,6 +26,7 @@ import {
 } from './events';
 import { STORIES } from './story';
 import { rungForPhase } from '../bots/party';
+import { LegendWatch } from './legends';
 import { Loot } from './loot';
 import { MAP_OFFSET } from '../net/cells';
 import type { EventMsg, SpillMsg } from '../net/wire';
@@ -151,10 +152,15 @@ describe('a trade asks the host first (POK-392)', () => {
   // POK-410: a legendary is asked for before its battle, and a lost battle puts it back.
   it('a legendary goes to the first ask while it stands, and to the next one once it is back', () => {
     const ground = new Set([eventKey(1, 0)]);
-    const claims = new TraderClaims(() => false, (key) => ground.has(key));
+    const held = new LegendWatch();
+    const claims = new TraderClaims(() => false, (key) => ground.has(key), (key) => held.holder(key));
     expect(legendClaimKey(eventKey(1, 0))).toBe(0xb810);
     expect([legendClaimOf(0xb810), legendClaimOf(eventKey(1, 0)), legendClaimOf(claimKey(1))]).toEqual([eventKey(1, 0), undefined, undefined]);
-    const ask = (seat: number) => claims.answer({ t: 'pickup', seat, key: legendClaimKey(eventKey(1, 0)) });
+    const ask = (seat: number) => {
+      const claim = claims.answer({ t: 'pickup', seat, key: legendClaimKey(eventKey(1, 0)) });
+      if (claim?.granted) held.note(claim.reply); // the yes is said to the room, the host's page too
+      return claim;
+    };
     expect(ask(4)).toEqual({ reply: { t: 'pickup', seat: 4, key: eventKey(1, 0) }, granted: true });
     ground.delete(eventKey(1, 0)); // the books heard the yes
     expect(ask(2), 'the second trainer at it: a no, naming the one fighting it').toEqual({ reply: { t: 'pickup', seat: 4, key: eventKey(1, 0) }, granted: false });
@@ -163,8 +169,8 @@ describe('a trade asks the host first (POK-392)', () => {
     expect(ask(2)?.granted).toBe(true);
     ground.delete(eventKey(1, 0));
     expect(ask(6)?.reply.seat, 'the newest yes is who has it').toBe(2);
-    claims.note({ t: 'start', seed: 1, spawns: [] });
-    expect(ask(6)?.reply.seat, 'a new match forgets who').toBe(0);
+    held.note({ t: 'out', seat: 2 });
+    expect(ask(6)?.reply.seat, 'never a trainer who is out').toBe(0);
   });
 
   it('a no from a host that never said yes names some other seat', () => {

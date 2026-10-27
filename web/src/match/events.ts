@@ -65,23 +65,19 @@ export const isHomeOrClaim = (key: number): boolean => (key & 0xff00) === 0x8c00
 export class TraderClaims {
   /** Who got each, by his own key. */
   private readonly won = new Map<number, number>();
-  /** Who the last yes for each legendary went to, by its key: the trainer fighting it, or
-   *  keeping it. A no names them, since every page books that no as who has it
-   *  (legends.ts): naming seat 0 or 1 put the legendary in the wrong hands (10-27). */
-  private readonly fighting = new Map<number, number>();
 
   /** `standing(n)`: the room's books still have event n's trader. `onGround(key)`: the
-   *  room's loot still has that piece. */
+   *  room's loot still has that piece. `holder(key)`: the seat still in that took it
+   *  (legends.ts), which a no for a legendary names: every page books that no as who has
+   *  it, and naming seat 0 or 1 put the legendary in the wrong hands (10-27). */
   constructor(
     private readonly standing: (n: number) => boolean,
     private readonly onGround: (key: number) => boolean = () => false,
+    private readonly holder: (key: number) => number | undefined = () => undefined,
   ) {}
 
   note(msg: Msg): void {
-    if (msg.t === 'start') {
-      this.won.clear();
-      this.fighting.clear();
-    }
+    if (msg.t === 'start') this.won.clear();
     if (msg.t !== 'pickup') return;
     // His key naming a Pokemon: the trade is done and he holds it now, free for the next
     // ask (Cam's 2026-10-19 play-test, #9).
@@ -105,10 +101,9 @@ export class TraderClaims {
     const legend = legendClaimOf(msg.key);
     if (legend !== undefined) {
       const granted = this.onGround(legend);
-      if (granted) this.fighting.set(legend, msg.seat);
       // A no names some other seat, which is all the asker's ROM reads: the one fighting
       // it when that is known, since the asker's page takes the no for who has it.
-      const holder = this.fighting.get(legend);
+      const holder = this.holder(legend);
       const other = holder !== undefined && holder !== msg.seat ? holder : msg.seat === 0 ? 1 : 0;
       return { reply: { t: 'pickup', seat: granted ? msg.seat : other, key: legend }, granted };
     }
