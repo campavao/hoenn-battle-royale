@@ -1,0 +1,61 @@
+# busy-settle: a fight says VS once, and the field after it says nothing but "free"
+# (Cam's 2026-10-27 play-test: the "?" and "VS" over a trainer's head "appear repeatedly
+# ... as if we keep spawning them infinitely"). The fade between a bot's walk-up and its
+# fight, and the return to the field after it, lock the field for a second or so; each
+# was reported as a menu, so the room heard VS, ?, VS, ? for one fight and popped a new
+# mark over our head at every one. A menu has to hold BR_BUSY_MENU_SETTLE now.
+#
+# run-bot.txt's fight, run from with the POKe DOLL, back to the field; the out ring is
+# not drained, so it holds everything we said, in order (a slot is 0x40, the type at
+# +0, a BUSY's kind at +6).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 300
+poke u32 *gSaveBlock2Ptr+0xAC 0
+poke u16 *gSaveBlock1Ptr+0x560 0x50
+poke u16 *gSaveBlock1Ptr+0x562 1
+expect u8 gBrBotFight+2 1
+expect u8 gBrNetlink 0
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 200
+expect u8 gBattleCommunication 2
+expect u16 gBrBattle+4 0
+shot menu
+tap DOWN
+wait 15
+tap RIGHT
+wait 15
+shot on-run
+tap A
+wait 300
+shot ran
+expect u16 gBrBattle+4 1
+expect u16 gBrBattle+6 1
+expect u8 gBattleOutcome 4
+tap A
+wait 600
+shot field
+# PLACE, STEP, then BUSY 2 (the walk-up), and straight on to the bot's card: no BUSY 1
+# for the fade into the fight
+expect u8 gBrMailbox+0x98 0x11
+expect u8 gBrMailbox+0x9E 2
+expect u8 gBrMailbox+0xD8 0x12
+# ...and back on the field, PLACE, then BUSY 0 with no BUSY 1 for the fade out of it
+expect u16 gBrMailbox+0x08 15
+expect u8 gBrMailbox+0x358 0x02
+expect u8 gBrMailbox+0x398 0x11
+expect u8 gBrMailbox+0x39E 0
+say busy settle ok

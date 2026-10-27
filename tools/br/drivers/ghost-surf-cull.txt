@@ -1,0 +1,36 @@
+# ghost-surf-cull: a surfing ghost the engine culls takes its SURF blob with it (Cam's
+# 2026-10-27 play-test: "random floating surf things", one "duped when he surfaced").
+# Walking away, the camera's move culls the ghost's object (RemoveObjectEventsOutsideView)
+# before BrGhosts_Tick hears it is out of view, so Despawn found no object and left its
+# blob on the sea, riding a freed object.
+#
+# ROUTE 107 (map 0:22), surfing from (20,10) as ghost-surf.txt, seat 2 (BRENDAN) on the sea
+# nine tiles east: in the object box, off the screen.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 16 14 00 0A 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrMatch+1 1
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 3C 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+# PLACE seat 2 on 0:22 at (29,10), facing west, alive, skin 0
+pokebytes gBrMailbox+0x1058 02 0E 0B 00 00 02 01 00 16 1D 00 0A 00 03 01 00
+poke u16 gBrMailbox+0x0C 2
+wait 90
+expect u8 gObjectEvents+0x74 0xCA
+expect u8 gObjectEvents+0x71 2
+# seat 2's blob is sprite 59, riding object 3 (data[2] at +0x32). The slot follows from every
+# sprite allocated before it: a new mark, weather or field effect in this setup moves it.
+expectbits u8 gSprites+0xFEA 0x01 0x01
+expect u8 gSprites+0xFDE 3
+# surf west to the shore: the box leaves seat 2 behind
+hold LEFT 140
+wait 30
+shot away
+# the camera's cull took object 3, and the seat let go of it...
+expectbits u8 gObjectEvents+0x6C 0x01 0x00
+expect u8 gBrSeats+41 0xFF
+# ...and its blob went with it, rather than staying on the sea
+expectbits u8 gSprites+0xFEA 0x01 0x00
+say ghost surf cull ok
