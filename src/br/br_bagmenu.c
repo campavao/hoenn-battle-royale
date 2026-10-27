@@ -58,11 +58,14 @@ static bool8 Interrupted(void)
         || BrField_Leaving();
 }
 
-static u8 OpenBox(u8 width, u8 rows)
+// At tile row `top`: the list's eight items and TAKE ALL are eighteen rows, and with the
+// frame round them that is the whole screen from row 0.
+static u8 OpenBox(u8 width, u8 rows, u8 top)
 {
     struct WindowTemplate t = { 0, 1, 2, 0, 0, 15, BR_BAGMENU_TILES };
     u8 win;
 
+    t.tilemapTop = top;
     t.width = width;
     t.height = 2 * rows;
     win = AddWindow(&t);
@@ -122,7 +125,7 @@ void BrBagMenu_Choose(u16 key)
         return;
     taskId = CreateTask(Task_Choose, 80);
     data = gTasks[taskId].data;
-    tWin = OpenBox(8, 2);
+    tWin = OpenBox(8, 2, 2);
     if (tWin == WINDOW_NONE)
     {
         DestroyTask(taskId);
@@ -243,7 +246,7 @@ void BrBagMenu_List(const u8 *rows, u8 count)
     sRowCount = count;
     taskId = CreateTask(Task_List, 80);
     data = gTasks[taskId].data;
-    tWin = OpenBox(LIST_WIDTH, 1 + count);
+    tWin = OpenBox(LIST_WIDTH, 1 + count, 1);
     if (tWin == WINDOW_NONE)
     {
         DestroyTask(taskId);

@@ -259,17 +259,20 @@ u8 BrLoot_Wanted(void)
 // room, else the `limit` nearest the middle of the view, the lower row first on a tie.
 static u8 Keep(u8 limit)
 {
-    u8 i, j, nearer, keep = 0;
+    u8 i, j, nearer, keep = 0, shown = 0;
     u16 d, e;
 
     for (i = 0; i < BR_MAX_LOOT; i++)
+        if (Shown(&gBrLoot.items[i]))
+            shown |= 1 << i;
+    for (i = 0; i < BR_MAX_LOOT; i++)
     {
-        if (!Shown(&gBrLoot.items[i]))
+        if (!(shown & (1 << i)))
             continue;
         d = BrField_ViewDistance(gBrLoot.items[i].x, gBrLoot.items[i].y);
         for (j = 0, nearer = 0; j < BR_MAX_LOOT && nearer < limit; j++)
         {
-            if (j == i || !Shown(&gBrLoot.items[j]))
+            if (j == i || !(shown & (1 << j)))
                 continue;
             e = BrField_ViewDistance(gBrLoot.items[j].x, gBrLoot.items[j].y);
             if (e < d || (e == d && j < i))
@@ -630,7 +633,8 @@ static void HandleGive(const u8 *payload, u8 len)
 }
 
 // The list's GIVE, shown when nothing else has the field. Gone from the field -- a
-// challenge, a battle, the match ending -- it goes into the bag as a press always did.
+// challenge, a battle, the match ending -- it goes back down as the bag, as a list the
+// challenge closed does (br_bagmenu.c): nothing in it was picked yet.
 static void TickList(void)
 {
     if (sListWait != 0)
@@ -640,7 +644,7 @@ static void TickList(void)
     if (!BrField_OverworldRunning() || gBrNetlink.pendingPeer != 0xFF)
     {
         sListReady = FALSE;
-        GiveRows(sListRows, sListCount);
+        BrLoot_BagListed(sListRows, sListCount);
         return;
     }
     if (ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked() || BrField_Leaving() || BrBagMenu_Up())
@@ -1577,6 +1581,9 @@ static void HoldLineForReach(void)
     BrHud_Hold(line);
 }
 
+// The bag the POKeMON / BAG box was opened on, for its cell. IWRAM.
+static struct BrLootItem sChosen;
+
 // A trainer's own bag, dropped going out or put back by a taker: its key's low byte 0xFF
 // in a seat's space. A TM forgotten is a bag of one, and is still one press.
 static bool8 TrainersBag(const struct BrLootItem *it)
@@ -1587,9 +1594,15 @@ static bool8 TrainersBag(const struct BrLootItem *it)
 // The bag taken, and its GIVE shown as a list (HandleGive) rather than poured in.
 static void TakeToList(struct BrLootItem *it)
 {
-    sListWait = BR_LIST_WAIT_FRAMES;
-    sListReady = FALSE;
+    u8 taken = gBrLoot.taken;
+
     Take(it);
+    // Only for the PICKUP that went: a refused press leaves the next GIVE to pour.
+    if (gBrLoot.taken != taken)
+    {
+        sListWait = BR_LIST_WAIT_FRAMES;
+        sListReady = FALSE;
+    }
 }
 
 // A on the cell we stand on or the one we face. The loot has no script of its own --
@@ -1623,6 +1636,7 @@ static void TryTake(void)
         {
             DropHeldLine();
             PlaySE(SE_SELECT);
+            sChosen = *it;
             BrBagMenu_Choose(it->key);
         }
         else if (!OpenPile(it, it))
@@ -1640,17 +1654,20 @@ static void TryTake(void)
 void BrLoot_BagChosen(u16 key, u8 choice)
 {
     struct BrLootItem *bag = Find(key);
+    struct BrLootItem *head;
 
-    // Somebody else's A can have got there while the box was up.
+    // Somebody else's A can have got there while the box was up: the bag gone, the team
+    // can still be lying in its cell, and POKeMON still opens on it.
+    if (choice == BR_BAGMENU_POKEMON)
+    {
+        head = bag != NULL ? bag : Head(&sChosen);
+        if (head == NULL || !OnCurrentMap(head) || !OpenPile(head, head))
+            PlaySE(SE_FAILURE);
+        return;
+    }
     if (bag == NULL || bag->kind != BR_LOOT_BAG || !OnCurrentMap(bag))
     {
         PlaySE(SE_FAILURE);
-        return;
-    }
-    if (choice == BR_BAGMENU_POKEMON)
-    {
-        if (!OpenPile(bag, bag))
-            PlaySE(SE_FAILURE);
         return;
     }
     TakeToList(bag);
