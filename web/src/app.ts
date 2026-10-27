@@ -8,6 +8,7 @@ import { stallLine, watch } from './emu/watchdog';
 import { checkEmerald, isPrePatched, sha1Hex } from './rom/emerald';
 import { loadCheckedRelease, loadSidecars, type CheckedRelease, type ReleaseInfo } from './release';
 import type { PatchWorkerRequest, PatchWorkerResponse } from './patch/bps.worker';
+import { artUrl, noRomArt, useRomArt } from './art';
 import { Mailbox, MAILBOX } from './net/mailbox';
 import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
@@ -4770,6 +4771,9 @@ async function main(): Promise<void> {
   // read out of the very image about to boot, so a core, a ROM and a page from different
   // deploys never disagree; a ROM that does not say gets the legacy band. How much of it
   // is asked for is the layout's (askForBand), measured once the playing screen is up.
+  // The field's pictures are cut from this same image (HBR-66): the site ships none.
+  if (usingPatched && symbols) useRomArt(bytes, symbols);
+  else noRomArt('an unpatched ROM has no field art');
   romPicture = romBand(bytes, symbols);
   oamTableAt = symbols?.get('gBrOamHi');
   fieldShownAt = symbols?.get('gBrFieldShown');
@@ -4785,7 +4789,7 @@ async function main(): Promise<void> {
   // Dev only, for the e2e harness (POK-220): solo play never builds a Bridge, so this
   // is the only way in to read the emulator's memory from outside the page.
   // `perf` makes a meter of the spec's own (POK-247), read from the moment it asks.
-  if (import.meta.env.DEV) (window as unknown as { __hbr?: unknown }).__hbr = { emu, perf: () => new fpsUi!.PerfProbe(emu, proxyCounts, { log: () => {} }) };
+  if (import.meta.env.DEV) (window as unknown as { __hbr?: unknown }).__hbr = { emu, art: artUrl, perf: () => new fpsUi!.PerfProbe(emu, proxyCounts, { log: () => {} }) };
 
   // The proxy's own instance is not booted here -- only made available. It costs a
   // second wasm core and a second copy of the ROM, so it is paid for on the first bot

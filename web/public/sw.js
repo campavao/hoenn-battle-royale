@@ -81,6 +81,11 @@ self.addEventListener('activate', (event) => {
       for (const name of await caches.keys()) {
         if (name !== CACHE) await caches.delete(name);
       }
+      // The pictures a release before HBR-66 shipped: the page cuts them from the ROM now.
+      const cache = await caches.open(CACHE);
+      for (const req of await cache.keys()) {
+        if (/^\/(field-maps|field-sprites|mon-pics|trainer-pics)\//.test(new URL(req.url).pathname)) await cache.delete(req);
+      }
       await self.clients.claim();
     })(),
   );

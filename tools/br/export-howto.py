@@ -27,7 +27,7 @@ One sheet, 240 wide (the screen's width), its pictures 150 tall, top to bottom:
     2828 item pickups: Route 101 with two item balls, a gold one and a fallen trainer's
          bag (br_loot.c draws a bag as BIRCH's), BRENDAN about to take the nearest
 
-The field sprites are the sheets export-sprites.py wrote to web/public/field-sprites:
+The field sprites are the sheets export-sprites.py wrote to build/br-art/field-sprites:
 standing south is frame 0, west frame 2; east is west mirrored, as the ROM draws it.
 """
 import json
@@ -38,8 +38,8 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "web/public/ui/howto.png"
-MAPS = ROOT / "web/public/field-maps"
-SPRITES = ROOT / "web/public/field-sprites"
+MAPS = ROOT / "build/br-art/field-maps"
+SPRITES = ROOT / "build/br-art/field-sprites"
 SHEETS = json.loads((ROOT / "web/src/data/sprites.json").read_text())
 
 BANG = ROOT / "graphics/field_effects/pics/emotion_exclamation.png"

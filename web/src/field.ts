@@ -1,8 +1,8 @@
 // The field past the picture (POK-317). The GBA draws 240x160 and nothing else, and on a
 // phone that is a third of the glass. Cam's reference is a Game Boy Pokémon rendered past
 // its LCD so the map fills the screen, the fight in the middle band with the field still
-// around it. So this draws the rest: a still of the map (tools/br/render-maps.py, in
-// web/public/field-maps/) scrolled in lockstep with the ROM's own camera, on a canvas
+// around it. So this draws the rest: a still of the map (cut from the player's ROM,
+// art/index.ts) scrolled in lockstep with the ROM's own camera, on a canvas
 // under the picture, at the picture's own scale. Nothing is zoomed and nothing is
 // stretched -- the picture is where the ROM's window is, and the map continues out of it.
 //
@@ -46,6 +46,7 @@ import {
   SURF_BLOB_GFX, withBlob,
 } from './field-ghosts';
 import type { Seat } from './field-ghosts';
+import { setPictureSrc } from './art';
 import type { RosterEntry } from './match/roster';
 
 export const GBA_W = 240;
@@ -893,7 +894,11 @@ export class FieldImages<T extends FieldImage> {
   private failed = new Set<string>();
   private pending = new Set<string>();
 
-  constructor(private readonly make: () => T, private readonly onLoad: () => void) {}
+  constructor(
+    private readonly make: () => T,
+    private readonly onLoad: () => void,
+    private readonly point: (img: T, src: string) => void = (img, src) => (img.src = src),
+  ) {}
 
   /** The image, or null while it loads or after it failed. */
   get(key: string, src: string): T | null {
@@ -912,7 +917,7 @@ export class FieldImages<T extends FieldImage> {
       });
       this.pending.add(key);
       this.images.set(key, made);
-      made.src = src;
+      this.point(made, src);
       img = made;
     }
     return img.complete && img.naturalWidth > 0 ? img : null;
@@ -939,6 +944,7 @@ export class FieldView {
     () => {
       this.drawn = null;
     },
+    setPictureSrc,
   );
   /** The map the picture was last drawn on: a new one retries the images that failed. */
   private drawnMap: string | null = null;

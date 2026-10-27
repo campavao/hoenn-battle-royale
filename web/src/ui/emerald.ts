@@ -10,6 +10,7 @@
 import uiData from '../data/ui.json';
 import spritesData from '../data/sprites.json';
 import { displayByte } from '../text/gen3';
+import { setPictureSrc } from '../art';
 
 export const CELL = 16;
 export const TILE = 8;
@@ -353,7 +354,7 @@ export class EmeraldCanvas {
       const el = new Image();
       el.decoding = 'async';
       el.onload = () => this.onLoad?.();
-      el.src = `/field-sprites/${gfx}.png`;
+      setPictureSrc(el, `/field-sprites/${gfx}.png`);
       this.sheets.set(gfx, el);
       img = el;
     }
@@ -390,7 +391,7 @@ export class EmeraldCanvas {
         this.missing.add(name);
         this.onLoad?.();
       };
-      el.src = name.startsWith('/') ? name : `/ui/${name}`;
+      setPictureSrc(el, name.startsWith('/') ? name : `/ui/${name}`);
       this.pictures.set(name, el);
       img = el;
     }

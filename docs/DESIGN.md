@@ -355,7 +355,8 @@ home-screen install works offline after the first patch.
 
 **The picture is 240×160 and the game is not** (POK-317). The GBA draws its window and
 nothing past it, so the shell draws the rest: a still of every outdoor map
-(`tools/br/render-maps.py` → `web/public/field-maps/`) scrolled in lockstep with the ROM's
+(cut from the player's ROM in the browser, `web/src/art/`, HBR-66; the site ships no
+Nintendo pictures) scrolled in lockstep with the ROM's
 camera (`gSaveBlock1Ptr->pos`, `gFieldCamera.x/y`, one frame behind the struct, offsets
 measured by `tools/br/drivers/field-scroll*.txt`) on a canvas under the picture, at the
 picture's own scale, with the palette fade mirrored from `gPaletteFade`. In a battle or a

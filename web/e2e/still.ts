@@ -1,7 +1,7 @@
 // The ROM's picture held to the map's still (POK-329). Past the LCD the core draws the
-// field from the ROM's own ring of tiles, and tools/br/render-maps.py draws the same map
-// from pret's data into web/public/field-maps/<MAP_ID>.png, which the composite under the
-// picture shows. So wherever the band shows inside the map, it is that still -- less the
+// field from the ROM's own ring of tiles, and the page cuts the same map's still out of
+// the ROM (web/src/art, the picture tools/br/render-maps.py draws from pret's data), which
+// the composite under the picture shows. So wherever the band shows inside the map, it is that still -- less the
 // sprites, the animated tiles (a flower's frames) and the GBA's 5-bit colour -- and a cell
 // of the ring holding the wrong row or column of the map, the border block, the last
 // map's rows or nothing at all, shows here as a 16x16 cell of the picture that is not
@@ -40,7 +40,7 @@ export interface StillSymbols {
 
 export interface StillSetup {
   sym: StillSymbols;
-  /** 'group:num' -> the still's URL, for every map the check may meet. */
+  /** 'group:num' -> the still's path (/field-maps/<MAP_ID>.png), for every map the check may meet. */
   stills: Record<string, string>;
   /** Milliseconds between samples; 0 for every frame. */
   every: number;
@@ -131,7 +131,7 @@ type StillEmu = {
   holdLockstep?(): () => void;
 };
 type StillWindow = {
-  __hbr: { emu: StillEmu };
+  __hbr: { emu: StillEmu; art(path: string): Promise<string> };
   __still?: { start(): void; stop(): StillReport; report(): StillReport; worstPng(): string | null; missPngs(): string[] };
 };
 
@@ -145,7 +145,7 @@ export async function installStill(s: StillSetup): Promise<void> {
   const lcd = document.querySelector('#canvas') as HTMLCanvasElement;
   const stills: Record<string, { w: number; h: number; px: Uint8ClampedArray }> = {};
   for (const [ref, url] of Object.entries(s.stills)) {
-    const img = await createImageBitmap(await (await fetch(url)).blob());
+    const img = await createImageBitmap(await (await fetch(await w.__hbr.art(url))).blob());
     const c = new OffscreenCanvas(img.width, img.height);
     const g = c.getContext('2d')!;
     g.drawImage(img, 0, 0);

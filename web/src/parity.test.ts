@@ -550,8 +550,11 @@ describe("the BR structs the page reads at an offset", () => {
     );
     // The signs: every section map_name_popup.c gives one, with its theme.
     const themes = /sMapSectionToThemeId\[[^\]]*\]\s*=\s*\{([\s\S]*?)\};/.exec(popupC)![1];
-    const want = Object.fromEntries([...themes.matchAll(/\[(MAPSEC_\w+)[^\]]*\]\s*=\s*MAPPOPUP_THEME_(\w+)/g)].map((m) => [m[1], m[2].toLowerCase()]));
-    expect(uiData.popupThemes).toEqual(want);
+    const want = Object.fromEntries([...themes.matchAll(/\[MAPSEC_(\w+)[^\]]*\]\s*=\s*MAPPOPUP_THEME_(\w+)/g)].map((m) => [m[1], m[2].toLowerCase()]));
+    expect(Object.fromEntries(Object.entries(uiData.popupThemes).map(([k, v]) => [k, uiData.popupThemeNames[v]]))).toEqual(want);
+    // ...and the themes in MAPPOPUP_THEME_'s order.
+    const order = [...popupC.matchAll(/^\s*MAPPOPUP_THEME_(\w+),?\s*$/gm)].map((m) => m[1].toLowerCase());
+    expect(uiData.popupThemeNames).toEqual(order);
   });
 
   it('gBrOwnPos and gBrBattle (touch.ts)', () => {

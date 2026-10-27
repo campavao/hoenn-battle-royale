@@ -17,10 +17,11 @@
 // hand-edited and committed; landing-reach.ts never writes it. match/hand.ts has the rules
 // this and landing.test.ts share.
 //
-// The map itself is drawn under the grid, from web/public/field-maps/<MAP_ID>.png -- the
-// page's own field renders (tools/br/render-maps.py, committed), one block to sixteen
-// pixels. Cam: "I have to see the actual map sprites to know what I'm painting." Without
-// the PNG the grid still draws, over the class colours.
+// The map itself is drawn under the grid, cut from the build tools/br/dev-patch.sh leaves
+// in public/patch (art/index.ts, as the game cuts it from the player's ROM), one block to
+// sixteen pixels. Cam: "I have to see the actual map sprites to know what I'm painting."
+// Without that build the grid still draws, over the class colours.
+import { noRomArt, setPictureSrc, useRomArt } from './art';
 import { HOENN } from './bots/hoenn';
 import { decodeGrid, type WorldMap } from './bots/world';
 import regionmapData from './data/regionmap.json';
@@ -29,6 +30,14 @@ import { LANDING_ALL, worldReady } from './match/landing';
 import { cellKey, handJson, handProblems, rectCells, walksTo, type HandRow } from './match/hand';
 
 await worldReady(); // the landing tables are fetched on demand, as the page's are
+try {
+  const [rom, syms] = await Promise.all([fetch('/patch/pokeemerald.gba'), fetch('/patch/br-symbols.json')]);
+  if (!rom.ok || !syms.ok) throw new Error('no local build in public/patch');
+  const table = (await syms.json()) as Record<string, string>;
+  useRomArt(new Uint8Array(await rom.arrayBuffer()), new Map(Object.entries(table).map(([k, v]) => [k, Number(v)])));
+} catch (err) {
+  noRomArt(err instanceof Error ? err.message : String(err));
+}
 
 const CELL = 16; // one map block, so the render lines up under the grid
 const DRAFT_KEY = 'hbr:painter-draft';
@@ -289,9 +298,9 @@ function show(m: WorldMap): void {
   picture.onerror = () => {
     picture = null;
     draw();
-    status.textContent = `no render for ${m.id}: run python tools/br/render-maps.py`;
+    status.textContent = `no render for ${m.id}: run tools/br/dev-patch.sh`;
   };
-  picture.src = `/field-maps/${m.id}.png`;
+  setPictureSrc(picture, `/field-maps/${m.id}.png`);
   changed();
 }
 

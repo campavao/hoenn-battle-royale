@@ -39,7 +39,7 @@ LoadMapNamePopUpWindowBg loads; `sMapSectionToThemeId` there says which section 
 which. The item icons are `gItemIconTable` (src/data/item_icon_table.h), each in its own
 palette (src/data/graphics/items.h). The skins are `sSkinGraphics` in src/br/br_ghosts.c, resolved to gfx ids through
 include/constants/event_objects.h, whose sheets export-sprites.py already wrote to
-web/public/field-sprites/<gfx>.png. The type icons are graphics/types/<type>.png, each in
+build/br-art/field-sprites/<gfx>.png. The type icons are graphics/types/<type>.png, each in
 the palette src/pokemon_summary_screen.c's sMoveTypeToOamPaletteNum gives it (OBJ
 palettes 13..15 are move_types_1..3.pal, loaded together from gMoveTypes_Pal). The card
 is src/trainer_card.c's front: `bg.bin` (BG2) under `front.bin` (BG0), both in
@@ -182,10 +182,11 @@ def popup(theme: str) -> Image.Image:
 
 
 def popup_themes() -> dict:
-    """MAPSEC_* -> theme name, for every section the ROM gives a sign."""
+    """Each section the ROM gives a sign, its MAPSEC_ name without the MAPSEC_ -> its theme,
+    an index into POPUP_THEMES (kept short: main.js carries it)."""
     src = (ROOT / "src/map_name_popup.c").read_text(encoding="utf-8")
     body = re.search(r"sMapSectionToThemeId\[[^\]]*\]\s*=\s*\{([^}]*)\}", src).group(1)
-    return {m: t.lower() for m, t in re.findall(r"\[(MAPSEC_\w+)[^\]]*\]\s*=\s*MAPPOPUP_THEME_(\w+)", body)}
+    return {m: POPUP_THEMES.index(t.lower()) for m, t in re.findall(r"\[MAPSEC_(\w+)[^\]]*\]\s*=\s*MAPPOPUP_THEME_(\w+)", body)}
 
 
 def item_icons() -> Image.Image:
@@ -323,6 +324,7 @@ def main():
         "textPalettes": {f"pal{i}": jasc_pal(ROOT / f"graphics/text_window/text_pal{i}.pal") for i in (1, 2, 3, 4)},
         "skins": skins(),
         "popupThemes": popup_themes(),
+        "popupThemeNames": POPUP_THEMES,
         "itemIcons": {"cell": ICON_CELL, "cols": ICON_COLS},
         "typeIcons": {"w": TYPE_W, "h": TYPE_H},
     }

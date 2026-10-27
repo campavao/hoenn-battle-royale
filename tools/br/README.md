@@ -79,8 +79,8 @@ from `web/`, which has vite-node):
 |---|---|---|---|
 | 1 | `python tools/br/export-world.py` | `web/src/data/world.json`, `world.meta.json`, `regionmap.json`, `landing.json` | `data/maps`, `data/layouts`, tileset attributes, region map sections |
 | 2 | `npx vite-node ../tools/br/landing-reach.ts` | `landing.json`, rewritten in place: cells with no way out marked `off`, doorsteps added | **always right after 1**, which overwrites `landing.json` and drops those marks |
-| 3 | `python tools/br/render-maps.py` | `web/public/field-maps/<MAP>.png`, `.border.png` | `world.json` from 1, layouts, tilesets |
-| 4 | `python tools/br/export-sprites.py` | `web/public/field-sprites/<gfx>.png`, `web/src/data/sprites.json` | object-event graphics tables and pics |
+| 3 | `python tools/br/render-maps.py` | `build/br-art/field-maps/<MAP>.png`, `.border.png`, `.cover.png` (reference only: the page cuts the maps from the ROM and `web/e2e/art.sha1.json` holds their hashes) | `world.json` from 1, layouts, tilesets |
+| 4 | `python tools/br/export-sprites.py` | `web/src/data/sprites.json`, and `build/br-art/field-sprites/<gfx>.png` (reference only, as 3) | object-event graphics tables and pics |
 | 5 | `python tools/br/export-ui.py` | `web/public/ui/*.png`, `web/src/data/ui.json` | the font, text window, message box, and the skin ladder: `sSkinGraphics` in `src/br/br_ghosts.c`, so **rerun it when that table changes**. The skins are drawn from 4's sheets |
 | 6 | `python tools/br/export-encounters.py` | `web/src/data/encounters.json` | `src/data/wild_encounters.json`, `evolution.h`, `species.h`, `species_names.h` |
 | 7 | `python tools/br/export-trainers.py > web/src/data/trainers.json` | the trainers on each map | each map's `scripts.inc` |

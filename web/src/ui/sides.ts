@@ -5,13 +5,14 @@
 //
 // The ROM says who is fighting (gBrSides, include/br/br_battle.h): each side's front
 // picture and name, filled as the intro draws the opponent. The pictures are
-// web/public/trainer-pics/<pic>.png (tools/br/export-trainer-pics.py). The balls are
+// cut from the ROM (art/index.ts, /trainer-pics/<pic>.png). The balls are
 // each party's, read every frame: one per mon, grey once it faints.
 //
 // They come up with the first choice of the fight -- by then the opponent has slid out of
 // the picture -- and stay until the battle hands back to the field. Beside the picture
 // when the field has the room (a desktop, a phone on its side); above it when only that
 // has it; not at all on a screen with neither.
+import { setPictureSrc } from '../art';
 import type { FieldLayout } from '../field';
 import { decodeGen3 } from '../text/gen3';
 import { BATTLE_MENU, MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE } from '../touch';
@@ -281,7 +282,10 @@ export class SidesView {
     if (key === card.drawn) return;
     card.drawn = key;
     const src = `/trainer-pics/${side.pic}.png`;
-    if (!card.pic.src.endsWith(src)) card.pic.src = src;
+    if (card.pic.dataset.pic !== src) {
+      card.pic.dataset.pic = src;
+      setPictureSrc(card.pic, src);
+    }
     card.pic.style.width = card.pic.style.height = `${PIC * s}px`;
     card.name.replaceChildren(textImage(fitText(side.name, CARD_W), TEXT_WHITE, s));
     card.name.setAttribute('aria-label', side.name);

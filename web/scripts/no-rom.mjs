@@ -14,6 +14,9 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const BANNED = /\.(gba|sav|ss[0-9])$/i;
+// The game's pictures are the ROM's own, cut from it in the player's browser (HBR-66,
+// HBR-67, web/src/art): a folder of them in a build is Nintendo's art, published.
+const BANNED_DIRS = new Set(['field-maps', 'field-sprites', 'mon-pics', 'trainer-pics']);
 
 // The cartridge header, which a rename does not touch: the first bytes of the Nintendo
 // logo at 0x04 (the BIOS refuses to boot without it) with the fixed 0x96 at 0xB2 that
@@ -39,13 +42,17 @@ function readHead(path) {
   }
 }
 
-/** Every file under `dir` that is a ROM or a save, by name or by its header. */
+/** Every file under `dir` that is a ROM or a save, by name or by its header, and every
+ *  folder of the ROM's pictures. */
 export function findRoms(dir) {
   const found = [];
   const walk = (d) => {
     for (const name of readdirSync(d)) {
       const path = join(d, name);
-      if (statSync(path).isDirectory()) walk(path);
+      if (statSync(path).isDirectory()) {
+        if (BANNED_DIRS.has(name)) found.push(path);
+        else walk(path);
+      }
       else if (BANNED.test(name) || looksLikeRom(readHead(path))) found.push(path);
     }
   };
@@ -64,10 +71,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   }
 
   if (found.length > 0) {
-    console.error('REFUSING THIS BUILD: it carries a ROM or a save.\n  ' + found.join('\n  '));
+    console.error('REFUSING THIS BUILD: it carries a ROM, a save or the ROM\'s pictures.\n  ' + found.join('\n  '));
     console.error('\nThese are dev artifacts (tools/br/dev-patch.sh). Take them out of');
     console.error('web/public/ before building for anybody but yourself.');
     process.exit(1);
   }
-  console.log('dist is clean: no ROM, no saves.');
+  console.log('dist is clean: no ROM, no saves, no ROM pictures.');
 }

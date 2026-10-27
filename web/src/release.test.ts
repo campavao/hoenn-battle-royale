@@ -254,10 +254,13 @@ function runWorker(files: Record<string, string>) {
   const self = {
     location: new URL('/sw.js', ORIGIN),
     addEventListener: (type: string, fn: (e: unknown) => void) => void (listeners[type] = fn),
+    clients: { claim: async () => undefined },
   };
   const caches = {
     open: async () => cache,
     match: (r: string | { url: string }, o?: MatchOpts) => cache.match(r, o),
+    keys: async () => ['hbr-v2'],
+    delete: async () => true,
   };
   const fetch = async (req: FakeRequest) => {
     const u = new URL(req.url);
@@ -287,7 +290,13 @@ function runWorker(files: Record<string, string>) {
     for (let i = 0; i < waits.length; i++) await waits[i].catch((e: Error) => { if (e.name !== 'QuotaExceededError') throw e; });
     return res.text();
   }
-  return { get, cache, net };
+  /** The worker taking over from the last one. */
+  async function activate(): Promise<void> {
+    let done: Promise<unknown> = Promise.resolve();
+    listeners.activate({ waitUntil: (p: Promise<unknown>) => void (done = p) });
+    await done;
+  }
+  return { get, activate, cache, net };
 }
 
 describe('the service worker (POK-330 #23)', () => {
@@ -450,13 +459,21 @@ describe('the service worker (POK-330 #23)', () => {
     expect(assets()).toEqual([]);
   });
 
+  it('a new worker drops the pictures the page now cuts from the ROM (HBR-66)', async () => {
+    const sw = runWorker({ '/field-maps/A.png': 'a', '/field-sprites/0.png': 'b', '/mon-pics/1.png': 'c', '/trainer-pics/0.png': 'd', '/ui/items.png': 'e' });
+    for (const p of ['/field-maps/A.png', '/field-sprites/0.png', '/mon-pics/1.png', '/trainer-pics/0.png', '/ui/items.png']) await sw.get(p);
+    expect(sw.cache.paths()).toEqual(['/field-maps/A.png', '/field-sprites/0.png', '/mon-pics/1.png', '/trainer-pics/0.png', '/ui/items.png']);
+    await sw.activate();
+    expect(sw.cache.paths()).toEqual(['/ui/items.png']);
+  });
+
   it('everything else is served from the cache and freshened behind it', async () => {
-    const files = { '/field-maps/A.png': 'still-1' };
+    const files = { '/ui/items.png': 'items-1' };
     const sw = runWorker(files);
-    expect(await sw.get('/field-maps/A.png')).toBe('still-1');
-    files['/field-maps/A.png'] = 'still-2';
-    expect(await sw.get('/field-maps/A.png')).toBe('still-1');
-    expect(await sw.get('/field-maps/A.png')).toBe('still-2');
+    expect(await sw.get('/ui/items.png')).toBe('items-1');
+    files['/ui/items.png'] = 'items-2';
+    expect(await sw.get('/ui/items.png')).toBe('items-1');
+    expect(await sw.get('/ui/items.png')).toBe('items-2');
   });
 
   it('leaves the relay and anything not GET alone', async () => {

@@ -354,6 +354,10 @@ static const u16 sWaterColors[16] = {
 };
 static const struct SpritePalette sWaterPalette = { sWaterColors, BR_PATCH_WATER_TAG };
 
+// Where the page finds the marks it draws past the LCD (web/src/art/romart.ts), as Draw
+// gives them: the tall grass's picture, the water's, and the water's colours.
+const void *const gBrPatchArt[] = { sTallGrassPic, sWaterPic, sWaterColors };
+
 // The ripple, and the shadow under it drifting as the dry-land ones do.
 static void SpriteCB_Water(struct Sprite *sprite)
 {
