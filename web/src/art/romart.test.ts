@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { artRequest } from '.';
+import { artRequest } from './client';
 import { lz77, rgba } from './romart';
 
 const LITTLEROOT = { group: 0, num: 9 };
@@ -16,11 +16,17 @@ describe('artRequest', () => {
     expect(artRequest('/field-sprites/patch-tall-grass.png', ref)).toEqual({ t: 'mark', mark: 'tall-grass' });
     expect(artRequest('/field-sprites/patch-water.png', ref)).toEqual({ t: 'mark', mark: 'water' });
     expect(artRequest('/field-sprites/patch-shadow.png', ref)).toEqual({ t: 'mark', mark: 'shadow' });
+    expect(artRequest('/mon-pics/1.png', ref)).toEqual({ t: 'mon', species: 1, shiny: false });
+    expect(artRequest('/mon-pics/439s.png', ref)).toEqual({ t: 'mon', species: 439, shiny: true });
+    expect(artRequest('/trainer-pics/0.png', ref)).toEqual({ t: 'trainer', pic: 0 });
+    expect(artRequest('/trainer-pics/92.png', ref)).toEqual({ t: 'trainer', pic: 92 });
   });
 
-  it('has nothing for a path that is not the field\'s art, or names nothing', () => {
+  it('has nothing for a path that is not the ROM\'s art, or names nothing', () => {
     expect(artRequest('/ui/font-normal.png', ref)).toBeNull();
-    expect(artRequest('/mon-pics/1.png', ref)).toBeNull();
+    expect(artRequest('/mon-pics/0.png', ref)).toBeNull();
+    expect(artRequest('/mon-pics/440.png', ref)).toBeNull();
+    expect(artRequest('/trainer-pics/93.png', ref)).toBeNull();
     expect(artRequest('/field-maps/MAP_NOWHERE.png', ref)).toBeNull();
     expect(artRequest('/field-sprites/999.png', ref)).toBeNull();
     expect(artRequest('/field-sprites/0.cover.png', ref)).toBeNull();

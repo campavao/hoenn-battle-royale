@@ -1,9 +1,10 @@
 // The field's pictures, cut from the player's own ROM (HBR-66).
 //
 // The site ships no Nintendo pictures: the ground, the cover over people, the border past
-// a map's edge, every person's sprite sheet, the SURF blob, the fog and the encounter
-// patches' marks are drawn here from the ROM bytes the player brought, pixel for pixel
-// what tools/br/render-maps.py and export-sprites.py draw from pret's files. Only
+// a map's edge, every person's sprite sheet, the SURF blob, the fog, the encounter
+// patches' marks, and every POKéMON's and trainer's front picture (HBR-67) are drawn here
+// from the ROM bytes the player brought, pixel for pixel what tools/br/render-maps.py,
+// export-sprites.py, export-mon-pics.py and export-trainer-pics.py draw from pret's files. Only
 // addresses (br-symbols.json) and frame counts (sprites.json) come from the site.
 //
 //   gMapGroups[group][num] -> MapHeader.mapLayout -> MapLayout {w, h, border, map,
@@ -40,7 +41,9 @@ export type ArtRequest =
   | { t: 'sheet'; gfx: number; frames: number }
   | { t: 'surf' }
   | { t: 'fog' }
-  | { t: 'mark'; mark: Mark };
+  | { t: 'mark'; mark: Mark }
+  | { t: 'mon'; species: number; shiny: boolean }
+  | { t: 'trainer'; pic: number };
 
 export function lz77(rom: Uint8Array, at: number): Uint8Array {
   if (rom[at] !== 0x10) throw new Error(`not LZ77 at ${at.toString(16)}`);
@@ -73,7 +76,6 @@ interface Tileset { tiles: Uint8Array; palettes: number[][]; metatiles: number; 
 export class RomArt {
   private dv: DataView;
   private tilesets = new Map<number, Tileset>();
-  private maps = new Map<string, Record<MapLayer, Picture>>();
   private objPals: Map<number, number[]> | null = null;
 
   constructor(private rom: Uint8Array, private sym: (name: string) => number | undefined) {
@@ -82,11 +84,13 @@ export class RomArt {
 
   draw(r: ArtRequest): Picture {
     switch (r.t) {
-      case 'map': return this.map(r.group, r.num)[r.layer];
+      case 'map': return this.map(r.group, r.num, r.layer);
       case 'sheet': return this.sheet(r.gfx, r.frames);
-      case 'surf': return this.frames(this.need('gFieldEffectObjectPic_SurfBlob'), 32, 32, 3, this.objectPalettes().get(PAL_TAG_BRENDAN)!);
-      case 'fog': return this.frames(this.need('gWeatherFogHorizontalTiles'), 64, 64, 1, this.palette(this.need('gFogPalette')));
+      case 'surf': return this.frames(this.run(this.need('gFieldEffectObjectPic_SurfBlob'), 3, 32 * 32 / 2), 32, 32, this.objectPalettes().get(PAL_TAG_BRENDAN)!);
+      case 'fog': return this.frames(this.run(this.need('gWeatherFogHorizontalTiles'), 1, 0), 64, 64, this.palette(this.need('gFogPalette')));
       case 'mark': return this.mark(r.mark);
+      case 'mon': return this.pic('gMonStillFrontPicTable', r.shiny ? 'gMonShinyPaletteTable' : 'gMonPaletteTable', r.species);
+      case 'trainer': return this.pic('gTrainerFrontPicTable', 'gTrainerFrontPicPaletteTable', r.pic);
     }
   }
 
@@ -120,11 +124,9 @@ export class RomArt {
     return t;
   }
 
-  /** Ground, cover and border for map (group, num), as render-maps.py draws them. */
-  private map(group: number, num: number): Record<MapLayer, Picture> {
-    const key = `${group}:${num}`;
-    const have = this.maps.get(key);
-    if (have) return have;
+  /** The ground, cover or border of map (group, num), as render-maps.py draws it. Only
+   *  the tilesets are kept: a picture is the caller's, and the biggest map's is 6.5 MB. */
+  private map(group: number, num: number, layer: MapLayer): Picture {
     const header = this.u32(this.u32(this.need('gMapGroups') + group * 4) + num * 4);
     const layout = this.u32(header);
     const w = this.dv.getInt32(layout - ROM, true), h = this.dv.getInt32(layout + 4 - ROM, true);
@@ -166,26 +168,24 @@ export class RomArt {
     };
     const W = w * BLOCK;
     const BLACK = 0xff000000;
-    const art = {
-      ground: paint(W, h * BLOCK, BLACK, (px) => {
-        for (let i = 0; i < w * h; i++) block(px, W, (i % w) * BLOCK, Math.floor(i / w) * BLOCK, this.u16(blocks + i * 2), false);
-      }),
-      cover: paint(W, h * BLOCK, 0, (px) => {
-        for (let i = 0; i < w * h; i++) block(px, W, (i % w) * BLOCK, Math.floor(i / w) * BLOCK, this.u16(blocks + i * 2), true);
-      }),
-      border: paint(2 * BLOCK, 2 * BLOCK, BLACK, (px) => {
+    if (layer === 'border') {
+      return paint(2 * BLOCK, 2 * BLOCK, BLACK, (px) => {
         for (let i = 0; i < 4; i++) block(px, 2 * BLOCK, (i & 1) * BLOCK, (i >> 1) * BLOCK, this.u16(border + i * 2), false);
-      }),
-    };
-    this.maps.set(key, art);
-    return art;
+      });
+    }
+    const cover = layer === 'cover';
+    return paint(W, h * BLOCK, cover ? 0 : BLACK, (px) => {
+      for (let i = 0; i < w * h; i++) block(px, W, (i % w) * BLOCK, Math.floor(i / w) * BLOCK, this.u16(blocks + i * 2), cover);
+    });
   }
 
   private objectPalettes(): Map<number, number[]> {
     if (this.objPals) return this.objPals;
     const rom = this.rom;
     const pals = new Map<number, number[]>();
-    // The longest run of {ROM pointer, tag 0x11xx, 0} entries; the table has 35.
+    // The first run of 20 or more {ROM pointer, tag 0x11xx, 0} entries: the table has 35
+    // (OBJ_EVENT_PAL_TAG_*), and nothing else in the ROM looks like it. e2e/art.spec.ts
+    // holds every sheet drawn with it to the one that shipped.
     const entry = (at: number) => {
       const p = this.dv.getUint32(at, true), tag = this.dv.getUint16(at + 4, true);
       return p >= ROM && p < ROM + rom.length && (tag & 0xff00) === 0x1100 && tag !== PAL_TAG_NONE && this.dv.getUint16(at + 6, true) === 0;
@@ -201,17 +201,21 @@ export class RomArt {
     return pals;
   }
 
-  /** `count` frames of w x h 4bpp tiles, `data` onwards, left to right, colour 0 clear. */
-  private frames(data: number | number[], w: number, h: number, count: number, pal: number[]): Picture {
-    const W = w * count;
+  /** `count` frames one after another from ROM address `at`, `size` bytes apart. */
+  private run(at: number, count: number, size: number): { src: Uint8Array; at: number[] } {
+    return { src: this.rom, at: Array.from({ length: count }, (_, f) => at - ROM + f * size) };
+  }
+
+  /** A frame of w x h 4bpp tiles at each of `at` in `src`, left to right, colour 0 clear. */
+  private frames({ src, at }: { src: Uint8Array; at: number[] }, w: number, h: number, pal: number[]): Picture {
+    const W = w * at.length;
     const px = new Uint32Array(W * h);
     const tw = w / TILE;
-    for (let f = 0; f < count; f++) {
-      const at = (typeof data === 'number' ? data + f * w * h / 2 : data[f]) - ROM;
+    for (let f = 0; f < at.length; f++) {
       for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
           const tile = (y >> 3) * tw + (x >> 3);
-          const b = this.rom[at + tile * 32 + (y & 7) * 4 + ((x & 7) >> 1)];
+          const b = src[at[f] + tile * 32 + (y & 7) * 4 + ((x & 7) >> 1)];
           const c = (b >> ((x & 1) * 4)) & 0xf;
           if (c) px[y * W + f * w + x] = pal[c];
         }
@@ -225,9 +229,19 @@ export class RomArt {
     const info = this.u32(this.need('gObjectEventGraphicsInfoPointers') + gfx * 4);
     const pal = this.objectPalettes().get(this.u16(info + 2)) ?? new Array<number>(16).fill(0xffff00ff);
     const images = this.u32(info + 28);
-    const data: number[] = [];
-    for (let f = 0; f < count; f++) data.push(this.u32(images + f * 8));
-    return this.frames(data, this.s16(info + 8), this.s16(info + 10), count, pal);
+    const at: number[] = [];
+    for (let f = 0; f < count; f++) at.push(this.u32(images + f * 8) - ROM);
+    return this.frames({ src: this.rom, at }, this.s16(info + 8), this.s16(info + 10), pal);
+  }
+
+  /** A 64x64 front picture: entry `i` of a CompressedSpriteSheet table, its first frame (a
+   *  POKéMON's still), in entry `i` of a CompressedSpritePalette table. Both are LZ77. */
+  private pic(sheets: string, palettes: string, i: number): Picture {
+    const tiles = lz77(this.rom, this.u32(this.need(sheets) + i * 8) - ROM);
+    const colours = lz77(this.rom, this.u32(this.need(palettes) + i * 8) - ROM);
+    const pal: number[] = [];
+    for (let c = 0; c < 16; c++) pal.push(rgba(colours[c * 2] | (colours[c * 2 + 1] << 8)));
+    return this.frames({ src: tiles, at: [0] }, 64, 64, pal);
   }
 
   /** An encounter patch's mark, its first frame, in the palette br_patch.c's Draw gives it. */
@@ -236,9 +250,9 @@ export class RomArt {
     const art = this.need('gBrPatchArt');
     if (mark === 'shadow') {
       const black = this.palette(this.need('gFieldEffectObjectPalette0'))[SHADOW_COLOUR];
-      return this.frames(this.need('gFieldEffectObjectPic_ShadowMedium'), 16, 8, 1, new Array<number>(16).fill(black));
+      return this.frames(this.run(this.need('gFieldEffectObjectPic_ShadowMedium'), 1, 0), 16, 8, new Array<number>(16).fill(black));
     }
-    if (mark === 'water') return this.frames(this.u32(art + 4), 16, 16, 1, this.palette(this.u32(art + 8)));
-    return this.frames(this.u32(art), 16, 16, 1, this.palette(this.need('gFieldEffectObjectPalette1')));
+    if (mark === 'water') return this.frames(this.run(this.u32(art + 4), 1, 0), 16, 16, this.palette(this.u32(art + 8)));
+    return this.frames(this.run(this.u32(art), 1, 0), 16, 16, this.palette(this.need('gFieldEffectObjectPalette1')));
   }
 }

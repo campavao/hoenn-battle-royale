@@ -51,11 +51,12 @@ describe('no-rom', () => {
     dir = mkdtempSync(join(tmpdir(), 'no-rom-'));
     mkdirSync(join(dir, 'field-maps'));
     mkdirSync(join(dir, 'field-sprites'));
+    mkdirSync(join(dir, 'mon-pics'));
     mkdirSync(join(dir, 'ui'));
     writeFileSync(join(dir, 'field-maps', 'MAP_LITTLEROOT_TOWN.png'), 'png');
     writeFileSync(join(dir, 'ui', 'font.png'), 'png');
 
     const found = findRoms(dir).map((p: string) => p.slice(dir.length + 1).replace(/\\/g, '/')).sort();
-    expect(found).toEqual(['field-maps', 'field-sprites']);
+    expect(found).toEqual(['field-maps', 'field-sprites', 'mon-pics']);
   });
 });

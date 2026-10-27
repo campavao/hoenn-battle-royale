@@ -2,7 +2,10 @@
 """Export every POKeMON's front picture, normal and shiny, for the champion's team on the
 results (HBR-47, web/src/ui/results-team.ts).
 
-    python tools/br/export-mon-pics.py   -> web/public/mon-pics/<species>.png, <species>s.png
+    python tools/br/export-mon-pics.py   -> build/br-art/mon-pics/<species>.png, <species>s.png
+
+The reference for the page's own cut from the player's ROM (HBR-67, web/src/art/romart.ts,
+web/e2e/art.sha1.json): the site ships none of these.
 
 Cam's 10-20 play-test, #14: "show the champion's team like the hall of fame cards, and
 tap one for its summary." The species number is the ROM's own (SPECIES_*), the order of
@@ -18,7 +21,7 @@ import re
 from PIL import Image
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-OUT = os.path.join(ROOT, 'web', 'public', 'mon-pics')
+OUT = os.path.join(ROOT, 'build', 'br-art', 'mon-pics')
 
 
 def read(path):

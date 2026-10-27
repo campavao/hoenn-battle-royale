@@ -1,7 +1,8 @@
-// The field's pictures, cut from the ROM in the page (HBR-66), held to the ones the site
-// used to ship. Until v0.3.38 every map's ground, cover and border and every sprite sheet
-// was a PNG in web/public, drawn from pret's files by tools/br/render-maps.py and
-// export-sprites.py; art.sha1.json is the hash of each of those PNGs' pixels, at the
+// The game's pictures, cut from the ROM in the page (HBR-66, HBR-67), held to the ones the
+// site used to ship. Until v0.3.38 every map's ground, cover and border, every sprite
+// sheet and every POKéMON's and trainer's front picture was a PNG in web/public, drawn
+// from pret's files by tools/br/render-maps.py, export-sprites.py, export-mon-pics.py and
+// export-trainer-pics.py; art.sha1.json is the hash of each of those PNGs' pixels, at the
 // ROM's own 5-bit colour, taken before they were deleted. The page's cut of the same
 // path must hash the same.
 //
@@ -17,6 +18,7 @@ const __dirname = import.meta.dirname;
 const HASHES = path.join(__dirname, 'art.sha1.json');
 const WORLD = path.resolve(__dirname, '../src/data/world.json');
 const SHEETS = path.resolve(__dirname, '../src/data/sprites.json');
+const EGG = 412;
 
 test.beforeAll(() => {
   test.skip(!romExists(), `no ROM at ${romPath()} -- set HBR_ROM, then run tools/br/dev-patch.sh`);
@@ -29,12 +31,15 @@ function artPaths(): string[] {
   return [
     ...maps.flatMap((m) => ['', '.cover', '.border'].map((l) => `/field-maps/${m.id}${l}.png`)),
     ...[...sheets, 'fog', 'patch-tall-grass', 'patch-water', 'patch-shadow'].map((s) => `/field-sprites/${s}.png`),
+    // Every species' still, normal and shiny, to Unown's last letter; the EGG has no shiny.
+    ...Array.from({ length: 439 }, (_, i) => i + 1).flatMap((n) => (n === EGG ? [`/mon-pics/${n}.png`] : [`/mon-pics/${n}.png`, `/mon-pics/${n}s.png`])),
+    ...Array.from({ length: 93 }, (_, pic) => `/trainer-pics/${pic}.png`),
   ].sort();
 }
 
 type W = { __hbr: { art(path: string): Promise<string> } };
 
-test('every map and sprite the page cuts from the ROM is the picture the site used to ship', async ({ page }) => {
+test('every picture the page cuts from the ROM is the one the site used to ship', async ({ page }) => {
   test.setTimeout(180_000);
   await page.goto(`/#solo&nobots&testmon&safari=15&seed=5376&land=MAP_LITTLEROOT_TOWN,10,10&rom=${romHashParam()}`);
   await page.waitForSelector('body.in-match', { timeout: 60_000 });

@@ -14,9 +14,9 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const BANNED = /\.(gba|sav|ss[0-9])$/i;
-// The field's pictures are the ROM's own, cut from it in the player's browser (HBR-66,
-// web/src/art): a folder of them in a build is Nintendo's art, published.
-const BANNED_DIRS = new Set(['field-maps', 'field-sprites']);
+// The game's pictures are the ROM's own, cut from it in the player's browser (HBR-66,
+// HBR-67, web/src/art): a folder of them in a build is Nintendo's art, published.
+const BANNED_DIRS = new Set(['field-maps', 'field-sprites', 'mon-pics', 'trainer-pics']);
 
 // The cartridge header, which a rename does not touch: the first bytes of the Nintendo
 // logo at 0x04 (the BIOS refuses to boot without it) with the fixed 0x96 at 0xB2 that
