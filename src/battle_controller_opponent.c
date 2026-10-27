@@ -36,6 +36,7 @@
 #if BR
 #include "br/br_battle.h"
 #include "br/br_duel.h"
+#include "br/br_spectate.h"
 // A proxy duel puts BOTH battlers on this controller (POK-238), and the one standing in
 // the player's position owns gPlayerParty -- so every read and write below follows the
 // side rather than a fixed array. Outside a duel this answers gEnemyParty, so nothing
@@ -1554,7 +1555,13 @@ static void OpponentHandlePrintSelectionString(void)
 
 static void OpponentHandleChooseAction(void)
 {
+#if BR
+    BrSpectate_HoldRng(TRUE); // its replay reads this choice from the record, and rolls nothing for it
+#endif
     AI_TrySwitchOrUseItem();
+#if BR
+    BrSpectate_HoldRng(FALSE);
+#endif
     OpponentBufferExecCompleted();
 }
 
@@ -1565,6 +1572,9 @@ static void OpponentHandleYesNoBox(void)
 
 static void OpponentHandleChooseMove(void)
 {
+#if BR
+    BrSpectate_HoldRng(TRUE); // the AI's rolls, and a wild mon's pick, as OpponentHandleChooseAction
+#endif
     if (gBattleTypeFlags & BATTLE_TYPE_PALACE)
     {
         BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_EXEC_SCRIPT, ChooseMoveAndTargetInBattlePalace());
@@ -1628,6 +1638,9 @@ static void OpponentHandleChooseMove(void)
             OpponentBufferExecCompleted();
         }
     }
+#if BR
+    BrSpectate_HoldRng(FALSE);
+#endif
 }
 
 static void OpponentHandleChooseItem(void)
@@ -1643,6 +1656,9 @@ static void OpponentHandleChoosePokemon(void)
 {
     s32 chosenMonId;
 
+#if BR
+    BrSpectate_HoldRng(TRUE); // as OpponentHandleChooseAction
+#endif
     if (*(gBattleStruct->AI_monToSwitchIntoId + gActiveBattler) == PARTY_SIZE)
     {
         chosenMonId = GetMostSuitableMonToSwitchInto();
@@ -1691,6 +1707,9 @@ static void OpponentHandleChoosePokemon(void)
     }
 
 
+#if BR
+    BrSpectate_HoldRng(FALSE);
+#endif
     *(gBattleStruct->monToSwitchIntoId + gActiveBattler) = chosenMonId;
     BtlController_EmitChosenMonReturnValue(B_COMM_TO_ENGINE, chosenMonId, NULL);
     OpponentBufferExecCompleted();

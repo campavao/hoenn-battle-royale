@@ -152,6 +152,24 @@ static int parseKeys(const char* s, uint32_t* mask) {
 // of link-battle traffic and BrNetlink stalls on a full ring; this plays the page's
 // reader, taking every slot as it lands (outTail = outHead each frame).
 static uint32_t drainAddr = 0;
+// `drain gBrMailbox log` also prints every message it takes, whole, as
+// `outmsg <type> <len> <hex bytes>`: a fight one driver fought, for another driver to
+// replay (tools/br/replay-check.sh, HBR-63).
+static int drainLog = 0;
+static int outMsgByte(uint32_t box, uint16_t first, int off);
+
+static void logOut(uint32_t box, uint16_t tail, uint16_t head) {
+    for (; tail != head; ++tail) {
+        uint32_t slot = box + 0x18 + (uint32_t)(tail % 64) * 64;
+        uint8_t type = core->busRead8(core, slot);
+        int total, i;
+        if (type & 0x80) continue;
+        total = core->busRead8(core, slot + 2) | core->busRead8(core, slot + 3) << 8;
+        printf("outmsg %d %d", type, total);
+        for (i = 0; i < total; ++i) printf(" %02X", outMsgByte(box, tail, i) & 0xFF);
+        printf("\n");
+    }
+}
 
 // ---- the netlink stall guard ----------------------------------------------------
 // A page reads the mailbox every frame. A driver that stages a link battle without
@@ -242,7 +260,11 @@ static void runN(int n) {
     for (int i = 0; i < n; ++i) {
         core->runFrame(core);
         frameNo++;
-        if (drainAddr) core->busWrite16(core, drainAddr + 0xA, core->busRead16(core, drainAddr + 0x8));
+        if (drainAddr) {
+            uint16_t head = core->busRead16(core, drainAddr + 0x8);
+            if (drainLog) logOut(drainAddr, core->busRead16(core, drainAddr + 0xA), head);
+            core->busWrite16(core, drainAddr + 0xA, head);
+        }
         checkNetlinkStall();
         runWatches();
     }
@@ -316,7 +338,7 @@ static int runLine(char* line) {
 
     if (strcmp(a, "say") == 0) { printf("%s\n", p + 3 + (p[3] == ' ')); return 0; }
     if (strcmp(a, "wait") == 0 && n >= 2) { runN(atoi(b)); return 0; }
-    if (strcmp(a, "drain") == 0 && n >= 2) { if (!parseAddr(b, &drainAddr)) return 4; printf("draining the out ring at 0x%08X\n", drainAddr); return 0; }
+    if (strcmp(a, "drain") == 0 && n >= 2) { if (!parseAddr(b, &drainAddr)) return 4; drainLog = n >= 3 && strcmp(c, "log") == 0; printf("draining the out ring at 0x%08X\n", drainAddr); return 0; }
     if (strcmp(a, "shot") == 0 && n >= 2) { shot(b); return 0; }
     if (strcmp(a, "state") == 0 && n >= 2) { return loadState(b) ? 0 : 3; }
     if (strcmp(a, "title") == 0) {

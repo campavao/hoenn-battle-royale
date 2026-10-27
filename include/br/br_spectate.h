@@ -113,6 +113,10 @@ void BrSpectate_SendPartyOf(struct Pokemon *party, u8 seat);
 // its choices alone, so a published fight must draw nothing from the generator the
 // replay does not: no turn of it on the frame (VBlankCB_Battle), no fog on the clock.
 bool8 BrSpectate_Publishing(void);
+// The opponent's choice -- the AI's, or a wild POKeMON's pick -- reaches a replay as a
+// recorded action, which rolls nothing. TRUE holds the generator as it is, FALSE puts it
+// back, so a published fight's choice rolls nothing either (HBR-63).
+void BrSpectate_HoldRng(bool8 hold);
 
 // The peek box is up where the map-name popup goes: a sign due now waits for it to close
 // (Cam's 2026-10-14 play-test, POK-370: the ROUTE 118 sign drew into the box's corner,

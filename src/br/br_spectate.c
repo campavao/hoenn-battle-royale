@@ -24,6 +24,7 @@
 #include "field_weather.h"
 #include "constants/field_weather.h"
 #include "pokemon.h"
+#include "random.h"
 #include "recorded_battle.h"
 #include "constants/species.h"
 #include "constants/items.h"
@@ -252,6 +253,22 @@ bool8 BrSpectate_Publishing(void)
     return gMain.inBattle && gBrMySeat < BR_MAX_SEATS
         && !(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED | BATTLE_TYPE_SAFARI
                                  | BATTLE_TYPE_WALLY_TUTORIAL | BATTLE_TYPE_DOUBLE));
+}
+
+// The generator as the opponent's choice found it (BrSpectate_HoldRng). The AI rolls for
+// its scores, its ties and its switches, and a wild POKeMON rolls for its move; the
+// replay is handed the choice and rolls none of it, so every damage roll after the first
+// choice of a fight fought alone was another than the replay's (HBR-63).
+static u32 sChoiceRng;
+
+void BrSpectate_HoldRng(bool8 hold)
+{
+    if (!BrSpectate_Publishing())
+        return;
+    if (hold)
+        sChoiceRng = gRngValue;
+    else
+        gRngValue = sChoiceRng;
 }
 
 // A gender is 0 or 1; the player's carries the fight's fog above it.
