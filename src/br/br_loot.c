@@ -553,8 +553,8 @@ struct BrLootItem *BrLoot_At(s16 x, s16 y)
 
 // Where a dropped thing lands: our own cell first, then the ring of cells around it,
 // skipping a cell whose collision bit is set and one this spill has already used.
-// Only the collision bit, as the eyeline (br_engage.c): water and ledges are open
-// ground, so a trainer who goes out at sea still leaves their team behind, and the
+// Only the collision bit, as the eyeline (br_engage.c): water is open ground and a
+// ledge is not, so a trainer who goes out at sea still leaves their team behind, and the
 // page's match/loot.ts deals a bot's spill by the collision rule too (POK-330 #67). A
 // cell that already has a piece on it is skipped, here and in the page's spillCells
 // (POK-388): BrLoot_At answers with the first row on a cell, so a ball dropped on another

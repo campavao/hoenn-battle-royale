@@ -555,7 +555,7 @@ export class TouchLayer {
     const dx = at.x - own.x;
     const dy = at.y - own.y;
     if (dx === 0 && dy === 0) return;
-    const goal: Spot = { map: own.map, x: own.x + dx, y: own.y + dy };
+    let goal: Spot = { map: own.map, x: own.x + dx, y: own.y + dy };
     const adjacent = Math.abs(dx) + Math.abs(dy) === 1;
 
     if (adjacent) {
@@ -564,8 +564,13 @@ export class TouchLayer {
       const facingIt = own.dir === DIR_OF[toward];
       const triedIt = this.stalledToward !== null && this.stalledToward.x === goal.x && this.stalledToward.y === goal.y
         && this.stalledToward.map === goal.map;
-      // Something to talk to, or something a walk already bounced off: face it, press A.
-      if (!standable || (facingIt && triedIt)) {
+      // A ledge the way it faces is a hop, not a thing to talk to: the walk below takes
+      // it to where the hop lands (HBR-62).
+      const hop = standable ? null : world.step({ map: own.map, x: own.x, y: own.y }, toward);
+      if (hop) {
+        goal = hop;
+      } else if (!standable || (facingIt && triedIt)) {
+        // Something to talk to, or something a walk already bounced off: face it, press A.
         this.cancel();
         this.stalledToward = null;
         this.queue = facingIt
