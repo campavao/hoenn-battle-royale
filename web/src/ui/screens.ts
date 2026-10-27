@@ -304,11 +304,11 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
           widgets.push({ rect: cell, text: `${more} more`, cls: 'room-more', onPress: () => void page++, cursor: { x: cell.x + 2, y: cell.y + 10 } });
         } else if (who) {
           const alpha = who.spectating ? 0.5 : 1;
-          const name = who.alive ? who.name : 'OUT';
+          const name = who.alive || who.spectating ? who.name : 'OUT';
           paintPerson(c, cell, who.skin, name, alpha, who.isMe ? TEXT_BLUE : TEXT_DARK);
           widgets.push({
             rect: cell,
-            text: `${who.name}${who.isMe ? ' (you)' : ''}${who.alive ? '' : ' -- OUT'}${who.spectating ? ' (watching)' : ''}`,
+            text: `${who.name}${who.isMe ? ' (you)' : ''}${who.alive || who.spectating ? '' : ' -- OUT'}${who.spectating ? ' (watching)' : ''}`,
             cls: 'roster-name',
             parent: 'room-roster',
             onPress: () => m.onSeat(who.seat),
@@ -722,10 +722,10 @@ export function sheetScreen(model: () => SheetModel): DrawnScreen {
       c.drawFrame(lay.frame);
       shown.forEach((who, i) => {
         const cell = lay.cells[i];
-        paintPerson(c, cell, who.skin, who.alive ? who.name : 'OUT', who.alive && !who.spectating ? 1 : 0.5, who.isMe ? TEXT_BLUE : TEXT_DARK);
+        paintPerson(c, cell, who.skin, who.alive || who.spectating ? who.name : 'OUT', who.alive && !who.spectating ? 1 : 0.5, who.isMe ? TEXT_BLUE : TEXT_DARK);
         widgets.push({
           rect: cell,
-          text: `${who.name}${who.isMe ? ' (you)' : ''}${who.alive ? '' : ' -- OUT'}${who.spectating ? ' (watching)' : ''}`,
+          text: `${who.name}${who.isMe ? ' (you)' : ''}${who.alive || who.spectating ? '' : ' -- OUT'}${who.spectating ? ' (watching)' : ''}`,
           cls: 'roster-name',
           parent: 'match-roster',
           onPress: () => m.onSeat(who.seat),

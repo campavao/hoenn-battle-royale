@@ -94,8 +94,9 @@ interface Regions {
 }
 
 /** The exporter's cell classes. 0 is plain ground, 7 tall grass, 8 a door or warp
- *  tile -- all real tiles a trainer stands on. 3..6 are the four ledge directions,
- *  which can be stood on and only jumped one way. 1 and 2 are wall and water. */
+ *  tile -- all real tiles a trainer stands on. 3..6 are the four ledge directions:
+ *  jumped over the way they face and a wall every other way, never stood on. 1 and 2
+ *  are wall and water. */
 const CLASS_WALL = 1;
 const CLASS_WATER = 2;
 const CLASS_GRASS = 7;
@@ -156,7 +157,7 @@ const NO_WARP = -2;
 const DEAD_WARP = -1;
 
 function canStand(cls: number, surf: boolean, cut: Field): boolean {
-  if (cls === CLASS_WALL) return false;
+  if (cls === CLASS_WALL || (cls >= LEDGE_MIN && cls <= LEDGE_MAX)) return false;
   if (cls === CLASS_CUT) return (fieldBits(cut) & FIELD_CUT) !== 0;
   if (cls === CLASS_BOULDER) return (fieldBits(cut) & FIELD_STRENGTH) !== 0;
   return cls !== CLASS_WATER || surf;
@@ -554,8 +555,9 @@ export class World {
     return grid[y * m.w + x];
   }
 
-  /** Can a trainer stand here? A ledge tile is standable, it is only the crossing
-   *  that is one-way. Water is not, unless they are surfing -- and a bot that can
+  /** Can a trainer stand here? Not on a ledge: every one carries the collision bit, so
+   *  the ROM only ever jumps over it, the way it faces (`step`), and from any other side
+   *  it is a wall. Water is not, unless they are surfing -- and a bot that can
    *  surf is the only thing that gets off Route 125 or Southern Island, where the
    *  drop is perfectly happy to put one. */
   standable(id: string, x: number, y: number, surf = false, cut: Field = false): boolean {
@@ -565,8 +567,9 @@ export class World {
   /** Is anything in the way here, by the ROM's own test? `MapGridGetCollisionAt(x, y)
    *  != 0` is the whole of it -- the collision bits and nothing else -- and it is what
    *  both the eyeline (`Sees`, br_engage.c) and a spill's scatter (`CellFree`,
-   *  br_loot.c) stop on. So water, a ledge, tall grass, a door and a cuttable tree (an
-   *  object, not a metatile) are all clear; a wall and the void off the map are not.
+   *  br_loot.c) stop on. So water, tall grass, a door and a cuttable tree (an object,
+   *  not a metatile) are all clear; a wall, a ledge (every one has the collision bit)
+   *  and the void off the map are not.
    *  Not `standable`, which is a question about feet: the page asked that one instead
    *  and a bot could not see across a pond a player's ROM could see it across, and a
    *  bot beaten at sea dropped nothing (POK-330 #67).
@@ -575,7 +578,8 @@ export class World {
    *  exporter folds into the wall class (export-world.py): blocked here, clear to the
    *  ROM. */
   clear(id: string, x: number, y: number): boolean {
-    return this.cell(id, x, y) !== CLASS_WALL;
+    const cls = this.cell(id, x, y);
+    return cls !== CLASS_WALL && (cls < LEDGE_MIN || cls > LEDGE_MAX);
   }
 
   /** Where one step in `dir` from `spot` lands -- the next cell, the map across a

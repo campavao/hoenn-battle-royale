@@ -1,5 +1,6 @@
-// What you did in a match that only your own ROM saw (POK-416): gBrTally, which the page
-// zeroes as a match starts and reads once it is decided -- the way it reads gBrJank.
+// What you did in a match that only your own ROM saw (POK-416): gBrTally, which the ROM
+// zeroes as a match starts (START) and the page reads once it is decided -- the way it
+// reads gBrJank.
 //
 // Cam: "record and show stats like how many battles won, favorite pokemon, favorite move,
 // distance traveled, pokemon caught, items used, etc and save that for global profile and
@@ -47,11 +48,6 @@ export function readTally(read: Read, base: number): MatchTally {
     mons: counts(read, base, SPECIES, SPECIES_N, MONS),
     moves: counts(read, base, MOVE_IDS, MOVES_N, MOVES),
   };
-}
-
-/** A new match counts from nothing. */
-export function zeroTally(write: (addr: number, value: number, bits: 8 | 16 | 32) => void, base: number): void {
-  for (let i = 0; i < TALLY_BYTES; i += 4) write(base + i, 0, 32);
 }
 
 /** The id with the highest count, or undefined for none. A tie goes to the lower id, so

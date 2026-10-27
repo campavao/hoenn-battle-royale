@@ -138,7 +138,8 @@ describe('the host deals its bots (POK-330 #42)', () => {
     expect(hb.tallyFor(seat)).toEqual({ t: 'tally', seat, steps: 0, won: 0, caught: 0, items: 0, mon: hb.bots.partyOf(seat)[0].species });
     hb.drop();
     for (let t = 1; t <= 60; t++) hb.tick(t * STEP_MS);
-    const steps = hb.seats.map((s) => (hb.tallyFor(s) as { steps: number }).steps);
+    // A bot beaten in a duel on the way has no tally left, so it walked nothing here.
+    const steps = hb.seats.map((s) => (hb.tallyFor(s) as { steps: number } | null)?.steps ?? 0);
     expect(steps.some((n) => n > 0), 'somebody walked').toBe(true);
   });
 

@@ -1,6 +1,6 @@
 # sight-water: water does not block the eyeline; a wall does (POK-330 #67).
-# Sees() stops only on a cell whose collision bit is set. Emerald's water and ledges
-# have none -- it is their behaviour that keeps a walker out -- so a trainer on the
+# Sees() stops only on a cell whose collision bit is set. Emerald's water has
+# none -- it is its behaviour that keeps a walker out -- so a trainer on the
 # shore sees straight across a pond, and one on a boat is seen from the shore. The
 # page's bots/sight.ts follows the same collision-only rule; this pins the ROM's half.
 #
