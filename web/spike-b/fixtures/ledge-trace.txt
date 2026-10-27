@@ -1,0 +1,21 @@
+# capture-only: spike B ledge/bump timing trace, compared by web/spike-b/timing.test.ts
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 10 09 00 0B 00 BD BB C7 FF
+wait 400
+say ready
+watch 0x030046c0 4
+watch 0x02006860 8
+watch 0x02006620 36
+say run-over-ledge
+hold down 50
+wait 30
+say bump-up-then-left
+hold up 40
+hold left 20
+wait 30
+say walk-right-then-down
+hold b+right 20
+hold b+down 60
+wait 30
+unwatch
+say done

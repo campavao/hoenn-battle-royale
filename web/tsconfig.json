@@ -10,5 +10,5 @@
     "resolveJsonModule": true,
     "types": ["emscripten", "vite/client"]
   },
-  "include": ["src", "spike"]
+  "include": ["src", "spike", "spike-b"]
 }

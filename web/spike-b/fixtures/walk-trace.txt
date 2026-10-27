@@ -1,0 +1,32 @@
+# capture-only: spike B walk-timing trace, compared by web/spike-b/timing.test.ts
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+say ready
+watch 0x030046c0 4
+watch 0x02006860 8
+watch 0x02006620 36
+say run-down
+hold down 40
+wait 30
+say walk-right
+hold b+right 40
+wait 30
+say tap-left
+hold left 2
+wait 30
+say hold-up-from-still
+hold up 40
+wait 30
+say tap-up-same
+hold up 2
+wait 30
+say turn-mid-run
+hold down 20
+hold left 30
+wait 30
+say bump-wall
+hold up 60
+wait 20
+unwatch
+say done

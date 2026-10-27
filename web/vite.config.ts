@@ -109,6 +109,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, "index.html"),
         spike: resolve(__dirname, "spike/index.html"),
+        spikeB: resolve(__dirname, "spike-b/index.html"),
       },
     },
     outDir: "dist", // Forces Vite to output to the "dist" folder
