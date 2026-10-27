@@ -34,7 +34,7 @@ import { LEFT_MATCH_NOTE, noteInMatch, noteOutOfMatch, reloadedMidMatch } from '
 import { Journal } from './match/journal';
 import type { ResumeRecord } from './match/resume';
 import { Curtain } from './match/curtain';
-import { FEEDBACK_ROW, HOWTO_ROW, emptyNote, isRoomCode, playRows, profileRows, rewatchRow, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
+import { DEBUG_ROW, FEEDBACK_ROW, HOWTO_ROW, emptyNote, isRoomCode, playRows, profileRows, rewatchRow, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
 import type { FeedbackState } from './ui/feedback';
 import { chunkScreen as chunkScreenOf } from './ui/chunk-screen';
 import { howToRead, markHowToDue, markHowToRead, takeHowToDue } from './ui/howto-due';
@@ -403,6 +403,27 @@ function setSeeThrough(on: boolean): void {
   try {
     if (on) localStorage.removeItem(SEE_THROUGH_KEY);
     else localStorage.setItem(SEE_THROUGH_KEY, '0');
+  } catch {
+    // A browser that keeps nothing keeps the default.
+  }
+}
+
+/** Whether the main menu has its DEBUG tile: the trainer card's DEBUG MENU, off unless
+ *  this browser turned it on. */
+const DEBUG_MENU_KEY = 'hbr-debug-menu';
+
+function debugMenuOn(): boolean {
+  try {
+    return localStorage.getItem(DEBUG_MENU_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function setDebugMenu(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(DEBUG_MENU_KEY, '1');
+    else localStorage.removeItem(DEBUG_MENU_KEY);
   } catch {
     // A browser that keeps nothing keeps the default.
   }
@@ -4115,6 +4136,13 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
         case 'mystats':
           stage.push(myStats);
           return;
+        case 'debugmenu':
+          setDebugMenu(!debugMenuOn());
+          redraw();
+          return;
+        case 'debug':
+          stage.push(debug);
+          return;
         case 'career':
           // Kanto's career is a file somebody can carry between machines; ours lives
           // in a localStorage nobody can copy, so this is the door (POK-243). Save
@@ -4220,6 +4248,7 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
         ...playRows(shownLink(), rooms.find((r) => r.daily)),
         HOWTO_ROW,
         FEEDBACK_ROW,
+        ...(debugMenuOn() ? [DEBUG_ROW] : []),
       ].map(row).map((r) => (r.id === HOWTO_ROW.id && !howToRead(localStorage) ? { ...r, badge: true } : r)),
       rowsId: 'lobby-rows',
       tiles: true,
@@ -4251,6 +4280,7 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
           skin: SKINS[careerSkin()],
           statsOn: !loadStats().off,
           seeThrough: seeThrough(),
+          debugMenu: debugMenuOn(),
         })
           .filter((r) => r.action.kind !== 'name' && r.action.kind !== 'skin')
           .map(row),
@@ -4294,6 +4324,24 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
       ],
       onBack: () => stage.pop(),
     }));
+    /** DEBUG (Cam, 2026-10-27: "a main menu option rather than manually editing the
+     *  url"): each row steps one hash flag, so the URL says what was picked and a link
+     *  with it still works. */
+    const debug = profileScreen((ui) => ui.debugScreen(() => ({
+      hash: location.hash,
+      dev: import.meta.env.DEV,
+      onSet: (hash, reload) => {
+        history.replaceState(null, '', `#${hash}`);
+        if (reload) location.reload();
+        else redraw();
+      },
+      onFresh: () => {
+        history.replaceState(null, '', '#fresh');
+        location.reload();
+      },
+      onSpikeB: () => location.assign(`${import.meta.env.BASE_URL}spike-b/`),
+      onBack: () => stage.pop(),
+    })));
     const lobbies = menuScreen(() => ({
       title: 'LOBBIES',
       rows: roomRows(rooms).map(row),

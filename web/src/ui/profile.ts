@@ -1,6 +1,7 @@
 // The trainer's own screens (POK-335, POK-337, POK-416): the TRAINER CARD, MY LOOK and MY
-// STATS. A chunk of their own, fetched soon after boot (app.ts's lazyScreen), the way the
+// STATS, and the DEBUG switches the card's DEBUG MENU puts on the main menu. A chunk of their own, fetched soon after boot (app.ts's lazyScreen), the way the
 // results are (POK-407): main.js has a budget, and these are only ever a press away.
+import { DEBUG_FLAGS, cycleFlag, flagDetail, flagValue } from '../debug';
 import { CARD_BADGES, SKINS, SKIN_UNLOCK_WINS, WARDROBE, cardBadges, cardStars, ordinal, skinUnlocked, type CareerTotals } from '../match/career';
 import { favourite, type TallyNames } from '../match/tally';
 import type { RecordLine } from '../match/record';
@@ -338,6 +339,45 @@ export function statsScreen(model: () => StatsModel): DrawnScreen {
       rowsId: 'my-stats',
       note: '',
       buttons: [{ label: 'BACK', id: 'my-stats-back', onPress: m.onBack }],
+      onBack: m.onBack,
+    };
+  });
+}
+
+// ---- DEBUG ----------------------------------------------------------------------------------
+
+export interface DebugModel {
+  /** location.hash, which the rows read and step. */
+  hash: string;
+  /** A dev server's page, which reads every flag; a build greys what it would not read. */
+  dev: boolean;
+  /** The hash with one flag stepped (no `#`), and whether it only applies after a reload. */
+  onSet: (hash: string, reload: boolean) => void;
+  onFresh: () => void;
+  onSpikeB: () => void;
+  onBack: () => void;
+}
+
+export function debugScreen(model: () => DebugModel): DrawnScreen {
+  return menuScreen(() => {
+    const m = model();
+    return {
+      title: 'DEBUG',
+      rows: [
+        ...DEBUG_FLAGS.map((flag): RowSpec => ({
+          label: flag.label,
+          detail: flagDetail(flag, flagValue(m.hash, flag)),
+          id: `debug-${flag.key}`,
+          disabled: flag.dev && !m.dev,
+          onPress: () => m.onSet(cycleFlag(m.hash, flag), flag.reload === true),
+        })),
+        { label: 'CLEAR CACHE', detail: 'and reload', id: 'debug-fresh', onPress: m.onFresh },
+        { label: 'SPIKE B', detail: 'TS overworld', id: 'debug-spike-b', onPress: m.onSpikeB },
+      ],
+      rowsId: 'debug-rows',
+      note: m.dev ? 'Each applies to the next match.' : 'Grey rows need a dev server.',
+      noteId: 'debug-note',
+      buttons: [{ label: 'BACK', id: 'debug-back', onPress: m.onBack }],
       onBack: m.onBack,
     };
   });
