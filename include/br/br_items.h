@@ -26,6 +26,10 @@ u8 BrItems_Pickup(u16 *item, u16 *count, u8 *text);
 // say NO ROOM is one you can walk over (BrLoot_Solid).
 bool8 BrItems_Fits(u16 item);
 
+// An item a Pokemon can hold for an effect, picked up mid-match: one the ground asks to
+// give straight away (BrMoves_HoldSoon). A TM has none: it is taught instead.
+bool8 BrItems_Holds(u16 item);
+
 // AddBagItem's own check, for whatever else arrives (a held item TAKEn, a spilled bag's
 // GIVE, a prize): TRUE when the item was used or sold, the ticker saying so, and nothing
 // goes in the bag; *item may change.

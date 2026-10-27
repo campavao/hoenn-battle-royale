@@ -26,6 +26,7 @@
 #include "constants/rgb.h"
 #if BR
 #include "br/br_main.h"
+#include "br/br_spectate.h"
 #endif
 
 static void VBlankIntr(void);
@@ -374,6 +375,9 @@ static void VBlankIntr(void)
     m4aSoundMain();
     TryReceiveLinkBattleData();
 
+#if BR
+    if (!(gMain.inBattle && BrSpectate_Publishing())) // as VBlankCB_Battle: its replay turns nothing on the frame
+#endif
     if (!gMain.inBattle || !(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_FRONTIER | BATTLE_TYPE_RECORDED)))
         Random();
 

@@ -1,0 +1,34 @@
+# drop-swap-taken: a ball somebody else takes while our drop's screen is up is theirs.
+# We moved its mon into the party anyway: as the screen closes it leaves the party
+# again, and nothing is claimed or released for it (drop-swap for the rest).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x1018 0B 29 26 00 00 01 00 09 03 01 00 0C 00 10 00 1B 01 05 02 00 0D 00 0F 00 18 01 05 03 00 0D 00 10 00 20 01 05 01 04 00 0B 00 0F 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+tap A
+wait 120
+expectne u32 gMain+4 CB2_Overworld+1
+# seat 1 takes the MUDKIP (key 1) while we look at it
+pokebytes gBrMailbox+0x1058 0A 0B 08 00 00 01 01 00 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 20
+# over to us all the same: picked, then START
+tap A
+wait 10
+tap START
+wait 30
+expect u8 gPlayerPartyCount 2
+tap B
+wait 150
+expect u32 gMain+4 CB2_Overworld+1
+shot field
+# just the TREECKO in the party, nothing taken or released by us, the other two and the
+# bag still down
+expect u8 gPlayerPartyCount 1
+expect u8 gBrLoot+0xA0 3
+expect u8 gBrLoot+0xA2 0
+expect u8 gBrLoot+0xA4 0
+say drop swap taken ok

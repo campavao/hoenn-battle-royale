@@ -178,6 +178,8 @@ describe('catching a seat up on the match', () => {
     expect(spills.flatMap((s) => s.mons.map((m) => m.key))).toEqual([eventKey(0, 0), eventKey(0, 1)]);
     expect(out.filter((m) => m.t === 'pickup')).toEqual([{ t: 'pickup', seat: 1, key: eventKey(1, 0) }]);
     expect(catchUp(1, { clockLeft: 90, placements: [] }, [], [], loot)).toEqual([]);
+    const held = catchUp(1, { clockLeft: 90, placements: [] }, [], events, loot, [], (key) => (key === eventKey(1, 0) ? 3 : undefined));
+    expect(held.filter((m) => m.t === 'pickup'), 'the one who took it, not the host').toEqual([{ t: 'pickup', seat: 3, key: eventKey(1, 0) }]);
   });
 
   // HBR-34: a house's or a floor's trader holds what he was last given only in each ROM,

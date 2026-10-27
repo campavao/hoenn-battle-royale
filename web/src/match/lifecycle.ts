@@ -273,6 +273,9 @@ export function catchUp(
   events: readonly EventMsg[] = [],
   loot?: { matching(want: (key: number) => boolean): SpillMsg[]; has(key: number): boolean },
   homes: readonly PickupMsg[] = [],
+  /** Who took an event's piece, when the host knows (legends.ts): the late joiner's chip
+   *  names them, where the host's own seat named the host as holding the legendary. */
+  takenBy: (key: number) => number | undefined = () => undefined,
 ): Msg[] {
   const out: Msg[] = [];
   if (state.ring) {
@@ -285,7 +288,7 @@ export function catchUp(
   out.push(...events);
   if (loot && events.length > 0) {
     out.push(...loot.matching(isEventKey));
-    for (const e of events) if (!loot.has(e.key)) out.push({ t: 'pickup', seat: hostSeat, key: e.key });
+    for (const e of events) if (!loot.has(e.key)) out.push({ t: 'pickup', seat: takenBy(e.key) ?? hostSeat, key: e.key });
   }
   out.push(...homes);
   return out;

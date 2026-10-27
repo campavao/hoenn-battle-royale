@@ -43,6 +43,9 @@ expect u8 gBrDuel+1 1
 # on both builds; re-find it the same way if this line goes red after a change that should
 # not touch a duel.
 poke u32 gRngValue 5
+# ...and the frame count: both sides' choices roll on Random2's generator stirred with it
+# (HBR-63), not on the battle's. 0 to 7 all hand B the fight in five turns.
+poke u32 gMain+0x20 0
 shot duel-intro
 # ...and it is being published under the two bots' seats (POK-300): the bstart went out
 # once the seed and both parties were up, with the battle id 1 | 2 << 8

@@ -21,6 +21,8 @@
 #include "constants/items.h"
 #include "br/br_hm.h"
 #include "br/br_match.h"
+#include "main.h"
+#include "overworld.h"
 
 extern const u8 BR_EventScript_Surf[];
 extern const u8 BR_EventScript_Waterfall[];
@@ -79,6 +81,120 @@ u8 BrHm_Slot(u16 move)
 static bool8 Can(u16 move)
 {
     return BrHm_Slot(move) < PARTY_SIZE;
+}
+
+EWRAM_DATA struct BrHmView gBrHmView = {0};
+// `can` is read off the party one mon at a time, a mon every BR_HM_VIEW_FRAMES field
+// frames: a GetMonData decrypts the whole mon, and six at once in one frame cost the
+// agbcc build a frame (hud-vram-pc). IWRAM: EWRAM is full.
+static u8 sSlotCan[PARTY_SIZE];
+static u8 sSlot;
+static u8 sViewFrames;
+
+#define BR_HM_VIEW_FRAMES 2
+#define BR_HM_SHOWN (BR_HM_CUT | BR_HM_FLY | BR_HM_SURF | BR_HM_STRENGTH | BR_HM_WATERFALL | BR_HM_DIVE)
+
+// BrHm_Slot's rule for one mon and every shown HM: the mon read once, its four moves
+// included (MonKnowsMove would read the four again per HM).
+static u8 SlotCan(u8 slot)
+{
+    u8 hm, i, can = 0;
+    u16 moves[MAX_MON_MOVES];
+    u16 species = GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL);
+
+    if (species == SPECIES_NONE || GetMonData(&gPlayerParty[slot], MON_DATA_IS_EGG, NULL))
+        return 0;
+    for (i = 0; i < MAX_MON_MOVES; i++)
+        moves[i] = GetMonData(&gPlayerParty[slot], MON_DATA_MOVE1 + i, NULL);
+    for (hm = 0; hm < ARRAY_COUNT(sHmMoves); hm++)
+    {
+        if (!((BR_HM_SHOWN >> hm) & 1))
+            continue;
+        for (i = 0; i < MAX_MON_MOVES && moves[i] != sHmMoves[hm]; i++)
+            ;
+        if (i < MAX_MON_MOVES || CouldLearn(species, hm))
+            can |= 1 << hm;
+    }
+    return can;
+}
+
+// The cell we face, for the field moves that start by walking into it (BrHm_WalkInto, the
+// trees and boulders) or by A on the water: what would happen, without doing it.
+static u8 Ready(u8 can)
+{
+    struct ObjectEvent *player = &gObjectEvents[gPlayerAvatar.objectEventId];
+    s16 x = player->currentCoords.x;
+    s16 y = player->currentCoords.y;
+    u8 ready = can & BR_HM_FLY; // the MAP flies from anywhere in the match (br_map.c)
+    u8 id;
+
+    // Coming back up is free (BrHm_DiveScript), so nothing to show for it down there.
+    if (gPlayerAvatar.flags & PLAYER_AVATAR_FLAG_UNDERWATER)
+        return ready;
+    if (gPlayerAvatar.flags & PLAYER_AVATAR_FLAG_SURFING)
+    {
+        // TrySetDiveWarp's test without its warp: a dive spot over a map below. (A dive
+        // that only a map script places is missed; none is on a match's route.)
+        if (MetatileBehavior_IsDiveable(MapGridGetMetatileBehaviorAt(x, y)) && GetMapConnection(CONNECTION_DIVE) != NULL)
+            ready |= can & BR_HM_DIVE;
+        MoveCoords(player->facingDirection, &x, &y);
+        if (player->facingDirection == DIR_NORTH && MetatileBehavior_IsWaterfall(MapGridGetMetatileBehaviorAt(x, y))
+         && GetCollisionAtCoords(player, x, y, DIR_NORTH) == COLLISION_NONE)
+            ready |= can & BR_HM_WATERFALL;
+        return ready;
+    }
+    if (IsPlayerFacingSurfableFishableWater())
+        ready |= can & BR_HM_SURF;
+    MoveCoords(player->facingDirection, &x, &y);
+    id = GetObjectEventIdByXY(x, y);
+    if (id != OBJECT_EVENTS_COUNT)
+    {
+        if (gObjectEvents[id].graphicsId == OBJ_EVENT_GFX_CUTTABLE_TREE)
+            ready |= can & BR_HM_CUT;
+        else if (gObjectEvents[id].graphicsId == OBJ_EVENT_GFX_PUSHABLE_BOULDER)
+        {
+            // TryPushBoulder's test: the cell past the boulder is free and not a door.
+            MoveCoords(player->facingDirection, &x, &y);
+            if (GetCollisionAtCoords(&gObjectEvents[id], x, y, player->facingDirection) == COLLISION_NONE
+             && !MetatileBehavior_IsNonAnimDoor(MapGridGetMetatileBehaviorAt(x, y)))
+                ready |= can & BR_HM_STRENGTH;
+        }
+    }
+    return ready;
+}
+
+void BrHm_Tick(void)
+{
+    if (gBrMatch.phase != BR_PHASE_PLAY)
+    {
+        gBrHmView.can = gBrHmView.ready = 0;
+        for (sSlot = 0; sSlot < PARTY_SIZE; sSlot++)
+            sSlotCan[sSlot] = 0;
+        sSlot = 0;
+        sViewFrames = 0;
+        return;
+    }
+    // Off the field (a door's map load, a menu, a battle) the party stands: `can` stays,
+    // so the icons do not blink out on every warp. The page hides them off the field.
+    if (gMain.callback2 != CB2_Overworld || gMain.inBattle || ScriptContext_IsEnabled())
+    {
+        gBrHmView.ready = 0;
+        return;
+    }
+    if (sViewFrames == 0)
+    {
+        u8 slot, can = 0;
+
+        sSlotCan[sSlot] = SlotCan(sSlot);
+        if (++sSlot == PARTY_SIZE)
+            sSlot = 0;
+        for (slot = 0; slot < PARTY_SIZE; slot++)
+            can |= sSlotCan[slot];
+        gBrHmView.can = can;
+        sViewFrames = BR_HM_VIEW_FRAMES;
+    }
+    sViewFrames--;
+    gBrHmView.ready = Ready(gBrHmView.can);
 }
 
 void BrHm_PartyMove(u16 move)

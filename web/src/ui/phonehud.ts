@@ -9,12 +9,14 @@
 // registers a key item and presses SELECT -- UseRegisteredKeyItemOnField decides
 // whether it works. What the windows say is read off the ROM every frame: the map's
 // section (its sign and name), gBrHud's clock, count and eyes, gBrRing's place, the
-// avatar's flags and the cell it faces. The ROM's own corner box says the same three
-// things, so while this is up the page sets gBrHud.noCorner and the corner comes off.
+// avatar's flags and the cell it faces, and gBrHmView's field moves. The ROM's own corner
+// box says the same three things, so while this is up the page sets gBrHud.noCorner and
+// the corner comes off.
 import uiData from '../data/ui.json';
 import regionData from '../data/regionmap.json';
 import type { WorldMap } from '../bots/world';
 import { decodeGen3 } from '../text/gen3';
+import { FIELD_ICONS, ICON_COLORS, ICON_SIZE } from './fieldicons';
 import { HUD } from '../net/hud';
 import { MAP_OFFSET } from '../net/cells';
 import { MAIN_CALLBACK2 } from '../field';
@@ -56,6 +58,10 @@ export const RING_PLACE_MAX = 16;
 export const LEVELS_ROD = 4;
 /** `gBrHud`'s fields the ROM keeps (include/br/br_hud.h). */
 export const HUD_FOG_FRAMES = 5;
+/** `struct BrHmView` (include/br/br_hm.h): the field moves somebody in the party could
+ *  use, and the ones that would work on what we face. Bit n is HM n+1's move. */
+export const HM_CAN = 0;
+export const HM_READY = 1;
 /** include/constants/items.h. */
 export const ITEM_MACH_BIKE = 259;
 export const ITEM_ACRO_BIKE = 272;
@@ -84,6 +90,36 @@ export function bagHolds(emu: HudRead, sym: (name: string) => number | undefined
     if (items.includes(id)) out.add(id);
   }
   return out;
+}
+
+/** The moves the symbols show, in the HMs' order; FLASH (HM05) and ROCK SMASH (HM06) the
+ *  ROM never sets (br_hm.h). Each one's symbol is FIELD_ICONS[name]. */
+const FIELD_MOVES: readonly { hm: number; name: string }[] = [
+  { hm: 0, name: 'CUT' },
+  { hm: 1, name: 'FLY' },
+  { hm: 2, name: 'SURF' },
+  { hm: 3, name: 'STRENGTH' },
+  { hm: 6, name: 'WATERFALL' },
+  { hm: 7, name: 'DIVE' },
+];
+
+export interface FieldMove {
+  name: string;
+  /** Its bit in gBrHmView: HM hm+1's move. */
+  hm: number;
+  /** It would work on what we face (or, for FLY, from MAP) right now. */
+  ready: boolean;
+}
+
+/** The field-move icons for gBrHmView's two masks (HBR-78). */
+export function fieldMoves(can: number, ready: number): FieldMove[] {
+  return FIELD_MOVES.filter((m) => (can >> m.hm) & 1).map((m) => ({ ...m, ready: ((ready >> m.hm) & 1) === 1 }));
+}
+
+/** gBrHmView's field moves; none with an older patch, which has no gBrHmView. */
+export function readFieldMoves(emu: HudRead, sym: (name: string) => number | undefined): FieldMove[] {
+  const hm = sym('gBrHmView');
+  return hm === undefined ? [] : fieldMoves(emu.read(hm + HM_CAN, 8), emu.read(hm + HM_READY, 8));
 }
 
 /** The world's water class (tools/br/export-world.py, bots/world.ts). */
@@ -117,6 +153,8 @@ export interface HudView {
   ctx: Ctx;
   /** gPlayerPartyCount: the start menu has no POKeMON row before the first catch. */
   party: number;
+  /** Field moves the party could use; none off the match proper or with an older patch. */
+  moves: FieldMove[];
 }
 
 /** The context button for a trainer with `flags`, facing a cell of class `facing`, on a
@@ -230,6 +268,7 @@ export function readHudView(emu: HudRead, sym: (name: string) => number | undefi
     safe,
     ctx: contextFor(flags, facing, !!map?.outdoor, rod, bikeIn(emu, sym)),
     party: partyCount === undefined ? 0 : emu.read(partyCount, 8),
+    moves: readFieldMoves(emu, sym),
   };
 }
 
@@ -242,6 +281,9 @@ export const SIGN_H = 40;
 export const DOCK_W = 96;
 export const DOCK_H = 40;
 const LINE = 14;
+/** The field moves' column: a chip a move, its symbol inside, one under the other. */
+export const MOVE_CHIP = ICON_SIZE + 6;
+export const MOVE_GAP = 2;
 
 export interface Line {
   left?: { text: string; color: TextColor };
@@ -273,6 +315,33 @@ export function fogLines(v: HudView): Line[] {
 /** The fog window's height for `n` lines, in whole tiles. */
 export function fogHeight(n: number): number {
   return Math.ceil((16 + n * LINE) / 8) * 8;
+}
+
+/** The field moves' column's height for `n` moves. */
+export function movesHeight(n: number): number {
+  return Math.max(1, n * MOVE_CHIP + (n - 1) * MOVE_GAP);
+}
+
+/** One chip: rounded by a pixel at each corner, light behind a move that works on what we
+ *  face, dark and see-through behind one that does not, whose symbol is faded too. */
+export const MOVE_READY_RING = '#3870e0';
+
+function drawChip(c: EmeraldCanvas, name: string, ready: boolean, y: number): void {
+  const n = MOVE_CHIP;
+  // Ready: a white chip in a blue ring (HBR-78: the one that works is blue). Else dark.
+  const fill = ready ? MOVE_READY_RING : '#202838';
+  const alpha = ready ? 1 : 0.65;
+  c.fillRect({ x: 1, y, w: n - 2, h: n }, fill, alpha);
+  c.fillRect({ x: 0, y: y + 1, w: 1, h: n - 2 }, fill, alpha);
+  c.fillRect({ x: n - 1, y: y + 1, w: 1, h: n - 2 }, fill, alpha);
+  if (ready) c.fillRect({ x: 2, y: y + 2, w: n - 4, h: n - 4 }, '#f8f8f8', 1);
+  const rows = FIELD_ICONS[name] ?? [];
+  rows.forEach((row, py) => {
+    for (let px = 0; px < row.length; px++) {
+      const color = ICON_COLORS[row[px]];
+      if (color) c.fillRect({ x: 3 + px, y: y + 3 + py, w: 1, h: 1 }, color, ready ? 1 : 0.7);
+    }
+  });
 }
 
 // ---- drawing ---------------------------------------------------------------------------
@@ -379,6 +448,35 @@ export class OffField {
   }
 }
 
+/** The field moves the party could use (HBR-78), a column of symbols with no words: the
+ *  ones that work on what we face lit, the rest faded. Gone with none. A phone's is at
+ *  the field's right edge under the fog window, a desktop's at its top right (index.html). */
+export class MovesWindow {
+  private moves: FieldMove[] = [];
+  private scale = 1;
+  private readonly win: Win;
+
+  constructor(readonly el: HTMLElement) {
+    this.win = new Win(el, MOVE_CHIP, movesHeight(1), (c) => {
+      this.moves.forEach((m, i) => drawChip(c, m.name, m.ready, i * (MOVE_CHIP + MOVE_GAP)));
+    });
+  }
+
+  setScale(scale: number): void {
+    if (!(scale > 0) || scale === this.scale) return;
+    this.scale = scale;
+    this.win.size(MOVE_CHIP, this.win.c.height, scale);
+  }
+
+  update(moves: FieldMove[]): void {
+    this.moves = moves;
+    const h = movesHeight(moves.length);
+    if (moves.length && this.win.c.height !== h) this.win.size(MOVE_CHIP, h, this.scale);
+    this.el.classList.toggle('gone', !moves.length);
+    this.win.show(moves.map((m) => `${m.name}${m.ready ? '!' : ''}`).join(' '));
+  }
+}
+
 export class PhoneHud {
   private view: HudView | null = null;
   private readonly offField = new OffField();
@@ -386,6 +484,7 @@ export class PhoneHud {
   private readonly signCue = new SignCue();
   private readonly sign: Win;
   private readonly fog: Win;
+  private readonly moves: MovesWindow;
   private readonly party: Win;
   private readonly map: Win;
   private readonly start: Win;
@@ -437,6 +536,7 @@ export class PhoneHud {
         if (l.right) c.drawText(l.right.text, FOG_W - 8 - measure(l.right.text), y, l.right.color);
       });
     });
+    this.moves = new MovesWindow(box('hud-moves gone'));
     const dockWin = (b: HTMLButtonElement, item: () => number | null, label: () => string, sub: () => string | null) =>
       new Win(b, DOCK_W, DOCK_H, (c, redo) => {
         c.drawFrame({ x: 0, y: 0, w: DOCK_W, h: DOCK_H });
@@ -474,6 +574,7 @@ export class PhoneHud {
     this.scale = scale;
     this.sign.size(SIGN_W, SIGN_H, scale);
     this.fog.size(FOG_W, this.fog.c.height, scale);
+    this.moves.setScale(scale);
     for (const w of [this.party, this.map, this.start, this.ctx]) w.size(DOCK_W, DOCK_H, scale);
   }
 
@@ -506,6 +607,7 @@ export class PhoneHud {
     const h = fogHeight(lines.length);
     if (this.fog.c.height !== h) this.fog.size(FOG_W, h, this.scale);
     this.fog.show(JSON.stringify(lines.map((l) => [l.left?.text, l.left?.color.fg, l.right?.text, l.right?.color.fg])));
+    this.moves.update(v.moves);
     // The start menu has a POKeMON row once there is a party, and MAP once the ring is
     // up (start_menu.c): before that each is grey, not a START that opens and shuts.
     this.grey(this.buttons.party, this.party, v.party === 0);

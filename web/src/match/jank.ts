@@ -19,6 +19,14 @@ export function readJank(read: (addr: number, bits: 8 | 16 | 32) => number, base
   return out;
 }
 
+/** The build a `jank` line names: the ROM's sha1 in seven characters, as the version line
+ *  shows it, or the protocol when no patch is running. The relay keeps at most 16 of
+ *  [\w.+-] and logs "?" for anything else, and the whole 40-character sha1 made every
+ *  line "?" (HBR-63). */
+export function jankVersion(patch: string | undefined, protocol: number | undefined): string {
+  return patch ? patch.slice(0, 7) : String(protocol ?? '?');
+}
+
 export interface JankMsg extends JankCounts {
   type: 'jank';
   v: string;

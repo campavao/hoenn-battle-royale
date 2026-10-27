@@ -1,0 +1,47 @@
+# emote-busy-followed: no busy mark over the trainer we watch (Cam's 2026-10-27
+# play-test: "I still see the tooltips appearing constantly when a player I'm spectating
+# is doing something"). The "?" and "VS" tell a trainer walking up that this one cannot
+# be engaged; a watcher sees what they are doing anyway, and every menu, sign and fight
+# popped one over the middle of the screen. Somebody else's ghost still wears theirs.
+#
+# emote-busy.txt's setup: seat 1 two tiles east, seat 2 three tiles north.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0E 00 0F 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 2
+pokebytes gBrMailbox+0x1058 02 0E 0B 00 00 02 01 00 09 0D 00 0D 00 01 01 04
+poke u16 gBrMailbox+0x0C 2
+wait 30
+expect u8 gBrSeats+16 1
+expect u8 gBrSeats+32 1
+# seat 1 into a menu, before we watch: it wears the "?"
+pokebytes gBrMailbox+0x1098 11 05 02 00 00 01 01
+poke u16 gBrMailbox+0x0C 3
+wait 40
+expectge u8 gBrGhostMark+1 1
+# FOLLOW seat 1: its mark comes down
+pokebytes gBrMailbox+0x10D8 14 04 01 00 00 01
+poke u16 gBrMailbox+0x0C 4
+wait 40
+expect u8 gBrSpectate+8 1
+expect u8 gBrGhostMark+1 0
+# ...and a fight of theirs puts none up, while seat 2's menu does
+pokebytes gBrMailbox+0x1118 11 05 02 00 00 01 02
+poke u16 gBrMailbox+0x0C 5
+wait 2
+pokebytes gBrMailbox+0x1158 11 05 02 00 00 02 01
+poke u16 gBrMailbox+0x0C 6
+wait 90
+expect u8 gBrGhostMark+1 0
+expectge u8 gBrGhostMark+2 1
+shot watching
+# FOLLOW 0xFF: back to ourselves, and seat 1 wears its VS again
+pokebytes gBrMailbox+0x1198 14 04 01 00 00 FF
+poke u16 gBrMailbox+0x0C 7
+wait 120
+expect u8 gBrSpectate+8 0xFF
+expectge u8 gBrGhostMark+1 1
+shot back
+say emote busy followed ok

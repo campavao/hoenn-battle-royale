@@ -24,6 +24,8 @@
 #include "constants/songs.h"
 #include "constants/trainers.h"
 #include "constants/characters.h"
+#include "pokemon_storage_system.h"
+#include "br/br_swap.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
@@ -270,6 +272,13 @@ static void TickPendingChallenge(void)
             gBrNetlink.pendingPeer = 0xFF;
         return;
     }
+    else if (BrStorage_Up() && BrStorage_Holding())
+    {
+        // The box with a mon in hand: a battle from here would lose it, since it lives
+        // only in the screen's own memory. The challenge waits until it is put down.
+        gBrNetlink.stableFrames = 0;
+        return;
+    }
     else
     {
         // A sub-screen: once it has sat on one callback for a while it is a menu
@@ -288,6 +297,18 @@ static void TickPendingChallenge(void)
             return;
         }
     }
+    // The drop's screen settles first: the fight is with the party as it stands, and the
+    // balls taken into it leave the ground before it starts (BrLoot_SettleNow).
+    if (BrSwap_Up())
+    {
+        if (!BrLoot_SettleNow())
+            return;
+        BrSwap_Settled(); // and no more moves while the fight is on its way
+    }
+    // A box is a menu like any other, and the fight starts from it; the boxes settle on
+    // the field after it (br_loot.c).
+    if (BrStorage_Up())
+        BrLoot_PcInterrupted();
     // A staged bot is a trainer battle from here, as HandleChallenge's would have been.
     if (BrBot_IsStaged(gBrNetlink.pendingPeer))
     {

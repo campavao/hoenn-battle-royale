@@ -1,0 +1,25 @@
+# hm-view: what the page's field-move icons read (HBR-78, br_hm.h gBrHmView). `can` is
+# who in the party could use each move; `ready` is the one that would work on what we
+# face. hm-cut-tree's ROUTE 104: the boot's TREECKO could learn CUT and STRENGTH and
+# nothing else shown (FLASH and ROCK SMASH are never bits), and we boot under the tree
+# at (35,22).
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 81 00 00 13 23 00 17 00 BD BB C7 FF
+wait 400
+expect u16 *gSaveBlock1Ptr+2 23
+expect u8 gBrHmView 0x09
+hold DOWN 2
+wait 20
+expect u8 gBrHmView+1 0x00
+hold UP 2
+wait 20
+# facing the tree: CUT is the one ready
+expect u8 gBrHmView+1 0x01
+shot facing-tree
+# not in the match proper (the Safari's opening, say): nothing to show
+poke u8 gBrMatch 1
+wait 2
+expect u8 gBrHmView 0x00
+expect u8 gBrHmView+1 0x00
+say hm view ok

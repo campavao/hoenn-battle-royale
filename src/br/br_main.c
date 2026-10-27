@@ -2,6 +2,7 @@
 // own managers are up and before the first frame, and BrFrame from the main loop
 // every frame. Everything else in src/br/ hangs off the systems these two start.
 #include "global.h"
+#include "br/br_swap.h"
 #include "br/br_config.h"
 #include "br/br_main.h"
 #include "br/br_mailbox.h"
@@ -9,6 +10,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_boot.h"
 #include "br/br_ring.h"
+#include "br/br_hm.h"
 #include "br/br_hud.h"
 #include "br/br_match.h"
 #include "br/br_hof.h"
@@ -71,6 +73,7 @@ void BrHeapReset(void)
     BrBot_HeapReset();
     BrDuel_HeapReset();
     BrMatch_HeapReset();
+    BrSwap_HeapReset();
 }
 
 EWRAM_DATA u8 gBrMidFrame = 0;
@@ -94,6 +97,7 @@ void BrFrame(void)
     BrDuel_Tick();
     BrRing_Tick();
     BrHud_Tick();
+    BrHm_Tick();
     BrMatch_Tick();
     BrHof_Tick();
     BrLevels_Tick();
@@ -102,6 +106,7 @@ void BrFrame(void)
     BrNetlink_Tick();
     BrBattle_TickStall();
     BrBattle_TickSeeThrough();
+    BrBattle_FillSlaveMons();
     BrEngage_Tick();
     BrSpectate_Tick();
     BrPick_Tick();
