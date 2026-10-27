@@ -19,13 +19,13 @@ class FakeNode {
   parentNode: FakeNode | null = null;
   childNodes: FakeNode[] = [];
   readonly ownerDocument = fakeDocument;
-  private listeners: { type: string; fn: (ev: { target: FakeNode }) => void }[] = [];
+  private listeners: { type: string; fn: (ev: Record<string, unknown> & { target: FakeNode }) => void }[] = [];
 
   constructor(tag: string) {
     this.tagName = tag.toUpperCase();
   }
 
-  addEventListener(type: 'click' | 'input', fn: (ev: { target: FakeNode }) => void): void {
+  addEventListener(type: string, fn: (ev: Record<string, unknown> & { target: FakeNode }) => void): void {
     this.listeners.push({ type, fn });
   }
 
@@ -71,8 +71,13 @@ class FakeNode {
     this.dispatch('input');
   }
 
-  private dispatch(type: string): void {
-    for (let n: FakeNode | null = this; n; n = n.parentNode) for (const l of n.listeners) if (l.type === type) l.fn({ target: this });
+  /** Any other event, with its fields: a wheel's deltaY, a pointer's clientY. */
+  fire(type: string, fields: Record<string, unknown> = {}): void {
+    this.dispatch(type, fields);
+  }
+
+  private dispatch(type: string, fields: Record<string, unknown> = {}): void {
+    for (let n: FakeNode | null = this; n; n = n.parentNode) for (const l of n.listeners) if (l.type === type) l.fn({ preventDefault() {}, ...fields, target: this });
   }
 
   /** Every element under this one, depth first. */
@@ -100,6 +105,44 @@ function mirror(typed: () => void = () => {}) {
 const at = (y: number) => ({ x: 8, y, w: 64, h: 16 });
 
 describe('the drawn screen\'s DOM copy (POK-330 #33)', () => {
+  // Cam's 10-26 play-test: the results' standings in one column, scrolled by hand.
+  it('a list moves a row per row of wheel or drag, and only the list hears it', () => {
+    let redrawn = 0;
+    const { sync, byId } = mirror(() => redrawn++);
+    const moved: number[] = [];
+    sync({
+      widgets: [
+        { rect: at(0), text: 'standings', id: 'list', scroll: (by) => (moved.push(by), true) },
+        { rect: at(100), text: 'PLAY AGAIN', id: 'again', onPress: () => {} },
+      ],
+    });
+    const list = byId('list');
+    expect(list.style.touchAction, 'a drag over it is not the page\'s').toBe('none');
+    expect(byId('again').style.touchAction).toBe('');
+    // At scale 2 a row is 32 CSS pixels: a 100-pixel notch is three, and the rest waits.
+    list.fire('wheel', { deltaY: 100, deltaMode: 0 });
+    expect(moved).toEqual([3]);
+    list.fire('wheel', { deltaY: 30, deltaMode: 0 });
+    expect(moved).toEqual([3, 1]);
+    list.fire('wheel', { deltaY: -1, deltaMode: 1 });
+    expect(moved).toEqual([3, 1, -1]);
+    // A finger pulling up 70 pixels shows two rows further down, wherever it wanders.
+    list.fire('pointerdown', { pointerId: 7, clientY: 200 });
+    byId('again').fire('pointermove', { pointerId: 7, clientY: 130 });
+    expect(moved).toEqual([3, 1, -1, 2]);
+    // A mouse let go outside the panel: the next move with no button held ends it.
+    list.fire('pointerdown', { pointerId: 8, clientY: 200, pointerType: 'mouse', buttons: 1 });
+    list.fire('pointermove', { pointerId: 8, clientY: 100, pointerType: 'mouse', buttons: 0 });
+    list.fire('pointermove', { pointerId: 8, clientY: 0, pointerType: 'mouse', buttons: 0 });
+    expect(moved).toEqual([3, 1, -1, 2]);
+    list.fire('pointerup', { pointerId: 7 });
+    list.fire('pointermove', { pointerId: 7, clientY: 0 });
+    expect(moved, 'nothing after the finger lifts').toHaveLength(4);
+    byId('again').fire('wheel', { deltaY: 300, deltaMode: 0 });
+    expect(moved, 'a wheel over a button is not the list\'s').toHaveLength(4);
+    expect(redrawn).toBe(4);
+  });
+
   it('a repaint keeps the button under the finger, and the tap presses the widget painted now', () => {
     // The room repaints every 500 ms, and a paint hands out fresh widgets with fresh
     // closures. A tap takes 100-200 ms: its pointerdown lands before a repaint and its

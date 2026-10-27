@@ -30,6 +30,10 @@ export interface Widget {
    *  here, which a phone's own keyboard types into, and the screen draws what it holds.
    *  `text` is its label. */
   field?: TextField;
+  /** A list longer than its window (the results' standings, Cam's 10-26 play-test): the
+   *  wheel or a finger dragged over it moves it this many rows, + down. True when it
+   *  moved, and the stage draws it again. */
+  scroll?: (rows: number) => boolean;
 }
 
 export interface TextField {
@@ -122,6 +126,9 @@ function arrange(parent: HTMLElement, want: HTMLElement[]): void {
  *  (POK-330 #33). Now an element stays as long as its widget does, is updated in place,
  *  and one listener on the whole copy presses whatever widget holds that element at
  *  the moment of the click. */
+/** A list's row, in screen pixels (screens.ts's ROW_H). */
+const ROW_PX = 16;
+
 export class Mirror {
   /** By key: the element, and the <li> it sits in when its parent is a list. */
   private els = new Map<string, HTMLElement>();
@@ -129,13 +136,73 @@ export class Mirror {
   private boxes = new Map<string, HTMLElement>();
   private pressable = new Map<HTMLElement, Widget>();
   private fields = new Map<HTMLElement, Widget>();
+  private scrolls = new Map<HTMLElement, Widget>();
+  /** A screen pixel in CSS pixels, from the last sync: a drag moves a row per ROW_H. */
+  private scale = 1;
 
   constructor(
     private readonly hits: HTMLElement,
     press: (w: Widget) => void,
-    /** After a field's text changed, so the screen draws it. */
+    /** After the screen changed under the player's hand -- a field's text, a list
+     *  scrolled -- so it is drawn. */
     typed: () => void = () => {},
   ) {
+    // The list's element under `target`: elements outlive paints, widgets do not.
+    const scroller = (target: EventTarget | null): HTMLElement | undefined => {
+      for (let n = target as HTMLElement | null; n && n !== hits; n = n.parentNode as HTMLElement | null) {
+        if (this.scrolls.has(n)) return n;
+      }
+      return undefined;
+    };
+    const move = (el: HTMLElement, rows: number) => {
+      if (this.scrolls.get(el)?.scroll?.(rows)) typed();
+    };
+    // A row of the list on the page, in CSS pixels.
+    const rowPx = () => ROW_PX * this.scale;
+    // The wheel, a notch or a trackpad's run of small steps: a row per row of it.
+    let wheel = 0;
+    hits.addEventListener('wheel', (ev) => {
+      const el = scroller(ev.target);
+      if (!el) return;
+      ev.preventDefault();
+      // Lines are rows; a page (Firefox's "scroll a page") is the list's own height.
+      const page = (this.scrolls.get(el)?.rect.h ?? ROW_PX) * this.scale;
+      const dy = ev.deltaMode === 1 ? ev.deltaY * rowPx() : ev.deltaMode === 2 ? ev.deltaY * page : ev.deltaY;
+      // A turn the other way starts afresh: what was left of the last one is not owed.
+      if (Math.sign(dy) !== Math.sign(wheel)) wheel = 0;
+      wheel += dy;
+      const rows = Math.trunc(wheel / rowPx());
+      if (rows === 0) return;
+      wheel -= rows * rowPx();
+      move(el, rows);
+    }, { passive: false });
+    // A finger (or a mouse held down) dragged over it: the list follows, a row at a time,
+    // as long as the press lasts, wherever the finger wanders.
+    let drag: { el: HTMLElement; id: number; y: number } | null = null;
+    hits.addEventListener('pointerdown', (ev) => {
+      const el = scroller(ev.target);
+      if (!el) return;
+      drag = { el, id: ev.pointerId, y: ev.clientY };
+      // Its up comes here even off the panel, or a mouse let go outside would leave the
+      // list following the pointer about.
+      el.setPointerCapture?.(ev.pointerId);
+    });
+    hits.addEventListener('pointermove', (ev) => {
+      if (!drag || drag.id !== ev.pointerId) return;
+      if (ev.pointerType === 'mouse' && ev.buttons === 0) {
+        drag = null;
+        return;
+      }
+      const rows = Math.trunc((drag.y - ev.clientY) / rowPx());
+      if (rows === 0) return;
+      drag.y -= rows * rowPx();
+      move(drag.el, rows);
+    });
+    const end = (ev: PointerEvent) => {
+      if (drag?.id === ev.pointerId) drag = null;
+    };
+    hits.addEventListener('pointerup', end);
+    hits.addEventListener('pointercancel', end);
     hits.addEventListener('input', (ev) => {
       const el = ev.target as HTMLTextAreaElement;
       const w = this.fields.get(el);
@@ -177,6 +244,8 @@ export class Mirror {
     const items = new Map<HTMLElement, HTMLElement>();
     const pressable = new Map<HTMLElement, Widget>();
     const fields = new Map<HTMLElement, Widget>();
+    const scrolls = new Map<HTMLElement, Widget>();
+    this.scale = scale;
     const seen = new Map<string, number>();
     for (const w of p.widgets) {
       // Two widgets can say the same thing in the same place (two trainers both named
@@ -205,6 +274,9 @@ export class Mirror {
         (el as HTMLButtonElement).disabled = w.disabled === true;
         pressable.set(el, w);
       }
+      if (w.scroll) scrolls.set(el, w);
+      // A drag over a list is the list's, not the page's.
+      el.style.touchAction = w.scroll ? 'none' : '';
       if (!w.field && el.textContent !== w.text) el.textContent = w.text;
       if (w.id) el.id = w.id;
       else el.removeAttribute('id');
@@ -235,6 +307,7 @@ export class Mirror {
     this.boxes = boxes;
     this.pressable = pressable;
     this.fields = fields;
+    this.scrolls = scrolls;
   }
 
   clear(): void {
@@ -244,6 +317,7 @@ export class Mirror {
     this.boxes.clear();
     this.pressable.clear();
     this.fields.clear();
+    this.scrolls.clear();
   }
 }
 
