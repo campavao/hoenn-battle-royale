@@ -259,10 +259,10 @@ bool8 BrSpectate_Publishing(void)
 // for its scores, its ties and its switches, and a wild POKeMON rolls for its move; the
 // replay is handed the choice and rolls none of it, so every damage roll after the first
 // choice of a fight fought alone was another than the replay's (HBR-63). The choice rolls
-// on Random2's generator instead -- its own stream, which no replay needs -- and the
-// battle's picks up where it was. Put back as it was instead, the turn's next rolls were
-// the choice's own over again: a wild POKeMON's `Random() & 3` move and the accuracy roll
-// after it, `Random() % 100`, agreed mod 4.
+// on Random2's generator, stirred with the frame count: a stream of its own, which no
+// replay needs, and the battle's picks up where it was. Put back as it was instead, the
+// turn's next rolls were the choice's own over again: a wild POKeMON's `Random() & 3`
+// move and the accuracy roll after it, `Random() % 100`, agreed mod 4.
 static u32 sBattleRng;
 
 void BrSpectate_HoldRng(bool8 hold)
@@ -271,8 +271,11 @@ void BrSpectate_HoldRng(bool8 hold)
         return;
     if (hold)
     {
+        // Random2's state alone starts at 0 on every boot and moves only with the
+        // animations played: the same buttons, the same picks. The frame count is the
+        // timing the battle's generator used to give them, and only this ROM reads it.
         sBattleRng = gRngValue;
-        gRngValue = gRng2Value;
+        gRngValue = gRng2Value ^ gMain.vblankCounter1 * 0x41C64E6D;
     }
     else
     {
