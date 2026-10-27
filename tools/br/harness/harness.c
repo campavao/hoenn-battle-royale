@@ -153,10 +153,11 @@ static int parseKeys(const char* s, uint32_t* mask) {
 // reader, taking every slot as it lands (outTail = outHead each frame).
 static uint32_t drainAddr = 0;
 // `drain gBrMailbox log` also prints every message it takes, whole, as
-// `outmsg <type> <len> <hex bytes>`: a fight one driver fought, for another driver to
+// `outmsg <type> <len> <hex bytes> @<frame>`: a fight one driver fought, for another driver to
 // replay (tools/br/replay-check.sh, HBR-63).
 static int drainLog = 0;
 static int outMsgByte(uint32_t box, uint16_t first, int off);
+static unsigned long frameNo;
 
 static void logOut(uint32_t box, uint16_t tail, uint16_t head) {
     for (; tail != head; ++tail) {
@@ -167,7 +168,7 @@ static void logOut(uint32_t box, uint16_t tail, uint16_t head) {
         total = core->busRead8(core, slot + 2) | core->busRead8(core, slot + 3) << 8;
         printf("outmsg %d %d", type, total);
         for (i = 0; i < total; ++i) printf(" %02X", outMsgByte(box, tail, i) & 0xFF);
-        printf("\n");
+        printf(" @%lu\n", frameNo);
     }
 }
 
@@ -221,7 +222,6 @@ static void checkNetlinkStall(void) {
 struct Watch { char addr[64]; int len; int windowsBg; };
 static struct Watch watches[WATCH_MAX];
 static int nwatches;
-static unsigned long frameNo;
 
 static void dumpRange(uint32_t addr, int len) {
     printf("dump 0x%08X:", addr);
