@@ -166,6 +166,7 @@ export function restoreDirector(d: Director, snap: DirectorSnap, gone: number): 
   const since = d['placements'].filter((seat) => !snap.placements.includes(seat));
   d['placements'].length = 0;
   d['placements'].push(...snap.placements, ...since);
+  for (const seat of since) d['aliveSeats'].delete(seat);
   for (const key of snap.dealt) d['dealtCells'].add(key);
 }
 

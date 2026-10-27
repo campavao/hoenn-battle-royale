@@ -526,6 +526,7 @@ describe("the host's own reload (HBR-20)", () => {
     b.director.resume({ ringPhase: 1, centre: { sx: 4, sy: 11 }, secsLeftInPhase: 5, out: [2, 3] });
     restoreDirector(b.director, snap, 0);
     expect(b.director.state.placements).toEqual([2, 3]);
+    expect(b.director.state.alive, 'and seat 3 is not standing as well').toBe(2);
   });
 
   it('counts the time the tab was away: a ring that fell due meanwhile goes out on the next tick', () => {
