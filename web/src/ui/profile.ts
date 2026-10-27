@@ -1,6 +1,9 @@
 // The trainer's own screens (POK-335, POK-337, POK-416): the TRAINER CARD, MY LOOK and MY
-// STATS. A chunk of their own, fetched soon after boot (app.ts's lazyScreen), the way the
-// results are (POK-407): main.js has a budget, and these are only ever a press away.
+// STATS, and the DEBUG switches the card's DEBUG MENU puts on the main menu. A chunk of
+// their own, fetched soon after boot (app.ts's lazyScreen), the way the results are
+// (POK-407): main.js has a budget, and these are only ever a press away.
+import { DEBUG_FLAGS, cycleFlag, flagDetail, toggleDebugMenu } from '../debug';
+import type { devPace } from '../hash';
 import { CARD_BADGES, SKINS, SKIN_UNLOCK_WINS, WARDROBE, cardBadges, cardStars, ordinal, skinUnlocked, type CareerTotals } from '../match/career';
 import { favourite, type TallyNames } from '../match/tally';
 import type { RecordLine } from '../match/record';
@@ -341,4 +344,42 @@ export function statsScreen(model: () => StatsModel): DrawnScreen {
       onBack: m.onBack,
     };
   });
+}
+
+// ---- DEBUG ----------------------------------------------------------------------------------
+
+export { toggleDebugMenu };
+
+/** DEBUG (Cam, 2026-10-27: "a main menu option rather than manually editing the url"):
+ *  each row steps one hash flag, so the URL says what was picked and a link with it still
+ *  works. Here rather than in app.ts for main.js's budget. `pace` is app.ts's paceOptions,
+ *  the pace the page will run off the hash. */
+export function debugScreen(pace: () => ReturnType<typeof devPace>, redraw: () => void, back: () => void): DrawnScreen {
+  const reload = (hash: string) => {
+    history.replaceState(null, '', `#${hash}`);
+    location.reload();
+  };
+  return menuScreen(() => ({
+    title: 'DEBUG',
+    rows: [
+      ...DEBUG_FLAGS.map((flag): RowSpec => ({
+        label: flag.label,
+        detail: flagDetail(flag, location.hash, pace()),
+        id: `debug-${flag.key}`,
+        onPress: () => {
+          const hash = cycleFlag(location.hash, flag);
+          if (flag.reload) return reload(hash);
+          history.replaceState(null, '', `#${hash}`);
+          redraw();
+        },
+      })),
+      { label: 'CLEAR CACHE', detail: 'drops the flags', id: 'debug-fresh', onPress: () => reload('fresh') },
+      { label: 'SPIKE B', detail: 'TS overworld', id: 'debug-spike-b', onPress: () => location.assign(`${import.meta.env.BASE_URL}spike-b/`) },
+    ],
+    rowsId: 'debug-rows',
+    note: 'Each applies to the next match.',
+    noteId: 'debug-note',
+    buttons: [{ label: 'BACK', id: 'debug-back', onPress: back }],
+    onBack: back,
+  }));
 }

@@ -54,8 +54,9 @@ function dropRoms(): Plugin {
 // (match/landing.ts's worldReady()); this keeps them out, and keeps main from growing
 // back past the line with nobody noticing. The build fails -- CI's `npm run build` too --
 // rather than warns. 360 KB since the phone's bag (2026-10-18), which took main from
-// about 348 KB to 354 KB: code, not data.
-export const MAIN_BUDGET = 360_000;
+// about 348 KB to 354 KB: code, not data. 380 KB since the DEBUG menu (Cam, 2026-10-27,
+// asked why there is a limit and then "That's fine" to raising it): main was full.
+export const MAIN_BUDGET = 380_000;
 const LAZY_DATA = /[\\/]src[\\/]data[\\/](world|landing)\.json$/;
 
 /** What is wrong with the entry chunk `main`, as the build names it; empty when nothing. */
@@ -73,7 +74,10 @@ function bundleBudget(): Plugin {
   return {
     name: 'br-bundle-budget',
     apply: 'build',
-    generateBundle(_options, bundle) {
+    // writeBundle, not generateBundle: Vite's preload helper is written into main after
+    // generateBundle, and the count there came out about 476 B under the file a phone
+    // downloads. This is the file as written.
+    writeBundle(_options, bundle) {
       for (const out of Object.values(bundle)) {
         if (out.type !== 'chunk' || !out.isEntry || out.name !== 'main') continue;
         const problems = overBudget(out);

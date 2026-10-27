@@ -46,6 +46,9 @@ export type LobbyAction =
   | { kind: 'feedback' }
   // A match in six panels (POK-429).
   | { kind: 'howto' }
+  // The test switches, off the hash (Cam, 2026-10-27), and the setting that shows them.
+  | { kind: 'debug' }
+  | { kind: 'debugmenu' }
   | { kind: 'join'; code: string; pass: boolean }
   | { kind: 'watch'; code: string }
   // Back into the match a reload left, to watch it (HBR-20).
@@ -98,6 +101,8 @@ export interface Profile {
     statsOn?: boolean;
     /** The battle over the map (an experiment, 2026-10-05 play-test). */
     seeThrough?: boolean;
+    /** Whether the main menu has a DEBUG tile. */
+    debugMenu?: boolean;
 }
 
 /** Who you are (POK-243): the trainer's own rows, on their own screen since POK-320. */
@@ -122,6 +127,9 @@ export function profileRows(profile: Profile): LobbyRow[] {
     // Kanto's career is a file on disk somebody can copy to another machine;
     // localStorage cannot be copied at all, so it needs a door (POK-243).
     { label: 'MY CAREER', detail: 'save or load a file', action: { kind: 'career' as const } },
+    // A setting rather than a tile everybody sees: the game is shared, and the switches
+    // are for whoever is testing it (Cam, 2026-10-27).
+    { label: 'DEBUG MENU', detail: profile.debugMenu ? 'ON' : 'OFF', action: { kind: 'debugmenu' as const } },
   ];
   return rows.map((r) => ({ ...r, id: `trainer-${r.action.kind}` }));
 }
@@ -137,6 +145,8 @@ const ART = {
   code: { item: 265 },
   daily: { item: 93 },
   howto: { item: 361 },
+  // The ITEMFINDER: it finds what is hidden.
+  debug: { item: 261 },
   feedback: { item: 121 },
 };
 
@@ -185,6 +195,14 @@ export const HOWTO_ROW: LobbyRow = {
   action: { kind: 'howto' },
   id: 'lobby-howto',
   art: ART.howto,
+};
+
+/** Last on the menu, once the trainer card's DEBUG MENU is on. */
+export const DEBUG_ROW: LobbyRow = {
+  label: 'DEBUG',
+  action: { kind: 'debug' },
+  id: 'lobby-debug',
+  art: ART.debug,
 };
 
 /** First on the menu after a reload that could not go back into its match (HBR-20,

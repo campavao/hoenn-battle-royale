@@ -20,7 +20,7 @@ function paramsOf(hash: string): URLSearchParams {
 }
 
 /** `a=&b` rather than URLSearchParams' `a=&b=`: a door with no value is a bare key. */
-function textOf(params: URLSearchParams): string {
+export function textOf(params: URLSearchParams): string {
   return params.toString().replace(/=(?=&|$)/g, '');
 }
 
@@ -65,7 +65,7 @@ export function perfWanted(hash: string): boolean {
   return paramsOf(hash).has('perf');
 }
 
-// ---- dev flags (the page reads these in DEV only) ----------------------------------------
+// ---- test flags (the DEBUG screen's; app.ts reads them in every build) ----------------------------------------
 
 /** A whole number of seconds, or undefined for anything else. */
 function secs(params: URLSearchParams, key: string): number | undefined {

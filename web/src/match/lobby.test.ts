@@ -141,13 +141,16 @@ describe('the profile rows', () => {
     expect(rows[0].detail).toBe('your name');
     expect(rows[1].label).toBe('MAY');
     // name, sprite, MY LOOK (POK-337), MY STATS (POK-416), play count, the battle's
-    // background (an experiment, 2026-10-05), career -- then the ways in.
+    // background (an experiment, 2026-10-05), career, the DEBUG tile's setting -- then
+    // the ways in.
     expect(rows[3]).toMatchObject({ label: 'MY STATS', action: { kind: 'mystats' }, id: 'trainer-mystats' });
     expect(rows[5].label).toBe('BATTLE BACKDROP');
     expect(rows[5].detail).toBe('CLASSIC');
     expect(fixedRows(true, { name: 'WALLY', skin: 'MAY', seeThrough: true })[5].detail).toBe('OVER MAP');
     expect(rows[6].label).toBe('MY CAREER');
-    expect(rows[7].label).toBe('QUICK PLAY');
+    expect(rows[7]).toMatchObject({ label: 'DEBUG MENU', detail: 'OFF', id: 'trainer-debugmenu' });
+    expect(fixedRows(true, { name: 'WALLY', skin: 'MAY', debugMenu: true })[7].detail).toBe('ON');
+    expect(rows[8].label).toBe('QUICK PLAY');
     expect(rows[rows.length - 1].label).toBe('JOIN BY CODE');
   });
 

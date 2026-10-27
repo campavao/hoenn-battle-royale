@@ -8,6 +8,8 @@
 import { describe, expect, it } from 'vitest';
 import appSource from './app.ts?raw';
 import bridgeSource from './net/bridge.ts?raw';
+import hashSource from './hash.ts?raw';
+import { DEBUG_FLAGS } from './debug';
 import playSource from '../e2e/play.ts?raw';
 import * as field from './field';
 import { HOENN } from './bots/hoenn';
@@ -78,12 +80,45 @@ describe('what came out of app.ts', () => {
 });
 
 // POK-327: the play-a-match e2e sets its match up from the hash -- the seed, the pace,
-// where the drop lands. Each is a way to rig a match, so none of them is read in a build.
+// where the drop lands. The seed and the pace are the DEBUG screen's, read in every build
+// (Cam, 2026-10-27: "Everywhere is fine for now"); where the drop lands is the harness's
+// alone, and a build reads none of it.
 describe('the dev flags a match is set up with', () => {
-  it.each(['fixedSeed', 'paceOptions', 'landOverride'])('%s reads nothing outside DEV', (fn) => {
+  it.each(['landOverride'])('%s reads nothing outside DEV', (fn) => {
     // To the end of the signature's line: a return type can have braces of its own.
     const guarded = new RegExp(String.raw`function ${fn}\([^)]*\)[^\n]*\{\s*if \(!import\.meta\.env\.DEV\) return (?:null|undefined);`);
     expect(appSource).toMatch(guarded);
+  });
+});
+
+// The DEBUG screen (debug.ts) writes each flag into the hash for the page to read. A key the
+// page does not read would be a row that does nothing; one read behind import.meta.env.DEV
+// would be a row that does nothing on the live site, which Cam wants them on (2026-10-27).
+describe("the DEBUG screen's flags", () => {
+  /** The ones read in hash.ts, behind paceOptions and perfWanted, or in fixedSeed. */
+  const reads: Record<string, { source: string; read: string }> = {
+    perf: { source: hashSource, read: "paramsOf(hash).has('perf')" },
+    fast: { source: hashSource, read: "params.has('fast')" },
+    safari: { source: hashSource, read: "secs(params, 'safari')" },
+    fog: { source: hashSource, read: "secs(params, 'fog')" },
+  };
+  it.each(DEBUG_FLAGS.map((f) => f.key))('#%s is read, in every build', (key) => {
+    const at = reads[key];
+    if (at) {
+      expect(at.source).toContain(at.read);
+      return;
+    }
+    const lines = appSource.split('\n').filter((l) => new RegExp(String.raw`\.(has|get)\('${key}'\)`).test(l));
+    expect(lines.length, `app.ts reads #${key}`).toBeGreaterThan(0);
+    for (const line of lines) expect(line, `#${key}`).not.toContain('import.meta.env.DEV');
+  });
+
+  it('reads the pace and the seed in every build', () => {
+    for (const fn of ['paceOptions', 'fixedSeed']) {
+      const body = new RegExp(String.raw`function ${fn}\([^)]*\)[^\n]*\{([\s\S]*?)\n\}`).exec(appSource)?.[1];
+      expect(body, fn).toBeDefined();
+      expect(body, fn).not.toContain('import.meta.env.DEV');
+    }
   });
 });
 

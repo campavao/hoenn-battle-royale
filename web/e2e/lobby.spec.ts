@@ -607,3 +607,49 @@ test('a room that will not let you in offers the way back', async ({ browser }) 
     await guestCtx.close();
   }
 });
+
+test('DEBUG: a trainer-card setting puts a tile on the menu whose rows write the hash flags', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto(`/#rom=${romHashParam()}`);
+  const strip = page.locator('#lobby-trainer');
+  await expect(strip).toBeVisible({ timeout: 60_000 });
+  const tile = page.locator('#lobby-debug');
+  await expect(tile, 'nobody sees it until they ask for it').toHaveCount(0);
+
+  await strip.click();
+  const setting = page.locator('#trainer-debugmenu');
+  await expect(setting).toContainText('DEBUG MENU OFF');
+  await setting.click();
+  await expect(setting).toContainText('DEBUG MENU ON');
+  await page.locator('#trainer-back').click();
+  await expect(tile).toBeVisible();
+
+  await tile.click();
+  const fast = page.locator('#debug-fast');
+  await expect(fast).toContainText('FAST PACE OFF');
+  await fast.click();
+  await expect(fast).toContainText('FAST PACE ON');
+  const safari = page.locator('#debug-safari');
+  // What FAST PACE runs, rather than the ROOM it says on its own.
+  await expect(safari).toContainText('SAFARI TIME 25s');
+  await safari.click();
+  await expect(safari).toContainText('SAFARI TIME 25s');
+  await safari.click();
+  await expect(safari).toContainText('SAFARI TIME 60s');
+  const hash = new URLSearchParams(new URL(page.url()).hash.slice(1));
+  expect(hash.get('rom'), 'the ROM the test came in with stays').toBe(romHashParam());
+  expect(hash.get('fast')).toBe('');
+  expect(hash.get('safari')).toBe('60');
+  await page.screenshot({ path: path.join(OUT_DIR, 'debug-menu.png') });
+
+  // A reload keeps both: the tile is this browser's setting, the flags are the URL's.
+  await page.reload();
+  await expect(tile).toBeVisible({ timeout: 60_000 });
+  await tile.click();
+  await expect(fast).toContainText('FAST PACE ON');
+  await fast.click();
+  await expect(fast).toContainText('FAST PACE OFF');
+  expect(new URL(page.url()).hash).not.toMatch(/(^#|&)fast(&|$)/);
+  await page.locator('#debug-back').click();
+  await expect(tile).toBeVisible();
+});
