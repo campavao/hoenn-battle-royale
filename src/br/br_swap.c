@@ -2,6 +2,7 @@
 #include "global.h"
 #include "malloc.h"
 #include "bg.h"
+#include "battle.h"
 #include "battle_interface.h"
 #include "field_screen_effect.h"
 #include "gpu_regs.h"
