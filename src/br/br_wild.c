@@ -19,8 +19,9 @@
 #include "br/br_wild.h"
 #include "br/br_zone.h"
 
-EWRAM_DATA struct BrWildAsk gBrWildAsk = {0};
-static EWRAM_DATA MainCallback sEnd = NULL;
+// In IWRAM, as gBrSides: EWRAM has no room left over its floor (ram-headroom.py).
+struct BrWildAsk gBrWildAsk;
+static MainCallback sEnd;
 
 // wild_encounter.c's ChooseWildMonIndex_Land and _WaterRock, which are static there.
 static u8 LandSlot(void)
