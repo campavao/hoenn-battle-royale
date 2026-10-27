@@ -168,3 +168,34 @@ describe('the fallen', () => {
     expect(roster.get(5)?.alive).toBe(true);
   });
 });
+
+describe('watchers', () => {
+  const WATCHED: RosterEvent = { ...ROOM, members: [...ROOM.members, { id: 7, name: 'CAM', spectate: true }] };
+  const place = (seat: number): Msg => ({ t: 'place', v: PROTOCOL, seat, f: 1, st: 'alive' });
+
+  it('are never standing in the match, whatever their own ROM places (Cam 10-26: "4 left" counted the watcher)', () => {
+    const roster = new Roster();
+    roster.setMySeat(7);
+    roster.applyRoster(WATCHED);
+    roster.applyMsg(place(7));
+    roster.applyMsg({ t: 'start', seed: 1, spawns: [] });
+    expect(roster.get(7)?.alive).toBe(false);
+    expect(roster.alive().map((e) => e.seat)).toEqual([2, 5]);
+  });
+
+  it('stand up once the relay seats them for the next match', () => {
+    const roster = new Roster();
+    roster.applyRoster(WATCHED);
+    roster.applyRoster({ ...ROOM, members: [...ROOM.members, { id: 7, name: 'CAM' }] });
+    expect(roster.get(7)?.alive).toBe(true);
+  });
+
+  it('who fell in the match they watched stay fallen', () => {
+    const roster = new Roster();
+    roster.applyRoster(ROOM);
+    roster.applyMsg({ t: 'out', seat: 5 });
+    roster.applyRoster({ ...ROOM, members: [{ id: 2, name: 'ASH' }, { id: 5, name: 'MISTY', spectate: true }] });
+    roster.applyRoster(ROOM);
+    expect(roster.get(5)?.alive).toBe(false);
+  });
+});

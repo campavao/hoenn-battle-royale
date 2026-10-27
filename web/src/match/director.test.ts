@@ -217,6 +217,13 @@ describe('picking up a match in progress (POK-252)', () => {
     expect(director.state.alive).toBe(2);
   });
 
+  it('keeps who went out, in order, for the standings a latecomer is caught up with (Cam 10-26)', () => {
+    const { director, fireOut } = harness([0, 1, 2, 3], 42, { safariSecs: 60, fogSecs: 30 });
+    director.resume({ ringPhase: 1, centre: { sx: 4, sy: 11 }, secsLeftInPhase: 30, out: [3, 2, 3] });
+    fireOut(1);
+    expect(director.state.placements).toEqual([3, 2, 1]);
+  });
+
   it('can be handed the opening instead, and finishes it', () => {
     const { director, sent, advance } = harness([0, 1], 42, { safariSecs: 60, fogSecs: 30 });
     director.resume({ ringPhase: 0, secsLeftInPhase: 3 });
