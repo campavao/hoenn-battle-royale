@@ -165,6 +165,35 @@ describe('against the real Hoenn', () => {
     for (const m of maps) expect(decodeGrid(m.grid, m.w * m.h).length).toBe(m.w * m.h);
   });
 
+  // HBR-62: the exporter tested the collision bit first and every ledge came out a wall.
+  // A ledge is a ledge again, and every hop from where a trainer can stand lands where
+  // one can, on the same map -- the next exporter change that breaks that fails here.
+  it('has its ledges, and every hop off one lands on its own map where a trainer can stand', () => {
+    const AHEAD: Record<number, [number, number, (typeof DIRS)[number]]> = {
+      3: [0, 1, 'south'], 4: [0, -1, 'north'], 5: [-1, 0, 'west'], 6: [1, 0, 'east'],
+    };
+    let ledges = 0;
+    let hops = 0;
+    const stranded: string[] = [];
+    for (const m of maps) {
+      const grid = decodeGrid(m.grid, m.w * m.h);
+      for (let i = 0; i < grid.length; i++) {
+        const ahead = AHEAD[grid[i]];
+        if (!ahead) continue;
+        ledges++;
+        const [dx, dy, dir] = ahead;
+        const from = { map: m.id, x: (i % m.w) - dx, y: Math.floor(i / m.w) - dy };
+        if (!hoenn.standable(from.map, from.x, from.y)) continue;
+        hops++;
+        const to = hoenn.step(from, dir);
+        if (!to || to.map !== m.id || !hoenn.standable(to.map, to.x, to.y)) stranded.push(`${m.id} ${from.x},${from.y} ${dir}`);
+      }
+    }
+    expect(ledges).toBeGreaterThan(900);
+    expect(hops).toBeGreaterThan(700);
+    expect(stranded).toEqual([]);
+  });
+
   it('every seam lands somewhere a trainer could have walked from', () => {
     // Not every seam cell is standable -- a cliff edge is a wall on both sides -- but a
     // seam that never lands anywhere means the offsets are wrong, and that is worth
