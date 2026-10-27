@@ -15,6 +15,7 @@
 #include "constants/field_effects.h"
 #include "constants/event_objects.h"
 #include "constants/event_object_movement.h"
+#include "constants/map_types.h"
 #include "br/br_event.h"
 #include "br/br_ghosts.h"
 #include "br/br_loot.h"
@@ -379,8 +380,13 @@ static void SurfGhost(u8 seat)
 
     if (obj == NULL)
         return;
-    wet = MetatileBehavior_IsSurfableWaterOrUnderwater(
-        MapGridGetMetatileBehaviorAt(obj->currentCoords.x, obj->currentCoords.y));
+    // Under the sea every cell is water, as it is for the player (who dives as one
+    // picture): by the tile alone, the seabed stood them up and the seaweed sat them
+    // down, swapping picture and blob at every step (Cam's 10-27 play-test, "artifacting
+    // around the head" underwater).
+    wet = gMapHeader.mapType == MAP_TYPE_UNDERWATER
+       || MetatileBehavior_IsSurfableWaterOrUnderwater(
+            MapGridGetMetatileBehaviorAt(obj->currentCoords.x, obj->currentCoords.y));
     walk = SkinGraphic(s->skin);
     gfx = wet ? SurfGraphic(walk) : walk;
     changed = obj->graphicsId != gfx;
