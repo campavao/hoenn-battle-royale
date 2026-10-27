@@ -896,6 +896,17 @@ static u8 MarkFor(u8 busy)
     return 0xFF;
 }
 
+// The mark a seat's ghost wears now. None over the trainer we are watching (Cam's 10-27
+// play-test: "tooltips appearing constantly when a player I'm spectating is doing
+// something"): the mark tells somebody walking up that they cannot engage, and a watcher
+// sees what that trainer is doing anyway -- every menu, sign and fight popped one.
+static u8 SeatMark(u8 seat)
+{
+    if (seat == gBrSpectate.follow)
+        return 0xFF;
+    return MarkFor(gBrSeatBusy[seat]);
+}
+
 // The seat's ghost already wears this mark.
 static bool8 Marked(u8 seat, u8 effect)
 {
@@ -920,7 +931,7 @@ bool8 BrGhosts_DropMark(struct Sprite *sprite, bool8 objectGone)
      || (MARK_EFFECT(sprite) != FLDEFF_BR_VS_ICON && MARK_EFFECT(sprite) != FLDEFF_QUESTION_MARK_ICON))
         return objectGone || sprite->animEnded;
     seat = localId - BR_GHOST_LOCAL_ID_BASE;
-    if (objectGone || MARK_EFFECT(sprite) != MarkFor(gBrSeatBusy[seat]))
+    if (objectGone || MARK_EFFECT(sprite) != SeatMark(seat))
     {
         if (gBrGhostMark[seat] == sprite - gSprites + 1)
             gBrGhostMark[seat] = 0;
@@ -959,7 +970,7 @@ static bool8 AimAtGhost(u8 seat)
 
 bool8 BrGhosts_Emote(u8 seat)
 {
-    u8 effect = seat < BR_MAX_SEATS ? MarkFor(gBrSeatBusy[seat]) : 0xFF;
+    u8 effect = seat < BR_MAX_SEATS ? SeatMark(seat) : 0xFF;
 
     if (effect == 0xFF || Marked(seat, effect) || !AimAtGhost(seat))
         return FALSE;
