@@ -1,5 +1,6 @@
-# drop-swap-full: a full party trades one for one. A on the drop's last mon lifts it and asks
-# which of ours; A on the first of ours swaps them, and ours lands beside us as a ball.
+# drop-swap-full: five picked move across at once, filling the party; then a full party
+# trades one for one, the drop's mon and ours picked together, with no question asked, and
+# ours lands beside us as a ball.
 # Six balls: MUDKIP, TORCHIC, ZIGZAGOON, TREECKO 7, LINOONE 6, SILCOON 8; our TREECKO 5.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
@@ -12,25 +13,48 @@ expect u8 gBrLoot+0xA0 6
 tap A
 wait 120
 shot six
+# five picked, across the top row and down the grid
 tap A
-wait 20
+wait 10
+tap RIGHT
+wait 10
 tap A
-wait 20
+wait 10
+tap DOWN
+wait 10
 tap A
-wait 20
+wait 10
+tap LEFT
+wait 10
 tap A
-wait 20
+wait 10
+tap DOWN
+wait 10
 tap A
-wait 20
-shot full
-tap A
+wait 10
+tap START
 wait 30
+shot full
+expect u8 gPlayerPartyCount 6
+# the last one alone would make seven: START moves nothing
+tap A
+wait 10
+tap START
+wait 30
+expect u8 gPlayerPartyCount 6
+shot refused
+# with our first (TREECKO 5) picked too, the two trade places
+tap LEFT
+wait 10
+tap LEFT
+wait 10
+tap A
+wait 10
 shot pick
-tap A
-wait 20
-tap A
+tap START
 wait 30
 shot swapped
+expect u8 gPlayerPartyCount 6
 tap B
 wait 150
 shot field

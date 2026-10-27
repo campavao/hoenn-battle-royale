@@ -21,8 +21,10 @@ expect u8 gBrLoot+0xA0 4
 tap A
 wait 120
 expectne u32 gMain+4 CB2_Overworld+1
-# MUDKIP over to us
+# MUDKIP over to us: picked, then START
 tap A
+wait 10
+tap START
 wait 30
 expect u8 gPlayerPartyCount 2
 expect u8 gBrLoot+0xA2 0
@@ -41,8 +43,10 @@ expect u8 gBrLoot+0xA2 1
 tap A
 tap RIGHT
 tap A
+tap START
 tap LEFT
 tap A
+tap START
 expect u8 gPlayerPartyCount 2
 expect u8 gBrLoot+0xA2 1
 wait 300

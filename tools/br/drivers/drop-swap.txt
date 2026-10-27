@@ -1,7 +1,7 @@
 # drop-swap: A on a ball of a drop with another in reach opens the TRADE menu's look,
 # our party left and the drop right (Cam, 2026-10-27: "you could see your inventory on
-# the left, and the lootable one on the right and transfer between em"). One of the drop
-# goes to the party and leaves the ground, one of ours goes over and lands beside us as a
+# the left, and the lootable one on the right and transfer between em"; its side titled
+# BAG). One of the drop goes to the party and leaves the ground, one of ours goes over and lands beside us as a
 # released ball, and the rest never moved.
 #
 # spill-pickup's SPILL with three species: MUDKIP (0x11B) on the cell we face, TORCHIC
@@ -21,16 +21,18 @@ shot screen
 expectne u32 gMain+4 CB2_Overworld+1
 expect u8 gBrLoot+0xA0 4
 expect u8 gBrLoot+0xA2 0
-# MUDKIP over to us
+# A picks MUDKIP, LEFT to TREECKO (past the party's empty cell) and A picks it,
+# START moves both across at once (Cam, 2026-10-27: "we should be able to move multiple
+# at a time")
 tap A
-wait 30
-expect u8 gPlayerPartyCount 2
-# left twice, past MUDKIP to TREECKO, and over to the drop
+wait 10
+expect u8 gPlayerPartyCount 1
 tap LEFT
 wait 10
-tap LEFT
-wait 10
 tap A
+wait 10
+shot picked
+tap START
 wait 30
 shot moved
 expect u8 gPlayerPartyCount 1

@@ -30,28 +30,31 @@
 
 #define SIDE_PARTY 0
 #define SIDE_DROP  1
-#define NO_SLOT    0xFF
 
 #define GFXTAG_CURSOR 300
 #define PALTAG_CURSOR 2345
 
 // Windows: trade.c's, in its order, then the two names and the line along the bottom.
-#define WIN_MESSAGE 0
 #define WIN_NAME(side, i) (2 + (side) * PARTY_SIZE + (i))
 #define WIN_TITLE(side) (14 + (side))
 #define WIN_HINT 16
-#define WIN_DONE 17
+#define WIN_MOVE 17
+
+// The cursor's cell past the twelve mons: the button bottom right, trade.c's CANCEL.
+#define CELL_MOVE (PARTY_SIZE * 2)
+#define BOX_PICKED_PALETTE 3
 
 struct BrSwap
 {
     struct Pokemon drop[PARTY_SIZE];
+    struct Pokemon scratch[PARTY_SIZE]; // the party as a MOVE leaves it
     u16 tilemapBuffer[BG_SCREEN_SIZE / 2];
     u8 iconIds[2][PARTY_SIZE];
     u8 counts[2];
     u8 cursor;     // side * PARTY_SIZE + slot
-    u8 picked;     // a drop's mon waiting for one of ours to swap with, or NO_SLOT
+    u8 marked[2];  // a bit per slot: picked to go across on the next MOVE
+    u8 lastCell;   // the cell the cursor left for the MOVE button
     u8 cursorSpriteId;
-    u8 messageUp;
     u8 state;
     u8 bg2hofs;
     u8 bg3hofs;
@@ -66,12 +69,9 @@ static const u16 sPartyBoxTilemap[] = INCBIN_U16("graphics/trade/party_box_map.b
 static const u8 sStripesBg2Tilemap[] = INCBIN_U8("graphics/trade/stripes_bg2_map.bin");
 static const u8 sStripesBg3Tilemap[] = INCBIN_U8("graphics/trade/stripes_bg3_map.bin");
 
-static const u8 sText_Drop[] = _("DROP");
-static const u8 sText_Done[] = _("DONE");
-static const u8 sText_Hint[] = _("{A_BUTTON} Move  {B_BUTTON} Done");
-static const u8 sText_PickOurs[] = _("Swap it for which\nof yours?");
-static const u8 sText_OnlyOne[] = _("That's your only\nPOKéMON for battle.");
-static const u8 sText_DropFull[] = _("There's no room\nin the DROP.");
+static const u8 sText_Drop[] = _("BAG"); // Cam, 2026-10-27: "rename to \"BAG\" instead of \"DROP\""
+static const u8 sText_Move[] = _("MOVE");
+static const u8 sText_Hint[] = _("{A_BUTTON}Pick {START_BUTTON}Move {B_BUTTON}Done");
 
 static const u8 sTextColors[] = { TEXT_COLOR_TRANSPARENT, TEXT_COLOR_WHITE, TEXT_COLOR_DARK_GRAY };
 
@@ -98,7 +98,7 @@ static const struct BgTemplate sBgTemplates[] = {
 };
 
 static const struct WindowTemplate sWindowTemplates[] = {
-    { 0,  4,  7, 22, 4, 15,  30 }, // a message
+    { 0,  4,  7, 22, 4, 15,  30 }, // trade.c's message, unused here
     { 0, 19, 15, 10, 4, 15, 118 }, // trade.c's yes/no, unused here
     { 0,  0,  5, 8, 2, 13, 158 }, { 0,  7,  5, 8, 2, 13, 174 },
     { 0,  0, 10, 8, 2, 13, 190 }, { 0,  7, 10, 8, 2, 13, 206 },
@@ -107,9 +107,9 @@ static const struct WindowTemplate sWindowTemplates[] = {
     { 0, 15, 10, 8, 2, 13, 286 }, { 0, 22, 10, 8, 2, 13, 302 },
     { 0, 15, 15, 8, 2, 13, 318 }, { 0, 22, 15, 8, 2, 13, 334 },
     { 0,  0,  0, 15, 2, 13, 350 }, // our name
-    { 0, 15,  0, 15, 2, 13, 380 }, // DROP
+    { 0, 15,  0, 15, 2, 13, 380 }, // BAG, the drop's side
     { 0,  1, 18, 20, 2, 13, 410 }, // the keys
-    { 0, 24, 18,  6, 2, 13, 450 }, // DONE, on trade.c's CANCEL button
+    { 0, 24, 18,  6, 2, 13, 450 }, // MOVE, on trade.c's CANCEL button
     DUMMY_WIN_TEMPLATE,
 };
 
@@ -118,7 +118,8 @@ static const struct OamData sOamData_Cursor = {
     0, 0, 0, 0, 0, SPRITE_SHAPE(64x32), 0, 0, SPRITE_SIZE(64x32), 0, 1,
 };
 static const union AnimCmd sAnim_Cursor[] = { ANIMCMD_FRAME(0, 5), ANIMCMD_END };
-static const union AnimCmd *const sAnims_Cursor[] = { sAnim_Cursor };
+static const union AnimCmd sAnim_CursorOnButton[] = { ANIMCMD_FRAME(32, 5), ANIMCMD_END };
+static const union AnimCmd *const sAnims_Cursor[] = { sAnim_Cursor, sAnim_CursorOnButton };
 static const struct SpriteSheet sCursorSheet = { gTradeCursor_Gfx, 0x800, GFXTAG_CURSOR };
 static const struct SpritePalette sCursorPalette = { gTradeCursor_Pal, PALTAG_CURSOR };
 static const struct SpriteTemplate sCursorTemplate = {
@@ -164,26 +165,18 @@ static struct Pokemon *MonAt(u8 side, u8 i)
     return side == SIDE_PARTY ? &gPlayerParty[i] : &sSwap->drop[i];
 }
 
-// The box under a mon, with its level and gender in the tilemap trade.c's way.
-static void DrawLevel(u8 side, u8 i)
+// The box under a mon, trade.c's, with no level: its "Lv." and gender cells take the strip's plain tile
+// beside it (Cam, 2026-10-27: "we don't need to show the level"). A picked mon's box is
+// orange, so what goes across on MOVE stands out.
+static void DrawBox(u8 side, u8 i)
 {
-    struct Pokemon *mon = MonAt(side, i);
     u8 cell = side * PARTY_SIZE + i;
-    u8 x = sLevelCoords[cell][0], y = sLevelCoords[cell][1];
-    u8 level = GetMonData(mon, MON_DATA_LEVEL, NULL);
-    u16 symbol;
+    u16 at = sLevelCoords[cell][0] + (sLevelCoords[cell][1] - 1) * 32;
 
-    CopyToBgTilemapBufferRect_ChangePalette(1, gTradeMenuMonBox_Tilemap, sBoxCoords[cell][0], sBoxCoords[cell][1], 6, 3, 0);
-    if (level / 10 != 0)
-        sSwap->tilemapBuffer[x + y * 32] = (level / 10) + 0x60;
-    sSwap->tilemapBuffer[x + y * 32 + 1] = (level % 10) + 0x70;
-    switch (GetMonGender(mon))
-    {
-    case MON_MALE:   symbol = 0x84; break;
-    case MON_FEMALE: symbol = 0x85; break;
-    default:         symbol = 0x83; break;
-    }
-    sSwap->tilemapBuffer[(y - 1) * 32 + x + 1] = symbol;
+    CopyToBgTilemapBufferRect_ChangePalette(1, gTradeMenuMonBox_Tilemap, sBoxCoords[cell][0], sBoxCoords[cell][1], 6, 3,
+                                            (sSwap->marked[side] & (1 << i)) ? BOX_PICKED_PALETTE : 0);
+    sSwap->tilemapBuffer[at] = sSwap->tilemapBuffer[at - 1];
+    sSwap->tilemapBuffer[at + 1] = sSwap->tilemapBuffer[at - 1];
 }
 
 static void SwapWithEnemyParty(void)
@@ -212,6 +205,14 @@ static void PlaceCursor(void)
 {
     struct Sprite *cursor = &gSprites[sSwap->cursorSpriteId];
 
+    if (sSwap->cursor == CELL_MOVE)
+    {
+        StartSpriteAnim(cursor, 1);
+        cursor->x = DISPLAY_WIDTH - 16;
+        cursor->y = DISPLAY_HEIGHT;
+        return;
+    }
+    StartSpriteAnim(cursor, 0);
     cursor->x = sIconCoords[sSwap->cursor][0] * 8 + 32;
     cursor->y = sIconCoords[sSwap->cursor][1] * 8;
 }
@@ -251,7 +252,7 @@ static void Redraw(void)
             GetMonData(mon, MON_DATA_NICKNAME, name);
             StringCopy_Nickname(str, name);
             PrintCentered(WIN_NAME(side, i), str, 64, FONT_SMALL);
-            DrawLevel(side, i);
+            DrawBox(side, i);
         }
     }
     DrawHeldItemIconsForTrade(sSwap->counts, &sSwap->iconIds[0][0], SIDE_PARTY);
@@ -260,84 +261,132 @@ static void Redraw(void)
     DrawHeldItemIconsForTrade(sSwap->counts, &sSwap->iconIds[0][0], SIDE_DROP);
     SwapWithEnemyParty();
     CopyBgTilemapBufferToVram(1);
-    if (sSwap->picked != NO_SLOT && sSwap->iconIds[SIDE_DROP][sSwap->picked] != SPRITE_NONE)
-        gSprites[sSwap->iconIds[SIDE_DROP][sSwap->picked]].y2 = -4; // lifted, waiting for one of ours
     PlaceCursor();
 }
 
-static void ShowMessage(const u8 *text)
+static u8 CountBits(u8 bits)
 {
-    FillWindowPixelBuffer(WIN_MESSAGE, PIXEL_FILL(1));
-    AddTextPrinterParameterized(WIN_MESSAGE, FONT_NORMAL, text, 0, 1, TEXT_SKIP_DRAW, NULL);
-    DrawTextBorderOuter(WIN_MESSAGE, 20, 12);
-    PutWindowTilemap(WIN_MESSAGE);
-    CopyWindowToVram(WIN_MESSAGE, COPYWIN_FULL);
-    sSwap->messageUp = TRUE;
-}
+    u8 n = 0;
 
-static void HideMessage(void)
-{
-    rbox_fill_rectangle(WIN_MESSAGE);
-    ClearWindowTilemap(WIN_MESSAGE);
-    CopyBgTilemapBufferToVram(0);
-    sSwap->messageUp = FALSE;
-    Redraw(); // the box was over the names, which share its background
-}
-
-// The drop's slots stay packed from 0, in the box and the mirror alike, so its count is
-// where the next one goes.
-static void TakeFromDrop(u8 i)
-{
-    u8 j;
-    struct BoxPokemon mon;
-
-    for (j = i; j + 1 < PARTY_SIZE; j++)
+    while (bits != 0)
     {
-        CopyBoxMonAt(0, j + 1, &mon);
-        SetBoxMonAt(0, j, &mon);
-        sSwap->drop[j] = sSwap->drop[j + 1];
+        n += bits & 1;
+        bits >>= 1;
     }
-    ZeroBoxMonAt(0, PARTY_SIZE - 1);
-    ZeroMonData(&sSwap->drop[PARTY_SIZE - 1]);
+    return n;
 }
 
-static void ToDrop(u8 i)
+// MOVE: every picked mon goes across at once, ours to the drop's side and the drop's to
+// ours, so a full party trades one for one with no question asked. The party keeps one
+// and neither side holds more than six, or nothing moves.
+static void MovePicked(void)
 {
-    u8 n = sSwap->counts[SIDE_DROP];
+    u8 party = sSwap->counts[SIDE_PARTY], drop = sSwap->counts[SIDE_DROP];
+    u8 out = CountBits(sSwap->marked[SIDE_PARTY]), in = CountBits(sSwap->marked[SIDE_DROP]);
+    u8 i, n = 0, k = 0;
 
-    sSwap->drop[n] = gPlayerParty[i];
-    SetBoxMonAt(0, n, &gPlayerParty[i].box);
-    ZeroMonData(&gPlayerParty[i]);
-    CompactPartySlots();
+    if (out + in == 0 || party - out + in == 0 || party - out + in > PARTY_SIZE || drop - in + out > PARTY_SIZE)
+    {
+        PlaySE(SE_FAILURE);
+        return;
+    }
+    for (i = 0; i < party; i++)
+        if (!(sSwap->marked[SIDE_PARTY] & (1 << i)))
+            sSwap->scratch[n++] = gPlayerParty[i];
+    for (i = 0; i < drop; i++)
+        if (sSwap->marked[SIDE_DROP] & (1 << i))
+            sSwap->scratch[n++] = sSwap->drop[i];
+    for (i = 0; i < drop; i++)
+        if (!(sSwap->marked[SIDE_DROP] & (1 << i)))
+            sSwap->drop[k++] = sSwap->drop[i];
+    for (i = 0; i < party; i++)
+        if (sSwap->marked[SIDE_PARTY] & (1 << i))
+            sSwap->drop[k++] = gPlayerParty[i];
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        if (i < n)
+            gPlayerParty[i] = sSwap->scratch[i];
+        else
+            ZeroMonData(&gPlayerParty[i]);
+        // The box is what counts: written now, so a battle from here loses nothing.
+        if (i < k)
+        {
+            SetBoxMonAt(0, i, &sSwap->drop[i].box);
+        }
+        else
+        {
+            ZeroMonData(&sSwap->drop[i]);
+            ZeroBoxMonAt(0, i);
+        }
+    }
+    sSwap->marked[SIDE_PARTY] = 0;
+    sSwap->marked[SIDE_DROP] = 0;
+    CalculatePlayerPartyCount();
+    PlaySE(SE_SELECT);
+    Redraw();
 }
 
-static void ToParty(u8 i)
+// The cell under the cursor may be empty after a MOVE: the nearest one on that side, else
+// the other's first.
+static void KeepCursorOnAMon(void)
 {
-    gPlayerParty[sSwap->counts[SIDE_PARTY]] = sSwap->drop[i];
-    TakeFromDrop(i);
-}
+    u8 side = sSwap->cursor / PARTY_SIZE;
+    u8 slot = sSwap->cursor % PARTY_SIZE;
 
-static void Swap(u8 ours, u8 theirs)
-{
-    struct Pokemon mon = gPlayerParty[ours];
-
-    gPlayerParty[ours] = sSwap->drop[theirs];
-    sSwap->drop[theirs] = mon;
-    SetBoxMonAt(0, theirs, &mon.box);
+    if (sSwap->cursor == CELL_MOVE || slot < sSwap->counts[side])
+        return;
+    if (sSwap->counts[side] != 0)
+        sSwap->cursor = side * PARTY_SIZE + sSwap->counts[side] - 1;
+    else
+        sSwap->cursor = (side ^ 1) * PARTY_SIZE;
+    PlaceCursor();
 }
 
 // The cursor's next cell in a direction: the trade menu's grid, two columns a side, three
-// rows, skipping the empty cells, and staying put when there is none that way.
+// rows, skipping the empty cells. Down past the last row is the MOVE button, and up from it
+// is where the cursor came from.
 static void MoveCursor(s8 dx, s8 dy)
 {
     s8 col = (sSwap->cursor / PARTY_SIZE) * 2 + (sSwap->cursor % PARTY_SIZE) % 2;
     s8 row = (sSwap->cursor % PARTY_SIZE) / 2;
     u8 tries, side, slot;
 
+    if (sSwap->cursor == CELL_MOVE)
+    {
+        if (dy < 0)
+        {
+            sSwap->cursor = sSwap->lastCell;
+            PlaySE(SE_SELECT);
+            PlaceCursor();
+        }
+        return;
+    }
+    if (dy != 0)
+    {
+        for (row += dy; row >= 0 && row < 3; row += dy)
+        {
+            side = col / 2;
+            slot = row * 2 + col % 2;
+            if (slot < sSwap->counts[side])
+            {
+                sSwap->cursor = side * PARTY_SIZE + slot;
+                PlaySE(SE_SELECT);
+                PlaceCursor();
+                return;
+            }
+        }
+        if (dy > 0)
+        {
+            sSwap->lastCell = sSwap->cursor;
+            sSwap->cursor = CELL_MOVE;
+            PlaySE(SE_SELECT);
+            PlaceCursor();
+        }
+        return;
+    }
     for (tries = 0; tries < 4; tries++)
     {
         col = (col + dx + 4) % 4;
-        row = (row + dy + 3) % 3;
         side = col / 2;
         slot = row * 2 + col % 2;
         if (slot < sSwap->counts[side])
@@ -355,58 +404,16 @@ static void Press(void)
     u8 side = sSwap->cursor / PARTY_SIZE;
     u8 slot = sSwap->cursor % PARTY_SIZE;
 
-    if (side == SIDE_PARTY)
+    if (sSwap->cursor == CELL_MOVE)
     {
-        if (sSwap->picked != NO_SLOT)
-        {
-            Swap(slot, sSwap->picked);
-            sSwap->picked = NO_SLOT;
-        }
-        else if (sSwap->counts[SIDE_PARTY] <= 1)
-        {
-            PlaySE(SE_FAILURE);
-            ShowMessage(sText_OnlyOne);
-            return;
-        }
-        else if (sSwap->counts[SIDE_DROP] >= PARTY_SIZE)
-        {
-            PlaySE(SE_FAILURE);
-            ShowMessage(sText_DropFull);
-            return;
-        }
-        else
-        {
-            ToDrop(slot);
-        }
-    }
-    else if (sSwap->counts[SIDE_PARTY] < PARTY_SIZE)
-    {
-        ToParty(slot);
-    }
-    else
-    {
-        // A full party: lift this one, and the next A on one of ours swaps them.
-        sSwap->picked = slot;
-        sSwap->cursor = 0;
-        PlaySE(SE_SELECT);
-        Redraw();
-        ShowMessage(sText_PickOurs);
+        MovePicked();
+        KeepCursorOnAMon();
         return;
     }
-    CalculatePlayerPartyCount();
+    sSwap->marked[side] ^= 1 << slot;
+    DrawBox(side, slot);
+    CopyBgTilemapBufferToVram(1);
     PlaySE(SE_SELECT);
-    Redraw();
-    // The cell under the cursor may be empty now: the nearest one on that side, else the other.
-    side = sSwap->cursor / PARTY_SIZE;
-    slot = sSwap->cursor % PARTY_SIZE;
-    if (slot >= sSwap->counts[side])
-    {
-        if (sSwap->counts[side] != 0)
-            sSwap->cursor = side * PARTY_SIZE + sSwap->counts[side] - 1;
-        else
-            sSwap->cursor = (side ^ 1) * PARTY_SIZE;
-        PlaceCursor();
-    }
 }
 
 bool8 BrSwap_Up(void)
@@ -421,9 +428,8 @@ void BrSwap_Settled(void)
     if (sSwap == NULL || sSwap->state != 0)
         return;
     sSwap->state = 2;
-    sSwap->picked = NO_SLOT;
-    if (sSwap->messageUp)
-        HideMessage();
+    sSwap->marked[SIDE_PARTY] = 0;
+    sSwap->marked[SIDE_DROP] = 0;
     MirrorDrop();
     Redraw();
     sSwap->cursor = 0;
@@ -469,20 +475,23 @@ static void CB2_BrSwapRun(void)
                 sSwap->state = 1;
             }
         }
-        else if (sSwap->messageUp)
-        {
-            if (JOY_NEW(A_BUTTON | B_BUTTON))
-                HideMessage();
-        }
         else if (JOY_NEW(A_BUTTON))
         {
             Press();
         }
+        else if (JOY_NEW(START_BUTTON))
+        {
+            MovePicked();
+            KeepCursorOnAMon();
+        }
         else if (JOY_NEW(B_BUTTON))
         {
-            if (sSwap->picked != NO_SLOT)
+            if (sSwap->marked[SIDE_PARTY] | sSwap->marked[SIDE_DROP])
             {
-                sSwap->picked = NO_SLOT;
+                // B lets go of what was picked first, and closes the screen after.
+                sSwap->marked[SIDE_PARTY] = 0;
+                sSwap->marked[SIDE_DROP] = 0;
+                PlaySE(SE_SELECT);
                 Redraw();
             }
             else
@@ -532,7 +541,6 @@ void CB2_BrSwap(void)
         sSwap->iconIds[SIDE_PARTY][i] = SPRITE_NONE;
         sSwap->iconIds[SIDE_DROP][i] = SPRITE_NONE;
     }
-    sSwap->picked = NO_SLOT;
     SetGpuReg(REG_OFFSET_DISPCNT, 0);
     SetGpuReg(REG_OFFSET_BLDCNT, 0);
     LoadPalette(gStandardMenuPalette, BG_PLTT_ID(15), PLTT_SIZEOF(10));
@@ -554,6 +562,11 @@ void CB2_BrSwap(void)
     LoadSpriteSheet(&sCursorSheet);
     LoadSpritePalette(&sCursorPalette);
     LoadPalette(gTradeMenu_Pal, BG_PLTT_ID(0), 3 * PLTT_SIZE_4BPP);
+    // A picked mon's box: trade.c's first palette with its purples in the menu's orange.
+    LoadPalette(gTradeMenu_Pal, BG_PLTT_ID(BOX_PICKED_PALETTE), PLTT_SIZE_4BPP);
+    LoadPalette(&gTradeMenu_Pal[9], BG_PLTT_ID(BOX_PICKED_PALETTE) + 4, PLTT_SIZEOF(1));
+    LoadPalette(&gTradeMenu_Pal[8], BG_PLTT_ID(BOX_PICKED_PALETTE) + 3, PLTT_SIZEOF(1));
+    LoadPalette(&gTradeMenu_Pal[8], BG_PLTT_ID(BOX_PICKED_PALETTE) + 6, PLTT_SIZEOF(1));
     LoadBgTiles(1, gTradeMenu_Gfx, 0x1280, 0);
     CopyToBgTilemapBufferRect_ChangePalette(1, gTradeMenu_Tilemap, 0, 0, 32, 20, 0);
     LoadBgTilemap(2, sStripesBg2Tilemap, 0x800, 0);
@@ -568,7 +581,7 @@ void CB2_BrSwap(void)
     PlaceCursor();
     PrintCentered(WIN_TITLE(SIDE_PARTY), gSaveBlock2Ptr->playerName, 120, FONT_NORMAL);
     PrintCentered(WIN_TITLE(SIDE_DROP), sText_Drop, 120, FONT_NORMAL);
-    PrintCentered(WIN_DONE, sText_Done, 48, FONT_NORMAL);
+    PrintCentered(WIN_MOVE, sText_Move, 48, FONT_NORMAL);
     FillWindowPixelBuffer(WIN_HINT, PIXEL_FILL(0));
     AddTextPrinterParameterized3(WIN_HINT, FONT_NORMAL, 0, 1, sTextColors, TEXT_SKIP_DRAW, sText_Hint);
     PutWindowTilemap(WIN_HINT);

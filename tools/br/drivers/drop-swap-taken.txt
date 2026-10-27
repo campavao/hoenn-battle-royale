@@ -15,8 +15,10 @@ expectne u32 gMain+4 CB2_Overworld+1
 pokebytes gBrMailbox+0x1058 0A 0B 08 00 00 01 01 00 00 00 00 00 00
 poke u16 gBrMailbox+0x0C 2
 wait 20
-# over to us all the same
+# over to us all the same: picked, then START
 tap A
+wait 10
+tap START
 wait 30
 expect u8 gPlayerPartyCount 2
 tap B
