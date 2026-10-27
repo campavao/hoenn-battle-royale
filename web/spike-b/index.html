@@ -30,6 +30,8 @@
       #intro button { justify-self: start; background: #4c7a99; color: #fff; border: 0; border-radius: 6px; padding: 8px 16px; font: inherit; font-weight: 700; }
       #battle.on { display: grid; }
       #battle canvas { image-rendering: pixelated; width: min(100vw, 150vh); aspect-ratio: 240 / 160; height: auto; }
+      /* A phone on its side: the battle between the pad's two halves, not under them. */
+      @media (orientation: landscape) and (pointer: coarse) { #battle canvas { width: min(calc(100vw - 2 * (env(safe-area-inset-left) + 200px)), 150vh); } }
       #battle .note { position: absolute; top: 12px; left: 12px; right: 12px; text-align: center; color: #9fb3c0; }
     </style>
   </head>
@@ -54,9 +56,10 @@
       <ul>
         <li>Walk and run like Emerald (hold B to walk).</li>
         <li>Face a trainer and press A to battle.</li>
+        <li>Step on a rustling patch of grass (or a dark ripple on water) for a wild Pokémon, as in the game.</li>
         <li>Spectate, then drag and pinch to see all of Hoenn and everyone in it.</li>
       </ul>
-      <span>Not here yet: wild Pokémon, items, the ring, other players.</span>
+      <span>Not here yet: items, the ring, other players, keeping what you catch.</span>
       <button id="intro-go" type="button">Start</button>
     </div></div>
     <script type="module" src="./main.ts"></script>

@@ -297,31 +297,32 @@ static void DealSome(void)
 // redrawn in the darker greens of the palette it already uses, so it reads apart from the
 // grass a step disturbs. Anywhere else -- water, a cave floor, sand, ash -- something's
 // shadow, drifting: a ripple or a puff of dust in a darker colour still vanished into the
-// sea and the sand (review of #19). Neither costs a palette slot of its own.
-static const u32 sTallGrassPic[] = INCGFX_U32("graphics/field_effects/pics/br_patch_tall_grass.png", ".4bpp", "-mwidth 2 -mheight 2");
-static const u32 sLongGrassPic[] = INCGFX_U32("graphics/field_effects/pics/br_patch_long_grass.png", ".4bpp", "-mwidth 2 -mheight 2");
+// sea and the sand (review of #19). Neither costs a palette slot of its own. Named, so
+// spike B's page can cut them from the player's ROM (web/spike-b/romart.ts).
+const u32 gBrPatchTallGrassPic[] = INCGFX_U32("graphics/field_effects/pics/br_patch_tall_grass.png", ".4bpp", "-mwidth 2 -mheight 2");
+const u32 gBrPatchLongGrassPic[] = INCGFX_U32("graphics/field_effects/pics/br_patch_long_grass.png", ".4bpp", "-mwidth 2 -mheight 2");
 
 static const struct SpriteFrameImage sTallGrassImages[] = {
-    overworld_frame(sTallGrassPic, 2, 2, 0),
-    overworld_frame(sTallGrassPic, 2, 2, 1),
-    overworld_frame(sTallGrassPic, 2, 2, 2),
-    overworld_frame(sTallGrassPic, 2, 2, 3),
-    overworld_frame(sTallGrassPic, 2, 2, 4),
+    overworld_frame(gBrPatchTallGrassPic, 2, 2, 0),
+    overworld_frame(gBrPatchTallGrassPic, 2, 2, 1),
+    overworld_frame(gBrPatchTallGrassPic, 2, 2, 2),
+    overworld_frame(gBrPatchTallGrassPic, 2, 2, 3),
+    overworld_frame(gBrPatchTallGrassPic, 2, 2, 4),
 };
-static const u32 sWaterPic[] = INCGFX_U32("graphics/field_effects/pics/br_patch_water.png", ".4bpp", "-mwidth 2 -mheight 2");
+const u32 gBrPatchWaterPic[] = INCGFX_U32("graphics/field_effects/pics/br_patch_water.png", ".4bpp", "-mwidth 2 -mheight 2");
 
 static const struct SpriteFrameImage sWaterImages[] = {
-    overworld_frame(sWaterPic, 2, 2, 0),
-    overworld_frame(sWaterPic, 2, 2, 1),
-    overworld_frame(sWaterPic, 2, 2, 2),
-    overworld_frame(sWaterPic, 2, 2, 3),
-    overworld_frame(sWaterPic, 2, 2, 4),
+    overworld_frame(gBrPatchWaterPic, 2, 2, 0),
+    overworld_frame(gBrPatchWaterPic, 2, 2, 1),
+    overworld_frame(gBrPatchWaterPic, 2, 2, 2),
+    overworld_frame(gBrPatchWaterPic, 2, 2, 3),
+    overworld_frame(gBrPatchWaterPic, 2, 2, 4),
 };
 static const struct SpriteFrameImage sLongGrassImages[] = {
-    overworld_frame(sLongGrassPic, 2, 2, 0),
-    overworld_frame(sLongGrassPic, 2, 2, 1),
-    overworld_frame(sLongGrassPic, 2, 2, 2),
-    overworld_frame(sLongGrassPic, 2, 2, 3),
+    overworld_frame(gBrPatchLongGrassPic, 2, 2, 0),
+    overworld_frame(gBrPatchLongGrassPic, 2, 2, 1),
+    overworld_frame(gBrPatchLongGrassPic, 2, 2, 2),
+    overworld_frame(gBrPatchLongGrassPic, 2, 2, 3),
 };
 
 static void SpriteCB_Patch(struct Sprite *sprite)
@@ -349,10 +350,10 @@ static void SpriteCB_Shadow(struct Sprite *sprite)
 // like a water texture"). Colour 1 the shadow, 2 and 3 the ripple, in the sea's own
 // highlights; only a map with a patch on water spends a slot on it.
 #define BR_PATCH_WATER_TAG 0x5A10
-static const u16 sWaterColors[16] = {
+const u16 gBrPatchWaterColors[16] = {
     0, RGB(4, 8, 15), RGB(22, 25, 30), RGB(17, 20, 27), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
-static const struct SpritePalette sWaterPalette = { sWaterColors, BR_PATCH_WATER_TAG };
+static const struct SpritePalette sWaterPalette = { gBrPatchWaterColors, BR_PATCH_WATER_TAG };
 
 // The ripple, and the shadow under it drifting as the dry-land ones do.
 static void SpriteCB_Water(struct Sprite *sprite)

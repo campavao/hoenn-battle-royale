@@ -51,6 +51,8 @@ u16 BrZone_Pick(void);
 // Outside the opening: the species a map's own table chose, or this match's stand-in for
 // it from the national dex (2026-10-05 play-test). Seeded by the match, map and species.
 u16 BrZone_National(u16 native);
+// ...as it would on another map than the one we stand on (br_wild.c).
+u16 BrZone_NationalOn(u16 native, u8 mapGroup, u8 mapNum);
 // Puts this match's item balls on the ground, once. Safe to call every tick.
 void BrZone_PlaceItems(void);
 // The opening is over: the balls nobody picked up come off the ground. Six of the eight

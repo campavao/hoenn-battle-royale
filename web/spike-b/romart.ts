@@ -165,6 +165,40 @@ export class RomArt {
     return pals;
   }
 
+  /** The marked spots' pictures (br_patch.c): the grass's rustle in the field effects'
+   *  palette, and the ripple in the water's own. 16x16 frames, left to right. */
+  patchSheets(): { grass: HTMLCanvasElement; water: HTMLCanvasElement } {
+    const grassPal = this.palette(this.u32(this.sym('gSpritePalette_GeneralFieldEffect1')));
+    const waterPal = this.palette(this.sym('gBrPatchWaterColors'));
+    return {
+      grass: this.frames(this.sym('gBrPatchTallGrassPic'), 5, 16, 16, grassPal),
+      water: this.frames(this.sym('gBrPatchWaterPic'), 5, 16, 16, waterPal),
+    };
+  }
+
+  /** `count` frames of w x h 4bpp tiles from `at`, row by row, colour 0 clear. */
+  private frames(at: number, count: number, w: number, h: number, pal: number[]): HTMLCanvasElement {
+    const cv = document.createElement('canvas');
+    cv.width = w * count;
+    cv.height = h;
+    const ctx = cv.getContext('2d')!;
+    const id = ctx.createImageData(cv.width, h);
+    const px = new Uint32Array(id.data.buffer);
+    const tw = w / TILE;
+    for (let f = 0; f < count; f++) {
+      const data = at - ROM + f * (w * h) / 2;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const b = this.rom[data + ((y >> 3) * tw + (x >> 3)) * 32 + (y & 7) * 4 + ((x & 7) >> 1)];
+          const c = (b >> ((x & 1) * 4)) & 0xf;
+          if (c) px[y * cv.width + f * w + x] = pal[c];
+        }
+      }
+    }
+    ctx.putImageData(id, 0, 0);
+    return cv;
+  }
+
   /** gfx's frames left to right, colour 0 clear, as export-sprites.py lays them out. */
   sprite(gfx: number, frames: number): HTMLCanvasElement {
     const info = this.u32(this.sym('gObjectEventGraphicsInfoPointers') + gfx * 4);

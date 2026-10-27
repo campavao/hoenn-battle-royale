@@ -46,6 +46,11 @@ BR_SIZE(BrPatch, 48)
 
 extern struct BrPatch gBrPatch;
 extern u8 gBrPatchTaken[];
+// The pictures (16x16 frames, 4bpp): spike B draws them from the player's ROM too.
+extern const u32 gBrPatchTallGrassPic[];
+extern const u32 gBrPatchLongGrassPic[];
+extern const u32 gBrPatchWaterPic[];
+extern const u16 gBrPatchWaterColors[16];
 
 void BrPatch_Init(void);
 // Deals this map's patches when we have walked onto a new one, grows the taken ones back

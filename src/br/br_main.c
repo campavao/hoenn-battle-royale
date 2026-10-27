@@ -29,6 +29,7 @@
 #include "br/br_zone.h"
 #include "br/br_balls.h"
 #include "br/br_patch.h"
+#include "br/br_wild.h"
 #include "br/br_event.h"
 #include "br/br_legend.h"
 #include "br/br_story.h"
@@ -93,6 +94,7 @@ void BrFrame(void)
     BrLoot_Tick();
     BrLegend_Tick();
     BrPatch_Tick();
+    BrWild_Tick(); // spike B's page asks for a wild battle
     BrBot_Tick();
     BrDuel_Tick();
     BrRing_Tick();

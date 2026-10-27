@@ -14,9 +14,10 @@
 // player's ROM in the browser (romart.ts): the site ships none. Nothing here is shell code.
 
 import { WorldIndex } from '../src/bots/hoenn';
-import type { World, WorldMap, Spot } from '../src/bots/world';
+import { isTallGrass, isWater, type World, type WorldMap, type Spot } from '../src/bots/world';
+import { dealPatches, loadPatches, type Patch, type PatchTable } from '../src/bots/patches';
 import { DIR_EAST, DIR_SOUTH, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from './sim';
-import { bootRom, loadRom, lastStart, type RomBattles } from './rom';
+import { bootRom, loadRom, lastStart, type Fought, type RomBattles } from './rom';
 import { RomArt } from './romart';
 import type { GbaKey } from '../src/emu';
 import type { PackedMon } from '../src/net/wire';
@@ -107,6 +108,8 @@ interface Actor {
   m: Mover;
   bot?: { rng: number; wait: number; dir: number; left: number; walk: boolean };
   battling?: boolean;
+  /** Fought once: a trainer you beat (or lost to) does not ask again. */
+  beaten?: boolean;
   /** A step whose arrival hasn't been checked yet (grass). */
   arriving?: boolean;
 }
@@ -119,7 +122,10 @@ const KEYMAP: Record<string, string> = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
   w: 'up', s: 'down', a: 'left', d: 'right', x: 'b', X: 'b', z: 'a', Z: 'a', Shift: 'b', Enter: 'a', ' ': 'a',
 };
+/** The start card is up: nothing behind it moves (review of #157). */
+const intro = () => document.getElementById('intro') !== null;
 addEventListener('keydown', (e) => {
+  if (intro()) return;
   if (e.key === 'v' || e.key === 'V') { toggleSpectate(); return; }
   const k = KEYMAP[e.key];
   if (!k) return;
@@ -131,7 +137,7 @@ addEventListener('keyup', (e) => { const k = KEYMAP[e.key]; if (k) held.delete(k
 addEventListener('blur', () => held.clear());
 for (const el of document.querySelectorAll<HTMLElement>('.k')) {
   const k = el.dataset.k!;
-  const down = (e: PointerEvent) => { e.preventDefault(); el.setPointerCapture(e.pointerId); el.classList.add('down'); if (!held.has(k)) pressed.add(k); held.add(k); };
+  const down = (e: PointerEvent) => { e.preventDefault(); if (intro()) return; el.setPointerCapture(e.pointerId); el.classList.add('down'); if (!held.has(k)) pressed.add(k); held.add(k); };
   const up = () => { el.classList.remove('down'); held.delete(k); };
   el.addEventListener('pointerdown', down);
   el.addEventListener('pointerup', up);
@@ -218,10 +224,12 @@ function tickActor(a: Actor): void {
   if (a === player && !a.m.action) {
     if (a.arriving) {
       a.arriving = false;
-      // Grass encounters wait on a real wild battle from the ROM: through the trainer
-      // path they opened as "TRAINER WILD would like to battle!" (Cam, 2026-10-27).
+      // A marked spot, as in the game: no step encounters, the spot you can see is the
+      // battle (br_patch.h).
+      const spot = patchAt(a.m.spot);
+      if (spot) { startWild(spot); return; }
     }
-    if (pressed.has('a')) talk();
+    if (pressed.has('a') && frame >= calmUntil) talk();
   }
 }
 
@@ -237,7 +245,36 @@ function talk(): void {
     const og = global(o.m.spot);
     return !!og && !!g && og.gx === g.gx && og.gy === g.gy;
   });
-  if (other) startBattle(other);
+  if (other && !other.beaten) startBattle(other);
+}
+
+// ---- marked spots: the live game's visible encounters ------------------------------------
+
+/** The page's match seed. The spots are dealt from it the way every ROM deals them
+ *  (bots/patches.ts, br_patch.c's Pick), and the ROM rolls the national stand-ins off it. */
+const SEED = (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0;
+let patchTable: PatchTable | null = null;
+/** Taken spots by key, and the frame they were taken: the ring's phase grows them back in
+ *  the game; here, a minute and a half. */
+const taken = new Map<number, number>();
+const REGROW = 60 * 90;
+
+function patchesOn(p: Placed): Patch[] {
+  return patchTable ? dealPatches(patchTable, p.m.id, p.m, SEED) : [];
+}
+
+function isTaken(key: number): boolean {
+  const at = taken.get(key);
+  if (at === undefined) return false;
+  if (frame - at < REGROW) return true;
+  taken.delete(key);
+  return false;
+}
+
+function patchAt(s: Spot): { map: Placed; patch: Patch } | null {
+  const p = placed.get(s.map);
+  const patch = p && patchesOn(p).find((q) => q.x === s.x && q.y === s.y && !isTaken(q.key));
+  return p && patch ? { map: p, patch } : null;
 }
 
 // ---- the battle handoff: the real ROM fights, the page waits ---------------------------
@@ -249,6 +286,7 @@ const gbaCanvas = document.getElementById('gba') as HTMLCanvasElement;
 let rom: RomBattles | null = null;
 let artMs = 0;
 let battle: { foe: Actor | null; shownAt: number } | null = null;
+let calmUntil = 0;
 const handoff: number[] = []; // ms from the trigger to the ROM's first battle frame, and back
 
 function mon(species: number, level: number): PackedMon {
@@ -259,35 +297,60 @@ function mon(species: number, level: number): PackedMon {
   };
 }
 
-function startBattle(foe: Actor): void {
+/** A battle the ROM fights, the page showing it from its first frame and taking the
+ *  screen back when it is over. */
+function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>): void {
   player.battling = true;
-  foe.battling = true;
-  foe.m.facing = foe.m.moveDir = ({ 1: 2, 2: 1, 3: 4, 4: 3 } as Record<number, number>)[player.m.facing];
+  if (foe) foe.battling = true;
   held.clear();
   battle = { foe, shownAt: performance.now() };
   if (!rom) {
     battleEl.classList.add('on');
     battleNote.textContent = 'The game is still loading. Try again in a moment.';
-    setTimeout(endBattle, 1500);
+    setTimeout(() => endBattle(null), 1500);
     return;
   }
   battleNote.textContent = '';
   const t0 = performance.now();
-  // POOCHYENA and ZIGZAGOON (Emerald's internal species ids, not the dex's).
-  const party = [mon(286, 5), mon(288, 5)];
   const firstFrame = rom.emu.onFrame(() => { handoff.push(performance.now() - t0); firstFrame(); });
   // The page keeps the screen until the ROM's battle is up: before that the hidden ROM
   // is still standing in its own Littleroot, which is what showed through ("teleported
-  // back to my house", Cam).
-  void rom.fight(foe.name, party, foe.skin, () => battleEl.classList.add('on')).then(endBattle);
+  // back to my house", Cam). A battle that never starts never takes the screen.
+  void run(rom, () => battleEl.classList.add('on')).then(endBattle, () => endBattle(null));
 }
 
-function endBattle(): void {
+function startBattle(foe: Actor): void {
+  foe.m.facing = foe.m.moveDir = ({ 1: 2, 2: 1, 3: 4, 4: 3 } as Record<number, number>)[player.m.facing];
+  // POOCHYENA and ZIGZAGOON (Emerald's internal species ids, not the dex's).
+  const party = [mon(286, 5), mon(288, 5)];
+  foe.beaten = true;
+  handOff(foe, (r, onStart) => r.fight(foe.name, party, foe.skin, onStart));
+}
+
+function startWild(at: { map: Placed; patch: Patch }): void {
+  const { m } = at.map;
+  handOff(null, (r, onStart) => {
+    // Taken as the battle starts, as BrPatch_Take does.
+    taken.set(at.patch.key, frame);
+    return r.wild(m.group, m.num, isWater(m, at.patch.x, at.patch.y), onStart);
+  });
+}
+
+const OUTCOME = ['', 'won', 'lost', 'drew', 'ran', 'teleported', 'it fled', 'caught it', 'out of balls', 'forfeited'];
+let lastResult = '';
+
+function endBattle(r: Fought | null): void {
   battleEl.classList.remove('on');
   player.battling = false;
   if (battle?.foe) battle.foe.battling = false;
+  const wild = battle && !battle.foe;
   battle = null;
   held.clear();
+  pressed.clear();
+  // A held A from the battle's last text must not walk straight into another one.
+  calmUntil = frame + 30;
+  if (r && !r.ok) lastResult = 'last battle: the ROM did not start it';
+  else if (r) lastResult = `last battle: ${wild ? `wild #${r.species} Lv${r.level}, ` : ''}${OUTCOME[r.outcome] ?? r.outcome}`;
 }
 
 // While the ROM has the screen, the pad is the ROM's.
@@ -449,6 +512,36 @@ function sheet(gfx: number): HTMLCanvasElement | null {
   return s ?? null;
 }
 
+let patchArt: { grass: HTMLCanvasElement; water: HTMLCanvasElement } | null = null;
+// sAnim_TallGrass's frames, ten apiece, then br_patch.c's breath before the next rustle.
+const RUSTLE = [1, 2, 3, 4, 0];
+const BREATH = 25;
+// br_patch.c's sDrift: a pixel or two either way and back, a step every eight frames.
+const DRIFT = [0, 1, 2, 1, 0, -1, -2, -1];
+
+/** The map's marked spots nobody has taken, as the ROM draws them (br_patch.c Draw):
+ *  the grass's rustle, darkened; on water a ripple drifting; anywhere else a shadow. */
+function drawPatches(p: Placed): void {
+  if (!patchArt && art) patchArt = art.patchSheets();
+  if (!patchArt) return;
+  for (const q of patchesOn(p)) {
+    if (isTaken(q.key)) continue;
+    const x = (p.gx + q.x) * TILE, y = (p.gy + q.y) * TILE;
+    // Each spot's sprite starts when it comes into view, so they rustle out of step.
+    const t = (frame + q.key * 13) % (RUSTLE.length * 10 + BREATH);
+    const f = t < RUSTLE.length * 10 ? RUSTLE[Math.floor(t / 10)] : 0;
+    const drift = DRIFT[((frame + q.key * 7) >> 3) & 7];
+    if (isWater(p.m, q.x, q.y)) ctx.drawImage(patchArt.water, f * TILE, 0, TILE, TILE, x + drift, y, TILE, TILE);
+    else if (isTallGrass(p.m, q.x, q.y)) ctx.drawImage(patchArt.grass, f * TILE, 0, TILE, TILE, x, y, TILE, TILE);
+    else {
+      ctx.fillStyle = '#181818';
+      ctx.beginPath();
+      ctx.ellipse(x + 8 + drift, y + 12, 7, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
 function draw(): void {
   if (follow) {
     const p = pixelOf(follow);
@@ -499,6 +592,7 @@ function draw(): void {
       else ctx.drawImage(p.ground!, x, y);
     }
   }
+  if (!far) for (const p of visible) drawPatches(p);
   const people = actors
     .map((a) => ({ a, p: pixelOf(a) }))
     .filter(({ p }) => p.x > vx0 - 32 && p.x < vx1 + 32 && p.y > vy0 - 48 && p.y < vy1 + 32)
@@ -584,6 +678,7 @@ function loop(now: number): void {
       `${actors.length} trainers · ${here.map.replace('MAP_', '')} ${here.x},${here.y}` +
       `\nROM ${rom ? (battle ? 'fighting' : 'paused, waiting to fight') : 'booting'}` +
       (lastStart ? ` · battle up in ${lastStart.frames} frames (${lastStart.ms.toFixed(0)} ms)` : '') +
+      (lastResult ? `\n${lastResult}` : '') +
       (spectating ? `\nzoom ${zoom.toFixed(2)} · drag, pinch, tap a trainer` : '');
   }
   requestAnimationFrame(loop);
@@ -648,8 +743,9 @@ async function boot(): Promise<void> {
   const rest = [...placed.values()];
   const next = () => { const p = rest.find((q) => !q.mips); if (p) { paint(p); mipFor(p, 0); setTimeout(next, 16); } };
   setTimeout(next, 500);
-  bootRom(files).then((r) => { rom = r; }, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { actors, placed, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startBattle, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; } };
+  void loadPatches().then((t) => { patchTable = t; });
+  bootRom(files, SEED).then((r) => { rom = r; }, (e) => console.warn('spike ROM not booted', e));
+  (window as unknown as { __spike: unknown }).__spike = { actors, placed, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startBattle, startWild, patchAt, patchesOn, taken, SEED, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; } };
 }
 
 void boot();

@@ -385,13 +385,17 @@ static u16 StandIns(u16 native, u16 band, u16 pick, u16 *out)
 
 u16 BrZone_National(u16 native)
 {
+    return BrZone_NationalOn(native, gSaveBlock1Ptr->location.mapGroup, gSaveBlock1Ptr->location.mapNum);
+}
+
+u16 BrZone_NationalOn(u16 native, u8 mapGroup, u8 mapNum)
+{
     u32 h;
     u16 band, n, out = native;
 
     if (gBrMatch.seed == 0 || !Wild(native))
         return native;
-    h = Mix(gBrMatch.seed ^ ((u32)gSaveBlock1Ptr->location.mapGroup << 24)
-            ^ ((u32)gSaveBlock1Ptr->location.mapNum << 16) ^ native);
+    h = Mix(gBrMatch.seed ^ ((u32)mapGroup << 24) ^ ((u32)mapNum << 16) ^ native);
     if (h & 1)
         return native; // half of them stay Hoenn's
     h = Mix(h);
