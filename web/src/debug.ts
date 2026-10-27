@@ -4,6 +4,7 @@
 //
 // Pure functions over the hash string, like hash.ts, so the cycle can be pinned without a
 // browser. app.ts reads and writes `location` around them.
+import { devPace } from './hash';
 
 /** One switch. `choices` are what the hash can say for it, in the order a press steps
  *  through them: `null` is the key absent, `''` a bare key (`#fast`), anything else its
@@ -16,19 +17,22 @@ export interface DebugFlag {
   off?: string;
   /** Seconds, said with an `s`. */
   secs?: boolean;
+  /** Which half of devPace this is: what it says comes from devPace itself, so `#fast`
+   *  under it reads 25s rather than the ROOM it would say on its own. */
+  pace?: 'safariSecs' | 'fogSecs';
   /** Read once as the page starts (wireFps), so a press reloads to apply it. The rest
    *  are read when a match starts, which is after this menu. */
   reload?: boolean;
-  /** Read only by a dev server's page (import.meta.env.DEV): each one rigs a match, and
-   *  devsurface.test.ts holds a build to reading none of them. */
+  /** Read only by a dev server's page (import.meta.env.DEV): each one rigs a match.
+   *  devsurface.test.ts holds every reader to its guard. */
   dev: boolean;
 }
 
 export const DEBUG_FLAGS: readonly DebugFlag[] = [
   { key: 'perf', label: 'PERF METERS', choices: [null, ''], reload: true, dev: false },
   { key: 'fast', label: 'FAST PACE', choices: [null, ''], dev: true },
-  { key: 'safari', label: 'SAFARI TIME', choices: [null, '25', '60', '120'], off: 'ROOM', secs: true, dev: true },
-  { key: 'fog', label: 'FOG PHASE', choices: [null, '15', '30', '60'], off: 'ROOM', secs: true, dev: true },
+  { key: 'safari', label: 'SAFARI TIME', choices: [null, '25', '60', '120'], off: 'ROOM', secs: true, pace: 'safariSecs', dev: true },
+  { key: 'fog', label: 'FOG PHASE', choices: [null, '15', '30', '60'], off: 'ROOM', secs: true, pace: 'fogSecs', dev: true },
   { key: 'seed', label: 'FIXED SEED', choices: [null, '1', '7', '42'], dev: true },
   { key: 'nobots', label: 'NO BOTS', choices: [null, ''], dev: true },
   { key: 'noauto', label: 'HOLD ROOM OPEN', choices: [null, ''], dev: true },
@@ -56,8 +60,14 @@ export function cycleFlag(hash: string, flag: DebugFlag): string {
   return params.toString().replace(/=(?=&|$)/g, '');
 }
 
-/** What the row says on its right for `value`. */
-export function flagDetail(flag: DebugFlag, value: string | null): string {
+/** What the row says on its right for the hash: the page's own reading of it where there
+ *  is one (the pace), so the row cannot say ROOM while the match runs fast. */
+export function flagDetail(flag: DebugFlag, hash: string): string {
+  if (flag.pace) {
+    const secs = devPace(hash)?.[flag.pace];
+    return secs === undefined ? (flag.off ?? 'OFF') : `${secs}s`;
+  }
+  const value = flagValue(hash, flag);
   if (value === null) return flag.off ?? 'OFF';
   if (value === '') return 'ON';
   return flag.secs ? `${value}s` : value;

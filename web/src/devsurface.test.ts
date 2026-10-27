@@ -8,6 +8,8 @@
 import { describe, expect, it } from 'vitest';
 import appSource from './app.ts?raw';
 import bridgeSource from './net/bridge.ts?raw';
+import hashSource from './hash.ts?raw';
+import { DEBUG_FLAGS } from './debug';
 import playSource from '../e2e/play.ts?raw';
 import * as field from './field';
 import { HOENN } from './bots/hoenn';
@@ -84,6 +86,32 @@ describe('the dev flags a match is set up with', () => {
     // To the end of the signature's line: a return type can have braces of its own.
     const guarded = new RegExp(String.raw`function ${fn}\([^)]*\)[^\n]*\{\s*if \(!import\.meta\.env\.DEV\) return (?:null|undefined);`);
     expect(appSource).toMatch(guarded);
+  });
+});
+
+// The DEBUG screen (debug.ts) greys every flag but #perf in a build, on the word of each
+// reader's guard. A reader that lost its guard would let a live player rig a match while
+// the row still greyed; a key the page does not read at all would be a row that does
+// nothing. Each dev flag is read either in a function the test above holds to its guard,
+// or on one line with the guard.
+describe("the DEBUG screen's dev flags", () => {
+  /** The ones read in hash.ts's devPace (behind paceOptions) or in fixedSeed: where, and how. */
+  const inGuardedFn: Record<string, { fn: string; source: string; read: string }> = {
+    fast: { fn: 'paceOptions', source: hashSource, read: "params.has('fast')" },
+    safari: { fn: 'paceOptions', source: hashSource, read: "secs(params, 'safari')" },
+    fog: { fn: 'paceOptions', source: hashSource, read: "secs(params, 'fog')" },
+    seed: { fn: 'fixedSeed', source: appSource, read: ".get('seed')" },
+  };
+  it.each(DEBUG_FLAGS.filter((f) => f.dev).map((f) => f.key))('#%s is read, and only in DEV', (key) => {
+    const at = inGuardedFn[key];
+    if (at) {
+      expect(appSource).toMatch(new RegExp(String.raw`function ${at.fn}\(`));
+      expect(at.source).toContain(at.read);
+      return;
+    }
+    const lines = appSource.split('\n').filter((l) => new RegExp(String.raw`\.(has|get)\('${key}'\)`).test(l));
+    expect(lines.length, `app.ts reads #${key}`).toBeGreaterThan(0);
+    for (const line of lines) expect(line, `#${key}`).toContain('import.meta.env.DEV');
   });
 });
 

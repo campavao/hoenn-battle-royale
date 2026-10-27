@@ -1,7 +1,8 @@
 // The trainer's own screens (POK-335, POK-337, POK-416): the TRAINER CARD, MY LOOK and MY
-// STATS, and the DEBUG switches the card's DEBUG MENU puts on the main menu. A chunk of their own, fetched soon after boot (app.ts's lazyScreen), the way the
-// results are (POK-407): main.js has a budget, and these are only ever a press away.
-import { DEBUG_FLAGS, cycleFlag, flagDetail, flagValue } from '../debug';
+// STATS, and the DEBUG switches the card's DEBUG MENU puts on the main menu. A chunk of
+// their own, fetched soon after boot (app.ts's lazyScreen), the way the results are
+// (POK-407): main.js has a budget, and these are only ever a press away.
+import { DEBUG_FLAGS, cycleFlag, flagDetail } from '../debug';
 import { CARD_BADGES, SKINS, SKIN_UNLOCK_WINS, WARDROBE, cardBadges, cardStars, ordinal, skinUnlocked, type CareerTotals } from '../match/career';
 import { favourite, type TallyNames } from '../match/tally';
 import type { RecordLine } from '../match/record';
@@ -366,12 +367,12 @@ export function debugScreen(model: () => DebugModel): DrawnScreen {
       rows: [
         ...DEBUG_FLAGS.map((flag): RowSpec => ({
           label: flag.label,
-          detail: flagDetail(flag, flagValue(m.hash, flag)),
+          detail: flagDetail(flag, m.hash),
           id: `debug-${flag.key}`,
           disabled: flag.dev && !m.dev,
           onPress: () => m.onSet(cycleFlag(m.hash, flag), flag.reload === true),
         })),
-        { label: 'CLEAR CACHE', detail: 'and reload', id: 'debug-fresh', onPress: m.onFresh },
+        { label: 'CLEAR CACHE', detail: 'drops the flags', id: 'debug-fresh', onPress: m.onFresh },
         { label: 'SPIKE B', detail: 'TS overworld', id: 'debug-spike-b', onPress: m.onSpikeB },
       ],
       rowsId: 'debug-rows',

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { DEBUG_FLAGS, cycleFlag, flagDetail, flagValue } from './debug';
+import { DEBUG_FLAGS, cycleFlag, flagDetail } from './debug';
 import { devPace, perfWanted, withRoom } from './hash';
-import { fitText } from './ui/emerald';
+import { measure } from './ui/emerald';
 import { W } from './ui/screens';
 
 const flag = (key: string) => DEBUG_FLAGS.find((f) => f.key === key)!;
@@ -37,24 +37,34 @@ describe('the DEBUG rows', () => {
   });
 
   it('say what each value means', () => {
-    expect(flagDetail(flag('fast'), flagValue('#fast', flag('fast')))).toBe('ON');
-    expect(flagDetail(flag('fast'), flagValue('', flag('fast')))).toBe('OFF');
-    expect(flagDetail(flag('safari'), flagValue('', flag('safari')))).toBe('ROOM');
-    expect(flagDetail(flag('safari'), flagValue('#safari=60', flag('safari')))).toBe('60s');
-    expect(flagDetail(flag('seed'), flagValue('#seed=7', flag('seed')))).toBe('7');
-    expect(flagDetail(flag('away'), null)).toBe('2 MIN');
+    expect(flagDetail(flag('fast'), '#fast')).toBe('ON');
+    expect(flagDetail(flag('fast'), '')).toBe('OFF');
+    expect(flagDetail(flag('safari'), '')).toBe('ROOM');
+    expect(flagDetail(flag('safari'), '#safari=60')).toBe('60s');
+    expect(flagDetail(flag('seed'), '#seed=7')).toBe('7');
+    expect(flagDetail(flag('away'), '')).toBe('2 MIN');
   });
 
-  it('start every switch at off, and fit every label beside its widest value', () => {
+  it('say the pace #fast runs, not ROOM, under FAST PACE', () => {
+    expect(flagDetail(flag('safari'), '#fast')).toBe('25s');
+    expect(flagDetail(flag('fog'), '#fast')).toBe('15s');
+    expect(flagDetail(flag('fog'), '#fast&fog=60')).toBe('60s');
+  });
+
+  it('start every switch at off, and fit every label beside every value it can say', () => {
     for (const f of DEBUG_FLAGS) {
       expect(f.choices[0], f.key).toBeNull();
-      const widest = Math.max(...f.choices.map((v) => flagDetail(f, v).length));
-      const line = `${f.label}  ${'0'.repeat(widest)}`;
-      expect(fitText(line, W - 32), f.key).toBe(line);
+      for (const v of f.choices) {
+        const hash = v === null ? '' : v === '' ? f.key : `${f.key}=${v}`;
+        const detail = flagDetail(f, hash);
+        // paintRows's room for a detail: the row inside the frame, less the cursor's slot,
+        // the label and an 8px gap.
+        expect(measure(detail), `${f.key} ${detail}`).toBeLessThanOrEqual(W - 16 - 8 - measure(f.label) - 8);
+      }
     }
   });
 
-  it('leave only #perf readable in a build: the rest rig a match (devsurface.test.ts)', () => {
+  it('leave only #perf readable in a build: the rest rig a match', () => {
     expect(DEBUG_FLAGS.filter((f) => !f.dev).map((f) => f.key)).toEqual(['perf']);
   });
 });
