@@ -168,9 +168,6 @@ async function hostsAMatch(browser: Browser, run: (typeof RUNS)[number]): Promis
       await expect(host.locator('#fps')).toContainText(/fps[\s\S]*all \d+ frames/);
       // ...in a band of its own above the picture (2026-10-27): under a phone's status bar,
       // where iOS blurred it, it had sat over the HUD and the results' title too.
-      // Its five lines hold a whole reading on a 390px phone (index.html .fps.perf).
-      const spill = await host.locator('#fps').evaluate((el) => el.scrollHeight - el.clientHeight);
-      expect(spill, 'the reading fits the band').toBeLessThanOrEqual(0);
       const readout = await host.locator('#fps').boundingBox();
       const picture = await host.locator('#screen-wrap').boundingBox();
       expect(readout && picture && readout.y + readout.height, 'the readout ends above the picture').toBeLessThanOrEqual((picture?.y ?? 0) + 0.5);

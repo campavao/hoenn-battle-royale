@@ -20,6 +20,7 @@ IntrMain, which is copied into that buffer, still fits it.
 
 Output is one Markdown line per map, so CI can append it to the step summary as is.
 """
+import os
 import re
 import sys
 
@@ -58,18 +59,22 @@ def symbols(path):
     return out
 
 
+# What main.c copies IntrMain into: BR_INTR_MAIN_WORDS words (include/br/br_main.h).
+BR_MAIN_H = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "include", "br", "br_main.h")
+
+
 def intr_main_fit(path):
-    """(IntrMain's size, IntrMain_Buffer's), both in bytes: the code runs from below the
-    next symbol in the text (AgbMain, crt0.s then main.c), the buffer up to the next RAM
-    symbol. None where the map does not say."""
+    """(IntrMain's size, the bytes main.c copies of it), or None where the map or the
+    header does not say. The code runs from IntrMain to the next symbol in the text
+    (AgbMain: crt0.s, then main.c)."""
     syms = symbols(path)
-    if not all(k in syms for k in ("IntrMain", "AgbMain", "IntrMain_Buffer")):
+    if not all(k in syms for k in ("IntrMain", "AgbMain")):
         return None
-    buf = syms["IntrMain_Buffer"]
-    after = [a for a in syms.values() if buf < a < 0x03008000]
-    if not after:
+    with open(BR_MAIN_H, encoding="utf-8") as f:
+        m = re.search(r"^#define BR_INTR_MAIN_WORDS\s+(\w+)", f.read(), re.M)
+    if not m:
         return None
-    return syms["AgbMain"] - syms["IntrMain"], min(after) - buf
+    return syms["AgbMain"] - syms["IntrMain"], int(m.group(1), 0) * 4
 
 
 def main(argv):
@@ -103,7 +108,7 @@ def main(argv):
         if fit is None or fit[0] <= 0:
             low.append("IntrMain or IntrMain_Buffer not measurable in the map")
         elif fit[0] > fit[1]:
-            low.append(f"IntrMain ({fit[0]:#x} B) past IntrMain_Buffer ({fit[1]:#x} B)")
+            low.append(f"IntrMain ({fit[0]:#x} B) past the {fit[1]:#x} B main.c copies")
         mark = "**UNDER THE FLOOR**" if low else "ok"
         print(
             f"- `{path}`: EWRAM {ewram_free} B free ({s['ewram']:#x} of {EWRAM_SIZE:#x}); "
