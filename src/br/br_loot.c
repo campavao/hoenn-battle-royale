@@ -535,7 +535,7 @@ static void HandlePickup(const u8 *payload, u8 len)
     BrPatch_NoteTaken(BrWire_ReadU16(d + 1)); // ...and a patch somebody's battle started on
     BrEvent_NoteTaken(BrWire_ReadU16(d + 1), d[0]); // ...and an event's legendary, for its mark
     BrLegend_NoteTaken(BrWire_ReadU16(d + 1), d[0]); // ...and one we are fighting too
-    NotePileTaken(BrWire_ReadU16(d + 1)); // ...and one a drop's box is showing us
+    NotePileTaken(BrWire_ReadU16(d + 1)); // ...and one a drop's screen is showing us
     it = Find(BrWire_ReadU16(d + 1));
     if (it == NULL)
         return;
@@ -890,7 +890,7 @@ static u16 TakenSpecies(const struct BrLootItem *it)
 // A PC was opened mid-match: once the field is ours again the boxes are settled
 // (SettleBoxes), and nothing is left in them.
 static bool8 sBoxesOut;
-// The balls a drop's box was opened on: each one's key, BR_HELD_NONE once somebody else
+// The balls a drop's screen (br_swap.c) was opened on: each one's key, BR_HELD_NONE once somebody else
 // took it while the box was up, and the personality MakeTaken gave its mon, which is how
 // the box and the party are told apart from what was ours. The balls stay on the ground
 // until the box closes. IWRAM, all of it: EWRAM has no byte to spare.
@@ -958,7 +958,7 @@ static void Task_OpenPile(u8 taskId)
 }
 
 // A on a drop's ball with another in reach: a copy of each in the PC's first box, and the
-// box up. FALSE leaves the press to Take's one ball. The spoils menu's pick is one ball,
+// swap screen up. FALSE leaves the press to Take's one ball. The spoils menu's pick is one ball,
 // and Take's alone.
 static bool8 OpenPile(const struct BrLootItem *pressed)
 {

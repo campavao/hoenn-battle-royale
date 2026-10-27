@@ -198,17 +198,15 @@ void BrLoot_TrainerBeaten(u16 trainerId, u8 localId);
 // lands as a ball at your feet, claimable by anyone -- trading up leaves a trace."
 // Nothing ever leaves a match.
 void BrLoot_Released(struct Pokemon *mon);
-// A pile of Pokemon on the ground opens the PC's MOVE POKeMON box (Cam, 2026-10-27:
-// "When picking up items from someone's drop, we should show the screen that looks like
-// the Trade screen, so you can easily transfer pokemon to your party and pokemon out of
-// it"). A on one of two or more balls within reach takes them all into the box, each
-// leaving the ground for everybody as one A on it would, and the box is the drop: move
-// any of them into the party, and any of the party out. Nothing leaves a match, so
-// whatever is in a box when the PC closes goes back down beside you as released balls
-// (BrLoot_PcExit), and RELEASE is not on the box's menu (BrLoot_PcCanRelease). Any PC
-// used mid-match plays by the same rule.
-// CB2_ExitPokeStorage's field callback: the field for a drop's box, else `callback`, the
-// PC's own menu. Mid-match it marks the boxes to be emptied onto the ground.
+// A pile of Pokemon on the ground opens a trade-style screen (br_swap.c; Cam,
+// 2026-10-27). A on one of two or more balls within reach copies them into the PC's first
+// box, which is the screen's drop side; the balls stay on the ground until it closes, and
+// SettleBoxes then takes up the ones that went to the party. Nothing leaves a match, so
+// whatever is in a box when the field is back goes down beside you as released balls,
+// and RELEASE is not on a PC box's menu (BrLoot_PcCanRelease). Any PC used mid-match
+// plays by the same rule.
+// CB2_ExitPokeStorage's field callback, `callback` as it was. Mid-match it marks the boxes
+// to be emptied onto the ground.
 MainCallback BrLoot_PcExit(MainCallback callback);
 // A battle is starting from the box, so CB2_ExitPokeStorage will not run: the boxes settle
 // once the field is back, all the same.
