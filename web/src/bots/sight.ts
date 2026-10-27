@@ -36,8 +36,8 @@ export function sees(world: World, from: Look, tx: number, ty: number): boolean 
     x += d.dx;
     y += d.dy;
     if (x === tx && y === ty) return true;
-    // The ROM stops on collision and nothing else (World.clear): a look crosses water,
-    // a ledge and a cuttable tree. It used to stop on anything nobody could walk on,
+    // The ROM stops on collision and nothing else (World.clear): a look crosses water
+    // and a cuttable tree, not a ledge. It used to stop on anything nobody could walk on,
     // so a bot never saw across a pond that a player's ROM saw it across (POK-330 #67).
     if (!world.clear(from.map, x, y)) return false;
   }
