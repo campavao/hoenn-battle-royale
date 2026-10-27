@@ -8,11 +8,12 @@
 // One source of position: `actors`. The renderer only reads it. The camera is either
 // glued to an actor or dragged freely over the whole of Hoenn.
 //
-// Reuses the shell's own data: world.json through bots/world.ts (the same walkability,
-// ledges, heights and seams the bots already walk on). Every picture is cut from the
+// Reuses the shell's walkability through bots/world.ts, on data/world.json: the shell's
+// world.json regenerated with export-world.py's ledge fix (the shipped one walls every
+// ledge, and changing it moves the live bots, so that ships on its own). Every picture is cut from the
 // player's ROM in the browser (romart.ts): the site ships none. Nothing here is shell code.
 
-import { loadHoenn } from '../src/bots/hoenn';
+import { WorldIndex } from '../src/bots/hoenn';
 import type { World, WorldMap, Spot } from '../src/bots/world';
 import { DIR_EAST, DIR_SOUTH, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from './sim';
 import { bootRom, loadRom, lastStart, type RomBattles } from './rom';
@@ -589,7 +590,7 @@ const BOT_GFX = Object.entries(SHEETS)
   .map(([k]) => Number(k));
 
 async function boot(): Promise<void> {
-  const hoenn = await loadHoenn();
+  const hoenn = new WorldIndex(((await import('./data/world.json')).default as { maps: WorldMap[] }).maps);
   world = hoenn.world;
   placed = layout(hoenn.maps);
   baseStep = stepFn(world);

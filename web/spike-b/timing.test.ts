@@ -7,7 +7,7 @@
 // fails on the first frame whose movement, tile or facing differs.
 import { describe, expect, it } from 'vitest';
 import { World, type WorldMap } from '../src/bots/world';
-import worldJson from '../src/data/world.json';
+import worldJson from './data/world.json';
 import { newMover, tick, stepFn, type Keys } from './sim';
 import walkRows from './fixtures/walk-trace.json';
 import walkDriver from './fixtures/walk-trace.txt?raw';

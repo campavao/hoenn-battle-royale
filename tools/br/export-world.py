@@ -344,15 +344,12 @@ def export():
             collision = (val & MAPGRID_COLLISION_MASK) >> MAPGRID_COLLISION_SHIFT
             behavior = metatile_behavior_name(primary_behaviors, secondary_behaviors, metatile_id)
 
-            # A ledge's own collision bits are set -- the ROM asks about the jump before
-            # it asks about collision (CheckForObjectEventCollision: IsLedge... first) --
-            # so a collision-first test made every ledge in Hoenn a wall.
-            if behavior in JUMP_DIR:
-                cls = JUMP_CLASS[JUMP_DIR[behavior]]
-            elif collision != 0:
+            if collision != 0:
                 cls = 1
             elif behavior in WATER_BEHAVIORS:
                 cls = 2
+            elif behavior in JUMP_DIR:
+                cls = JUMP_CLASS[JUMP_DIR[behavior]]
             elif behavior in GRASS_BEHAVIORS:
                 cls = 7
             elif behavior in IMPASSABLE_BEHAVIORS:
