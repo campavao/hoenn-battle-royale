@@ -46,4 +46,16 @@ describe('no-rom', () => {
     const found = findRoms(dir).map((p: string) => p.slice(dir.length + 1).replace(/\\/g, '/')).sort();
     expect(found).toEqual(['assets/other-cart', 'patch/game.bin', 'patch/pokeemerald.gba', 'slot.sav']);
   });
+
+  it('finds a folder of the field\'s pictures, which the page cuts from the ROM (HBR-66)', () => {
+    dir = mkdtempSync(join(tmpdir(), 'no-rom-'));
+    mkdirSync(join(dir, 'field-maps'));
+    mkdirSync(join(dir, 'field-sprites'));
+    mkdirSync(join(dir, 'ui'));
+    writeFileSync(join(dir, 'field-maps', 'MAP_LITTLEROOT_TOWN.png'), 'png');
+    writeFileSync(join(dir, 'ui', 'font.png'), 'png');
+
+    const found = findRoms(dir).map((p: string) => p.slice(dir.length + 1).replace(/\\/g, '/')).sort();
+    expect(found).toEqual(['field-maps', 'field-sprites']);
+  });
 });

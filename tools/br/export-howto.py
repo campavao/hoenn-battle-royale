@@ -23,7 +23,7 @@ One sheet, 240 wide (the screen's width), its pictures 150 tall, top to bottom:
     2550 CHARMANDER, CHARMELEON, CHARIZARD, 64x64 each, in their own colours; under them,
          at 2614, the same three in white, the way they flash while they change
 
-The field sprites are the sheets export-sprites.py wrote to web/public/field-sprites:
+The field sprites are the sheets export-sprites.py wrote to build/br-art/field-sprites:
 standing south is frame 0, west frame 2; east is west mirrored, as the ROM draws it.
 """
 import json
@@ -34,8 +34,8 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "web/public/ui/howto.png"
-MAPS = ROOT / "web/public/field-maps"
-SPRITES = ROOT / "web/public/field-sprites"
+MAPS = ROOT / "build/br-art/field-maps"
+SPRITES = ROOT / "build/br-art/field-sprites"
 SHEETS = json.loads((ROOT / "web/src/data/sprites.json").read_text())
 
 BANG = ROOT / "graphics/field_effects/pics/emotion_exclamation.png"

@@ -46,6 +46,7 @@ BR_SIZE(BrPatch, 48)
 
 extern struct BrPatch gBrPatch;
 extern u8 gBrPatchTaken[];
+extern const void *const gBrPatchArt[];
 
 void BrPatch_Init(void);
 // Deals this map's patches when we have walked onto a new one, grows the taken ones back

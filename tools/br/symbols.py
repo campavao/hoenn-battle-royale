@@ -55,6 +55,10 @@ ENGINE_SYMBOLS = [
     "gObjectEventGraphicsInfoPointers", "gInitialMovementTypeFacingDirections",
     # ...and the fog over it, drawn past the picture at the ROM's own scroll (POK-318).
     "gWeather",
+    # ...and the pictures the page cuts out of the ROM for what it draws past the LCD: the
+    # SURF blob, a shadow, the field effects' palettes, the fog (web/src/art/romart.ts).
+    "gFieldEffectObjectPic_SurfBlob", "gFieldEffectObjectPic_ShadowMedium",
+    "gFieldEffectObjectPalette0", "gFieldEffectObjectPalette1", "gWeatherFogHorizontalTiles", "gFogPalette",
     # The overworld's main callback: the page shows the picture past the LCD only while
     # gMain.callback2 is this (POK-319, web/src/field.ts).
     "CB2_Overworld",

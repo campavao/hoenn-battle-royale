@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Render every outdoor map to a PNG, for the field past the picture and the drop painter.
 
-    python tools/br/render-maps.py            -> web/public/field-maps/<MAP_ID>.png
-                                                 web/public/field-maps/<MAP_ID>.border.png
+    python tools/br/render-maps.py            -> build/br-art/field-maps/<MAP_ID>.png
+                                                 build/br-art/field-maps/<MAP_ID>.border.png
 
-Two readers. The page (web/src/field.ts, POK-317) draws these around the GBA's 240x160
-picture, scrolled with the ROM's own camera, so the game fills the screen: the GBA draws
-nothing past its window, so this is what stands in for it. The drop painter (POK-314) lays
-its grid over the same still. Cam, painting: "I have to see the actual map sprites to know
-what I'm painting."
+The reference for the page's own cut (HBR-66). The site ships none of these: the page
+draws every map past the GBA's 240x160 from the player's ROM (web/src/art/romart.ts, the
+same steps as below), and web/e2e/art.sha1.json holds the hash of each of these, which the
+page's cut must match. They stay on the build machine, read by export-howto.py and
+export-menu-pan.py.
 
 Each map is drawn the way the GBA does, from pret's own data: the layout's map.bin says
 which metatile stands in each block, the tileset's metatiles.bin says which eight tiles
@@ -26,7 +26,7 @@ which the page draws over the people it draws itself (POK-443).
 
 No object events, no animation, no player: a still of the ground, one block = 16 px. Every
 map has at most a couple of hundred colours (thirteen palettes of sixteen), so the PNGs
-are written with a palette, exactly, at about a third the size -- they ship with the site.
+are written with a palette, exactly, at about a third the size.
 """
 import json
 import os
@@ -37,7 +37,7 @@ import numpy as np
 from PIL import Image
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-OUT = os.path.join(ROOT, 'web', 'public', 'field-maps')
+OUT = os.path.join(ROOT, 'build', 'br-art', 'field-maps')
 TILE = 8
 BLOCK = 16
 # include/global.fieldmap.h: the layer type in a metatile attribute's bits 12..15.

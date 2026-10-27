@@ -2,7 +2,7 @@
 """Export every object-event graphic as a sprite sheet, for the people on the field
 past the picture (POK-318, web/src/field.ts).
 
-    python tools/br/export-sprites.py   -> web/public/field-sprites/<gfx id>.png
+    python tools/br/export-sprites.py   -> build/br-art/field-sprites/<gfx id>.png
                                            web/src/data/sprites.json
 
 The ROM only draws the people inside its 240x160 window; the page draws them whole
@@ -29,7 +29,9 @@ import sys
 from PIL import Image
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-OUT = os.path.join(ROOT, 'web', 'public', 'field-sprites')
+# The sheets are the reference for the page's own cut from the ROM (HBR-66,
+# web/src/art/romart.ts, web/e2e/art.sha1.json); the site ships only sprites.json.
+OUT = os.path.join(ROOT, 'build', 'br-art', 'field-sprites')
 DATA = os.path.join(ROOT, 'web', 'src', 'data', 'sprites.json')
 SRC = os.path.join(ROOT, 'src', 'data', 'object_events')
 

@@ -451,12 +451,12 @@ describe('the service worker (POK-330 #23)', () => {
   });
 
   it('everything else is served from the cache and freshened behind it', async () => {
-    const files = { '/field-maps/A.png': 'still-1' };
+    const files = { '/ui/items.png': 'items-1' };
     const sw = runWorker(files);
-    expect(await sw.get('/field-maps/A.png')).toBe('still-1');
-    files['/field-maps/A.png'] = 'still-2';
-    expect(await sw.get('/field-maps/A.png')).toBe('still-1');
-    expect(await sw.get('/field-maps/A.png')).toBe('still-2');
+    expect(await sw.get('/ui/items.png')).toBe('items-1');
+    files['/ui/items.png'] = 'items-2';
+    expect(await sw.get('/ui/items.png')).toBe('items-1');
+    expect(await sw.get('/ui/items.png')).toBe('items-2');
   });
 
   it('leaves the relay and anything not GET alone', async () => {

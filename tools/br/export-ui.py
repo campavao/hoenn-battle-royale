@@ -39,7 +39,7 @@ LoadMapNamePopUpWindowBg loads; `sMapSectionToThemeId` there says which section 
 which. The item icons are `gItemIconTable` (src/data/item_icon_table.h), each in its own
 palette (src/data/graphics/items.h). The skins are `sSkinGraphics` in src/br/br_ghosts.c, resolved to gfx ids through
 include/constants/event_objects.h, whose sheets export-sprites.py already wrote to
-web/public/field-sprites/<gfx>.png. The type icons are graphics/types/<type>.png, each in
+build/br-art/field-sprites/<gfx>.png. The type icons are graphics/types/<type>.png, each in
 the palette src/pokemon_summary_screen.c's sMoveTypeToOamPaletteNum gives it (OBJ
 palettes 13..15 are move_types_1..3.pal, loaded together from gMoveTypes_Pal). The card
 is src/trainer_card.c's front: `bg.bin` (BG2) under `front.bin` (BG0), both in

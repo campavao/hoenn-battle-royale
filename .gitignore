@@ -82,3 +82,8 @@ web/playwright-report/
 docs/playtests/*/frames/
 docs/playtests/*/*.jpg
 docs/playtests/*/audio.wav
+
+# The field's pictures are cut from the player's ROM in the browser (HBR-66); the
+# exporters' reference PNGs go to build/br-art.
+web/public/field-maps/
+web/public/field-sprites/

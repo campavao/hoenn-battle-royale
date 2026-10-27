@@ -4,8 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const DATA = path.resolve(import.meta.dirname, '../../data');
-const STILLS = path.resolve(import.meta.dirname, '../public/field-maps');
-const hasStill = (id: string) => fs.existsSync(path.join(STILLS, `${id}.png`));
+// The page cuts a still of every outdoor map out of the ROM (web/src/art).
+const WORLD = path.resolve(import.meta.dirname, '../src/data/world.json');
+let outdoor: Set<string> | null = null;
+const hasStill = (id: string) =>
+  (outdoor ??= new Set((JSON.parse(fs.readFileSync(WORLD, 'utf8')) as { maps: { id: string; outdoor?: boolean }[] }).maps.filter((m) => m.outdoor).map((m) => m.id))).has(id);
 
 type MapJson = { id: string; layout: string; connections?: { map: string; offset: number; direction: string }[] | null };
 type Known = { ref: string; folder: string; json: MapJson; width: number; height: number };
