@@ -165,15 +165,23 @@ static u8 Ready(u8 can)
 
 void BrHm_Tick(void)
 {
+    // Outside the match proper this is every frame of the title, the Safari and the
+    // drop, so it clears once and then costs a compare (seam-midframe sits a few cycles
+    // from a VBlank on the agbcc build).
     if (gBrMatch.phase != BR_PHASE_PLAY)
     {
-        gBrHmView.can = gBrHmView.ready = 0;
-        for (sSlot = 0; sSlot < PARTY_SIZE; sSlot++)
-            sSlotCan[sSlot] = 0;
-        sSlot = 0;
-        sViewFrames = 0;
+        if (sViewFrames != 0xFF)
+        {
+            gBrHmView.can = gBrHmView.ready = 0;
+            for (sSlot = 0; sSlot < PARTY_SIZE; sSlot++)
+                sSlotCan[sSlot] = 0;
+            sSlot = 0;
+            sViewFrames = 0xFF; // cleared; the first PLAY frame reads a mon
+        }
         return;
     }
+    if (sViewFrames == 0xFF)
+        sViewFrames = 0;
     // Off the field (a door's map load, a menu, a battle) the party stands: `can` stays,
     // so the icons do not blink out on every warp. The page hides them off the field.
     if (gMain.callback2 != CB2_Overworld || gMain.inBattle || ScriptContext_IsEnabled())
@@ -181,6 +189,11 @@ void BrHm_Tick(void)
         gBrHmView.ready = 0;
         return;
     }
+    // Mid-step nothing is faced yet, and a map seam's load runs in a step: any work here
+    // pushes that load past another VBlank on the agbcc build (seam-midframe). `ready`
+    // keeps the last standing frame's until the step ends.
+    if (gPlayerAvatar.tileTransitionState != T_NOT_MOVING)
+        return;
     if (sViewFrames == 0)
     {
         u8 slot, can = 0;
