@@ -70,7 +70,11 @@ COMMON_DATA u16 gKeyRepeatContinueDelay = 0;
 COMMON_DATA bool8 gSoftResetDisabled = 0;
 COMMON_DATA IntrFunc gIntrTable[INTR_COUNT] = {0};
 COMMON_DATA u8 gLinkVSyncDisabled = 0;
+#if BR
+COMMON_DATA u32 IntrMain_Buffer[BR_INTR_MAIN_WORDS] = {0};
+#else
 COMMON_DATA u32 IntrMain_Buffer[0x200] = {0};
+#endif
 COMMON_DATA s8 gPcmDmaCounter = 0;
 
 static EWRAM_DATA u16 sTrainerId = 0;
