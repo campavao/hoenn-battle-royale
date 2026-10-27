@@ -230,8 +230,11 @@ function jsHeap(): number | null {
 /** The `#perf` readout: this second, then the whole page so far -- the line Cam
  *  screenshots at the end of a match on a phone. */
 export function perfLines(now: PerfSample, all: PerfSample): string[] {
-  const audio = (a: AudioStats) =>
-    a.callbacks === 0 ? `audio ${a.state === 'none' ? 'off' : a.state}` : `audio ${a.late} late ${a.cut} cut`;
+  const audio = (a: AudioStats) => {
+    const line = a.callbacks === 0 ? `audio ${a.state === 'none' ? 'off' : a.state}` : `audio ${a.late} late ${a.cut} cut`;
+    const skipped = a.skipped > 0 ? ` ${a.skipped} skipped` : '';
+    return `${line}${skipped}${a.starved ? ' MUTE' : ''}`;
+  };
   const first = `${frameLine(now.frames)} · work ${now.frames.work.mean.toFixed(1)} ms · ${audio(now.audio)}`;
   const f = all.frames;
   const parts = [
