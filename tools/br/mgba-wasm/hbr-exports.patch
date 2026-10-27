@@ -1645,7 +1645,7 @@ index 751e8b1..59daede 100644
  	-s ENVIRONMENT='web,worker' \
  	-s PTHREAD_POOL_SIZE=5 \
 diff --git a/src/platform/wasm/main.c b/src/platform/wasm/main.c
-index 14d9a8a..08f3985 100644
+index 14d9a8a..97c3f86 100644
 --- a/src/platform/wasm/main.c
 +++ b/src/platform/wasm/main.c
 @@ -12,6 +12,10 @@
@@ -1667,7 +1667,7 @@ index 14d9a8a..08f3985 100644
  DEFINE_WRAPPER(videoFrameStarted)
  
  /**
-@@ -146,6 +149,711 @@ EMSCRIPTEN_KEEPALIVE float getVolume() {
+@@ -146,6 +149,748 @@ EMSCRIPTEN_KEEPALIVE float getVolume() {
  		return 0.0;
  }
  
@@ -1747,9 +1747,10 @@ index 14d9a8a..08f3985 100644
 +// used to wait at every frame's end, however long the page took to run its listeners and
 +// present, so a busy main thread slowed the game. Now the core leaves a copy of work RAM
 +// (brFrameRam) and of the picture at each frame's end, posts the page's callback if none
-+// is waiting, and gives the page BR_FRAME_WAIT_MS to answer. A page that answers in time
-+// is the old hand-off exactly: its writes and keys land before the next frame starts. A
-+// page that does not is handed the newest frame when it gets to it, so a busy page sees
++// is waiting, and gives the page BR_FRAME_WAIT_MS from the post to answer. A page that
++// answers in time is the old hand-off exactly: its writes and keys land before the next
++// frame starts. A page that does not is not waited for again until it answers in time, and
++// is handed the newest frame when it gets to it, so a busy page sees
 +// fewer frames while the game keeps its speed, up to BR_FRAME_LEAD frames ahead. In
 +// lockstep (a headless core, whose duel bots/proxy.ts drives frame by frame, and a test
 +// that checks every frame) the core waits for every answer.
@@ -1757,7 +1758,9 @@ index 14d9a8a..08f3985 100644
 +// it changed since it took a frame (against brPristineRam) goes to the core as runs of
 +// (offset, seen, value), with the keys it holds (brSetKeys), and lands at the next frame
 +// boundary -- a run only where the game has not written it since the page's frame, so a
-+// late write never lands half or over a newer one of the game's. Everything under
++// late write does not land over a newer one of the game's (brLostWrites counts those
++// dropped). A run is the bytes that changed: a u16 whose high byte alone changed is a
++// run of one, and could land beside a low byte the game moved since. Everything under
 +// brFrameLock: the core writes brFrameRam, the picture and the log; the page the rest.
 +#define BR_RAM_SIZE (GBA_SIZE_EWRAM + GBA_SIZE_IWRAM)
 +struct BrWrite {
@@ -1774,6 +1777,17 @@ index 14d9a8a..08f3985 100644
 +#define BR_FRAME_LEAD 6u
 +#define BR_FRAME_WAIT_MS 4.0
 +static bool brLockstep = false;
++// How far ahead the core may run (brSetFrameLead): BR_FRAME_LEAD, or less while a tap walk
++// steers, which must turn within a step.
++static uint32_t brLead = BR_FRAME_LEAD;
++// When the core last posted, and whether the page's last answer came within
++// BR_FRAME_WAIT_MS of its post. A page that does not is not waited for until it does, so
++// a page that is always slow costs the core nothing.
++static double brPostAt = 0;
++static double brTakenPostAt = 0;
++static bool brPageQuick = true;
++// Runs of the page's writes the game had changed first, so dropped (brLostWrites).
++static uint32_t brLost = 0;
 +// The keys the page holds (KEY_BIT order), for the next frame boundary.
 +static uint32_t brKeys = 0;
 +static bool brKeysOwed = false;
@@ -2187,6 +2201,9 @@ index 14d9a8a..08f3985 100644
 +		for (k = i; k < j && ours; ++k) {
 +			*_brLiveRam(brWrites[k].at) = brWrites[k].now;
 +		}
++		if (!ours) {
++			++brLost;
++		}
 +		i = j;
 +	}
 +	brWritesLen = 0;
@@ -2215,7 +2232,7 @@ index 14d9a8a..08f3985 100644
 +	if (!callbackStorage.videoFrameEnded) {
 +		brDoneSeq = brFrameSeq;
 +	}
-+	while (brFrameSeq - brDoneSeq >= BR_FRAME_LEAD && !_brStopAsked()) {
++	while (brFrameSeq - brDoneSeq >= brLead && !_brStopAsked()) {
 +		ConditionWaitTimed(&brFrameCond, &brFrameLock, 1);
 +	}
 +	_brApplyPage();
@@ -2235,6 +2252,7 @@ index 14d9a8a..08f3985 100644
 +	post = callbackStorage.videoFrameEnded && !brPosted;
 +	if (post) {
 +		brPosted = true;
++		brPostAt = emscripten_get_now();
 +	}
 +	MutexUnlock(&brFrameLock);
 +	if (post) {
@@ -2246,9 +2264,9 @@ index 14d9a8a..08f3985 100644
 +		    },
 +		    (int) callbackStorage.videoFrameEnded, (int) context);
 +		// A page that answers in time has its writes and keys before the next frame starts.
-+		double until = emscripten_get_now() + BR_FRAME_WAIT_MS;
++		double until = brPostAt + BR_FRAME_WAIT_MS;
 +		MutexLock(&brFrameLock);
-+		while (brDoneSeq != brFrameSeq && !_brStopAsked() && (brLockstep || emscripten_get_now() < until)) {
++		while (brDoneSeq != brFrameSeq && !_brStopAsked() && (brLockstep || (brPageQuick && emscripten_get_now() < until))) {
 +			ConditionWaitTimed(&brFrameCond, &brFrameLock, 1);
 +		}
 +		if (brDoneSeq == brFrameSeq) {
@@ -2277,6 +2295,7 @@ index 14d9a8a..08f3985 100644
 +	int fresh;
 +	MutexLock(_brFrameLock());
 +	brPosted = false;
++	brTakenPostAt = brPostAt;
 +	_brCollectWrites();
 +	// A callback the core posted before quitGame: there is no frame for it.
 +	fresh = renderer->core ? (int) (brFrameSeq - brTakenSeq) : 0;
@@ -2299,6 +2318,7 @@ index 14d9a8a..08f3985 100644
 +	MutexLock(_brFrameLock());
 +	_brCollectWrites();
 +	brDoneSeq = brTakenSeq;
++	brPageQuick = emscripten_get_now() - brTakenPostAt < BR_FRAME_WAIT_MS;
 +	ConditionWake(&brFrameCond);
 +	MutexUnlock(&brFrameLock);
 +}
@@ -2337,11 +2357,28 @@ index 14d9a8a..08f3985 100644
 +	MutexUnlock(&brFrameLock);
 +}
 +
++// Hoenn BR (HBR-59): at most `lead` frames ahead of the page (0: BR_FRAME_LEAD), while a
++// tap walk steers. A walk turns or stops as a step begins, so the keys must land within
++// the step: 4 frames on a Mach Bike at speed.
++EMSCRIPTEN_KEEPALIVE void brSetFrameLead(int lead) {
++	MutexLock(_brFrameLock());
++	brLead = lead > 0 && lead < (int) BR_FRAME_LEAD ? (uint32_t) lead : BR_FRAME_LEAD;
++	ConditionWake(&brFrameCond);
++	MutexUnlock(&brFrameLock);
++}
++
++// Hoenn BR (HBR-59): runs of the page's writes dropped since the core started, because the
++// game wrote those bytes after the page's frame (#perf shows them).
++EMSCRIPTEN_KEEPALIVE int brLostWrites(void) {
++	return (int) brLost;
++}
++
 +// A new core: its RAM as the page's copy, nothing owed either way. Before its thread runs.
 +static void _brResetFrames(void) {
 +	MutexLock(_brFrameLock());
 +	brWritesLen = 0;
 +	brPosted = false;
++	brPageQuick = true;
 +	_brCopyLiveRam(brFrameRam);
 +	memcpy(brShadowRam, brFrameRam, BR_RAM_SIZE);
 +	memcpy(brPristineRam, brFrameRam, BR_RAM_SIZE);
@@ -2379,7 +2416,7 @@ index 14d9a8a..08f3985 100644
  EMSCRIPTEN_KEEPALIVE int getMainLoopTimingMode() {
  	int mode = -1;
  	int value = -1;
-@@ -427,28 +1135,31 @@ EMSCRIPTEN_KEEPALIVE bool loadGame(const char* name, const char* savePathOverrid
+@@ -427,28 +1172,31 @@ EMSCRIPTEN_KEEPALIVE bool loadGame(const char* name, const char* savePathOverrid
  	mSDLInitBindingsGBA(&renderer->core->inputMap);
  
  	unsigned w, h;
@@ -2428,7 +2465,7 @@ index 14d9a8a..08f3985 100644
  
  	emscripten_resume_main_loop();
  	return true;
-@@ -518,7 +1229,7 @@ addCoreCallbacks(void (*alarmCallbackPtr)(void*), void (*coreCrashedCallbackPtr)
+@@ -518,7 +1266,7 @@ addCoreCallbacks(void (*alarmCallbackPtr)(void*), void (*coreCrashedCallbackPtr)
  		if (saveDataUpdatedCallbackPtr)
  			callbacks.savedataUpdated = wrapped_savedataUpdated;
  		if (videoFrameEndedCallbackPtr)
@@ -2437,7 +2474,7 @@ index 14d9a8a..08f3985 100644
  		if (videoFrameStartedCallbackPtr)
  			callbacks.videoFrameStarted = wrapped_videoFrameStarted;
  
-@@ -744,19 +1455,9 @@ void runLoop() {
+@@ -744,19 +1492,9 @@ void runLoop() {
  				};
  			}
  			if (mCoreSyncWaitFrameStart(&renderer->thread->impl->sync)) {
@@ -2460,7 +2497,7 @@ index 14d9a8a..08f3985 100644
  			}
  			mCoreSyncWaitFrameEnd(&renderer->thread->impl->sync);
  		}
-@@ -860,11 +1561,19 @@ int main() {
+@@ -860,11 +1598,19 @@ int main() {
  
  	mLogSetDefaultLogger(&logCtx);
  
@@ -2485,10 +2522,10 @@ index 14d9a8a..08f3985 100644
  	// exclude specific key events
  	SDL_SetEventFilter(excludeKeys, NULL);
 diff --git a/src/platform/wasm/mgba.d.ts b/src/platform/wasm/mgba.d.ts
-index edad1b1..0a7cce1 100644
+index edad1b1..0c4bd43 100644
 --- a/src/platform/wasm/mgba.d.ts
 +++ b/src/platform/wasm/mgba.d.ts
-@@ -296,6 +296,77 @@ declare namespace mGBA {
+@@ -296,6 +296,83 @@ declare namespace mGBA {
       * @returns Current volume multiplier.
       */
      getVolume(): number;
@@ -2549,6 +2586,12 @@ index edad1b1..0a7cce1 100644
 +    /** Hoenn BR (HBR-59): the keys the page holds, a GBA_KEY bitmask, for the game from the
 +     *  next frame boundary along with the page's RAM writes. */
 +    _brSetKeys(keys: number): void;
++    /** Hoenn BR (HBR-59): at most `lead` frames ahead of the page (0: the default, 6),
++     *  while a tap walk steers. */
++    _brSetFrameLead(lead: number): void;
++    /** Hoenn BR (HBR-59): runs of the page's RAM writes dropped since the core started,
++     *  because the game wrote those bytes after the frame the page read. */
++    _brLostWrites(): number;
 +    /** Hoenn BR (POK-319): wasm heap offset of the picture's ABGR8888 pixels (the texture's
 +     *  top-left; the LCD is at (left, top) inside it), 0 with no game loaded. */
 +    _brPicturePtr(): number;

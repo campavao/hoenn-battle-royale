@@ -34,6 +34,11 @@ static void Bump(u16 *ids, u8 *counts, u8 size, u16 id)
     }
 }
 
+void BrTally_Reset(void)
+{
+    CpuFill16(0, &gBrTally, sizeof(gBrTally));
+}
+
 void BrTally_Step(void)
 {
     if (gBrTally.steps < 0xFFFF)

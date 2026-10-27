@@ -156,6 +156,11 @@ export function startMenuTable(rom: Uint8Array | null | undefined, at: number | 
 export const DIR_OF: Record<SeamDir, number> = { south: 1, north: 2, west: 3, east: 4 };
 const KEY_OF: Record<SeamDir, GbaKey> = { south: 'down', north: 'up', west: 'left', east: 'right' };
 
+/** How far the core may run ahead of the page while a walk steers (HBR-59). A walk turns
+ *  or stops as a step begins (currentCoords moves then), and the keys must land before the
+ *  step ends: 4 frames on a Mach Bike at speed. Seeing the step up to 2 frames late, and
+ *  the keys landing at the next frame boundary, leaves one to spare. */
+const WALK_LEAD = 2;
 /** A walk that shows no progress for this long is blocked: an NPC, a ledge, a dialog. */
 const STALL_FRAMES = 60;
 /** A menu tap that cannot land its cursor in this long is abandoned. */
@@ -269,8 +274,7 @@ export class TouchLayer {
   private ranAt = 0;
   /** The game's frames since the frame before this one: what every count here adds. */
   private step = 1;
-  /** Lockstep held while a walk is on (HBR-59): it turns on the frame it lands, as the
-   *  game would see a thumb do, however busy the page is. */
+  /** The short lead held while a walk is on (HBR-59, WALK_LEAD), released after. */
   private unlock: (() => void) | null = null;
   private gapFor = 0;
   private queue: Press[] = [];
@@ -644,7 +648,7 @@ export class TouchLayer {
       return;
     }
     if (this.walk) {
-      this.unlock ??= emu.holdLockstep?.() ?? null;
+      this.unlock ??= emu.holdLead?.(WALK_LEAD) ?? null;
       this.frameWalk();
       if (!this.walk) this.letGo();
       return;

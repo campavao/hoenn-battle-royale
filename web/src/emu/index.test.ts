@@ -329,6 +329,17 @@ describe('Emulator', () => {
     expect(calls).toEqual(['lockstep 1', 'lockstep 0']);
   });
 
+  it('the core takes the smallest lead held, and its default once none is (HBR-59)', async () => {
+    const { emu, m, calls } = await make();
+    m._brSetFrameLead = (lead) => void calls.push(`lead ${lead}`);
+    const a = emu.holdLead(3);
+    const b = emu.holdLead(2);
+    b();
+    b();
+    a();
+    expect(calls).toEqual(['lead 3', 'lead 2', 'lead 3', 'lead 0']);
+  });
+
   it('what the page writes paused reaches the game: synced after a pause and before a resume, dropped by a restore (HBR-59)', async () => {
     const { emu, m, calls } = await make();
     m._brSync = (discard) => void calls.push(`brSync ${discard}`);

@@ -56,6 +56,15 @@ describe('the dev fps line (POK-331 #29)', () => {
     expect(meter.read()).toBe('30 fps · p95 33 · max 33 ms');
   });
 
+  it('says how many of the page\'s writes the core dropped (HBR-59)', () => {
+    const clock = { t: 0 };
+    const gba = fakeEmu();
+    const emu: Metered = { ...gba.emu, lostWrites: 2 };
+    const meter = new FrameMeter(emu, () => clock.t, () => {});
+    gba.frame();
+    expect(meter.read()).toBe('1000 fps · 2 writes lost');
+  });
+
   it("says the game's own rate when the page saw fewer frames than it ran (HBR-59)", () => {
     const clock = { t: 0 };
     const gba = fakeEmu();

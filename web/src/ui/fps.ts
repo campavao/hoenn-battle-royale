@@ -26,6 +26,8 @@ export interface Metered {
   readonly pauses?: number;
   /** Frames the game has run, seen or not (HBR-59: a busy page sees fewer). */
   readonly ran?: number;
+  /** The page's RAM writes the core dropped so far, the game having got there first. */
+  readonly lostWrites?: number;
 }
 
 /** Fixed bins, so a window costs the same however long it runs, and a quantile is good
@@ -89,6 +91,9 @@ export interface FrameStats {
   work: { mean: number; p95: number; max: number };
   /** Frame listeners that have thrown so far (not per window: each is heard once). */
   threw: number;
+  /** The page's RAM writes the core has dropped so far (HBR-59): a late write over bytes
+   *  the game had changed since. */
+  lost: number;
 }
 
 export class FrameMeter {
@@ -145,6 +150,7 @@ export class FrameMeter {
         max: this.work.max,
       },
       threw: this.errors,
+      lost: this.emu.lostWrites ?? 0,
     };
     if (reset) {
       this.frames = 0;
@@ -170,12 +176,13 @@ function ms(n: number): string {
 }
 
 /** `60 fps · p95 17 · max 34 ms`, the game's own rate when the page saw fewer frames
- *  than it ran, and the listeners that threw. */
+ *  than it ran, the listeners that threw, and the page's writes the core dropped. */
 export function frameLine(s: FrameStats): string {
   const times = s.frames > 1 && s.max > 0 ? ` · p95 ${ms(s.p95)} · max ${ms(s.max)} ms` : '';
   const game = s.game - s.fps >= 1 ? ` · game ${s.game.toFixed(0)}` : '';
   const threw = s.threw === 0 ? '' : ` · ${s.threw} listener${s.threw === 1 ? '' : 's'} threw`;
-  return `${s.fps.toFixed(0)} fps${game}${times}${threw}`;
+  const lost = s.lost === 0 ? '' : ` · ${s.lost} write${s.lost === 1 ? '' : 's'} lost`;
+  return `${s.fps.toFixed(0)} fps${game}${times}${threw}${lost}`;
 }
 
 /** One reading of everything: a window of frames and audio, and the running totals. */

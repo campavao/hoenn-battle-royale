@@ -1,0 +1,28 @@
+# tally-start: START zeroes what the ROM counted (HBR-59). The page used to zero gBrTally
+# itself, and since the core hands the page frames late on a busy phone, that write could
+# be dropped by a step the page never saw, carrying the last match's steps, wins and
+# catches into the career. The ROM zeroes it as it reads START instead.
+wait 30
+pokebytes gBrMailbox+0x2018 82 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+# What a finished match left: 120 steps, 3 won, 1 caught, 2 items, a species counted.
+poke u16 gBrTally 120
+poke u16 gBrTally+2 3
+poke u16 gBrTally+4 1
+poke u16 gBrTally+6 2
+poke u16 gBrTally+8 277
+poke u8 gBrTally+36 4
+poke u16 gBrTally+50 1
+wait 2
+expect u16 gBrTally 120
+# START (seat 0, one spawn: Route 101 at 25,10), as land-lost.txt sends it.
+pokebytes gBrMailbox+0x1018 0E 15 12 00 00 78 56 34 12 01 78 00 78 00 00 00 00 19 0A 00 28 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 4
+expect u16 gBrTally 0
+expect u16 gBrTally+2 0
+expect u16 gBrTally+4 0
+expect u16 gBrTally+6 0
+expect u16 gBrTally+8 0
+expect u8 gBrTally+36 0
+expect u16 gBrTally+50 0

@@ -353,6 +353,12 @@ declare namespace mGBA {
     /** Hoenn BR (HBR-59): the keys the page holds, a GBA_KEY bitmask, for the game from the
      *  next frame boundary along with the page's RAM writes. */
     _brSetKeys(keys: number): void;
+    /** Hoenn BR (HBR-59): at most `lead` frames ahead of the page (0: the default, 6),
+     *  while a tap walk steers. */
+    _brSetFrameLead(lead: number): void;
+    /** Hoenn BR (HBR-59): runs of the page's RAM writes dropped since the core started,
+     *  because the game wrote those bytes after the frame the page read. */
+    _brLostWrites(): number;
     /** Hoenn BR (POK-319): wasm heap offset of the picture's ABGR8888 pixels (the texture's
      *  top-left; the LCD is at (left, top) inside it), 0 with no game loaded. */
     _brPicturePtr(): number;

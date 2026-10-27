@@ -18,7 +18,7 @@ import { HUD, HUD_PAGE, readFogHp, writeHudClockSecs, writeHudEyes, writeHudLeft
 import type { HudWorld } from './ui/phonehud';
 import type { PadPrefsControl } from './ui/padprefs';
 import { moveInfo, type Rom } from './battle/movebook';
-import { favourite, readTally, tallyMsg, zeroTally, type MatchTally } from './match/tally';
+import { favourite, readTally, tallyMsg, type MatchTally } from './match/tally';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
 import { battleSeats, cutTo, nameBstart, romReplaying, Spectate, watchName } from './match/spectate';
 import type { Results } from './match/results';
@@ -2098,11 +2098,10 @@ function moveNameOf(id: number): string | undefined {
 }
 
 /** gBrTally (POK-416), as a MatchSession reads it: undefined for a build without it. */
-function tallyOf(emu: Emulator, symbols: Map<string, number> | undefined): { zero(): void; read(): MatchTally } | undefined {
+function tallyOf(emu: Emulator, symbols: Map<string, number> | undefined): { read(): MatchTally } | undefined {
   const base = symbols?.get('gBrTally');
   if (base === undefined) return undefined;
   return {
-    zero: () => zeroTally((a, v, bits) => emu.write(a, v, bits), base),
     read: () => readTally((a, bits) => emu.read(a, bits), base),
   };
 }
@@ -3177,7 +3176,7 @@ function wireRoom(
       defaultFog: () => controls.fogSecs,
       store: localStorage,
       // ...and the ROM's own counts are the ROM's, back from its savestate.
-      tally: ((t) => t && { zero: () => void (rereadAt || t.zero()), read: () => t.read() })(tallyOf(emu, symbols)),
+      tally: tallyOf(emu, symbols),
       fameWanted: () => !paraded.paraded,
       grace: new EndGrace({
         graceMs: END_GRACE_MS,

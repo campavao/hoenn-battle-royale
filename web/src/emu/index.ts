@@ -99,6 +99,10 @@ export interface CoreModule {
   /** The keys the page holds (KEY_BIT order), for the game from the next frame boundary,
    *  with the page's writes. Older cores take buttonPress at once instead. */
   _brSetKeys?(keys: number): void;
+  /** At most `lead` frames ahead of the page (0: the core's default). */
+  _brSetFrameLead?(lead: number): void;
+  /** Runs of the page's writes dropped because the game wrote those bytes first. */
+  _brLostWrites?(): number;
   HEAPU8: Uint8Array;
   /** SDL2's audio output, once a game's thread has opened it (audio-meter.ts). */
   SDL2?: SdlAudio;
@@ -201,6 +205,7 @@ export class Emulator {
   /** Frames the game has run, whether or not the page saw each (HBR-59). */
   private ranFrames = 0;
   private lockstepHolds = 0;
+  private leads: number[] = [];
   /** A headless core's sound has been paused since its last boot or resume. */
   private quiet = false;
   /** What boot() last loaded, so reboot() can load it again. */
@@ -583,7 +588,7 @@ export class Emulator {
 
   /** Lockstep (HBR-59) while anyone holds it: the game waits on the page's every frame, so
    *  the page sees each one and a busy page slows the game -- as a check of every frame
-   *  needs, or a tap's walk that turns on the frame it arrives. Otherwise a page that is
+   *  needs. Otherwise a page that is
    *  late is handed the newest frame and the game keeps its speed. Returns the release. */
   holdLockstep(): () => void {
     if (this.lockstepHolds++ === 0) this.m._brSetLockstep?.(1);
@@ -593,6 +598,28 @@ export class Emulator {
       held = false;
       if (--this.lockstepHolds === 0) this.m._brSetLockstep?.(0);
     };
+  }
+
+  /** The core at most `frames` ahead of the page while held (HBR-59): a tap walk turns as
+   *  a step begins, so its keys must land within the step, which lockstep would also do
+   *  but at the cost of the game's speed. The smallest hold wins. Returns the release. */
+  holdLead(frames: number): () => void {
+    const set = () => this.m._brSetFrameLead?.(this.leads.length ? Math.min(...this.leads) : 0);
+    this.leads.push(frames);
+    set();
+    let held = true;
+    return () => {
+      if (!held) return;
+      held = false;
+      this.leads.splice(this.leads.indexOf(frames), 1);
+      set();
+    };
+  }
+
+  /** Runs of the page's RAM writes the core dropped, the game having written those bytes
+   *  after the frame the page read (HBR-59); 0 for an older core. */
+  get lostWrites(): number {
+    return this.m._brLostWrites?.() ?? 0;
   }
 
   /** Frames the game has run so far: more than the page's frames when it was too busy to
