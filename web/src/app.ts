@@ -3258,10 +3258,12 @@ function wireRoom(
   let amWatching = false;
   /** Hands a trainer who is out somebody to watch, and keeps the strip honest as the
    *  field thins. Kanto's rule: being out IS spectating -- the strip is how you change
-   *  who, not how you start. A watcher (POK-260) is left alone: it chose its own seat
-   *  and was never in the match to be eliminated from it. */
+   *  who, not how you start. A watcher (POK-260) is as out as anybody: its row never
+   *  stands (match/roster.ts). Left alone, it followed nobody, and its ROM's own trainer
+   *  walked Littleroot with a player's START menu (Cam's 10-26 play-test, back through
+   *  WATCH after a reload: "I can play again?"). */
   const autoWatch = (): void => {
-    if (!bridge || amWatching) return;
+    if (!bridge) return;
     const me = bridge.roster.get(bridge.seat);
     if (me === undefined || me.alive) return;
     const on = spectate.watchingSeat();

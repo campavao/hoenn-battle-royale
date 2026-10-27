@@ -306,7 +306,10 @@ export class Director {
      *  told again under a new n, on the cells its first telling still lies on. */
     events?: readonly EventMsg[];
   }): void {
-    for (const seat of state.out ?? []) this.aliveSeats.delete(seat);
+    // The dead stay dead, in the order they went: a latecomer's standings are caught up
+    // from it (catchUp), and left empty, a watcher's results listed only the seats that
+    // went after the takeover (Cam's 10-26 play-test: 3 places for 4 players and 4 bots).
+    for (const seat of state.out ?? []) if (this.aliveSeats.delete(seat)) this.placements.push(seat);
     for (const cell of state.dealt ?? []) this.dealtCells.add(cellKey(cell));
     for (const e of state.events ?? []) {
       const story = storyOf(e, this.opts.world.sections, (id) => this.mapRefOf(id));

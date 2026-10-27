@@ -54,6 +54,14 @@ export class Roster {
    *  of the match -- and so did their next `place`, from a ROM that never heard it was
    *  out. Out is for the match; only endMatch() or the next `start` stands them up. */
   private readonly fallen = new Set<number>();
+  /** Members the relay lists as watching (POK-260): in the room, never in its match.
+   *  Their own ROM places them like anybody, and a watcher's page counted itself among
+   *  the standing -- "4 left" with three in, and nobody to follow (Cam, 2026-10-26). */
+  private readonly watchers = new Set<number>();
+
+  private standing(seat: number): boolean {
+    return !this.fallen.has(seat) && !this.watchers.has(seat);
+  }
 
   /** Which seat is "us" -- flips `isMe` on the matching row, if it already exists. */
   setMySeat(seat: number): void {
@@ -68,7 +76,7 @@ export class Roster {
   private entry(seat: number): RosterEntry {
     let e = this.entries.get(seat);
     if (!e) {
-      e = { seat, name: '', alive: !this.fallen.has(seat), dir: DEFAULT_DIR, isMe: seat === this.mySeat };
+      e = { seat, name: '', alive: this.standing(seat), dir: DEFAULT_DIR, isMe: seat === this.mySeat };
       this.entries.set(seat, e);
     }
     return e;
@@ -78,14 +86,20 @@ export class Roster {
    *  the relay's own connection id) and drops rows for anyone no longer listed --
    *  except the match's bots, which the relay never lists (seatBots). Position/facing/
    *  alive state is left alone -- the relay roster doesn't carry it -- until a
-   *  place/step/face/out message fills it in. */
+   *  place/step/face/out message fills it in. A watcher is the one exception: the
+   *  relay's `spectate` is the whole of it, and seated for the next match, they stand. */
   applyRoster(msg: RosterEvent): void {
     const seen = new Set<number>();
     for (const m of msg.members) {
       seen.add(m.id);
+      const was = this.watchers.has(m.id);
+      if (m.spectate) this.watchers.add(m.id);
+      else this.watchers.delete(m.id);
       const e = this.entry(m.id);
       e.name = m.name;
+      if (was !== (m.spectate === true)) e.alive = this.standing(m.id);
     }
+    for (const seat of this.watchers) if (!seen.has(seat)) this.watchers.delete(seat);
     for (const seat of Array.from(this.entries.keys())) {
       if (!seen.has(seat) && !this.bots.has(seat)) this.entries.delete(seat);
     }
@@ -114,7 +128,7 @@ export class Roster {
 
   private standAll(): void {
     this.fallen.clear();
-    for (const e of this.entries.values()) e.alive = true;
+    for (const e of this.entries.values()) e.alive = !this.watchers.has(e.seat);
   }
 
   /** One of the match's bots (seatBots), which no relay roster lists. */
@@ -149,7 +163,7 @@ export class Roster {
         }
         e.dir = msg.f;
         if (msg.st === 'out') this.fallen.add(msg.seat);
-        e.alive = !this.fallen.has(msg.seat);
+        e.alive = this.standing(msg.seat);
         return;
       }
       case 'step': {
