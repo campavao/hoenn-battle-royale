@@ -25,10 +25,14 @@ export interface ServiceOptions {
 const FRAME_MS = 1000 / 60;
 /** An empty world is kept this long (a reload comes back to it), then dropped. */
 const IDLE_MS = 60_000;
+/** A phone that sends no keys this long (a tab hidden for good) is let go. */
+const QUIET_MS = 120_000;
+/** The whole room, at most this often a phone (it is ~20 KB against a 13 B ask). */
+const SYNC_MS = 1000;
 
 export class WorldService {
   private host: Host | null = null;
-  private readonly links = new Map<number, Link>();
+  private readonly links = new Map<number, Link & { quiet(): boolean }>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private t0 = 0;
   private emptySince = 0;
@@ -40,19 +44,22 @@ export class WorldService {
 
   open(link: Link): Session {
     let id = 0;
+    let heard = this.opts.now();
+    let synced = -Infinity;
     const send = (m: WorldDown) => link.send(JSON.stringify(m));
     return {
       onText: (text) => {
         let m: WorldUp;
         try { m = JSON.parse(text) as WorldUp; } catch { return; }
         if (!m || typeof m !== 'object') return;
+        heard = this.opts.now();
         if (m.t === 'join' && !id) {
           if (this.links.size >= this.opts.cap) { send({ t: 'full' }); link.close(); return; }
           const host = this.start();
           const name = String(m.name ?? '').toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 10) || 'TRAINER';
           const skin = Number.isInteger(m.skin) && m.skin >= 0 && m.skin < 16 ? m.skin : 0;
           id = host.join(name, skin);
-          this.links.set(id, link);
+          this.links.set(id, { send: link.send, close: link.close, quiet: () => this.opts.now() - heard > QUIET_MS });
           send({ t: 'hello', id, state: host.room.state() });
           this.opts.log(`world: ${name}#${id} in (${this.links.size} here, tick ${host.room.tick})`);
         } else if (!id || !this.host) {
@@ -63,6 +70,9 @@ export class WorldService {
         } else if (m.t === 'end') {
           this.host.end(id);
         } else if (m.t === 'sync') {
+          const now = this.opts.now();
+          if (now - synced < SYNC_MS) return;
+          synced = now;
           send({ t: 'state', state: this.host.room.state() });
         }
       },
@@ -89,9 +99,20 @@ export class WorldService {
 
   /** Every frame that is due, sent; a host that fell far behind skips ahead instead. */
   pump(): void {
+    try {
+      this.frames();
+    } catch (err) {
+      // Once, not every 4 ms: the world stops, the matches on this relay go on.
+      this.opts.log(`world: stopped on ${err instanceof Error ? err.stack : String(err)}`);
+      this.stop();
+    }
+  }
+
+  private frames(): void {
     const host = this.host;
     if (!host) return;
     const now = this.opts.now();
+    for (const l of this.links.values()) if (l.quiet()) l.close();
     if (!this.links.size && now - this.emptySince > IDLE_MS) { this.stop(); return; }
     let due = Math.floor((now - this.t0) / FRAME_MS) - host.room.tick;
     if (due > 30) { this.t0 += (due - 2) * FRAME_MS; due = 2; }

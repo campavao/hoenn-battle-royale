@@ -105,7 +105,9 @@ class Online implements WorldLink {
     // Play out: one frame a frame; more when the buffer has grown (a bunch arrived, or
     // this phone's clock runs slow), none while it builds its cushion back.
     if (!this.playing && this.queue.length >= CUSHION) this.playing = true;
-    // Far behind (the tab was hidden): straight to the last few.
+    // Far behind (the tab was hidden): a few seconds are played through at once; past
+    // that the relay's copy of the room is cheaper than replaying it.
+    if (this.queue.length > 600) { this.resync(); return []; }
     const n = !this.playing ? 0 : this.queue.length > 30 ? this.queue.length - CUSHION : this.queue.length > 8 ? 3 : this.queue.length > 4 ? 2 : 1;
     const events: RoomEvent[] = [];
     for (let i = 0; i < n && this.queue.length && !this.syncing; i++) {

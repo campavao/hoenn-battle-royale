@@ -7,33 +7,39 @@ import type { Spot, WorldMap } from '../../src/bots/world';
 import { botKeys, botSpawns, type Brain } from './bots';
 import { Room, type Command, type RoomEvent } from './room';
 
-/** One frame as a mirror needs it: what changed before anybody moved, then who now holds
- *  which keys (only the ones that changed), and -- per phone -- the last of its inputs
- *  this frame used. */
+/** One frame as a mirror needs it: what changed before anybody moved, the bots whose
+ *  keys changed, and the trainers' inputs the frame used. Most frames a trainer uses one
+ *  input, the same keys as the last, so only the rest are written: `ins` [id, ...bits]
+ *  for a trainer who used other keys or two inputs, `stall` for one who used none. The
+ *  service adds, per phone, the number of the last of its own inputs used. */
 export interface Frame {
   tick: number;
   cmds?: Command[];
   keys?: [number, number][];
+  ins?: number[][];
+  stall?: number[];
   ack?: number;
 }
 
 interface Player {
   id: number;
-  /** Keys per frame, in order, not used yet; and the number of the last one used. */
+  /** Inputs, one per phone frame, in order, not used yet; and the number of the last one
+   *  used. */
   queue: number[];
   seq: number;
-  held: number;
   started: boolean;
-  /** Frames since the last input arrived in time. */
-  dry: number;
+  /** Frames stood with inputs in hand, waiting for the cushion. */
+  waited: number;
 }
 
-/** Inputs wait this many frames before the first is used, so a late packet doesn't
- *  leave a frame without keys; past MAX_QUEUE a backlog is caught up (net.ts corrects). */
+/** A trainer waits for this many inputs in hand before moving again, so a late packet
+ *  rarely leaves it a frame short (spectators see a pause, not a stutter). Past
+ *  JITTER + CATCH_UP it takes two a frame until it is back. Nothing is ever dropped:
+ *  every input moves the trainer exactly once, so the relay's walk is the thumb's. */
 const JITTER = 3;
-const MAX_QUEUE = 12;
-/** Frames a trainer's keys stay held with nothing new from the phone. */
-const DRY = 15;
+const CATCH_UP = 3;
+/** A phone this far behind (ten seconds of keys) is not catching up: the oldest go. */
+const MAX_QUEUE = 600;
 
 export class Host {
   readonly room: Room;
@@ -52,24 +58,31 @@ export class Host {
     }
   }
 
-  /** A new trainer, in Littleroot by the truck, standing on the next frame. */
+  /** A new trainer, in Littleroot by the truck (or at `spot`), standing on the next frame. */
   join(name: string, skin: number, spot?: Spot): number {
     const id = this.nextId++;
-    if (spot) {
-      this.pending.push({ c: 'join', id, bot: false, name, skin, spot, facing: 1 });
-      this.players.set(id, { id, queue: [], seq: 0, held: 0, started: false, dry: 0 });
-      return id;
+    if (!spot) {
+      const free = [[10, 10], [9, 10], [11, 10], [10, 11], [9, 11], [11, 11], [10, 12], [8, 10], [12, 10]];
+      // Not where somebody stands, nor where a join this frame will put them.
+      const used = (x: number, y: number) =>
+        this.room.actors.some((a) => a.m.spot.map === 'MAP_LITTLEROOT_TOWN' && a.m.spot.x === x && a.m.spot.y === y) ||
+        this.pending.some((c) => c.c === 'join' && c.spot.map === 'MAP_LITTLEROOT_TOWN' && c.spot.x === x && c.spot.y === y);
+      const at = free.find(([x, y]) => !used(x, y)) ?? [10, 10];
+      spot = { map: 'MAP_LITTLEROOT_TOWN', x: at[0], y: at[1] };
     }
-    const free = [[10, 10], [9, 10], [11, 10], [10, 11], [9, 11], [11, 11], [10, 12], [8, 10], [12, 10]];
-    const at = free.find(([x, y]) => !this.room.actors.some((a) => a.m.spot.map === 'MAP_LITTLEROOT_TOWN' && a.m.spot.x === x && a.m.spot.y === y)) ?? [10, 10];
-    this.pending.push({ c: 'join', id, bot: false, name, skin, spot: { map: 'MAP_LITTLEROOT_TOWN', x: at[0], y: at[1] }, facing: 1 });
-    this.players.set(id, { id, queue: [], seq: 0, held: 0, started: false, dry: 0 });
+    this.pending.push({ c: 'join', id, bot: false, name, skin, spot, facing: 1 });
+    this.players.set(id, { id, queue: [], seq: 0, started: false, waited: 0 });
     return id;
   }
 
   leave(id: number): void {
     this.players.delete(id);
     this.pending.push({ c: 'leave', id });
+  }
+
+  /** How many inputs a phone has sent that no frame has used yet. */
+  backlog(id: number): number {
+    return this.players.get(id)?.queue.length ?? 0;
   }
 
   /** A phone's keys for its next frames, numbered: `first` is the number of k[0]. */
@@ -80,11 +93,12 @@ export class Host {
     // Resent or overlapping: only the frames not seen yet.
     const skip = Math.max(0, known + 1 - first);
     for (let i = skip; i < k.length; i++) p.queue.push(k[i] & 63);
+    while (p.queue.length > MAX_QUEUE) { p.queue.shift(); p.seq += 1; }
   }
 
   /** The phone's battle is over: its trainer (and the bot) walk again. */
   end(id: number): void {
-    if (this.players.has(id)) this.pending.push({ c: 'end', id });
+    if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: 'end', id });
   }
 
   /** One frame. The record goes to every mirror; `acks` is each phone's last input used. */
@@ -94,34 +108,43 @@ export class Host {
     this.pending = [];
     for (const c of cmds) room.apply(c);
     const keys: [number, number][] = [];
+    const ins: number[][] = [];
+    const stall: number[] = [];
+    const used = new Map<number, number[]>();
     const acks = new Map<number, number>();
     for (const a of room.actors) {
-      let bits = a.keys;
       if (a.bot) {
         const brain = this.brains.get(a.id);
-        bits = brain && !a.battling ? botKeys(room, a, brain) : 0;
-      } else {
-        const p = this.players.get(a.id);
-        if (p) {
-          if (!p.started && p.queue.length >= Math.max(1, this.jitter)) p.started = true;
-          if (p.started) {
-            while (p.queue.length > MAX_QUEUE) { p.held = p.queue.shift()!; p.seq += 1; }
-            if (p.queue.length) { p.held = p.queue.shift()!; p.seq += 1; p.dry = 0; }
-            else p.started = false; // ran dry: wait for a cushion again
-          }
-          // Keys go on being held through a late packet, but not for good: a phone that
-          // went quiet (a hidden tab, a dead network) lets go.
-          if (!p.queue.length && ++p.dry > DRY) p.held = 0;
-          bits = p.held;
-          acks.set(a.id, p.seq);
-        }
+        const bits = brain && !a.battling ? botKeys(room, a, brain) : 0;
+        if (bits !== a.keys) { keys.push([a.id, bits]); a.keys = bits; }
+        continue;
       }
-      if (bits !== a.keys) { keys.push([a.id, bits]); a.keys = bits; }
+      const p = this.players.get(a.id);
+      if (!p) { stall.push(a.id); continue; }
+      // Moving again once the cushion is in hand, or once what is in hand has waited as
+      // long as a cushion would have (a lone tap after a quiet spell).
+      if (!p.started && p.queue.length) {
+        if (p.queue.length >= Math.max(1, this.jitter) || p.waited >= this.jitter) { p.started = true; p.waited = 0; }
+        else p.waited += 1;
+      }
+      if (p.started) {
+        const n = p.queue.length > this.jitter + CATCH_UP ? 2 : p.queue.length ? 1 : 0;
+        if (!n) p.started = false; // ran dry: stand, and wait for a cushion again
+        const take = p.queue.splice(0, n);
+        p.seq += n;
+        if (n) used.set(a.id, take);
+      }
+      const take = used.get(a.id);
+      if (!take) stall.push(a.id);
+      else if (take.length !== 1 || take[0] !== a.keys) ins.push([a.id, ...take]);
+      acks.set(a.id, p.seq);
     }
-    const events = room.step();
+    const events = room.step(used);
     const frame: Frame = { tick: room.tick };
     if (cmds.length) frame.cmds = cmds;
     if (keys.length) frame.keys = keys;
+    if (ins.length) frame.ins = ins;
+    if (stall.length) frame.stall = stall;
     return { frame, acks, events };
   }
 }
@@ -133,7 +156,11 @@ export function play(room: Room, f: Frame): RoomEvent[] {
     const a = room.actor(id);
     if (a) a.keys = bits;
   }
-  const events = room.step();
+  const used = new Map<number, number[]>();
+  for (const a of room.actors) if (!a.bot) used.set(a.id, [a.keys]);
+  for (const id of f.stall ?? []) used.delete(id);
+  for (const [id, ...bits] of f.ins ?? []) used.set(id, bits);
+  const events = room.step(used);
   if (room.tick !== f.tick) throw new Error(`frame ${f.tick} played as ${room.tick}`);
   return events;
 }

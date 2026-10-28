@@ -34,7 +34,8 @@ export interface Actor {
   /** The wardrobe index: what the ROM draws this trainer as in a battle. */
   skin: number;
   m: Mover;
-  /** The keys held this frame, and last frame (A is a press, not a hold). */
+  /** The keys it moved on last, and the time before (A is a press, not a hold). A bot's
+   *  are set for each frame; a trainer's are the phone's inputs, one per move. */
   keys: number;
   last: number;
   /** In a battle: stands still, keys ignored, until end(). */
@@ -108,10 +109,14 @@ export class Room {
       this.actors.push(a);
       this.actors.sort((p, q) => p.id - q.id);
     } else if (cmd.c === 'leave') {
-      this.actors = this.actors.filter((a) => a.id !== cmd.id);
+      // A bot fought by somebody who left walks again.
+      const a = this.actor(cmd.id);
+      const foe = a?.foe ? this.actor(a.foe) : undefined;
+      if (foe) foe.battling = false;
+      this.actors = this.actors.filter((o) => o.id !== cmd.id);
     } else {
       const a = this.actor(cmd.id);
-      if (!a) return;
+      if (!a || !a.battling) return;
       a.battling = false;
       a.keys = a.last = 0;
       const foe = a.foe ? this.actor(a.foe) : undefined;
@@ -130,39 +135,50 @@ export class Room {
     return m ? dealPatches(this.patches, m.id, m, this.seed) : [];
   }
 
-  /** One frame: everybody's keys (setKeys first), then everybody moves, by id. */
-  step(): RoomEvent[] {
+  /** One frame, everybody in id order. A bot moves once, on its keys. A trainer moves
+   *  once for each of its phone's inputs this frame used (`ins`): none while they are
+   *  late, two while it catches up. So a trainer's walk is its thumb's, input for input,
+   *  however the network bunched them -- the phone's own replay of the same inputs lands
+   *  on the same tile (net.ts). */
+  step(ins?: ReadonlyMap<number, readonly number[]>): RoomEvent[] {
     this.tick += 1;
     for (const [key, at] of this.taken) if (this.tick - at >= REGROW) this.taken.delete(key);
     const events: RoomEvent[] = [];
     for (const a of this.actors) {
-      if (a.battling) { a.last = a.keys; continue; }
-      const before = a.m.strides;
-      tick(a.m, keysOf(a.keys), this.stepFor(a));
-      if (a.m.strides !== before) a.arriving = true;
-      if (!a.m.action && !a.bot) {
-        if (a.arriving) {
-          a.arriving = false;
-          const p = this.patchesOn(a.m.spot.map).find((q) => q.x === a.m.spot.x && q.y === a.m.spot.y && !this.isTaken(q.key));
-          if (p) {
-            this.taken.set(p.key, this.tick);
-            a.battling = true;
-            events.push({ type: 'wild', tick: this.tick, id: a.id, map: a.m.spot.map, x: p.x, y: p.y, key: p.key });
-          }
-        }
-        if (!a.battling && (a.keys & KEY_A) && !(a.last & KEY_A)) {
-          const foe = this.facing(a);
-          if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
-            a.battling = foe.battling = foe.beaten = true;
-            foe.m.facing = foe.m.moveDir = ({ 1: 2, 2: 1, 3: 4, 4: 3 } as Record<number, number>)[a.m.facing];
-            a.foe = foe.id;
-            events.push({ type: 'fight', tick: this.tick, id: a.id, foe: foe.id });
-          }
-        }
-      } else if (!a.m.action) a.arriving = false;
-      a.last = a.keys;
+      if (a.bot) this.move(a, a.keys, events);
+      else for (const bits of ins?.get(a.id) ?? []) this.move(a, bits, events);
     }
     return events;
+  }
+
+  /** One move of one actor on `bits`: sim.ts's frame, then what it landed on or pressed. */
+  private move(a: Actor, bits: number, events: RoomEvent[]): void {
+    a.keys = bits;
+    if (a.battling) { a.last = bits; return; }
+    const before = a.m.strides;
+    tick(a.m, keysOf(bits), this.stepFor(a));
+    if (a.m.strides !== before) a.arriving = true;
+    if (!a.m.action && !a.bot) {
+      if (a.arriving) {
+        a.arriving = false;
+        const p = this.patchesOn(a.m.spot.map).find((q) => q.x === a.m.spot.x && q.y === a.m.spot.y && !this.isTaken(q.key));
+        if (p) {
+          this.taken.set(p.key, this.tick);
+          a.battling = true;
+          events.push({ type: 'wild', tick: this.tick, id: a.id, map: a.m.spot.map, x: p.x, y: p.y, key: p.key });
+        }
+      }
+      if (!a.battling && (bits & KEY_A) && !(a.last & KEY_A)) {
+        const foe = this.facing(a);
+        if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
+          a.battling = foe.battling = foe.beaten = true;
+          foe.m.facing = foe.m.moveDir = ({ 1: 2, 2: 1, 3: 4, 4: 3 } as Record<number, number>)[a.m.facing];
+          a.foe = foe.id;
+          events.push({ type: 'fight', tick: this.tick, id: a.id, foe: foe.id });
+        }
+      }
+    } else if (!a.m.action) a.arriving = false;
+    a.last = bits;
   }
 
   /** The trainer standing on the cell `a` faces. */
@@ -188,10 +204,15 @@ export class Room {
   /** A short fingerprint of the room: two machines that disagree find out within a second. */
   hash(): number {
     let h = 0x811c9dc5 ^ this.tick;
-    const mix = (v: number) => { h = Math.imul(h ^ (v & 0xffff), 0x01000193) >>> 0; };
+    const mix = (v: number) => { h = Math.imul(h ^ (v & 0xffff), 0x01000193) >>> 0; h = Math.imul(h ^ (v >>> 16), 0x01000193) >>> 0; };
+    const str = (t: string) => { for (let i = 0; i < t.length; i++) mix(t.charCodeAt(i)); };
     for (const a of this.actors) {
-      mix(a.id); mix(a.m.spot.x); mix(a.m.spot.y); mix(a.m.spot.map.length); mix(a.m.facing);
-      mix(a.m.action ? a.m.action.t + 64 * a.m.action.len : 0); mix(a.battling ? 1 : 0); mix(a.keys);
+      const m = a.m;
+      mix(a.id); str(m.spot.map); mix(m.spot.x); mix(m.spot.y); str(m.prev.map); mix(m.prev.x); mix(m.prev.y);
+      mix(m.facing); mix(m.moveDir); mix(m.runningState); mix(m.run ? 1 : 0); mix(m.strides);
+      mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
+      mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
+      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0)); mix(a.foe); mix(a.keys); mix(a.last);
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
     return h;

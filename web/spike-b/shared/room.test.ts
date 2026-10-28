@@ -73,6 +73,63 @@ describe('shared room', () => {
   });
 });
 
+describe('comings and goings', () => {
+  it('a trainer who leaves mid-fight lets the bot walk again', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 1, bot: true, name: 'BOT', skin: 4, spot: { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 12 }, facing: 1 });
+    room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_LITTLEROOT_TOWN', x: 9, y: 12 }, facing: 4 });
+    room.step(new Map([[2, [KEY_A]]]));
+    expect(room.actor(1)!.battling).toBe(true);
+    room.apply({ c: 'leave', id: 2 });
+    expect(room.actor(1)!.battling).toBe(false);
+  });
+
+  it('two trainers joining in one frame stand on two tiles', () => {
+    const host = new Host(makeRoom(MAPS, PATCHES, 99), 0, MAPS);
+    const a = host.join('A', 0), b = host.join('B', 1);
+    host.advance();
+    expect(host.room.actor(a)!.m.spot).not.toEqual(host.room.actor(b)!.m.spot);
+  });
+});
+
+describe('late keys', () => {
+  // The relay's walk is the thumb's: whenever the phone's inputs arrive (bunched, late,
+  // after a dry spell), the relay's trainer ends where the phone's own replay of the same
+  // inputs does, every move of the way (review of #160: it used to stop a tile off).
+  it('the relay walks the inputs the phone walked, however they arrive', () => {
+    let rng = 99;
+    const r = () => { rng ^= rng << 13; rng ^= rng >>> 17; rng ^= rng << 5; return (rng >>> 0) / 4294967296; };
+    for (let trial = 0; trial < 40; trial++) {
+      const host = new Host(makeRoom(MAPS, PATCHES, 7), 0, MAPS);
+      const start = { map: 'MAP_ROUTE101', x: 5, y: 10 };
+      const id = host.join('A', 0, start);
+      // the phone: holds and taps, one input a frame, walked on its own copy
+      const inputs: number[] = [];
+      for (let k = 0; k < 6; k++) {
+        const bits = [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT][Math.floor(r() * 4)] | (r() < 0.3 ? KEY_B : 0);
+        const len = 1 + Math.floor(r() * 30);
+        for (let i = 0; i < len; i++) inputs.push(bits);
+        for (let i = Math.floor(r() * 10); i > 0; i--) inputs.push(0);
+      }
+      for (let i = 0; i < 20; i++) inputs.push(0);
+      const phone = makeRoom(MAPS, PATCHES, 7);
+      phone.apply({ c: 'join', id, bot: false, name: 'A', skin: 0, spot: start, facing: 1 });
+      for (const bits of inputs) phone.step(new Map([[id, [bits]]]));
+      // the network: each input arrives 0..12 frames late, in order
+      const due: number[] = [];
+      let t = 1;
+      for (let i = 0; i < inputs.length; i++) { t = Math.max(t, i + Math.floor(r() * 13)); due.push(t); }
+      let next = 0;
+      for (let f = 0; f < inputs.length + 60; f++) {
+        while (next < inputs.length && due[next] <= f) { host.input(id, next + 1, [inputs[next]]); next++; }
+        host.advance();
+      }
+      expect(host.backlog(id)).toBe(0);
+      expect(host.room.actor(id)!.m).toEqual(phone.actor(id)!.m);
+    }
+  });
+});
+
 const pendingEnds: [number, number][] = [];
 
 describe('room battles', () => {
@@ -85,14 +142,14 @@ describe('room battles', () => {
     room.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_ROUTE101', x: p.x - 1, y: p.y }, facing: 4 });
     const a = room.actor(1)!;
     const events = [];
-    for (let i = 0; i < 40 && !a.battling; i++) { a.keys = KEY_RIGHT; events.push(...room.step()); }
+    for (let i = 0; i < 40 && !a.battling; i++) { events.push(...room.step(new Map([[1, [KEY_RIGHT]]]))); }
     expect(events).toMatchObject([{ type: 'wild', id: 1, x: p.x, y: p.y, key: p.key }]);
     expect(room.isTaken(p.key)).toBe(true);
     for (let i = 0; i < 30; i++) expect(room.step()).toEqual([]); // standing still in the battle
     room.apply({ c: 'end', id: 1 });
     // off and back on: nothing
     const more = [];
-    for (const k of [KEY_LEFT, KEY_RIGHT]) for (let i = 0; i < 40; i++) { a.keys = k; more.push(...room.step()); }
+    for (const k of [KEY_LEFT, KEY_RIGHT]) for (let i = 0; i < 40; i++) { more.push(...room.step(new Map([[1, [k]]]))); }
     expect(more).toEqual([]);
   });
 
@@ -101,14 +158,16 @@ describe('room battles', () => {
     room.apply({ c: 'join', id: 1, bot: true, name: 'BOT', skin: 4, spot: { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 12 }, facing: 1 });
     room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_LITTLEROOT_TOWN', x: 9, y: 12 }, facing: 4 });
     const me = room.actor(2)!, bot = room.actor(1)!;
-    me.keys = KEY_A;
-    expect(room.step()).toMatchObject([{ type: 'fight', id: 2, foe: 1 }]);
+    const press = (bits: number) => room.step(new Map([[2, [bits]]]));
+    expect(press(KEY_A)).toMatchObject([{ type: 'fight', id: 2, foe: 1 }]);
     expect(bot.battling && me.battling && bot.beaten).toBe(true);
     expect(bot.m.facing).toBe(3); // turned to face the trainer
     room.apply({ c: 'end', id: 2 });
     expect(bot.battling || me.battling).toBe(false);
-    me.keys = 0; room.step();
-    me.keys = KEY_A;
-    expect(room.step()).toEqual([]); // beaten: once only
+    me.keys = KEY_B;
+    room.apply({ c: 'end', id: 2 }); // not battling: nothing
+    expect(me.keys).toBe(KEY_B);
+    press(0);
+    expect(press(KEY_A)).toEqual([]); // beaten: once only
   });
 });

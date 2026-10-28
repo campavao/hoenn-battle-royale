@@ -45,18 +45,25 @@ test("/world: two phones share one room at 60 Hz", async () => {
     a.send({ t: "in", s: 1, k: Array(20).fill(2) });
     const acked = await a.until((m) => m.t === "f" && m.f.some((f) => f.a >= 20));
     assert.ok(acked);
-    // frames come in order with no gaps, about 60 a second
+    // frames come in order with no gaps, about 60 a second (by the ticks the relay
+    // stamped, over two seconds: what this process happens to read in a burst does not
+    // count)
+    const ticks = [];
     const t0 = Date.now();
-    let ticks = [];
-    while (Date.now() - t0 < 1000) {
+    while (Date.now() - t0 < 2000) {
       const m = await b.until((x) => x.t === "f");
       ticks.push(...m.f.map((f) => f.tick));
     }
     for (let i = 1; i < ticks.length; i++) assert.equal(ticks[i], ticks[i - 1] + 1);
-    assert.ok(ticks.length > 45 && ticks.length < 75, `${ticks.length} frames in a second`);
+    const rate = (ticks[ticks.length - 1] - ticks[0]) / ((Date.now() - t0) / 1000);
+    assert.ok(rate > 45 && rate < 75, `${rate.toFixed(1)} frames a second`);
     // a hash rides along every 60 frames
     const h = await b.until((m) => m.t === "f" && m.f.some((f) => f.h !== undefined), 2000);
     assert.ok(h);
+    // the whole room, at most once a second however often it is asked for
+    for (let i = 0; i < 5; i++) b.send({ t: "sync" });
+    await new Promise((r) => setTimeout(r, 400));
+    assert.equal(b.inbox.filter((m) => m.t === "state").length, 1);
     // health counts the world's trainers
     const health = await (await fetch(`http://127.0.0.1:${port}/health`)).json();
     assert.equal(health.world, 2);

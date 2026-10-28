@@ -1045,10 +1045,13 @@ var Room = class {
       this.actors.push(a);
       this.actors.sort((p, q) => p.id - q.id);
     } else if (cmd.c === "leave") {
-      this.actors = this.actors.filter((a) => a.id !== cmd.id);
+      const a = this.actor(cmd.id);
+      const foe = a?.foe ? this.actor(a.foe) : void 0;
+      if (foe) foe.battling = false;
+      this.actors = this.actors.filter((o) => o.id !== cmd.id);
     } else {
       const a = this.actor(cmd.id);
-      if (!a) return;
+      if (!a || !a.battling) return;
       a.battling = false;
       a.keys = a.last = 0;
       const foe = a.foe ? this.actor(a.foe) : void 0;
@@ -1064,42 +1067,52 @@ var Room = class {
     const m = this.maps.get(mapId);
     return m ? dealPatches(this.patches, m.id, m, this.seed) : [];
   }
-  /** One frame: everybody's keys (setKeys first), then everybody moves, by id. */
-  step() {
+  /** One frame, everybody in id order. A bot moves once, on its keys. A trainer moves
+   *  once for each of its phone's inputs this frame used (`ins`): none while they are
+   *  late, two while it catches up. So a trainer's walk is its thumb's, input for input,
+   *  however the network bunched them -- the phone's own replay of the same inputs lands
+   *  on the same tile (net.ts). */
+  step(ins) {
     this.tick += 1;
     for (const [key, at] of this.taken) if (this.tick - at >= REGROW) this.taken.delete(key);
     const events = [];
     for (const a of this.actors) {
-      if (a.battling) {
-        a.last = a.keys;
-        continue;
-      }
-      const before = a.m.strides;
-      tick(a.m, keysOf(a.keys), this.stepFor(a));
-      if (a.m.strides !== before) a.arriving = true;
-      if (!a.m.action && !a.bot) {
-        if (a.arriving) {
-          a.arriving = false;
-          const p = this.patchesOn(a.m.spot.map).find((q) => q.x === a.m.spot.x && q.y === a.m.spot.y && !this.isTaken(q.key));
-          if (p) {
-            this.taken.set(p.key, this.tick);
-            a.battling = true;
-            events.push({ type: "wild", tick: this.tick, id: a.id, map: a.m.spot.map, x: p.x, y: p.y, key: p.key });
-          }
-        }
-        if (!a.battling && a.keys & KEY_A && !(a.last & KEY_A)) {
-          const foe = this.facing(a);
-          if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
-            a.battling = foe.battling = foe.beaten = true;
-            foe.m.facing = foe.m.moveDir = { 1: 2, 2: 1, 3: 4, 4: 3 }[a.m.facing];
-            a.foe = foe.id;
-            events.push({ type: "fight", tick: this.tick, id: a.id, foe: foe.id });
-          }
-        }
-      } else if (!a.m.action) a.arriving = false;
-      a.last = a.keys;
+      if (a.bot) this.move(a, a.keys, events);
+      else for (const bits of ins?.get(a.id) ?? []) this.move(a, bits, events);
     }
     return events;
+  }
+  /** One move of one actor on `bits`: sim.ts's frame, then what it landed on or pressed. */
+  move(a, bits, events) {
+    a.keys = bits;
+    if (a.battling) {
+      a.last = bits;
+      return;
+    }
+    const before = a.m.strides;
+    tick(a.m, keysOf(bits), this.stepFor(a));
+    if (a.m.strides !== before) a.arriving = true;
+    if (!a.m.action && !a.bot) {
+      if (a.arriving) {
+        a.arriving = false;
+        const p = this.patchesOn(a.m.spot.map).find((q) => q.x === a.m.spot.x && q.y === a.m.spot.y && !this.isTaken(q.key));
+        if (p) {
+          this.taken.set(p.key, this.tick);
+          a.battling = true;
+          events.push({ type: "wild", tick: this.tick, id: a.id, map: a.m.spot.map, x: p.x, y: p.y, key: p.key });
+        }
+      }
+      if (!a.battling && bits & KEY_A && !(a.last & KEY_A)) {
+        const foe = this.facing(a);
+        if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
+          a.battling = foe.battling = foe.beaten = true;
+          foe.m.facing = foe.m.moveDir = { 1: 2, 2: 1, 3: 4, 4: 3 }[a.m.facing];
+          a.foe = foe.id;
+          events.push({ type: "fight", tick: this.tick, id: a.id, foe: foe.id });
+        }
+      }
+    } else if (!a.m.action) a.arriving = false;
+    a.last = bits;
   }
   /** The trainer standing on the cell `a` faces. */
   facing(a) {
@@ -1124,16 +1137,33 @@ var Room = class {
     let h = 2166136261 ^ this.tick;
     const mix2 = (v) => {
       h = Math.imul(h ^ v & 65535, 16777619) >>> 0;
+      h = Math.imul(h ^ v >>> 16, 16777619) >>> 0;
+    };
+    const str = (t) => {
+      for (let i = 0; i < t.length; i++) mix2(t.charCodeAt(i));
     };
     for (const a of this.actors) {
+      const m = a.m;
       mix2(a.id);
-      mix2(a.m.spot.x);
-      mix2(a.m.spot.y);
-      mix2(a.m.spot.map.length);
-      mix2(a.m.facing);
-      mix2(a.m.action ? a.m.action.t + 64 * a.m.action.len : 0);
-      mix2(a.battling ? 1 : 0);
+      str(m.spot.map);
+      mix2(m.spot.x);
+      mix2(m.spot.y);
+      str(m.prev.map);
+      mix2(m.prev.x);
+      mix2(m.prev.y);
+      mix2(m.facing);
+      mix2(m.moveDir);
+      mix2(m.runningState);
+      mix2(m.run ? 1 : 0);
+      mix2(m.strides);
+      mix2(m.px + 1024);
+      mix2(m.py + 1024);
+      mix2(m.lift + 1024);
+      mix2(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 65535);
+      mix2((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0));
+      mix2(a.foe);
       mix2(a.keys);
+      mix2(a.last);
     }
     for (const [k, t] of this.taken) {
       mix2(k);
@@ -1242,8 +1272,8 @@ function botSpawns(room, maps, count) {
 
 // spike-b/shared/host.ts
 var JITTER = 3;
-var MAX_QUEUE = 12;
-var DRY = 15;
+var CATCH_UP = 3;
+var MAX_QUEUE = 600;
 var Host = class {
   /** `jitter` 0 is the page hosting itself: a key is used the frame it is pressed. */
   constructor(room, bots, maps, jitter = JITTER) {
@@ -1261,23 +1291,26 @@ var Host = class {
   brains = /* @__PURE__ */ new Map();
   pending = [];
   nextId = 1;
-  /** A new trainer, in Littleroot by the truck, standing on the next frame. */
+  /** A new trainer, in Littleroot by the truck (or at `spot`), standing on the next frame. */
   join(name, skin, spot) {
     const id = this.nextId++;
-    if (spot) {
-      this.pending.push({ c: "join", id, bot: false, name, skin, spot, facing: 1 });
-      this.players.set(id, { id, queue: [], seq: 0, held: 0, started: false, dry: 0 });
-      return id;
+    if (!spot) {
+      const free = [[10, 10], [9, 10], [11, 10], [10, 11], [9, 11], [11, 11], [10, 12], [8, 10], [12, 10]];
+      const used = (x, y) => this.room.actors.some((a) => a.m.spot.map === "MAP_LITTLEROOT_TOWN" && a.m.spot.x === x && a.m.spot.y === y) || this.pending.some((c) => c.c === "join" && c.spot.map === "MAP_LITTLEROOT_TOWN" && c.spot.x === x && c.spot.y === y);
+      const at = free.find(([x, y]) => !used(x, y)) ?? [10, 10];
+      spot = { map: "MAP_LITTLEROOT_TOWN", x: at[0], y: at[1] };
     }
-    const free = [[10, 10], [9, 10], [11, 10], [10, 11], [9, 11], [11, 11], [10, 12], [8, 10], [12, 10]];
-    const at = free.find(([x, y]) => !this.room.actors.some((a) => a.m.spot.map === "MAP_LITTLEROOT_TOWN" && a.m.spot.x === x && a.m.spot.y === y)) ?? [10, 10];
-    this.pending.push({ c: "join", id, bot: false, name, skin, spot: { map: "MAP_LITTLEROOT_TOWN", x: at[0], y: at[1] }, facing: 1 });
-    this.players.set(id, { id, queue: [], seq: 0, held: 0, started: false, dry: 0 });
+    this.pending.push({ c: "join", id, bot: false, name, skin, spot, facing: 1 });
+    this.players.set(id, { id, queue: [], seq: 0, started: false, waited: 0 });
     return id;
   }
   leave(id) {
     this.players.delete(id);
     this.pending.push({ c: "leave", id });
+  }
+  /** How many inputs a phone has sent that no frame has used yet. */
+  backlog(id) {
+    return this.players.get(id)?.queue.length ?? 0;
   }
   /** A phone's keys for its next frames, numbered: `first` is the number of k[0]. */
   input(id, first, k) {
@@ -1286,10 +1319,14 @@ var Host = class {
     const known = p.seq + p.queue.length;
     const skip = Math.max(0, known + 1 - first);
     for (let i = skip; i < k.length; i++) p.queue.push(k[i] & 63);
+    while (p.queue.length > MAX_QUEUE) {
+      p.queue.shift();
+      p.seq += 1;
+    }
   }
   /** The phone's battle is over: its trainer (and the bot) walk again. */
   end(id) {
-    if (this.players.has(id)) this.pending.push({ c: "end", id });
+    if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: "end", id });
   }
   /** One frame. The record goes to every mirror; `acks` is each phone's last input used. */
   advance() {
@@ -1298,41 +1335,49 @@ var Host = class {
     this.pending = [];
     for (const c of cmds) room.apply(c);
     const keys = [];
+    const ins = [];
+    const stall = [];
+    const used = /* @__PURE__ */ new Map();
     const acks = /* @__PURE__ */ new Map();
     for (const a of room.actors) {
-      let bits = a.keys;
       if (a.bot) {
         const brain = this.brains.get(a.id);
-        bits = brain && !a.battling ? botKeys(room, a, brain) : 0;
-      } else {
-        const p = this.players.get(a.id);
-        if (p) {
-          if (!p.started && p.queue.length >= Math.max(1, this.jitter)) p.started = true;
-          if (p.started) {
-            while (p.queue.length > MAX_QUEUE) {
-              p.held = p.queue.shift();
-              p.seq += 1;
-            }
-            if (p.queue.length) {
-              p.held = p.queue.shift();
-              p.seq += 1;
-              p.dry = 0;
-            } else p.started = false;
-          }
-          if (!p.queue.length && ++p.dry > DRY) p.held = 0;
-          bits = p.held;
-          acks.set(a.id, p.seq);
+        const bits = brain && !a.battling ? botKeys(room, a, brain) : 0;
+        if (bits !== a.keys) {
+          keys.push([a.id, bits]);
+          a.keys = bits;
         }
+        continue;
       }
-      if (bits !== a.keys) {
-        keys.push([a.id, bits]);
-        a.keys = bits;
+      const p = this.players.get(a.id);
+      if (!p) {
+        stall.push(a.id);
+        continue;
       }
+      if (!p.started && p.queue.length) {
+        if (p.queue.length >= Math.max(1, this.jitter) || p.waited >= this.jitter) {
+          p.started = true;
+          p.waited = 0;
+        } else p.waited += 1;
+      }
+      if (p.started) {
+        const n = p.queue.length > this.jitter + CATCH_UP ? 2 : p.queue.length ? 1 : 0;
+        if (!n) p.started = false;
+        const take2 = p.queue.splice(0, n);
+        p.seq += n;
+        if (n) used.set(a.id, take2);
+      }
+      const take = used.get(a.id);
+      if (!take) stall.push(a.id);
+      else if (take.length !== 1 || take[0] !== a.keys) ins.push([a.id, ...take]);
+      acks.set(a.id, p.seq);
     }
-    const events = room.step();
+    const events = room.step(used);
     const frame = { tick: room.tick };
     if (cmds.length) frame.cmds = cmds;
     if (keys.length) frame.keys = keys;
+    if (ins.length) frame.ins = ins;
+    if (stall.length) frame.stall = stall;
     return { frame, acks, events };
   }
 };
@@ -1343,6 +1388,8 @@ var HASH_EVERY = 60;
 // spike-b/shared/service.ts
 var FRAME_MS = 1e3 / 60;
 var IDLE_MS = 6e4;
+var QUIET_MS = 12e4;
+var SYNC_MS = 1e3;
 var WorldService = class {
   constructor(opts) {
     this.opts = opts;
@@ -1361,6 +1408,8 @@ var WorldService = class {
   }
   open(link) {
     let id = 0;
+    let heard = this.opts.now();
+    let synced = -Infinity;
     const send = (m) => link.send(JSON.stringify(m));
     return {
       onText: (text) => {
@@ -1371,6 +1420,7 @@ var WorldService = class {
           return;
         }
         if (!m || typeof m !== "object") return;
+        heard = this.opts.now();
         if (m.t === "join" && !id) {
           if (this.links.size >= this.opts.cap) {
             send({ t: "full" });
@@ -1381,7 +1431,7 @@ var WorldService = class {
           const name = String(m.name ?? "").toUpperCase().replace(/[^A-Z0-9 ]/g, "").slice(0, 10) || "TRAINER";
           const skin = Number.isInteger(m.skin) && m.skin >= 0 && m.skin < 16 ? m.skin : 0;
           id = host.join(name, skin);
-          this.links.set(id, link);
+          this.links.set(id, { send: link.send, close: link.close, quiet: () => this.opts.now() - heard > QUIET_MS });
           send({ t: "hello", id, state: host.room.state() });
           this.opts.log(`world: ${name}#${id} in (${this.links.size} here, tick ${host.room.tick})`);
         } else if (!id || !this.host) {
@@ -1392,6 +1442,9 @@ var WorldService = class {
         } else if (m.t === "end") {
           this.host.end(id);
         } else if (m.t === "sync") {
+          const now = this.opts.now();
+          if (now - synced < SYNC_MS) return;
+          synced = now;
           send({ t: "state", state: this.host.room.state() });
         }
       },
@@ -1416,9 +1469,18 @@ var WorldService = class {
   }
   /** Every frame that is due, sent; a host that fell far behind skips ahead instead. */
   pump() {
+    try {
+      this.frames();
+    } catch (err) {
+      this.opts.log(`world: stopped on ${err instanceof Error ? err.stack : String(err)}`);
+      this.stop();
+    }
+  }
+  frames() {
     const host = this.host;
     if (!host) return;
     const now = this.opts.now();
+    for (const l of this.links.values()) if (l.quiet()) l.close();
     if (!this.links.size && now - this.emptySince > IDLE_MS) {
       this.stop();
       return;

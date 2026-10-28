@@ -475,7 +475,7 @@ function draw(): void {
   ctx.fillStyle = '#0d1a14';
   ctx.fillRect(0, 0, W, H);
   // Past every map's edge the GBA repeats the map's 2x2 border block (Route 101's
-  // trees): tile the followed map's, aligned to its even coordinates.
+  // trees): tile the block of the map under the camera, aligned to its even coordinates.
   const home = mapUnder(cam.x, cam.y) ?? placed.get('MAP_LITTLEROOT_TOWN')!;
   if (paint(home) && home.border && z < 0.5) {
     // Far out the 32 px block is noise: one flat colour, its average.
