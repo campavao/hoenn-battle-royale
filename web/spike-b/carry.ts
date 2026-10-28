@@ -32,3 +32,31 @@ export function rekey(bag: Uint8Array, from: number, to: number): Uint8Array {
   for (let at = POCKETS_AT; at < BAG_LEN; at += 4) v.setUint16(at + 2, v.getUint16(at + 2, true) ^ (x & 0xffff), true);
   return out;
 }
+
+// include/constants/items.h.
+const ITEM_MASTER_BALL = 1, ITEM_LAST_BALL = 12, ITEM_TM01 = 289, ITEM_HM08 = 346;
+/** A ball off the ground is six (br_items.c's Pickup, BR_ITEMS_BALLS); one of the rest. */
+export const groundCount = (item: number): number => (item > ITEM_MASTER_BALL && item <= ITEM_LAST_BALL ? 6 : 1);
+export const isTm = (item: number): boolean => item >= ITEM_TM01 && item <= ITEM_HM08;
+
+/** The pockets' items, decrypted: id -> count. */
+function pocketCounts(bag: Uint8Array, key: number): Map<number, number> {
+  const v = new DataView(bag.buffer, bag.byteOffset, bag.byteLength);
+  const out = new Map<number, number>();
+  for (let at = POCKETS_AT; at < BAG_LEN; at += 4) {
+    const id = v.getUint16(at, true);
+    if (id) out.set(id, (out.get(id) ?? 0) + (v.getUint16(at + 2, true) ^ (key & 0xffff)));
+  }
+  return out;
+}
+
+/** What a GIVE did to the bag, as the ROM filed it: the items that went in (a POKé BALL
+ *  as ROYALé BALLs, a FULL HEAL as a FULL RESTORE -- br_items.c's Apply) and money made
+ *  (an item sold). Nothing either way: it did not fit. */
+export function arrived(before: { bag: Uint8Array; key: number }, after: { bag: Uint8Array; key: number }): { items: { id: number; n: number }[]; money: number } {
+  const was = pocketCounts(before.bag, before.key), now = pocketCounts(after.bag, after.key);
+  const items: { id: number; n: number }[] = [];
+  for (const [id, n] of now) if (n > (was.get(id) ?? 0)) items.push({ id, n: n - (was.get(id) ?? 0) });
+  const money = (bytes: Uint8Array, key: number) => (new DataView(bytes.buffer, bytes.byteOffset).getUint32(0, true) ^ key) >>> 0;
+  return { items, money: money(after.bag, after.key) - money(before.bag, before.key) };
+}

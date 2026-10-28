@@ -7,7 +7,8 @@ import type { PatchTable } from '../../src/bots/patches';
 import worldJson from '../data/world.json';
 import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
-import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, makeRoom } from './room';
+import { isTm } from '../carry';
+import { GROUND_PER_MAP, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, makeRoom } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -31,7 +32,7 @@ describe('shared room', () => {
     const dirs = [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, 0];
     const sent = new Map([[a, 0], [b, 0]]);
     const held = new Map([[a, 0], [b, 0]]);
-    let wild = 0, fights = 0, moved = 0;
+    let wild = 0, fights = 0, items = 0, moved = 0;
     const start = new Map<number, string>();
 
     for (let f = 0; f < 6000; f++) {
@@ -49,6 +50,7 @@ describe('shared room', () => {
       }
       const { frame, events } = host.advance();
       for (const e of events) {
+        if (e.type === 'item') { items += 1; continue; }
         if (e.type === 'wild') wild += 1; else fights += 1;
         // the phone's battle lasts a while, then it says so
         const done = f + 30 + Math.floor(r() * 200);
@@ -69,7 +71,7 @@ describe('shared room', () => {
     expect(JSON.stringify(early.state())).toBe(JSON.stringify(host.room.state()));
     expect(moved).toBeGreaterThan(50);
     expect(wild).toBeGreaterThan(0);
-    console.log(`wild ${wild}, fights ${fights}, steps ${moved}`);
+    console.log(`wild ${wild}, fights ${fights}, items ${items}, steps ${moved}`);
   });
 });
 
@@ -172,7 +174,7 @@ describe('late keys', () => {
       expect(host.backlog(id)).toBe(0);
       expect(host.room.actor(id)!.m).toEqual(phone.actor(id)!.m);
     }
-  });
+  }, 20_000); // 80 rooms' walks: ~3 s here, and a shared CI runner can take twice that
 });
 
 const pendingEnds: [number, number][] = [];
@@ -214,5 +216,55 @@ describe('room battles', () => {
     expect(me.keys).toBe(KEY_B);
     press(0);
     expect(press(KEY_A)).toEqual([]); // beaten: once only
+  });
+});
+
+describe('item balls', () => {
+  it('are dealt from the seed on plain ground a trainer can reach, a few a map', () => {
+    const one = makeRoom(MAPS, PATCHES, 4242), two = makeRoom(MAPS, PATCHES, 4242), other = makeRoom(MAPS, PATCHES, 7);
+    const g = [...one.ground().values()];
+    expect(g).toEqual([...two.ground().values()]);
+    expect(g).not.toEqual([...other.ground().values()]);
+    const perMap = new Map<string, number>();
+    for (const b of g) perMap.set(b.map, (perMap.get(b.map) ?? 0) + 1);
+    expect(perMap.size).toBeGreaterThanOrEqual(5); // every map you can walk to
+    expect(Math.max(...perMap.values())).toBeLessThanOrEqual(GROUND_PER_MAP);
+    for (const b of g) {
+      expect(one.world.cell(b.map, b.x, b.y)).toBe(0);
+      expect(one.patchesOn(b.map).some((q) => q.x === b.x && q.y === b.y)).toBe(false);
+      expect(b.item).toBeGreaterThan(0);
+      expect(isTm(b.item)).toBe(false); // no machines until one is taught off the ground
+    }
+    expect(new Set(g.map((b) => b.key)).size).toBe(g.length);
+  });
+
+  it('a ball is solid; A at it takes it once, off the map for everybody', () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const step = room.stepFor({ id: -1 } as never);
+    // a ball with open ground west of it
+    const b = [...room.ground().values()].find((q) => room.world.cell(q.map, q.x - 1, q.y) === 0 && !room.patchesOn(q.map).some((p) => p.x === q.x - 1 && p.y === q.y))!;
+    expect(b).toBeTruthy();
+    expect(step({ map: b.map, x: b.x - 1, y: b.y }, 4)).toBeNull(); // solid
+    room.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: { map: b.map, x: b.x - 1, y: b.y }, facing: 4 });
+    const press = (bits: number) => room.step(new Map([[1, [bits]]]));
+    expect(press(KEY_A)).toMatchObject([{ type: 'item', id: 1, key: b.key, item: b.item }]);
+    expect(room.groundAt(b.map, b.x, b.y)).toBeUndefined();
+    press(0);
+    expect(press(KEY_A)).toEqual([]); // gone
+    const mirror = makeRoom(MAPS, PATCHES, 4242);
+    mirror.load(room.state());
+    expect(mirror.groundAt(b.map, b.x, b.y)).toBeUndefined();
+    expect(mirror.hash()).toBe(room.hash());
+    // a ball that would not go in the bag is put back by its taker, and only by them
+    const back = makeRoom(MAPS, PATCHES, 4242);
+    back.load(room.state());
+    back.apply({ c: 'drop', id: 2, key: b.key });
+    expect(back.groundAt(b.map, b.x, b.y)).toBeUndefined();
+    back.apply({ c: 'drop', id: 1, key: b.key });
+    expect(back.groundAt(b.map, b.x, b.y)).toEqual(b);
+    // now the cell is open
+    let walked = false;
+    for (let i = 0; i < 40 && !walked; i++) { press(KEY_RIGHT); walked = room.actor(1)!.m.spot.x === b.x; }
+    expect(walked).toBe(true);
   });
 });

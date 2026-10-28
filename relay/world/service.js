@@ -903,6 +903,97 @@ function dealPatches(table, mapId, map, seed) {
   return patches;
 }
 
+// web/src/match/clock.ts
+function pickIndex(rng, length) {
+  return Math.min(length - 1, Math.floor(rng() * length));
+}
+
+// web/src/data/encounters.json
+var encounters_default = { maps: { MAP_ALTERING_CAVE: [41, 179, 190, 204, 213, 216, 228, 234, 235], MAP_ARTISAN_CAVE_1F: [235], MAP_ARTISAN_CAVE_B1F: [235], MAP_CAVE_OF_ORIGIN_1F: [41, 42, 322], MAP_CAVE_OF_ORIGIN_ENTRANCE: [41, 42], MAP_CAVE_OF_ORIGIN_UNUSED_RUBY_SAPPHIRE_MAP1: [41, 42, 322], MAP_CAVE_OF_ORIGIN_UNUSED_RUBY_SAPPHIRE_MAP2: [41, 42, 322], MAP_CAVE_OF_ORIGIN_UNUSED_RUBY_SAPPHIRE_MAP3: [41, 42, 322], MAP_DESERT_UNDERPASS: [132, 370, 371], MAP_FIERY_PATH: [321, 66, 88, 109, 339, 218], MAP_GRANITE_CAVE_1F: [335, 74, 41, 63], MAP_GRANITE_CAVE_B1F: [322, 382, 41, 335, 63], MAP_GRANITE_CAVE_B2F: [322, 382, 41, 63], MAP_GRANITE_CAVE_STEVENS_ROOM: [335, 382, 41, 63], MAP_JAGGED_PASS: [339, 351, 66], MAP_MAGMA_HIDEOUT_1F: [74, 75, 321], MAP_MAGMA_HIDEOUT_2F_1R: [74, 75, 321], MAP_MAGMA_HIDEOUT_2F_2R: [74, 75, 321], MAP_MAGMA_HIDEOUT_2F_3R: [74, 75, 321], MAP_MAGMA_HIDEOUT_3F_1R: [74, 75, 321], MAP_MAGMA_HIDEOUT_3F_2R: [74, 75, 321], MAP_MAGMA_HIDEOUT_3F_3R: [74, 75, 321], MAP_MAGMA_HIDEOUT_4F: [74, 75, 321], MAP_METEOR_FALLS_1F_1R: [41, 349], MAP_METEOR_FALLS_1F_2R: [42, 349], MAP_METEOR_FALLS_B1F_1R: [42, 349], MAP_METEOR_FALLS_B1F_2R: [42, 349, 395], MAP_METEOR_FALLS_STEVENS_CAVE: [42, 349], MAP_MIRAGE_TOWER_1F: [27, 332], MAP_MIRAGE_TOWER_2F: [27, 332], MAP_MIRAGE_TOWER_3F: [27, 332], MAP_MIRAGE_TOWER_4F: [27, 332], MAP_MT_PYRE_1F: [377], MAP_MT_PYRE_2F: [377], MAP_MT_PYRE_3F: [377], MAP_MT_PYRE_4F: [377, 361], MAP_MT_PYRE_5F: [377, 361], MAP_MT_PYRE_6F: [377, 361], MAP_MT_PYRE_EXTERIOR: [37, 309, 377], MAP_MT_PYRE_SUMMIT: [377, 361, 411], MAP_NEW_MAUVILLE_ENTRANCE: [81, 100], MAP_NEW_MAUVILLE_INSIDE: [81, 100, 82, 101], MAP_PETALBURG_WOODS: [286, 290, 304, 306, 364, 291, 293], MAP_ROUTE101: [286, 288, 290], MAP_ROUTE102: [288, 286, 290, 295, 298, 392], MAP_ROUTE103: [309, 286, 288], MAP_ROUTE104: [309, 286, 183, 304, 290], MAP_ROUTE110: [309, 337, 353, 354, 367, 43, 286], MAP_ROUTE111: [27, 318, 332, 344], MAP_ROUTE112: [339, 183], MAP_ROUTE113: [308, 218, 227], MAP_ROUTE114: [296, 358, 379, 295, 299], MAP_ROUTE115: [309, 304, 39, 358, 305], MAP_ROUTE116: [286, 304, 301, 315, 63, 370], MAP_ROUTE117: [387, 43, 286, 183, 298, 386], MAP_ROUTE118: [309, 288, 337, 289, 317, 338], MAP_ROUTE119: [43, 369, 288, 289, 317], MAP_ROUTE120: [43, 183, 287, 376, 286, 298, 317], MAP_ROUTE121: [309, 43, 287, 377, 44, 286, 317], MAP_ROUTE123: [309, 43, 287, 377, 44, 286, 317], MAP_ROUTE130: [360], MAP_RUSTURF_TUNNEL: [370], MAP_SAFARI_ZONE_NORTH: [43, 44, 177, 178, 214, 231], MAP_SAFARI_ZONE_NORTHEAST: [190, 216, 228, 241, 163, 165, 191, 204], MAP_SAFARI_ZONE_NORTHWEST: [43, 44, 84, 85, 111, 127], MAP_SAFARI_ZONE_SOUTH: [202, 25, 43, 203, 44, 84, 177], MAP_SAFARI_ZONE_SOUTHEAST: [179, 191, 207, 234, 163, 167, 190, 209], MAP_SAFARI_ZONE_SOUTHWEST: [202, 25, 43, 203, 44, 84, 177], MAP_SEAFLOOR_CAVERN_ROOM1: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM2: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM3: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM4: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM5: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM6: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM7: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM8: [41, 42], MAP_SHOAL_CAVE_LOW_TIDE_ENTRANCE_ROOM: [341, 41, 42], MAP_SHOAL_CAVE_LOW_TIDE_ICE_ROOM: [341, 41, 346, 42], MAP_SHOAL_CAVE_LOW_TIDE_INNER_ROOM: [341, 41, 42], MAP_SHOAL_CAVE_LOW_TIDE_LOWER_ROOM: [341, 41, 42], MAP_SHOAL_CAVE_LOW_TIDE_STAIRS_ROOM: [341, 41, 42], MAP_SKY_PILLAR_1F: [319, 42, 322, 378], MAP_SKY_PILLAR_3F: [319, 42, 322, 378], MAP_SKY_PILLAR_5F: [319, 359, 42, 322, 378], MAP_VICTORY_ROAD_1F: [42, 336, 370, 382, 41, 335, 371, 383], MAP_VICTORY_ROAD_B1F: [383, 42, 336, 355], MAP_VICTORY_ROAD_B2F: [383, 42, 322, 355] }, evolve: { "1": [16, 2], "2": [32, 3], "4": [16, 5], "5": [36, 6], "7": [16, 8], "8": [36, 9], "10": [7, 11], "11": [10, 12], "13": [7, 14], "14": [10, 15], "16": [18, 17], "17": [36, 18], "19": [20, 20], "21": [20, 22], "23": [22, 24], "27": [22, 28], "29": [16, 30], "32": [16, 33], "41": [22, 42], "43": [21, 44], "46": [24, 47], "48": [31, 49], "50": [26, 51], "52": [28, 53], "54": [33, 55], "56": [28, 57], "60": [25, 61], "63": [16, 64], "66": [28, 67], "69": [21, 70], "72": [30, 73], "74": [25, 75], "77": [40, 78], "79": [37, 80], "81": [30, 82], "84": [31, 85], "86": [34, 87], "88": [38, 89], "92": [25, 93], "96": [26, 97], "98": [28, 99], "100": [30, 101], "104": [28, 105], "109": [35, 110], "111": [42, 112], "116": [32, 117], "118": [33, 119], "129": [20, 130], "138": [40, 139], "140": [40, 141], "147": [30, 148], "148": [55, 149], "152": [16, 153], "153": [32, 154], "155": [14, 156], "156": [36, 157], "158": [18, 159], "159": [30, 160], "161": [15, 162], "163": [20, 164], "165": [18, 166], "167": [22, 168], "170": [27, 171], "177": [25, 178], "179": [15, 180], "180": [30, 181], "183": [18, 184], "187": [18, 188], "188": [27, 189], "194": [20, 195], "204": [31, 205], "209": [23, 210], "216": [30, 217], "218": [38, 219], "220": [33, 221], "223": [25, 224], "228": [24, 229], "231": [25, 232], "236": [20, 107], "238": [30, 124], "239": [30, 125], "240": [30, 126], "246": [30, 247], "247": [55, 248], "277": [16, 278], "278": [36, 279], "280": [16, 281], "281": [36, 282], "283": [16, 284], "284": [36, 285], "286": [18, 287], "288": [20, 289], "290": [7, 291], "291": [10, 292], "293": [10, 294], "295": [14, 296], "298": [14, 299], "301": [20, 302], "304": [22, 305], "306": [23, 307], "309": [25, 310], "311": [22, 312], "313": [40, 314], "318": [36, 319], "323": [30, 324], "326": [30, 327], "330": [30, 331], "332": [35, 333], "333": [45, 334], "335": [24, 336], "337": [26, 338], "339": [33, 340], "341": [32, 342], "342": [44, 343], "344": [32, 345], "346": [42, 347], "351": [32, 352], "356": [37, 357], "358": [35, 359], "360": [15, 202], "361": [37, 362], "364": [18, 365], "365": [36, 366], "367": [26, 368], "370": [20, 371], "371": [40, 372], "377": [37, 378], "382": [32, 383], "383": [42, 384], "388": [40, 389], "390": [40, 391], "392": [20, 393], "393": [30, 394], "395": [30, 396], "396": [50, 397], "398": [20, 399], "399": [45, 400] }, names: { "1": "BULBASAUR", "2": "IVYSAUR", "3": "VENUSAUR", "4": "CHARMANDER", "5": "CHARMELEON", "6": "CHARIZARD", "7": "SQUIRTLE", "8": "WARTORTLE", "9": "BLASTOISE", "10": "CATERPIE", "11": "METAPOD", "12": "BUTTERFREE", "13": "WEEDLE", "14": "KAKUNA", "15": "BEEDRILL", "16": "PIDGEY", "17": "PIDGEOTTO", "18": "PIDGEOT", "19": "RATTATA", "20": "RATICATE", "21": "SPEAROW", "22": "FEAROW", "23": "EKANS", "24": "ARBOK", "25": "PIKACHU", "26": "RAICHU", "27": "SANDSHREW", "28": "SANDSLASH", "29": "NIDORAN♀", "30": "NIDORINA", "31": "NIDOQUEEN", "32": "NIDORAN♂", "33": "NIDORINO", "34": "NIDOKING", "35": "CLEFAIRY", "36": "CLEFABLE", "37": "VULPIX", "38": "NINETALES", "39": "JIGGLYPUFF", "40": "WIGGLYTUFF", "41": "ZUBAT", "42": "GOLBAT", "43": "ODDISH", "44": "GLOOM", "45": "VILEPLUME", "46": "PARAS", "47": "PARASECT", "48": "VENONAT", "49": "VENOMOTH", "50": "DIGLETT", "51": "DUGTRIO", "52": "MEOWTH", "53": "PERSIAN", "54": "PSYDUCK", "55": "GOLDUCK", "56": "MANKEY", "57": "PRIMEAPE", "58": "GROWLITHE", "59": "ARCANINE", "60": "POLIWAG", "61": "POLIWHIRL", "62": "POLIWRATH", "63": "ABRA", "64": "KADABRA", "65": "ALAKAZAM", "66": "MACHOP", "67": "MACHOKE", "68": "MACHAMP", "69": "BELLSPROUT", "70": "WEEPINBELL", "71": "VICTREEBEL", "72": "TENTACOOL", "73": "TENTACRUEL", "74": "GEODUDE", "75": "GRAVELER", "76": "GOLEM", "77": "PONYTA", "78": "RAPIDASH", "79": "SLOWPOKE", "80": "SLOWBRO", "81": "MAGNEMITE", "82": "MAGNETON", "83": "FARFETCH'D", "84": "DODUO", "85": "DODRIO", "86": "SEEL", "87": "DEWGONG", "88": "GRIMER", "89": "MUK", "90": "SHELLDER", "91": "CLOYSTER", "92": "GASTLY", "93": "HAUNTER", "94": "GENGAR", "95": "ONIX", "96": "DROWZEE", "97": "HYPNO", "98": "KRABBY", "99": "KINGLER", "100": "VOLTORB", "101": "ELECTRODE", "102": "EXEGGCUTE", "103": "EXEGGUTOR", "104": "CUBONE", "105": "MAROWAK", "106": "HITMONLEE", "107": "HITMONCHAN", "108": "LICKITUNG", "109": "KOFFING", "110": "WEEZING", "111": "RHYHORN", "112": "RHYDON", "113": "CHANSEY", "114": "TANGELA", "115": "KANGASKHAN", "116": "HORSEA", "117": "SEADRA", "118": "GOLDEEN", "119": "SEAKING", "120": "STARYU", "121": "STARMIE", "122": "MR. MIME", "123": "SCYTHER", "124": "JYNX", "125": "ELECTABUZZ", "126": "MAGMAR", "127": "PINSIR", "128": "TAUROS", "129": "MAGIKARP", "130": "GYARADOS", "131": "LAPRAS", "132": "DITTO", "133": "EEVEE", "134": "VAPOREON", "135": "JOLTEON", "136": "FLAREON", "137": "PORYGON", "138": "OMANYTE", "139": "OMASTAR", "140": "KABUTO", "141": "KABUTOPS", "142": "AERODACTYL", "143": "SNORLAX", "144": "ARTICUNO", "145": "ZAPDOS", "146": "MOLTRES", "147": "DRATINI", "148": "DRAGONAIR", "149": "DRAGONITE", "150": "MEWTWO", "151": "MEW", "152": "CHIKORITA", "153": "BAYLEEF", "154": "MEGANIUM", "155": "CYNDAQUIL", "156": "QUILAVA", "157": "TYPHLOSION", "158": "TOTODILE", "159": "CROCONAW", "160": "FERALIGATR", "161": "SENTRET", "162": "FURRET", "163": "HOOTHOOT", "164": "NOCTOWL", "165": "LEDYBA", "166": "LEDIAN", "167": "SPINARAK", "168": "ARIADOS", "169": "CROBAT", "170": "CHINCHOU", "171": "LANTURN", "172": "PICHU", "173": "CLEFFA", "174": "IGGLYBUFF", "175": "TOGEPI", "176": "TOGETIC", "177": "NATU", "178": "XATU", "179": "MAREEP", "180": "FLAAFFY", "181": "AMPHAROS", "182": "BELLOSSOM", "183": "MARILL", "184": "AZUMARILL", "185": "SUDOWOODO", "186": "POLITOED", "187": "HOPPIP", "188": "SKIPLOOM", "189": "JUMPLUFF", "190": "AIPOM", "191": "SUNKERN", "192": "SUNFLORA", "193": "YANMA", "194": "WOOPER", "195": "QUAGSIRE", "196": "ESPEON", "197": "UMBREON", "198": "MURKROW", "199": "SLOWKING", "200": "MISDREAVUS", "201": "UNOWN", "202": "WOBBUFFET", "203": "GIRAFARIG", "204": "PINECO", "205": "FORRETRESS", "206": "DUNSPARCE", "207": "GLIGAR", "208": "STEELIX", "209": "SNUBBULL", "210": "GRANBULL", "211": "QWILFISH", "212": "SCIZOR", "213": "SHUCKLE", "214": "HERACROSS", "215": "SNEASEL", "216": "TEDDIURSA", "217": "URSARING", "218": "SLUGMA", "219": "MAGCARGO", "220": "SWINUB", "221": "PILOSWINE", "222": "CORSOLA", "223": "REMORAID", "224": "OCTILLERY", "225": "DELIBIRD", "226": "MANTINE", "227": "SKARMORY", "228": "HOUNDOUR", "229": "HOUNDOOM", "230": "KINGDRA", "231": "PHANPY", "232": "DONPHAN", "233": "PORYGON2", "234": "STANTLER", "235": "SMEARGLE", "236": "TYROGUE", "237": "HITMONTOP", "238": "SMOOCHUM", "239": "ELEKID", "240": "MAGBY", "241": "MILTANK", "242": "BLISSEY", "243": "RAIKOU", "244": "ENTEI", "245": "SUICUNE", "246": "LARVITAR", "247": "PUPITAR", "248": "TYRANITAR", "249": "LUGIA", "250": "HO-OH", "251": "CELEBI", "277": "TREECKO", "278": "GROVYLE", "279": "SCEPTILE", "280": "TORCHIC", "281": "COMBUSKEN", "282": "BLAZIKEN", "283": "MUDKIP", "284": "MARSHTOMP", "285": "SWAMPERT", "286": "POOCHYENA", "287": "MIGHTYENA", "288": "ZIGZAGOON", "289": "LINOONE", "290": "WURMPLE", "291": "SILCOON", "292": "BEAUTIFLY", "293": "CASCOON", "294": "DUSTOX", "295": "LOTAD", "296": "LOMBRE", "297": "LUDICOLO", "298": "SEEDOT", "299": "NUZLEAF", "300": "SHIFTRY", "301": "NINCADA", "302": "NINJASK", "303": "SHEDINJA", "304": "TAILLOW", "305": "SWELLOW", "306": "SHROOMISH", "307": "BRELOOM", "308": "SPINDA", "309": "WINGULL", "310": "PELIPPER", "311": "SURSKIT", "312": "MASQUERAIN", "313": "WAILMER", "314": "WAILORD", "315": "SKITTY", "316": "DELCATTY", "317": "KECLEON", "318": "BALTOY", "319": "CLAYDOL", "320": "NOSEPASS", "321": "TORKOAL", "322": "SABLEYE", "323": "BARBOACH", "324": "WHISCASH", "325": "LUVDISC", "326": "CORPHISH", "327": "CRAWDAUNT", "328": "FEEBAS", "329": "MILOTIC", "330": "CARVANHA", "331": "SHARPEDO", "332": "TRAPINCH", "333": "VIBRAVA", "334": "FLYGON", "335": "MAKUHITA", "336": "HARIYAMA", "337": "ELECTRIKE", "338": "MANECTRIC", "339": "NUMEL", "340": "CAMERUPT", "341": "SPHEAL", "342": "SEALEO", "343": "WALREIN", "344": "CACNEA", "345": "CACTURNE", "346": "SNORUNT", "347": "GLALIE", "348": "LUNATONE", "349": "SOLROCK", "350": "AZURILL", "351": "SPOINK", "352": "GRUMPIG", "353": "PLUSLE", "354": "MINUN", "355": "MAWILE", "356": "MEDITITE", "357": "MEDICHAM", "358": "SWABLU", "359": "ALTARIA", "360": "WYNAUT", "361": "DUSKULL", "362": "DUSCLOPS", "363": "ROSELIA", "364": "SLAKOTH", "365": "VIGOROTH", "366": "SLAKING", "367": "GULPIN", "368": "SWALOT", "369": "TROPIUS", "370": "WHISMUR", "371": "LOUDRED", "372": "EXPLOUD", "373": "CLAMPERL", "374": "HUNTAIL", "375": "GOREBYSS", "376": "ABSOL", "377": "SHUPPET", "378": "BANETTE", "379": "SEVIPER", "380": "ZANGOOSE", "381": "RELICANTH", "382": "ARON", "383": "LAIRON", "384": "AGGRON", "385": "CASTFORM", "386": "VOLBEAT", "387": "ILLUMISE", "388": "LILEEP", "389": "CRADILY", "390": "ANORITH", "391": "ARMALDO", "392": "RALTS", "393": "KIRLIA", "394": "GARDEVOIR", "395": "BAGON", "396": "SHELGON", "397": "SALAMENCE", "398": "BELDUM", "399": "METANG", "400": "METAGROSS", "401": "REGIROCK", "402": "REGICE", "403": "REGISTEEL", "404": "KYOGRE", "405": "GROUDON", "406": "RAYQUAZA", "407": "LATIAS", "408": "LATIOS", "409": "JIRACHI", "410": "DEOXYS", "411": "CHIMECHO" } };
+
+// web/src/bots/party.ts
+var EXPORTED = encounters_default;
+var ENCOUNTERS = EXPORTED.maps;
+
+// web/src/match/events.ts
+var EVENT_RARES = 2;
+var ITEM_MASTER_BALL = 1;
+var ITEM_CHOICE_BAND = 186;
+var ITEM_LEFTOVERS = 200;
+var GOLD = [
+  301,
+  302,
+  303,
+  310,
+  312,
+  313,
+  314,
+  317,
+  318,
+  323,
+  326,
+  // TM13 14 15 22 24 25 26 29 30 35 38
+  ITEM_MASTER_BALL,
+  ITEM_LEFTOVERS,
+  ITEM_CHOICE_BAND
+];
+var EVENT_GOLD = 3;
+var EVENT_PIECES = 1 + EVENT_RARES + EVENT_GOLD + 1;
+var EVENT_CELLS = EVENT_PIECES + 1;
+
+// web/src/match/scatter.ts
+var ITEM_POKE_BALL = 4;
+var ITEM_HYPER_POTION = 21;
+var ITEM_SUPER_POTION = 22;
+var ITEM_FULL_HEAL = 23;
+var ITEM_REVIVE = 24;
+var ITEM_ETHER = 34;
+var ITEM_X_ATTACK = 75;
+var ITEM_X_DEFEND = 76;
+var ITEM_X_SPEED = 77;
+var ITEM_LUM_BERRY = 141;
+var ITEM_SITRUS_BERRY = 142;
+var ITEM_TM01 = 289;
+var ITEM_HM01 = 339;
+var SCATTER_TABLE = [
+  { id: ITEM_SUPER_POTION, w: 6 },
+  { id: ITEM_HYPER_POTION, w: 4 },
+  { id: ITEM_REVIVE, w: 3 },
+  { id: ITEM_FULL_HEAL, w: 2 },
+  { id: ITEM_POKE_BALL, w: 5 },
+  { id: ITEM_ETHER, w: 2 },
+  { id: ITEM_SITRUS_BERRY, w: 2 },
+  { id: ITEM_LUM_BERRY, w: 1 },
+  { id: ITEM_X_ATTACK, w: 1 },
+  { id: ITEM_X_DEFEND, w: 1 },
+  { id: ITEM_X_SPEED, w: 1 },
+  { id: "tm", w: 3 }
+];
+function blueTm(rng) {
+  let tm = ITEM_TM01 + pickIndex(rng, ITEM_HM01 - ITEM_TM01);
+  while (GOLD.includes(tm)) tm = tm + 1 < ITEM_HM01 ? tm + 1 : ITEM_TM01;
+  return tm;
+}
+function scatterItem(rng) {
+  const total = SCATTER_TABLE.reduce((n, row) => n + row.w, 0);
+  let roll = pickIndex(rng, total);
+  for (const row of SCATTER_TABLE) {
+    if (roll < row.w) return row.id === "tm" ? blueTm(rng) : row.id;
+    roll -= row.w;
+  }
+  return ITEM_SUPER_POTION;
+}
+
+// web/spike-b/carry.ts
+var BAG_AT = 1168;
+var BAG_LEN = 2120 - 1168;
+var POCKETS_AT = 1376 - BAG_AT;
+var PARTY_LEN = 6 * 100;
+var DEX2_LEN = 144 - 28;
+var ITEM_TM012 = 289;
+var ITEM_HM08 = 346;
+var isTm = (item) => item >= ITEM_TM012 && item <= ITEM_HM08;
+
 // web/spike-b/sim.ts
 var DIR_SOUTH = 1;
 var DIR_NORTH = 2;
@@ -1009,7 +1100,9 @@ var KEY_A = 32;
 function keysOf(bits) {
   return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A) };
 }
+var GROUND_PER_MAP = 6;
 var REGROW = 60 * 90;
+var DEALS = /* @__PURE__ */ new Map();
 var Room = class {
   constructor(world, maps, patches, seed) {
     this.world = world;
@@ -1026,14 +1119,18 @@ var Room = class {
   actors = [];
   /** Taken spots by key, and the frame they were taken. */
   taken = /* @__PURE__ */ new Map();
+  /** Item balls taken, by key, and who took each (they do not grow back). */
+  picked = /* @__PURE__ */ new Map();
   base;
+  dealt = null;
   state() {
-    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken] };
+    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked] };
   }
   load(s) {
     this.tick = s.tick;
     this.actors = structuredClone(s.actors);
     this.taken = new Map(s.taken);
+    this.picked = new Map(s.picked ?? []);
   }
   actor(id) {
     return this.actors.find((a) => a.id === id);
@@ -1044,6 +1141,8 @@ var Room = class {
       const a = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, beaten: false, foe: 0, arriving: false };
       this.actors.push(a);
       this.actors.sort((p, q) => p.id - q.id);
+    } else if (cmd.c === "drop") {
+      if (this.picked.get(cmd.key) === cmd.id) this.picked.delete(cmd.key);
     } else if (cmd.c === "leave") {
       const a = this.actor(cmd.id);
       const foe = a?.foe ? this.actor(a.foe) : void 0;
@@ -1062,6 +1161,63 @@ var Room = class {
   isTaken(key) {
     const at = this.taken.get(key);
     return at !== void 0 && this.tick - at < REGROW;
+  }
+  /** Every item ball the seed deals, taken or not, by cell (`map:x:y`). Walked out from
+   *  Littleroot on foot over this room's maps, so none is on an island or behind a ledge
+   *  that only goes one way out; each on plain ground, never a marked spot or a door, nor
+   *  the corner new trainers stand on. */
+  ground() {
+    if (this.dealt) return this.dealt;
+    const id = `${this.seed}:${[...this.maps.keys()].join()}`;
+    const hit = DEALS.get(id);
+    if (hit) return this.dealt = hit;
+    const seen = /* @__PURE__ */ new Set();
+    const land = /* @__PURE__ */ new Map();
+    const start = { map: "MAP_LITTLEROOT_TOWN", x: 10, y: 10 };
+    const queue = [start];
+    seen.add(`${start.map}:${start.x}:${start.y}`);
+    while (queue.length) {
+      const at = queue.shift();
+      if (this.world.cell(at.map, at.x, at.y) === 0 && !this.world.warpAt(at.map, at.x, at.y)) {
+        const l = land.get(at.map) ?? [];
+        l.push(at);
+        land.set(at.map, l);
+      }
+      for (let dir = 1; dir <= 4; dir++) {
+        const r = this.base(at, dir);
+        if (!r || !this.maps.has(r.to.map)) continue;
+        const k = `${r.to.map}:${r.to.x}:${r.to.y}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        queue.push(r.to);
+      }
+    }
+    let state = (this.seed ^ 400800273) >>> 0 || 1;
+    const rng = () => {
+      state ^= state << 13;
+      state ^= state >>> 17;
+      state ^= state << 5;
+      return (state >>> 0) / 4294967296;
+    };
+    const out = /* @__PURE__ */ new Map();
+    let n = 0;
+    for (const id2 of [...land.keys()].sort()) {
+      const marked = new Set(this.patchesOn(id2).map((q) => `${q.x}:${q.y}`));
+      const cells = land.get(id2).filter((c) => !marked.has(`${c.x}:${c.y}`) && !(id2 === "MAP_LITTLEROOT_TOWN" && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
+      for (let i = 0; i < GROUND_PER_MAP && cells.length; i++) {
+        const c = cells.splice(Math.floor(rng() * cells.length), 1)[0];
+        let item = scatterItem(rng);
+        while (isTm(item)) item = scatterItem(rng);
+        out.set(`${id2}:${c.x}:${c.y}`, { key: ++n, map: id2, x: c.x, y: c.y, item });
+      }
+    }
+    DEALS.set(id, out);
+    return this.dealt = out;
+  }
+  /** The item ball still lying on a cell, if any. */
+  groundAt(map, x, y) {
+    const g = this.ground().get(`${map}:${x}:${y}`);
+    return g && !this.picked.has(g.key) ? g : void 0;
   }
   patchesOn(mapId) {
     const m = this.maps.get(mapId);
@@ -1114,8 +1270,13 @@ var Room = class {
         }
       }
       if (!a.battling && bits & KEY_A && !(a.last & KEY_A)) {
-        const foe = this.facing(a);
-        if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
+        const [x, y] = this.ahead(a);
+        const g = this.groundAt(a.m.spot.map, x, y);
+        const foe = g ? void 0 : this.facing(a);
+        if (g) {
+          this.picked.set(g.key, a.id);
+          events.push({ type: "item", tick: this.tick, id: a.id, key: g.key, item: g.item });
+        } else if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
           a.battling = foe.battling = foe.beaten = true;
           foe.m.facing = foe.m.moveDir = { 1: 2, 2: 1, 3: 4, 4: 3 }[a.m.facing];
           a.foe = foe.id;
@@ -1125,20 +1286,25 @@ var Room = class {
     } else if (!a.m.action) a.arriving = false;
     a.last = bits;
   }
+  /** The cell `a` faces, on its own map. */
+  ahead(a) {
+    const d = { 1: [0, 1], 2: [0, -1], 3: [-1, 0], 4: [1, 0] }[a.m.facing];
+    return [a.m.spot.x + d[0], a.m.spot.y + d[1]];
+  }
   /** The trainer standing on the cell `a` faces. */
   facing(a) {
-    const d = { 1: [0, 1], 2: [0, -1], 3: [-1, 0], 4: [1, 0] }[a.m.facing];
-    const x = a.m.spot.x + d[0], y = a.m.spot.y + d[1];
+    const [x, y] = this.ahead(a);
     return this.actors.find((o) => o.id !== a.id && o.m.spot.map === a.m.spot.map && o.m.spot.x === x && o.m.spot.y === y);
   }
-  /** Where `a` may step: the ROM's rules, a map this room has, and nobody standing there
-   *  (a step's destination is the trainer's spot from its first frame, so two can't
-   *  both walk into one cell). */
+  /** Where `a` may step: the ROM's rules, a map this room has, no item ball, and nobody
+   *  standing there (a step's destination is the trainer's spot from its first frame, so
+   *  two can't both walk into one cell). */
   stepFor(a) {
     return (from, dir) => {
       const r = this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
       const t = r.to;
+      if (this.groundAt(t.map, t.x, t.y)) return null;
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return null;
       return r;
     };
@@ -1179,6 +1345,10 @@ var Room = class {
     for (const [k, t] of this.taken) {
       mix2(k);
       mix2(t);
+    }
+    for (const [k, by] of this.picked) {
+      mix2(k);
+      mix2(by);
     }
     return h;
   }
@@ -1265,7 +1435,7 @@ function botSpawns(room, maps, count) {
     const m = land[Math.floor(r() * land.length)];
     const x = Math.floor(r() * m.w), y = Math.floor(r() * m.h);
     const c = grids.get(m.id)[y * m.w + x];
-    if (c !== 0 && c !== 7 || taken.has(`${m.id}:${x}:${y}`)) continue;
+    if (c !== 0 && c !== 7 || taken.has(`${m.id}:${x}:${y}`) || room.groundAt(m.id, x, y)) continue;
     if (m.id === "MAP_LITTLEROOT_TOWN" && x >= 7 && x <= 13 && y >= 9 && y <= 13) continue;
     add({ map: m.id, x, y }, 1 + Math.floor(r() * 4), botSkin(Math.floor(r() * 12)));
   }
@@ -1329,6 +1499,10 @@ var Host = class {
   /** The phone's battle is over: its trainer (and the bot) walk again. */
   end(id) {
     if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: "end", id });
+  }
+  /** The ball `key` would not go in the phone's bag: back on the ground. */
+  drop(id, key) {
+    if (this.players.has(id) && this.room.picked.get(key) === id) this.pending.push({ c: "drop", id, key });
   }
   /** One frame. The record goes to every mirror; `acks` is each phone's last input used. */
   advance() {
@@ -1443,6 +1617,8 @@ var WorldService = class {
           this.host.input(id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
         } else if (m.t === "end") {
           this.host.end(id);
+        } else if (m.t === "drop") {
+          if (Number.isInteger(m.k)) this.host.drop(id, m.k);
         } else if (m.t === "sync") {
           const now = this.opts.now();
           if (now - synced < SYNC_MS) return;

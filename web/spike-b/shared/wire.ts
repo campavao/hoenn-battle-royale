@@ -11,6 +11,8 @@ export type WorldUp =
   | { t: 'in'; s: number; k: number[] }
   /** My battle is over. */
   | { t: 'end' }
+  /** The ball `k` would not go in my bag: put it back. */
+  | { t: 'drop'; k: number }
   /** My copy went wrong (a hash or a gap): send me the room again. */
   | { t: 'sync' };
 

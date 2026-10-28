@@ -18,7 +18,7 @@ import { Mailbox, MAILBOX } from '../src/net/mailbox';
 import { packSlot } from '../src/net/slots';
 import { PROTOCOL, type PackedMon } from '../src/net/wire';
 import { loadCheckedRelease } from '../src/release';
-import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, rekey } from './carry';
+import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, rekey } from './carry';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 
 const BOOT_MAP_TESTMON = 0x81;
@@ -38,12 +38,18 @@ export let lastStart: { ms: number; frames: number } | null = null;
  *  keeps the screen, and nothing showed). */
 export interface Fought { ok: boolean; outcome: number; species: number; level: number }
 
+export interface Given { items: { id: number; n: number }[]; money: number; used: boolean }
+
 export interface RomBattles {
   /** Fight `name`'s party. Resolves when the ROM is back on the field. */
   fight(name: string, mons: PackedMon[], skin: number, onStart: () => void): Promise<Fought>;
   /** The wild battle a marked spot on map (group, num) starts; `behavior` is the spot's
    *  metatile behaviour (water or land, and the backdrop). */
   wild(group: number, num: number, behavior: number, onStart: () => void): Promise<Fought>;
+  /** An item ball picked up: into the bag the ROM's own way (a match's GIVE, so a vitamin
+   *  is used and a nugget sold as in a match). What went in, as the ROM filed it; `used`
+   *  when it went on the team; null when it did not fit. */
+  give(item: number, n: number): Promise<Given | null>;
   press(k: GbaKey): void;
   release(k: GbaKey): void;
   emu: Emulator;
@@ -168,6 +174,13 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
    *  never before, so the hidden field never shows through. */
   let broken = false;
   let carried: ReturnType<typeof kept> | null = null;
+  // One thing at a time on the ROM: a battle asked for while an item goes in waits for it.
+  let queue: Promise<unknown> = Promise.resolve();
+  const inTurn = <T>(f: () => Promise<T>): Promise<T> => {
+    const run = queue.then(f, f);
+    queue = run.catch(() => undefined);
+    return run;
+  };
   async function battle(kick: () => void, going: () => boolean, over: () => boolean, onStart: () => void, after: () => Omit<Fought, 'ok'>): Promise<Fought> {
     if (broken) throw new Error('the parked ROM could not be restored');
     // Every battle from one state would roll the same: a fresh draw each time.
@@ -194,11 +207,11 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       result = { ok: true, ...after() };
       // A catch with a full party: back on its field the ROM asks which one makes room
       // (br_catch.c). The player answers it on the ROM's screen, as in a match.
-      const asked = await until(emu, () => emu.read(catchAt, 8) === 0, 600);
-      if (!asked) {
-        console.warn('spike: a catch is still waiting for a slot after 10 s', { catch: [...emu.bytes(catchAt, 8)], callback2: emu.read(sym('gMain') + 4, 32).toString(16) });
-        await until(emu, () => emu.read(catchAt, 8) === 0, Infinity);
-      }
+      // Ten seconds with the prompt never put up (asked, byte 1, still 0) is a stall, not
+      // a slow thumb.
+      if (!await until(emu, () => emu.read(catchAt, 8) === 0 || emu.read(catchAt + 1, 8) !== 0, 600))
+        console.warn('spike: a catch is still waiting for its prompt after 10 s', { catch: [...emu.bytes(catchAt, 8)], callback2: emu.read(sym('gMain') + 4, 32).toString(16) });
+      await until(emu, () => emu.read(catchAt, 8) === 0, Infinity);
       // A loss is a whiteout: in a match the trainer is out. Here the team goes back to
       // how it came in (the ring and elimination are the match's, later).
       if (result.outcome !== LOST && result.outcome !== DREW) carried = kept();
@@ -219,22 +232,43 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       // The path a bot fight takes: its card, its ghost beside us, its challenge. All three
       // go on the ring in one go, on purpose: the ROM reads the ring in order, so the card
       // is staged before the CHALLENGE that needs it (the fight is up in ~80 frames).
-      return battle(() => {
+      return inTurn(() => battle(() => {
         send({ t: 'trainer', seat: FOE_SEAT, name, mons });
         send({ t: 'place', v: PROTOCOL, seat: FOE_SEAT, map: { group: 0, num: 9 }, x: 20, y: 8, f: 1, st: 'alive', sprite: String(skin) });
         send({ t: 'challenge', seat: FOE_SEAT, opponent: ME, nonce: 0 });
       }, () => emu.read(fightAt + 2, 8) === 1, () => emu.read(fightAt + 2, 8) === 0, onStart,
-      () => ({ outcome: emu.read(outcomeAt, 8), species: 0, level: 0 }));
+      () => ({ outcome: emu.read(outcomeAt, 8), species: 0, level: 0 })));
+    },
+    give(item, n) {
+      return inTurn(async () => {
+        if (broken) return null;
+        const before = kept();
+        // br_loot.c's HandleGive: straight into AddBagItem when no bag of ours is waiting.
+        emu.resume();
+        send({ t: 'give', items: [{ id: item, n }] });
+        await until(emu, () => box.pending() === 0, 60);
+        await frames(emu, 1);
+        emu.pause();
+        const after = kept();
+        // Back to parked with what it left, as after a battle: a refusal's NO ROOM box and
+        // the frames it ran are not where the next battle starts.
+        if (!emu.restore(parked!)) broken = true;
+        else keep(after);
+        carried = after;
+        const got = arrived(before, after);
+        const used = after.party.some((b, i) => b !== before.party[i]);
+        return got.items.length || got.money || used ? { ...got, used } : null;
+      });
     },
     wild(group, num, behavior, onStart) {
       // br_wild.h: the map, then ASKED; FIGHTING once it is under way, DONE when it is over.
-      return battle(() => {
+      return inTurn(() => battle(() => {
         emu.write(askAt + 1, group, 8);
         emu.write(askAt + 2, num, 8);
         emu.write(askAt + 3, behavior, 8);
         emu.write(askAt, WILD_ASKED, 8);
       }, () => emu.read(askAt, 8) !== WILD_ASKED, () => emu.read(askAt, 8) === WILD_DONE, onStart,
-      () => ({ outcome: emu.read(askAt + 7, 8), species: emu.read(askAt + 4, 16), level: emu.read(askAt + 6, 8) }));
+      () => ({ outcome: emu.read(askAt + 7, 8), species: emu.read(askAt + 4, 16), level: emu.read(askAt + 6, 8) })));
     },
   };
 }
