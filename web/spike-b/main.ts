@@ -5,8 +5,10 @@
 // fight, do the sync bugs go away, does it hold 60 fps on a phone, and does walking still
 // feel like Emerald?
 //
-// One source of position: `actors`. The renderer only reads it. The camera is either
-// glued to an actor or dragged freely over the whole of Hoenn.
+// One source of position: the shared Room (shared/room.ts), run by the relay for every
+// phone that opens the page, or by the page itself when there is no relay (net.ts). The
+// renderer only reads it. The camera is either glued to a trainer or dragged freely over
+// the whole of Hoenn.
 //
 // Reuses the shell's walkability through bots/world.ts, on data/world.json: the shell's
 // world.json regenerated with export-world.py's ledge fix (the shipped one walls every
@@ -14,9 +16,12 @@
 // player's ROM in the browser (romart.ts): the site ships none. Nothing here is shell code.
 
 import { WorldIndex } from '../src/bots/hoenn';
-import { isTallGrass, isWater, type World, type WorldMap, type Spot } from '../src/bots/world';
-import { dealPatches, loadPatches, type Patch, type PatchTable } from '../src/bots/patches';
-import { DIR_EAST, DIR_SOUTH, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from './sim';
+import { isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
+import { loadPatches } from '../src/bots/patches';
+import { DIR_EAST } from './sim';
+import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, makeRoom, type Actor, type RoomEvent } from './shared/room';
+import { SKIN_GFX } from './shared/bots';
+import { onlineLink, soloLink, type WorldLink } from './net';
 import { bootRom, loadRom, lastStart, type Fought, type RomBattles } from './rom';
 import { RomArt } from './romart';
 import type { GbaKey } from '../src/emu';
@@ -98,22 +103,6 @@ const GO = { 1: [3, 0, 4, 0], 2: [5, 1, 6, 1], 3: [7, 2, 8, 2], 4: [7, 2, 8, 2] 
 const RUN = { 1: [12, 9, 13, 9], 2: [14, 10, 15, 10], 3: [16, 11, 17, 11], 4: [16, 11, 17, 11] } as Record<number, number[]>;
 const FACE = { 1: 0, 2: 1, 3: 2, 4: 2 } as Record<number, number>;
 
-interface Actor {
-  id: number;
-  name: string;
-  /** The wardrobe index (SKIN_GFX): what the ROM draws this trainer as in a battle. */
-  skin: number;
-  gfx: number;
-  /** Position, facing and the action in flight: sim.ts's, the ROM's rules, for everyone. */
-  m: Mover;
-  bot?: { rng: number; wait: number; dir: number; left: number; walk: boolean };
-  battling?: boolean;
-  /** Fought once: a trainer you beat (or lost to) does not ask again. */
-  beaten?: boolean;
-  /** A step whose arrival hasn't been checked yet (grass). */
-  arriving?: boolean;
-}
-
 // ---- input ----------------------------------------------------------------------------
 
 const held = new Set<string>();
@@ -144,14 +133,11 @@ for (const el of document.querySelectorAll<HTMLElement>('.k')) {
   el.addEventListener('pointercancel', up);
 }
 
-// ---- the sim --------------------------------------------------------------------------
+// ---- the room ------------------------------------------------------------------------
 
-let world: World;
 let placed: Map<string, Placed>;
-const actors: Actor[] = [];
-let player: Actor;
+let link: WorldLink;
 let frame = 0;
-let baseStep: StepFn;
 
 function global(s: Spot): { gx: number; gy: number } | null {
   const p = placed.get(s.map);
@@ -164,118 +150,26 @@ function classAt(s: Spot): number {
   return p.classes[s.y * p.m.w + s.x];
 }
 
-/** Another trainer stands there, or is stepping onto it: an object event is solid. */
-function occupied(self: Actor, s: Spot): boolean {
-  const g = global(s);
-  if (!g) return true;
-  return actors.some((o) => {
-    if (o === self) return false;
-    const og = global(o.m.spot);
-    return !!og && og.gx === g.gx && og.gy === g.gy;
-  });
+/** Every trainer as drawn: the room's, with mine where my thumb has it. */
+function actors(): Actor[] {
+  const me = link.mine();
+  return link.room.actors.map((a) => (me && a.id === link.me ? me : a));
 }
 
-/** Doors lead indoors, which this spike does not draw, so they are walls here; so is a
- *  map the layout never placed. */
-function stepFor(a: Actor): StepFn {
-  return (from, dir) => {
-    const r = baseStep(from, dir);
-    if (!r || !placed.has(r.to.map) || occupied(a, r.to)) return null;
-    return r;
-  };
-}
-
-function rand(a: Actor): number {
-  let x = a.bot!.rng;
-  x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
-  a.bot!.rng = x >>> 0;
-  return a.bot!.rng / 4294967296;
-}
-
-const KEY_OF: Record<number, keyof Keys> = { 1: 'down', 2: 'up', 3: 'left', 4: 'right' };
-
-/** A bot's thumb on the pad: wander a few tiles, stop, look around. Its keys go through
- *  the same sim.ts as yours, so it turns, runs and bumps by the ROM's rules. */
-function botKeys(a: Actor): Keys {
-  const b = a.bot!;
-  if (a.m.action) return b.left > 0 ? { [KEY_OF[b.dir]]: true, b: b.walk } : {};
-  if (b.wait > 0) { b.wait -= 1; return {}; }
-  if (b.left <= 0) {
-    b.dir = 1 + Math.floor(rand(a) * 4);
-    b.left = 1 + Math.floor(rand(a) * 6);
-    b.walk = rand(a) < 0.4;
-  }
-  if (!stepFor(a)(a.m.spot, b.dir)) { b.left = 0; b.wait = 10 + Math.floor(rand(a) * 30); return {}; }
-  b.left -= 1;
-  if (b.left === 0) b.wait = Math.floor(rand(a) * 90);
-  return { [KEY_OF[b.dir]]: true, b: b.walk };
-}
-
-function playerKeys(): Keys {
-  if (spectating) return {};
-  return { up: held.has('up'), down: held.has('down'), left: held.has('left'), right: held.has('right'), b: held.has('b') };
-}
-
-function tickActor(a: Actor): void {
-  if (a.battling) return;
-  const before = a.m.strides;
-  tick(a.m, a === player ? playerKeys() : botKeys(a), stepFor(a));
-  if (a.m.strides !== before) a.arriving = true;
-  if (a === player && !a.m.action) {
-    if (a.arriving) {
-      a.arriving = false;
-      // A marked spot, as in the game: no step encounters, the spot you can see is the
-      // battle (br_patch.h).
-      const spot = patchAt(a.m.spot);
-      if (spot) { startWild(spot); return; }
-    }
-    if (pressed.has('a') && frame >= calmUntil) talk();
-  }
-}
-
-function facingSpot(a: Actor): Spot {
-  const d = { 1: [0, 1], 2: [0, -1], 3: [-1, 0], 4: [1, 0] }[a.m.facing]!;
-  return { map: a.m.spot.map, x: a.m.spot.x + d[0], y: a.m.spot.y + d[1] };
-}
-
-function talk(): void {
-  const g = global(facingSpot(player));
-  const other = actors.find((o) => {
-    if (o === player || o.m.action) return false;
-    const og = global(o.m.spot);
-    return !!og && !!g && og.gx === g.gx && og.gy === g.gy;
-  });
-  if (other && !other.beaten) startBattle(other);
+/** My keys this frame, as the room takes them. Pressing A to talk and walking are the
+ *  room's business (a bot you face, a marked spot you land on); the page only keeps a
+ *  held A from the last battle's text out of the next one. */
+function myBits(): number {
+  if (spectating || battle || intro()) return 0;
+  const bits = (held.has('up') ? KEY_UP : 0) | (held.has('down') ? KEY_DOWN : 0) | (held.has('left') ? KEY_LEFT : 0) |
+    (held.has('right') ? KEY_RIGHT : 0) | (held.has('b') ? KEY_B : 0) | (held.has('a') && frame >= calmUntil ? KEY_A : 0);
+  return bits;
 }
 
 // ---- marked spots: the live game's visible encounters ------------------------------------
 
-/** The page's match seed. The spots are dealt from it the way every ROM deals them
- *  (bots/patches.ts, br_patch.c's Pick), and the ROM rolls the national stand-ins off it. */
-const SEED = (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0;
-let patchTable: PatchTable | null = null;
-/** Taken spots by key, and the frame they were taken: the ring's phase grows them back in
- *  the game; here, a minute and a half. */
-const taken = new Map<number, number>();
-const REGROW = 60 * 90;
-
-function patchesOn(p: Placed): Patch[] {
-  return patchTable ? dealPatches(patchTable, p.m.id, p.m, SEED) : [];
-}
-
-function isTaken(key: number): boolean {
-  const at = taken.get(key);
-  if (at === undefined) return false;
-  if (frame - at < REGROW) return true;
-  taken.delete(key);
-  return false;
-}
-
-function patchAt(s: Spot): { map: Placed; patch: Patch } | null {
-  const p = placed.get(s.map);
-  const patch = p && patchesOn(p).find((q) => q.x === s.x && q.y === s.y && !isTaken(q.key));
-  return p && patch ? { map: p, patch } : null;
-}
+// The room deals them from its seed the way every ROM deals them (bots/patches.ts,
+// br_patch.c's Pick), and the ROM rolls the national stand-ins off the same seed.
 
 // ---- the battle handoff: the real ROM fights, the page waits ---------------------------
 
@@ -300,8 +194,6 @@ function mon(species: number, level: number): PackedMon {
 /** A battle the ROM fights, the page showing it from its first frame and taking the
  *  screen back when it is over. */
 function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>): void {
-  player.battling = true;
-  if (foe) foe.battling = true;
   held.clear();
   battle = { foe, shownAt: performance.now() };
   if (!rom) {
@@ -326,21 +218,19 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
     });
 }
 
-function startBattle(foe: Actor): void {
-  foe.m.facing = foe.m.moveDir = ({ 1: 2, 2: 1, 3: 4, 4: 3 } as Record<number, number>)[player.m.facing];
-  // POOCHYENA and ZIGZAGOON (Emerald's internal species ids, not the dex's).
-  const party = [mon(286, 5), mon(288, 5)];
-  foe.beaten = true;
-  handOff(foe, (r, onStart) => r.fight(foe.name, party, foe.skin, onStart));
-}
-
-function startWild(at: { map: Placed; patch: Patch }): void {
-  const { m } = at.map;
-  handOff(null, (r, onStart) => {
-    // Taken as the battle starts, as BrPatch_Take does.
-    taken.set(at.patch.key, frame);
-    return r.wild(m.group, m.num, art!.behavior(m.group, m.num, at.patch.x, at.patch.y), onStart);
-  });
+/** A battle the room started for me: A at a bot, or a marked spot I landed on (the room
+ *  took it as the battle started, as BrPatch_Take does). */
+function startFor(e: RoomEvent): void {
+  if (e.type === 'fight') {
+    const foe = link.room.actor(e.foe);
+    if (!foe) { link.end(); return; }
+    // POOCHYENA and ZIGZAGOON (Emerald's internal species ids, not the dex's).
+    const party = [mon(286, 5), mon(288, 5)];
+    handOff(foe, (r, onStart) => r.fight(foe.name, party, foe.skin, onStart));
+  } else {
+    const m = placed.get(e.map)!.m;
+    handOff(null, (r, onStart) => r.wild(m.group, m.num, art!.behavior(m.group, m.num, e.x, e.y), onStart));
+  }
 }
 
 const OUTCOME = ['', 'won', 'lost', 'drew', 'ran', 'teleported', 'it fled', 'caught it', 'out of balls', 'forfeited'];
@@ -348,8 +238,7 @@ let lastResult = '';
 
 function endBattle(r: Fought | null): void {
   battleEl.classList.remove('on');
-  player.battling = false;
-  if (battle?.foe) battle.foe.battling = false;
+  link.end();
   const wild = battle && !battle.foe;
   battle = null;
   held.clear();
@@ -375,7 +264,8 @@ for (const el of document.querySelectorAll<HTMLElement>('.k')) {
 const canvas = document.getElementById('world') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 let spectating = false;
-let follow: Actor;
+/** The trainer the camera follows, by id; 0 for a camera dragged free. */
+let follow = 0;
 let cam = { x: 0, y: 0 }; // world pixel at the screen centre
 let zoom = 3; // device pixels per GBA pixel
 // The device's pixels. The canvas itself is smaller: drawn at the GBA's own pixels (one
@@ -403,7 +293,7 @@ function toggleSpectate(): void {
   spectating = !spectating;
   modeBtn.classList.toggle('on', spectating);
   modeBtn.textContent = spectating ? 'Back to my trainer (V)' : 'Spectate (V)';
-  if (!spectating) { follow = player; zoom = fitZoom(); }
+  if (!spectating) { follow = link.me; zoom = fitZoom(); }
   held.clear();
 }
 modeBtn.addEventListener('click', toggleSpectate);
@@ -430,7 +320,7 @@ canvas.addEventListener('pointermove', (e) => {
     cam.x -= ((e.clientX - p.x) * dpr) / zoom;
     cam.y -= ((e.clientY - p.y) * dpr) / zoom;
     moved += Math.abs(e.clientX - p.x) + Math.abs(e.clientY - p.y);
-    follow = undefined as unknown as Actor;
+    follow = 0;
   }
   p.x = e.clientX; p.y = e.clientY;
   if (pointers.size === 2 && pinch0) {
@@ -457,12 +347,12 @@ function followAt(clientX: number, clientY: number): void {
   const wy = cam.y + (clientY * dpr - devH / 2) / zoom;
   let best: Actor | null = null;
   let bestD = 24 / Math.min(1, zoom);
-  for (const a of actors) {
+  for (const a of actors()) {
     const p = pixelOf(a);
     const d = Math.hypot(p.x + 8 - wx, p.y - wy);
     if (d < bestD) { best = a; bestD = d; }
   }
-  if (best) { follow = best; if (zoom < 1) zoom = fitZoom(); }
+  if (best) { follow = best.id; if (zoom < 1) zoom = fitZoom(); }
 }
 
 /** An actor's tile top-left in world pixels, mid-step included. */
@@ -474,7 +364,7 @@ function pixelOf(a: Actor): { x: number; y: number; lift: number } {
 /** The walk anim's frame: a stride's four frames over the action, feet alternating. */
 function frameOf(a: Actor): number {
   const act = a.m.action;
-  const tab = a.m.run && act?.kind === 'step' && SHEETS[String(a.gfx)].frames >= 18 ? RUN : GO;
+  const tab = a.m.run && act?.kind === 'step' && SHEETS[String(SKIN_GFX[a.skin])].frames >= 18 ? RUN : GO;
   if (act && act.kind !== 'hop') {
     const q = Math.min(3, Math.floor((act.t / act.len) * 4));
     return tab[a.m.facing][(q + (a.m.strides & 1) * 2) % 4];
@@ -531,8 +421,8 @@ const DRIFT = [0, 1, 2, 1, 0, -1, -2, -1];
 function drawPatches(p: Placed): void {
   if (!patchArt && art) patchArt = art.patchSheets();
   if (!patchArt) return;
-  for (const q of patchesOn(p)) {
-    if (isTaken(q.key)) continue;
+  for (const q of link.room.patchesOn(p.m.id)) {
+    if (link.room.isTaken(q.key)) continue;
     const x = (p.gx + q.x) * TILE, y = (p.gy + q.y) * TILE;
     // Each spot's sprite starts when it comes into view, so they rustle out of step.
     const t = (frame + q.key * 13) % (RUSTLE.length * 10 + BREATH);
@@ -549,9 +439,28 @@ function drawPatches(p: Placed): void {
   }
 }
 
+/** The map at world pixel (x, y), or the nearest one to it: whose border fills the space
+ *  past every map's edge. Picked by where the camera looks, the same whether it follows a
+ *  trainer or is dragged, so the filler never changes with how you got there (Cam). */
+function mapUnder(x: number, y: number): Placed | null {
+  let best: Placed | null = null;
+  let bestD = Infinity;
+  for (const p of placed.values()) {
+    const x0 = p.gx * TILE, y0 = p.gy * TILE;
+    const dx = Math.max(x0 - x, 0, x - (x0 + p.m.w * TILE));
+    const dy = Math.max(y0 - y, 0, y - (y0 + p.m.h * TILE));
+    const d = dx * dx + dy * dy;
+    if (d < bestD) { best = p; bestD = d; }
+    if (d === 0) break;
+  }
+  return best;
+}
+
 function draw(): void {
-  if (follow) {
-    const p = pixelOf(follow);
+  const all = actors();
+  const followed = follow ? all.find((a) => a.id === follow) : undefined;
+  if (followed) {
+    const p = pixelOf(followed);
     cam.x = p.x + 8;
     cam.y = p.y + 8;
   }
@@ -566,8 +475,8 @@ function draw(): void {
   ctx.fillStyle = '#0d1a14';
   ctx.fillRect(0, 0, W, H);
   // Past every map's edge the GBA repeats the map's 2x2 border block (Route 101's
-  // trees): tile the followed map's, aligned to its even coordinates.
-  const home = placed.get((follow ?? player).m.spot.map)!;
+  // trees): tile the block of the map under the camera, aligned to its even coordinates.
+  const home = mapUnder(cam.x, cam.y) ?? placed.get('MAP_LITTLEROOT_TOWN')!;
   if (paint(home) && home.border && z < 0.5) {
     // Far out the 32 px block is noise: one flat colour, its average.
     home.borderTint ??= tint(home.border);
@@ -600,13 +509,14 @@ function draw(): void {
     }
   }
   if (!far) for (const p of visible) drawPatches(p);
-  const people = actors
+  const people = all
     .map((a) => ({ a, p: pixelOf(a) }))
     .filter(({ p }) => p.x > vx0 - 32 && p.x < vx1 + 32 && p.y > vy0 - 48 && p.y < vy1 + 32)
     .sort((u, v) => u.p.y - v.p.y);
   for (const { a, p } of people) {
-    const info = SHEETS[String(a.gfx)];
-    const s = sheet(a.gfx);
+    const gfx = SKIN_GFX[a.skin];
+    const info = SHEETS[String(gfx)];
+    const s = sheet(gfx);
     if (!s) continue;
     const fr = frameOf(a);
     const dx = p.x + TILE / 2 - info.w / 2;
@@ -623,7 +533,7 @@ function draw(): void {
       const pl = placed.get(a.m.spot.map)!;
       if (pl.ground) ctx.drawImage(pl.ground, a.m.spot.x * TILE, a.m.spot.y * TILE + 8, TILE, 8, p.x, p.y + 8, TILE, 8);
     }
-    if (spectating && a === follow) {
+    if (spectating && a.id === follow) {
       ctx.strokeStyle = '#ffd34d';
       ctx.lineWidth = 1 / Math.min(1, z);
       ctx.strokeRect(dx - 1, dy - 1, info.w + 2, info.h + 2);
@@ -636,10 +546,12 @@ function draw(): void {
   if (z < 0.6) {
     // in canvas pixels, whole ones, so the squares stay sharp
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    for (const a of [...actors.slice(1), player]) {
+    // mine last, on top
+    for (const a of [...all.filter((o) => o.id !== link.me), ...all.filter((o) => o.id === link.me)]) {
       const p = pixelOf(a);
-      ctx.fillStyle = a === player ? '#ff3b3b' : a.battling ? '#ffd34d' : '#ffffff';
-      const r = a === player ? 5 : 3;
+      const mine = a.id === link.me;
+      ctx.fillStyle = mine ? '#ff3b3b' : a.battling ? '#ffd34d' : a.bot ? '#ffffff' : '#5ec8ff';
+      const r = mine ? 5 : a.bot ? 3 : 4;
       ctx.fillRect(Math.round(ox + (p.x + 8) * z) - r, Math.round(oy + (p.y + 8) * z) - r, r * 2, r * 2);
     }
   }
@@ -666,7 +578,7 @@ function loop(now: number): void {
     acc -= 1000 / 60;
     steps += 1;
     frame += 1;
-    for (const a of actors) tickActor(a);
+    for (const e of link.frame(myBits())) startFor(e);
     pressed.clear();
   }
   const t1 = performance.now();
@@ -678,11 +590,11 @@ function loop(now: number): void {
     const sorted = [...gaps].sort((a, b) => a - b);
     const p95 = sorted[Math.floor(sorted.length * 0.95)] ?? 0;
     const fps = 1000 / (gaps.reduce((s, g) => s + g, 0) / gaps.length);
-    const here = player.m.spot;
+    const here = link.mine()?.m.spot ?? { map: 'MAP_LITTLEROOT_TOWN', x: 0, y: 0 };
     statsEl.textContent =
       `${fps.toFixed(0)} fps · p95 gap ${p95.toFixed(1)} ms\n` +
       `sim ${simMs.toFixed(2)} ms · draw ${drawMs.toFixed(2)} ms · art from your ROM ${artMs.toFixed(0)} ms\n` +
-      `${actors.length} trainers · ${here.map.replace('MAP_', '')} ${here.x},${here.y}` +
+      `${link.room.actors.length} trainers · ${here.map.replace('MAP_', '')} ${here.x},${here.y}\n${link.status()}` +
       `\nROM ${rom ? (battle ? 'fighting' : 'paused, waiting to fight') : 'booting'}` +
       (lastStart ? ` · battle up in ${lastStart.frames} frames (${lastStart.ms.toFixed(0)} ms)` : '') +
       (lastResult ? `\n${lastResult}` : '') +
@@ -693,46 +605,11 @@ function loop(now: number): void {
 
 // ---- boot -----------------------------------------------------------------------------
 
-// The wardrobe (br_ghosts.c sSkinGraphics, career.ts SKINS): a bot wears a skin so the
-// trainer you walk up to is the trainer the ROM puts in the battle.
-const SKIN_GFX = [0, 89, 100, 105, 55, 45, 31, 32, 42, 43, 21, 22, 25, 18, 35, 47];
-const SKIN_NAME = ['BRENDAN', 'MAY', 'BRENDAN', 'MAY', 'HIKER', 'BEAUTY', 'CAMPER', 'PICNIC', 'SWIMMER', 'SWIMMER', 'EXPERT', 'EXPERT', 'POKEFAN', 'POKEFAN', 'JOEY', 'LASS'];
-const botSkin = (n: number) => 4 + (n % 12);
+const DEFAULT_RELAY_URL = 'wss://hoenn-relay-production.up.railway.app';
 
 async function boot(): Promise<void> {
   const hoenn = new WorldIndex(((await import('./data/world.json')).default as { maps: WorldMap[] }).maps);
-  world = hoenn.world;
   placed = layout(hoenn.maps);
-  baseStep = stepFn(world);
-  player = { id: 0, name: 'YOU', skin: 0, gfx: 0, m: newMover({ map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 }, DIR_SOUTH) };
-  actors.push(player);
-  follow = player;
-  // Bots all over Hoenn, so a spectator sees the whole map playing out.
-  const seed = Number(new URLSearchParams(location.search).get('bots') ?? 64);
-  let rng = 0x9e3779b9;
-  const r = () => { rng ^= rng << 13; rng ^= rng >>> 17; rng ^= rng << 5; return (rng >>> 0) / 4294967296; };
-  const land = [...placed.values()].filter((p) => !p.m.id.includes('SAFARI') && !p.m.id.includes('FRONTIER') && !p.m.id.includes('PROTOTYPE'));
-  let id = 1;
-  for (let tries = 0; actors.length <= seed && tries < 50000; tries++) {
-    const p = land[Math.floor(r() * land.length)];
-    const x = Math.floor(r() * p.m.w), y = Math.floor(r() * p.m.h);
-    const c = p.classes[y * p.m.w + x];
-    if (c !== 0 && c !== 7) continue;
-    if (actors.some((a) => a.m.spot.map === p.m.id && a.m.spot.x === x && a.m.spot.y === y)) continue;
-    // near Littleroot, a handful close enough to walk up to
-    const skin = botSkin(Math.floor(r() * 12));
-    actors.push({
-      id, name: SKIN_NAME[skin], skin, gfx: SKIN_GFX[skin], m: newMover({ map: p.m.id, x, y }, 1 + Math.floor(r() * 4)),
-      bot: { rng: (id * 2654435761) >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1, left: 0, walk: false },
-    });
-    id += 1;
-  }
-  // three bots right next to you in Littleroot, to walk up to and battle
-  for (const [x, y] of [[7, 12], [13, 13], [11, 16]]) {
-    const skin = botSkin(id * 7);
-    actors.push({ id, name: SKIN_NAME[skin], skin, gfx: SKIN_GFX[skin], m: newMover({ map: 'MAP_LITTLEROOT_TOWN', x, y }, DIR_SOUTH), bot: { rng: id * 97 + 1, wait: 30, dir: 1, left: 0, walk: false } });
-    id += 1;
-  }
   let files: Awaited<ReturnType<typeof loadRom>>;
   try {
     files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; });
@@ -744,15 +621,23 @@ async function boot(): Promise<void> {
   art = new RomArt(files.rom, files.sym);
   paint(placed.get('MAP_LITTLEROOT_TOWN')!);
   artMs = performance.now() - t0;
+  // One Hoenn for everybody on the page: the relay's (?world=<ws url> for another
+  // relay), or, with none to reach (or ?solo), the page's own with the bots.
+  const patches = await loadPatches();
+  const q = new URLSearchParams(location.search);
+  const url = q.get('world') ?? `${(import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL}/world`;
+  statsEl.textContent = 'joining the shared world...';
+  const online = q.has('solo') ? null : await onlineLink(url, 'TRAINER', Math.random() < 0.5 ? 0 : 1, (seed) => makeRoom(hoenn.maps, patches, seed, hoenn.world));
+  link = online ?? soloLink(hoenn.maps, patches, hoenn.world, (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0);
+  follow = link.me;
   resize();
   requestAnimationFrame((t) => { last = t; loop(t); });
   // The rest of Hoenn, a map a tick, so zooming out never waits.
   const rest = [...placed.values()];
-  const next = () => { const p = rest.find((q) => !q.mips); if (p) { paint(p); mipFor(p, 0); setTimeout(next, 16); } };
+  const next = () => { const p = rest.find((r) => !r.mips); if (p) { paint(p); mipFor(p, 0); setTimeout(next, 16); } };
   setTimeout(next, 500);
-  void loadPatches().then((t) => { patchTable = t; });
-  bootRom(files, SEED).then((r) => { rom = r; }, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { actors, placed, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startBattle, startWild, patchAt, patchesOn, taken, SEED, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; } };
+  bootRom(files, link.room.seed).then((r) => { rom = r; }, (e) => console.warn('spike ROM not booted', e));
+  (window as unknown as { __spike: unknown }).__spike = { link, actors, placed, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; } };
 }
 
 void boot();
