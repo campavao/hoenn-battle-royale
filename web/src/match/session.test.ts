@@ -357,13 +357,14 @@ describe("one match's books (POK-330 #42)", () => {
 
   // HBR-87: a human's bag is what their own ROM spilled going out. The payload is the
   // one spill-own-items.txt reads off BrLoot_SpillOwn: seat 0's TREECKO, then a bag of
-  // POTION x3, ANTIDOTE x1, POKe BALL x5 and ORAN BERRY x2. Before, its itemCount was 0
+  // POTION x3, ANTIDOTE x1, POKe BALL x5 and ORAN BERRY x2 (the money set to 3000; the driver's
+  // zeroed key scrambles it). Before, its itemCount was 0
   // and the taker got the money alone.
   it("gives the taker a fallen player's items off the spill their ROM sent", () => {
     const { session, toRom } = books({ mySeat: () => 7 }); // the taker
     const payload = Uint8Array.from([
       0x00, 0x00, 0x09, 0x01, 0x00, 0x00, 0x0c, 0x00, 0x10, 0x00, 0x15, 0x01, 0x05, 0x01, 0xff, 0x00, 0x0c, 0x00, 0x10,
-      0x00, 0x04, 0x0d, 0x00, 0x03, 0x0e, 0x00, 0x01, 0x04, 0x00, 0x05, 0x8b, 0x00, 0x02, 0x92, 0x55, 0x06, 0x4a, 0x03,
+      0x00, 0x04, 0x0d, 0x00, 0x03, 0x0e, 0x00, 0x01, 0x04, 0x00, 0x05, 0x8b, 0x00, 0x02, 0xb8, 0x0b, 0x00, 0x00, 0x03,
       0xbd, 0xbb, 0xc7,
     ]);
     const spill = unpackSlot(BR_MSG.SPILL, payload) as SpillMsg;

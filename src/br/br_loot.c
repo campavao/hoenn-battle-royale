@@ -862,6 +862,7 @@ void BrLoot_TeamTaken(bool8 taken)
 // offers (HBR-82). Not the key items, and not the TMs (HBR-86). The page keeps the rows
 // for the match and GIVEs them to whoever takes the bag (match/session.ts giveBag): with
 // none, a human's bag was money alone and a bot's was not (HBR-87).
+// Eight rows is all a SPILL holds: past that, the first eight in pocket order go.
 static u8 PackOwnItems(u8 *out)
 {
     static const u8 sPockets[] = { ITEMS_POCKET, BALLS_POCKET, BERRIES_POCKET };
