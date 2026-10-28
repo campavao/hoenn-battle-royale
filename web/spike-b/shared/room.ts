@@ -13,6 +13,11 @@
 // Stepping onto a marked spot nobody has taken, or pressing A at a bot, starts a battle:
 // the trainer (and the bot) stand still until the phone says the battle is over.
 //
+// The fog closes in as a match's does (br_ring.c): a ring on a clock, the first phase an
+// announcement, each later one smaller, the last everywhere -- then a new round with a new
+// centre. It is the room's tick and seed and nothing else, so every phone has the same
+// ring without a word on the wire. Outside it the page bleeds the team (main.ts).
+//
 // Items lie about as item balls (match/scatter.ts's table, a few on every map), dealt
 // from the seed on cells a trainer can walk to from Littleroot. A ball is solid, as the
 // ROM's are; A at one takes it, for that trainer and off everybody's map.
@@ -20,7 +25,7 @@
 import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
 import { scatterItem } from '../../src/match/scatter';
-import { isTm } from '../carry';
+import { isTm } from './items';
 import { dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
 
 export const KEY_UP = 1, KEY_DOWN = 2, KEY_LEFT = 4, KEY_RIGHT = 8, KEY_B = 16, KEY_A = 32;
@@ -74,7 +79,9 @@ export type Command =
   | { c: 'end'; id: number }
   /** The ball `key` would not go in `id`'s bag: it lies where it was (POK-294, nothing
    *  leaves the match). */
-  | { c: 'drop'; id: number; key: number };
+  | { c: 'drop'; id: number; key: number }
+  /** `id`'s team is down (the fog, or a lost battle): off the map, watching. */
+  | { c: 'out'; id: number };
 
 /** The marked spots grow back: the ring's phase does it in the game; here, a while. */
 export const REGROW = 60 * 90;
@@ -90,6 +97,19 @@ export interface RoomState {
 }
 
 const DEALS = new Map<string, ReadonlyMap<string, Ground>>();
+/** Every cell a trainer can walk to from Littleroot, per set of maps. */
+const REACH = new Map<string, Spot[]>();
+
+/** A ring phase, in frames. */
+export const RING_PHASE = 60 * 90;
+/** What each phase leaves of the reachable world, as a share of its farthest cell from
+ *  the centre: the first an announcement (no fog), the last everywhere (-1), the way
+ *  clock.ts's RING_RADII go from 28 sections to -1. */
+const RING_STEPS = [Infinity, 0.6, 0.4, 0.25, 0.12, 0.04, -1];
+
+/** The ring at a frame, in the plane layout() places the maps in (tiles). `r` is Infinity
+ *  for no fog and -1 for fog everywhere; `left` the frames to the next phase. */
+export interface Ring { round: number; phase: number; last: boolean; cx: number; cy: number; r: number; next?: number; left: number }
 
 export class Room {
   tick = 0;
@@ -107,6 +127,8 @@ export class Room {
     readonly maps: ReadonlyMap<string, WorldMap>,
     readonly patches: PatchTable,
     readonly seed: number,
+    /** Where each map sits in the plane (layout()): the ring is measured there. */
+    readonly places: ReadonlyMap<string, { gx: number; gy: number }>,
   ) {
     this.base = stepFn(world);
   }
@@ -135,7 +157,7 @@ export class Room {
       this.actors.sort((p, q) => p.id - q.id);
     } else if (cmd.c === 'drop') {
       if (this.picked.get(cmd.key) === cmd.id) this.picked.delete(cmd.key);
-    } else if (cmd.c === 'leave') {
+    } else if (cmd.c === 'leave' || cmd.c === 'out') {
       // A bot fought by somebody who left walks again.
       const a = this.actor(cmd.id);
       const foe = a?.foe ? this.actor(a.foe) : undefined;
@@ -168,26 +190,12 @@ export class Room {
     const id = `${this.seed}:${[...this.maps.keys()].join()}`;
     const hit = DEALS.get(id);
     if (hit) return (this.dealt = hit);
-    const seen = new Set<string>();
     const land = new Map<string, Spot[]>();
-    const start: Spot = { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 };
-    const queue = [start];
-    seen.add(`${start.map}:${start.x}:${start.y}`);
-    while (queue.length) {
-      const at = queue.shift()!;
-      if (this.world.cell(at.map, at.x, at.y) === 0 && !this.world.warpAt(at.map, at.x, at.y)) {
-        const l = land.get(at.map) ?? [];
-        l.push(at);
-        land.set(at.map, l);
-      }
-      for (let dir = 1; dir <= 4; dir++) {
-        const r = this.base(at, dir);
-        if (!r || !this.maps.has(r.to.map)) continue;
-        const k = `${r.to.map}:${r.to.x}:${r.to.y}`;
-        if (seen.has(k)) continue;
-        seen.add(k);
-        queue.push(r.to);
-      }
+    for (const at of this.reachable()) {
+      if (this.world.cell(at.map, at.x, at.y) !== 0 || this.world.warpAt(at.map, at.x, at.y)) continue;
+      const l = land.get(at.map) ?? [];
+      l.push(at);
+      land.set(at.map, l);
     }
     let state = (this.seed ^ 0x17e3ba11) >>> 0 || 1;
     const rng = () => { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return (state >>> 0) / 4294967296; };
@@ -206,8 +214,83 @@ export class Room {
         out.set(`${id}:${c.x}:${c.y}`, { key: ++n, map: id, x: c.x, y: c.y, item });
       }
     }
+    // A relay world makes one room a seed; keep the last few, not every one ever dealt.
+    if (DEALS.size >= 8) DEALS.delete(DEALS.keys().next().value!);
     DEALS.set(id, out);
     return (this.dealt = out);
+  }
+
+  /** Every cell a trainer can walk to from Littleroot, in the order a walk out finds them. */
+  reachable(): readonly Spot[] {
+    const id = [...this.maps.keys()].join();
+    const hit = REACH.get(id);
+    if (hit) return hit;
+    const seen = new Set<string>();
+    const out: Spot[] = [];
+    const start: Spot = { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 };
+    const queue = [start];
+    seen.add(`${start.map}:${start.x}:${start.y}`);
+    while (queue.length) {
+      const at = queue.shift()!;
+      out.push(at);
+      for (let dir = 1; dir <= 4; dir++) {
+        const r = this.base(at, dir);
+        if (!r || !this.maps.has(r.to.map)) continue;
+        const k = `${r.to.map}:${r.to.x}:${r.to.y}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        queue.push(r.to);
+      }
+    }
+    REACH.set(id, out);
+    return out;
+  }
+
+  /** The ring this frame (or at `tick`). */
+  ring(tick = this.tick): Ring {
+    const len = this.ringPhase;
+    const round = Math.floor(tick / (RING_STEPS.length * len));
+    const t = tick - round * RING_STEPS.length * len;
+    const phase = Math.floor(t / len);
+    const { cx, cy, far } = this.centre(round);
+    const at = (i: number) => (RING_STEPS[i] === Infinity || RING_STEPS[i] < 0 ? RING_STEPS[i] : RING_STEPS[i] * far);
+    const last = phase === RING_STEPS.length - 1;
+    return { round, phase, last, cx, cy, r: at(phase), next: last ? undefined : at(phase + 1), left: len - (t - phase * len) };
+  }
+
+  /** Frames a phase lasts: RING_PHASE, or shorter for a solo test (`?ring=` seconds). */
+  ringPhase = RING_PHASE;
+
+  private centres = new Map<number, { cx: number; cy: number; far: number }>();
+  /** A round's centre: a cell a trainer can stand on, from the seed; and how far the
+   *  farthest reachable cell is from it. */
+  private centre(round: number): { cx: number; cy: number; far: number } {
+    const hit = this.centres.get(round);
+    if (hit) return hit;
+    const cells = this.reachable();
+    let h = Math.imul((this.seed ^ 0x51ed270b) >>> 0, 0x9e3779b1) ^ Math.imul(round + 1, 0x85ebca6b);
+    h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12;
+    const c = cells[(h >>> 0) % cells.length];
+    const p = this.places.get(c.map)!;
+    const cx = p.gx + c.x + 0.5, cy = p.gy + c.y + 0.5;
+    let far = 0;
+    for (const s of cells) {
+      const q = this.places.get(s.map)!;
+      far = Math.max(far, Math.hypot(q.gx + s.x + 0.5 - cx, q.gy + s.y + 0.5 - cy));
+    }
+    const out = { cx, cy, far };
+    if (this.centres.size > 4) this.centres.clear();
+    this.centres.set(round, out);
+    return out;
+  }
+
+  /** Is this cell in the fog now? */
+  inFog(s: Spot, ring = this.ring()): boolean {
+    if (ring.r === Infinity) return false;
+    if (ring.r < 0) return true;
+    const p = this.places.get(s.map);
+    if (!p) return true;
+    return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy) > ring.r;
   }
 
   /** The item ball still lying on a cell, if any. */
@@ -356,6 +439,8 @@ export function layout(maps: readonly WorldMap[]): Map<string, { m: WorldMap; gx
 
 /** A room over world.json's maps: walking on every outdoor map joined to Littleroot. */
 export function makeRoom(all: readonly WorldMap[], patches: PatchTable, seed: number, world?: World): Room {
-  const maps = new Map([...layout(all)].map(([id, p]) => [id, p.m]));
-  return new Room(world ?? new World(all as WorldMap[]), maps, patches, seed);
+  const placed = layout(all);
+  const maps = new Map([...placed].map(([id, p]) => [id, p.m]));
+  const places = new Map([...placed].map(([id, p]) => [id, { gx: p.gx, gy: p.gy }]));
+  return new Room(world ?? new World(all as WorldMap[]), maps, patches, seed, places);
 }

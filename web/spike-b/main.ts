@@ -23,7 +23,7 @@ import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, makeRoom, type Act
 import { SKIN_GFX } from './shared/bots';
 import { onlineLink, soloLink, type WorldLink } from './net';
 import { bootRom, loadRom, lastStart, type Fought, type RomBattles } from './rom';
-import { groundCount } from './carry';
+import { groundCount } from './shared/items';
 import { RomArt } from './romart';
 import type { GbaKey } from '../src/emu';
 import type { PackedMon } from '../src/net/wire';
@@ -263,10 +263,12 @@ function startFor(e: RoomEvent): void {
     if (!foe) { link.end(); return; }
     // POOCHYENA and ZIGZAGOON (Emerald's internal species ids, not the dex's).
     const party = [mon(286, 5), mon(288, 5)];
-    handOff(foe, (r, onStart) => r.fight(foe.name, party, foe.skin, onStart));
+    const fog = inFogNow();
+    handOff(foe, (r, onStart) => r.fight(foe.name, party, foe.skin, onStart, fog));
   } else {
     const m = placed.get(e.map)!.m;
-    handOff(null, (r, onStart) => r.wild(m.group, m.num, art!.behavior(m.group, m.num, e.x, e.y), onStart));
+    const fog = inFogNow();
+    handOff(null, (r, onStart) => r.wild(m.group, m.num, art!.behavior(m.group, m.num, e.x, e.y), onStart, fog));
   }
 }
 
@@ -284,6 +286,75 @@ function endBattle(r: Fought | null): void {
   calmUntil = frame + 30;
   if (r && !r.ok) lastResult = 'last battle: the ROM did not start it';
   else if (r) lastResult = `last battle: ${wild ? `wild #${r.species} Lv${r.level}, ` : ''}${OUTCOME[r.outcome] ?? r.outcome}`;
+  // A whiteout is the end of a trainer's match (Kanto's rules, DESIGN.md §10).
+  if (r?.ok && (r.outcome === 2 || r.outcome === 3)) goOut(r.outcome === 2 ? 'Your team lost the battle.' : 'Your team went down with theirs.');
+}
+
+// ---- the fog (room.ts's ring) ----------------------------------------------------------
+
+const outEl = document.getElementById('out')!;
+let isOut = false;
+let fogTimer = 0;
+let lastPhase = -1;
+let wasInFog = false;
+/** br_ring.h: BR_FOG_TICK_FRAMES, a bite every four seconds. */
+const FOG_TICK = 240;
+
+function inFogNow(): boolean {
+  const me = link.room.actor(link.me);
+  return !!me && link.room.inFog(me.m.spot);
+}
+
+/** Out of the match: off the map, watching, and a way back in. */
+function goOut(why: string): void {
+  if (isOut) return;
+  isOut = true;
+  link.out();
+  document.getElementById('out-why')!.textContent = why;
+  outEl.classList.add('on');
+  if (!spectating) toggleSpectate();
+}
+document.getElementById('rejoin')!.addEventListener('click', () => location.reload());
+
+/** Once a frame: the ring's news, and the fog's bite while I stand in it. */
+function fogFrame(): void {
+  const ring = link.room.ring();
+  if (ring.phase !== lastPhase) {
+    if (lastPhase >= 0) {
+      if (ring.phase === 0) say('The fog lifts. A new round!');
+      else if (ring.last) say('THE FOG COVERS ALL OF HOENN!');
+      else say(ring.phase === 1 ? 'The fog is rolling in!' : 'The fog is closing in!');
+    }
+    lastPhase = ring.phase;
+  }
+  if (isOut || battle || !rom) return;
+  const fog = inFogNow();
+  if (fog && !wasInFog) { say('You are in the fog!'); fogTimer = FOG_TICK; }
+  wasInFog = fog;
+  if (!fog || --fogTimer > 0) return;
+  fogTimer = FOG_TICK;
+  void rom.bleed().then((alive) => { if (!alive) goOut('Your team fainted in the fog.'); });
+}
+
+/** The fog over everything outside the ring, the inside left clear. */
+function drawFog(x0: number, y0: number, x1: number, y1: number): void {
+  const ring = link.room.ring();
+  if (ring.r === Infinity) return;
+  ctx.fillStyle = 'rgba(176, 160, 196, 0.5)';
+  ctx.beginPath();
+  ctx.rect(x0, y0, x1 - x0, y1 - y0);
+  if (ring.r >= 0) ctx.arc(ring.cx * TILE, ring.cy * TILE, Math.max(ring.r, 0.5) * TILE, 0, Math.PI * 2, true);
+  ctx.fill('evenodd');
+}
+
+function fogLine(): string {
+  const ring = link.room.ring();
+  const s = Math.ceil(ring.left / 60);
+  const clock = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const where = inFogNow() ? ' · YOU ARE IN THE FOG' : '';
+  if (ring.r === Infinity) return `fog in ${clock}${where}`;
+  if (ring.last) return `FOG EVERYWHERE · new round in ${clock}${where}`;
+  return `fog phase ${ring.phase}, closes again in ${clock}${where}`;
 }
 
 // While the ROM has the screen, the pad is the ROM's.
@@ -327,6 +398,7 @@ function resize(): void {
 addEventListener('resize', resize);
 
 function toggleSpectate(): void {
+  if (isOut && spectating) return; // out: watching is all there is
   spectating = !spectating;
   modeBtn.classList.toggle('on', spectating);
   modeBtn.textContent = spectating ? 'Back to my trainer (V)' : 'Spectate (V)';
@@ -595,6 +667,7 @@ function draw(): void {
   for (const p of visible) {
     if (p.cover && !far) ctx.drawImage(p.cover, p.gx * TILE, p.gy * TILE);
   }
+  drawFog(vx0, vy0, vx1, vy1);
   // Zoomed far out, the sprites are specks: mark every trainer with a dot.
   if (z < 0.6) {
     // in canvas pixels, whole ones, so the squares stay sharp
@@ -632,6 +705,7 @@ function loop(now: number): void {
     steps += 1;
     frame += 1;
     for (const e of link.frame(myBits())) startFor(e);
+    fogFrame();
     pressed.clear();
   }
   const t1 = performance.now();
@@ -651,6 +725,7 @@ function loop(now: number): void {
       `${link.room.actors.length} trainers · ${here.map.replace('MAP_', '')} ${here.x},${here.y}\n${link.status()}` +
       `\nROM ${rom ? (battle ? 'fighting' : 'paused, waiting to fight') : 'booting'}` +
       (lastStart ? ` · battle up in ${lastStart.frames} frames (${lastStart.ms.toFixed(0)} ms)` : '') +
+      `\n${fogLine()}` +
       (lastResult ? `\n${lastResult}` : '') +
       (spectating ? `\nzoom ${zoom.toFixed(2)} · drag, pinch, tap a trainer` : '');
   }
@@ -683,6 +758,10 @@ async function boot(): Promise<void> {
   statsEl.textContent = 'joining the shared world...';
   const online = q.has('solo') ? null : await onlineLink(url, 'TRAINER', Math.random() < 0.5 ? 0 : 1, (seed) => makeRoom(hoenn.maps, patches, seed, hoenn.world));
   link = online ?? soloLink(hoenn.maps, patches, hoenn.world, (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0);
+  // A quicker fog to try it alone: ?ring=<seconds a phase> (solo only: the relay's ring is
+  // everybody's).
+  const ringSecs = Number(q.get('ring'));
+  if (!link.online && ringSecs > 0) link.room.ringPhase = Math.round(ringSecs * 60);
   follow = link.me;
   resize();
   requestAnimationFrame((t) => { last = t; loop(t); });

@@ -31,6 +31,8 @@ export interface WorldLink {
   end(): void;
   /** The ball `key` would not go in my bag: put it back. */
   drop(key: number): void;
+  /** My team is down: off the map. */
+  out(): void;
   /** For the stats line. */
   status(): string;
 }
@@ -53,6 +55,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     mine: () => host.room.actor(me),
     end: () => host.end(me),
     drop: (key) => host.drop(me, key),
+    out: () => host.out(me),
     status: () => 'solo: you and the bots (no relay)',
   };
 }
@@ -172,6 +175,8 @@ class Online implements WorldLink {
   end(): void { this.send({ t: 'end' }); }
 
   drop(key: number): void { this.send({ t: 'drop', k: key }); }
+
+  out(): void { this.send({ t: 'out' }); }
 
   status(): string {
     if (this.closed) return 'the relay closed the connection: reload to rejoin';

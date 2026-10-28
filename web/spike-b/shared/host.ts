@@ -107,6 +107,11 @@ export class Host {
     if (this.players.has(id) && this.room.picked.get(key) === id) this.pending.push({ c: 'drop', id, key });
   }
 
+  /** The phone's team is down: its trainer leaves the map, and the phone watches. */
+  out(id: number): void {
+    if (this.players.has(id) && this.room.actor(id)) this.pending.push({ c: 'out', id });
+  }
+
   /** One frame. The record goes to every mirror; `acks` is each phone's last input used. */
   advance(): { frame: Frame; acks: Map<number, number>; events: RoomEvent[] } {
     const room = this.room;

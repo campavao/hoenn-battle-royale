@@ -30,6 +30,8 @@ const WILD_FIGHTING = 2;
 const WILD_DONE = 3;
 // gBattleOutcome.
 const LOST = 2;
+// include/br/br_ring.h: BR_FOG_TICK_FRAMES.
+const FOG_TICK = 240;
 const DREW = 3;
 /** How long the last fight took to start: from the TRAINER card to the battle running. */
 export let lastStart: { ms: number; frames: number } | null = null;
@@ -42,10 +44,13 @@ export interface Given { items: { id: number; n: number }[]; money: number; used
 
 export interface RomBattles {
   /** Fight `name`'s party. Resolves when the ROM is back on the field. */
-  fight(name: string, mons: PackedMon[], skin: number, onStart: () => void): Promise<Fought>;
+  fight(name: string, mons: PackedMon[], skin: number, onStart: () => void, fog?: boolean): Promise<Fought>;
   /** The wild battle a marked spot on map (group, num) starts; `behavior` is the spot's
    *  metatile behaviour (water or land, and the backdrop). */
-  wild(group: number, num: number, behavior: number, onStart: () => void): Promise<Fought>;
+  wild(group: number, num: number, behavior: number, onStart: () => void, fog?: boolean): Promise<Fought>;
+  /** The fog's bite between battles (br_ring.c Bleed): a tenth of each mon's max HP, at
+   *  least 1, a fainted one's status cleared. How many are still standing. */
+  bleed(): Promise<number>;
   /** An item ball picked up: into the bag the ROM's own way (a match's GIVE, so a vitamin
    *  is used and a nugget sold as in a match). What went in, as the ROM filed it; `used`
    *  when it went on the team; null when it did not fit. */
@@ -138,6 +143,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   const mainFunc = sym('gBattleMainFunc');
   const outcomeAt = sym('gBattleOutcome');
   const catchAt = sym('gBrCatch');
+  const ringAt = sym('gBrRing');
   const partyAt = sym('gPlayerParty');
   const countAt = sym('gPlayerPartyCount');
   const save1 = sym('gSaveBlock1Ptr');
@@ -181,11 +187,15 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     queue = run.catch(() => undefined);
     return run;
   };
-  async function battle(kick: () => void, going: () => boolean, over: () => boolean, onStart: () => void, after: () => Omit<Fought, 'ok'>): Promise<Fought> {
+  async function battle(fog: boolean, kick: () => void, going: () => boolean, over: () => boolean, onStart: () => void, after: () => Omit<Fought, 'ok'>): Promise<Fought> {
     if (broken) throw new Error('the parked ROM could not be restored');
     // Every battle from one state would roll the same: a fresh draw each time.
     emu.write(sym('gRngValue'), (Math.random() * 2 ** 32) >>> 0, 32);
     emu.write(mainFunc, 0, 32);
+    // Fought in the fog (br_ring.h): a ring with fog everywhere, so the hidden ROM's own
+    // map is outside it -- a wild battle bleeds as it goes, a trainer's hurts at each
+    // turn's end (BrRing_DecideBattleFog), both down to 1 and never past. None: no ring.
+    emu.bytes(ringAt, 10).set(fog ? [1, 1, 0, 0, 0xff, 0, 0, 0, FOG_TICK & 0xff, FOG_TICK >> 8] : [0, 0, 0, 0, 0, 0, 0, 0, FOG_TICK & 0xff, FOG_TICK >> 8]);
     emu.resume();
     const t0 = performance.now();
     let n = 0;
@@ -228,16 +238,34 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     emu,
     press: (k) => emu.press(k),
     release: (k) => emu.release(k),
-    fight(name, mons, skin, onStart) {
+    fight(name, mons, skin, onStart, fog = false) {
       // The path a bot fight takes: its card, its ghost beside us, its challenge. All three
       // go on the ring in one go, on purpose: the ROM reads the ring in order, so the card
       // is staged before the CHALLENGE that needs it (the fight is up in ~80 frames).
-      return inTurn(() => battle(() => {
+      return inTurn(() => battle(fog, () => {
         send({ t: 'trainer', seat: FOE_SEAT, name, mons });
         send({ t: 'place', v: PROTOCOL, seat: FOE_SEAT, map: { group: 0, num: 9 }, x: 20, y: 8, f: 1, st: 'alive', sprite: String(skin) });
         send({ t: 'challenge', seat: FOE_SEAT, opponent: ME, nonce: 0 });
       }, () => emu.read(fightAt + 2, 8) === 1, () => emu.read(fightAt + 2, 8) === 0, onStart,
       () => ({ outcome: emu.read(outcomeAt, 8), species: 0, level: 0 })));
+    },
+    bleed() {
+      return inTurn(async () => {
+        if (broken) return 0;
+        const n = emu.read(countAt, 8);
+        let alive = 0;
+        for (let i = 0; i < n; i++) {
+          const at = partyAt + i * 100;
+          let hp = emu.read(at + 86, 16);
+          if (!hp) continue;
+          hp -= Math.min(hp, Math.max(1, Math.floor(emu.read(at + 88, 16) / 10)));
+          emu.write(at + 86, hp, 16);
+          if (hp) alive++;
+          else emu.write(at + 80, 0, 32); // a fainted mon has no status (Bleed)
+        }
+        carried = kept();
+        return alive;
+      });
     },
     give(item, n) {
       return inTurn(async () => {
@@ -260,9 +288,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         return got.items.length || got.money || used ? { ...got, used } : null;
       });
     },
-    wild(group, num, behavior, onStart) {
+    wild(group, num, behavior, onStart, fog = false) {
       // br_wild.h: the map, then ASKED; FIGHTING once it is under way, DONE when it is over.
-      return inTurn(() => battle(() => {
+      return inTurn(() => battle(fog, () => {
         emu.write(askAt + 1, group, 8);
         emu.write(askAt + 2, num, 8);
         emu.write(askAt + 3, behavior, 8);
