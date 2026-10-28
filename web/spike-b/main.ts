@@ -274,10 +274,12 @@ async function takeBag(key: number, bag: Bag, who: string): Promise<void> {
     if (left < row.n) took++;
     if (left) rest.items.push({ id: row.id, n: left });
   }
-  await r.addMoney(bag.money);
-  const money = bag.money ? ` and ¥${bag.money}` : '';
+  // Out by now: the money stays in the bag too, not in a ROM whose spill is already read.
+  if (isOut) rest.money = bag.money;
+  else await r.addMoney(bag.money);
+  const money = bag.money && !isOut ? ` and ¥${bag.money}` : '';
   say(`Took ${who}'s bag: ${took} item${took === 1 ? '' : 's'}${money}.${rest.items.length ? ' Some would not fit.' : ''}`);
-  if (rest.items.length) link.drop(key, rest);
+  if (rest.items.length || rest.money) link.drop(key, rest);
 }
 
 /** What the room started for me: A at a bot, or a marked spot I landed on (the room took
