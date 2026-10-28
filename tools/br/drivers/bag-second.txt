@@ -1,0 +1,32 @@
+# bag-second: a fallen trainer's second bag (HBR-88, key 0xFE in their seat's space: the
+# rows the first could not hold) opens on its list like the first, not poured in whole.
+#
+# bag-take-all.txt's ground: seat 3's bag alone on the cell we face (12,17), its key
+# 0x03FE, no money.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# SPILL: no mons, hasBag 01, key 0x03FE, (12,17), no items, money 0, no name
+pokebytes gBrMailbox+0x1018 0B 14 11 00 00 03 00 09 00 01 FE 03 0C 00 11 00 00 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrLoot+0xA0 1
+tap A
+wait 20
+# taken, and the list waits for its GIVE
+expect u8 gBrLoot+0xA2 1
+expect u8 gBrLoot+0xA0 0
+expectmsg 10 u16 1 0x03FE
+# GIVE [count 2] (ORAN BERRY x99) (ORAN BERRY x50)
+pokebytes gDecompressionBuffer 02 8B 00 63 8B 00 32
+mailsend gBrMailbox 30 gDecompressionBuffer 7
+wait 40
+shot list
+# a list, so nothing is in the pocket until TAKE ALL
+expect u16 *gSaveBlock1Ptr+0x790 0
+tap A
+wait 30
+expect u16 *gSaveBlock1Ptr+0x790 139
+expect u32 gMain+4 CB2_Overworld+1
+say bag second ok
