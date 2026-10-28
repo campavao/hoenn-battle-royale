@@ -1,7 +1,32 @@
 {
- "readAt": "2026-10-28T04:06:27.014Z",
+ "readAt": "2026-10-28T15:35:53.935Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "HD6JGN",
+   "at": "2026-10-28T15:27:04.914Z",
+   "end": "2026-10-28T15:32:52.971Z",
+   "secs": 348,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-10-28T15:27:05.734Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
   {
    "code": "8VNJVJ",
    "at": "2026-10-27T22:39:44.717Z",
@@ -3097,14 +3122,14 @@
   {
    "id": "6144a717",
    "first": "2026-10-17T02:37:29.310Z",
-   "last": "2026-10-27T22:39:44.638Z",
+   "last": "2026-10-28T15:27:04.837Z",
    "since": "2026-10-15",
    "versions": [
     "2",
     "3"
    ],
    "solo": 2,
-   "checkins": 11,
+   "checkins": 12,
    "v": "3"
   }
  ],
