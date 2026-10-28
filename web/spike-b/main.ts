@@ -29,6 +29,8 @@ import type { PackedMon } from '../src/net/wire';
 import spritesData from '../src/data/sprites.json';
 
 const TILE = 16;
+// include/constants/event_objects.h.
+const OBJ_EVENT_GFX_ITEM_BALL = 59;
 const SHEETS = spritesData as Record<string, { name: string; w: number; h: number; frames: number }>;
 
 // ---- layout: every outdoor map at a place in one plane --------------------------------
@@ -218,9 +220,43 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
     });
 }
 
-/** A battle the room started for me: A at a bot, or a marked spot I landed on (the room
- *  took it as the battle started, as BrPatch_Take does). */
+// Item balls (room.ts's ground): what I picked up goes into the ROM's bag, one at a time,
+// and waits for the ROM if it is still booting.
+const foundEl = document.getElementById('found')!;
+let foundUntil = 0;
+const toGive: number[] = [];
+let giving = false;
+/** include/constants/items.h: a ball off the ground is six (br_items.c's Pickup). */
+const ITEM_MASTER_BALL = 1, ITEM_LAST_BALL = 12, BALLS_OFF_THE_GROUND = 6;
+
+function say(text: string): void {
+  foundEl.textContent = text;
+  foundEl.classList.add('on');
+  foundUntil = performance.now() + 2500;
+}
+
+function giveNext(): void {
+  if (giving || !rom || !toGive.length) return;
+  giving = true;
+  const item = toGive.shift()!;
+  const n = item > ITEM_MASTER_BALL && item <= ITEM_LAST_BALL ? BALLS_OFF_THE_GROUND : 1;
+  const name = art?.itemName(item) || `item ${item}`;
+  rom.give(item, n).then((ok) => {
+    if (!ok) say(`No room in the bag for ${name}.`);
+  }, (e) => console.warn('spike give failed', e)).finally(() => { giving = false; giveNext(); });
+}
+
+/** What the room started for me: A at a bot, or a marked spot I landed on (the room took
+ *  it as the battle started, as BrPatch_Take does), or A at an item ball. */
 function startFor(e: RoomEvent): void {
+  if (e.type === 'item') {
+    const name = art?.itemName(e.item) || `item ${e.item}`;
+    const n = e.item > ITEM_MASTER_BALL && e.item <= ITEM_LAST_BALL ? BALLS_OFF_THE_GROUND : 1;
+    say(`Found ${n > 1 ? `${n} ` : ''}${name}!`);
+    toGive.push(e.item);
+    giveNext();
+    return;
+  }
   if (e.type === 'fight') {
     const foe = link.room.actor(e.foe);
     if (!foe) { link.end(); return; }
@@ -439,6 +475,21 @@ function drawPatches(p: Placed): void {
   }
 }
 
+let ballArt: HTMLCanvasElement | null = null;
+/** The item balls nobody has taken, as the ROM draws one (OBJ_EVENT_GFX_ITEM_BALL). */
+function drawGround(x0: number, y0: number, x1: number, y1: number): void {
+  if (!ballArt && art) ballArt = art.sprite(OBJ_EVENT_GFX_ITEM_BALL, 1);
+  if (!ballArt) return;
+  for (const g of link.room.ground().values()) {
+    if (link.room.picked.has(g.key)) continue;
+    const p = placed.get(g.map);
+    if (!p) continue;
+    const x = (p.gx + g.x) * TILE, y = (p.gy + g.y) * TILE;
+    if (x < x0 - TILE || x > x1 || y < y0 - TILE || y > y1) continue;
+    ctx.drawImage(ballArt, x + (TILE - ballArt.width) / 2, y + TILE - ballArt.height);
+  }
+}
+
 /** The map at world pixel (x, y), or the nearest one to it: whose border fills the space
  *  past every map's edge. Picked by where the camera looks, the same whether it follows a
  *  trainer or is dragged, so the filler never changes with how you got there (Cam). */
@@ -509,6 +560,7 @@ function draw(): void {
     }
   }
   if (!far) for (const p of visible) drawPatches(p);
+  if (!far) drawGround(vx0, vy0, vx1, vy1);
   const people = all
     .map((a) => ({ a, p: pixelOf(a) }))
     .filter(({ p }) => p.x > vx0 - 32 && p.x < vx1 + 32 && p.y > vy0 - 48 && p.y < vy1 + 32)
@@ -583,6 +635,7 @@ function loop(now: number): void {
   }
   const t1 = performance.now();
   draw();
+  if (foundUntil && performance.now() > foundUntil) { foundUntil = 0; foundEl.classList.remove('on'); }
   const t2 = performance.now();
   simMs = simMs * 0.9 + (t1 - t0) * 0.1;
   drawMs = drawMs * 0.9 + (t2 - t1) * 0.1;
@@ -636,7 +689,7 @@ async function boot(): Promise<void> {
   const rest = [...placed.values()];
   const next = () => { const p = rest.find((r) => !r.mips); if (p) { paint(p); mipFor(p, 0); setTimeout(next, 16); } };
   setTimeout(next, 500);
-  bootRom(files, link.room.seed).then((r) => { rom = r; }, (e) => console.warn('spike ROM not booted', e));
+  bootRom(files, link.room.seed).then((r) => { rom = r; giveNext(); }, (e) => console.warn('spike ROM not booted', e));
   (window as unknown as { __spike: unknown }).__spike = { link, actors, placed, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; } };
 }
 

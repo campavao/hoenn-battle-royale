@@ -58,7 +58,7 @@ export function botSpawns(room: Room, maps: readonly WorldMap[], count: number):
     const m = land[Math.floor(r() * land.length)];
     const x = Math.floor(r() * m.w), y = Math.floor(r() * m.h);
     const c = grids.get(m.id)![y * m.w + x];
-    if ((c !== 0 && c !== 7) || taken.has(`${m.id}:${x}:${y}`)) continue;
+    if ((c !== 0 && c !== 7) || taken.has(`${m.id}:${x}:${y}`) || room.groundAt(m.id, x, y)) continue;
     // Not on the new trainers' corner of Littleroot.
     if (m.id === 'MAP_LITTLEROOT_TOWN' && x >= 7 && x <= 13 && y >= 9 && y <= 13) continue;
     add({ map: m.id, x, y }, 1 + Math.floor(r() * 4), botSkin(Math.floor(r() * 12)));

@@ -210,6 +210,23 @@ export class RomArt {
     return cv;
   }
 
+  /** An item's name as the bag shows it (gItems, struct Item: 14 bytes of name first,
+   *  44 bytes a row), in capitals and digits; '' for an id the table does not have. */
+  itemName(id: number): string {
+    const row = this.sym('gItems') + id * 44;
+    if (this.u16(row + 14) !== id) return '';
+    let out = '';
+    for (let i = 0; i < 14; i++) {
+      const c = this.rom[row - ROM + i];
+      if (c === 0xff) break;
+      out += c >= 0xbb && c <= 0xd4 ? String.fromCharCode(65 + c - 0xbb)
+        : c >= 0xd5 && c <= 0xee ? String.fromCharCode(97 + c - 0xd5)
+        : c >= 0xa1 && c <= 0xaa ? String.fromCharCode(48 + c - 0xa1)
+        : c === 0x1b ? 'é' : c === 0xae ? '-' : c === 0xad ? '.' : ' ';
+    }
+    return out;
+  }
+
   /** gfx's frames left to right, colour 0 clear, as export-sprites.py lays them out. */
   sprite(gfx: number, frames: number): HTMLCanvasElement {
     const info = this.u32(this.sym('gObjectEventGraphicsInfoPointers') + gfx * 4);
