@@ -6,7 +6,9 @@
 // our map, and a CHALLENGE starts an ordinary trainer battle. A wild battle is asked for
 // in gBrWildAsk (br_wild.h): the map the page's marked spot is on, and the ROM rolls it
 // from that map's own table. When the ROM is back on the field the battle is over, the
-// page takes the screen back, and the ROM is put back where it was parked.
+// page takes the screen back, and the ROM is put back where it was parked -- with the
+// party and the bag the battle left (a catch, a used POTION, a level), so the trainer's
+// team is theirs from battle to battle.
 //
 // The ROM is the player's own, patched the way the game patches it (loadRom). In dev,
 // web/public/spike-rom/ (gitignored, never committed) can stand in for it.
@@ -25,6 +27,18 @@ const FOE_SEAT = 31;
 const WILD_ASKED = 1;
 const WILD_FIGHTING = 2;
 const WILD_DONE = 3;
+// gBattleOutcome.
+const LOST = 2;
+const DREW = 3;
+// include/global.h's SaveBlock1: money, coins, the registered item, the PC's items and
+// every bag pocket, one run from 0x490 to 0x848. Money, coins and the pockets' counts are
+// kept XORed with SaveBlock2's key (0xAC), and every battle's start draws a new one
+// (MoveSaveBlocks_ResetHeap), so they are carried from the battle's key to the parked one.
+const BAG_AT = 0x490;
+const BAG_LEN = 0x848 - 0x490;
+const KEY_AT = 0xac;
+const POCKETS_AT = 0x560 - BAG_AT;
+const PARTY_LEN = 6 * 100;
 /** How long the last fight took to start: from the TRAINER card to the battle running. */
 export let lastStart: { ms: number; frames: number } | null = null;
 
@@ -115,8 +129,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   emu.write(match + 8, seed >>> 0, 32);
   await frames(emu, 2);
   // Parked: every battle starts from here and comes back to it. Whatever a battle leaves
-  // on the hidden field -- a whiteout's walk home, a win's spoils, a catch -- is undone,
-  // so the next one is never refused (review of #157).
+  // on the hidden field -- a whiteout's walk home, a win's spoils -- is undone, so the
+  // next one is never refused (review of #157). Only the party and the bag are carried.
   const parked = emu.snapshot();
   if (!parked) throw new Error('the core would not save a state');
 
@@ -124,6 +138,28 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   const askAt = sym('gBrWildAsk');
   const mainFunc = sym('gBattleMainFunc');
   const outcomeAt = sym('gBattleOutcome');
+  const catchAt = sym('gBrCatch');
+  const partyAt = sym('gPlayerParty');
+  const countAt = sym('gPlayerPartyCount');
+  const save1 = sym('gSaveBlock1Ptr');
+  const save2 = sym('gSaveBlock2Ptr');
+  /** The trainer's own: party and bag, copied out of the ROM, and back in. */
+  const kept = () => ({
+    count: emu.read(countAt, 8),
+    party: emu.bytes(partyAt, PARTY_LEN).slice(),
+    bag: emu.bytes(emu.read(save1, 32) + BAG_AT, BAG_LEN).slice(),
+    key: emu.read(emu.read(save2, 32) + KEY_AT, 32),
+  });
+  const keep = (k: ReturnType<typeof kept>) => {
+    const bag = new DataView(k.bag.slice().buffer);
+    const x = (k.key ^ emu.read(emu.read(save2, 32) + KEY_AT, 32)) >>> 0;
+    bag.setUint32(0, bag.getUint32(0, true) ^ x, true); // money
+    bag.setUint16(4, bag.getUint16(4, true) ^ (x & 0xffff), true); // coins
+    for (let at = POCKETS_AT; at < BAG_LEN; at += 4) bag.setUint16(at + 2, bag.getUint16(at + 2, true) ^ (x & 0xffff), true);
+    emu.write(countAt, k.count, 8);
+    emu.bytes(partyAt, PARTY_LEN).set(k.party);
+    emu.bytes(emu.read(save1, 32) + BAG_AT, BAG_LEN).set(new Uint8Array(bag.buffer));
+  };
   const send = (msg: Parameters<typeof packSlot>[0]) => {
     for (const s of packSlot(msg)) box.push(s.type, s.payload);
   };
@@ -132,6 +168,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
    *  on the field. The page gets the screen at the battle's first frame (onStart) and
    *  never before, so the hidden field never shows through. */
   let broken = false;
+  let carried: ReturnType<typeof kept> | null = null;
   async function battle(kick: () => void, going: () => boolean, over: () => boolean, onStart: () => void, after: () => Omit<Fought, 'ok'>): Promise<Fought> {
     if (broken) throw new Error('the parked ROM could not be restored');
     // Every battle from one state would roll the same: a fresh draw each time.
@@ -156,11 +193,18 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       onStart();
       await until(emu, over, Infinity);
       result = { ok: true, ...after() };
+      // A catch with a full party: back on its field the ROM asks which one makes room
+      // (br_catch.c). The player answers it on the ROM's screen, as in a match.
+      await until(emu, () => emu.read(catchAt, 8) === 0, Infinity);
+      // A loss is a whiteout: in a match the trainer is out. Here the team goes back to
+      // how it came in (the ring and elimination are the match's, later).
+      if (result.outcome !== LOST && result.outcome !== DREW) carried = kept();
     }
     emu.pause();
     // A ROM that could not be put back would start the next battle from whatever this
     // one left on its field: no more battles from it.
     if (!emu.restore(parked!)) broken = true;
+    else if (carried) keep(carried);
     return result;
   }
 
