@@ -7,6 +7,7 @@ import type { WorldMap } from '../../src/bots/world';
 import type { PatchTable } from '../../src/bots/patches';
 import { Host } from './host';
 import { makeRoom } from './room';
+import { cleanBag } from './items';
 import { HASH_EVERY, type WireFrame, type WorldDown, type WorldUp } from './wire';
 
 export interface Link { send(text: string): void; close(): void }
@@ -70,9 +71,9 @@ export class WorldService {
         } else if (m.t === 'end') {
           this.host.end(id);
         } else if (m.t === 'out') {
-          this.host.out(id);
+          this.host.out(id, cleanBag(m.bag) ?? undefined);
         } else if (m.t === 'drop') {
-          if (Number.isInteger(m.k)) this.host.drop(id, m.k);
+          if (Number.isInteger(m.k)) this.host.drop(id, m.k, cleanBag(m.rest) ?? undefined);
         } else if (m.t === 'sync') {
           const now = this.opts.now();
           if (now - synced < SYNC_MS) return;

@@ -19,7 +19,7 @@ import { WorldIndex } from '../src/bots/hoenn';
 import { isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
 import { loadPatches } from '../src/bots/patches';
 import { DIR_EAST } from './sim';
-import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, makeRoom, type Actor, type RoomEvent } from './shared/room';
+import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, makeRoom, type Actor, type Bag, type RoomEvent } from './shared/room';
 import { SKIN_GFX } from './shared/bots';
 import { onlineLink, soloLink, type WorldLink } from './net';
 import { bootRom, loadRom, lastStart, type Fought, type RomBattles } from './rom';
@@ -32,6 +32,7 @@ import spritesData from '../src/data/sprites.json';
 const TILE = 16;
 // include/constants/event_objects.h.
 const OBJ_EVENT_GFX_ITEM_BALL = 59;
+const OBJ_EVENT_GFX_BIRCHS_BAG = 97;
 const SHEETS = spritesData as Record<string, { name: string; w: number; h: number; frames: number }>;
 
 // ---- layout: every outdoor map at a place in one plane --------------------------------
@@ -225,7 +226,7 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
 // and waits for the ROM if it is still booting.
 const foundEl = document.getElementById('found')!;
 let foundUntil = 0;
-const toGive: { key: number; item: number }[] = [];
+const toGive: ({ key: number; item: number } | { key: number; bag: Bag; name: string })[] = [];
 let giving = false;
 
 function say(text: string): void {
@@ -237,8 +238,13 @@ function say(text: string): void {
 function giveNext(): void {
   if (giving || !rom || !toGive.length) return;
   giving = true;
-  const { key, item } = toGive.shift()!;
+  const next = toGive.shift()!;
   const name = (id: number) => art?.itemName(id) || `item ${id}`;
+  if ('bag' in next) {
+    takeBag(next.key, next.bag, next.name).catch((e) => console.warn('spike bag failed', e)).finally(() => { giving = false; giveNext(); });
+    return;
+  }
+  const { key, item } = next;
   rom.give(item, groundCount(item)).then((got) => {
     // What the ROM made of it (br_items.c's Apply), not what was on the ground.
     if (!got) {
@@ -250,11 +256,27 @@ function giveNext(): void {
   }, (e) => console.warn('spike give failed', e)).finally(() => { giving = false; giveNext(); });
 }
 
+/** A fallen trainer's bag, row by row into mine the ROM's way, and its money. What did
+ *  not fit goes back down as the bag, for somebody else (POK-294: nothing leaves). */
+async function takeBag(key: number, bag: Bag, who: string): Promise<void> {
+  const r = rom!;
+  const rest: Bag = { items: [], money: 0 };
+  let took = 0;
+  for (const row of bag.items) {
+    if (await r.give(row.id, row.n)) took++;
+    else rest.items.push(row);
+  }
+  await r.addMoney(bag.money);
+  const money = bag.money ? ` and ¥${bag.money}` : '';
+  say(`Took ${who}'s bag: ${took} item${took === 1 ? '' : 's'}${money}.${rest.items.length ? ' Some would not fit.' : ''}`);
+  if (rest.items.length) link.drop(key, rest);
+}
+
 /** What the room started for me: A at a bot, or a marked spot I landed on (the room took
  *  it as the battle started, as BrPatch_Take does), or A at an item ball. */
 function startFor(e: RoomEvent): void {
-  if (e.type === 'item') {
-    toGive.push({ key: e.key, item: e.item });
+  if (e.type === 'item' || e.type === 'bag') {
+    toGive.push(e.type === 'item' ? { key: e.key, item: e.item } : { key: e.key, bag: e.bag, name: e.name });
     giveNext();
     return;
   }
@@ -309,7 +331,8 @@ function inFogNow(): boolean {
 function goOut(why: string): void {
   if (isOut) return;
   isOut = true;
-  link.out();
+  // What I carried lies where I fell (POK-232).
+  link.out(rom?.spill());
   document.getElementById('out-why')!.textContent = why;
   outEl.classList.add('on');
   if (!spectating) toggleSpectate();
@@ -554,18 +577,21 @@ function drawPatches(p: Placed): void {
 }
 
 let ballArt: HTMLCanvasElement | null = null;
-/** The item balls nobody has taken, as the ROM draws one (OBJ_EVENT_GFX_ITEM_BALL). */
+let bagArt: HTMLCanvasElement | null = null;
+/** The item balls and bags nobody has taken, as the ROM draws them (br_loot.c: a
+ *  fallen trainer's bag is BIRCH's BAG). */
 function drawGround(x0: number, y0: number, x1: number, y1: number): void {
   if (!ballArt && art) ballArt = art.sprite(OBJ_EVENT_GFX_ITEM_BALL, 1);
-  if (!ballArt) return;
-  for (const g of link.room.ground().values()) {
-    if (link.room.picked.has(g.key)) continue;
-    const p = placed.get(g.map);
-    if (!p) continue;
-    const x = (p.gx + g.x) * TILE, y = (p.gy + g.y) * TILE;
-    if (x < x0 - TILE || x > x1 || y < y0 - TILE || y > y1) continue;
-    ctx.drawImage(ballArt, x + (TILE - ballArt.width) / 2, y + TILE - ballArt.height);
-  }
+  if (!bagArt && art) bagArt = art.sprite(OBJ_EVENT_GFX_BIRCHS_BAG, 1);
+  const put = (img: HTMLCanvasElement | null, map: string, gx: number, gy: number) => {
+    const p = placed.get(map);
+    if (!img || !p) return;
+    const x = (p.gx + gx) * TILE, y = (p.gy + gy) * TILE;
+    if (x < x0 - TILE || x > x1 || y < y0 - TILE || y > y1) return;
+    ctx.drawImage(img, x + (TILE - img.width) / 2, y + TILE - img.height);
+  };
+  for (const g of link.room.ground().values()) if (!link.room.picked.has(g.key)) put(ballArt, g.map, g.x, g.y);
+  for (const b of link.room.spills.values()) if (!link.room.picked.has(b.key)) put(bagArt, b.map, b.x, b.y);
 }
 
 /** The map at world pixel (x, y), or the nearest one to it: whose border fills the space
@@ -775,7 +801,7 @@ async function boot(): Promise<void> {
   const next = () => { const p = rest.find((r) => !r.mips); if (p) { paint(p); mipFor(p, 0); setTimeout(next, 16); } };
   setTimeout(next, 500);
   bootRom(files, link.room.seed).then((r) => { rom = r; giveNext(); }, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { link, actors, placed, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; } };
+  (window as unknown as { __spike: unknown }).__spike = { link, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; } };
 }
 
 void boot();

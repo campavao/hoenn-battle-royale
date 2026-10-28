@@ -7,8 +7,8 @@ import type { PatchTable } from '../../src/bots/patches';
 import worldJson from '../data/world.json';
 import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
-import { isTm } from './items';
-import { GROUND_PER_MAP, RING_PHASE, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, makeRoom } from './room';
+import { cleanBag, isTm, within } from './items';
+import { GROUND_PER_MAP, RING_PHASE, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, makeRoom } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -304,5 +304,55 @@ describe('the fog', () => {
     room.apply({ c: 'out', id: 2 });
     expect(room.actor(2)).toBeUndefined();
     expect(room.actor(1)!.battling).toBe(false);
+  });
+});
+
+describe('a fallen trainer\'s bag', () => {
+  const bag = { items: [{ id: 13, n: 3 }, { id: 4, n: 6 }], money: 1200 };
+
+  it('lies where they fell; solid; A takes it whole, and what did not fit goes back', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    const at = { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 12 };
+    room.apply({ c: 'join', id: 1, bot: false, name: 'MAY', skin: 0, spot: at, facing: 1 });
+    room.apply({ c: 'join', id: 2, bot: false, name: 'B', skin: 0, spot: { ...at, x: 9 }, facing: 4 });
+    room.apply({ c: 'out', id: 1, bag });
+    expect(room.actor(1)).toBeUndefined();
+    const key = SPILL_KEY + 1;
+    expect(room.spillAt(at.map, at.x, at.y)).toMatchObject({ key, name: 'MAY', bag });
+    expect(room.stepFor(room.actor(2)!)({ ...at, x: 9 }, 4)).toBeNull(); // solid
+    // mirrored like everything else
+    const mirror = makeRoom(MAPS, PATCHES, 99);
+    mirror.load(room.state());
+    expect(mirror.hash()).toBe(room.hash());
+    expect(room.step(new Map([[2, [KEY_A]]]))).toMatchObject([{ type: 'bag', id: 2, key, bag, name: 'MAY' }]);
+    expect(room.spillAt(at.map, at.x, at.y)).toBeUndefined();
+    room.step(new Map([[2, [0]]]));
+    expect(room.step(new Map([[2, [KEY_A]]]))).toEqual([]);
+    // the potions would not fit: back down with only them, and only by the taker
+    room.apply({ c: 'drop', id: 3, key, rest: { items: [{ id: 13, n: 3 }], money: 0 } });
+    expect(room.spillAt(at.map, at.x, at.y)).toBeUndefined();
+    room.apply({ c: 'drop', id: 2, key, rest: { items: [{ id: 13, n: 3 }], money: 0 } });
+    expect(room.spillAt(at.map, at.x, at.y)?.bag).toEqual({ items: [{ id: 13, n: 3 }], money: 0 });
+    mirror.load(room.state());
+    expect(mirror.hash()).toBe(room.hash());
+  });
+
+  it('an empty bag leaves nothing, and leaving (not out) leaves nothing', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 12 }, facing: 1 });
+    room.apply({ c: 'join', id: 2, bot: false, name: 'B', skin: 0, spot: { map: 'MAP_LITTLEROOT_TOWN', x: 9, y: 12 }, facing: 1 });
+    room.apply({ c: 'out', id: 1, bag: { items: [], money: 0 } });
+    room.apply({ c: 'leave', id: 2 });
+    expect(room.spills.size).toBe(0);
+  });
+
+  it('what a phone sends is made safe, and a bag put back never grows', () => {
+    expect(cleanBag(null)).toBeNull();
+    expect(cleanBag({ items: 'x' })).toBeNull();
+    expect(cleanBag({ items: Array(93).fill({ id: 1, n: 1 }) })).toBeNull();
+    expect(cleanBag({ items: [{ id: 13, n: 3 }, { id: 999, n: 1 }, { id: 4, n: 0 }, { id: 4, n: 100 }, { id: 2.5, n: 1 }], money: 5e9 }))
+      .toEqual({ items: [{ id: 13, n: 3 }], money: 999999 });
+    expect(within({ items: [{ id: 13, n: 9 }, { id: 4, n: 2 }, { id: 7, n: 1 }], money: 9999 }, bag))
+      .toEqual({ items: [{ id: 13, n: 3 }, { id: 4, n: 2 }], money: 1200 });
   });
 });

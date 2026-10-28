@@ -54,3 +54,31 @@ export function arrived(before: { bag: Uint8Array; key: number }, after: { bag: 
   const money = (bytes: Uint8Array, key: number) => (new DataView(bytes.buffer, bytes.byteOffset).getUint32(0, true) ^ key) >>> 0;
   return { items, money: money(after.bag, after.key) - money(before.bag, before.key) };
 }
+
+// The pockets a fallen trainer's bag spills (POK-232): items, balls and berries. Not key
+// items (a trainer's own, every one already has the ITEMFINDER) and not machines (a TM
+// off the ground is taught there and then, br_items.c's Found, which a GIVE would skip).
+const SPILL_POCKETS: [number, number][] = [[0x560, 30], [0x650, 16], [0x790, 46]];
+
+/** What a trainer who is out leaves on the ground: the spilling pockets' rows, in bag
+ *  order, and the money, decrypted under `key`. */
+export function spillOf(bag: Uint8Array, key: number): { items: { id: number; n: number }[]; money: number } {
+  const v = new DataView(bag.buffer, bag.byteOffset, bag.byteLength);
+  const items: { id: number; n: number }[] = [];
+  for (const [at, slots] of SPILL_POCKETS)
+    for (let i = 0; i < slots; i++) {
+      const o = at - BAG_AT + 4 * i;
+      const id = v.getUint16(o, true), n = v.getUint16(o + 2, true) ^ (key & 0xffff);
+      if (id && n) items.push({ id, n });
+    }
+  return { items, money: (v.getUint32(0, true) ^ key) >>> 0 };
+}
+
+/** The bag run with `more` money in it, capped at the game's 999,999 (AddMoney). */
+export function withMoney(bag: Uint8Array, key: number, more: number): Uint8Array {
+  const out = bag.slice();
+  const v = new DataView(out.buffer);
+  const now = (v.getUint32(0, true) ^ key) >>> 0;
+  v.setUint32(0, (Math.min(now + more, 999999) ^ key) >>> 0, true);
+  return out;
+}

@@ -1,7 +1,7 @@
 // The shared world's messages (relay/world.js <-> net.ts), one JSON object a text frame.
 
 import type { Frame } from './host';
-import type { RoomState } from './room';
+import type { Bag, RoomState } from './room';
 
 /** Phone to relay. */
 export type WorldUp =
@@ -11,10 +11,10 @@ export type WorldUp =
   | { t: 'in'; s: number; k: number[] }
   /** My battle is over. */
   | { t: 'end' }
-  /** The ball `k` would not go in my bag: put it back. */
-  | { t: 'drop'; k: number }
-  /** My team is down: take my trainer off the map; I keep watching. */
-  | { t: 'out' }
+  /** The ball or bag `k` would not go in my bag: put it back (a bag holding `rest`). */
+  | { t: 'drop'; k: number; rest?: Bag }
+  /** My team is down: take my trainer off the map, my bag where I stood; I keep watching. */
+  | { t: 'out'; bag?: Bag }
   /** My copy went wrong (a hash or a gap): send me the room again. */
   | { t: 'sync' };
 

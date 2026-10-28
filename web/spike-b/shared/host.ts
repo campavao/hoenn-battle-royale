@@ -5,7 +5,8 @@
 
 import type { Spot, WorldMap } from '../../src/bots/world';
 import { botKeys, botSpawns, type Brain } from './bots';
-import { Room, type Command, type RoomEvent } from './room';
+import { Room, type Bag, type Command, type RoomEvent } from './room';
+import { within } from './items';
 
 /** One frame as a mirror needs it: what changed before anybody moved, the bots whose
  *  keys changed, and the trainers' inputs the frame used. Most frames a trainer uses one
@@ -102,14 +103,18 @@ export class Host {
     if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: 'end', id });
   }
 
-  /** The ball `key` would not go in the phone's bag: back on the ground. */
-  drop(id: number, key: number): void {
-    if (this.players.has(id) && this.room.picked.get(key) === id) this.pending.push({ c: 'drop', id, key });
+  /** The ball `key` would not go in the phone's bag: back on the ground. A bag goes back
+   *  with what did not fit, never more than it held. */
+  drop(id: number, key: number, rest?: Bag): void {
+    if (!this.players.has(id) || this.room.picked.get(key) !== id) return;
+    const was = this.room.spills.get(key)?.bag;
+    this.pending.push(was && rest ? { c: 'drop', id, key, rest: within(rest, was) } : { c: 'drop', id, key });
   }
 
-  /** The phone's team is down: its trainer leaves the map, and the phone watches. */
-  out(id: number): void {
-    if (this.players.has(id) && this.room.actor(id)) this.pending.push({ c: 'out', id });
+  /** The phone's team is down: its trainer leaves the map, what they carried where they
+   *  stood, and the phone watches. */
+  out(id: number, bag?: Bag): void {
+    if (this.players.has(id) && this.room.actor(id)) this.pending.push(bag ? { c: 'out', id, bag } : { c: 'out', id });
   }
 
   /** One frame. The record goes to every mirror; `acks` is each phone's last input used. */

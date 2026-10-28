@@ -25,7 +25,7 @@
 import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
 import { scatterItem } from '../../src/match/scatter';
-import { isTm } from './items';
+import { isTm, type BagRows } from './items';
 import { dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
 
 export const KEY_UP = 1, KEY_DOWN = 2, KEY_LEFT = 4, KEY_RIGHT = 8, KEY_B = 16, KEY_A = 32;
@@ -63,7 +63,18 @@ export interface Actor {
 export type RoomEvent =
   | { type: 'wild'; tick: number; id: number; map: string; x: number; y: number; key: number }
   | { type: 'fight'; tick: number; id: number; foe: number }
-  | { type: 'item'; tick: number; id: number; key: number; item: number };
+  | { type: 'item'; tick: number; id: number; key: number; item: number }
+  | { type: 'bag'; tick: number; id: number; key: number; bag: Bag; name: string };
+
+/** What a trainer who is out carried: the bag's items (not its key items or machines)
+ *  and money. */
+export type Bag = BagRows;
+
+/** A trainer's bag where they fell (POK-232). Its key is SPILL_KEY + their id. */
+export interface Spill { key: number; map: string; x: number; y: number; name: string; bag: Bag }
+
+/** Spill keys, clear of the dealt balls' 1..n. */
+export const SPILL_KEY = 1 << 20;
 
 /** An item ball: its key, its cell and what is in it. */
 export interface Ground { key: number; map: string; x: number; y: number; item: number }
@@ -78,10 +89,11 @@ export type Command =
   | { c: 'leave'; id: number }
   | { c: 'end'; id: number }
   /** The ball `key` would not go in `id`'s bag: it lies where it was (POK-294, nothing
-   *  leaves the match). */
-  | { c: 'drop'; id: number; key: number }
-  /** `id`'s team is down (the fog, or a lost battle): off the map, watching. */
-  | { c: 'out'; id: number };
+   *  leaves the match). A bag goes back down holding `rest`, what did not fit. */
+  | { c: 'drop'; id: number; key: number; rest?: Bag }
+  /** `id`'s team is down (the fog, or a lost battle): off the map, watching. What they
+   *  carried lies where they stood (POK-232). */
+  | { c: 'out'; id: number; bag?: Bag };
 
 /** The marked spots grow back: the ring's phase does it in the game; here, a while. */
 export const REGROW = 60 * 90;
@@ -94,6 +106,8 @@ export interface RoomState {
   taken: [number, number][];
   /** Item balls taken: key, and who took it. */
   picked?: [number, number][];
+  /** Bags dropped by trainers who are out, taken or not (`picked` says). */
+  spills?: Spill[];
 }
 
 const DEALS = new Map<string, ReadonlyMap<string, Ground>>();
@@ -120,6 +134,8 @@ export class Room {
   taken = new Map<number, number>();
   /** Item balls taken, by key, and who took each (they do not grow back). */
   picked = new Map<number, number>();
+  /** Bags trainers who went out left, by key; one is lying while `picked` has not got it. */
+  spills = new Map<number, Spill>();
   private readonly base: StepFn;
   private dealt: ReadonlyMap<string, Ground> | null = null;
 
@@ -136,7 +152,7 @@ export class Room {
   }
 
   state(): RoomState {
-    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked] };
+    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]) };
   }
 
   load(s: RoomState): void {
@@ -144,6 +160,7 @@ export class Room {
     this.actors = structuredClone(s.actors);
     this.taken = new Map(s.taken);
     this.picked = new Map(s.picked ?? []);
+    this.spills = new Map(structuredClone(s.spills ?? []).map((b) => [b.key, b]));
   }
 
   actor(id: number): Actor | undefined {
@@ -158,10 +175,18 @@ export class Room {
       this.actors.push(a);
       this.actors.sort((p, q) => p.id - q.id);
     } else if (cmd.c === 'drop') {
-      if (this.picked.get(cmd.key) === cmd.id) this.picked.delete(cmd.key);
+      if (this.picked.get(cmd.key) !== cmd.id) return;
+      this.picked.delete(cmd.key);
+      const b = this.spills.get(cmd.key);
+      if (b && cmd.rest) b.bag = structuredClone(cmd.rest);
     } else if (cmd.c === 'leave' || cmd.c === 'out') {
       // A bot fought by somebody who left walks again.
       const a = this.actor(cmd.id);
+      // Where they stood: nobody else can be on that cell, nor a ball (both are solid).
+      if (a && cmd.c === 'out' && cmd.bag && (cmd.bag.items.length || cmd.bag.money)) {
+        const key = SPILL_KEY + a.id;
+        this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag: structuredClone(cmd.bag) });
+      }
       const foe = a?.foe ? this.actor(a.foe) : undefined;
       if (foe) foe.battling = false;
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
@@ -301,6 +326,12 @@ export class Room {
     return g && !this.picked.has(g.key) ? g : undefined;
   }
 
+  /** The bag lying on a cell, if any. */
+  spillAt(map: string, x: number, y: number): Spill | undefined {
+    for (const b of this.spills.values()) if (b.map === map && b.x === x && b.y === y && !this.picked.has(b.key)) return b;
+    return undefined;
+  }
+
   patchesOn(mapId: string): Patch[] {
     const m = this.maps.get(mapId);
     return m ? dealPatches(this.patches, m.id, m, this.seed) : [];
@@ -353,10 +384,14 @@ export class Room {
       if (!a.battling && (bits & KEY_A) && !(a.last & KEY_A)) {
         const [x, y] = this.ahead(a);
         const g = this.groundAt(a.m.spot.map, x, y);
-        const foe = g ? undefined : this.facing(a);
+        const b = g ? undefined : this.spillAt(a.m.spot.map, x, y);
+        const foe = g || b ? undefined : this.facing(a);
         if (g) {
           this.picked.set(g.key, a.id);
           events.push({ type: 'item', tick: this.tick, id: a.id, key: g.key, item: g.item });
+        } else if (b) {
+          this.picked.set(b.key, a.id);
+          events.push({ type: 'bag', tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name });
         } else if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
           a.battling = foe.battling = foe.beaten = true;
           foe.m.facing = foe.m.moveDir = ({ 1: 2, 2: 1, 3: 4, 4: 3 } as Record<number, number>)[a.m.facing];
@@ -380,7 +415,7 @@ export class Room {
     return this.actors.find((o) => o.id !== a.id && o.m.spot.map === a.m.spot.map && o.m.spot.x === x && o.m.spot.y === y);
   }
 
-  /** Where `a` may step: the ROM's rules, a map this room has, no item ball, and nobody
+  /** Where `a` may step: the ROM's rules, a map this room has, no item ball or bag, and nobody
    *  standing there (a step's destination is the trainer's spot from its first frame, so
    *  two can't both walk into one cell). */
   stepFor(a: Actor): StepFn {
@@ -388,7 +423,7 @@ export class Room {
       const r = this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
       const t = r.to;
-      if (this.groundAt(t.map, t.x, t.y)) return null;
+      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y)) return null;
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return null;
       return r;
     };
@@ -409,6 +444,10 @@ export class Room {
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
     for (const [k, by] of this.picked) { mix(k); mix(by); }
+    for (const b of this.spills.values()) {
+      mix(b.key); str(b.map); mix(b.x); mix(b.y); mix(b.bag.money);
+      for (const r of b.bag.items) { mix(r.id); mix(r.n); }
+    }
     return h;
   }
 }
