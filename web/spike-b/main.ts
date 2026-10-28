@@ -549,6 +549,23 @@ function drawPatches(p: Placed): void {
   }
 }
 
+/** The map at world pixel (x, y), or the nearest one to it: whose border fills the space
+ *  past every map's edge. Picked by where the camera looks, the same whether it follows a
+ *  trainer or is dragged, so the filler never changes with how you got there (Cam). */
+function mapUnder(x: number, y: number): Placed | null {
+  let best: Placed | null = null;
+  let bestD = Infinity;
+  for (const p of placed.values()) {
+    const x0 = p.gx * TILE, y0 = p.gy * TILE;
+    const dx = Math.max(x0 - x, 0, x - (x0 + p.m.w * TILE));
+    const dy = Math.max(y0 - y, 0, y - (y0 + p.m.h * TILE));
+    const d = dx * dx + dy * dy;
+    if (d < bestD) { best = p; bestD = d; }
+    if (d === 0) break;
+  }
+  return best;
+}
+
 function draw(): void {
   if (follow) {
     const p = pixelOf(follow);
@@ -567,7 +584,7 @@ function draw(): void {
   ctx.fillRect(0, 0, W, H);
   // Past every map's edge the GBA repeats the map's 2x2 border block (Route 101's
   // trees): tile the followed map's, aligned to its even coordinates.
-  const home = placed.get((follow ?? player).m.spot.map)!;
+  const home = mapUnder(cam.x, cam.y) ?? placed.get(player.m.spot.map)!;
   if (paint(home) && home.border && z < 0.5) {
     // Far out the 32 px block is noise: one flat colour, its average.
     home.borderTint ??= tint(home.border);
