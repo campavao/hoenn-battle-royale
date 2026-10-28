@@ -63,9 +63,6 @@ ENGINE_SYMBOLS = [
     # The overworld's main callback: the page shows the picture past the LCD only while
     # gMain.callback2 is this (POK-319, web/src/field.ts).
     "CB2_Overworld",
-    # A drop's POKeMON screen (br_swap.h) and the PC box it reads the drop from: spike B
-    # opens it on its own hidden ROM for a fallen trainer's team (HBR-82).
-    "CB2_BrSwap", "gPokemonStoragePtr",
     # ...and the map grid and layout the core draws the whole window from, which the
     # ROM names in gBrWorld (world-grid.txt), and the table of every map, which the core
     # walks for the neighbours past the grid's edge.
