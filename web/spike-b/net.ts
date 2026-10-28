@@ -55,7 +55,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
 }
 
 /** Frames the playout keeps in hand before it starts (and again after running dry). */
-const CUSHION = 2;
+const CUSHION = 3;
 
 class Online implements WorldLink {
   room!: Room;
@@ -63,6 +63,9 @@ class Online implements WorldLink {
   readonly online = true;
   private queue: WireFrame[] = [];
   private playing = false;
+  /** The buffer's depth, smoothed over about a third of a second. */
+  private depth = 0;
+  private ticks = 0;
   private seq = 0;
   private acked = 0;
   private sent: { seq: number; bits: number }[] = [];
@@ -103,15 +106,21 @@ class Online implements WorldLink {
     this.sent.push({ seq: this.seq, bits });
     this.lastSend.set(this.seq, performance.now());
     this.send({ t: 'in', s: this.seq, k: [bits] });
-    // Play out: one frame a frame; more when the buffer has grown (a bunch arrived, or
-    // this phone's clock runs slow), none while it builds its cushion back.
+    // Play out: one frame a frame, none while it builds its cushion back. A buffer that
+    // stays deep (this phone's clock runs slow, or the network settled after a bad
+    // patch) is caught up gently, one extra frame in 15 -- the world a few percent fast
+    // for a moment, never the 2-3x bursts that made everybody look sped up (Cam).
+    this.depth = this.depth * 0.95 + this.queue.length * 0.05;
+    this.ticks += 1;
     if (!this.playing && this.queue.length >= CUSHION) this.playing = true;
     // Far behind (the tab was hidden): a few seconds are played through at once; past
     // that the relay's copy of the room is cheaper than replaying it.
     if (this.queue.length > 600) { this.resync(); return []; }
     // The relay answers one sync a second: one asked too soon goes unanswered, so ask again.
     if (this.syncing && performance.now() - this.syncAt > 1500) this.resync();
-    const n = !this.playing ? 0 : this.queue.length > 30 ? this.queue.length - CUSHION : this.queue.length > 8 ? 3 : this.queue.length > 4 ? 2 : 1;
+    const n = !this.playing ? 0
+      : this.queue.length > 120 ? this.queue.length - CUSHION - 2
+      : this.depth > CUSHION + 3 && this.ticks % 15 === 0 ? 2 : 1;
     const events: RoomEvent[] = [];
     for (let i = 0; i < n && this.queue.length && !this.syncing; i++) {
       const f = this.queue.shift()!;
