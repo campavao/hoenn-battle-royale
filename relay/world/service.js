@@ -984,12 +984,7 @@ function scatterItem(rng) {
   return ITEM_SUPER_POTION;
 }
 
-// web/spike-b/carry.ts
-var BAG_AT = 1168;
-var BAG_LEN = 2120 - 1168;
-var POCKETS_AT = 1376 - BAG_AT;
-var PARTY_LEN = 6 * 100;
-var DEX2_LEN = 144 - 28;
+// web/spike-b/shared/items.ts
 var ITEM_TM012 = 289;
 var ITEM_HM08 = 346;
 var isTm = (item) => item >= ITEM_TM012 && item <= ITEM_HM08;
@@ -1103,18 +1098,23 @@ function keysOf(bits) {
 var GROUND_PER_MAP = 6;
 var REGROW = 60 * 90;
 var DEALS = /* @__PURE__ */ new Map();
+var REACH = /* @__PURE__ */ new Map();
+var RING_PHASE = 60 * 120;
+var RING_STEPS = [Infinity, 15 / 28, 9 / 28, 7 / 28, 5 / 28, 3 / 28, 2 / 28, 0, -1];
 var Room = class {
-  constructor(world, maps, patches, seed) {
+  constructor(world, maps, patches, seed, places) {
     this.world = world;
     this.maps = maps;
     this.patches = patches;
     this.seed = seed;
+    this.places = places;
     this.base = stepFn(world);
   }
   world;
   maps;
   patches;
   seed;
+  places;
   tick = 0;
   actors = [];
   /** Taken spots by key, and the frame they were taken. */
@@ -1143,7 +1143,7 @@ var Room = class {
       this.actors.sort((p, q) => p.id - q.id);
     } else if (cmd.c === "drop") {
       if (this.picked.get(cmd.key) === cmd.id) this.picked.delete(cmd.key);
-    } else if (cmd.c === "leave") {
+    } else if (cmd.c === "leave" || cmd.c === "out") {
       const a = this.actor(cmd.id);
       const foe = a?.foe ? this.actor(a.foe) : void 0;
       if (foe) foe.battling = false;
@@ -1171,26 +1171,12 @@ var Room = class {
     const id = `${this.seed}:${[...this.maps.keys()].join()}`;
     const hit = DEALS.get(id);
     if (hit) return this.dealt = hit;
-    const seen = /* @__PURE__ */ new Set();
     const land = /* @__PURE__ */ new Map();
-    const start = { map: "MAP_LITTLEROOT_TOWN", x: 10, y: 10 };
-    const queue = [start];
-    seen.add(`${start.map}:${start.x}:${start.y}`);
-    while (queue.length) {
-      const at = queue.shift();
-      if (this.world.cell(at.map, at.x, at.y) === 0 && !this.world.warpAt(at.map, at.x, at.y)) {
-        const l = land.get(at.map) ?? [];
-        l.push(at);
-        land.set(at.map, l);
-      }
-      for (let dir = 1; dir <= 4; dir++) {
-        const r = this.base(at, dir);
-        if (!r || !this.maps.has(r.to.map)) continue;
-        const k = `${r.to.map}:${r.to.x}:${r.to.y}`;
-        if (seen.has(k)) continue;
-        seen.add(k);
-        queue.push(r.to);
-      }
+    for (const at of this.reachable()) {
+      if (this.world.cell(at.map, at.x, at.y) !== 0 || this.world.warpAt(at.map, at.x, at.y)) continue;
+      const l = land.get(at.map) ?? [];
+      l.push(at);
+      land.set(at.map, l);
     }
     let state = (this.seed ^ 400800273) >>> 0 || 1;
     const rng = () => {
@@ -1211,8 +1197,79 @@ var Room = class {
         out.set(`${id2}:${c.x}:${c.y}`, { key: ++n, map: id2, x: c.x, y: c.y, item });
       }
     }
+    if (DEALS.size >= 8) DEALS.delete(DEALS.keys().next().value);
     DEALS.set(id, out);
     return this.dealt = out;
+  }
+  /** Every cell a trainer can walk to from Littleroot, in the order a walk out finds them. */
+  reachable() {
+    const id = [...this.maps.keys()].join();
+    const hit = REACH.get(id);
+    if (hit) return hit;
+    const seen = /* @__PURE__ */ new Set();
+    const out = [];
+    const start = { map: "MAP_LITTLEROOT_TOWN", x: 10, y: 10 };
+    const queue = [start];
+    seen.add(`${start.map}:${start.x}:${start.y}`);
+    while (queue.length) {
+      const at = queue.shift();
+      out.push(at);
+      for (let dir = 1; dir <= 4; dir++) {
+        const r = this.base(at, dir);
+        if (!r || !this.maps.has(r.to.map)) continue;
+        const k = `${r.to.map}:${r.to.x}:${r.to.y}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        queue.push(r.to);
+      }
+    }
+    REACH.set(id, out);
+    return out;
+  }
+  /** The ring this frame (or at `tick`). */
+  ring(tick2 = this.tick) {
+    const len = this.ringPhase;
+    const round = Math.floor(tick2 / (RING_STEPS.length * len));
+    const t = tick2 - round * RING_STEPS.length * len;
+    const phase = Math.floor(t / len);
+    const { cx, cy, far } = this.centre(round);
+    const at = (i) => RING_STEPS[i] === Infinity || RING_STEPS[i] < 0 ? RING_STEPS[i] : RING_STEPS[i] * far;
+    const last = phase === RING_STEPS.length - 1;
+    return { round, phase, last, cx, cy, r: at(phase), next: last ? void 0 : at(phase + 1), left: len - (t - phase * len) };
+  }
+  /** Frames a phase lasts: RING_PHASE, or shorter for a solo test (`?ring=` seconds). */
+  ringPhase = RING_PHASE;
+  centres = /* @__PURE__ */ new Map();
+  /** A round's centre: a cell a trainer can stand on, from the seed; and how far the
+   *  farthest reachable cell is from it. */
+  centre(round) {
+    const hit = this.centres.get(round);
+    if (hit) return hit;
+    const cells = this.reachable();
+    let h = Math.imul((this.seed ^ 1374496523) >>> 0, 2654435761) ^ Math.imul(round + 1, 2246822507);
+    h ^= h >>> 15;
+    h = Math.imul(h, 739982445);
+    h ^= h >>> 12;
+    const c = cells[(h >>> 0) % cells.length];
+    const p = this.places.get(c.map);
+    const cx = p.gx + c.x + 0.5, cy = p.gy + c.y + 0.5;
+    let far = 0;
+    for (const s of cells) {
+      const q = this.places.get(s.map);
+      far = Math.max(far, Math.hypot(q.gx + s.x + 0.5 - cx, q.gy + s.y + 0.5 - cy));
+    }
+    const out = { cx, cy, far };
+    if (this.centres.size > 4) this.centres.clear();
+    this.centres.set(round, out);
+    return out;
+  }
+  /** Is this cell in the fog now? */
+  inFog(s, ring = this.ring()) {
+    if (ring.r === Infinity) return false;
+    if (ring.r < 0) return true;
+    const p = this.places.get(s.map);
+    if (!p) return true;
+    return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy) > ring.r;
   }
   /** The item ball still lying on a cell, if any. */
   groundAt(map, x, y) {
@@ -1386,8 +1443,10 @@ function layout(maps) {
   return placed;
 }
 function makeRoom(all, patches, seed, world) {
-  const maps = new Map([...layout(all)].map(([id, p]) => [id, p.m]));
-  return new Room(world ?? new World(all), maps, patches, seed);
+  const placed = layout(all);
+  const maps = new Map([...placed].map(([id, p]) => [id, p.m]));
+  const places = new Map([...placed].map(([id, p]) => [id, { gx: p.gx, gy: p.gy }]));
+  return new Room(world ?? new World(all), maps, patches, seed, places);
 }
 
 // web/spike-b/shared/bots.ts
@@ -1504,6 +1563,10 @@ var Host = class {
   drop(id, key) {
     if (this.players.has(id) && this.room.picked.get(key) === id) this.pending.push({ c: "drop", id, key });
   }
+  /** The phone's team is down: its trainer leaves the map, and the phone watches. */
+  out(id) {
+    if (this.players.has(id) && this.room.actor(id)) this.pending.push({ c: "out", id });
+  }
   /** One frame. The record goes to every mirror; `acks` is each phone's last input used. */
   advance() {
     const room = this.room;
@@ -1617,6 +1680,8 @@ var WorldService = class {
           this.host.input(id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
         } else if (m.t === "end") {
           this.host.end(id);
+        } else if (m.t === "out") {
+          this.host.out(id);
         } else if (m.t === "drop") {
           if (Number.isInteger(m.k)) this.host.drop(id, m.k);
         } else if (m.t === "sync") {

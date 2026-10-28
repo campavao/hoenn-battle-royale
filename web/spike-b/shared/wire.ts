@@ -13,6 +13,8 @@ export type WorldUp =
   | { t: 'end' }
   /** The ball `k` would not go in my bag: put it back. */
   | { t: 'drop'; k: number }
+  /** My team is down: take my trainer off the map; I keep watching. */
+  | { t: 'out' }
   /** My copy went wrong (a hash or a gap): send me the room again. */
   | { t: 'sync' };
 

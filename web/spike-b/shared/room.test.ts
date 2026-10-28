@@ -7,8 +7,8 @@ import type { PatchTable } from '../../src/bots/patches';
 import worldJson from '../data/world.json';
 import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
-import { isTm } from '../carry';
-import { GROUND_PER_MAP, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, makeRoom } from './room';
+import { isTm } from './items';
+import { GROUND_PER_MAP, RING_PHASE, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, makeRoom } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -266,5 +266,43 @@ describe('item balls', () => {
     let walked = false;
     for (let i = 0; i < 40 && !walked; i++) { press(KEY_RIGHT); walked = room.actor(1)!.m.spot.x === b.x; }
     expect(walked).toBe(true);
+  });
+});
+
+describe('the fog', () => {
+  it('closes on a seeded centre phase by phase, then covers everything, then lifts', () => {
+    const room = makeRoom(MAPS, PATCHES, 31337), same = makeRoom(MAPS, PATCHES, 31337);
+    const at = (p: number) => room.ring(p * RING_PHASE + 1);
+    expect(at(0)).toMatchObject({ round: 0, phase: 0, r: Infinity, last: false });
+    expect(at(0).left).toBe(RING_PHASE - 1);
+    const radii = [1, 2, 3, 4, 5, 6, 7].map((p) => at(p).r);
+    for (let i = 1; i < radii.length; i++) expect(radii[i]).toBeLessThan(radii[i - 1]);
+    expect(radii[5]).toBeGreaterThan(0);
+    expect(radii[6]).toBe(0); // the centre cell alone, as the match's 0
+    expect(at(8)).toMatchObject({ phase: 8, r: -1, last: true });
+    expect(at(9)).toMatchObject({ round: 1, phase: 0, r: Infinity });
+    expect(same.ring(3 * RING_PHASE)).toEqual(room.ring(3 * RING_PHASE));
+    expect(at(10).cx !== at(1).cx || at(10).cy !== at(1).cy).toBe(true); // a new round, a new centre
+    // the centre is a cell a trainer can stand on, and is never in the fog before the end
+    const centre = room.reachable().find((s) => !room.inFog(s, at(5)))!;
+    expect(centre).toBeTruthy();
+    const start = { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 };
+    expect(room.inFog(start, at(0))).toBe(false);
+    expect(room.inFog(start, at(8))).toBe(true);
+    // every reachable cell is clear in the announcement; most are fogged by the seventh phase
+    const cells = room.reachable();
+    expect(cells.filter((s) => room.inFog(s, at(0))).length).toBe(0);
+    expect(cells.filter((s) => room.inFog(s, at(7))).length / cells.length).toBeGreaterThan(0.9);
+  });
+
+  it('a trainer who is out leaves the map, and its bot walks again', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 1, bot: true, name: 'BOT', skin: 4, spot: { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 12 }, facing: 1 });
+    room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_LITTLEROOT_TOWN', x: 9, y: 12 }, facing: 4 });
+    room.step(new Map([[2, [KEY_A]]]));
+    expect(room.actor(1)!.battling).toBe(true);
+    room.apply({ c: 'out', id: 2 });
+    expect(room.actor(2)).toBeUndefined();
+    expect(room.actor(1)!.battling).toBe(false);
   });
 });
