@@ -167,6 +167,7 @@ import { cleanFeedback, cleanFeedbackVersion, cleanFeedbackWhere,
          parseOrigins } from "./clean.js";
 import { Conn } from "./conn.js";
 import { MAX_SEAT, Room } from "./room.js";
+import { createWorld, WORLD_PATH } from "./world.js";
 
 // The input cleaners, Room and Conn live beside this file (POK-331 #19); what
 // server.js exported before the move, it still does.
@@ -1029,7 +1030,8 @@ export function createRelay(options = {}) {
       // `locked`: matches running, which a relay deploy would end (docs/DEPLOY.md)
       let locked = 0;
       for (const room of rooms.values()) if (room.locked) locked += 1;
-      const body = JSON.stringify({ status: "ok", rooms: rooms.size, conns: conns.size, locked });
+      const body = JSON.stringify({ status: "ok", rooms: rooms.size, conns: conns.size, locked,
+                                    world: world.service ? world.service.players : 0 });
       res.writeHead(200, { "Content-Type": "application/json",
                             "Content-Length": Buffer.byteLength(body) });
       res.end(body);
@@ -1040,6 +1042,8 @@ export function createRelay(options = {}) {
   });
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: limits.line });
+  // Spike B's shared world (world.js): its own sockets, its own caps.
+  const world = createWorld({ log });
 
   httpServer.on("upgrade", (req, socket, head) => {
     const origin = req.headers.origin;
@@ -1049,6 +1053,10 @@ export function createRelay(options = {}) {
       return;
     }
     const ip = clientAddress(req, trustProxy);
+    if (req.url && req.url.split("?")[0] === WORLD_PATH) {
+      world.handle(req, socket, head, ip);
+      return;
+    }
     const ipCount = (perIp.get(ip) || 0) + 1;
     if (conns.size >= limits.conns || ipCount > limits.connsPerIp) {
       // silently dropping these made a full relay look like a network
@@ -1115,6 +1123,7 @@ export function createRelay(options = {}) {
   function close(code) {
     clearInterval(sweeper);
     clearInterval(reporter);
+    world.close();
     for (const room of rooms.values()) {
       for (const m of room.members.values()) m.room = null;
     }
