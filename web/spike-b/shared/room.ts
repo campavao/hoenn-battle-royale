@@ -100,12 +100,14 @@ const DEALS = new Map<string, ReadonlyMap<string, Ground>>();
 /** Every cell a trainer can walk to from Littleroot, per set of maps. */
 const REACH = new Map<string, Spot[]>();
 
-/** A ring phase, in frames. */
-export const RING_PHASE = 60 * 90;
+/** A ring phase, in frames: the match's 120 s (DEFAULT_FOG_SECS, web/src/match/director.ts). */
+export const RING_PHASE = 60 * 120;
 /** What each phase leaves of the reachable world, as a share of its farthest cell from
- *  the centre: the first an announcement (no fog), the last everywhere (-1), the way
- *  clock.ts's RING_RADII go from 28 sections to -1. */
-const RING_STEPS = [Infinity, 0.6, 0.4, 0.25, 0.12, 0.04, -1];
+ *  the centre: the first an announcement (no fog), then clock.ts's RING_RADII
+ *  [28, 15, 9, 7, 5, 3, 2, 0, -1] as shares of its 28 -- 0 the centre cell alone, -1
+ *  everywhere. The match measures in region-map sections; here it is tiles, on purpose:
+ *  this world is walked tile by tile, and a section-sized ring would fog half a town. */
+const RING_STEPS = [Infinity, 15 / 28, 9 / 28, 7 / 28, 5 / 28, 3 / 28, 2 / 28, 0, -1];
 
 /** The ring at a frame, in the plane layout() places the maps in (tiles). `r` is Infinity
  *  for no fog and -1 for fog everywhere; `left` the frames to the next phase. */

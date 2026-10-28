@@ -1099,8 +1099,8 @@ var GROUND_PER_MAP = 6;
 var REGROW = 60 * 90;
 var DEALS = /* @__PURE__ */ new Map();
 var REACH = /* @__PURE__ */ new Map();
-var RING_PHASE = 60 * 90;
-var RING_STEPS = [Infinity, 0.6, 0.4, 0.25, 0.12, 0.04, -1];
+var RING_PHASE = 60 * 120;
+var RING_STEPS = [Infinity, 15 / 28, 9 / 28, 7 / 28, 5 / 28, 3 / 28, 2 / 28, 0, -1];
 var Room = class {
   constructor(world, maps, patches, seed, places) {
     this.world = world;

@@ -327,7 +327,12 @@ function fogFrame(): void {
     }
     lastPhase = ring.phase;
   }
-  if (isOut || battle || !rom) return;
+  if (isOut || !rom) return;
+  if (battle) {
+    // A ring that closes on a trainer mid-battle reaches the battle at its next turn.
+    if (inFogNow()) rom.fogNow();
+    return;
+  }
   const fog = inFogNow();
   if (fog && !wasInFog) { say('You are in the fog!'); fogTimer = FOG_TICK; }
   wasInFog = fog;

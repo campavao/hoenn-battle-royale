@@ -32,6 +32,10 @@ const WILD_DONE = 3;
 const LOST = 2;
 // include/br/br_ring.h: BR_FOG_TICK_FRAMES.
 const FOG_TICK = 240;
+/** gBrRing's first ten bytes (active, phase, cx, cy, r, outside, applied, out,
+ *  damageTimer): fog everywhere (r = 0xFF, -1), and no ring at all. */
+const FOGGED = [1, 1, 0, 0, 0xff, 0, 0, 0, FOG_TICK & 0xff, FOG_TICK >> 8];
+const CLEAR = [0, 0, 0, 0, 0, 0, 0, 0, FOG_TICK & 0xff, FOG_TICK >> 8];
 const DREW = 3;
 /** How long the last fight took to start: from the TRAINER card to the battle running. */
 export let lastStart: { ms: number; frames: number } | null = null;
@@ -51,6 +55,9 @@ export interface RomBattles {
   /** The fog's bite between battles (br_ring.c Bleed): a tenth of each mon's max HP, at
    *  least 1, a fainted one's status cleared. How many are still standing. */
   bleed(): Promise<number>;
+  /** The ring closed on the trainer in the middle of a battle: from the next turn's end
+   *  that battle is fought in the fog. Nothing between battles. */
+  fogNow(): void;
   /** An item ball picked up: into the bag the ROM's own way (a match's GIVE, so a vitamin
    *  is used and a nugget sold as in a match). What went in, as the ROM filed it; `used`
    *  when it went on the team; null when it did not fit. */
@@ -179,6 +186,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
    *  on the field. The page gets the screen at the battle's first frame (onStart) and
    *  never before, so the hidden field never shows through. */
   let broken = false;
+  let fighting = false;
   let carried: ReturnType<typeof kept> | null = null;
   // One thing at a time on the ROM: a battle asked for while an item goes in waits for it.
   let queue: Promise<unknown> = Promise.resolve();
@@ -193,9 +201,11 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     emu.write(sym('gRngValue'), (Math.random() * 2 ** 32) >>> 0, 32);
     emu.write(mainFunc, 0, 32);
     // Fought in the fog (br_ring.h): a ring with fog everywhere, so the hidden ROM's own
-    // map is outside it -- a wild battle bleeds as it goes, a trainer's hurts at each
-    // turn's end (BrRing_DecideBattleFog), both down to 1 and never past. None: no ring.
-    emu.bytes(ringAt, 10).set(fog ? [1, 1, 0, 0, 0xff, 0, 0, 0, FOG_TICK & 0xff, FOG_TICK >> 8] : [0, 0, 0, 0, 0, 0, 0, 0, FOG_TICK & 0xff, FOG_TICK >> 8]);
+    // map is outside it. The fog hurts each mon on the field a tenth at every turn's end
+    // and can knock it out, as in every fog battle (BrRing_FogEndTurn, HBR-11). None: no
+    // ring. The ROM asks the ring again each turn, so fogNow() reaches a battle under way.
+    emu.bytes(ringAt, 10).set(fog ? FOGGED : CLEAR);
+    fighting = true;
     emu.resume();
     const t0 = performance.now();
     let n = 0;
@@ -214,6 +224,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     if (shown) {
       onStart();
       await until(emu, over, Infinity);
+      // The ring is the battle's: back on the field nothing of it is left to bleed the
+      // hidden ROM's party while a catch prompt waits.
+      fighting = false;
+      emu.bytes(ringAt, 10).set(CLEAR);
       result = { ok: true, ...after() };
       // A catch with a full party: back on its field the ROM asks which one makes room
       // (br_catch.c). The player answers it on the ROM's screen, as in a match.
@@ -226,6 +240,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       // how it came in (the ring and elimination are the match's, later).
       if (result.outcome !== LOST && result.outcome !== DREW) carried = kept();
     }
+    fighting = false;
     emu.pause();
     // A ROM that could not be put back would start the next battle from whatever this
     // one left on its field: no more battles from it.
@@ -266,6 +281,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         carried = kept();
         return alive;
       });
+    },
+    fogNow() {
+      if (fighting && !broken && emu.read(ringAt, 8) === 0) emu.bytes(ringAt, 10).set(FOGGED);
     },
     give(item, n) {
       return inTurn(async () => {

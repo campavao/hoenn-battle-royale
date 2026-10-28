@@ -275,23 +275,24 @@ describe('the fog', () => {
     const at = (p: number) => room.ring(p * RING_PHASE + 1);
     expect(at(0)).toMatchObject({ round: 0, phase: 0, r: Infinity, last: false });
     expect(at(0).left).toBe(RING_PHASE - 1);
-    const radii = [1, 2, 3, 4, 5].map((p) => at(p).r);
+    const radii = [1, 2, 3, 4, 5, 6, 7].map((p) => at(p).r);
     for (let i = 1; i < radii.length; i++) expect(radii[i]).toBeLessThan(radii[i - 1]);
-    expect(radii[4]).toBeGreaterThan(0);
-    expect(at(6)).toMatchObject({ phase: 6, r: -1, last: true });
-    expect(at(7)).toMatchObject({ round: 1, phase: 0, r: Infinity });
+    expect(radii[5]).toBeGreaterThan(0);
+    expect(radii[6]).toBe(0); // the centre cell alone, as the match's 0
+    expect(at(8)).toMatchObject({ phase: 8, r: -1, last: true });
+    expect(at(9)).toMatchObject({ round: 1, phase: 0, r: Infinity });
     expect(same.ring(3 * RING_PHASE)).toEqual(room.ring(3 * RING_PHASE));
-    expect(at(8).cx !== at(1).cx || at(8).cy !== at(1).cy).toBe(true); // a new round, a new centre
+    expect(at(10).cx !== at(1).cx || at(10).cy !== at(1).cy).toBe(true); // a new round, a new centre
     // the centre is a cell a trainer can stand on, and is never in the fog before the end
     const centre = room.reachable().find((s) => !room.inFog(s, at(5)))!;
     expect(centre).toBeTruthy();
     const start = { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 };
     expect(room.inFog(start, at(0))).toBe(false);
-    expect(room.inFog(start, at(6))).toBe(true);
-    // every reachable cell is clear in the announcement; most are fogged by the fifth phase
+    expect(room.inFog(start, at(8))).toBe(true);
+    // every reachable cell is clear in the announcement; most are fogged by the seventh phase
     const cells = room.reachable();
     expect(cells.filter((s) => room.inFog(s, at(0))).length).toBe(0);
-    expect(cells.filter((s) => room.inFog(s, at(5))).length / cells.length).toBeGreaterThan(0.9);
+    expect(cells.filter((s) => room.inFog(s, at(7))).length / cells.length).toBeGreaterThan(0.9);
   });
 
   it('a trainer who is out leaves the map, and its bot walks again', () => {
