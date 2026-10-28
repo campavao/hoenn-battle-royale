@@ -1,0 +1,58 @@
+# spill-own-overflow: a fallen trainer's bag holds everything they carried (HBR-88, POK-294:
+# nothing leaves the match). A SPILL's bag carries eight rows of at most 99, so SpillOwn
+# took the first eight stacks in pocket order and clamped each at 99: ten ITEMS stacks
+# left the balls and berries out, and a stack of 300 berries spilled 99.
+#
+# Now a stack over 99 goes as rows of 99 and the rest, and the rows past eight go in a
+# second bag, key 0xFE in our seat's space, on the next free cell round the first. The
+# money and the name ride with the first.
+#
+# spill-own-items.txt's walk-out, key zeroed: ITEMS POTION..HEAL POWDER (13..22) one of
+# each, POKe BALLS the dealt POKe BALL x5, BERRIES ORAN BERRY x300. Fifteen rows: ten, one,
+# then 99 99 99 3.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 gPlayerPartyCount 1
+poke u32 *gSaveBlock2Ptr+0xAC 0
+pokebytes *gSaveBlock1Ptr+0x560 0D 00 01 00 0E 00 01 00 0F 00 01 00 10 00 01 00 11 00 01 00 12 00 01 00 13 00 01 00 14 00 01 00 15 00 01 00 16 00 01 00
+pokebytes *gSaveBlock1Ptr+0x650 04 00 05 00
+pokebytes *gSaveBlock1Ptr+0x790 8B 00 2C 01
+poke u16 gPlayerParty+0x56 2
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+waitfor u16 gPlayerParty+0x56 0 300
+wait 30
+expect u8 gBrMatch 3
+# the first bag (the older SPILL): TREECKO, key 0x00FF, eight rows, POTION first and
+# HEAL POWDER (22) not in it
+expectmsg 11#2 u8 3 1
+expectmsg 11#2 u16 14 0x00FF
+expectmsg 11#2 u8 20 8
+expectmsg 11#2 u16 21 13
+expectmsg 11#2 u16 42 20
+# the second (the newer): no team, key 0x00FE, seven rows -- ENERGYPOWDER (21), HEAL
+# POWDER, the POKe BALLs, then ORAN BERRY 99, 99, 99, 3 -- and no money
+expectmsg 11 u8 3 0
+expectmsg 11 u8 4 1
+expectmsg 11 u16 5 0x00FE
+# on the first free cell round the first bag's (12,16), diagonal first: (13,17)
+expectmsg 11#2 u16 16 12
+expectmsg 11#2 u16 18 16
+expectmsg 11 u16 7 13
+expectmsg 11 u16 9 17
+expectmsg 11 u8 11 7
+expectmsg 11 u16 12 21
+expectmsg 11 u16 15 22
+expectmsg 11 u16 18 4
+expectmsg 11 u8 20 5
+expectmsg 11 u16 21 139
+expectmsg 11 u8 23 99
+expectmsg 11 u8 26 99
+expectmsg 11 u8 29 99
+expectmsg 11 u16 30 139
+expectmsg 11 u8 32 3
+expectmsg 11 u16 33 0
+expectmsg 11 u16 35 0
+say spill own overflow ok
