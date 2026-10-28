@@ -321,7 +321,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     },
     swap(mons, onStart) {
       return inTurn(async () => {
-        if (broken) return mons;
+        // A patch's symbols from before the screen was exported: the team stays in the bag.
+        if (broken || !Number.isFinite(swapCb) || !Number.isFinite(storageAt)) return mons;
         // The drop's side is the PC's first box, slots 0..5 (br_swap.h).
         const box = emu.read(storageAt, 32) + 4;
         for (let i = 0; i < 6; i++) emu.bytes(box + i * BOX_MON_LEN, BOX_MON_LEN).set(i < mons.length ? fromB64(mons[i]) : new Uint8Array(BOX_MON_LEN));
