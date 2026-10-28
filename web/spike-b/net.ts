@@ -67,6 +67,7 @@ class Online implements WorldLink {
   private acked = 0;
   private sent: { seq: number; bits: number }[] = [];
   private syncing = false;
+  private syncAt = 0;
   private resyncs = 0;
   private rtt = 0;
   private lastSend = new Map<number, number>();
@@ -108,6 +109,8 @@ class Online implements WorldLink {
     // Far behind (the tab was hidden): a few seconds are played through at once; past
     // that the relay's copy of the room is cheaper than replaying it.
     if (this.queue.length > 600) { this.resync(); return []; }
+    // The relay answers one sync a second: one asked too soon goes unanswered, so ask again.
+    if (this.syncing && performance.now() - this.syncAt > 1500) this.resync();
     const n = !this.playing ? 0 : this.queue.length > 30 ? this.queue.length - CUSHION : this.queue.length > 8 ? 3 : this.queue.length > 4 ? 2 : 1;
     const events: RoomEvent[] = [];
     for (let i = 0; i < n && this.queue.length && !this.syncing; i++) {
@@ -131,6 +134,7 @@ class Online implements WorldLink {
 
   private resync(): void {
     this.syncing = true;
+    this.syncAt = performance.now();
     this.resyncs += 1;
     this.queue = [];
     this.send({ t: 'sync' });
