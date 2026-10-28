@@ -1092,6 +1092,7 @@ function keysOf(bits) {
 }
 var GROUND_PER_MAP = 6;
 var REGROW = 60 * 90;
+var DEALS = /* @__PURE__ */ new Map();
 var Room = class {
   constructor(world, maps, patches, seed) {
     this.world = world;
@@ -1155,6 +1156,9 @@ var Room = class {
    *  the corner new trainers stand on. */
   ground() {
     if (this.dealt) return this.dealt;
+    const id = `${this.seed}:${[...this.maps.keys()].join()}`;
+    const hit = DEALS.get(id);
+    if (hit) return this.dealt = hit;
     const seen = /* @__PURE__ */ new Set();
     const land = /* @__PURE__ */ new Map();
     const start = { map: "MAP_LITTLEROOT_TOWN", x: 10, y: 10 };
@@ -1185,14 +1189,15 @@ var Room = class {
     };
     const out = /* @__PURE__ */ new Map();
     let n = 0;
-    for (const id of [...land.keys()].sort()) {
-      const marked = new Set(this.patchesOn(id).map((q) => `${q.x}:${q.y}`));
-      const cells = land.get(id).filter((c) => !marked.has(`${c.x}:${c.y}`) && !(id === "MAP_LITTLEROOT_TOWN" && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
+    for (const id2 of [...land.keys()].sort()) {
+      const marked = new Set(this.patchesOn(id2).map((q) => `${q.x}:${q.y}`));
+      const cells = land.get(id2).filter((c) => !marked.has(`${c.x}:${c.y}`) && !(id2 === "MAP_LITTLEROOT_TOWN" && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
       for (let i = 0; i < GROUND_PER_MAP && cells.length; i++) {
         const c = cells.splice(Math.floor(rng() * cells.length), 1)[0];
-        out.set(`${id}:${c.x}:${c.y}`, { key: ++n, map: id, x: c.x, y: c.y, item: scatterItem(rng) });
+        out.set(`${id2}:${c.x}:${c.y}`, { key: ++n, map: id2, x: c.x, y: c.y, item: scatterItem(rng) });
       }
     }
+    DEALS.set(id, out);
     return this.dealt = out;
   }
   /** The item ball still lying on a cell, if any. */

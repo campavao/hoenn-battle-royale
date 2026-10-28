@@ -85,6 +85,8 @@ export interface RoomState {
   picked?: [number, number][];
 }
 
+const DEALS = new Map<string, ReadonlyMap<string, Ground>>();
+
 export class Room {
   tick = 0;
   actors: Actor[] = [];
@@ -93,7 +95,7 @@ export class Room {
   /** Item balls taken, by key, and who took each (they do not grow back). */
   picked = new Map<number, number>();
   private readonly base: StepFn;
-  private dealt: Map<string, Ground> | null = null;
+  private dealt: ReadonlyMap<string, Ground> | null = null;
 
   constructor(
     readonly world: World,
@@ -155,6 +157,11 @@ export class Room {
    *  the corner new trainers stand on. */
   ground(): ReadonlyMap<string, Ground> {
     if (this.dealt) return this.dealt;
+    // The same seed over the same maps deals the same balls: dealt once a process (the
+    // relay makes one room; the tests and a phone's resyncs make many).
+    const id = `${this.seed}:${[...this.maps.keys()].join()}`;
+    const hit = DEALS.get(id);
+    if (hit) return (this.dealt = hit);
     const seen = new Set<string>();
     const land = new Map<string, Spot[]>();
     const start: Spot = { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 };
@@ -189,6 +196,7 @@ export class Room {
         out.set(`${id}:${c.x}:${c.y}`, { key: ++n, map: id, x: c.x, y: c.y, item: scatterItem(rng) });
       }
     }
+    DEALS.set(id, out);
     return (this.dealt = out);
   }
 

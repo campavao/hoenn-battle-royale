@@ -173,7 +173,7 @@ describe('late keys', () => {
       expect(host.backlog(id)).toBe(0);
       expect(host.room.actor(id)!.m).toEqual(phone.actor(id)!.m);
     }
-  });
+  }, 20_000); // 80 rooms' walks: ~3 s here, and a shared CI runner can take twice that
 });
 
 const pendingEnds: [number, number][] = [];
