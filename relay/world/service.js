@@ -988,6 +988,34 @@ function scatterItem(rng) {
 var ITEM_TM012 = 289;
 var ITEM_HM08 = 346;
 var isTm = (item) => item >= ITEM_TM012 && item <= ITEM_HM08;
+var isKeyItem = (item) => item >= 259 && item <= 288 || item >= 349;
+var ITEMS_COUNT = 377;
+var MAX_MONEY = 999999;
+var BAG_ROWS = 30 + 16 + 46;
+function cleanBag(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const { items, money } = raw;
+  if (!Array.isArray(items) || items.length > BAG_ROWS) return null;
+  const out = { items: [], money: Number.isInteger(money) ? Math.min(Math.max(money, 0), MAX_MONEY) : 0 };
+  for (const r of items) {
+    const id = Number(r?.id), n = Number(r?.n);
+    if (Number.isInteger(id) && id > 0 && id < ITEMS_COUNT && Number.isInteger(n) && n > 0 && !isTm(id) && !isKeyItem(id)) out.items.push({ id, n: Math.min(n, 999) });
+  }
+  return out;
+}
+function within(rest, was) {
+  const left = /* @__PURE__ */ new Map();
+  for (const r of was.items) left.set(r.id, (left.get(r.id) ?? 0) + r.n);
+  const items = [];
+  for (const r of rest.items) {
+    const n = Math.min(r.n, left.get(r.id) ?? 0);
+    if (n > 0) {
+      items.push({ id: r.id, n });
+      left.set(r.id, left.get(r.id) - n);
+    }
+  }
+  return { items, money: Math.min(rest.money, was.money) };
+}
 
 // web/spike-b/sim.ts
 var DIR_SOUTH = 1;
@@ -1095,6 +1123,7 @@ var KEY_A = 32;
 function keysOf(bits) {
   return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A) };
 }
+var SPILL_KEY = 1 << 20;
 var GROUND_PER_MAP = 6;
 var REGROW = 60 * 90;
 var DEALS = /* @__PURE__ */ new Map();
@@ -1121,16 +1150,19 @@ var Room = class {
   taken = /* @__PURE__ */ new Map();
   /** Item balls taken, by key, and who took each (they do not grow back). */
   picked = /* @__PURE__ */ new Map();
+  /** Bags trainers who went out left, by key; one is lying while `picked` has not got it. */
+  spills = /* @__PURE__ */ new Map();
   base;
   dealt = null;
   state() {
-    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked] };
+    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]) };
   }
   load(s) {
     this.tick = s.tick;
     this.actors = structuredClone(s.actors);
     this.taken = new Map(s.taken);
     this.picked = new Map(s.picked ?? []);
+    this.spills = new Map(structuredClone(s.spills ?? []).map((b) => [b.key, b]));
   }
   actor(id) {
     return this.actors.find((a) => a.id === id);
@@ -1142,9 +1174,16 @@ var Room = class {
       this.actors.push(a);
       this.actors.sort((p, q) => p.id - q.id);
     } else if (cmd.c === "drop") {
-      if (this.picked.get(cmd.key) === cmd.id) this.picked.delete(cmd.key);
+      if (this.picked.get(cmd.key) !== cmd.id) return;
+      this.picked.delete(cmd.key);
+      const b = this.spills.get(cmd.key);
+      if (b && cmd.rest) b.bag = structuredClone(cmd.rest);
     } else if (cmd.c === "leave" || cmd.c === "out") {
       const a = this.actor(cmd.id);
+      if (a && cmd.c === "out" && cmd.bag && (cmd.bag.items.length || cmd.bag.money)) {
+        const key = SPILL_KEY + a.id;
+        this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag: structuredClone(cmd.bag) });
+      }
       const foe = a?.foe ? this.actor(a.foe) : void 0;
       if (foe) foe.battling = false;
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
@@ -1276,6 +1315,11 @@ var Room = class {
     const g = this.ground().get(`${map}:${x}:${y}`);
     return g && !this.picked.has(g.key) ? g : void 0;
   }
+  /** The bag lying on a cell, if any. */
+  spillAt(map, x, y) {
+    for (const b of this.spills.values()) if (b.map === map && b.x === x && b.y === y && !this.picked.has(b.key)) return b;
+    return void 0;
+  }
   patchesOn(mapId) {
     const m = this.maps.get(mapId);
     return m ? dealPatches(this.patches, m.id, m, this.seed) : [];
@@ -1329,10 +1373,14 @@ var Room = class {
       if (!a.battling && bits & KEY_A && !(a.last & KEY_A)) {
         const [x, y] = this.ahead(a);
         const g = this.groundAt(a.m.spot.map, x, y);
-        const foe = g ? void 0 : this.facing(a);
+        const b = g ? void 0 : this.spillAt(a.m.spot.map, x, y);
+        const foe = g || b ? void 0 : this.facing(a);
         if (g) {
           this.picked.set(g.key, a.id);
           events.push({ type: "item", tick: this.tick, id: a.id, key: g.key, item: g.item });
+        } else if (b) {
+          this.picked.set(b.key, a.id);
+          events.push({ type: "bag", tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name });
         } else if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
           a.battling = foe.battling = foe.beaten = true;
           foe.m.facing = foe.m.moveDir = { 1: 2, 2: 1, 3: 4, 4: 3 }[a.m.facing];
@@ -1353,7 +1401,7 @@ var Room = class {
     const [x, y] = this.ahead(a);
     return this.actors.find((o) => o.id !== a.id && o.m.spot.map === a.m.spot.map && o.m.spot.x === x && o.m.spot.y === y);
   }
-  /** Where `a` may step: the ROM's rules, a map this room has, no item ball, and nobody
+  /** Where `a` may step: the ROM's rules, a map this room has, no item ball or bag, and nobody
    *  standing there (a step's destination is the trainer's spot from its first frame, so
    *  two can't both walk into one cell). */
   stepFor(a) {
@@ -1361,7 +1409,7 @@ var Room = class {
       const r = this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
       const t = r.to;
-      if (this.groundAt(t.map, t.x, t.y)) return null;
+      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y)) return null;
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return null;
       return r;
     };
@@ -1406,6 +1454,17 @@ var Room = class {
     for (const [k, by] of this.picked) {
       mix2(k);
       mix2(by);
+    }
+    for (const b of this.spills.values()) {
+      mix2(b.key);
+      str(b.map);
+      mix2(b.x);
+      mix2(b.y);
+      mix2(b.bag.money);
+      for (const r of b.bag.items) {
+        mix2(r.id);
+        mix2(r.n);
+      }
     }
     return h;
   }
@@ -1559,13 +1618,17 @@ var Host = class {
   end(id) {
     if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: "end", id });
   }
-  /** The ball `key` would not go in the phone's bag: back on the ground. */
-  drop(id, key) {
-    if (this.players.has(id) && this.room.picked.get(key) === id) this.pending.push({ c: "drop", id, key });
+  /** The ball `key` would not go in the phone's bag: back on the ground. A bag goes back
+   *  with what did not fit, never more than it held. */
+  drop(id, key, rest) {
+    if (!this.players.has(id) || this.room.picked.get(key) !== id) return;
+    const was = this.room.spills.get(key)?.bag;
+    this.pending.push(was && rest ? { c: "drop", id, key, rest: within(rest, was) } : { c: "drop", id, key });
   }
-  /** The phone's team is down: its trainer leaves the map, and the phone watches. */
-  out(id) {
-    if (this.players.has(id) && this.room.actor(id)) this.pending.push({ c: "out", id });
+  /** The phone's team is down: its trainer leaves the map, what they carried where they
+   *  stood, and the phone watches. */
+  out(id, bag) {
+    if (this.players.has(id) && this.room.actor(id)) this.pending.push(bag ? { c: "out", id, bag } : { c: "out", id });
   }
   /** One frame. The record goes to every mirror; `acks` is each phone's last input used. */
   advance() {
@@ -1681,9 +1744,9 @@ var WorldService = class {
         } else if (m.t === "end") {
           this.host.end(id);
         } else if (m.t === "out") {
-          this.host.out(id);
+          this.host.out(id, cleanBag(m.bag) ?? void 0);
         } else if (m.t === "drop") {
-          if (Number.isInteger(m.k)) this.host.drop(id, m.k);
+          if (Number.isInteger(m.k)) this.host.drop(id, m.k, cleanBag(m.rest) ?? void 0);
         } else if (m.t === "sync") {
           const now = this.opts.now();
           if (now - synced < SYNC_MS) return;

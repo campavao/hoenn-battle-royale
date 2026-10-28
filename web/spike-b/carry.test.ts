@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAG_LEN, arrived, rekey } from './carry';
+import { BAG_AT, BAG_LEN, arrived, rekey, spillOf, withMoney } from './carry';
 
 describe('rekey', () => {
   it('carries money, coins and pocket counts from one key to another, and nothing else', () => {
@@ -53,5 +53,23 @@ describe('arrived', () => {
     expect(arrived(before, bag(k, 3000, [[0x560, 19, 1], [0x650, 4, 5]]))).toEqual({ items: [{ id: 19, n: 1 }], money: 0 });
     expect(arrived(before, bag(k, 8000, [[0x650, 4, 5]]))).toEqual({ items: [], money: 5000 });
     expect(arrived(before, before)).toEqual({ items: [], money: 0 });
+  });
+});
+
+describe('spillOf', () => {
+  it('reads the items, balls and berries pockets and the money; not key items or machines', () => {
+    const key = 0x1234abcd;
+    const bag = new Uint8Array(BAG_LEN);
+    const v = new DataView(bag.buffer);
+    const slot = (at: number, id: number, n: number) => { v.setUint16(at - BAG_AT, id, true); v.setUint16(at - BAG_AT + 2, n ^ (key & 0xffff), true); };
+    v.setUint32(0, (5000 ^ key) >>> 0, true);
+    slot(0x560, 13, 2); // POTION
+    slot(0x5d8, 261, 1); // a key item
+    slot(0x650, 4, 6); // POKé BALL
+    slot(0x690, 289, 1); // TM01
+    slot(0x790 + 4, 133, 3); // a berry, second slot
+    expect(spillOf(bag, key)).toEqual({ items: [{ id: 13, n: 2 }, { id: 4, n: 6 }, { id: 133, n: 3 }], money: 5000 });
+    expect(spillOf(withMoney(bag, key, 1200), key).money).toBe(6200);
+    expect(spillOf(withMoney(bag, key, 2e6), key).money).toBe(999999);
   });
 });

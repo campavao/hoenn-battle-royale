@@ -18,7 +18,7 @@ import { Mailbox, MAILBOX } from '../src/net/mailbox';
 import { packSlot } from '../src/net/slots';
 import { PROTOCOL, type PackedMon } from '../src/net/wire';
 import { loadCheckedRelease } from '../src/release';
-import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, rekey } from './carry';
+import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, rekey, spillOf, withMoney } from './carry';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 
 const BOOT_MAP_TESTMON = 0x81;
@@ -62,6 +62,11 @@ export interface RomBattles {
    *  is used and a nugget sold as in a match). What went in, as the ROM filed it; `used`
    *  when it went on the team; null when it did not fit. */
   give(item: number, n: number): Promise<Given | null>;
+  /** What the trainer carries, as a bag left on the ground when they are out (POK-232):
+   *  read in turn, after whatever was already going in. */
+  spill(): Promise<{ items: { id: number; n: number }[]; money: number }>;
+  /** Money out of somebody's bag (br_loot.c's Take pays it). */
+  addMoney(n: number): Promise<void>;
   press(k: GbaKey): void;
   release(k: GbaKey): void;
   emu: Emulator;
@@ -188,6 +193,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   let broken = false;
   let fighting = false;
   let carried: ReturnType<typeof kept> | null = null;
+  // The bag as it last stood, a lost battle's included: what a trainer who is out leaves
+  // is what they had at the end, not the bag a loss puts the team back to (as BrMatch_Out
+  // reads it, after the battle).
+  let last: { bag: Uint8Array; key: number } | null = null;
   // One thing at a time on the ROM: a battle asked for while an item goes in waits for it.
   let queue: Promise<unknown> = Promise.resolve();
   const inTurn = <T>(f: () => Promise<T>): Promise<T> => {
@@ -238,7 +247,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       await until(emu, () => emu.read(catchAt, 8) === 0, Infinity);
       // A loss is a whiteout: in a match the trainer is out. Here the team goes back to
       // how it came in (the ring and elimination are the match's, later).
-      if (result.outcome !== LOST && result.outcome !== DREW) carried = kept();
+      const now = kept();
+      last = now;
+      if (result.outcome !== LOST && result.outcome !== DREW) carried = now;
     }
     fighting = false;
     emu.pause();
@@ -278,12 +289,27 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
           if (hp) alive++;
           else emu.write(at + 80, 0, 32); // a fainted mon has no status (Bleed)
         }
-        carried = kept();
+        carried = last = kept();
         return alive;
       });
     },
     fogNow() {
       if (fighting && !broken && emu.read(ringAt, 8) === 0) emu.bytes(ringAt, 10).set(FOGGED);
+    },
+    spill() {
+      return inTurn(async () => {
+        const k = last ?? kept();
+        return spillOf(k.bag, k.key);
+      });
+    },
+    addMoney(n) {
+      return inTurn(async () => {
+        if (broken || n <= 0) return;
+        const k = carried ?? kept();
+        const next = { ...k, bag: withMoney(k.bag, k.key, n) as typeof k.bag };
+        keep(next);
+        carried = last = next;
+      });
     },
     give(item, n) {
       return inTurn(async () => {
@@ -300,7 +326,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         // the frames it ran are not where the next battle starts.
         if (!emu.restore(parked!)) broken = true;
         else keep(after);
-        carried = after;
+        carried = last = after;
         const got = arrived(before, after);
         const used = after.party.some((b, i) => b !== before.party[i]);
         return got.items.length || got.money || used ? { ...got, used } : null;

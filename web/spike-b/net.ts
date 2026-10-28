@@ -16,7 +16,7 @@ import type { World, WorldMap } from '../src/bots/world';
 import type { PatchTable } from '../src/bots/patches';
 import { tick } from './sim';
 import { Host, play } from './shared/host';
-import { keysOf, makeRoom, type Actor, type Room, type RoomEvent } from './shared/room';
+import { keysOf, makeRoom, type Actor, type Bag, type Room, type RoomEvent } from './shared/room';
 import type { WireFrame, WorldDown, WorldUp } from './shared/wire';
 
 export interface WorldLink {
@@ -30,9 +30,9 @@ export interface WorldLink {
   /** My battle is over. */
   end(): void;
   /** The ball `key` would not go in my bag: put it back. */
-  drop(key: number): void;
+  drop(key: number, rest?: Bag): void;
   /** My team is down: off the map. */
-  out(): void;
+  out(bag?: Bag): void;
   /** For the stats line. */
   status(): string;
 }
@@ -54,8 +54,8 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     },
     mine: () => host.room.actor(me),
     end: () => host.end(me),
-    drop: (key) => host.drop(me, key),
-    out: () => host.out(me),
+    drop: (key, rest) => host.drop(me, key, rest),
+    out: (bag) => host.out(me, bag),
     status: () => 'solo: you and the bots (no relay)',
   };
 }
@@ -174,9 +174,9 @@ class Online implements WorldLink {
 
   end(): void { this.send({ t: 'end' }); }
 
-  drop(key: number): void { this.send({ t: 'drop', k: key }); }
+  drop(key: number, rest?: Bag): void { this.send({ t: 'drop', k: key, rest }); }
 
-  out(): void { this.send({ t: 'out' }); }
+  out(bag?: Bag): void { this.send({ t: 'out', bag }); }
 
   status(): string {
     if (this.closed) return 'the relay closed the connection: reload to rejoin';
