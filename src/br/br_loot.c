@@ -617,6 +617,15 @@ static void HandleGive(const u8 *payload, u8 len)
     count = d[0];
     if (count > 8 || (u16)(1 + 3 * count) > n)
         return;
+    // Out before it came: our own drop is being read out of the pockets a bag at a time
+    // (SendBag), so what was in this one goes back down as it was, in nobody's pockets.
+    if (gBrMatch.phase == BR_PHASE_OUT)
+    {
+        sListWait = 0;
+        if (sGivenBag.kind == BR_LOOT_BAG)
+            PutBack(d + 1, count, FALSE);
+        return;
+    }
     if (sListWait == 0 || sGivenBag.kind != BR_LOOT_BAG)
     {
         GiveRows(d + 1, count);
