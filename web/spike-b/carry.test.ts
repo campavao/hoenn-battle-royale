@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAG_AT, BAG_LEN, arrived, rekey, spillOf, withMoney } from './carry';
+import { BAG_AT, BAG_LEN, arrived, fromB64, monsOf, rekey, spillOf, withMoney } from './carry';
 
 describe('rekey', () => {
   it('carries money, coins and pocket counts from one key to another, and nothing else', () => {
@@ -71,5 +71,14 @@ describe('spillOf', () => {
     expect(spillOf(bag, key)).toEqual({ items: [{ id: 13, n: 2 }, { id: 4, n: 6 }, { id: 133, n: 3 }], money: 5000 });
     expect(spillOf(withMoney(bag, key, 1200), key).money).toBe(6200);
     expect(spillOf(withMoney(bag, key, 2e6), key).money).toBe(999999);
+  });
+});
+
+describe('monsOf', () => {
+  it('is each party mon\'s first 80 bytes (its BoxPokemon), as many as the party holds', () => {
+    const party = new Uint8Array(600).map((_, i) => i % 251);
+    const m = monsOf(party, 2);
+    expect(m).toHaveLength(2);
+    expect([...fromB64(m[1])]).toEqual([...party.subarray(100, 180)]);
   });
 });

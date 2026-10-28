@@ -82,3 +82,16 @@ export function withMoney(bag: Uint8Array, key: number, more: number): Uint8Arra
   v.setUint32(0, (Math.min(now + more, 999999) ^ key) >>> 0, true);
   return out;
 }
+
+/** A BoxPokemon: a party slot's first 80 bytes, which a box holds (pokemon.h). */
+export const BOX_MON_LEN = 80;
+
+export const toB64 = (b: Uint8Array): string => btoa(String.fromCharCode(...b));
+export const fromB64 = (s: string): Uint8Array => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+/** The team, as the box mons a bag carries (HBR-82). */
+export function monsOf(party: Uint8Array, count: number): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < Math.min(count, 6); i++) out.push(toB64(party.subarray(i * 100, i * 100 + BOX_MON_LEN)));
+  return out;
+}

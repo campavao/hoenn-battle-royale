@@ -18,7 +18,7 @@ import { Mailbox, MAILBOX } from '../src/net/mailbox';
 import { packSlot } from '../src/net/slots';
 import { PROTOCOL, type PackedMon } from '../src/net/wire';
 import { loadCheckedRelease } from '../src/release';
-import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, rekey, spillOf, withMoney } from './carry';
+import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fromB64, monsOf, rekey, spillOf, toB64, withMoney, BOX_MON_LEN } from './carry';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 
 const BOOT_MAP_TESTMON = 0x81;
@@ -64,7 +64,11 @@ export interface RomBattles {
   give(item: number, n: number): Promise<Given | null>;
   /** What the trainer carries, as a bag left on the ground when they are out (POK-232):
    *  read in turn, after whatever was already going in. */
-  spill(): Promise<{ items: { id: number; n: number }[]; money: number }>;
+  spill(): Promise<{ items: { id: number; n: number }[]; money: number; mons: string[] }>;
+  /** A fallen trainer's team on the ROM's own BAG screen (br_swap.h): ours on the left,
+   *  theirs on the right, picks moved across. Resolves, back on the field, with the mons
+   *  left in the bag. `onStart` is the screen's first frame. */
+  swap(mons: string[], onStart: () => void): Promise<string[]>;
   /** Money out of somebody's bag (br_loot.c's Take pays it). */
   addMoney(n: number): Promise<void>;
   press(k: GbaKey): void;
@@ -156,6 +160,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   const outcomeAt = sym('gBattleOutcome');
   const catchAt = sym('gBrCatch');
   const ringAt = sym('gBrRing');
+  const storageAt = sym('gPokemonStoragePtr');
+  const mainAt = sym('gMain');
+  const swapCb = sym('CB2_BrSwap');
+  const overworldCb = sym('CB2_Overworld');
   const partyAt = sym('gPlayerParty');
   const countAt = sym('gPlayerPartyCount');
   const save1 = sym('gSaveBlock1Ptr');
@@ -196,7 +204,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   // The bag as it last stood, a lost battle's included: what a trainer who is out leaves
   // is what they had at the end, not the bag a loss puts the team back to (as BrMatch_Out
   // reads it, after the battle).
-  let last: { bag: Uint8Array; key: number } | null = null;
+  let last: ReturnType<typeof kept> | null = null;
   // One thing at a time on the ROM: a battle asked for while an item goes in waits for it.
   let queue: Promise<unknown> = Promise.resolve();
   const inTurn = <T>(f: () => Promise<T>): Promise<T> => {
@@ -299,7 +307,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     spill() {
       return inTurn(async () => {
         const k = last ?? kept();
-        return spillOf(k.bag, k.key);
+        return { ...spillOf(k.bag, k.key), mons: monsOf(k.party, k.count) };
       });
     },
     addMoney(n) {
@@ -309,6 +317,32 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         const next = { ...k, bag: withMoney(k.bag, k.key, n) as typeof k.bag };
         keep(next);
         carried = last = next;
+      });
+    },
+    swap(mons, onStart) {
+      return inTurn(async () => {
+        if (broken) return mons;
+        // The drop's side is the PC's first box, slots 0..5 (br_swap.h).
+        const box = emu.read(storageAt, 32) + 4;
+        for (let i = 0; i < 6; i++) emu.bytes(box + i * BOX_MON_LEN, BOX_MON_LEN).set(i < mons.length ? fromB64(mons[i]) : new Uint8Array(BOX_MON_LEN));
+        emu.write(mainAt + 4, (swapCb | 1) >>> 0, 32);
+        emu.resume();
+        await frames(emu, 1);
+        onStart();
+        // B closes it, and CB2_ReturnToField puts the hidden field back up.
+        await until(emu, () => ((emu.read(mainAt + 4, 32) & ~1) >>> 0) === overworldCb, Infinity);
+        emu.pause();
+        const left: string[] = [];
+        for (let i = 0; i < 6; i++) {
+          const m = emu.bytes(box + i * BOX_MON_LEN, BOX_MON_LEN);
+          if (!m.some((v) => v)) break;
+          left.push(toB64(m.slice()));
+        }
+        const now = kept();
+        if (!emu.restore(parked!)) broken = true;
+        else keep(now);
+        carried = last = now;
+        return left;
       });
     },
     give(item, n) {

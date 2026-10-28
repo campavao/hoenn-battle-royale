@@ -309,6 +309,7 @@ describe('the fog', () => {
 
 describe('a fallen trainer\'s bag', () => {
   const bag = { items: [{ id: 13, n: 3 }, { id: 4, n: 6 }], money: 1200 };
+  const mon = (b: number) => btoa(String.fromCharCode(...new Uint8Array(80).fill(b)));
 
   it('lies where they fell; solid; A takes it whole, and what did not fit goes back', () => {
     const room = makeRoom(MAPS, PATCHES, 99);
@@ -337,6 +338,25 @@ describe('a fallen trainer\'s bag', () => {
     expect(mirror.hash()).toBe(room.hash());
   });
 
+  it('holds the team too: a bag of only mons lies, and goes back with whoever was left in it', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    const at = { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 12 };
+    room.apply({ c: 'join', id: 1, bot: false, name: 'MAY', skin: 0, spot: at, facing: 1 });
+    room.apply({ c: 'join', id: 2, bot: false, name: 'B', skin: 0, spot: { ...at, x: 9 }, facing: 4 });
+    room.apply({ c: 'out', id: 1, bag: { items: [], money: 0, mons: [mon(1), mon(2)] } });
+    const key = SPILL_KEY + 1;
+    expect(room.spillAt(at.map, at.x, at.y)?.bag.mons).toEqual([mon(1), mon(2)]);
+    const before = room.hash();
+    expect(room.step(new Map([[2, [KEY_A]]]))).toMatchObject([{ type: 'bag', key, bag: { mons: [mon(1), mon(2)] } }]);
+    // one of theirs taken, one of B's left in its place
+    room.apply({ c: 'drop', id: 2, key, rest: { items: [], money: 0, mons: [mon(2), mon(9)] } });
+    expect(room.spillAt(at.map, at.x, at.y)?.bag.mons).toEqual([mon(2), mon(9)]);
+    expect(room.hash()).not.toBe(before);
+    const mirror = makeRoom(MAPS, PATCHES, 99);
+    mirror.load(room.state());
+    expect(mirror.hash()).toBe(room.hash());
+  });
+
   it('an empty bag leaves nothing, and leaving (not out) leaves nothing', () => {
     const room = makeRoom(MAPS, PATCHES, 99);
     room.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 12 }, facing: 1 });
@@ -355,5 +375,11 @@ describe('a fallen trainer\'s bag', () => {
       .toEqual({ items: [{ id: 13, n: 3 }, { id: 133, n: 999 }], money: 999999 });
     expect(within({ items: [{ id: 13, n: 9 }, { id: 4, n: 2 }, { id: 7, n: 1 }], money: 9999 }, bag))
       .toEqual({ items: [{ id: 13, n: 3 }, { id: 4, n: 2 }], money: 1200 });
+    // a team: up to six box mons, each 80 bytes
+    expect(cleanBag({ items: [], money: 0, mons: [mon(1)] })).toEqual({ items: [], money: 0, mons: [mon(1)] });
+    expect(cleanBag({ items: [], money: 0, mons: Array(7).fill(mon(1)) })).toBeNull();
+    expect(cleanBag({ items: [], money: 0, mons: [btoa('short')] })).toBeNull();
+    expect(cleanBag({ items: [], money: 0, mons: [7] })).toBeNull();
+    expect(within({ items: [], money: 0, mons: [mon(3)] }, bag).mons).toEqual([mon(3)]);
   });
 });
