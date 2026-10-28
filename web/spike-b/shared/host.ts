@@ -34,8 +34,9 @@ interface Player {
 
 /** A trainer waits for this many inputs in hand before moving again, so a late packet
  *  rarely leaves it a frame short (spectators see a pause, not a stutter). Past
- *  JITTER + CATCH_UP it takes two every fourth frame until it is back. Nothing is ever dropped:
- *  every input moves the trainer exactly once, so the relay's walk is the thumb's. */
+ *  JITTER + CATCH_UP it takes two every fourth frame until it is back. Nothing is ever
+ *  dropped: every input moves the trainer exactly once, so the relay's walk is the
+ *  thumb's. */
 const JITTER = 3;
 const CATCH_UP = 3;
 /** A phone this far behind (ten seconds of keys) is not catching up: the oldest go. */

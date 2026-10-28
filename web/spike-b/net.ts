@@ -108,8 +108,9 @@ class Online implements WorldLink {
     this.send({ t: 'in', s: this.seq, k: [bits] });
     // Play out: one frame a frame, none while it builds its cushion back. A buffer that
     // stays deep (this phone's clock runs slow, or the network settled after a bad
-    // patch) is caught up gently, one extra frame in 15 -- the world a few percent fast
-    // for a moment, never the 2-3x bursts that made everybody look sped up (Cam).
+    // patch) is caught up gently: one extra frame in 15, one in 4 past 20 deep (a bad
+    // bunch clears in seconds) -- never the 2-3x bursts that made everybody look sped
+    // up (Cam).
     this.depth = this.depth * 0.95 + this.queue.length * 0.05;
     this.ticks += 1;
     if (!this.playing && this.queue.length >= CUSHION) this.playing = true;
@@ -120,7 +121,7 @@ class Online implements WorldLink {
     if (this.syncing && performance.now() - this.syncAt > 1500) this.resync();
     const n = !this.playing ? 0
       : this.queue.length > 120 ? this.queue.length - CUSHION - 2
-      : this.depth > CUSHION + 3 && this.ticks % 15 === 0 ? 2 : 1;
+      : this.ticks % (this.depth > 20 ? 4 : 15) === 0 && this.depth > CUSHION + 3 ? 2 : 1;
     const events: RoomEvent[] = [];
     for (let i = 0; i < n && this.queue.length && !this.syncing; i++) {
       const f = this.queue.shift()!;

@@ -1089,6 +1089,17 @@ var Room = class {
       a.last = bits;
       return;
     }
+    if (a.bot && !a.m.action) {
+      const dir = dirOf(keysOf(bits));
+      if (dir) {
+        a.m.facing = a.m.moveDir = dir;
+        const r = this.stepFor(a)(a.m.spot, dir);
+        if (!r || r.hop) {
+          a.last = bits;
+          return;
+        }
+      }
+    }
     const before = a.m.strides;
     tick(a.m, keysOf(bits), this.stepFor(a));
     if (a.m.strides !== before) a.arriving = true;
@@ -1222,29 +1233,14 @@ function rand(b) {
   return b.rng / 4294967296;
 }
 var DELAYS = [32, 64, 96, 128];
-function botKeys(room, a, b) {
-  const rest = () => DELAYS[Math.floor(rand(b) * DELAYS.length)];
-  if (a.m.action) {
-    if (b.left && a.m.action.kind === "step") {
-      b.left = 0;
-      b.wait = rest();
-    }
-    return b.left ? KEY_OF[b.dir] : 0;
-  }
-  if (b.left) {
-    if (room.stepFor(a)(a.m.spot, b.dir)) return KEY_OF[b.dir];
-    b.left = 0;
-    b.wait = rest();
-    return 0;
-  }
+function botKeys(_room, a, b) {
+  if (a.m.action) return 0;
   if (b.wait > 0) {
     b.wait -= 1;
     return 0;
   }
   b.dir = 1 + Math.floor(rand(b) * 4);
-  b.wait = rest();
-  if (!room.stepFor(a)(a.m.spot, b.dir)) return a.m.facing !== b.dir ? KEY_OF[b.dir] : 0;
-  b.left = 1;
+  b.wait = DELAYS[Math.floor(rand(b) * DELAYS.length)];
   return KEY_OF[b.dir];
 }
 function botSpawns(room, maps, count) {
@@ -1262,7 +1258,7 @@ function botSpawns(room, maps, count) {
   const add = (spot, facing, skin) => {
     taken.add(`${spot.map}:${spot.x}:${spot.y}`);
     const n = out.length + 1;
-    out.push({ name: SKIN_NAME[skin], skin, spot, facing, brain: { rng: n * 2654435761 >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1, left: 0 } });
+    out.push({ name: SKIN_NAME[skin], skin, spot, facing, brain: { rng: n * 2654435761 >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
   };
   for (const [x, y] of [[7, 12], [13, 13], [11, 16]]) add({ map: "MAP_LITTLEROOT_TOWN", x, y }, 1, botSkin(out.length * 7 + 1));
   for (let tries = 0; out.length < count && tries < 5e4; tries++) {
