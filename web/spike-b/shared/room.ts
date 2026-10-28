@@ -450,7 +450,7 @@ export class Room {
     for (const b of this.spills.values()) {
       mix(b.key); str(b.map); mix(b.x); mix(b.y); mix(b.bag.money);
       for (const r of b.bag.items) { mix(r.id); mix(r.n); }
-      for (const m of b.bag.mons ?? []) str(m);
+      for (const m of b.bag.mons ?? []) { mix(m.species); mix(m.level); }
     }
     return h;
   }

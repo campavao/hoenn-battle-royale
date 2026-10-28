@@ -184,7 +184,7 @@ const gbaCanvas = document.getElementById('gba') as HTMLCanvasElement;
 let rom: RomBattles | null = null;
 let artMs = 0;
 let battle: { foe: Actor | null; shownAt: number } | null = null;
-/** The ROM has the screen for a dropped bag's team (rom.swap). */
+/** The ROM has the screen for a dropped bag's team (rom.team). */
 let swapping = false;
 let calmUntil = 0;
 const handoff: number[] = []; // ms from the trigger to the ROM's first battle frame, and back
@@ -301,7 +301,7 @@ async function openBag(key: number, bag: Bag, who: string): Promise<void> {
   held.clear();
   let left = mons;
   try {
-    left = await rom.swap(mons, () => battleEl.classList.add('on'));
+    left = await rom.team(mons, who, () => battleEl.classList.add('on'));
   } finally {
     swapping = false;
     battleEl.classList.remove('on');
@@ -421,6 +421,8 @@ function fogFrame(): void {
     lastPhase = ring.phase;
   }
   if (isOut || !rom) return;
+  // The BAG screen is a menu: the fog bites on the field and in battle (BrRing_Tick).
+  if (swapping) return;
   if (battle) {
     // A ring that closes on a trainer mid-battle reaches the battle at its next turn.
     if (inFogNow()) rom.fogNow();

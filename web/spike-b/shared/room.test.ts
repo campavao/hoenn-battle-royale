@@ -309,7 +309,7 @@ describe('the fog', () => {
 
 describe('a fallen trainer\'s bag', () => {
   const bag = { items: [{ id: 13, n: 3 }, { id: 4, n: 6 }], money: 1200 };
-  const mon = (b: number) => btoa(String.fromCharCode(...new Uint8Array(80).fill(b)));
+  const mon = (species: number) => ({ species, level: 5 });
 
   it('lies where they fell; solid; A takes it whole, and what did not fit goes back', () => {
     const room = makeRoom(MAPS, PATCHES, 99);
@@ -348,7 +348,7 @@ describe('a fallen trainer\'s bag', () => {
     expect(room.spillAt(at.map, at.x, at.y)?.bag.mons).toEqual([mon(1), mon(2)]);
     const before = room.hash();
     expect(room.step(new Map([[2, [KEY_A]]]))).toMatchObject([{ type: 'bag', key, bag: { mons: [mon(1), mon(2)] } }]);
-    // one of theirs taken, one of B's left in its place
+    // one of theirs taken, one of B's put down in its place
     room.apply({ c: 'drop', id: 2, key, rest: { items: [], money: 0, mons: [mon(2), mon(9)] } });
     expect(room.spillAt(at.map, at.x, at.y)?.bag.mons).toEqual([mon(2), mon(9)]);
     expect(room.hash()).not.toBe(before);
@@ -375,11 +375,13 @@ describe('a fallen trainer\'s bag', () => {
       .toEqual({ items: [{ id: 13, n: 3 }, { id: 133, n: 999 }], money: 999999 });
     expect(within({ items: [{ id: 13, n: 9 }, { id: 4, n: 2 }, { id: 7, n: 1 }], money: 9999 }, bag))
       .toEqual({ items: [{ id: 13, n: 3 }, { id: 4, n: 2 }], money: 1200 });
-    // a team: up to six box mons, each 80 bytes
+    // a team: up to six, each a real species at a real level
     expect(cleanBag({ items: [], money: 0, mons: [mon(1)] })).toEqual({ items: [], money: 0, mons: [mon(1)] });
     expect(cleanBag({ items: [], money: 0, mons: Array(7).fill(mon(1)) })).toBeNull();
-    expect(cleanBag({ items: [], money: 0, mons: [btoa('short')] })).toBeNull();
+    expect(cleanBag({ items: [], money: 0, mons: [{ species: 412, level: 5 }] })).toBeNull();
+    expect(cleanBag({ items: [], money: 0, mons: [{ species: 25, level: 101 }] })).toBeNull();
     expect(cleanBag({ items: [], money: 0, mons: [7] })).toBeNull();
+    expect(cleanBag({ items: [], money: 0, mons: [{ species: 25, level: 5, extra: 1 }] })).toEqual({ items: [], money: 0, mons: [{ species: 25, level: 5 }] });
     expect(within({ items: [], money: 0, mons: [mon(3)] }, bag).mons).toEqual([mon(3)]);
   });
 });
