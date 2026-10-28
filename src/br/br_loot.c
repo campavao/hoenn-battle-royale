@@ -855,16 +855,48 @@ void BrLoot_TeamTaken(bool8 taken)
     sTeamTaken = taken;
 }
 
+// A bag's item rows, as a SPILL carries them (br_wire.h: itemCount <= 8).
+#define BR_SPILL_ITEMS 8
+
+// What we were carrying, as a SPILL's item rows: the pockets a beaten trainer's BAG list
+// offers (HBR-82). Not the key items, and not the TMs (HBR-86). The page keeps the rows
+// for the match and GIVEs them to whoever takes the bag (match/session.ts giveBag): with
+// none, a human's bag was money alone and a bot's was not (HBR-87).
+// Eight rows is all a SPILL holds: past that, the first eight in pocket order go.
+static u8 PackOwnItems(u8 *out)
+{
+    static const u8 sPockets[] = { ITEMS_POCKET, BALLS_POCKET, BERRIES_POCKET };
+    u8 count = 0, p, i;
+
+    for (p = 0; p < ARRAY_COUNT(sPockets); p++)
+    {
+        struct BagPocket *pocket = &gBagPockets[sPockets[p]];
+
+        for (i = 0; i < pocket->capacity && count < BR_SPILL_ITEMS; i++)
+        {
+            u16 item = pocket->itemSlots[i].itemId;
+            u16 n = pocket->itemSlots[i].quantity ^ (u16)gSaveBlock2Ptr->encryptionKey;
+
+            if (item == ITEM_NONE || n == 0)
+                continue;
+            BrWire_WriteU16(out + 3 * count, item);
+            out[3 * count + 2] = n > 99 ? 99 : n;
+            count++;
+        }
+    }
+    return count;
+}
+
 // [seat, map, count, count*(key, x, y, species, level), hasBag, bagKey, bagX, bagY,
-// itemCount, money, nameLen, name] -- br_wire.h's BR_MSG_SPILL. The bag goes out with
-// the money and the name on it; its item list is the pickup ticket's business.
+// itemCount, itemCount*(id, n), money, nameLen, name] -- br_wire.h's BR_MSG_SPILL. The
+// bag goes out with what was in it, the money and the name on it.
 void BrLoot_SpillOwn(void)
 {
-    u8 buf[96];
+    u8 buf[4 + 9 * PARTY_SIZE + 7 + 3 * BR_SPILL_ITEMS + 4 + 1 + PLAYER_NAME_LENGTH];
     struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
     s16 x, y;
     u16 len = 0, key;
-    u8 count = 0, i, j;
+    u8 count = 0, items, i, j;
     u32 money;
 
     // Team and bag on one cell, ours or the first free one round it: the team is in the
@@ -896,7 +928,9 @@ void BrLoot_SpillOwn(void)
     BrWire_WriteU16(buf + len + 2, (u16)x);
     BrWire_WriteU16(buf + len + 4, (u16)y);
     len += 6;
-    buf[len++] = 0; // itemCount: the bag's contents ride with the pickup
+    items = PackOwnItems(buf + len + 1);
+    buf[len++] = items;
+    len += 3 * items;
     money = GetMoney(&gSaveBlock1Ptr->money);
     buf[len++] = money & 0xFF;
     buf[len++] = (money >> 8) & 0xFF;

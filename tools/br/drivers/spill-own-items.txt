@@ -1,0 +1,42 @@
+# spill-own-items: a trainer who goes out drops their items in the bag, not just the money
+# (HBR-87). Cam's rule (HBR-82): A on a beaten trainer's bag offers BAG, a list of what
+# they carried with Take all. The page holds a bag's rows for the match off its SPILL and
+# GIVEs them to whoever takes it (match/session.ts giveBag), so the rows have to be in the
+# spill: SpillOwn wrote itemCount 0 and every human's bag was money alone. Bots' bags,
+# filled by the host page, always carried theirs.
+#
+# fog-out.txt's walk-out: one TREECKO, finished by the fog. Key zeroed so the quantities
+# read as poked: ITEMS POTION x3 and ANTIDOTE x1, POKe BALLS the dealt POKe BALL x5,
+# BERRIES ORAN BERRY x2, and a TM01 the bag leaves out (live TMs are HBR-86).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 gPlayerPartyCount 1
+poke u32 *gSaveBlock2Ptr+0xAC 0
+pokebytes *gSaveBlock1Ptr+0x560 0D 00 03 00 0E 00 01 00
+pokebytes *gSaveBlock1Ptr+0x650 04 00 05 00
+pokebytes *gSaveBlock1Ptr+0x690 21 01 01 00
+pokebytes *gSaveBlock1Ptr+0x790 8B 00 02 00
+poke u16 gPlayerParty+0x56 2
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+waitfor u16 gPlayerParty+0x56 0 300
+wait 30
+expect u8 gBrMatch 3
+# the spill: seat, map, one mon (9 bytes), hasBag at 13, the bag's key and cell, then
+# itemCount at 20 and its rows from 21, pocket by pocket: POTION x3, ANTIDOTE x1,
+# POKe BALL x5, ORAN BERRY x2, then the money. Before, data+20 was 0 and the money stood
+# at 21.
+expectmsg 11 u8 3 1
+expectmsg 11 u8 13 1
+expectmsg 11 u8 20 4
+expectmsg 11 u16 21 13
+expectmsg 11 u8 23 3
+expectmsg 11 u16 24 14
+expectmsg 11 u8 26 1
+expectmsg 11 u16 27 4
+expectmsg 11 u8 29 5
+expectmsg 11 u16 30 139
+expectmsg 11 u8 32 2
+say spill own items ok
