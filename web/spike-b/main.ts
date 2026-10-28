@@ -263,8 +263,16 @@ async function takeBag(key: number, bag: Bag, who: string): Promise<void> {
   const rest: Bag = { items: [], money: 0 };
   let took = 0;
   for (const row of bag.items) {
-    if (await r.give(row.id, row.n)) took++;
-    else rest.items.push(row);
+    // A GIVE's count is a byte: a berry stack (up to 999) goes in pieces, and what did not
+    // fit of it goes back.
+    let left = row.n;
+    while (left > 0 && !isOut) {
+      const n = Math.min(left, 99);
+      if (!await r.give(row.id, n)) break;
+      left -= n;
+    }
+    if (left < row.n) took++;
+    if (left) rest.items.push({ id: row.id, n: left });
   }
   await r.addMoney(bag.money);
   const money = bag.money ? ` and ¥${bag.money}` : '';
@@ -331,8 +339,11 @@ function inFogNow(): boolean {
 function goOut(why: string): void {
   if (isOut) return;
   isOut = true;
-  // What I carried lies where I fell (POK-232).
-  link.out(rom?.spill());
+  // Nothing more goes into a trainer who is out: what was on its way stays on the ground.
+  for (const g of toGive.splice(0)) link.drop(g.key);
+  // What I carried lies where I fell (POK-232), once what was already going in is in.
+  if (rom) rom.spill().then((bag) => link.out(bag), () => link.out());
+  else link.out();
   document.getElementById('out-why')!.textContent = why;
   outEl.classList.add('on');
   if (!spectating) toggleSpectate();

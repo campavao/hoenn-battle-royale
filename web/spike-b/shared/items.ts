@@ -7,13 +7,17 @@ export const groundCount = (item: number): number => (item > ITEM_MASTER_BALL &&
 
 export const isTm = (item: number): boolean => item >= ITEM_TM01 && item <= ITEM_HM08;
 
+/** The key items: MACH BIKE..DEVON SCOPE, and OAK's PARCEL onwards. */
+export const isKeyItem = (item: number): boolean => (item >= 259 && item <= 288) || item >= 349;
+
 const ITEMS_COUNT = 377, MAX_MONEY = 999999, BAG_ROWS = 30 + 16 + 46;
 
 export interface BagRows { items: { id: number; n: number }[]; money: number }
 
-/** A bag as a phone sent it, made safe: real item ids, sane counts, no more rows than the
- *  three pockets a bag spills (items, balls, berries) can hold, and money as the game caps
- *  it. Null for anything that is not a bag. */
+/** A bag as a phone sent it, made safe: real item ids from the pockets a bag spills (not
+ *  key items or machines), counts up to a berry stack's 999, no more rows than those three
+ *  pockets (items, balls, berries) hold, and money as the game caps it. Null for anything
+ *  that is not a bag. */
 export function cleanBag(raw: unknown): BagRows | null {
   if (!raw || typeof raw !== 'object') return null;
   const { items, money } = raw as { items?: unknown; money?: unknown };
@@ -21,7 +25,7 @@ export function cleanBag(raw: unknown): BagRows | null {
   const out: BagRows = { items: [], money: Number.isInteger(money) ? Math.min(Math.max(money as number, 0), MAX_MONEY) : 0 };
   for (const r of items) {
     const id = Number((r as { id?: unknown })?.id), n = Number((r as { n?: unknown })?.n);
-    if (Number.isInteger(id) && id > 0 && id < ITEMS_COUNT && Number.isInteger(n) && n > 0 && n <= 99) out.items.push({ id, n });
+    if (Number.isInteger(id) && id > 0 && id < ITEMS_COUNT && Number.isInteger(n) && n > 0 && !isTm(id) && !isKeyItem(id)) out.items.push({ id, n: Math.min(n, 999) });
   }
   return out;
 }

@@ -350,8 +350,9 @@ describe('a fallen trainer\'s bag', () => {
     expect(cleanBag(null)).toBeNull();
     expect(cleanBag({ items: 'x' })).toBeNull();
     expect(cleanBag({ items: Array(93).fill({ id: 1, n: 1 }) })).toBeNull();
-    expect(cleanBag({ items: [{ id: 13, n: 3 }, { id: 999, n: 1 }, { id: 4, n: 0 }, { id: 4, n: 100 }, { id: 2.5, n: 1 }], money: 5e9 }))
-      .toEqual({ items: [{ id: 13, n: 3 }], money: 999999 });
+    // not an item, none, not a whole number, a key item, a machine: out; a berry stack to 999
+    expect(cleanBag({ items: [{ id: 13, n: 3 }, { id: 999, n: 1 }, { id: 4, n: 0 }, { id: 2.5, n: 1 }, { id: 261, n: 1 }, { id: 289, n: 1 }, { id: 133, n: 1500 }], money: 5e9 }))
+      .toEqual({ items: [{ id: 13, n: 3 }, { id: 133, n: 999 }], money: 999999 });
     expect(within({ items: [{ id: 13, n: 9 }, { id: 4, n: 2 }, { id: 7, n: 1 }], money: 9999 }, bag))
       .toEqual({ items: [{ id: 13, n: 3 }, { id: 4, n: 2 }], money: 1200 });
   });

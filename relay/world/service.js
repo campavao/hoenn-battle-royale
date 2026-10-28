@@ -988,6 +988,7 @@ function scatterItem(rng) {
 var ITEM_TM012 = 289;
 var ITEM_HM08 = 346;
 var isTm = (item) => item >= ITEM_TM012 && item <= ITEM_HM08;
+var isKeyItem = (item) => item >= 259 && item <= 288 || item >= 349;
 var ITEMS_COUNT = 377;
 var MAX_MONEY = 999999;
 var BAG_ROWS = 30 + 16 + 46;
@@ -998,7 +999,7 @@ function cleanBag(raw) {
   const out = { items: [], money: Number.isInteger(money) ? Math.min(Math.max(money, 0), MAX_MONEY) : 0 };
   for (const r of items) {
     const id = Number(r?.id), n = Number(r?.n);
-    if (Number.isInteger(id) && id > 0 && id < ITEMS_COUNT && Number.isInteger(n) && n > 0 && n <= 99) out.items.push({ id, n });
+    if (Number.isInteger(id) && id > 0 && id < ITEMS_COUNT && Number.isInteger(n) && n > 0 && !isTm(id) && !isKeyItem(id)) out.items.push({ id, n: Math.min(n, 999) });
   }
   return out;
 }
