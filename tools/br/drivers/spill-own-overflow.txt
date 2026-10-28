@@ -7,7 +7,7 @@
 # second bag, key 0xFE in our seat's space, on the next free cell round the first. The
 # money and the name ride with the first.
 #
-# spill-own-items.txt's walk-out, key zeroed: ITEMS POTION..HEAL POWDER (13..22) one of
+# spill-own-items.txt's walk-out, key zeroed: ITEMS POTION..SUPER POTION (13..22) one of
 # each, POKe BALLS the dealt POKe BALL x5, BERRIES ORAN BERRY x300. Fifteen rows: ten, one,
 # then 99 99 99 3.
 wait 30
@@ -26,14 +26,14 @@ waitfor u16 gPlayerParty+0x56 0 300
 wait 30
 expect u8 gBrMatch 3
 # the first bag (the older SPILL): TREECKO, key 0x00FF, eight rows, POTION first and
-# HEAL POWDER (22) not in it
+# MAX POTION (20) last
 expectmsg 11#2 u8 3 1
 expectmsg 11#2 u16 14 0x00FF
 expectmsg 11#2 u8 20 8
 expectmsg 11#2 u16 21 13
 expectmsg 11#2 u16 42 20
-# the second (the newer): no team, key 0x00FE, seven rows -- ENERGYPOWDER (21), HEAL
-# POWDER, the POKe BALLs, then ORAN BERRY 99, 99, 99, 3 -- and no money
+# the second (the newer): no team, key 0x00FE, seven rows -- HYPER POTION (21), SUPER
+# POTION, the POKe BALLs, then ORAN BERRY 99, 99, 99, 3 -- and no money
 expectmsg 11 u8 3 0
 expectmsg 11 u8 4 1
 expectmsg 11 u16 5 0x00FE

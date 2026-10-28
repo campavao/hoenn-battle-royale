@@ -8,7 +8,7 @@ pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
 poke u8 gBrMatch 2
 # SPILL: no mons, hasBag 01, key 0x03FE, (12,17), no items, money 0, no name
-pokebytes gBrMailbox+0x1018 0B 11 0E 00 00 03 00 09 00 01 FE 03 0C 00 11 00 00 00 00 00 00 00
+pokebytes gBrMailbox+0x1018 0B 14 11 00 00 03 00 09 00 01 FE 03 0C 00 11 00 00 00 00 00 00 00
 poke u16 gBrMailbox+0x0C 1
 wait 30
 expect u8 gBrLoot+0xA0 1
