@@ -34,8 +34,9 @@ interface Player {
 
 /** A trainer waits for this many inputs in hand before moving again, so a late packet
  *  rarely leaves it a frame short (spectators see a pause, not a stutter). Past
- *  JITTER + CATCH_UP it takes two a frame until it is back. Nothing is ever dropped:
- *  every input moves the trainer exactly once, so the relay's walk is the thumb's. */
+ *  JITTER + CATCH_UP it takes two every fourth frame until it is back. Nothing is ever
+ *  dropped: every input moves the trainer exactly once, so the relay's walk is the
+ *  thumb's. */
 const JITTER = 3;
 const CATCH_UP = 3;
 /** A phone this far behind (ten seconds of keys) is not catching up: the oldest go. */
@@ -128,7 +129,9 @@ export class Host {
         else p.waited += 1;
       }
       if (p.started) {
-        const n = p.queue.length > this.jitter + CATCH_UP ? 2 : p.queue.length ? 1 : 0;
+        // Catching up, a second input every fourth frame: the trainer a quarter fast for a
+        // moment as others see it, not double speed.
+        const n = p.queue.length > this.jitter + CATCH_UP && room.tick % 4 === 0 ? 2 : p.queue.length ? 1 : 0;
         if (!n) p.started = false; // ran dry: stand, and wait for a cushion again
         const take = p.queue.splice(0, n);
         p.seq += n;

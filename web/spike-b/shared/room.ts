@@ -15,7 +15,7 @@
 
 import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
-import { newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
+import { dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
 
 export const KEY_UP = 1, KEY_DOWN = 2, KEY_LEFT = 4, KEY_RIGHT = 8, KEY_B = 16, KEY_A = 32;
 
@@ -155,6 +155,17 @@ export class Room {
   private move(a: Actor, bits: number, events: RoomEvent[]): void {
     a.keys = bits;
     if (a.battling) { a.last = bits; return; }
+    if (a.bot && !a.m.action) {
+      const dir = dirOf(keysOf(bits));
+      if (dir) {
+        // A townsperson faces its way and walks at once (WanderAround_Step4 sets the
+        // direction, no turn in place as the player has); a shut way, or a ledge
+        // (wanderers never jump), it only faces.
+        a.m.facing = a.m.moveDir = dir;
+        const r = this.stepFor(a)(a.m.spot, dir);
+        if (!r || r.hop) { a.last = bits; return; }
+      }
+    }
     const before = a.m.strides;
     tick(a.m, keysOf(bits), this.stepFor(a));
     if (a.m.strides !== before) a.arriving = true;

@@ -73,6 +73,51 @@ describe('shared room', () => {
   });
 });
 
+describe('bots', () => {
+  // Cam (2026-10-28): "why does everyone move so fast?" They ran and walked six tiles at a
+  // go. Emerald's wanderers walk one tile at walking pace, then stand 32..128 frames.
+  it("wander like the game's townsfolk: walk one tile, then stand", () => {
+    const host = new Host(makeRoom(MAPS, PATCHES, 5), 64, MAPS);
+    const bots = host.room.actors.map((a) => a.id);
+    const last = new Map<number, string>();
+    const stepEnd = new Map<number, number>();
+    const wasStep = new Map<number, boolean>();
+    const stepFrames = new Map<number, number>();
+    let steps = 0, fastest = 0, shortRest = 0, hops = 0, turns = 0;
+    for (let f = 0; f < 3600; f++) {
+      host.advance();
+      for (const id of bots) {
+        const a = host.room.actor(id)!;
+        const k = `${a.m.spot.map}:${a.m.spot.x}:${a.m.spot.y}`;
+        const stepping = a.m.action?.kind === 'step';
+        if (a.m.action?.kind === 'hop') hops += 1;
+        if (a.m.action?.kind === 'turn') turns += 1;
+        if (stepping) stepFrames.set(id, (stepFrames.get(id) ?? 0) + 1);
+        if (wasStep.get(id) && !stepping) stepEnd.set(id, f);
+        if (a.m.action?.kind === 'hop') stepEnd.delete(id);
+        if (last.has(id) && last.get(id) !== k) {
+          steps += 1;
+          // from the end of its last step to the start of this one: a rest of 32+
+          if (stepEnd.has(id) && f - stepEnd.get(id)! < 32) shortRest += 1;
+        }
+        wasStep.set(id, stepping);
+        last.set(id, k);
+        if (stepping) fastest = Math.max(fastest, a.m.action!.speed);
+      }
+    }
+    const perBotPerMinute = steps / bots.length;
+    // one tile every ~1.5 s on average, never a run
+    expect(perBotPerMinute).toBeGreaterThan(15);
+    expect(perBotPerMinute).toBeLessThan(60);
+    expect(shortRest).toBe(0);
+    expect(hops).toBe(0); // wanderers never jump a ledge
+    expect(turns).toBe(0); // they face and walk at once, no turn in place
+    expect(fastest).toBe(1); // a pixel a frame: walking
+    const frames = [...stepFrames.values()].reduce((x, y) => x + y, 0);
+    expect(frames / steps).toBeGreaterThan(14); // 16 frames a tile (15 seen mid-action): walking, not 8
+  });
+});
+
 describe('comings and goings', () => {
   it('a trainer who leaves mid-fight lets the bot walk again', () => {
     const room = makeRoom(MAPS, PATCHES, 99);
