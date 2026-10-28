@@ -907,22 +907,23 @@ static u8 sSpillNext;
 static bool8 sSpillTeam;
 static u8 sSpillGroup, sSpillNum;
 static s16 sSpillX, sSpillY;
+static u8 sSpillCell; // sAround's next index for a bag past the first
 
 // A bag past the first goes on the next cell round it with nothing on it, while we are
-// still on the map it went down on; else on the first bag's own cell.
+// still on the map it went down on; else on the first bag's own cell. Past the last one
+// used, not only past what our table shows: a full table drops a bag it was handed.
 static void NextBagCell(s16 *x, s16 *y)
 {
-    u8 i;
-
     *x = sSpillX;
     *y = sSpillY;
     if (gSaveBlock1Ptr->location.mapGroup != sSpillGroup || gSaveBlock1Ptr->location.mapNum != sSpillNum)
         return;
-    for (i = 0; i < ARRAY_COUNT(sAround); i++)
+    while (sSpillCell < ARRAY_COUNT(sAround))
     {
-        s16 cx = sSpillX + sSpillDx[sAround[i]];
-        s16 cy = sSpillY + sSpillDy[sAround[i]];
+        s16 cx = sSpillX + sSpillDx[sAround[sSpillCell]];
+        s16 cy = sSpillY + sSpillDy[sAround[sSpillCell]];
 
+        sSpillCell++;
         if (MapGridGetCollisionAt(cx, cy) == 0 && !OnWarp(cx, cy) && BrLoot_At(cx, cy) == NULL)
         {
             *x = cx;
@@ -938,10 +939,11 @@ static void NextBagCell(s16 *x, s16 *y)
 // with only the rows that did not fit, and the name. FALSE when there is nothing left.
 static bool8 SendBag(u8 bag)
 {
-    u8 buf[4 + 9 * PARTY_SIZE + 7 + 3 * BR_SPILL_ITEMS + 4 + 1 + PLAYER_NAME_LENGTH];
+    // header, team, bag flag + key + cell, itemCount, rows, money, name
+    u8 buf[4 + 9 * PARTY_SIZE + 7 + 1 + 3 * BR_SPILL_ITEMS + 4 + 1 + PLAYER_NAME_LENGTH];
     s16 x = sSpillX, y = sSpillY;
     u16 len = 0;
-    u8 count = 0, items, i, j;
+    u8 count = 0, items, i, j, cell = sSpillCell;
     u32 money = 0;
 
     items = PackOwnItems(buf, bag * BR_SPILL_ITEMS); // to see that there is a bag at all
@@ -991,7 +993,10 @@ static bool8 SendBag(u8 bag)
     // Behind anything held, the OUT before it above all (POK-232: the room hears the
     // elimination first). No room is no harm: the next frame tries again.
     if (!BrWire_Clear() || !BrWire_SendLarge(BR_MSG_SPILL, buf, len))
+    {
+        sSpillCell = cell; // the same cell when it does go
         return TRUE;
+    }
     // Nobody hears their own message come back off the relay, so put ours down here.
     ParseSpill(buf, len);
     sSpillNext++;
@@ -1024,6 +1029,7 @@ void BrLoot_SpillOwn(void)
     sSpillGroup = gSaveBlock1Ptr->location.mapGroup;
     sSpillNum = gSaveBlock1Ptr->location.mapNum;
     sSpillTeam = !sTeamTaken;
+    sSpillCell = 0;
     sSpillNext = 1;
     SendSpill();
 }

@@ -1,0 +1,40 @@
+# spill-own-partial: a drop of two bags going out into a nearly full ring goes a bag at a
+# time (HBR-88, HBR-89): what room there is takes the held OUT and the first bag, and the
+# second waits for the page to drain the ring, then lands on the cell it would have had.
+#
+# spill-own-overflow.txt's fifteen rows, and the ring full when the fog finishes TREECKO.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 gPlayerPartyCount 1
+poke u32 *gSaveBlock2Ptr+0xAC 0
+pokebytes *gSaveBlock1Ptr+0x560 0D 00 01 00 0E 00 01 00 0F 00 01 00 10 00 01 00 11 00 01 00 12 00 01 00 13 00 01 00 14 00 01 00 15 00 01 00 16 00 01 00
+pokebytes *gSaveBlock1Ptr+0x650 04 00 05 00
+pokebytes *gSaveBlock1Ptr+0x790 8B 00 2C 01
+poke u16 gPlayerParty+0x56 2
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 2
+poke u16 gBrMailbox+0x08 64
+poke u16 gBrMailbox+0x0A 0
+waitfor u16 gPlayerParty+0x56 0 300
+wait 30
+expect u8 gBrMatch 3
+expect u16 gBrMailbox+0x08 64
+# two slots free: the OUT and the first bag (one slot), and no room left for the second
+poke u16 gBrMailbox+0x0A 2
+wait 10
+expect u16 gBrMailbox+0x08 66
+expectmsg 9 u8 0 0
+expectmsg 11 u16 14 0x00FF
+expectmsg 11 u8 20 8
+# all of it free: the second bag, on (13,17) beside the first's (12,16)
+poke u16 gBrMailbox+0x0A 66
+wait 10
+expect u16 gBrMailbox+0x08 67
+expectmsg 11 u16 5 0x00FE
+expectmsg 11 u16 7 13
+expectmsg 11 u16 9 17
+expectmsg 11 u8 11 7
+say spill own partial ok
