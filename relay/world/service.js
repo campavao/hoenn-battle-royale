@@ -984,6 +984,16 @@ function scatterItem(rng) {
   return ITEM_SUPER_POTION;
 }
 
+// web/spike-b/carry.ts
+var BAG_AT = 1168;
+var BAG_LEN = 2120 - 1168;
+var POCKETS_AT = 1376 - BAG_AT;
+var PARTY_LEN = 6 * 100;
+var DEX2_LEN = 144 - 28;
+var ITEM_TM012 = 289;
+var ITEM_HM08 = 346;
+var isTm = (item) => item >= ITEM_TM012 && item <= ITEM_HM08;
+
 // web/spike-b/sim.ts
 var DIR_SOUTH = 1;
 var DIR_NORTH = 2;
@@ -1131,6 +1141,8 @@ var Room = class {
       const a = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, beaten: false, foe: 0, arriving: false };
       this.actors.push(a);
       this.actors.sort((p, q) => p.id - q.id);
+    } else if (cmd.c === "drop") {
+      if (this.picked.get(cmd.key) === cmd.id) this.picked.delete(cmd.key);
     } else if (cmd.c === "leave") {
       const a = this.actor(cmd.id);
       const foe = a?.foe ? this.actor(a.foe) : void 0;
@@ -1194,7 +1206,9 @@ var Room = class {
       const cells = land.get(id2).filter((c) => !marked.has(`${c.x}:${c.y}`) && !(id2 === "MAP_LITTLEROOT_TOWN" && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
       for (let i = 0; i < GROUND_PER_MAP && cells.length; i++) {
         const c = cells.splice(Math.floor(rng() * cells.length), 1)[0];
-        out.set(`${id2}:${c.x}:${c.y}`, { key: ++n, map: id2, x: c.x, y: c.y, item: scatterItem(rng) });
+        let item = scatterItem(rng);
+        while (isTm(item)) item = scatterItem(rng);
+        out.set(`${id2}:${c.x}:${c.y}`, { key: ++n, map: id2, x: c.x, y: c.y, item });
       }
     }
     DEALS.set(id, out);
@@ -1486,6 +1500,10 @@ var Host = class {
   end(id) {
     if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: "end", id });
   }
+  /** The ball `key` would not go in the phone's bag: back on the ground. */
+  drop(id, key) {
+    if (this.players.has(id) && this.room.picked.get(key) === id) this.pending.push({ c: "drop", id, key });
+  }
   /** One frame. The record goes to every mirror; `acks` is each phone's last input used. */
   advance() {
     const room = this.room;
@@ -1599,6 +1617,8 @@ var WorldService = class {
           this.host.input(id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
         } else if (m.t === "end") {
           this.host.end(id);
+        } else if (m.t === "drop") {
+          if (Number.isInteger(m.k)) this.host.drop(id, m.k);
         } else if (m.t === "sync") {
           const now = this.opts.now();
           if (now - synced < SYNC_MS) return;

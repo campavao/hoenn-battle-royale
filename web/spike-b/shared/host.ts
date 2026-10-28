@@ -102,6 +102,11 @@ export class Host {
     if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: 'end', id });
   }
 
+  /** The ball `key` would not go in the phone's bag: back on the ground. */
+  drop(id: number, key: number): void {
+    if (this.players.has(id) && this.room.picked.get(key) === id) this.pending.push({ c: 'drop', id, key });
+  }
+
   /** One frame. The record goes to every mirror; `acks` is each phone's last input used. */
   advance(): { frame: Frame; acks: Map<number, number>; events: RoomEvent[] } {
     const room = this.room;

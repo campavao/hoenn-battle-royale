@@ -69,6 +69,8 @@ export class WorldService {
           this.host.input(id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
         } else if (m.t === 'end') {
           this.host.end(id);
+        } else if (m.t === 'drop') {
+          if (Number.isInteger(m.k)) this.host.drop(id, m.k);
         } else if (m.t === 'sync') {
           const now = this.opts.now();
           if (now - synced < SYNC_MS) return;

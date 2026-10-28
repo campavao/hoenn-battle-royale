@@ -20,6 +20,7 @@
 import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
 import { scatterItem } from '../../src/match/scatter';
+import { isTm } from '../carry';
 import { dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
 
 export const KEY_UP = 1, KEY_DOWN = 2, KEY_LEFT = 4, KEY_RIGHT = 8, KEY_B = 16, KEY_A = 32;
@@ -70,7 +71,10 @@ export const GROUND_PER_MAP = 6;
 export type Command =
   | { c: 'join'; id: number; bot: boolean; name: string; skin: number; spot: Spot; facing: number }
   | { c: 'leave'; id: number }
-  | { c: 'end'; id: number };
+  | { c: 'end'; id: number }
+  /** The ball `key` would not go in `id`'s bag: it lies where it was (POK-294, nothing
+   *  leaves the match). */
+  | { c: 'drop'; id: number; key: number };
 
 /** The marked spots grow back: the ring's phase does it in the game; here, a while. */
 export const REGROW = 60 * 90;
@@ -129,6 +133,8 @@ export class Room {
       // Ordered by id, on every machine: who moves first decides who gets a contested cell.
       this.actors.push(a);
       this.actors.sort((p, q) => p.id - q.id);
+    } else if (cmd.c === 'drop') {
+      if (this.picked.get(cmd.key) === cmd.id) this.picked.delete(cmd.key);
     } else if (cmd.c === 'leave') {
       // A bot fought by somebody who left walks again.
       const a = this.actor(cmd.id);
@@ -193,7 +199,11 @@ export class Room {
         !(id === 'MAP_LITTLEROOT_TOWN' && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
       for (let i = 0; i < GROUND_PER_MAP && cells.length; i++) {
         const c = cells.splice(Math.floor(rng() * cells.length), 1)[0];
-        out.set(`${id}:${c.x}:${c.y}`, { key: ++n, map: id, x: c.x, y: c.y, item: scatterItem(rng) });
+        // No machines yet: in a match one off the ground is taught there and then (br_items.c
+        // Found), which a bare GIVE would skip.
+        let item = scatterItem(rng);
+        while (isTm(item)) item = scatterItem(rng);
+        out.set(`${id}:${c.x}:${c.y}`, { key: ++n, map: id, x: c.x, y: c.y, item });
       }
     }
     DEALS.set(id, out);

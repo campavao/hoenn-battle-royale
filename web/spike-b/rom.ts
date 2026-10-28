@@ -18,7 +18,7 @@ import { Mailbox, MAILBOX } from '../src/net/mailbox';
 import { packSlot } from '../src/net/slots';
 import { PROTOCOL, type PackedMon } from '../src/net/wire';
 import { loadCheckedRelease } from '../src/release';
-import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, rekey } from './carry';
+import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, rekey } from './carry';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 
 const BOOT_MAP_TESTMON = 0x81;
@@ -38,6 +38,8 @@ export let lastStart: { ms: number; frames: number } | null = null;
  *  keeps the screen, and nothing showed). */
 export interface Fought { ok: boolean; outcome: number; species: number; level: number }
 
+export interface Given { items: { id: number; n: number }[]; money: number; used: boolean }
+
 export interface RomBattles {
   /** Fight `name`'s party. Resolves when the ROM is back on the field. */
   fight(name: string, mons: PackedMon[], skin: number, onStart: () => void): Promise<Fought>;
@@ -45,8 +47,9 @@ export interface RomBattles {
    *  metatile behaviour (water or land, and the backdrop). */
   wild(group: number, num: number, behavior: number, onStart: () => void): Promise<Fought>;
   /** An item ball picked up: into the bag the ROM's own way (a match's GIVE, so a vitamin
-   *  is used and a nugget sold as in a match). False when the bag had no room. */
-  give(item: number, n: number): Promise<boolean>;
+   *  is used and a nugget sold as in a match). What went in, as the ROM filed it; `used`
+   *  when it went on the team; null when it did not fit. */
+  give(item: number, n: number): Promise<Given | null>;
   press(k: GbaKey): void;
   release(k: GbaKey): void;
   emu: Emulator;
@@ -238,16 +241,23 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     },
     give(item, n) {
       return inTurn(async () => {
-        if (broken) return false;
+        if (broken) return null;
         const before = kept();
         // br_loot.c's HandleGive: straight into AddBagItem when no bag of ours is waiting.
         emu.resume();
         send({ t: 'give', items: [{ id: item, n }] });
-        await frames(emu, 4);
+        await until(emu, () => box.pending() === 0, 60);
+        await frames(emu, 1);
         emu.pause();
-        carried = kept();
-        // Nothing changed: the pocket was full (GiveRows says so on the hidden field).
-        return carried.bag.some((b, i) => b !== before.bag[i]) || carried.party.some((b, i) => b !== before.party[i]);
+        const after = kept();
+        // Back to parked with what it left, as after a battle: a refusal's NO ROOM box and
+        // the frames it ran are not where the next battle starts.
+        if (!emu.restore(parked!)) broken = true;
+        else keep(after);
+        carried = after;
+        const got = arrived(before, after);
+        const used = after.party.some((b, i) => b !== before.party[i]);
+        return got.items.length || got.money || used ? { ...got, used } : null;
       });
     },
     wild(group, num, behavior, onStart) {

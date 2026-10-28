@@ -23,6 +23,7 @@ import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, makeRoom, type Act
 import { SKIN_GFX } from './shared/bots';
 import { onlineLink, soloLink, type WorldLink } from './net';
 import { bootRom, loadRom, lastStart, type Fought, type RomBattles } from './rom';
+import { groundCount } from './carry';
 import { RomArt } from './romart';
 import type { GbaKey } from '../src/emu';
 import type { PackedMon } from '../src/net/wire';
@@ -224,10 +225,8 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
 // and waits for the ROM if it is still booting.
 const foundEl = document.getElementById('found')!;
 let foundUntil = 0;
-const toGive: number[] = [];
+const toGive: { key: number; item: number }[] = [];
 let giving = false;
-/** include/constants/items.h: a ball off the ground is six (br_items.c's Pickup). */
-const ITEM_MASTER_BALL = 1, ITEM_LAST_BALL = 12, BALLS_OFF_THE_GROUND = 6;
 
 function say(text: string): void {
   foundEl.textContent = text;
@@ -238,11 +237,16 @@ function say(text: string): void {
 function giveNext(): void {
   if (giving || !rom || !toGive.length) return;
   giving = true;
-  const item = toGive.shift()!;
-  const n = item > ITEM_MASTER_BALL && item <= ITEM_LAST_BALL ? BALLS_OFF_THE_GROUND : 1;
-  const name = art?.itemName(item) || `item ${item}`;
-  rom.give(item, n).then((ok) => {
-    if (!ok) say(`No room in the bag for ${name}.`);
+  const { key, item } = toGive.shift()!;
+  const name = (id: number) => art?.itemName(id) || `item ${id}`;
+  rom.give(item, groundCount(item)).then((got) => {
+    // What the ROM made of it (br_items.c's Apply), not what was on the ground.
+    if (!got) {
+      say(`No room in the bag for ${name(item)}.`);
+      link.drop(key); // it stays where it lay
+    } else if (got.items.length) say(`Found ${got.items.map((g) => `${g.n > 1 ? `${g.n} ` : ''}${name(g.id)}`).join(', ')}!`);
+    else if (got.money) say(`Sold ${name(item)} for ¥${got.money}.`);
+    else say(`${name(item)}! Your team got stronger.`);
   }, (e) => console.warn('spike give failed', e)).finally(() => { giving = false; giveNext(); });
 }
 
@@ -250,10 +254,7 @@ function giveNext(): void {
  *  it as the battle started, as BrPatch_Take does), or A at an item ball. */
 function startFor(e: RoomEvent): void {
   if (e.type === 'item') {
-    const name = art?.itemName(e.item) || `item ${e.item}`;
-    const n = e.item > ITEM_MASTER_BALL && e.item <= ITEM_LAST_BALL ? BALLS_OFF_THE_GROUND : 1;
-    say(`Found ${n > 1 ? `${n} ` : ''}${name}!`);
-    toGive.push(e.item);
+    toGive.push({ key: e.key, item: e.item });
     giveNext();
     return;
   }

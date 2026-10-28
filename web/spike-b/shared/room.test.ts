@@ -7,6 +7,7 @@ import type { PatchTable } from '../../src/bots/patches';
 import worldJson from '../data/world.json';
 import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
+import { isTm } from '../carry';
 import { GROUND_PER_MAP, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, makeRoom } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
@@ -232,6 +233,7 @@ describe('item balls', () => {
       expect(one.world.cell(b.map, b.x, b.y)).toBe(0);
       expect(one.patchesOn(b.map).some((q) => q.x === b.x && q.y === b.y)).toBe(false);
       expect(b.item).toBeGreaterThan(0);
+      expect(isTm(b.item)).toBe(false); // no machines until one is taught off the ground
     }
     expect(new Set(g.map((b) => b.key)).size).toBe(g.length);
   });
@@ -253,6 +255,13 @@ describe('item balls', () => {
     mirror.load(room.state());
     expect(mirror.groundAt(b.map, b.x, b.y)).toBeUndefined();
     expect(mirror.hash()).toBe(room.hash());
+    // a ball that would not go in the bag is put back by its taker, and only by them
+    const back = makeRoom(MAPS, PATCHES, 4242);
+    back.load(room.state());
+    back.apply({ c: 'drop', id: 2, key: b.key });
+    expect(back.groundAt(b.map, b.x, b.y)).toBeUndefined();
+    back.apply({ c: 'drop', id: 1, key: b.key });
+    expect(back.groundAt(b.map, b.x, b.y)).toEqual(b);
     // now the cell is open
     let walked = false;
     for (let i = 0; i < 40 && !walked; i++) { press(KEY_RIGHT); walked = room.actor(1)!.m.spot.x === b.x; }
