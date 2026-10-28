@@ -8,7 +8,7 @@
 // from that map's own table. When the ROM is back on the field the battle is over, the
 // page takes the screen back, and the ROM is put back where it was parked -- with the
 // party and the bag the battle left (a catch, a used POTION, a level), so the trainer's
-// team is theirs from battle to battle.
+// team is theirs from battle to battle (carry.ts).
 //
 // The ROM is the player's own, patched the way the game patches it (loadRom). In dev,
 // web/public/spike-rom/ (gitignored, never committed) can stand in for it.
@@ -18,6 +18,7 @@ import { Mailbox, MAILBOX } from '../src/net/mailbox';
 import { packSlot } from '../src/net/slots';
 import { PROTOCOL, type PackedMon } from '../src/net/wire';
 import { loadCheckedRelease } from '../src/release';
+import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, rekey } from './carry';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 
 const BOOT_MAP_TESTMON = 0x81;
@@ -30,15 +31,6 @@ const WILD_DONE = 3;
 // gBattleOutcome.
 const LOST = 2;
 const DREW = 3;
-// include/global.h's SaveBlock1: money, coins, the registered item, the PC's items and
-// every bag pocket, one run from 0x490 to 0x848. Money, coins and the pockets' counts are
-// kept XORed with SaveBlock2's key (0xAC), and every battle's start draws a new one
-// (MoveSaveBlocks_ResetHeap), so they are carried from the battle's key to the parked one.
-const BAG_AT = 0x490;
-const BAG_LEN = 0x848 - 0x490;
-const KEY_AT = 0xac;
-const POCKETS_AT = 0x560 - BAG_AT;
-const PARTY_LEN = 6 * 100;
 /** How long the last fight took to start: from the TRAINER card to the battle running. */
 export let lastStart: { ms: number; frames: number } | null = null;
 
@@ -129,8 +121,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   emu.write(match + 8, seed >>> 0, 32);
   await frames(emu, 2);
   // Parked: every battle starts from here and comes back to it. Whatever a battle leaves
-  // on the hidden field -- a whiteout's walk home, a win's spoils -- is undone, so the
-  // next one is never refused (review of #157). Only the party and the bag are carried.
+  // on the hidden field -- a whiteout's walk home, a story flag -- is undone, so the next
+  // one is never refused (review of #157). The party, the bag (prize money too) and the
+  // Pokédex are carried (carry.ts).
   const parked = emu.snapshot();
   if (!parked) throw new Error('the core would not save a state');
 
@@ -143,22 +136,28 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   const countAt = sym('gPlayerPartyCount');
   const save1 = sym('gSaveBlock1Ptr');
   const save2 = sym('gSaveBlock2Ptr');
-  /** The trainer's own: party and bag, copied out of the ROM, and back in. */
-  const kept = () => ({
-    count: emu.read(countAt, 8),
-    party: emu.bytes(partyAt, PARTY_LEN).slice(),
-    bag: emu.bytes(emu.read(save1, 32) + BAG_AT, BAG_LEN).slice(),
-    key: emu.read(emu.read(save2, 32) + KEY_AT, 32),
-  });
+  /** The trainer's own: party, bag and Pokédex, copied out of the ROM, and back in. The
+   *  save blocks move at every battle's start, so each is found through its pointer. */
+  const kept = () => {
+    const s1 = emu.read(save1, 32), s2 = emu.read(save2, 32);
+    return {
+      count: emu.read(countAt, 8),
+      party: emu.bytes(partyAt, PARTY_LEN).slice(),
+      bag: emu.bytes(s1 + BAG_AT, BAG_LEN).slice(),
+      key: emu.read(s2 + KEY_AT, 32),
+      dex: emu.bytes(s2 + DEX2_AT, DEX2_LEN).slice(),
+      seen1: emu.bytes(s1 + SEEN1_AT, SEEN_LEN).slice(),
+      seen2: emu.bytes(s1 + SEEN2_AT, SEEN_LEN).slice(),
+    };
+  };
   const keep = (k: ReturnType<typeof kept>) => {
-    const bag = new DataView(k.bag.slice().buffer);
-    const x = (k.key ^ emu.read(emu.read(save2, 32) + KEY_AT, 32)) >>> 0;
-    bag.setUint32(0, bag.getUint32(0, true) ^ x, true); // money
-    bag.setUint16(4, bag.getUint16(4, true) ^ (x & 0xffff), true); // coins
-    for (let at = POCKETS_AT; at < BAG_LEN; at += 4) bag.setUint16(at + 2, bag.getUint16(at + 2, true) ^ (x & 0xffff), true);
+    const s1 = emu.read(save1, 32), s2 = emu.read(save2, 32);
     emu.write(countAt, k.count, 8);
     emu.bytes(partyAt, PARTY_LEN).set(k.party);
-    emu.bytes(emu.read(save1, 32) + BAG_AT, BAG_LEN).set(new Uint8Array(bag.buffer));
+    emu.bytes(s1 + BAG_AT, BAG_LEN).set(rekey(k.bag, k.key, emu.read(s2 + KEY_AT, 32)));
+    emu.bytes(s2 + DEX2_AT, DEX2_LEN).set(k.dex);
+    emu.bytes(s1 + SEEN1_AT, SEEN_LEN).set(k.seen1);
+    emu.bytes(s1 + SEEN2_AT, SEEN_LEN).set(k.seen2);
   };
   const send = (msg: Parameters<typeof packSlot>[0]) => {
     for (const s of packSlot(msg)) box.push(s.type, s.payload);
@@ -195,7 +194,11 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       result = { ok: true, ...after() };
       // A catch with a full party: back on its field the ROM asks which one makes room
       // (br_catch.c). The player answers it on the ROM's screen, as in a match.
-      await until(emu, () => emu.read(catchAt, 8) === 0, Infinity);
+      const asked = await until(emu, () => emu.read(catchAt, 8) === 0, 600);
+      if (!asked) {
+        console.warn('spike: a catch is still waiting for a slot after 10 s', { catch: [...emu.bytes(catchAt, 8)], callback2: emu.read(sym('gMain') + 4, 32).toString(16) });
+        await until(emu, () => emu.read(catchAt, 8) === 0, Infinity);
+      }
       // A loss is a whiteout: in a match the trainer is out. Here the team goes back to
       // how it came in (the ring and elimination are the match's, later).
       if (result.outcome !== LOST && result.outcome !== DREW) carried = kept();
