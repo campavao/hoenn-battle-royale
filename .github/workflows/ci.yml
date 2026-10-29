@@ -55,11 +55,17 @@ jobs:
 
       - id: scope
         run: |
+          set -o pipefail
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            git diff -z --name-only HEAD^1 HEAD | xargs -0 node web/scripts/ci-scope.mjs | tee -a "$GITHUB_OUTPUT"
+            # --no-renames: a file moved out of src/ must count where it came from too.
+            git diff -z --no-renames --name-only HEAD^1 HEAD > changed
+            node web/scripts/ci-scope.mjs < changed > scope.txt
           else
-            printf 'rom=true\ne2e=all\n' | tee -a "$GITHUB_OUTPUT"
+            printf 'rom=true\ne2e=all\n' > scope.txt
           fi
+          cat scope.txt
+          grep -q '^rom=' scope.txt && grep -q '^e2e=' scope.txt
+          cat scope.txt >> "$GITHUB_OUTPUT"
 
   # Every BR touch in a pret file sits under `#if BR` / `.if BR` (docs/C-STYLE.md), so a
   # pret merge only ever meets our lines in guarded blocks. Seconds, no toolchain.
@@ -235,8 +241,8 @@ jobs:
         shard: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
       # On a pull request that reaches no spec (scripts/ci-scope.mjs) every step is skipped
-      # and the shard passes: the ruleset still requires e2e (1) to (4) by name, and a
-      # skipped matrix reports no shard at all.
+      # and the shard passes, instead of the job being skipped: until the ruleset requires
+      # `e2e done`, it requires e2e (1) to (4) by name, and a skipped matrix reports none.
       RUN_E2E: ${{ needs.scope.outputs.e2e != 'none' }}
       # Unset (the whole suite) unless the PR reaches only some specs.
       E2E_SPECS: ${{ needs.scope.outputs.e2e != 'all' && needs.scope.outputs.e2e || '' }}

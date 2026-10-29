@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 // What a pull request can break, from the files it changes:
 //
-//     node scripts/ci-scope.mjs <changed file>...   # -> rom=true|false, e2e=all|none|<spec files>
+//     git diff -z --no-renames --name-only A B | node scripts/ci-scope.mjs   # -> rom=..., e2e=...
+//
+// Paths come NUL-separated on stdin (no argument limit to split them across two runs). It
+// prints rom=true|false and e2e=all|none|<spec files>. No paths at all is everything: an
+// empty diff is more likely a broken checkout than a PR that changes nothing.
 //
 // BR CI runs the rom job (both ROM builds and every driver) and the whole e2e suite on every
 // push, tag and release. On a pull request this decides how much of that the change can
@@ -11,6 +15,7 @@
 //
 // A path takes the first rule it matches; a path no rule names runs everything, so a new
 // directory is covered until someone says otherwise.
+import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
@@ -27,7 +32,11 @@ export const RULES = [
   // A spec changed: that spec. Helpers beside the specs (symbols.ts, play.ts, ...) fall through
   // to the web/ rule below, since every spec uses them.
   { match: /^web\/e2e\/[^/]+\.spec\.ts$/, rom: false, e2e: (path) => [basename(path)] },
-  // The shell and the relay: every spec drives both, but neither goes into the ROM.
+  // Shell files the rom job reads too: make-patch.sh checks the BPS with the page's own
+  // decoder (tools/br/make-bps.ts, under web's vite-node), version-json.sh reads the shell's
+  // version, and objects-band.py, a driver's checker, reads the sprite sheets.
+  { match: /^web\/src\/(patch|rom)\/|^web\/src\/data\/sprites\.json$|^web\/package(-lock)?\.json$/, rom: true, e2e: 'all' },
+  // The rest of the shell, and the relay: every spec drives both, but neither goes into the ROM.
   { match: /^web\/|^relay\//, rom: false, e2e: 'all' },
 ];
 const EVERYTHING = { rom: true, e2e: 'all' };
@@ -48,8 +57,8 @@ export function scope(paths) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const paths = process.argv.slice(2);
-  const { rom, e2e } = scope(paths);
+  const paths = readFileSync(0, 'utf8').split('\0').filter(Boolean);
+  const { rom, e2e } = paths.length === 0 ? EVERYTHING : scope(paths);
   const e2eOut = e2e === 'all' ? 'all' : e2e.length === 0 ? 'none' : e2e.join(' ');
   console.error(`${paths.length} files changed: rom ${rom}, e2e ${e2eOut}`);
   console.log(`rom=${rom}`);

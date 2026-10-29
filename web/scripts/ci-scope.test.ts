@@ -31,6 +31,12 @@ describe('ci-scope', () => {
     expect(scope(['relay/server.js', 'web/spike-b/main.ts'])).toEqual({ rom: false, e2e: 'all' });
   });
 
+  it('runs the ROM job for the shell files it reads: the BPS decoder, the version, the sprite sheets', () => {
+    for (const path of ['web/src/patch/bps.ts', 'web/src/rom/emerald.ts', 'web/src/data/sprites.json', 'web/package.json']) {
+      expect(scope([path]), path).toEqual({ rom: true, e2e: 'all' });
+    }
+  });
+
   it('runs everything for the ROM, the tools, CI, or a path no rule names', () => {
     for (const path of ['src/br/br_loot.c', 'tools/br/drivers/smoke.txt', '.github/workflows/ci.yml', 'Makefile', 'somewhere/new.txt']) {
       expect(scope(['docs/DESIGN.md', path]), path).toEqual({ rom: true, e2e: 'all' });
