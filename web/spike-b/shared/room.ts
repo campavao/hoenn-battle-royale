@@ -94,6 +94,9 @@ export interface Actor {
    *  next is due while it stands in the fog (its own clock, as brain.ts's bleedAt). */
   bites?: number;
   bleedAt?: number;
+  /** A bot's pickings: the balls and the bags' items and money it took on its way, which
+   *  go into the bag it drops when it is out. */
+  loot?: { items: Stack[]; money: number };
   /** Fighting gym leader n - 1 (gyms.ts). */
   boss?: number;
   /** A fight that started from a look, before it starts (br_walkup.h): the "!", then the
@@ -1015,22 +1018,8 @@ export class Room {
     const phase = this.ring().phase + 1;
     const grade = gradeOf(this.seed, a.id);
     const party = dealParty(this.seed, a.id, phase, a.m.spot.map, grade);
-    // And whatever it picked up on its way, balls and bags (bots carry what they pick
-    // up, POK-322).
-    const loot: Stack[] = [];
-    let money = purse(phase, grade);
-    const mine = new Set<number>();
-    for (const [k, who] of this.picked) if (who === a.id) mine.add(k);
-    if (mine.size) {
-      for (const g of this.ground().values()) if (mine.has(g.key)) add(loot, g.item);
-      for (const k of mine) {
-        const b = this.spills.get(k);
-        if (!b) continue;
-        for (const st of b.bag.items) add(loot, st.id, st.n);
-        money += b.bag.money;
-      }
-    }
-    const bag: Bag = { items: carried(party, loot), money, mons: party.map((m) => ({ species: m.species, level: m.level })) };
+    // And whatever it picked up on its way (bots carry what they pick up, POK-322).
+    const bag: Bag = { items: carried(party, a.loot?.items ?? []), money: purse(phase, grade) + (a.loot?.money ?? 0), mons: party.map((m) => ({ species: m.species, level: m.level })) };
     const key = SPILL_KEY + a.id;
     if (!emptyBag(bag)) this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag });
     this.fall(a, by);
@@ -1356,8 +1345,16 @@ export class Room {
           const [x, y] = this.ahead(a);
           const g = this.groundAt(a.m.spot.map, x, y);
           const b = g ? undefined : this.spillAt(a.m.spot.map, x, y);
-          if (g && !g.gift) this.picked.set(g.key, a.id);
-          if (b && !b.legend && !b.person && b.guard === undefined) this.picked.set(b.key, a.id);
+          const loot = (a.loot ??= { items: [], money: 0 });
+          if (g && !g.gift) { this.picked.set(g.key, a.id); add(loot.items, g.item); }
+          if (b && !b.legend && !b.person && b.guard === undefined) {
+            // Its items and money, as live bots empty a bag (brain.ts takePiece). The
+            // Pokémon stay in it for whoever comes next (HBR-82), and the bot steps over it.
+            for (const st of b.bag.items) add(loot.items, st.id, st.n);
+            loot.money += b.bag.money;
+            if (b.bag.mons?.length) b.bag = { items: [], money: 0, mons: b.bag.mons };
+            else this.picked.set(b.key, a.id);
+          }
         }
         // A, from a bot on its way somewhere (bots.ts): it may jump a ledge, or SURF.
         if (!r || ((r.hop || (r.water && !this.onWater(a))) && !(bits & KEY_A))) { a.last = bits; return; }
@@ -1482,7 +1479,10 @@ export class Room {
       const t = r.to;
       // A REGI chamber's wall: shut until its story opened it (and in a match without one).
       if (r.warp && DOOR_MAPS.has(from.map) && from.y === DOOR_Y + 1 && t.y < DOOR_Y && !this.events.some((e) => e.map === from.map && e.opened)) return null;
-      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y) || ferryAt(t.map, t.x, t.y)) return null;
+      // A bag a bot has emptied of its items but not of its Pokémon it steps over.
+      const bag = this.spillAt(t.map, t.x, t.y);
+      if (bag && !(a.bot && !bag.bag.items.length && !bag.bag.money && !bag.legend && !bag.person && bag.guard === undefined)) return null;
+      if (this.groundAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y) || ferryAt(t.map, t.x, t.y)) return null;
       // The Zone's gate is shut until the drop, both ways.
       if (from.map.startsWith(SAFARI) !== t.map.startsWith(SAFARI) && this.ring().safari) return null;
       const boss = leaderAt(t.map, t.x, t.y);
@@ -1505,7 +1505,7 @@ export class Room {
       mix(m.facing); mix(m.moveDir); mix(m.runningState); mix(m.run ? 1 : 0); mix(m.strides); mix(m.bike ? 1 + m.bikeSpeed * 4 + m.bikeCount * 16 : 0);
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
-      mix((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.bleedAt ?? 0); mix(a.boss ?? 0); mix(a.away ? 1 : 0); mix(a.pickBy ?? 0);
+      mix((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.bleedAt ?? 0); mix(a.boss ?? 0); mix(a.away ? 1 : 0); mix(a.pickBy ?? 0); mix(a.loot?.money ?? 0); for (const st of a.loot?.items ?? []) { mix(st.id); mix(st.n); }
       if (a.meet) { mix(a.meet.foe); mix(a.meet.since); mix((a.meet.walk ? 1 : 0) | (a.meet.duel ? 2 : 0)); }
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }

@@ -2949,20 +2949,7 @@ var Room = class {
     const phase = this.ring().phase + 1;
     const grade = gradeOf(this.seed, a.id);
     const party = dealParty(this.seed, a.id, phase, a.m.spot.map, grade);
-    const loot = [];
-    let money = purse(phase, grade);
-    const mine = /* @__PURE__ */ new Set();
-    for (const [k, who] of this.picked) if (who === a.id) mine.add(k);
-    if (mine.size) {
-      for (const g of this.ground().values()) if (mine.has(g.key)) add(loot, g.item);
-      for (const k of mine) {
-        const b = this.spills.get(k);
-        if (!b) continue;
-        for (const st of b.bag.items) add(loot, st.id, st.n);
-        money += b.bag.money;
-      }
-    }
-    const bag = { items: carried(party, loot), money, mons: party.map((m) => ({ species: m.species, level: m.level })) };
+    const bag = { items: carried(party, a.loot?.items ?? []), money: purse(phase, grade) + (a.loot?.money ?? 0), mons: party.map((m) => ({ species: m.species, level: m.level })) };
     const key = SPILL_KEY + a.id;
     if (!emptyBag(bag)) this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag });
     this.fall(a, by);
@@ -3303,8 +3290,17 @@ var Room = class {
           const [x, y] = this.ahead(a);
           const g = this.groundAt(a.m.spot.map, x, y);
           const b = g ? void 0 : this.spillAt(a.m.spot.map, x, y);
-          if (g && !g.gift) this.picked.set(g.key, a.id);
-          if (b && !b.legend && !b.person && b.guard === void 0) this.picked.set(b.key, a.id);
+          const loot = a.loot ??= { items: [], money: 0 };
+          if (g && !g.gift) {
+            this.picked.set(g.key, a.id);
+            add(loot.items, g.item);
+          }
+          if (b && !b.legend && !b.person && b.guard === void 0) {
+            for (const st of b.bag.items) add(loot.items, st.id, st.n);
+            loot.money += b.bag.money;
+            if (b.bag.mons?.length) b.bag = { items: [], money: 0, mons: b.bag.mons };
+            else this.picked.set(b.key, a.id);
+          }
         }
         if (!r || (r.hop || r.water && !this.onWater(a)) && !(bits & KEY_A)) {
           a.last = bits;
@@ -3417,7 +3413,9 @@ var Room = class {
       if (a.bot && !this.places.has(r.to.map)) return null;
       const t = r.to;
       if (r.warp && DOOR_MAPS.has(from.map) && from.y === DOOR_Y + 1 && t.y < DOOR_Y && !this.events.some((e) => e.map === from.map && e.opened)) return null;
-      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y) || ferryAt(t.map, t.x, t.y)) return null;
+      const bag = this.spillAt(t.map, t.x, t.y);
+      if (bag && !(a.bot && !bag.bag.items.length && !bag.bag.money && !bag.legend && !bag.person && bag.guard === void 0)) return null;
+      if (this.groundAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y) || ferryAt(t.map, t.x, t.y)) return null;
       if (from.map.startsWith(SAFARI) !== t.map.startsWith(SAFARI) && this.ring().safari) return null;
       const boss = leaderAt(t.map, t.x, t.y);
       if (boss && !this.bossDown(boss.n)) return null;
@@ -3470,6 +3468,11 @@ var Room = class {
       mix2(a.boss ?? 0);
       mix2(a.away ? 1 : 0);
       mix2(a.pickBy ?? 0);
+      mix2(a.loot?.money ?? 0);
+      for (const st of a.loot?.items ?? []) {
+        mix2(st.id);
+        mix2(st.n);
+      }
       if (a.meet) {
         mix2(a.meet.foe);
         mix2(a.meet.since);
