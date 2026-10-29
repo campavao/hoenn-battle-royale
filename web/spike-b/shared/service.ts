@@ -14,6 +14,13 @@
 import type { WorldMap } from '../../src/bots/world';
 import type { PatchTable } from '../../src/bots/patches';
 import { CODE_ALPHABET, CODE_LENGTH } from '../../src/match/lobby';
+import { Host } from './host';
+import { RING_PHASE, makeRoom } from './room';
+import { FOG_STEPS, MAX_STEPS, SAFARI_STEPS } from '../../src/match/room';
+import { cleanBag } from './items';
+import { over } from './over';
+import type { FameMon } from '../../src/ui/results';
+import { HASH_EVERY, type Again, type CardRecord, type Listed, type Member, type Settings, type SpMsg, type WireFrame, type WorldDown, type WorldUp } from './wire';
 
 /** A career off the wire, whole numbers or nothing: what a seat's card shows. */
 function recOf(r: unknown): { rec?: CardRecord } {
@@ -26,12 +33,30 @@ function recOf(r: unknown): { rec?: CardRecord } {
 
 /** A passcode: four of the room codes' letters (ui/entry.ts PASS_ENTRY). */
 const isPass = (s: string) => s.length === 4 && [...s.toUpperCase()].every((c) => CODE_ALPHABET.includes(c));
-import { Host } from './host';
-import { RING_PHASE, makeRoom } from './room';
-import { FOG_STEPS, MAX_STEPS, SAFARI_STEPS } from '../../src/match/room';
-import { cleanBag } from './items';
-import { over } from './over';
-import { HASH_EVERY, type Again, type CardRecord, type Listed, type Member, type Settings, type SpMsg, type WireFrame, type WorldDown, type WorldUp } from './wire';
+
+/** A team off the wire, sane or nothing: six at most, each a species and a level, its
+ *  name, HP and four moves (ui/results.ts FameMon). */
+function teamOf(t: unknown): FameMon[] | undefined {
+  if (!Array.isArray(t) || t.length > 6) return undefined;
+  const int = (v: unknown, max: number) => (Number.isInteger(v) && (v as number) >= 0 && (v as number) <= max ? (v as number) : undefined);
+  const out: FameMon[] = [];
+  for (const m of t as { [k: string]: unknown }[]) {
+    if (!m || typeof m !== 'object') return undefined;
+    const species = int(m.species, 0xffff), level = int(m.level, 100);
+    if (!species || level === undefined) return undefined;
+    const moves = Array.isArray(m.moves) ? (m.moves as { id?: unknown }[]).slice(0, 4).map((v) => int(v?.id, 0xffff)).filter((id): id is number => !!id).map((id) => ({ id })) : [];
+    out.push({
+      species,
+      level,
+      ...(typeof m.nickname === 'string' ? { nickname: m.nickname.slice(0, 10) } : {}),
+      ...(int(m.hp, 999) !== undefined ? { hp: m.hp as number } : {}),
+      ...(int(m.maxHp, 999) !== undefined ? { maxHp: m.maxHp as number } : {}),
+      ...(m.shiny === true ? { shiny: true } : {}),
+      moves,
+    });
+  }
+  return out;
+}
 
 export interface Link { send(text: string): void; close(): void }
 export interface Session { onText(text: string): void; onClose(): void }
@@ -93,6 +118,8 @@ interface Phone {
   /** Out of the room (the host's KICK, or their own LEAVE): the socket's next join
    *  starts afresh. */
   kicked?: boolean;
+  /** Their team as they last told it (the hall of fame's, when they win). */
+  team?: FameMon[];
 }
 
 /** The battle a phone's ROM is publishing, as sent: for a watcher who comes in after it
@@ -194,6 +221,11 @@ export class WorldService {
           this.drop(p);
           p.kicked = true;
           this.send(p.link, { t: 'kicked' });
+        } else if (m.t === 'team') {
+          const mons = teamOf(m.mons);
+          if (!mons) return;
+          phone.team = mons;
+          for (const p of room.members.values()) this.send(p.link, { t: 'team', id: phone.id, mons });
         } else if (!host) {
           return;
         } else if (m.t === 'in') {
@@ -230,6 +262,7 @@ export class WorldService {
           if (to) this.send(to.link, { t: 'bt', q: m.q & 0xffff, d: m.d.map((v) => (Number(v) | 0) & 0xff) });
         } else if (m.t === 'sp') {
           this.publish(room, phone, m.m);
+
         } else if (m.t === 'watch') {
           if (!Number.isInteger(m.id) || m.id < 0 || m.id === phone.id || m.id === phone.watching) return;
           const was = phone.watching;
@@ -300,6 +333,7 @@ export class WorldService {
     room.host.away(p.id, false);
     this.opts.log(`world: #${p.id} back in room ${room.code}`);
     this.send(link, { t: 'hello', id: p.id, state: room.host.room.state(), key: p.key });
+    for (const o of room.members.values()) if (o.team) this.send(link, { t: 'team', id: o.id, mons: o.team });
     this.roster(room);
     return p;
   }
@@ -357,7 +391,10 @@ export class WorldService {
     room.t0 = this.opts.now();
     this.opts.log(`world: room ${room.code} starts, ${room.members.size} trainers, seed ${seed}`);
     const state = r.state();
-    for (const p of room.members.values()) this.send(p.link, { t: 'hello', id: p.id, state, key: p.key });
+    for (const p of room.members.values()) {
+      p.team = undefined;
+      this.send(p.link, { t: 'hello', id: p.id, state, key: p.key });
+    }
     this.roster(room);
   }
 

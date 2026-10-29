@@ -3481,6 +3481,27 @@ function recOf(r) {
   return w === void 0 || p === void 0 ? {} : { rec: { wins: w, played: p, ...b ? { best: b } : {} } };
 }
 var isPass = (s) => s.length === 4 && [...s.toUpperCase()].every((c) => CODE_ALPHABET.includes(c));
+function teamOf(t) {
+  if (!Array.isArray(t) || t.length > 6) return void 0;
+  const int = (v, max) => Number.isInteger(v) && v >= 0 && v <= max ? v : void 0;
+  const out = [];
+  for (const m of t) {
+    if (!m || typeof m !== "object") return void 0;
+    const species = int(m.species, 65535), level = int(m.level, 100);
+    if (!species || level === void 0) return void 0;
+    const moves = Array.isArray(m.moves) ? m.moves.slice(0, 4).map((v) => int(v?.id, 65535)).filter((id) => !!id).map((id) => ({ id })) : [];
+    out.push({
+      species,
+      level,
+      ...typeof m.nickname === "string" ? { nickname: m.nickname.slice(0, 10) } : {},
+      ...int(m.hp, 999) !== void 0 ? { hp: m.hp } : {},
+      ...int(m.maxHp, 999) !== void 0 ? { maxHp: m.maxHp } : {},
+      ...m.shiny === true ? { shiny: true } : {},
+      moves
+    });
+  }
+  return out;
+}
 var FRAME_MS = 1e3 / 60;
 var QUIET_MS = 12e4;
 var SYNC_MS = 1e3;
@@ -3595,6 +3616,11 @@ var WorldService = class {
           this.drop(p);
           p.kicked = true;
           this.send(p.link, { t: "kicked" });
+        } else if (m.t === "team") {
+          const mons = teamOf(m.mons);
+          if (!mons) return;
+          phone.team = mons;
+          for (const p of room.members.values()) this.send(p.link, { t: "team", id: phone.id, mons });
         } else if (!host) {
           return;
         } else if (m.t === "in") {
@@ -3693,6 +3719,7 @@ var WorldService = class {
     room.host.away(p.id, false);
     this.opts.log(`world: #${p.id} back in room ${room.code}`);
     this.send(link, { t: "hello", id: p.id, state: room.host.room.state(), key: p.key });
+    for (const o of room.members.values()) if (o.team) this.send(link, { t: "team", id: o.id, mons: o.team });
     this.roster(room);
     return p;
   }
@@ -3748,7 +3775,10 @@ var WorldService = class {
     room.t0 = this.opts.now();
     this.opts.log(`world: room ${room.code} starts, ${room.members.size} trainers, seed ${seed}`);
     const state = r.state();
-    for (const p of room.members.values()) this.send(p.link, { t: "hello", id: p.id, state, key: p.key });
+    for (const p of room.members.values()) {
+      p.team = void 0;
+      this.send(p.link, { t: "hello", id: p.id, state, key: p.key });
+    }
     this.roster(room);
   }
   /** The match is over: the room waits for its next START (a quick one counts again). */

@@ -2,6 +2,8 @@ import type { MatchTally } from '../src/match/tally';
 import type { addTotals } from '../src/match/career';
 import HMS from '../src/data/hms.json';
 import { MOVE_CUT, MOVE_STRENGTH, MOVE_SURF } from '../src/bots/party';
+import { decodeGen3 } from '../src/text/gen3';
+import type { FameMon } from '../src/ui/results';
 
 // What a battle in spike B keeps (rom.ts): the ROM goes back to its parked state after
 // every battle, and these are the trainer's own bytes carried across it.
@@ -130,6 +132,32 @@ export function teamOf(party: Uint8Array, count: number): { species: number; lev
     const growth = at + 32 + 12 * ORDERS[personality % 24].indexOf('G');
     const species = ((v.getUint32(growth, true) ^ key) >>> 0) & 0xffff;
     if (species) out.push({ species, level: party[at + 84] });
+  }
+  return out;
+}
+
+/** The team as the results screen's hall of fame shows it (ui/results.ts fameOf): each
+ *  one's nickname, species, level, HP and moves, and whether it is shiny (pokemon.c's
+ *  IsShinyOtIdPersonality), out of the party's bytes. */
+export function fameTeam(party: Uint8Array, count: number): FameMon[] {
+  const v = new DataView(party.buffer, party.byteOffset, party.byteLength);
+  const out: FameMon[] = [];
+  for (let i = 0; i < Math.min(count, 6); i++) {
+    const at = i * 100;
+    const personality = v.getUint32(at, true), otId = v.getUint32(at + 4, true);
+    const key = (personality ^ otId) >>> 0;
+    const order = ORDERS[personality % 24];
+    const word = (sub: string, off: number) => (v.getUint32(at + 32 + 12 * order.indexOf(sub) + off, true) ^ key) >>> 0;
+    const species = word('G', 0) & 0xffff;
+    if (!species) continue;
+    const a = word('A', 0), b = word('A', 4);
+    const moves = [a & 0xffff, a >>> 16, b & 0xffff, b >>> 16].filter((id) => id > 0).map((id) => ({ id }));
+    const raw = party.subarray(at + 8, at + 18);
+    const end = raw.indexOf(0xff);
+    let nickname: string | undefined;
+    try { nickname = decodeGen3(end < 0 ? raw : raw.subarray(0, end)) || undefined; } catch { nickname = undefined; }
+    const shiny = ((otId >>> 16) ^ (otId & 0xffff) ^ (personality >>> 16) ^ (personality & 0xffff)) < 8;
+    out.push({ species, nickname, level: party[at + 84], hp: v.getUint16(at + 86, true), maxHp: v.getUint16(at + 88, true), shiny, moves });
   }
   return out;
 }

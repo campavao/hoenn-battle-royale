@@ -31,7 +31,7 @@ import { loadCareer, recordMatch } from '../src/match/career';
 import type { MatchTally } from '../src/match/tally';
 import { tallySince } from './carry';
 import { guessedStickKeys, loadStickMap, stickKeys } from '../src/pad';
-import { resultsView, standingsOf, tallyLines } from '../src/ui/results';
+import { fameOf, resultsView, standingsOf, tallyLines } from '../src/ui/results';
 import { favourite } from '../src/match/tally';
 import { moveInfo, type Rom as MoveTables } from '../src/battle/movebook';
 import { OUT_BATCH_MS, outs, won } from '../src/match/ticker';
@@ -668,6 +668,28 @@ function fieldFrame(): void {
   void rom.field().then((bits) => { if (l === link && bits !== (link.room.actor(link.me)?.field ?? 0)) link.field(bits); }).finally(() => { fieldAsking = false; });
 }
 
+/** Every few seconds, between battles: my team as it stands, told to the room when it
+ *  changes, so the results screen can show the champion's (the live game's PARTY). */
+let teamAsking = false;
+let teamSent = '';
+function teamFrame(): void {
+  if (frame % 300 !== 150 || battle || swapping || isOut) return;
+  tellTeam();
+}
+
+/** My team to the room now, if it changed since I last told it. */
+function tellTeam(): void {
+  if (teamAsking || !rom) return;
+  teamAsking = true;
+  const l = link;
+  void rom.fameTeam().then((mons) => {
+    const text = JSON.stringify(mons);
+    if (l !== link || text === teamSent) return;
+    teamSent = text;
+    l.team(mons);
+  }).catch(() => undefined).finally(() => { teamAsking = false; });
+}
+
 /** The CENTER's nurse, as the match has her (pkmn_center_nurse.inc): one question, and
  *  closed once the fog is on the town. */
 async function nurse(): Promise<void> {
@@ -790,6 +812,7 @@ function endBattle(r: Fought | null): void {
   const wild = battle && !battle.foe && boss === undefined;
   const by = battle?.foe?.id;
   battle = null;
+  tellTeam();
   held.clear();
   pressed.clear();
   // A held A from the battle's last text must not walk straight into another one.
@@ -984,7 +1007,14 @@ async function parade(): Promise<void> {
 const botIds = () => new Set(link.room.actors.filter((a) => a.bot).map((a) => a.id));
 /** The match's end on the live game's results screen (ui/results.ts): my place of how
  *  many, how long I lasted, everybody's place, and what this round added to MY STATS. */
-function results(res: Results): void {
+function results(res: Results, waited = 0): void {
+  // The champion's team comes from their phone a moment after their last battle (a
+  // bot's never does): a second or two for it, as the live game's PARTY.
+  const coming = res.winner === link.me ? teamAsking : !!res.winner && !link.teams.has(res.winner) && !botIds().has(res.winner);
+  if (coming && waited < 10) {
+    setTimeout(() => results(res, waited + 1), 200);
+    return;
+  }
   const n = res.entrants.length;
   const place = new Map<number, number>();
   if (res.winner) place.set(res.winner, 1);
@@ -1000,7 +1030,7 @@ function results(res: Results): void {
   const beaten = res.fallen.filter((f) => f.by && f.by === nameOf(link.me)).length;
   lobby!.results({
     view: resultsView({ placement: place.get(link.me), survived, winner: res.winner || undefined, ended: true }, n, link.me, nameOf),
-    fame: null,
+    fame: fameOf(res.winner || undefined, link.me, res.winner ? link.teams.get(res.winner) : undefined, nameOf, speciesName, (id) => moveInfo(romTables, id)?.name),
     standings: standingsOf(placed, link.me, nameOf),
     record: [
       { label: 'BEATEN', value: String(beaten) },
@@ -1158,6 +1188,7 @@ function startMatch(l: WorldLink): void {
   isOut = waiting = shownWin = false;
   // Every match's rounds count from 0: what was told or recorded of the last one is not.
   seenRound = lastPhase = recordedRound = safariRound = pickAsked = hudRound = dugRound = -1;
+  teamSent = '';
   tallyFrom = rom?.tally() ?? null;
   myStepsN = 0;
   mySpotWas = '';
@@ -2047,6 +2078,7 @@ function loop(now: number): void {
     for (const e of link.frame(myBits())) startFor(e);
     roundFrame();
     fieldFrame();
+    teamFrame();
     soundFrame();
     stepsFrame();
     doorsFrame();

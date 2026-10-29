@@ -17,6 +17,7 @@ import type { PatchTable } from '../src/bots/patches';
 import { tick } from './sim';
 import { Host, play } from './shared/host';
 import { keysOf, makeRoom, type Actor, type Bag, type Room, type RoomEvent } from './shared/room';
+import type { FameMon } from '../src/ui/results';
 import type { Again, CardRecord, Listed, Settings, SpMsg, WireFrame, WorldDown, WorldUp } from './shared/wire';
 
 export interface WorldLink {
@@ -59,6 +60,10 @@ export interface WorldLink {
   onSp: ((from: number, m: SpMsg) => void) | null;
   /** How many are watching me. */
   onEyes: ((n: number) => void) | null;
+  /** My team as it stands, for the hall of fame if I win. */
+  team(mons: FameMon[]): void;
+  /** Every trainer's team as they last told it. */
+  readonly teams: Map<number, FameMon[]>;
   /** For the stats line. */
   status(): string;
 }
@@ -72,6 +77,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
   const me = host.join('YOU', 0);
   host.advance();
   let seq = 0;
+  const teams = new Map<number, FameMon[]>();
   return {
     room: host.room,
     me,
@@ -96,6 +102,8 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     sp: () => undefined,
     onSp: null,
     onEyes: null,
+    teams,
+    team: (mons) => { teams.set(me, mons); },
     status: () => 'solo: you and the bots (no relay)',
   };
 }
@@ -126,6 +134,7 @@ class Online implements WorldLink {
   onBt: ((q: number, d: number[]) => void) | null = null;
   onSp: ((from: number, m: SpMsg) => void) | null = null;
   onEyes: ((n: number) => void) | null = null;
+  readonly teams = new Map<number, FameMon[]>();
 
   constructor(private readonly ws: WebSocket, private readonly make: (seed: number) => Room) {
     ws.addEventListener('close', () => { this.closed = true; });
@@ -138,6 +147,7 @@ class Online implements WorldLink {
       this.room.load(m.state);
       this.me = m.id;
       this.key = m.key;
+      this.teams.clear();
       ready();
     } else if (m.t === 'state') {
       this.room.load(m.state);
@@ -151,6 +161,8 @@ class Online implements WorldLink {
       this.onSp?.(m.from, m.m);
     } else if (m.t === 'eyes') {
       this.onEyes?.(m.n);
+    } else if (m.t === 'team') {
+      this.teams.set(m.id, m.mons);
     }
   }
 
@@ -225,6 +237,8 @@ class Online implements WorldLink {
 
   end(fled = false, won = false): void { this.send({ t: 'end', ...(fled ? { fled } : {}), ...(won ? { won } : {}) }); }
   field(bits: number): void { this.send({ t: 'field', bits }); }
+
+  team(mons: FameMon[]): void { this.teams.set(this.me, mons); this.send({ t: 'team', mons }); }
 
   bots(a: number, b: number, winner: number): void { this.send({ t: 'bots', a, b, w: winner }); }
 

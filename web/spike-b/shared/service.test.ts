@@ -157,6 +157,30 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it("a trainer's team goes to the room, sane or not at all", () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
+    try {
+      const a = phone(), b = phone();
+      const sa = svc.open(a.link), sb = svc.open(b.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, code }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      const id = (a.got.find((m) => m.t === 'hello') as unknown as { id: number }).id;
+      const mons = [{ species: 252, nickname: 'TAMY', level: 9, hp: 20, maxHp: 27, moves: [{ id: 1 }, { id: 43 }, { id: 'x' }] }];
+      sa.onText(JSON.stringify({ t: 'team', mons }));
+      expect(b.got.at(-1)).toEqual({ t: 'team', id, mons: [{ ...mons[0], moves: [{ id: 1 }, { id: 43 }] }] });
+      const n = b.got.length;
+      sa.onText(JSON.stringify({ t: 'team', mons: [{ species: 0, level: 5 }] }));
+      sa.onText(JSON.stringify({ t: 'team', mons: Array(7).fill({ species: 1, level: 5 }) }));
+      sa.onText(JSON.stringify({ t: 'team', mons: [{ species: 1, level: 101 }] }));
+      expect(b.got.length).toBe(n);
+      const teams = () => [...(svc as unknown as { rooms: Map<string, { members: Map<number, { team?: unknown }> }> }).rooms.get(code)!.members.values()].map((p) => p.team);
+      expect(teams().filter(Boolean)).toHaveLength(1);
+    } finally {
+      svc.stop();
+    }
+  });
   it('a reload within a minute is the same trainer; later, it watches', () => {
     // Bots on the map keep the match going after bob is the last trainer left.
     let t = 0;

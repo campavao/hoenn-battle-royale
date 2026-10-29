@@ -18,12 +18,13 @@ import { Mailbox, MAILBOX } from '../src/net/mailbox';
 import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from '../src/net/slots';
 import { PROTOCOL, type Dir, type Msg, type PackedMon } from '../src/net/wire';
 import { loadCheckedRelease } from '../src/release';
-import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fieldOf, healed, rekey, spillOf, teamOf, withMoney, withoutItem } from './carry';
+import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fameTeam, fieldOf, healed, rekey, spillOf, teamOf, withMoney, withoutItem } from './carry';
 import { startMenuTable } from '../src/touch';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 import { CATCH_UP_SPEED, spectatePace } from '../src/match/spectate';
 import type { SpMsg } from './shared/wire';
 import { readTally, type MatchTally } from '../src/match/tally';
+import type { FameMon } from '../src/ui/results';
 
 /** SaveBlock2's options halfword (include/global.h). */
 const OPTIONS_AT = 0x14;
@@ -203,6 +204,8 @@ export interface RomBattles {
   heal(): Promise<void>;
   /** What the team could do on the field now (room.ts FIELD_*). */
   field(): Promise<number>;
+  /** The team as the results screen's hall of fame shows it. */
+  fameTeam(): Promise<FameMon[]>;
   press(k: GbaKey): void;
   release(k: GbaKey): void;
   emu: Emulator;
@@ -643,6 +646,12 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       return inTurn(async () => {
         const k = carried ?? kept();
         return fieldOf(k.party, k.count);
+      });
+    },
+    fameTeam() {
+      return inTurn(async () => {
+        const k = carried ?? kept();
+        return fameTeam(k.party, k.count);
       });
     },
     heal() {

@@ -2,6 +2,7 @@
 
 import type { Frame } from './host';
 import type { Bag, RoomState } from './room';
+import type { FameMon } from '../../src/ui/results';
 
 /** Phone to relay. */
 export type WorldUp =
@@ -47,7 +48,10 @@ export type WorldUp =
   | { t: 'watch'; id: number }
   /** What my ROM published of the battle I am in (a BSTART, then its TURNs), for whoever
    *  watches me or the one I fight. */
-  | { t: 'sp'; m: SpMsg };
+  | { t: 'sp'; m: SpMsg }
+  /** My team as it stands (after a battle, a catch, a trade): the results screen's hall
+   *  of fame when I win. */
+  | { t: 'team'; mons: FameMon[] };
 
 /** A published battle's message as it left the fighter's ROM (web/src/net/wire.ts's
  *  BstartMsg and TurnMsg): opaque bytes, for the watcher's ROM to replay. */
@@ -105,6 +109,8 @@ export type WorldDown =
   | { t: 'sp'; from: number; m: SpMsg }
   /** How many are watching me now. */
   | { t: 'eyes'; n: number }
+  /** Trainer `id`'s team as they last told it. */
+  | { t: 'team'; id: number; mons: FameMon[] }
   | { t: 'full' };
 
 export const HASH_EVERY = 60;
