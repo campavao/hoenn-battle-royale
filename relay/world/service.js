@@ -57,6 +57,7 @@ function mulberry32(seed, state) {
 function pickIndex(rng, length) {
   return Math.min(length - 1, Math.floor(rng() * length));
 }
+var RING_RADII = [28, 15, 9, 7, 5, 3, 2, 0, -1];
 
 // web/src/data/lines.json
 var lines_default = [
@@ -2355,7 +2356,8 @@ var LANDS = /* @__PURE__ */ new Map();
 var LANDED = /* @__PURE__ */ new WeakMap();
 var LANDING = 200;
 var RING_PHASE = 60 * 120;
-var RING_STEPS = [Infinity, 15 / 28, 9 / 28, 7 / 28, 5 / 28, 3 / 28, 2 / 28, 0, -1];
+var SECTION_TILES = 27;
+var RING_STEPS = RING_RADII.map((r, i) => i === 0 ? Infinity : r < 0 ? r : Math.max(r, 0.5) * SECTION_TILES);
 var FINAL_REACH = 24;
 var SAFARI = "MAP_SAFARI_ZONE_";
 var PICK_WAIT = 35 * 60;
@@ -2446,8 +2448,8 @@ var Room = class {
       const a = this.actor(cmd.id);
       if (a && !a.bot && a.m.spot.map.startsWith(SAFARI) && this.places.has(cmd.map) && !cmd.map.startsWith(SAFARI)) this.dropOne(a, cmd.map);
     } else if (cmd.c === "away") {
-      const a = this.actor(cmd.id);
-      if (a && !a.bot) a.away = cmd.on || void 0;
+      const a = this.actor(cmd.id) ?? this.bench.find((b) => b.id === cmd.id);
+      if (a && !("bot" in a && a.bot)) a.away = cmd.on || void 0;
     } else if (cmd.c === "sail") {
       const a = this.actor(cmd.id);
       if (!a || a.bot || a.battling || a.m.action) return;
@@ -2646,11 +2648,11 @@ var Room = class {
     const len = this.ringPhase;
     const round = this.results.round;
     let t = tick2 - this.epoch;
-    const { cx, cy, far } = this.centre(round);
+    const { cx, cy } = this.centre(round);
     if (t < this.opening) return { round, phase: 0, last: false, cx, cy, r: Infinity, next: Infinity, left: this.opening - t, safari: true };
     t -= this.opening;
     const phase = Math.min(RING_STEPS.length - 1, Math.floor(t / len));
-    const at = (i) => RING_STEPS[i] === Infinity || RING_STEPS[i] < 0 ? RING_STEPS[i] : RING_STEPS[i] * far;
+    const at = (i) => RING_STEPS[i];
     const last = phase === RING_STEPS.length - 1;
     return { round, phase, last, cx, cy, r: at(phase), next: last ? void 0 : at(phase + 1), left: last ? 0 : len - (t - phase * len) };
   }
@@ -2891,7 +2893,7 @@ var Room = class {
   engageBots(events) {
     if (this.ring().safari) return;
     if (this.tick < this.duelAfter || this.tick % 8) return;
-    const judges = [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench];
+    const judges = [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b) => !b.away)];
     if (!judges.length) return;
     const byMap = /* @__PURE__ */ new Map();
     for (const a of this.actors) {
@@ -2947,7 +2949,20 @@ var Room = class {
     const phase = this.ring().phase + 1;
     const grade = gradeOf(this.seed, a.id);
     const party = dealParty(this.seed, a.id, phase, a.m.spot.map, grade);
-    const bag = { items: carried(party, []), money: purse(phase, grade), mons: party.map((m) => ({ species: m.species, level: m.level })) };
+    const loot = [];
+    let money = purse(phase, grade);
+    const mine = /* @__PURE__ */ new Set();
+    for (const [k, who] of this.picked) if (who === a.id) mine.add(k);
+    if (mine.size) {
+      for (const g of this.ground().values()) if (mine.has(g.key)) add(loot, g.item);
+      for (const k of mine) {
+        const b = this.spills.get(k);
+        if (!b) continue;
+        for (const st of b.bag.items) add(loot, st.id, st.n);
+        money += b.bag.money;
+      }
+    }
+    const bag = { items: carried(party, loot), money, mons: party.map((m) => ({ species: m.species, level: m.level })) };
     const key = SPILL_KEY + a.id;
     if (!emptyBag(bag)) this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag });
     this.fall(a, by);
@@ -3228,6 +3243,13 @@ var Room = class {
       if (dir) {
         a.m.facing = a.m.moveDir = dir;
         const r = this.stepFor(a)(a.m.spot, dir);
+        if (!r && bits & KEY_A) {
+          const [x, y] = this.ahead(a);
+          const g = this.groundAt(a.m.spot.map, x, y);
+          const b = g ? void 0 : this.spillAt(a.m.spot.map, x, y);
+          if (g && !g.gift) this.picked.set(g.key, a.id);
+          if (b && !b.legend && !b.person && b.guard === void 0) this.picked.set(b.key, a.id);
+        }
         if (!r || (r.hop || r.water && !this.onWater(a)) && !(bits & KEY_A)) {
           a.last = bits;
           return;
@@ -3409,6 +3431,7 @@ var Room = class {
     for (const b of this.bench) {
       mix2(b.id);
       mix2(b.skin);
+      mix2(b.away ? 1 : 0);
       str(b.name);
     }
     const r = this.results;
@@ -3582,6 +3605,20 @@ function insideNext(room) {
   return cells;
 }
 function goal(room, a, b) {
+  if (hunting(room)) {
+    const p2 = room.places.get(a.m.spot.map);
+    let best2, bestD2 = Infinity;
+    for (const o of room.actors) {
+      const q = room.places.get(o.m.spot.map);
+      if (o === a || o.away || !p2 || !q || room.inFog(o.m.spot)) continue;
+      const d = Math.abs(q.gx + o.m.spot.x - p2.gx - a.m.spot.x) + Math.abs(q.gy + o.m.spot.y - p2.gy - a.m.spot.y);
+      if (d < bestD2) {
+        bestD2 = d;
+        best2 = o;
+      }
+    }
+    if (best2) return { ...best2.m.spot };
+  }
   const ev = room.events[room.events.length - 1];
   if (ev && room.spills.has(ev.key) && !room.picked.has(ev.key) && rand(b) < 1 / 3 && !room.inFog({ map: ev.map, x: ev.x, y: ev.y })) {
     const near = room.reachable().filter((s) => s.map === ev.map && Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
@@ -3614,11 +3651,17 @@ function leg(room, from, to) {
   const hop = hops.find((m) => room.places.has(m));
   return hop ? findPathToAny(room.world, from, room.world.entryCells(from.map, hop, true, true), 6e3, true, true) : null;
 }
+var HUNT_AT = 3;
+function hunting(room) {
+  const r = room.results;
+  return !room.ring().safari && r.entrants.length > 0 && r.entrants.length - r.fallen.length <= HUNT_AT;
+}
 function botKeys(room, a, b) {
   if (a.m.action) return 0;
   const ring = room.ring();
   const at = `${ring.round}:${ring.phase}:${room.events.length}`;
-  if ((b.plan !== at || !b.goal && room.inFog(a.m.spot, ring)) && (room.tick + a.id * 7) % 30 === 0) {
+  const hunt = hunting(room) && (!b.steps?.length || (room.tick + a.id * 7) % 240 === 0);
+  if ((b.plan !== at || hunt || !b.goal && room.inFog(a.m.spot, ring)) && (room.tick + a.id * 7) % 30 === 0) {
     b.plan = at;
     b.goal = goal(room, a, b);
     b.steps = void 0;
@@ -3627,7 +3670,12 @@ function botKeys(room, a, b) {
   if (b.goal && !b.steps?.length && (room.tick + a.id * 7) % 30 === 0) {
     const path = !sameSpot(a.m.spot, b.goal) && (b.legs = (b.legs ?? 0) + 1) <= 24 ? leg(room, a.m.spot, b.goal) : null;
     b.steps = path?.found ? path.steps : void 0;
-    if (!b.steps) b.goal = null;
+    const end = b.steps?.[b.steps.length - 1]?.to;
+    if (end && room.actors.some((o) => o !== a && sameSpot(o.m.spot, end))) b.steps = b.steps.slice(0, -1);
+    if (!b.steps?.length) {
+      b.steps = void 0;
+      b.goal = null;
+    }
     b.stuck = 0;
   }
   if (!b.steps?.length && (room.tick + a.id * 7) % 30 === 0 && room.tick >= a.calm && !ring.safari && !room.inFog(a.m.spot, ring)) {
@@ -3966,6 +4014,7 @@ var WorldService = class {
         if (!m || typeof m !== "object") return;
         if (phone?.kicked) phone = null;
         if (phone) phone.heard = this.opts.now();
+        if (m.t === "here") return;
         if (m.t === "list") {
           this.send(link, { t: "rooms", rooms: this.listed() });
           return;
@@ -4106,7 +4155,8 @@ var WorldService = class {
           room.streams.delete(p.id);
           this.eyes(room, was);
         }
-        if (room?.host && me && !me.battling) {
+        const benched = !me && room?.host?.room.bench.some((x) => x.id === p.id);
+        if (room?.host && (me && !me.battling || benched)) {
           p.away = this.opts.now();
           p.link = NOWHERE;
           room.host.away(p.id, true);

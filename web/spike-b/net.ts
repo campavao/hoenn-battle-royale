@@ -160,7 +160,11 @@ class Online implements WorldLink {
   readonly teams = new Map<number, FameMon[]>();
 
   constructor(private readonly ws: WebSocket, private readonly make: (seed: number) => Room) {
-    ws.addEventListener('close', () => { this.closed = true; });
+    // A hidden tab (walked away from) runs no frames; it says it is still here, under the
+    // relay's QUIET_MS, or the relay drops it and it comes back to the menu (Cam 10-29).
+    // A background tab's timers run at most once a minute: 20 s is well inside either.
+    const here = setInterval(() => { if (document.hidden) this.send({ t: 'here' }); }, 20_000);
+    ws.addEventListener('close', () => { this.closed = true; clearInterval(here); });
   }
 
   /** The relay's answers; `hello` resolves `ready`. */

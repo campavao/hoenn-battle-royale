@@ -225,6 +225,34 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it("a hidden tab's 'here' keeps it in; out and watching, a dropped socket comes back to watching", () => {
+    let t = 0;
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 3, cap: 30, now: () => t, log: () => undefined });
+    try {
+      const a = phone(), b = phone();
+      const sa = svc.open(a.link), sb = svc.open(b.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, code }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      const hello = a.got.find((m) => m.t === 'hello') as unknown as { id: number; key: string };
+      // Walked away: no frames for three minutes, only the hidden tab's 'here'.
+      for (let i = 0; i < 9; i++) { t += 20_000; sa.onText(JSON.stringify({ t: 'here' })); sb.onText(JSON.stringify({ t: 'here' })); svc.pump(); }
+      expect(a.closed).toBe(false);
+      // Out, watching: the socket drops (a reload, the wifi) and comes back inside the minute.
+      sa.onText(JSON.stringify({ t: 'out' }));
+      t += 1000; svc.pump();
+      sa.onClose();
+      t += 20_000; svc.pump();
+      const a2 = phone();
+      svc.open(a2.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, code, again: { code, id: hello.id, key: hello.key } }));
+      const back = a2.got.find((m) => m.t === 'hello') as unknown as { id: number; state: { bench: { id: number }[] } };
+      expect(back.id).toBe(hello.id);
+      expect(back.state.bench.map((x) => x.id)).toContain(hello.id);
+    } finally {
+      svc.stop();
+    }
+  });
   it('a new socket with the key takes the trainer over before the old one is seen to close', () => {
     let t = 0;
     const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 3, cap: 30, now: () => t, log: () => undefined });
