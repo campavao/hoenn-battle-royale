@@ -73,6 +73,20 @@ function insideNext(room: Room): Spot[] {
  *  the newest event on the ground; the rest stay put inside the ring, and those outside
  *  it walk in to its nearest cell. */
 function goal(room: Room, a: Actor, b: Brain): Spot | null {
+  // The hunt (brain.ts HUNT_AT, Kanto's rule): with three left, a bot aims at somebody,
+  // the nearest still standing, rather than at a cell; otherwise the last three wait for
+  // each other in a shrinking ring.
+  if (hunting(room)) {
+    const p = room.places.get(a.m.spot.map);
+    let best: Actor | undefined, bestD = Infinity;
+    for (const o of room.actors) {
+      const q = room.places.get(o.m.spot.map);
+      if (o === a || o.away || !p || !q || room.inFog(o.m.spot)) continue;
+      const d = Math.abs(q.gx + o.m.spot.x - p.gx - a.m.spot.x) + Math.abs(q.gy + o.m.spot.y - p.gy - a.m.spot.y);
+      if (d < bestD) { bestD = d; best = o; }
+    }
+    if (best) return { ...best.m.spot };
+  }
   const ev = room.events[room.events.length - 1];
   if (ev && room.spills.has(ev.key) && !room.picked.has(ev.key) && rand(b) < 1 / 3 && !room.inFog({ map: ev.map, x: ev.x, y: ev.y })) {
     const near = room.reachable().filter((s) => s.map === ev.map && Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
@@ -107,6 +121,13 @@ function leg(room: Room, from: Spot, to: Spot): Path | null {
   return hop ? findPathToAny(room.world, from, room.world.entryCells(from.map, hop, true, true), 6000, true, true) : null;
 }
 
+/** brain.ts HUNT_AT: under this many still standing, the hunt. */
+const HUNT_AT = 3;
+function hunting(room: Room): boolean {
+  const r = room.results;
+  return !room.ring().safari && r.entrants.length > 0 && r.entrants.length - r.fallen.length <= HUNT_AT;
+}
+
 export function botKeys(room: Room, a: Actor, b: Brain): number {
   // One frame of the key is one tile (or one turn to face a shut way): then let go.
   if (a.m.action) return 0;
@@ -115,7 +136,9 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
   // A new phase or event: each bot rethinks on its own frame of the next half second, so
   // sixty-four searches never land on one frame.
   // One the fog has caught with nowhere to go (its walk gave up) thinks again too.
-  if ((b.plan !== at || (!b.goal && room.inFog(a.m.spot, ring))) && (room.tick + a.id * 7) % 30 === 0) {
+  // A hunter's quarry moves: it looks again whenever its walk runs out, and every 4 s.
+  const hunt = hunting(room) && (!b.steps?.length || (room.tick + a.id * 7) % 240 === 0);
+  if ((b.plan !== at || hunt || (!b.goal && room.inFog(a.m.spot, ring))) && (room.tick + a.id * 7) % 30 === 0) {
     b.plan = at;
     b.goal = goal(room, a, b);
     b.steps = undefined;
@@ -125,7 +148,10 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
   if (b.goal && !b.steps?.length && (room.tick + a.id * 7) % 30 === 0) {
     const path = !sameSpot(a.m.spot, b.goal) && (b.legs = (b.legs ?? 0) + 1) <= 24 ? leg(room, a.m.spot, b.goal) : null;
     b.steps = path?.found ? path.steps : undefined;
-    if (!b.steps) b.goal = null;
+    // A hunt ends beside its quarry, in its eyeline, not on it.
+    const end = b.steps?.[b.steps.length - 1]?.to;
+    if (end && room.actors.some((o) => o !== a && sameSpot(o.m.spot, end))) b.steps = b.steps!.slice(0, -1);
+    if (!b.steps?.length) { b.steps = undefined; b.goal = null; }
     b.stuck = 0;
   }
   // Somebody to fight close by (brain.ts approach): a trainer on the bot's screen, or

@@ -32,7 +32,7 @@ import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, dra
 import { DOOR_Y, FINAL_CHANCE, STORIES, STORY_CHANCE, type Story, type StoryDoor } from '../../src/match/story';
 import { dealParty, rungForPhase } from '../../src/bots/party';
 import { gradeOf } from '../../src/bots/roster';
-import { carried, purse } from '../../src/bots/bag';
+import { add, carried, purse, type Stack } from '../../src/bots/bag';
 import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
 import { blueTm, scatterItem } from '../../src/match/scatter';
@@ -41,6 +41,7 @@ import { GIFTS } from '../../src/match/gifts';
 import { cableOrDoll, type BagRows } from './items';
 import { SIGHT_RANGE, eitherSees, type Facing } from '../../src/bots/sight';
 import { SAFARI_CELLS } from '../../src/match/safari';
+import { RING_RADII } from '../../src/match/clock';
 import { CLASS_WATER, DIR_NORTH, dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
 
 export const KEY_UP = 1, KEY_DOWN = 2, KEY_LEFT = 4, KEY_RIGHT = 8, KEY_B = 16, KEY_A = 32, KEY_SELECT = 64;
@@ -331,7 +332,8 @@ export interface RoomState {
 
 /** A trainer in the world but not on the map: out this round, or come in after the fog
  *  closed. Back at the truck when it lifts. */
-export interface Benched { id: number; name: string; skin: number }
+/** `away`: its phone gone a moment (a reload, a dropped socket), coming back within the minute. */
+export interface Benched { id: number; name: string; skin: number; away?: boolean }
 
 /** One who went out of a round: what beat them (a name; '' for the fog), or `left`. */
 export interface Fallen { id: number; name: string; by: string; wild?: boolean; left?: boolean; bot?: boolean; at?: number }
@@ -354,12 +356,17 @@ const REACH = new Map<string, Spot[]>();
 
 /** A ring phase, in frames: the match's 120 s (DEFAULT_FOG_SECS, web/src/match/director.ts). */
 export const RING_PHASE = 60 * 120;
-/** What each phase leaves of the reachable world, as a share of its farthest cell from
- *  the centre: the first an announcement (no fog), then clock.ts's RING_RADII
- *  [28, 15, 9, 7, 5, 3, 2, 0, -1] as shares of its 28 -- 0 the centre cell alone, -1
- *  everywhere. The match measures in region-map sections; here it is tiles, on purpose:
- *  this world is walked tile by tile, and a section-sized ring would fog half a town. */
-const RING_STEPS = [Infinity, 15 / 28, 9 / 28, 7 / 28, 5 / 28, 3 / 28, 2 / 28, 0, -1];
+/** Tiles to a region-map section in this world's plane: the least-squares fit of each
+ *  placed map's centre against its section's (region_map_sections.json), 27.4 across and
+ *  27.0 down (room.test.ts checks it). */
+export const SECTION_TILES = 27;
+/** Each phase's radius in tiles: the live match's, clock.ts's RING_RADII in sections at
+ *  SECTION_TILES each. The first an announcement (no fog); 0 the centre's own section, as
+ *  the ROM's nearest-point test keeps it (br_ring.c BrRing_SectionInside); -1 everywhere.
+ *  Not shares of the centre's farthest reachable cell, as it was: that world is the walk
+ *  out of Littleroot, a few sections across, so the first shrink fogged most of Hoenn
+ *  (Cam 2026-10-29, as on 09-18 with Mossdeep). */
+const RING_STEPS = RING_RADII.map((r, i) => (i === 0 ? Infinity : r < 0 ? r : Math.max(r, 0.5) * SECTION_TILES));
 /** How near a walking trainer must be able to stand to a final story's place for the ring
  *  to centre on it (FINAL_CHANCE). */
 const FINAL_REACH = 24;
@@ -465,8 +472,8 @@ export class Room {
       // map asked for. At the opening's end, or before it when the balls ran out.
       if (a && !a.bot && a.m.spot.map.startsWith(SAFARI) && this.places.has(cmd.map) && !cmd.map.startsWith(SAFARI)) this.dropOne(a, cmd.map);
     } else if (cmd.c === 'away') {
-      const a = this.actor(cmd.id);
-      if (a && !a.bot) a.away = cmd.on || undefined;
+      const a = this.actor(cmd.id) ?? this.bench.find((b) => b.id === cmd.id);
+      if (a && !('bot' in a && a.bot)) a.away = cmd.on || undefined;
     } else if (cmd.c === 'sail') {
       const a = this.actor(cmd.id);
       if (!a || a.bot || a.battling || a.m.action) return;
@@ -676,14 +683,14 @@ export class Room {
     const len = this.ringPhase;
     const round = this.results.round;
     let t = tick - this.epoch;
-    const { cx, cy, far } = this.centre(round);
+    const { cx, cy } = this.centre(round);
     // The Safari: phase 0's no-fog, before it.
     if (t < this.opening) return { round, phase: 0, last: false, cx, cy, r: Infinity, next: Infinity, left: this.opening - t, safari: true };
     t -= this.opening;
     // The fog everywhere holds until somebody wins (director.ts stops its ring timer
     // there): it used to lift on a timer and end the match with nobody crowned.
     const phase = Math.min(RING_STEPS.length - 1, Math.floor(t / len));
-    const at = (i: number) => (RING_STEPS[i] === Infinity || RING_STEPS[i] < 0 ? RING_STEPS[i] : RING_STEPS[i] * far);
+    const at = (i: number) => RING_STEPS[i];
     const last = phase === RING_STEPS.length - 1;
     return { round, phase, last, cx, cy, r: at(phase), next: last ? undefined : at(phase + 1), left: last ? 0 : len - (t - phase * len) };
   }
@@ -936,7 +943,7 @@ export class Room {
     // busy); or one on the bench, out and watching (or in for the next match), which is
     // still here: a phone that goes leaves the bench too. Otherwise, once the last trainer
     // was out, the bots only ever bled out in the fog and nobody was crowned.
-    const judges = [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench];
+    const judges = [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b) => !b.away)];
     if (!judges.length) return;
     const byMap = new Map<string, Actor[]>();
     for (const a of this.actors) {
@@ -1000,7 +1007,22 @@ export class Room {
     const phase = this.ring().phase + 1;
     const grade = gradeOf(this.seed, a.id);
     const party = dealParty(this.seed, a.id, phase, a.m.spot.map, grade);
-    const bag: Bag = { items: carried(party, []), money: purse(phase, grade), mons: party.map((m) => ({ species: m.species, level: m.level })) };
+    // And whatever it picked up on its way, balls and bags (bots carry what they pick
+    // up, POK-322).
+    const loot: Stack[] = [];
+    let money = purse(phase, grade);
+    const mine = new Set<number>();
+    for (const [k, who] of this.picked) if (who === a.id) mine.add(k);
+    if (mine.size) {
+      for (const g of this.ground().values()) if (mine.has(g.key)) add(loot, g.item);
+      for (const k of mine) {
+        const b = this.spills.get(k);
+        if (!b) continue;
+        for (const st of b.bag.items) add(loot, st.id, st.n);
+        money += b.bag.money;
+      }
+    }
+    const bag: Bag = { items: carried(party, loot), money, mons: party.map((m) => ({ species: m.species, level: m.level })) };
     const key = SPILL_KEY + a.id;
     if (!emptyBag(bag)) this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag });
     this.fall(a, by);
@@ -1239,6 +1261,15 @@ export class Room {
         // (wanderers never jump), it only faces.
         a.m.facing = a.m.moveDir = dir;
         const r = this.stepFor(a)(a.m.spot, dir);
+        // A bag in its way (a trainer's who went out): it picks it up, as live bots take
+        // the loot they come to, and walks on. Not a story's piece, which is a fight.
+        if (!r && (bits & KEY_A)) {
+          const [x, y] = this.ahead(a);
+          const g = this.groundAt(a.m.spot.map, x, y);
+          const b = g ? undefined : this.spillAt(a.m.spot.map, x, y);
+          if (g && !g.gift) this.picked.set(g.key, a.id);
+          if (b && !b.legend && !b.person && b.guard === undefined) this.picked.set(b.key, a.id);
+        }
         // A, from a bot on its way somewhere (bots.ts): it may jump a ledge, or SURF.
         if (!r || ((r.hop || (r.water && !this.onWater(a))) && !(bits & KEY_A))) { a.last = bits; return; }
       }
@@ -1390,7 +1421,7 @@ export class Room {
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
     for (const [k, by] of this.picked) { mix(k); mix(by); }
-    for (const b of this.bench) { mix(b.id); mix(b.skin); str(b.name); }
+    for (const b of this.bench) { mix(b.id); mix(b.skin); mix(b.away ? 1 : 0); str(b.name); }
     const r = this.results;
     mix(r.round); mix(r.winner); mix(r.wonAt ?? 0); mix(this.epoch); mix(this.opening); mix(this.duelAfter); for (const [n, w] of this.gyms) { mix(n); mix(w.length); }
     for (const h of this.homes) { mix(h.n); mix(h.species); mix(h.busy); mix(h.gone ? 1 : 0); }

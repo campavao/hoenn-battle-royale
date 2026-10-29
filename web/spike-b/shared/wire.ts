@@ -20,6 +20,9 @@ export type WorldUp =
   | { t: 'kick'; id: number }
   /** LOBBIES: the rooms somebody hosted, answered by `rooms` (before a join, or in one). */
   | { t: 'list' }
+  /** Still here: a hidden tab sends no frames (no requestAnimationFrame), so it says so,
+   *  or the relay takes its silence for a phone gone (QUIET_MS). */
+  | { t: 'here' }
   /** My keys for frames `s`, `s`+1, ... (numbered from 1, never reset). */
   | { t: 'in'; s: number; k: number[] }
   /** My battle is over (`fled`: it never got going, or was run from). */

@@ -169,6 +169,7 @@ export class WorldService {
         if (!m || typeof m !== 'object') return;
         if (phone?.kicked) phone = null;
         if (phone) phone.heard = this.opts.now();
+        if (m.t === 'here') return;
         if (m.t === 'list') { this.send(link, { t: 'rooms', rooms: this.listed() }); return; }
         if (m.t === 'join' && !phone && m.again && typeof m.again === 'object') {
           const back = this.back(m.again, link);
@@ -294,9 +295,11 @@ export class WorldService {
         const was = p.watching;
         p.watching = 0;
         if (room) { room.streams.delete(p.id); this.eyes(room, was); }
-        // Mid-match, a reload comes back within the minute to the trainer it left; a
-        // reload mid-battle is a forfeit (Cam), and a page waiting on the bench just goes.
-        if (room?.host && me && !me.battling) {
+        // Mid-match, a reload comes back within the minute to the trainer it left, or to
+        // watching (out, or in for the next match): it went back to the menu, a match it
+        // was still in (Cam 10-29, "the game reset"). A reload mid-battle is a forfeit (Cam).
+        const benched = !me && room?.host?.room.bench.some((x) => x.id === p.id);
+        if (room?.host && ((me && !me.battling) || benched)) {
           p.away = this.opts.now();
           p.link = NOWHERE;
           room.host.away(p.id, true);
