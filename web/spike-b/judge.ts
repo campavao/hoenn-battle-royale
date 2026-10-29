@@ -5,6 +5,7 @@
 import { Emulator } from '../src/emu';
 import { MAILBOX } from '../src/net/mailbox';
 import { ProxyDuels, type DuelOutcome, type DuelSide } from '../src/bots/proxy';
+import type { BstartMsg, TurnMsg } from '../src/net/wire';
 import type { RomFiles } from './rom';
 
 /** br_boot.h's BR_BOOT_MAP: a fresh game in Littleroot, nobody in the party. */
@@ -12,7 +13,8 @@ const BOOT_MAP = 1;
 
 export type Judge = (a: DuelSide, b: DuelSide) => Promise<DuelOutcome | null>;
 
-export function makeJudge({ rom, sym }: RomFiles): Judge {
+/** `onStream`: the fight as it is fought (ProxyDuels' own), for whoever watches either bot. */
+export function makeJudge({ rom, sym }: RomFiles, onStream?: (msg: BstartMsg | TurnMsg, sides: [number, number]) => void): Judge {
   const mailboxBase = sym('gBrMailbox');
   let proxy: ProxyDuels | null = null;
   return (a, b) => {
@@ -39,6 +41,7 @@ export function makeJudge({ rom, sym }: RomFiles): Judge {
         e.bytes(base + MAILBOX.OFF_BOOT, boot.length).set(boot);
       },
       onNote: (what) => console.info('[spike proxy]', what),
+      onStream,
     });
     return proxy.fight(a, b);
   };

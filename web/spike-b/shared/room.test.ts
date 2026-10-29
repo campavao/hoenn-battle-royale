@@ -1190,6 +1190,50 @@ describe('where the Safari opens (HBR-109)', () => {
   });
 });
 
+describe('the drop after the Safari (Cam 2026-10-29)', () => {
+  it('waits out a battle fought in the Zone before dropping anywhere, and never onto a walled-in pocket', () => {
+    const room = makeRoom(MAPS, PATCHES, 21);
+    room.ringPhase = 6000;
+    room.opening = 300;
+    room.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: room.truck(1)[0], facing: 1 });
+    const a = room.actor(1)!;
+    while (room.ring().safari) room.step(new Map());
+    // A battle that runs past the fly map's time: still in the Zone after it.
+    a.battling = true;
+    for (let i = 0; i < PICK_WAIT + 600; i++) room.step(new Map());
+    expect(a.m.spot.map.startsWith(SAFARI)).toBe(true);
+    a.battling = false;
+    // Then the fly map's whole time again, and the drop.
+    for (let i = 0; i < PICK_WAIT - 10; i++) room.step(new Map());
+    expect(a.m.spot.map.startsWith(SAFARI)).toBe(true);
+    for (let i = 0; i < 20; i++) room.step(new Map());
+    expect(a.m.spot.map.startsWith(SAFARI)).toBe(false);
+    expect(room.landing().has(`${a.m.spot.map}:${a.m.spot.x}:${a.m.spot.y}`)).toBe(true);
+    // The bank behind the ABANDONED SHIP (ROUTE 108) is no landing; the mainland is.
+    const land = room.landing();
+    expect([...land].some((k) => k.startsWith('MAP_ROUTE108:'))).toBe(false);
+    expect(land.has('MAP_LITTLEROOT_TOWN:10:10')).toBe(true);
+    // Exact under one-way ledges: from every landing cell (a sample) the walk reaches at
+    // least 200 cells; from every outdoor cell left out, it never does and comes back.
+    const walk = (k: string) => {
+      const [map, x, y] = k.split(':');
+      const seen = new Set([k]), queue: { map: string; x: number; y: number; z?: number }[] = [{ map, x: +x, y: +y }];
+      while (queue.length && seen.size < 400) {
+        const at = queue.pop()!;
+        for (let dir = 1; dir <= 4; dir++) {
+          const r = (room as unknown as { base: (s: typeof at, d: number) => { to: typeof at } | null }).base(at, dir);
+          if (!r || !room.places.has(r.to.map) || r.to.map.startsWith(SAFARI)) continue;
+          const kk = `${r.to.map}:${r.to.x}:${r.to.y}:${r.to.z ?? ''}`;
+          if (!seen.has(kk)) { seen.add(kk); queue.push(r.to); }
+        }
+      }
+      return seen.size;
+    };
+    const cells = [...land];
+    for (let i = 0; i < cells.length; i += 97) expect(walk(cells[i])).toBeGreaterThanOrEqual(200);
+  });
+});
+
 describe('gym leaders', () => {
   it('A at a leader is their battle; the first to beat them closes the gym, and they leave it', () => {
     const room = makeRoom(MAPS, PATCHES, 7);

@@ -2352,6 +2352,9 @@ var AFTER_WIN = 60 * 15;
 var TRUCK = 40;
 var DEALS = /* @__PURE__ */ new Map();
 var REACH = /* @__PURE__ */ new Map();
+var LANDS = /* @__PURE__ */ new Map();
+var LANDED = /* @__PURE__ */ new WeakMap();
+var LANDING = 200;
 var RING_PHASE = 60 * 120;
 var SECTION_TILES = 27;
 var RING_STEPS = RING_RADII.map((r, i) => i === 0 ? Infinity : r < 0 ? r : Math.max(r, 0.5) * SECTION_TILES);
@@ -2744,7 +2747,6 @@ var Room = class {
     const r = this.results;
     const end = this.roundEnd();
     if (end !== void 0 && this.tick >= end + AFTER_WIN) this.newRound(r.round + 1);
-    else if (this.tick - PICK_WAIT >= this.epoch && this.ring(this.tick - PICK_WAIT).safari && !this.ring(this.tick - PICK_WAIT + 1).safari) this.drop();
     else if (was.safari && !ring.safari) {
       for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) this.dropOne(a);
     } else if (ring.phase !== was.phase) {
@@ -2753,6 +2755,7 @@ var Room = class {
       const n = eventForRing(ring.phase);
       if (n !== void 0) this.dropEvent(n, ring);
     }
+    if (!ring.safari && this.opening) this.waitPicks();
     if (!r.winner && r.entrants.length >= 2) {
       const alive = r.entrants.filter(([id]) => !r.fallen.some((f) => f.id === id));
       if (alive.length === 1) {
@@ -3002,10 +3005,105 @@ var Room = class {
     REACH.set(id, out);
     return out;
   }
-  /** The fly map is over for everybody (PICK_WAIT after the Safari): whoever is still
-   *  in the Zone, having chosen nowhere, drops anywhere outdoors (br_pick.c's timeout). */
-  drop() {
-    for (const a of this.actors) if (!a.bot && a.m.spot.map.startsWith(SAFARI)) this.dropOne(a);
+  /** Cells a drop may land on: outdoors, from which one can walk to a stretch of ground
+   *  where every cell reaches every other, LANDING cells or more (a strongly connected
+   *  component of the step graph: ledges go one way). A pocket walled in by water or rock
+   *  (the bank behind the ABANDONED SHIP), or one a ledge drops into with no way back to
+   *  open ground, is no place to be dropped without SURF. */
+  landing() {
+    const id = "landing:" + [...this.maps.keys()].join();
+    const hit = LANDS.get(id);
+    if (hit) return hit;
+    const index = /* @__PURE__ */ new Map(), spots = [], next = [];
+    const node = (s) => {
+      const k = `${s.map}:${s.x}:${s.y}:${s.z ?? ""}`;
+      let n = index.get(k);
+      if (n === void 0) {
+        n = spots.length;
+        index.set(k, n);
+        spots.push(s);
+        next.push([]);
+      }
+      return n;
+    };
+    for (const map of this.places.keys()) {
+      if (map.startsWith(SAFARI)) continue;
+      const m = this.maps.get(map);
+      for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (this.world.cell(map, x, y) === 0) node({ map, x, y });
+    }
+    for (let n = 0; n < spots.length; n++) {
+      for (let dir = 1; dir <= 4; dir++) {
+        const r = this.base(spots[n], dir);
+        if (r && this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) next[n].push(node(r.to));
+      }
+    }
+    const N = spots.length, order = new Int32Array(N).fill(-1), low = new Int32Array(N), comp = new Int32Array(N).fill(-1);
+    const stack = [], onStack = new Uint8Array(N), sizes = [];
+    let time = 0;
+    for (let root = 0; root < N; root++) {
+      if (order[root] >= 0) continue;
+      const work = [[root, 0]];
+      order[root] = low[root] = time++;
+      stack.push(root);
+      onStack[root] = 1;
+      while (work.length) {
+        const top = work[work.length - 1], v = top[0];
+        if (top[1] < next[v].length) {
+          const w = next[v][top[1]++];
+          if (order[w] < 0) {
+            order[w] = low[w] = time++;
+            stack.push(w);
+            onStack[w] = 1;
+            work.push([w, 0]);
+          } else if (onStack[w]) low[v] = Math.min(low[v], order[w]);
+          continue;
+        }
+        work.pop();
+        if (work.length) {
+          const u = work[work.length - 1][0];
+          low[u] = Math.min(low[u], low[v]);
+        }
+        if (low[v] === order[v]) {
+          const c = sizes.length;
+          let size = 0, w;
+          do {
+            w = stack.pop();
+            onStack[w] = 0;
+            comp[w] = c;
+            size++;
+          } while (w !== v);
+          sizes.push(size);
+        }
+      }
+    }
+    const prev = spots.map(() => []);
+    for (let v = 0; v < N; v++) for (const w of next[v]) prev[w].push(v);
+    const ok = new Uint8Array(N), queue = [];
+    for (let v = 0; v < N; v++) if (sizes[comp[v]] >= LANDING) {
+      ok[v] = 1;
+      queue.push(v);
+    }
+    while (queue.length) for (const u of prev[queue.pop()]) if (!ok[u]) {
+      ok[u] = 1;
+      queue.push(u);
+    }
+    const out = /* @__PURE__ */ new Set();
+    for (let v = 0; v < N; v++) {
+      const s = spots[v];
+      if (ok[v] && s.z === void 0 && this.world.cell(s.map, s.x, s.y) === 0) out.add(`${s.map}:${s.x}:${s.y}`);
+    }
+    LANDS.set(id, out);
+    return out;
+  }
+  /** The fly map's time (PICK_WAIT after the Safari, or after a battle fought in the
+   *  Zone since): whoever is still there, having chosen nowhere, drops anywhere outdoors
+   *  (br_pick.c's timeout). */
+  waitPicks() {
+    for (const a of this.actors) {
+      if (a.bot || !a.m.spot.map.startsWith(SAFARI)) continue;
+      if (a.battling) a.pickBy = this.tick + PICK_WAIT;
+      else if (this.tick >= (a.pickBy ?? this.epoch + this.opening + PICK_WAIT)) this.dropOne(a);
+    }
   }
   /** `a` out of the Zone onto a free cell of `want` (or of any outdoor map), dealt from
    *  the seed, the round and who it is, as the host deals the live drop's cell. */
@@ -3019,14 +3117,17 @@ var Room = class {
     };
     const used = new Set(this.actors.map((o) => `${o.m.spot.map}:${o.m.spot.x}:${o.m.spot.y}`));
     const reach = a.bot ? new Set(this.reachable().map((s) => `${s.map}:${s.x}:${s.y}`)) : null;
-    const maps = [...new Set(reach ? this.reachable().map((s) => s.map) : this.places.keys())].filter((m) => !m.startsWith(SAFARI)).sort();
+    const land = this.landing();
+    let landed = LANDED.get(land);
+    if (!landed) LANDED.set(land, landed = new Set([...land].map((k) => k.slice(0, k.indexOf(":")))));
+    const maps = [...new Set(reach ? this.reachable().map((s) => s.map) : this.places.keys())].filter((m) => !m.startsWith(SAFARI) && landed.has(m)).sort();
     for (let tries = 0; tries < 4; tries++) {
       const map = tries === 0 && want ? want : maps[Math.floor(rng() * maps.length)];
       const m = this.maps.get(map);
       if (!m) continue;
       const cells = [];
       for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
-        if (this.world.cell(map, x, y) !== 0 || used.has(`${map}:${x}:${y}`) || this.groundAt(map, x, y) || this.spillAt(map, x, y)) continue;
+        if (this.world.cell(map, x, y) !== 0 || !land.has(`${map}:${x}:${y}`) || used.has(`${map}:${x}:${y}`) || this.groundAt(map, x, y) || this.spillAt(map, x, y)) continue;
         if (reach && !reach.has(`${map}:${x}:${y}`)) continue;
         if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
         cells.push({ map, x, y });
@@ -3034,6 +3135,7 @@ var Room = class {
       if (!cells.length) continue;
       a.m = newMover(cells[Math.floor(rng() * cells.length)], 1);
       a.calm = this.tick + JOIN_GRACE;
+      a.pickBy = void 0;
       return;
     }
   }
@@ -3056,6 +3158,7 @@ var Room = class {
       a.calm = this.tick + JOIN_GRACE;
       a.shun = a.shunUntil = 0;
       a.arriving = false;
+      a.pickBy = void 0;
     });
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
@@ -3364,6 +3467,7 @@ var Room = class {
       mix2(a.bleedAt ?? 0);
       mix2(a.boss ?? 0);
       mix2(a.away ? 1 : 0);
+      mix2(a.pickBy ?? 0);
       mix2(a.loot?.money ?? 0);
       for (const st of a.loot?.items ?? []) {
         mix2(st.id);
@@ -3518,7 +3622,9 @@ function makeRoom(all, patches, seed, world) {
     maps.set(m.id, m);
     anchors.set(m.id, harbor);
   }
-  return new Room(world ?? new World(all), maps, patches, seed, places, anchors);
+  const room = new Room(world ?? new World(all), maps, patches, seed, places, anchors);
+  room.landing();
+  return room;
 }
 
 // web/spike-b/shared/bots.ts
@@ -4081,7 +4187,7 @@ var WorldService = class {
           const to = room.members.get(foe.id);
           if (to) this.send(to.link, { t: "bt", q: m.q & 65535, d: m.d.map((v) => (Number(v) | 0) & 255) });
         } else if (m.t === "sp") {
-          this.publish(room, phone, m.m);
+          this.publish(room, phone, m.m, m.as);
         } else if (m.t === "watch") {
           if (!Number.isInteger(m.id) || m.id < 0 || m.id === phone.id || m.id === phone.watching) return;
           const was = phone.watching;
@@ -4251,23 +4357,27 @@ var WorldService = class {
     if (!this.rooms.size) this.stop();
   }
   /** One of a fighter's published battle's messages: kept, and on to everybody watching
-   *  either side of it. Only from a trainer in a battle; a TURN only after its BSTART. */
-  publish(room, phone, raw) {
+   *  either side of it. Only from a trainer in a battle, or from the judge of a bots'
+   *  fight (`as`, the bot it is published as: its judge watching gets it too); a TURN only
+   *  after its BSTART. */
+  publish(room, phone, raw, as) {
     if (!raw || raw.t !== "bstart" && raw.t !== "turn" || !Number.isInteger(raw.battle) || !Array.isArray(raw.data)) return;
     if (raw.data.length > (raw.t === "bstart" ? BSTART_MAX : TURN_MAX)) return;
-    const me = room.host?.room.actor(phone.id);
+    const bot = as === void 0 ? void 0 : room.host?.room.actor(as);
+    if (as !== void 0 && (!bot?.bot || bot.judge !== phone.id)) return;
+    const me = bot ?? room.host?.room.actor(phone.id);
     if (!me?.battling) return;
     const m = { t: raw.t, battle: raw.battle & 65535, data: raw.data.map((v) => (Number(v) | 0) & 255) };
-    let s = room.streams.get(phone.id);
-    if (m.t === "bstart") room.streams.set(phone.id, s = { battle: m.battle, sent: [], bytes: 0 });
+    let s = room.streams.get(me.id);
+    if (m.t === "bstart") room.streams.set(me.id, s = { battle: m.battle, sent: [], bytes: 0, foe: me.foe });
     if (!s || s.battle !== m.battle) return;
-    const text = JSON.stringify({ t: "sp", from: phone.id, m });
+    const text = JSON.stringify({ t: "sp", from: me.id, m });
     if (s.bytes + text.length <= STREAM_MAX) {
       s.sent.push(text);
       s.bytes += text.length;
     }
     for (const w of room.members.values()) {
-      if (w !== phone && w.watching && (w.watching === phone.id || w.watching === me.foe)) w.link.send(text);
+      if ((w !== phone || bot) && w.watching && (w.watching === me.id || w.watching === me.foe)) w.link.send(text);
     }
   }
   /** The battle trainer `id` is in now, as published: by their ROM, or by the ROM of the
@@ -4277,9 +4387,10 @@ var WorldService = class {
     const a = r?.actor(id);
     if (!r || !a?.battling) return void 0;
     const own = room.streams.get(id);
-    if (own) return own;
+    if (own && own.foe === a.foe) return own;
     const foe = a.foe ? r.actor(a.foe) : void 0;
-    return foe?.battling && foe.foe === id ? room.streams.get(foe.id) : void 0;
+    const theirs = foe?.battling && foe.foe === id ? room.streams.get(foe.id) : void 0;
+    return theirs && theirs.foe === id ? theirs : void 0;
   }
   /** Every team the room's trainers have told, to one phone just in (the legendary's
    *  chip and the champion's hall of fame read them). */

@@ -50,8 +50,9 @@ export type WorldUp =
    *  fought, and they see one more eye. */
   | { t: 'watch'; id: number }
   /** What my ROM published of the battle I am in (a BSTART, then its TURNs), for whoever
-   *  watches me or the one I fight. */
-  | { t: 'sp'; m: SpMsg }
+   *  watches me or the one I fight. `as`: a bot's fight I judge (judge.ts), published as
+   *  side A of it, so a page out of the match can watch two bots fight as live does. */
+  | { t: 'sp'; m: SpMsg; as?: number }
   /** My team as it stands (after a battle, a catch, a trade): the results screen's hall
    *  of fame when I win. */
   | { t: 'team'; mons: FameMon[] };

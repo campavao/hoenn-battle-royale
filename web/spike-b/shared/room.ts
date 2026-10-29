@@ -77,6 +77,9 @@ export interface Actor {
   shunUntil: number;
   /** A step finished whose arrival has not been looked at yet (the spots). */
   arriving: boolean;
+  /** In the Zone after the Safari: the frame the fly map's answer is due by, then the drop
+   *  is anywhere. A battle there pushes it on, so the fly map always gets its time. */
+  pickBy?: number;
   /** What the team could do on the field (FIELD_*): SURF, CUT, STRENGTH, as the page
    *  reads its party (br_hm.c asks the same: knows the move or could learn it). */
   field?: number;
@@ -356,6 +359,11 @@ const TRUCK = 40;
 const DEALS = new Map<string, ReadonlyMap<string, Ground>>();
 /** Every cell a trainer can walk to from Littleroot, per set of maps. */
 const REACH = new Map<string, Spot[]>();
+const LANDS = new Map<string, Set<string>>();
+/** The maps with a landing cell, by landing(). */
+const LANDED = new WeakMap<ReadonlySet<string>, Set<string>>();
+/** The least ground a drop's cell must be joined to on foot (Room.landing). */
+const LANDING = 200;
 
 /** A ring phase, in frames: the match's 120 s (DEFAULT_FOG_SECS, web/src/match/director.ts). */
 export const RING_PHASE = 60 * 120;
@@ -788,7 +796,6 @@ export class Room {
     const r = this.results;
     const end = this.roundEnd();
     if (end !== undefined && this.tick >= end + AFTER_WIN) this.newRound(r.round + 1);
-    else if (this.tick - PICK_WAIT >= this.epoch && this.ring(this.tick - PICK_WAIT).safari && !this.ring(this.tick - PICK_WAIT + 1).safari) this.drop();
     // The Safari is over: the bots drop at once, anywhere (they have no fly map).
     else if (was.safari && !ring.safari) {
       for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) this.dropOne(a);
@@ -801,6 +808,7 @@ export class Room {
       const n = eventForRing(ring.phase);
       if (n !== undefined) this.dropEvent(n, ring);
     }
+    if (!ring.safari && this.opening) this.waitPicks();
     // The last one standing, once the frame's goings are all in (the last two out on one
     // frame: neither).
     if (!r.winner && r.entrants.length >= 2) {
@@ -1073,10 +1081,85 @@ export class Room {
     return out;
   }
 
-  /** The fly map is over for everybody (PICK_WAIT after the Safari): whoever is still
-   *  in the Zone, having chosen nowhere, drops anywhere outdoors (br_pick.c's timeout). */
-  private drop(): void {
-    for (const a of this.actors) if (!a.bot && a.m.spot.map.startsWith(SAFARI)) this.dropOne(a);
+  /** Cells a drop may land on: outdoors, from which one can walk to a stretch of ground
+   *  where every cell reaches every other, LANDING cells or more (a strongly connected
+   *  component of the step graph: ledges go one way). A pocket walled in by water or rock
+   *  (the bank behind the ABANDONED SHIP), or one a ledge drops into with no way back to
+   *  open ground, is no place to be dropped without SURF. */
+  landing(): ReadonlySet<string> {
+    const id = 'landing:' + [...this.maps.keys()].join();
+    const hit = LANDS.get(id);
+    if (hit) return hit;
+    // The graph: every outdoor cell a step reaches, numbered, with its steps out.
+    const index = new Map<string, number>(), spots: Spot[] = [], next: number[][] = [];
+    // A bridge cell is two places (Spot.z); a drop lands with none, which is either.
+    const node = (s: Spot) => {
+      const k = `${s.map}:${s.x}:${s.y}:${s.z ?? ''}`;
+      let n = index.get(k);
+      if (n === undefined) { n = spots.length; index.set(k, n); spots.push(s); next.push([]); }
+      return n;
+    };
+    for (const map of this.places.keys()) {
+      if (map.startsWith(SAFARI)) continue;
+      const m = this.maps.get(map)!;
+      for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (this.world.cell(map, x, y) === 0) node({ map, x, y });
+    }
+    for (let n = 0; n < spots.length; n++) {
+      for (let dir = 1; dir <= 4; dir++) {
+        const r = this.base(spots[n], dir as Facing);
+        if (r && this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) next[n].push(node(r.to));
+      }
+    }
+    // Tarjan's components, without recursion (23k cells).
+    const N = spots.length, order = new Int32Array(N).fill(-1), low = new Int32Array(N), comp = new Int32Array(N).fill(-1);
+    const stack: number[] = [], onStack = new Uint8Array(N), sizes: number[] = [];
+    let time = 0;
+    for (let root = 0; root < N; root++) {
+      if (order[root] >= 0) continue;
+      const work: [number, number][] = [[root, 0]];
+      order[root] = low[root] = time++; stack.push(root); onStack[root] = 1;
+      while (work.length) {
+        const top = work[work.length - 1], v = top[0];
+        if (top[1] < next[v].length) {
+          const w = next[v][top[1]++];
+          if (order[w] < 0) { order[w] = low[w] = time++; stack.push(w); onStack[w] = 1; work.push([w, 0]); }
+          else if (onStack[w]) low[v] = Math.min(low[v], order[w]);
+          continue;
+        }
+        work.pop();
+        if (work.length) { const u = work[work.length - 1][0]; low[u] = Math.min(low[u], low[v]); }
+        if (low[v] === order[v]) {
+          const c = sizes.length;
+          let size = 0, w: number;
+          do { w = stack.pop()!; onStack[w] = 0; comp[w] = c; size++; } while (w !== v);
+          sizes.push(size);
+        }
+      }
+    }
+    // Back from every cell of a big component: whoever can walk to one.
+    const prev: number[][] = spots.map(() => []);
+    for (let v = 0; v < N; v++) for (const w of next[v]) prev[w].push(v);
+    const ok = new Uint8Array(N), queue: number[] = [];
+    for (let v = 0; v < N; v++) if (sizes[comp[v]] >= LANDING) { ok[v] = 1; queue.push(v); }
+    while (queue.length) for (const u of prev[queue.pop()!]) if (!ok[u]) { ok[u] = 1; queue.push(u); }
+    const out = new Set<string>();
+    for (let v = 0; v < N; v++) {
+      const s = spots[v];
+      if (ok[v] && s.z === undefined && this.world.cell(s.map, s.x, s.y) === 0) out.add(`${s.map}:${s.x}:${s.y}`);
+    }
+    LANDS.set(id, out);
+    return out;
+  }
+
+  /** The fly map's time (PICK_WAIT after the Safari, or after a battle fought in the
+   *  Zone since): whoever is still there, having chosen nowhere, drops anywhere outdoors
+   *  (br_pick.c's timeout). */
+  private waitPicks(): void {
+    for (const a of this.actors) {
+      if (a.bot || !a.m.spot.map.startsWith(SAFARI)) continue;
+      if (a.battling) a.pickBy = this.tick + PICK_WAIT;
+      else if (this.tick >= (a.pickBy ?? this.epoch + this.opening + PICK_WAIT)) this.dropOne(a);
+    }
   }
 
   /** `a` out of the Zone onto a free cell of `want` (or of any outdoor map), dealt from
@@ -1089,14 +1172,18 @@ export class Room {
     // island or into a pocket could never be met nor walk into the ring (a trainer may
     // land anywhere, islands too: Cam, 2026-10-20).
     const reach = a.bot ? new Set(this.reachable().map((s) => `${s.map}:${s.x}:${s.y}`)) : null;
-    const maps = [...new Set(reach ? this.reachable().map((s) => s.map) : this.places.keys())].filter((m) => !m.startsWith(SAFARI)).sort();
+    // A trainer only on ground joined to LANDING cells (Room.landing): no walled-in pocket.
+    const land = this.landing();
+    let landed = LANDED.get(land);
+    if (!landed) LANDED.set(land, landed = new Set([...land].map((k) => k.slice(0, k.indexOf(':')))));
+    const maps = [...new Set(reach ? this.reachable().map((s) => s.map) : this.places.keys())].filter((m) => !m.startsWith(SAFARI) && landed.has(m)).sort();
     for (let tries = 0; tries < 4; tries++) {
       const map = tries === 0 && want ? want : maps[Math.floor(rng() * maps.length)];
       const m = this.maps.get(map);
       if (!m) continue;
       const cells: Spot[] = [];
       for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
-        if (this.world.cell(map, x, y) !== 0 || used.has(`${map}:${x}:${y}`) || this.groundAt(map, x, y) || this.spillAt(map, x, y)) continue;
+        if (this.world.cell(map, x, y) !== 0 || !land.has(`${map}:${x}:${y}`) || used.has(`${map}:${x}:${y}`) || this.groundAt(map, x, y) || this.spillAt(map, x, y)) continue;
         if (reach && !reach.has(`${map}:${x}:${y}`)) continue;
         if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
         cells.push({ map, x, y });
@@ -1104,6 +1191,7 @@ export class Room {
       if (!cells.length) continue;
       a.m = newMover(cells[Math.floor(rng() * cells.length)], 1);
       a.calm = this.tick + JOIN_GRACE;
+      a.pickBy = undefined;
       return;
     }
   }
@@ -1129,6 +1217,7 @@ export class Room {
       a.calm = this.tick + JOIN_GRACE;
       a.shun = a.shunUntil = 0;
       a.arriving = false;
+      a.pickBy = undefined;
     });
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
@@ -1416,7 +1505,7 @@ export class Room {
       mix(m.facing); mix(m.moveDir); mix(m.runningState); mix(m.run ? 1 : 0); mix(m.strides); mix(m.bike ? 1 + m.bikeSpeed * 4 + m.bikeCount * 16 : 0);
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
-      mix((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.bleedAt ?? 0); mix(a.boss ?? 0); mix(a.away ? 1 : 0); mix(a.loot?.money ?? 0); for (const st of a.loot?.items ?? []) { mix(st.id); mix(st.n); }
+      mix((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.bleedAt ?? 0); mix(a.boss ?? 0); mix(a.away ? 1 : 0); mix(a.pickBy ?? 0); mix(a.loot?.money ?? 0); for (const st of a.loot?.items ?? []) { mix(st.id); mix(st.n); }
       if (a.meet) { mix(a.meet.foe); mix(a.meet.since); mix((a.meet.walk ? 1 : 0) | (a.meet.duel ? 2 : 0)); }
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
@@ -1513,5 +1602,8 @@ export function makeRoom(all: readonly WorldMap[], patches: PatchTable, seed: nu
   // BrStory_Dock), Lilycove's harbour.
   const harbor = anchors.get(ATTENDANT.map);
   if (harbor) for (const m of islandMaps(all)) { maps.set(m.id, m); anchors.set(m.id, harbor); }
-  return new Room(world ?? new World(all as WorldMap[]), maps, patches, seed, places, anchors);
+  const room = new Room(world ?? new World(all as WorldMap[]), maps, patches, seed, places, anchors);
+  // Built now, once per world (cached), not on the frame of the first drop.
+  room.landing();
+  return room;
 }

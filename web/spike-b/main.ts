@@ -36,6 +36,7 @@ import { favourite } from '../src/match/tally';
 import { moveInfo, type Rom as MoveTables } from '../src/battle/movebook';
 import { OUT_BATCH_MS, event, felled, opening, outs, won } from '../src/match/ticker';
 import { MessageBox } from './msgbox';
+import { MusicCue, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
@@ -58,6 +59,7 @@ import { ITEM_MACH_BIKE, PhoneHud, fogPhase, signFor } from '../src/ui/phonehud'
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
 import { cardFields } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
+import { nameBstart } from '../src/match/spectate';
 import { LEADERS } from './shared/gyms';
 import { CLERKS, priceOf, shelf } from './shared/marts';
 import type { GbaKey } from '../src/emu';
@@ -73,7 +75,7 @@ const OBJ_EVENT_GFX_MART_EMPLOYEE = 83;
 const OBJ_EVENT_GFX_GENTLEMAN = 48;
 const OBJ_EVENT_GFX_BRENDAN_SURFING = 2, OBJ_EVENT_GFX_MAY_SURFING = 92;
 const BIKE_GFX = [1, 90]; // OBJ_EVENT_GFX_BRENDAN_MACH_BIKE, _MAY_MACH_BIKE
-const OBJ_EVENT_GFX_CUTTABLE_TREE = 82, OBJ_EVENT_GFX_PUSHABLE_BOULDER = 87;
+const OBJ_EVENT_GFX_CUTTABLE_TREE = 82, OBJ_EVENT_GFX_BREAKABLE_ROCK = 86, OBJ_EVENT_GFX_PUSHABLE_BOULDER = 87;
 // export-world.py's classes for them.
 const CLASS_WATER = 2, CLASS_CUT = 9, CLASS_BOULDER = 10;
 const OBJ_EVENT_GFX_BIRCHS_BAG = 97;
@@ -905,8 +907,11 @@ function endBattle(r: Fought | null): void {
   calmUntil = frame + 30;
   if (r && !r.ok) lastResult = 'last battle: the ROM did not start it';
   else if (r) lastResult = `last battle: ${wild ? `wild #${r.species} Lv${r.level}, ` : ''}${OUTCOME[r.outcome] ?? r.outcome}`;
-  // A whiteout is the end of a trainer's match (Kanto's rules, DESIGN.md §10).
-  if (!stale && r?.ok && (r.outcome === 2 || r.outcome === 3)) goOut('', by, !!wild);
+  // A whiteout is the end of a trainer's match (Kanto's rules, DESIGN.md §10). So is a
+  // team with nobody standing whatever the battle called its end (the fog's KO in a
+  // battle): not out until the next fog bite found it, it was a minute late (Cam, 10-29).
+  const fainted = !!after?.length && after.every((m) => !m.hp);
+  if (!stale && r?.ok && (r.outcome === 2 || r.outcome === 3 || fainted)) goOut('', by, !!wild);
 }
 
 /** How long a trainer the room says is no longer fighting me may go quiet before the
@@ -1226,11 +1231,12 @@ function safariFrame(ring: Ring): void {
 async function flyDrop(): Promise<void> {
   const r = rom, me = link.room.actor(link.me);
   if (!r || !me || !ringMap) return;
-  if (!(await r.spill()).mons.length) { goOut('You caught nothing in the SAFARI ZONE.'); return; }
   let section = 0;
+  // The field is held from here: no walk into grass or a trainer while the map comes up.
   swapping = true;
   held.clear();
   try {
+    if (!(await r.spill()).mons.length) { swapping = false; goOut('You caught nothing in the SAFARI ZONE.'); return; }
     section = await r.drop(ringMap.look(me.m.spot), () => { if (swapping) battleEl.classList.add('on'); });
   } finally {
     swapping = false;
@@ -1627,17 +1633,29 @@ function matchOver(): void {
 document.getElementById('menu')!.addEventListener('click', () => { void openMenu(); });
 document.getElementById('find')!.addEventListener('click', () => itemfinder());
 
-// Sound (the live match's MUTE, its own key): the ROM's, heard while its screen is the
-// one shown -- a battle, the team screen, a menu, the parade. Its field runs hidden under
-// ours between those, and its route music would come through in snatches.
+// Sound (the live match's MUTE, its own key): the ROM's. In a battle, a menu or the
+// parade it is that screen's; between them its field runs on hidden under ours and plays
+// the song for where the trainer the camera follows stands (music.ts, br_music.h).
 const MUTE_KEY = 'hbr:muted';
 let muted = false;
 try { muted = localStorage.getItem(MUTE_KEY) === '1'; } catch { /* private window: on */ }
 const soundBtn = document.getElementById('sound')!;
 let heard = -1;
 function soundFrame(): void {
-  const v = !muted && battleEl.classList.contains('on') ? 100 : 0;
+  const v = muted ? 0 : 100;
   if (rom && v !== heard) { rom.emu.setVolume(v); heard = v; }
+  rom?.music(cue.next(muted || !matchOn ? null : whereFollowed()));
+}
+const cue = new MusicCue();
+/** Where the followed trainer stands for the song: through a door, the other side. */
+function whereFollowed(): Where | null {
+  const a = follow ? link.room.actor(follow) : undefined;
+  if (!a) return null;
+  const door = a.m.action?.kind === 'warp' && a.m.action.land ? a.m.action.land : null;
+  const spot = door ?? a.m.spot;
+  const m = placed.get(spot.map)?.m;
+  if (!m) return null;
+  return { group: m.group, num: m.num, x: spot.x, surf: !door && classAt(spot) === CLASS_WATER, bike: a.m.bike, door: !!door };
 }
 function paintSound(): void { soundBtn.textContent = `Sound: ${muted ? 'off' : 'on'}`; }
 soundBtn.addEventListener('click', () => {
@@ -2227,9 +2245,14 @@ function drawProps(visible: Placed[], all: Actor[]): void {
   for (const p of visible) {
     if (!p.props) {
       p.props = [];
+      // A CUT cell is a tree or a Rock Smash rock (export-world.py marks both): the map's
+      // own object there says which (the Safari's are rocks, not trees).
+      const objs = art.objects(p.m.group, p.m.num);
       for (let i = 0; i < p.classes.length; i++) {
-        const c = p.classes[i];
-        if (c === CLASS_CUT || c === CLASS_BOULDER) p.props.push([i % p.m.w, Math.floor(i / p.m.w), c === CLASS_CUT ? OBJ_EVENT_GFX_CUTTABLE_TREE : OBJ_EVENT_GFX_PUSHABLE_BOULDER]);
+        const c = p.classes[i], x = i % p.m.w, y = Math.floor(i / p.m.w);
+        const own = objs.find((o) => o[0] === x && o[1] === y)?.[2];
+        if (c === CLASS_CUT) p.props.push([x, y, own === OBJ_EVENT_GFX_BREAKABLE_ROCK ? own : OBJ_EVENT_GFX_CUTTABLE_TREE]);
+        else if (c === CLASS_BOULDER) p.props.push([x, y, OBJ_EVENT_GFX_PUSHABLE_BOULDER]);
       }
     }
     for (const [x, y, gfx] of p.props) {
@@ -2598,7 +2621,7 @@ function loop(now: number): void {
       `${fps.toFixed(0)} fps · p95 gap ${p95.toFixed(1)} ms\n` +
       `sim ${simMs.toFixed(2)} ms · draw ${drawMs.toFixed(2)} ms · art from your ROM ${artMs.toFixed(0)} ms\n` +
       `${link.room.actors.length} trainers · ${here.map.replace('MAP_', '')} ${here.x},${here.y}\n${link.status()}` +
-      `\nROM ${rom ? (battle ? 'fighting' : 'paused, waiting to fight') : 'booting'}` +
+      `\nROM ${rom ? (battle ? 'fighting' : 'between battles') : 'booting'}` +
       (lastStart ? ` · battle up in ${lastStart.frames} frames (${lastStart.ms.toFixed(0)} ms)` : '') +
       `\n${fogLine()}` +
       (lastResult ? `\n${lastResult}` : '') +
@@ -2627,7 +2650,12 @@ async function boot(): Promise<void> {
   const t0 = performance.now();
   art = new RomArt(files.rom, files.sym);
   romTables = { bytes: files.rom, sym: (n) => { const a = files.sym(n); return Number.isNaN(a) ? undefined : a; } };
-  judge = makeJudge(files);
+  // A bots' fight, published as its side A for whoever watches either bot, as live
+  // (app.ts proxyStream); the proxy's BSTART names nobody, so the names go in here.
+  judge = makeJudge(files, (msg, sides) => {
+    const named = msg.t === 'bstart' ? nameBstart(msg, (id) => link.room.actor(id)?.name ?? '', sides) : msg;
+    link.sp(named, sides[0]);
+  });
   paint(placed.get('MAP_LITTLEROOT_TOWN')!);
   artMs = performance.now() - t0;
   // One Hoenn for everybody on the page: the relay's (?world=<ws url> for another
