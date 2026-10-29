@@ -58,6 +58,7 @@ import { ITEM_MACH_BIKE, PhoneHud, fogPhase, signFor } from '../src/ui/phonehud'
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
 import { cardFields } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
+import { nameBstart } from '../src/match/spectate';
 import { LEADERS } from './shared/gyms';
 import { CLERKS, priceOf, shelf } from './shared/marts';
 import type { GbaKey } from '../src/emu';
@@ -905,8 +906,11 @@ function endBattle(r: Fought | null): void {
   calmUntil = frame + 30;
   if (r && !r.ok) lastResult = 'last battle: the ROM did not start it';
   else if (r) lastResult = `last battle: ${wild ? `wild #${r.species} Lv${r.level}, ` : ''}${OUTCOME[r.outcome] ?? r.outcome}`;
-  // A whiteout is the end of a trainer's match (Kanto's rules, DESIGN.md §10).
-  if (!stale && r?.ok && (r.outcome === 2 || r.outcome === 3)) goOut('', by, !!wild);
+  // A whiteout is the end of a trainer's match (Kanto's rules, DESIGN.md §10). So is a
+  // team with nobody standing whatever the battle called its end (the fog's KO in a
+  // battle): not out until the next fog bite found it, it was a minute late (Cam, 10-29).
+  const fainted = !!after?.length && after.every((m) => !m.hp);
+  if (!stale && r?.ok && (r.outcome === 2 || r.outcome === 3 || fainted)) goOut('', by, !!wild);
 }
 
 /** How long a trainer the room says is no longer fighting me may go quiet before the
@@ -2627,7 +2631,12 @@ async function boot(): Promise<void> {
   const t0 = performance.now();
   art = new RomArt(files.rom, files.sym);
   romTables = { bytes: files.rom, sym: (n) => { const a = files.sym(n); return Number.isNaN(a) ? undefined : a; } };
-  judge = makeJudge(files);
+  // A bots' fight, published as its side A for whoever watches either bot, as live
+  // (app.ts proxyStream); the proxy's BSTART names nobody, so the names go in here.
+  judge = makeJudge(files, (msg, sides) => {
+    const named = msg.t === 'bstart' ? nameBstart(msg, (id) => link.room.actor(id)?.name ?? '', sides) : msg;
+    link.sp(named, sides[0]);
+  });
   paint(placed.get('MAP_LITTLEROOT_TOWN')!);
   artMs = performance.now() - t0;
   // One Hoenn for everybody on the page: the relay's (?world=<ws url> for another

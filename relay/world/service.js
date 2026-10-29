@@ -4029,7 +4029,7 @@ var WorldService = class {
           const to = room.members.get(foe.id);
           if (to) this.send(to.link, { t: "bt", q: m.q & 65535, d: m.d.map((v) => (Number(v) | 0) & 255) });
         } else if (m.t === "sp") {
-          this.publish(room, phone, m.m);
+          this.publish(room, phone, m.m, m.as);
         } else if (m.t === "watch") {
           if (!Number.isInteger(m.id) || m.id < 0 || m.id === phone.id || m.id === phone.watching) return;
           const was = phone.watching;
@@ -4198,23 +4198,27 @@ var WorldService = class {
     if (!this.rooms.size) this.stop();
   }
   /** One of a fighter's published battle's messages: kept, and on to everybody watching
-   *  either side of it. Only from a trainer in a battle; a TURN only after its BSTART. */
-  publish(room, phone, raw) {
+   *  either side of it. Only from a trainer in a battle, or from the judge of a bots'
+   *  fight (`as`, the bot it is published as: its judge watching gets it too); a TURN only
+   *  after its BSTART. */
+  publish(room, phone, raw, as) {
     if (!raw || raw.t !== "bstart" && raw.t !== "turn" || !Number.isInteger(raw.battle) || !Array.isArray(raw.data)) return;
     if (raw.data.length > (raw.t === "bstart" ? BSTART_MAX : TURN_MAX)) return;
-    const me = room.host?.room.actor(phone.id);
+    const bot = as === void 0 ? void 0 : room.host?.room.actor(as);
+    if (as !== void 0 && (!bot?.bot || bot.judge !== phone.id)) return;
+    const me = bot ?? room.host?.room.actor(phone.id);
     if (!me?.battling) return;
     const m = { t: raw.t, battle: raw.battle & 65535, data: raw.data.map((v) => (Number(v) | 0) & 255) };
-    let s = room.streams.get(phone.id);
-    if (m.t === "bstart") room.streams.set(phone.id, s = { battle: m.battle, sent: [], bytes: 0 });
+    let s = room.streams.get(me.id);
+    if (m.t === "bstart") room.streams.set(me.id, s = { battle: m.battle, sent: [], bytes: 0 });
     if (!s || s.battle !== m.battle) return;
-    const text = JSON.stringify({ t: "sp", from: phone.id, m });
+    const text = JSON.stringify({ t: "sp", from: me.id, m });
     if (s.bytes + text.length <= STREAM_MAX) {
       s.sent.push(text);
       s.bytes += text.length;
     }
     for (const w of room.members.values()) {
-      if (w !== phone && w.watching && (w.watching === phone.id || w.watching === me.foe)) w.link.send(text);
+      if ((w !== phone || bot) && w.watching && (w.watching === me.id || w.watching === me.foe)) w.link.send(text);
     }
   }
   /** The battle trainer `id` is in now, as published: by their ROM, or by the ROM of the

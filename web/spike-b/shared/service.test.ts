@@ -409,4 +409,36 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it("hands on a bots' fight from its judge's page, to its watchers and the judge watching too", () => {
+    let t = 0;
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 2, cap: 30, now: () => t, log: () => undefined });
+    try {
+      const a = phone(), b = phone();
+      const sa = svc.open(a.link), sb = svc.open(b.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 1, code }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      const alice = (a.got.find((m) => m.t === 'hello') as unknown as { id: number }).id;
+      t += 200;
+      svc.pump();
+      type Bot = { id: number; bot: boolean; battling: boolean; foe: number; judge?: number };
+      const room = [...(svc as unknown as { rooms: Map<string, { host: { room: { actors: Bot[] } } }> }).rooms.values()][0];
+      const [x, y] = room.host.room.actors.filter((o) => o.bot);
+      Object.assign(x, { battling: true, foe: y.id, judge: alice });
+      Object.assign(y, { battling: true, foe: x.id, judge: alice });
+      const sp = (p: ReturnType<typeof phone>) => p.got.filter((m) => m.t === 'sp') as unknown as { from: number; m: { t: string } }[];
+      sa.onText(JSON.stringify({ t: 'watch', id: y.id }));
+      sb.onText(JSON.stringify({ t: 'watch', id: x.id }));
+      // Not its judge: bob publishes nothing as a bot.
+      sb.onText(JSON.stringify({ t: 'sp', as: x.id, m: { t: 'bstart', battle: x.id | (y.id << 8), data: [1] } }));
+      expect(sp(a)).toHaveLength(0);
+      sa.onText(JSON.stringify({ t: 'sp', as: x.id, m: { t: 'bstart', battle: x.id | (y.id << 8), data: [1] } }));
+      sa.onText(JSON.stringify({ t: 'sp', as: x.id, m: { t: 'turn', battle: x.id | (y.id << 8), data: [0, 1, 4] } }));
+      expect(sp(b).map((m) => [m.from, m.m.t])).toEqual([[x.id, 'bstart'], [x.id, 'turn']]);
+      expect(sp(a).map((m) => [m.from, m.m.t]), 'the judge watching the other bot').toEqual([[x.id, 'bstart'], [x.id, 'turn']]);
+    } finally {
+      svc.stop();
+    }
+  });
 });

@@ -56,7 +56,8 @@ export interface WorldLink {
   /** Whose battles come to me (0: nobody's), and the eye they see. */
   watch(id: number): void;
   /** What my ROM published of the battle I am in, for whoever watches it. */
-  sp(m: SpMsg): void;
+  /** `as`: a bots' fight this page judges, published as that bot (wire.ts). */
+  sp(m: SpMsg, as?: number): void;
   /** The battle the trainer I watch is in, message by message from its start. */
   onSp: ((from: number, m: SpMsg) => void) | null;
   /** How many are watching me. */
@@ -79,7 +80,16 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
   host.advance();
   let seq = 0;
   const teams = new Map<number, FameMon[]>();
-  return {
+  // The bots' fights this page judges, as the relay keeps them (service.ts publish), for
+  // watching one: from its BSTART, however late the watch begins.
+  const streams = new Map<number, SpMsg[]>();
+  let watching = 0;
+  const fightOf = (id: number) => {
+    const a = host.room.actor(id);
+    if (!a?.battling) return undefined;
+    return streams.has(id) ? id : a.foe && streams.has(a.foe) ? a.foe : undefined;
+  };
+  const link: WorldLink = {
     room: host.room,
     me,
     online: false,
@@ -99,14 +109,24 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     out: (bag, by, wild) => host.out(me, bag, by, wild),
     bt: () => undefined,
     onBt: null,
-    watch: () => undefined,
-    sp: () => undefined,
+    watch: (id) => {
+      watching = id;
+      const from = fightOf(id);
+      if (from !== undefined) for (const m of streams.get(from)!) link.onSp?.(from, m);
+    },
+    sp: (m, as) => {
+      if (as === undefined) return;
+      if (m.t === 'bstart') streams.set(as, []);
+      streams.get(as)?.push(m);
+      if (watching && fightOf(watching) === as) link.onSp?.(as, m);
+    },
     onSp: null,
     onEyes: null,
     teams,
     team: (mons) => { teams.set(me, mons); },
     status: () => 'solo: you and the bots (no relay)',
   };
+  return link;
 }
 
 /** Frames the playout keeps in hand before it starts (and again after running dry). */
@@ -257,7 +277,7 @@ class Online implements WorldLink {
 
   watch(id: number): void { this.send({ t: 'watch', id }); }
 
-  sp(m: SpMsg): void { this.send({ t: 'sp', m }); }
+  sp(m: SpMsg, as?: number): void { this.send({ t: 'sp', m, ...(as === undefined ? {} : { as }) }); }
 
   status(): string {
     if (this.closed) return 'the relay closed the connection: reload to rejoin';
