@@ -7,6 +7,21 @@ export const groundCount = (item: number): number => (item > ITEM_MASTER_BALL &&
 
 export const isTm = (item: number): boolean => item >= ITEM_TM01 && item <= ITEM_HM08;
 
+/** br_loot.c's TradedInto: the four classic trade evolutions go off when a home's
+ *  POKeMON reaches you (SPECIES_KADABRA, MACHOKE, GRAVELER, HAUNTER). */
+const TRADED_INTO: Record<number, number> = { 64: 65, 67: 68, 75: 76, 93: 94 };
+export const tradedInto = (species: number): number => TRADED_INTO[species] ?? species;
+
+/** br_balls.c's BrBalls_Deal: past the machines (one in BR_BALLS_TM_IN), one ball in
+ *  BR_BALLS_CABLE_IN is a LINK CABLE and one a POKe DOLL. */
+export const ITEM_POKE_DOLL = 80, ITEM_LINK_CABLE = 52;
+const CABLE_IN = 12;
+export function cableOrDoll(item: number, roll: number): number {
+  if (isTm(item)) return item;
+  const k = Math.floor(roll * CABLE_IN);
+  return k === 0 ? ITEM_LINK_CABLE : k === 1 ? ITEM_POKE_DOLL : item;
+}
+
 /** The key items: MACH BIKE..DEVON SCOPE, and OAK's PARCEL onwards. */
 export const isKeyItem = (item: number): boolean => (item >= 259 && item <= 288) || item >= 349;
 

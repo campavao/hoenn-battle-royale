@@ -1380,6 +1380,297 @@ function draw(rng, pool, n) {
   return out;
 }
 
+// web/src/match/story.ts
+var LILEEP = 388;
+var ANORITH = 390;
+var BELDUM = 398;
+var WYNAUT = 360;
+var REGIROCK2 = 401;
+var REGICE2 = 402;
+var REGISTEEL2 = 403;
+var KYOGRE2 = 404;
+var ZUBAT = 41;
+var GOLBAT = 42;
+var CROBAT = 169;
+var MIGHTYENA = 287;
+var CARVANHA = 330;
+var SHARPEDO = 331;
+var CAMERUPT = 340;
+var GROUDON2 = 405;
+var RAYQUAZA2 = 406;
+var CASTFORM = 385;
+var LATIAS2 = 407;
+var LATIOS2 = 408;
+var DEOXYS = 410;
+var MEW = 151;
+var LUGIA = 249;
+var HO_OH = 250;
+var MAPSEC_SOUTHERN_ISLAND = 73;
+var MAPSEC_BIRTH_ISLAND = 200;
+var MAPSEC_FARAWAY_ISLAND = 201;
+var MAPSEC_NAVEL_ROCK = 211;
+var ITEM_FOCUS_BAND = 196;
+var ITEM_SHELL_BELL = 219;
+var ITEM_TM24 = 312;
+var ITEM_TM47 = 335;
+var ITEM_DEEP_SEA_TOOTH = 192;
+var ITEM_DEEP_SEA_SCALE = 193;
+var ITEM_SCANNER = 278;
+var ITEM_MASTER_BALL2 = 1;
+var ITEM_METEORITE = 280;
+var ITEM_SUN_STONE = 93;
+var DOOR_Y = 20;
+var STORY_CHANCE = 0.5;
+var FINAL_CHANCE = 0.25;
+var STORIES = [
+  {
+    id: "mirage-tower",
+    name: "MIRAGE TOWER",
+    section: "MAPSEC_MIRAGE_TOWER",
+    map: "MAP_MIRAGE_TOWER_4F",
+    // The two fossils where the tower's own lie, each already the mon it would revive as.
+    mons: [[LILEEP], [ANORITH]],
+    cells: [{ x: 5, y: 4 }, { x: 7, y: 4 }, { x: 6, y: 3 }, { x: 6, y: 5 }]
+  },
+  {
+    id: "stevens-house",
+    name: "STEVEN'S HOUSE",
+    section: "MAPSEC_MOSSDEEP_CITY",
+    map: "MAP_MOSSDEEP_CITY_STEVENS_HOUSE",
+    // The BELDUM he leaves, at the rung: METANG or METAGROSS late on.
+    mons: [[BELDUM]],
+    cells: [{ x: 4, y: 2 }, { x: 3, y: 3 }, { x: 5, y: 2 }]
+  },
+  {
+    id: "new-mauville",
+    name: "NEW MAUVILLE",
+    section: "MAPSEC_NEW_MAUVILLE",
+    map: "MAP_NEW_MAUVILLE_INSIDE",
+    // Wattson's thanks for the generator. In the hall inside the door: the generator room
+    // is behind the barriers, and a bot walks the layout's, which never open.
+    items: [[ITEM_TM24]],
+    cells: [{ x: 32, y: 35 }, { x: 31, y: 35 }, { x: 33, y: 35 }]
+  },
+  {
+    id: "shoal-cave",
+    name: "SHOAL CAVE",
+    section: "MAPSEC_SHOAL_CAVE",
+    map: "MAP_SHOAL_CAVE_LOW_TIDE_LOWER_ROOM",
+    // The BLACK BELT's FOCUS BAND where he stands, and the bell the shells and salt make.
+    items: [[ITEM_FOCUS_BAND], [ITEM_SHELL_BELL]],
+    cells: [{ x: 11, y: 4 }, { x: 12, y: 4 }, { x: 10, y: 4 }, { x: 11, y: 5 }]
+  },
+  // The three golems in their chambers, where their own sat, the supplies and the trader
+  // outside the wall for whoever cannot open it.
+  {
+    id: "desert-ruins",
+    name: "DESERT RUINS",
+    section: "MAPSEC_DESERT_RUINS",
+    map: "MAP_DESERT_RUINS",
+    mons: [[REGIROCK2]],
+    cells: [{ x: 8, y: 7 }, { x: 7, y: 22 }, { x: 9, y: 22 }],
+    door: "smash"
+  },
+  {
+    id: "island-cave",
+    name: "ISLAND CAVE",
+    section: "MAPSEC_ISLAND_CAVE",
+    map: "MAP_ISLAND_CAVE",
+    mons: [[REGICE2]],
+    cells: [{ x: 8, y: 7 }, { x: 7, y: 22 }, { x: 9, y: 22 }],
+    door: "wait"
+  },
+  {
+    id: "ancient-tomb",
+    name: "ANCIENT TOMB",
+    section: "MAPSEC_ANCIENT_TOMB",
+    map: "MAP_ANCIENT_TOMB",
+    mons: [[REGISTEEL2]],
+    cells: [{ x: 8, y: 7 }, { x: 7, y: 22 }, { x: 9, y: 22 }],
+    door: "fly"
+  },
+  {
+    id: "granite-cave",
+    name: "GRANITE CAVE",
+    section: "MAPSEC_GRANITE_CAVE",
+    map: "MAP_GRANITE_CAVE_STEVENS_ROOM",
+    // Steven and the TM he gives for the letter, where he stands.
+    items: [[ITEM_TM47]],
+    cells: [{ x: 7, y: 8 }, { x: 5, y: 7 }, { x: 9, y: 7 }],
+    people: [{ at: 0, gfx: "OBJ_EVENT_GFX_STEVEN" }]
+  },
+  {
+    id: "lavaridge-egg",
+    name: "LAVARIDGE TOWN",
+    section: "MAPSEC_LAVARIDGE_TOWN",
+    map: "MAP_LAVARIDGE_TOWN",
+    // The egg woman's WYNAUT, hatched, at her feet: she has no flag to stand her down,
+    // so she is her own self above it.
+    mons: [[WYNAUT]],
+    cells: [{ x: 4, y: 8 }, { x: 3, y: 8 }, { x: 3, y: 9 }]
+  },
+  {
+    id: "abandoned-ship",
+    name: "ABANDONED SHIP",
+    section: "MAPSEC_ABANDONED_SHIP",
+    map: "MAP_ABANDONED_SHIP_CAPTAINS_OFFICE",
+    // The SCANNER in the captain's office, and CAPTAIN STERN at his harbour, who gives a
+    // DEEP SEA TOOTH or SCALE for it.
+    items: [[ITEM_DEEP_SEA_TOOTH, ITEM_DEEP_SEA_SCALE], [ITEM_SCANNER]],
+    cells: [{ x: 6, y: 13, map: "MAP_SLATEPORT_CITY_HARBOR" }, { x: 4, y: 3 }, { x: 5, y: 3 }, { x: 6, y: 3 }],
+    people: [{ at: 0, gfx: "OBJ_EVENT_GFX_SCIENTIST_1", wants: ITEM_SCANNER }]
+  },
+  // The gates: the team's boss where Emerald stood him, holding what the team was after,
+  // and handing it over when he falls (one fight, his own, on each ROM; whoever wins
+  // first takes it from the room).
+  {
+    id: "magma-hideout",
+    name: "MAGMA HIDEOUT",
+    section: "MAPSEC_MAGMA_HIDEOUT",
+    map: "MAP_MAGMA_HIDEOUT_4F",
+    // GROUDON awake, and the MASTER BALL MAXIE would have caught it with.
+    mons: [[GROUDON2]],
+    items: [[ITEM_MASTER_BALL2]],
+    cells: [{ x: 16, y: 21 }, { x: 15, y: 22 }, { x: 14, y: 22 }, { x: 13, y: 22 }],
+    people: [{ at: 0, gfx: "OBJ_EVENT_GFX_MAXIE", trainer: "TRAINER_MAXIE_MAGMA_HIDEOUT", party: [MIGHTYENA, CROBAT, CAMERUPT] }]
+  },
+  {
+    id: "route128-kyogre",
+    name: "ROUTE 128 SHOAL",
+    section: "MAPSEC_ROUTE_128",
+    map: "MAP_ROUTE128",
+    // KYOGRE, risen, with ARCHIE on the shoal where he watched it.
+    mons: [[KYOGRE2]],
+    cells: [{ x: 37, y: 22 }, { x: 38, y: 22 }, { x: 36, y: 22 }],
+    people: [{ at: 0, gfx: "OBJ_EVENT_GFX_ARCHIE", trainer: "TRAINER_ARCHIE", party: [MIGHTYENA, CROBAT, SHARPEDO] }]
+  },
+  {
+    id: "weather-institute",
+    name: "WEATHER INSTITUTE",
+    section: "MAPSEC_ROUTE_119",
+    map: "MAP_ROUTE119_WEATHER_INSTITUTE_2F",
+    // The CASTFORM the scientists give for clearing TEAM AQUA out, in SHELLY's hands.
+    mons: [[CASTFORM]],
+    cells: [{ x: 4, y: 6 }, { x: 5, y: 6 }, { x: 3, y: 6 }],
+    people: [{ at: 0, gfx: "OBJ_EVENT_GFX_AQUA_MEMBER_F", trainer: "TRAINER_SHELLY_WEATHER_INSTITUTE", party: [CARVANHA, MIGHTYENA] }]
+  },
+  {
+    id: "aqua-hideout",
+    name: "AQUA HIDEOUT",
+    section: "MAPSEC_AQUA_HIDEOUT",
+    map: "MAP_AQUA_HIDEOUT_B2F",
+    // The MASTER BALL from the hideout's last room, with MATT at the submarine's dock.
+    items: [[ITEM_MASTER_BALL2]],
+    cells: [{ x: 23, y: 19 }, { x: 22, y: 19 }, { x: 24, y: 19 }],
+    people: [{ at: 0, gfx: "OBJ_EVENT_GFX_AQUA_MEMBER_M", trainer: "TRAINER_MATT", party: [MIGHTYENA, GOLBAT] }]
+  },
+  {
+    id: "mt-chimney",
+    name: "MT. CHIMNEY",
+    section: "MAPSEC_MT_CHIMNEY",
+    map: "MAP_MT_CHIMNEY",
+    // The METEORITE at the machine, plus two rares (the doc's row), MAXIE beside it.
+    // He holds the stone (at: 2); the rares are his story's other pieces and open when he falls.
+    rares: 2,
+    items: [[ITEM_METEORITE]],
+    cells: [{ x: 12, y: 6 }, { x: 11, y: 6 }, { x: 13, y: 6 }, { x: 13, y: 7 }, { x: 12, y: 7 }],
+    people: [{ at: 2, gfx: "OBJ_EVENT_GFX_MAXIE", trainer: "TRAINER_MAXIE_MT_CHIMNEY", party: [MIGHTYENA, ZUBAT, CAMERUPT] }]
+  },
+  {
+    id: "space-center",
+    name: "SPACE CENTER",
+    section: "MAPSEC_MOSSDEEP_CITY",
+    map: "MAP_MOSSDEEP_CITY_SPACE_CENTER_2F",
+    // The SUN STONE the center gives, plus two rares (the doc's row), MAXIE at the stairs.
+    // He holds the stone (at: 2); the rares are his story's other pieces and open when he falls.
+    rares: 2,
+    items: [[ITEM_SUN_STONE]],
+    cells: [{ x: 2, y: 9 }, { x: 3, y: 9 }, { x: 1, y: 9 }, { x: 1, y: 8 }, { x: 0, y: 8 }],
+    people: [{ at: 2, gfx: "OBJ_EVENT_GFX_MAXIE", trainer: "TRAINER_MAXIE_MOSSDEEP", party: [MIGHTYENA, CROBAT, CAMERUPT] }]
+  },
+  // The islands. Lilycove's ferry sails to the one a live story is on (br_story.c), and
+  // its own legendary is gone for the match: this is the only one there.
+  {
+    id: "southern-island",
+    name: "SOUTHERN ISLAND",
+    section: "MAPSEC_LILYCOVE_CITY",
+    mapsec: MAPSEC_SOUTHERN_ISLAND,
+    map: "MAP_SOUTHERN_ISLAND_INTERIOR",
+    // The EON pair, one of them, before the stone.
+    mons: [[LATIAS2, LATIOS2]],
+    cells: [{ x: 13, y: 10 }, { x: 12, y: 10 }, { x: 14, y: 10 }],
+    boat: true
+  },
+  {
+    id: "birth-island",
+    name: "BIRTH ISLAND",
+    section: "MAPSEC_LILYCOVE_CITY",
+    mapsec: MAPSEC_BIRTH_ISLAND,
+    map: "MAP_BIRTH_ISLAND_EXTERIOR",
+    // DEOXYS where the triangle's last step would have put it.
+    mons: [[DEOXYS]],
+    cells: [{ x: 15, y: 10 }, { x: 14, y: 11 }, { x: 16, y: 11 }],
+    boat: true
+  },
+  {
+    id: "faraway-island",
+    name: "FARAWAY ISLAND",
+    section: "MAPSEC_LILYCOVE_CITY",
+    mapsec: MAPSEC_FARAWAY_ISLAND,
+    map: "MAP_FARAWAY_ISLAND_INTERIOR",
+    // MEW in the island's long grass.
+    mons: [[MEW]],
+    cells: [{ x: 13, y: 12 }, { x: 12, y: 13 }, { x: 14, y: 13 }],
+    boat: true
+  },
+  {
+    id: "navel-rock-top",
+    name: "NAVEL ROCK PEAK",
+    section: "MAPSEC_LILYCOVE_CITY",
+    mapsec: MAPSEC_NAVEL_ROCK,
+    map: "MAP_NAVEL_ROCK_TOP",
+    // HO-OH at the summit, at the top of the last climb.
+    mons: [[HO_OH]],
+    cells: [{ x: 12, y: 9 }, { x: 11, y: 16 }, { x: 13, y: 16 }],
+    boat: true
+  },
+  {
+    id: "navel-rock-bottom",
+    name: "NAVEL ROCK",
+    section: "MAPSEC_LILYCOVE_CITY",
+    mapsec: MAPSEC_NAVEL_ROCK,
+    map: "MAP_NAVEL_ROCK_BOTTOM",
+    // LUGIA in the hollow at the foot of the rock.
+    mons: [[LUGIA]],
+    cells: [{ x: 11, y: 13 }, { x: 10, y: 12 }, { x: 12, y: 12 }],
+    boat: true
+  },
+  // The final rings. RAYQUAZA at the top of SKY PILLAR, where it sleeps, its own gone for
+  // the match and the door already open (br_boot.c), and the clean pillar the match plays
+  // is the one the bots' world has, so they climb it; SOOTOPOLIS's clash, KYOGRE or
+  // GROUDON at the CAVE OF ORIGIN's mouth, and the city in KYOGRE's rain or GROUDON's
+  // drought while it is there, the seed's pick (br_story.c), so a fight in it starts in it.
+  {
+    id: "sky-pillar",
+    name: "SKY PILLAR",
+    section: "MAPSEC_SKY_PILLAR",
+    map: "MAP_SKY_PILLAR_TOP",
+    mons: [[RAYQUAZA2]],
+    cells: [{ x: 14, y: 5 }, { x: 13, y: 6 }, { x: 15, y: 6 }],
+    final: true
+  },
+  {
+    id: "sootopolis",
+    name: "SOOTOPOLIS CITY",
+    section: "MAPSEC_SOOTOPOLIS_CITY",
+    map: "MAP_SOOTOPOLIS_CITY",
+    mons: [[KYOGRE2, GROUDON2]],
+    cells: [{ x: 31, y: 34 }, { x: 30, y: 35 }, { x: 32, y: 35 }],
+    final: true,
+    noBots: true
+  }
+];
+
 // web/src/bots/patches.ts
 var PATCH_KEY_BASE = 8192;
 var PATCH_MAX = 8;
@@ -1472,32 +1763,43 @@ function scatterItem(rng) {
   return ITEM_SUPER_POTION;
 }
 
+// web/spike-b/data/rooms.json
+var rooms_default = [["MAP_DEWFORD_TOWN_HOUSE1", 5, 4, true, true, 3, 4, false], ["MAP_DEWFORD_TOWN_HOUSE2", 7, 5, true, true, 6, 4, false], ["MAP_FALLARBOR_TOWN_COZMOS_HOUSE", 3, 5, true, true, 1, 4, false], ["MAP_FALLARBOR_TOWN_MOVE_RELEARNERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_FORTREE_CITY_HOUSE1", 6, 2, true, true, 6, 3, false], ["MAP_FORTREE_CITY_HOUSE2", 6, 4, true, true, 1, 3, false], ["MAP_FORTREE_CITY_HOUSE3", 6, 2, true, true, 6, 3, false], ["MAP_FORTREE_CITY_HOUSE4", 6, 3, true, true, 7, 3, false], ["MAP_FORTREE_CITY_HOUSE5", 6, 2, true, true, 1, 3, false], ["MAP_LAVARIDGE_TOWN_HOUSE", 5, 4, true, true, 3, 3, false], ["MAP_LILYCOVE_CITY_HOUSE1", 3, 5, true, true, 1, 4, false], ["MAP_LILYCOVE_CITY_HOUSE2", 2, 4, true, true, 0, 3, false], ["MAP_LILYCOVE_CITY_HOUSE3", 5, 5, true, true, 4, 4, false], ["MAP_LILYCOVE_CITY_HOUSE4", 3, 5, true, true, 1, 5, false], ["MAP_LILYCOVE_CITY_MOVE_DELETERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_1F", 3, 4, true, true, 1, 4, false], ["MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_2F", 3, 3, true, true, 3, 5, false], ["MAP_LITTLEROOT_TOWN_MAYS_HOUSE_1F", 7, 4, true, true, 9, 4, false], ["MAP_LITTLEROOT_TOWN_MAYS_HOUSE_2F", 5, 3, true, true, 5, 5, false], ["MAP_MAUVILLE_CITY_HOUSE1", 5, 5, true, true, 4, 5, false], ["MAP_MAUVILLE_CITY_HOUSE2", 3, 5, true, true, 1, 4, false], ["MAP_MOSSDEEP_CITY_HOUSE1", 5, 5, true, true, 4, 4, false], ["MAP_MOSSDEEP_CITY_HOUSE2", 3, 5, true, true, 1, 4, false], ["MAP_MOSSDEEP_CITY_HOUSE3", 5, 5, true, true, 4, 5, false], ["MAP_MOSSDEEP_CITY_HOUSE4", 5, 4, true, true, 4, 3, false], ["MAP_MOSSDEEP_CITY_STEVENS_HOUSE", 5, 4, true, true, 3, 3, false], ["MAP_OLDALE_TOWN_HOUSE1", 3, 5, true, true, 1, 4, false], ["MAP_OLDALE_TOWN_HOUSE2", 5, 5, true, true, 4, 5, false], ["MAP_PACIFIDLOG_TOWN_HOUSE1", 5, 5, true, true, 3, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE2", 5, 5, true, true, 3, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE3", 5, 5, true, true, 3, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE4", 5, 5, true, true, 3, 5, false], ["MAP_PACIFIDLOG_TOWN_HOUSE5", 5, 5, true, true, 3, 5, false], ["MAP_PETALBURG_CITY_HOUSE1", 3, 5, true, true, 1, 4, false], ["MAP_PETALBURG_CITY_HOUSE2", 5, 4, true, true, 4, 3, false], ["MAP_PETALBURG_CITY_WALLYS_HOUSE", 5, 5, true, true, 4, 4, false], ["MAP_ROUTE104_MR_BRINEYS_HOUSE", 7, 5, true, true, 6, 4, false], ["MAP_ROUTE109_SEASHORE_HOUSE", 8, 4, true, true, 7, 4, false], ["MAP_ROUTE111_WINSTRATE_FAMILYS_HOUSE", 5, 5, true, true, 5, 3, false], ["MAP_ROUTE114_FOSSIL_MANIACS_HOUSE", 2, 5, true, true, 0, 4, false], ["MAP_ROUTE114_LANETTES_HOUSE", 7, 5, true, true, 5, 3, false], ["MAP_ROUTE116_TUNNELERS_REST_HOUSE", 7, 5, true, true, 6, 4, false], ["MAP_ROUTE119_HOUSE", 3, 5, true, true, 1, 4, false], ["MAP_ROUTE123_BERRY_MASTERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_ROUTE124_DIVING_TREASURE_HUNTERS_HOUSE", 4, 5, true, true, 2, 4, false], ["MAP_RUSTBORO_CITY_CUTTERS_HOUSE", 8, 5, true, true, 7, 4, false], ["MAP_RUSTBORO_CITY_HOUSE1", 4, 5, true, true, 2, 4, false], ["MAP_RUSTBORO_CITY_HOUSE2", 6, 5, true, true, 7, 4, false], ["MAP_RUSTBORO_CITY_HOUSE3", 6, 5, true, true, 7, 4, false], ["MAP_SLATEPORT_CITY_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_SLATEPORT_CITY_NAME_RATERS_HOUSE", 5, 4, true, true, 4, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE1", 4, 3, true, true, 5, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE2", 5, 4, true, true, 3, 4, false], ["MAP_SOOTOPOLIS_CITY_HOUSE3", 4, 3, true, true, 3, 2, false], ["MAP_SOOTOPOLIS_CITY_HOUSE4", 4, 3, true, true, 5, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE5", 5, 4, true, true, 3, 4, false], ["MAP_SOOTOPOLIS_CITY_HOUSE6", 3, 2, true, true, 4, 2, false], ["MAP_SOOTOPOLIS_CITY_HOUSE7", 4, 3, true, true, 2, 3, false], ["MAP_SOOTOPOLIS_CITY_LOTAD_AND_SEEDOT_HOUSE", 4, 3, true, true, 2, 3, false], ["MAP_VERDANTURF_TOWN_FRIENDSHIP_RATERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_VERDANTURF_TOWN_HOUSE", 3, 5, true, true, 1, 4, false], ["MAP_VERDANTURF_TOWN_WANDAS_HOUSE", 4, 5, true, true, 2, 5, false], ["MAP_ABANDONED_SHIP_CORRIDORS_1F", 9, 6, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_CORRIDORS_B1F", 2, 6, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_DECK", 10, 10, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_HIDDEN_FLOOR_CORRIDORS", 11, 2, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_HIDDEN_FLOOR_ROOMS", 0, 0, false, false, 20, 5, true], ["MAP_ABANDONED_SHIP_ROOMS_1F", 0, 0, false, false, 7, 6, true], ["MAP_ALTERING_CAVE", 16, 12, false, true, 15, 13, true], ["MAP_ANCIENT_TOMB", 4, 21, false, true, 5, 21, true], ["MAP_AQUA_HIDEOUT_1F", 17, 17, false, true, 18, 17, true], ["MAP_AQUA_HIDEOUT_B1F", 0, 0, false, false, 26, 10, true], ["MAP_AQUA_HIDEOUT_B2F", 0, 0, false, false, 16, 11, true], ["MAP_CAVE_OF_ORIGIN_1F", 8, 8, false, true, 0, 0, false], ["MAP_CAVE_OF_ORIGIN_B1F", 6, 12, false, true, 0, 0, false], ["MAP_CAVE_OF_ORIGIN_ENTRANCE", 9, 13, false, true, 0, 0, false], ["MAP_DESERT_RUINS", 4, 21, false, true, 5, 21, true], ["MAP_DESERT_UNDERPASS", 69, 9, false, true, 70, 9, true], ["MAP_DEWFORD_TOWN_HALL", 3, 5, false, true, 0, 0, false], ["MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F", 15, 9, false, true, 9, 5, true], ["MAP_FIERY_PATH", 0, 0, false, false, 18, 18, true], ["MAP_FORTREE_CITY_DECORATION_SHOP", 5, 3, false, true, 0, 0, false], ["MAP_GRANITE_CAVE_1F", 0, 0, false, false, 21, 7, true], ["MAP_GRANITE_CAVE_B1F", 0, 0, false, false, 15, 12, true], ["MAP_GRANITE_CAVE_B2F", 0, 0, false, false, 16, 14, true], ["MAP_GRANITE_CAVE_STEVENS_ROOM", 6, 6, false, true, 0, 0, false], ["MAP_ISLAND_CAVE", 4, 21, false, true, 5, 21, true], ["MAP_JAGGED_PASS", 0, 0, false, false, 13, 21, true], ["MAP_LAVARIDGE_TOWN_HERB_SHOP", 4, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_CONTEST_HALL", 24, 17, false, true, 25, 17, true], ["MAP_LILYCOVE_CITY_CONTEST_LOBBY", 15, 3, false, true, 15, 6, true], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_1F", 8, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_2F", 8, 4, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_1F", 9, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_2F", 9, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_3F", 9, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_4F", 9, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_5F", 9, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_ROOFTOP", 9, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_HARBOR", 9, 11, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_1F", 5, 10, false, true, 10, 7, true], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F", 12, 6, false, true, 11, 7, true], ["MAP_LILYCOVE_CITY_POKEMON_TRAINER_FAN_CLUB", 5, 10, false, true, 0, 0, false], ["MAP_MAGMA_HIDEOUT_1F", 0, 0, false, false, 22, 14, true], ["MAP_MAGMA_HIDEOUT_2F_1R", 16, 19, false, true, 15, 19, true], ["MAP_MAGMA_HIDEOUT_2F_2R", 0, 0, false, false, 25, 13, true], ["MAP_MAGMA_HIDEOUT_2F_3R", 21, 11, false, true, 0, 0, false], ["MAP_MAGMA_HIDEOUT_3F_1R", 0, 0, false, false, 15, 10, true], ["MAP_MAGMA_HIDEOUT_4F", 0, 0, false, false, 29, 14, true], ["MAP_MARINE_CAVE_END", 14, 13, false, true, 15, 13, true], ["MAP_MARINE_CAVE_ENTRANCE", 7, 7, false, true, 8, 6, true], ["MAP_MAUVILLE_CITY_BIKE_SHOP", 5, 3, false, true, 0, 0, false], ["MAP_MAUVILLE_CITY_GAME_CORNER", 11, 3, false, true, 0, 0, false], ["MAP_METEOR_FALLS_1F_1R", 0, 0, false, false, 16, 20, true], ["MAP_METEOR_FALLS_1F_2R", 14, 16, false, true, 13, 16, true], ["MAP_METEOR_FALLS_B1F_1R", 14, 19, false, true, 15, 18, true], ["MAP_METEOR_FALLS_STEVENS_CAVE", 17, 15, false, true, 17, 16, true], ["MAP_MIRAGE_TOWER_1F", 5, 3, false, true, 0, 0, false], ["MAP_MIRAGE_TOWER_2F", 5, 3, false, true, 0, 0, false], ["MAP_MIRAGE_TOWER_3F", 5, 3, false, true, 0, 0, false], ["MAP_MIRAGE_TOWER_4F", 4, 3, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_GAME_CORNER_1F", 6, 3, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_GAME_CORNER_B1F", 4, 1, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_1F", 10, 5, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_2F", 8, 7, false, true, 0, 0, false], ["MAP_MT_CHIMNEY", 18, 21, false, true, 21, 25, true], ["MAP_MT_CHIMNEY_CABLE_CAR_STATION", 4, 7, false, true, 0, 0, false], ["MAP_MT_PYRE_1F", 11, 7, false, true, 0, 0, false], ["MAP_MT_PYRE_EXTERIOR", 0, 0, false, false, 17, 27, true], ["MAP_MT_PYRE_SUMMIT", 24, 17, false, true, 24, 19, true], ["MAP_NEW_MAUVILLE_ENTRANCE", 3, 3, false, true, 0, 0, false], ["MAP_PETALBURG_WOODS", 0, 0, false, false, 26, 22, true], ["MAP_ROUTE104_PRETTY_PETAL_FLOWER_SHOP", 7, 7, false, true, 0, 0, false], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_NORTH_ENTRANCE", 7, 3, false, true, 0, 0, false], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_SOUTH_ENTRANCE", 7, 3, false, true, 0, 0, false], ["MAP_ROUTE111_OLD_LADYS_REST_STOP", 5, 4, false, true, 0, 0, false], ["MAP_ROUTE112_CABLE_CAR_STATION", 4, 7, false, true, 0, 0, false], ["MAP_ROUTE113_GLASS_WORKSHOP", 7, 5, false, true, 0, 0, false], ["MAP_ROUTE114_FOSSIL_MANIACS_TUNNEL", 6, 13, false, true, 0, 0, false], ["MAP_ROUTE117_POKEMON_DAY_CARE", 3, 3, false, true, 0, 0, false], ["MAP_ROUTE119_WEATHER_INSTITUTE_1F", 11, 6, false, true, 9, 6, true], ["MAP_ROUTE119_WEATHER_INSTITUTE_2F", 9, 9, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_1F", 7, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_2F", 11, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_3F", 15, 6, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT1_1F", 10, 5, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT1_2F", 3, 5, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT2_1F", 9, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT2_2F", 6, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT2_3F", 6, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_POKEMON_SCHOOL", 6, 4, false, true, 0, 0, false], ["MAP_RUSTURF_TUNNEL", 0, 0, false, false, 18, 15, true], ["MAP_SEAFLOOR_CAVERN_ENTRANCE", 7, 7, false, true, 8, 7, true], ["MAP_SEAFLOOR_CAVERN_ROOM1", 12, 8, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM2", 7, 6, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM3", 7, 7, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM4", 11, 11, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM5", 8, 8, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM6", 5, 4, false, true, 5, 5, true], ["MAP_SEAFLOOR_CAVERN_ROOM7", 3, 19, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM8", 3, 8, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM9", 0, 0, false, false, 13, 23, true], ["MAP_SEALED_CHAMBER_INNER_ROOM", 10, 11, false, true, 9, 10, true], ["MAP_SEALED_CHAMBER_OUTER_ROOM", 8, 9, false, true, 8, 11, true], ["MAP_SHOAL_CAVE_LOW_TIDE_ENTRANCE_ROOM", 0, 0, false, false, 18, 17, true], ["MAP_SHOAL_CAVE_LOW_TIDE_ICE_ROOM", 0, 0, false, false, 10, 15, true], ["MAP_SHOAL_CAVE_LOW_TIDE_INNER_ROOM", 0, 0, false, false, 23, 19, true], ["MAP_SHOAL_CAVE_LOW_TIDE_LOWER_ROOM", 13, 5, false, true, 0, 0, false], ["MAP_SKY_PILLAR_1F", 10, 4, false, true, 0, 0, false], ["MAP_SKY_PILLAR_2F", 10, 4, false, true, 0, 0, false], ["MAP_SKY_PILLAR_3F", 10, 5, false, true, 0, 0, false], ["MAP_SKY_PILLAR_4F", 10, 5, false, true, 0, 0, false], ["MAP_SKY_PILLAR_5F", 11, 3, false, true, 0, 0, false], ["MAP_SKY_PILLAR_ENTRANCE", 8, 8, false, true, 0, 0, false], ["MAP_SKY_PILLAR_OUTSIDE", 13, 10, false, true, 0, 0, false], ["MAP_SKY_PILLAR_TOP", 12, 11, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_HARBOR", 9, 11, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_1F", 12, 6, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F", 12, 4, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_POKEMON_FAN_CLUB", 7, 7, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_STERNS_SHIPYARD_1F", 9, 8, false, true, 8, 6, true], ["MAP_SLATEPORT_CITY_STERNS_SHIPYARD_2F", 7, 6, false, true, 0, 0, false], ["MAP_TERRA_CAVE_END", 10, 12, false, true, 11, 12, true], ["MAP_TERRA_CAVE_ENTRANCE", 11, 10, false, true, 0, 0, false], ["MAP_TRAINER_HILL_ENTRANCE", 9, 8, false, true, 0, 0, false], ["MAP_VICTORY_ROAD_1F", 0, 0, false, false, 23, 22, true], ["MAP_VICTORY_ROAD_B1F", 0, 0, false, false, 22, 14, true], ["MAP_VICTORY_ROAD_B2F", 0, 0, false, false, 23, 19, true]];
+
 // web/src/match/gifts.ts
 var ITEM_BRIGHT_POWDER = 179;
 var ITEM_WHITE_HERB = 180;
 var ITEM_QUICK_CLAW = 183;
 var ITEM_CHOICE_BAND2 = 186;
 var ITEM_KINGS_ROCK = 187;
-var ITEM_FOCUS_BAND = 196;
+var ITEM_FOCUS_BAND2 = 196;
 var ITEM_SCOPE_LENS = 198;
 var ITEM_LEFTOVERS2 = 200;
-var ITEM_SHELL_BELL = 219;
+var ITEM_SHELL_BELL2 = 219;
 var GIFTS = [
   ITEM_BRIGHT_POWDER,
   ITEM_WHITE_HERB,
   ITEM_QUICK_CLAW,
   ITEM_CHOICE_BAND2,
   ITEM_KINGS_ROCK,
-  ITEM_FOCUS_BAND,
+  ITEM_FOCUS_BAND2,
   ITEM_SCOPE_LENS,
   ITEM_LEFTOVERS2,
-  ITEM_SHELL_BELL
+  ITEM_SHELL_BELL2
 ];
 
 // web/spike-b/shared/items.ts
 var ITEM_TM012 = 289;
 var ITEM_HM08 = 346;
 var isTm = (item) => item >= ITEM_TM012 && item <= ITEM_HM08;
+var ITEM_POKE_DOLL = 80;
+var ITEM_LINK_CABLE = 52;
+var CABLE_IN = 12;
+function cableOrDoll(item, roll) {
+  if (isTm(item)) return item;
+  const k = Math.floor(roll * CABLE_IN);
+  return k === 0 ? ITEM_LINK_CABLE : k === 1 ? ITEM_POKE_DOLL : item;
+}
 var isKeyItem = (item) => item >= 259 && item <= 288 || item >= 349;
 var ITEMS_COUNT = 377;
 var MAX_MONEY = 999999;
@@ -1683,6 +1985,45 @@ function keysOf(bits) {
   return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A) };
 }
 var FIELD_SURF = 4;
+var ATTENDANT = { map: "MAP_LILYCOVE_CITY_HARBOR", x: 8, y: 10 };
+var HARBOR_LANDING = { map: "MAP_LILYCOVE_CITY_HARBOR", x: 8, y: 11 };
+var DOCKS = {
+  "southern-island": { map: "MAP_SOUTHERN_ISLAND_EXTERIOR", x: 13, y: 22, sailor: [13, 23] },
+  "birth-island": { map: "MAP_BIRTH_ISLAND_HARBOR", x: 8, y: 4, sailor: [8, 5] },
+  "faraway-island": { map: "MAP_FARAWAY_ISLAND_ENTRANCE", x: 13, y: 38, sailor: [13, 39] },
+  "navel-rock-top": { map: "MAP_NAVEL_ROCK_HARBOR", x: 8, y: 4, sailor: [8, 5] },
+  "navel-rock-bottom": { map: "MAP_NAVEL_ROCK_HARBOR", x: 8, y: 4, sailor: [8, 5] }
+};
+function ferryAt(map, x, y) {
+  if (map === ATTENDANT.map && x === ATTENDANT.x && y === ATTENDANT.y) return "attendant";
+  return Object.values(DOCKS).some((d) => d.map === map && d.sailor[0] === x && d.sailor[1] === y) ? "sailor" : void 0;
+}
+function islandMaps(all) {
+  const byId = new Map(all.map((m) => [m.id, m]));
+  const out = /* @__PURE__ */ new Map();
+  const queue = [...new Set(Object.values(DOCKS).map((d) => d.map))];
+  while (queue.length) {
+    const m = byId.get(queue.shift());
+    if (!m || out.has(m.id)) continue;
+    out.set(m.id, m);
+    for (const w of m.warps ?? []) queue.push(w.to);
+  }
+  return [...out.values()];
+}
+var DOORS = Object.fromEntries(STORIES.filter((s) => s.door).map((s) => [s.id, s.door]));
+var DOOR_MAPS = new Set(STORIES.filter((s) => s.door).map((s) => s.map));
+var atWall = (a) => DOOR_MAPS.has(a.m.spot.map) && a.m.spot.x === 8 && a.m.spot.y === DOOR_Y + 1 && a.m.facing === 2;
+var PERSON_GFX = {
+  OBJ_EVENT_GFX_STEVEN: [134, "STEVEN"],
+  OBJ_EVENT_GFX_SCIENTIST_1: [46, "CAPT. STERN"],
+  OBJ_EVENT_GFX_MAXIE: [196, "MAXIE"],
+  OBJ_EVENT_GFX_ARCHIE: [195, "ARCHIE"],
+  OBJ_EVENT_GFX_AQUA_MEMBER_F: [118, "SHELLY"],
+  OBJ_EVENT_GFX_AQUA_MEMBER_M: [117, "MATT"]
+};
+var GATES = ["TRAINER_MAXIE_MAGMA_HIDEOUT", "TRAINER_ARCHIE", "TRAINER_SHELLY_WEATHER_INSTITUTE", "TRAINER_MATT", "TRAINER_MAXIE_MT_CHIMNEY", "TRAINER_MAXIE_MOSSDEEP"];
+var HOME_N = 1e3;
+var HOME_MONS = [277, 280, 283, 1, 4, 7, 64, 67, 75, 93, 385, 143];
 var EVENT_SPILL = 2 << 20;
 var eventPiece = (n, i) => EVENT_SPILL | n << 4 | i;
 var emptyBag = (b) => !b.items.length && !b.money && !b.mons?.length;
@@ -1690,10 +2031,14 @@ var GRACE = 120;
 var LOCKOUT = 600;
 var JOIN_GRACE = 300;
 var BACK = { 1: 2, 2: 1, 3: 4, 4: 3 };
+var WALKUP_BANG = 30;
+var APPROACH_FRAMES = (SIGHT_RANGE + 1) * 16 + 90;
+var KEY_TO = { 1: KEY_DOWN, 2: KEY_UP, 3: KEY_LEFT, 4: KEY_RIGHT };
 var BOT_DUEL_GAP = 60 * 12;
 var BOT_DUEL_MAX = 60 * 120;
 var BOT_BITE = 600;
 var BOT_BITES = 3;
+var ROOMS = rooms_default;
 var SPILL_KEY = 1 << 20;
 var GROUND_PER_MAP = 6;
 var REGROW = 60 * 90;
@@ -1703,6 +2048,7 @@ var DEALS = /* @__PURE__ */ new Map();
 var REACH = /* @__PURE__ */ new Map();
 var RING_PHASE = 60 * 120;
 var RING_STEPS = [Infinity, 15 / 28, 9 / 28, 7 / 28, 5 / 28, 3 / 28, 2 / 28, 0, -1];
+var FINAL_REACH = 24;
 var SAFARI = "MAP_SAFARI_ZONE_";
 var Room = class {
   constructor(world, maps, patches, seed, places, anchors = /* @__PURE__ */ new Map()) {
@@ -1713,6 +2059,7 @@ var Room = class {
     this.places = places;
     this.anchors = anchors;
     this.base = stepFn(world);
+    this.homes = this.dealHomes(0);
   }
   world;
   maps;
@@ -1735,12 +2082,33 @@ var Room = class {
   events = [];
   /** Who beat which gym leader this round, in the order they fell. */
   gyms = [];
+  /** This round's people at home and floor traders (dealHomes). */
+  homes = [];
   base;
   /** The StepFn for each FIELD_* combination a team has. */
   fields = [];
   dealt = null;
+  /** Round `round`'s people at home, from the seed: the houses this world goes into,
+   *  one in eight with somebody (half give), and every floor that has a trader. */
+  dealHomes(round) {
+    let state = (this.seed ^ 16613 ^ Math.imul(round + 1, 2654435761)) >>> 0 || 1;
+    const rng = () => {
+      state ^= state << 13;
+      state ^= state >>> 17;
+      state ^= state << 5;
+      return (state >>> 0) / 4294967296;
+    };
+    const which = Math.floor(rng() * 8);
+    const out = [];
+    ROOMS.forEach(([map, , , house, , x, y, trader], i) => {
+      const draw2 = rng(), gives = rng() < 0.5;
+      if (!this.maps.has(map) || this.places.has(map) || (house ? i % 8 !== which : !trader)) return;
+      out.push({ n: HOME_N + i, map, x, y, species: HOME_MONS[Math.floor(draw2 * HOME_MONS.length)], busy: 0, ...house && gives ? { gives: true } : {} });
+    });
+    return out;
+  }
   state() {
-    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}, ...this.epoch ? { epoch: this.epoch } : {}, ...this.opening ? { opening: this.opening } : {}, ...this.duelAfter ? { duelAfter: this.duelAfter } : {}, ...this.events.length ? { events: structuredClone(this.events) } : {}, ...this.gyms.length ? { gyms: structuredClone(this.gyms) } : {} };
+    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}, ...this.epoch ? { epoch: this.epoch } : {}, ...this.opening ? { opening: this.opening } : {}, ...this.duelAfter ? { duelAfter: this.duelAfter } : {}, ...this.events.length ? { events: structuredClone(this.events) } : {}, ...this.gyms.length ? { gyms: structuredClone(this.gyms) } : {}, homes: structuredClone(this.homes) };
   }
   load(s) {
     this.tick = s.tick;
@@ -1750,6 +2118,7 @@ var Room = class {
     this.duelAfter = s.duelAfter ?? 0;
     this.events = structuredClone(s.events ?? []);
     this.gyms = structuredClone(s.gyms ?? []);
+    this.homes = s.homes ? structuredClone(s.homes) : this.dealHomes(s.results?.round ?? 0);
     this.actors = structuredClone(s.actors);
     this.taken = new Map(s.taken);
     this.picked = new Map(s.picked ?? []);
@@ -1770,11 +2139,26 @@ var Room = class {
     } else if (cmd.c === "away") {
       const a = this.actor(cmd.id);
       if (a && !a.bot) a.away = cmd.on || void 0;
+    } else if (cmd.c === "sail") {
+      const a = this.actor(cmd.id);
+      if (!a || a.bot || a.battling || a.m.action) return;
+      const [x, y] = this.ahead(a);
+      const who = ferryAt(a.m.spot.map, x, y);
+      if (cmd.to === "" && who === "sailor") a.m = newMover(HARBOR_LANDING, 1);
+      else if (who === "attendant" && this.sailingTo().some((s) => s.id === cmd.to)) {
+        const d = DOCKS[cmd.to];
+        a.m = newMover({ map: d.map, x: d.x, y: d.y }, 2);
+      }
+    } else if (cmd.c === "open") {
+      const a = this.actor(cmd.id), e = this.events.find((q) => q.n === cmd.n);
+      if (a && e && e.story && DOORS[e.story] && a.m.spot.map === e.map && atWall(a)) e.opened = true;
     } else if (cmd.c === "traded") {
-      const t = this.events.find((e) => e.n === cmd.n)?.trader;
+      const t = this.events.find((e) => e.n === cmd.n)?.trader ?? this.homes.find((h) => h.n === cmd.n);
       if (!t || t.busy !== cmd.id) return;
       t.busy = 0;
-      if (cmd.given > 0 && cmd.given < 412) t.species = cmd.given;
+      if (t.gives) {
+        if (cmd.given) t.gone = true;
+      } else if (cmd.given > 0 && cmd.given < 412) t.species = cmd.given;
       const a = this.actor(cmd.id);
       if (a?.battling && !a.foe) {
         a.battling = false;
@@ -1815,9 +2199,14 @@ var Room = class {
       }
       const foe = a?.foe ? this.actor(a.foe) : void 0;
       if (foe?.bot) foe.battling = false;
+      for (const o of this.actors) if (o.meet?.foe === cmd.id) this.unmeet(o);
       for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
-      for (const [key, by] of this.picked) if (by === cmd.id && this.spills.get(key)?.legend) this.picked.delete(key);
+      for (const [key, by] of this.picked) {
+        const b = this.spills.get(key);
+        if (by === cmd.id && (b?.legend || b?.person?.gate !== void 0)) this.picked.delete(key);
+      }
       for (const e of this.events) if (e.trader?.busy === cmd.id) e.trader.busy = 0;
+      for (const h of this.homes) if (h.busy === cmd.id) h.busy = 0;
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
       if (cmd.c === "leave") this.bench = this.bench.filter((b) => b.id !== cmd.id);
       if (!a || a.bot) return;
@@ -1835,6 +2224,15 @@ var Room = class {
         a.shunUntil = this.tick + LOCKOUT;
       }
       const foe = a.foe ? this.actor(a.foe) : void 0;
+      if (a.meet) {
+        a.meet = void 0;
+        if (foe?.meet?.foe === a.id) {
+          foe.meet = void 0;
+          foe.battling = false;
+          foe.foe = 0;
+          foe.calm = this.tick + GRACE;
+        }
+      }
       if (foe?.bot) {
         foe.battling = false;
         foe.calm = this.tick + GRACE;
@@ -1849,6 +2247,17 @@ var Room = class {
         a.boss = void 0;
       }
     }
+  }
+  /** The islands the ferry sails to now: a live story's whose first piece still lies there
+   *  (br_story.c's LiveAt), one row an island. */
+  sailingTo() {
+    const out = [];
+    for (const e of this.events) {
+      const d = e.story ? DOCKS[e.story] : void 0;
+      if (!d || !this.spills.has(e.key) || this.picked.has(e.key) || out.some((o) => DOCKS[o.id].map === d.map)) continue;
+      out.push({ id: e.story, name: e.place ?? e.story });
+    }
+    return out;
   }
   /** Gym leader `n` has been beaten this round. */
   bossDown(n) {
@@ -1888,10 +2297,16 @@ var Room = class {
       const cells = land.get(id2).filter((c) => !marked.has(`${c.x}:${c.y}`) && !(id2 === "MAP_LITTLEROOT_TOWN" && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
       for (let i = 0; i < GROUND_PER_MAP && cells.length; i++) {
         const c = cells.splice(Math.floor(rng() * cells.length), 1)[0];
-        let item = scatterItem(rng);
-        while (isTm(item)) item = scatterItem(rng);
+        const item = cableOrDoll(scatterItem(rng), rng());
         out.set(`${id2}:${c.x}:${c.y}`, { key: ++n, map: id2, x: c.x, y: c.y, item });
       }
+    }
+    for (const [map, x, y, house, cache2] of ROOMS) {
+      if (!cache2) continue;
+      if (!this.maps.has(map) || this.places.has(map) || this.world.cell(map, x, y) !== 0 || out.has(`${map}:${x}:${y}`)) continue;
+      if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
+      const gold = Math.floor(rng() * (house ? 3 : 8)) === 0;
+      out.set(`${map}:${x}:${y}`, { key: ++n, map, x, y, item: gold ? GOLD[Math.floor(rng() * GOLD.length)] : blueTm(rng) });
     }
     for (const id2 of [...land.keys()].sort()) {
       if (!/^MAP_\w+_(TOWN|CITY)$/.test(id2)) continue;
@@ -1952,8 +2367,9 @@ var Room = class {
   /** Frames of Safari each round opens with (SAFARI); 0, none (a test's room). */
   opening = 0;
   centres = /* @__PURE__ */ new Map();
-  /** A round's centre: a cell a trainer can stand on, from the seed; and how far the
-   *  farthest reachable cell is from it. */
+  /** A round's centre: a cell a trainer can stand on, from the seed, or one round in four
+   *  a final story's place (story.ts's FINAL_CHANCE: SKY PILLAR), which then holds that
+   *  story for the last event; and how far the farthest reachable cell is from it. */
   centre(round) {
     const hit = this.centres.get(round);
     if (hit) return hit;
@@ -1964,13 +2380,27 @@ var Room = class {
     h ^= h >>> 12;
     const c = cells[(h >>> 0) % cells.length];
     const p = this.places.get(c.map);
-    const cx = p.gx + c.x + 0.5, cy = p.gy + c.y + 0.5;
+    let cx = p.gx + c.x + 0.5, cy = p.gy + c.y + 0.5;
+    const near = (x, y) => cells.some((s) => {
+      const q = this.places.get(s.map);
+      return Math.hypot(q.gx + s.x + 0.5 - x, q.gy + s.y + 0.5 - y) <= FINAL_REACH;
+    });
+    const at = (s) => {
+      const q = this.places.get(s.map), a = this.anchors.get(s.map);
+      return q ? { x: q.gx + s.cells[0].x + 0.5, y: q.gy + s.cells[0].y + 0.5 } : a ? { x: a.gx, y: a.gy } : void 0;
+    };
+    const finals = STORIES.filter((s) => {
+      const p2 = s.final && this.maps.has(s.map) ? at(s) : void 0;
+      return p2 && near(p2.x, p2.y);
+    });
+    const story = finals.length && (h >>> 7) % 1e3 / 1e3 < FINAL_CHANCE ? finals[(h >>> 17 >>> 0) % finals.length] : void 0;
+    if (story) ({ x: cx, y: cy } = at(story));
     let far = 0;
     for (const s of cells) {
       const q = this.places.get(s.map);
       far = Math.max(far, Math.hypot(q.gx + s.x + 0.5 - cx, q.gy + s.y + 0.5 - cy));
     }
-    const out = { cx, cy, far };
+    const out = { cx, cy, far, ...story ? { final: story.id } : {} };
     if (this.centres.size > 4) this.centres.clear();
     this.centres.set(round, out);
     return out;
@@ -2012,6 +2442,7 @@ var Room = class {
     if (ring.round !== was.round || r.wonAt !== void 0 && this.tick >= r.wonAt + AFTER_WIN) this.newRound(r.round + 1);
     else if (was.safari && !ring.safari) this.drop(ring.round);
     else if (ring.phase !== was.phase) {
+      for (const e of this.events) if (e.story && DOORS[e.story] === "wait" && ring.phase > (e.phase ?? 0)) e.opened = true;
       if (ring.phase === 1 && !r.entrants.length) r.entrants = this.actors.map((a) => [a.id, a.name]);
       const n = eventForRing(ring.phase);
       if (n !== void 0) this.dropEvent(n, ring);
@@ -2039,6 +2470,7 @@ var Room = class {
       if (a.bot) this.move(a, a.keys, events);
       else for (const bits of ins?.get(a.id) ?? []) this.move(a, bits, events);
     }
+    this.approach(events);
     this.engage(events);
     for (const a of this.actors) if (a.judge && this.tick - (a.since ?? 0) > BOT_DUEL_MAX) this.part(a);
     this.engageBots(events);
@@ -2062,6 +2494,10 @@ var Room = class {
       const p = this.places.get(s.map);
       return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy);
     };
+    const final = n === EVENT_MAX - 1 ? STORIES.find((s) => s.id === this.centre(ring.round).final) : void 0;
+    if (final && !this.events.some((e) => e.story === final.id)) return this.tellStory(n, ring, final, rng);
+    const story = n < EVENT_MAX - 1 && rng() < STORY_CHANCE ? this.storyFor(rng, ring) : void 0;
+    if (story) return this.tellStory(n, ring, story, rng);
     let from;
     if (n === EVENT_MAX - 1) for (const s of all) {
       if (!from || plane(s) < plane(from)) from = s;
@@ -2087,6 +2523,50 @@ var Room = class {
       this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: "", bag, ...i === 0 ? { legend: true } : {} });
     });
     this.events.push({ n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0], ...trader ? { trader } : {} });
+  }
+  /** A story event this round has not had (story.ts), where Emerald set that beat, inside
+   *  the ring. The ones the page can tell: a place and its reward, or a person handing it
+   *  over, a REGI behind its wall, a gate's boss to beat first, or an island the ferry
+   *  sails to; not the final ring's. */
+  storyFor(rng, ring) {
+    const open = STORIES.filter((s) => (s.people ?? []).every((p) => PERSON_GFX[p.gfx] && (!p.trainer || GATES.includes(p.trainer))) && (!s.boat || DOCKS[s.id]) && !s.final && !s.noBots && !this.events.some((e) => e.story === s.id) && s.cells.every((c) => this.maps.has(c.map ?? s.map) && this.world.cell(c.map ?? s.map, c.x, c.y) === 0) && !this.inFog({ map: s.map, x: s.cells[0].x, y: s.cells[0].y }, ring));
+    return open.length ? open[Math.floor(rng() * open.length)] : void 0;
+  }
+  /** The story's pieces on its own cells (story.ts's storyDrop): its mons at the phase's
+   *  rung, its rares, its items, the supplies, and the trader past them. */
+  tellStory(n, ring, story, rng) {
+    const level = rungForPhase(ring.phase + 1);
+    const species = [...(story.mons ?? []).map((pick) => pick[Math.floor(rng() * pick.length)]), ...draw(rng, RARES, story.rares ?? 0)];
+    const bags = [...(story.items ?? []).map((pick) => [{ id: pick[Math.floor(rng() * pick.length)], n: 1 }]), SUPPLIES.map((r) => ({ ...r }))];
+    const cells = story.cells.map((c) => ({ map: c.map ?? story.map, x: c.x, y: c.y }));
+    const pieces = species.length + bags.length;
+    const offers = RARES.filter((r) => !species.includes(r));
+    const spot = cells.length > pieces && offers.length ? cells[pieces] : void 0;
+    cells.slice(0, pieces).forEach((c, i) => {
+      const key = eventPiece(n, i);
+      const bag = i < species.length ? { items: [], money: 0, mons: [{ species: species[i], level }] } : { items: bags[i - species.length], money: 0 };
+      const p = story.people?.find((q) => q.at === i);
+      const [gfx, name] = p ? PERSON_GFX[p.gfx] : [0, ""];
+      const gate = p?.trainer ? GATES.indexOf(p.trainer) : -1;
+      const person = p ? { gfx, name, ...p.wants ? { wants: p.wants } : {}, ...gate >= 0 ? { gate } : {} } : void 0;
+      const boss = story.people?.find((q) => q.trainer);
+      const guard = boss && boss.at !== i ? eventPiece(n, boss.at) : void 0;
+      this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: "", bag, ...person ? { person } : {}, ...guard !== void 0 ? { guard } : {} });
+    });
+    const trader = spot ? { x: spot.x, y: spot.y, species: offers[Math.floor(rng() * offers.length)], busy: 0 } : void 0;
+    const legend = species.some((sp) => LEGENDS.flat().includes(sp));
+    if (legend) {
+      const b = this.spills.get(eventPiece(n, 0));
+      if (b && !b.person) b.legend = true;
+    }
+    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: legend ? species[0] : 0, story: story.id, place: story.name, ...trader ? { trader } : {}, ...story.door ? { phase: ring.phase, opened: false } : {} });
+  }
+  /** Out of a walk-up whose battle never started: walking again after the grace. */
+  unmeet(a) {
+    a.meet = void 0;
+    a.battling = false;
+    a.foe = 0;
+    a.calm = this.tick + GRACE;
   }
   /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
   part(a) {
@@ -2237,12 +2717,57 @@ var Room = class {
       a.bites = 0;
       if (a.judge) this.part(a);
     }
+    for (const a of this.actors) if (a.meet) {
+      a.meet = void 0;
+      a.battling = false;
+      a.foe = 0;
+    }
     this.duelAfter = 0;
     this.events = [];
     this.gyms = [];
+    this.homes = this.dealHomes(round);
     this.taken.clear();
     this.picked.clear();
     this.spills.clear();
+  }
+  /** The walk-ups under way: after the "!", the walker steps the eyeline toward the
+   *  other, and beside them (or out of time, or the other gone) the fight starts. */
+  approach(events) {
+    for (const w of this.actors) {
+      const m = w.meet;
+      if (!m || !m.walk) continue;
+      const o = this.actor(m.foe);
+      if (!o || o.meet?.foe !== w.id) {
+        w.meet = void 0;
+        w.battling = false;
+        w.foe = 0;
+        continue;
+      }
+      if (this.tick - m.since < WALKUP_BANG) continue;
+      const dx = o.m.spot.x - w.m.spot.x, dy = o.m.spot.y - w.m.spot.y;
+      const beside = o.m.spot.map === w.m.spot.map && Math.abs(dx) + Math.abs(dy) <= 1;
+      if (w.m.action) {
+        tick(w.m, keysOf(0), this.stepFor(w));
+        continue;
+      }
+      if (!beside && this.tick - m.since < APPROACH_FRAMES) {
+        const dir = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        const before = w.m.strides;
+        tick(w.m, keysOf(KEY_TO[dir]), this.stepFor(w));
+        if (w.m.strides !== before || w.m.action) continue;
+      }
+      const toO = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+      if (dx || dy) {
+        w.m.facing = w.m.moveDir = toO;
+        o.m.facing = o.m.moveDir = BACK[toO];
+      }
+      w.meet = o.meet = void 0;
+      const [h, f] = w.bot ? [o, w] : o.bot ? [w, o] : w.id < o.id ? [w, o] : [o, w];
+      if (m.duel) {
+        events.push({ type: "duel", tick: this.tick, id: h.id, foe: f.id, first: true });
+        events.push({ type: "duel", tick: this.tick, id: f.id, foe: h.id, first: false });
+      } else events.push({ type: "fight", tick: this.tick, id: h.id, foe: f.id });
+    }
   }
   /** Two trainers on one map who see each other fight (br_engage.c's BrEngage_Tick): the
    *  eyeline both ways, BR_SIGHT_RANGE cells, stopped by collision (bots/sight.ts). Only
@@ -2262,14 +2787,15 @@ var Room = class {
         if (!eitherSees(this.world, look(a), look(b))) continue;
         const dx = b.m.spot.x - a.m.spot.x, dy = b.m.spot.y - a.m.spot.y;
         const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        const bWalks = b.m.facing === BACK[toB] && a.m.facing !== toB;
         a.m.facing = a.m.moveDir = toB;
         b.m.facing = b.m.moveDir = BACK[toB];
         a.battling = b.battling = true;
         a.foe = b.id;
         b.foe = a.id;
         a.keys = a.last = b.keys = b.last = 0;
-        events.push({ type: "duel", tick: this.tick, id: a.id, foe: b.id, first: true });
-        events.push({ type: "duel", tick: this.tick, id: b.id, foe: a.id, first: false });
+        a.meet = { foe: b.id, walk: !bWalks, since: this.tick, duel: true };
+        b.meet = { foe: a.id, walk: bWalks, since: this.tick, duel: true };
         break;
       }
     }
@@ -2282,13 +2808,15 @@ var Room = class {
         if (!eitherSees(this.world, look(h), look(b))) continue;
         const dx = b.m.spot.x - h.m.spot.x, dy = b.m.spot.y - h.m.spot.y;
         const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        const botWalks = b.m.facing === BACK[toB];
         h.m.facing = h.m.moveDir = toB;
         b.m.facing = b.m.moveDir = BACK[toB];
         h.battling = b.battling = true;
         h.foe = b.id;
         b.foe = h.id;
         h.keys = h.last = b.keys = b.last = 0;
-        events.push({ type: "fight", tick: this.tick, id: h.id, foe: b.id });
+        h.meet = { foe: b.id, walk: !botWalks, since: this.tick, duel: false };
+        b.meet = { foe: h.id, walk: botWalks, since: this.tick, duel: false };
         break;
       }
     }
@@ -2324,7 +2852,15 @@ var Room = class {
           events.push({ type: "wild", tick: this.tick, id: a.id, map: a.m.spot.map, x: p.x, y: p.y, key: p.key });
         }
       }
-      if (!a.battling && bits & KEY_A && !(a.last & KEY_A)) {
+      const wall = !a.battling && bits & KEY_A && !(a.last & KEY_A) && atWall(a) ? this.events.find((e) => e.map === a.m.spot.map && e.story && DOORS[e.story] && !e.opened) : void 0;
+      const ferry = !wall && !a.battling && bits & KEY_A && !(a.last & KEY_A) ? ferryAt(a.m.spot.map, ...this.ahead(a)) : void 0;
+      if (ferry) {
+        events.push({ type: "ferry", tick: this.tick, id: a.id, to: ferry === "attendant" ? this.sailingTo() : [], ...ferry === "sailor" ? { home: true } : {} });
+      } else if (wall) {
+        const how = DOORS[wall.story];
+        if (how === "smash") wall.opened = true;
+        events.push({ type: "door", tick: this.tick, id: a.id, n: wall.n, how, ...wall.opened ? { opened: true } : {} });
+      } else if (!a.battling && bits & KEY_A && !(a.last & KEY_A)) {
         const [x, y] = this.ahead(a);
         const g = this.groundAt(a.m.spot.map, x, y);
         const b = g ? void 0 : this.spillAt(a.m.spot.map, x, y);
@@ -2338,11 +2874,17 @@ var Room = class {
         } else if (tr && !tr.t.busy) {
           tr.t.busy = a.id;
           a.battling = true;
-          events.push({ type: "trade", tick: this.tick, id: a.id, n: tr.n, species: tr.t.species });
+          events.push({ type: "trade", tick: this.tick, id: a.id, n: tr.n, species: tr.t.species, ...tr.t.gives ? { gives: true } : {} });
         } else if (tr) {
         } else if (g) {
           this.picked.set(g.key, a.id);
           events.push({ type: "item", tick: this.tick, id: a.id, key: g.key, item: g.item, ...g.gift ? { gift: true } : {} });
+        } else if (b?.guard !== void 0 && this.spills.has(b.guard) && !this.picked.has(b.guard)) {
+          events.push({ type: "guarded", tick: this.tick, id: a.id, name: this.spills.get(b.guard).person?.name ?? "" });
+        } else if (b?.person?.gate !== void 0) {
+          this.picked.set(b.key, a.id);
+          a.battling = true;
+          events.push({ type: "gate", tick: this.tick, id: a.id, key: b.key, gate: b.person.gate, bag: structuredClone(b.bag), name: b.person.name });
         } else if (b?.legend) {
           const mon = b.bag.mons[0];
           this.picked.set(b.key, a.id);
@@ -2350,7 +2892,7 @@ var Room = class {
           events.push({ type: "legend", tick: this.tick, id: a.id, key: b.key, species: mon.species, level: mon.level });
         } else if (b) {
           this.picked.set(b.key, a.id);
-          events.push({ type: "bag", tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name });
+          events.push({ type: "bag", tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name, ...b.person ? { person: { ...b.person } } : {} });
         } else if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
           a.battling = foe.battling = true;
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
@@ -2366,9 +2908,10 @@ var Room = class {
     } else if (!a.m.action) a.arriving = false;
     a.last = bits;
   }
-  /** An event's trader standing on a cell. */
+  /** An event's trader standing on a cell, or somebody at home (not one who gave theirs). */
   traderAt(map, x, y) {
     for (const e of this.events) if (e.trader && e.map === map && e.trader.x === x && e.trader.y === y) return { n: e.n, t: e.trader };
+    for (const h of this.homes) if (!h.gone && h.map === map && h.x === x && h.y === y) return { n: h.n, t: h };
     return void 0;
   }
   onWater(a) {
@@ -2400,7 +2943,8 @@ var Room = class {
       if (!r || !this.maps.has(r.to.map)) return null;
       if (a.bot && !this.places.has(r.to.map)) return null;
       const t = r.to;
-      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y)) return null;
+      if (r.warp && DOOR_MAPS.has(from.map) && from.y === DOOR_Y + 1 && t.y < DOOR_Y && !this.events.some((e) => e.map === from.map && e.opened)) return null;
+      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y) || ferryAt(t.map, t.x, t.y)) return null;
       if (from.map.startsWith(SAFARI) !== t.map.startsWith(SAFARI) && this.ring().safari) return null;
       const boss = leaderAt(t.map, t.x, t.y);
       if (boss && !this.bossDown(boss.n)) return null;
@@ -2449,6 +2993,11 @@ var Room = class {
       mix2(a.boss ?? 0);
       mix2(a.pick?.length ?? 0);
       mix2(a.away ? 1 : 0);
+      if (a.meet) {
+        mix2(a.meet.foe);
+        mix2(a.meet.since);
+        mix2((a.meet.walk ? 1 : 0) | (a.meet.duel ? 2 : 0));
+      }
     }
     for (const [k, t] of this.taken) {
       mix2(k);
@@ -2474,11 +3023,19 @@ var Room = class {
       mix2(n);
       mix2(w.length);
     }
+    for (const h2 of this.homes) {
+      mix2(h2.n);
+      mix2(h2.species);
+      mix2(h2.busy);
+      mix2(h2.gone ? 1 : 0);
+    }
     for (const e of this.events) {
       mix2(e.key);
       mix2(e.x);
       mix2(e.y);
       mix2(e.species);
+      mix2(e.story?.length ?? 0);
+      mix2(e.opened ? 1 : 0);
       if (e.trader) {
         mix2(e.trader.x);
         mix2(e.trader.y);
@@ -2562,7 +3119,7 @@ function interiors(all, outside) {
     const here = outside.get(id);
     for (const w of m.warps ?? []) {
       const to = byId.get(w.to);
-      if (!to || to.outdoor || CLOSED_DOORS.has(to.id) || out.has(to.id)) continue;
+      if (!to || outside.has(to.id) || CLOSED_DOORS.has(to.id) || out.has(to.id)) continue;
       const at = here ? { gx: here.gx + w.x + 0.5, gy: here.gy + w.y + 0.5 } : out.get(id);
       out.set(to.id, { m: to, gx: at.gx, gy: at.gy });
       queue.push(to.id);
@@ -2579,6 +3136,11 @@ function makeRoom(all, patches, seed, world) {
   for (const m of zone) maps.set(m.id, m);
   const anchors = new Map([...inside].map(([id, p]) => [id, { gx: p.gx, gy: p.gy }]));
   for (const m of zone) anchors.set(m.id, { gx: -1e4, gy: -1e4 });
+  const harbor = anchors.get(ATTENDANT.map);
+  if (harbor) for (const m of islandMaps(all)) {
+    maps.set(m.id, m);
+    anchors.set(m.id, harbor);
+  }
   return new Room(world ?? new World(all), maps, patches, seed, places, anchors);
 }
 
@@ -2701,7 +3263,7 @@ function botSpawns(room, maps, count) {
     const n = out.length + 1;
     out.push({ name: SKIN_NAME[skin], skin, spot, facing, brain: { rng: n * 2654435761 >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
   };
-  for (const [x, y] of [[7, 12], [13, 13], [11, 16]]) add({ map: "MAP_LITTLEROOT_TOWN", x, y }, 1, botSkin(out.length * 7 + 1));
+  for (const [x, y] of [[7, 12], [13, 13], [11, 16]].slice(0, count)) add({ map: "MAP_LITTLEROOT_TOWN", x, y }, 1, botSkin(out.length * 7 + 1));
   for (let tries = 0; out.length < count && tries < 5e4; tries++) {
     const m = land[Math.floor(r() * land.length)];
     const x = Math.floor(r() * m.w), y = Math.floor(r() * m.h);
@@ -2802,6 +3364,14 @@ var Host = class {
   /** The page's trade with event `n`'s trader is done: it gave him `given` (0, none). */
   traded(id, n, given) {
     if (this.players.has(id)) this.pending.push({ c: "traded", id, n, given });
+  }
+  /** The page saw a Flying-type in its team at event `n`'s REGI wall. */
+  open(id, n) {
+    if (this.players.has(id)) this.pending.push({ c: "open", id, n });
+  }
+  /** The page asked the ferry for story `to`'s island ('' home). */
+  sail(id, to) {
+    if (this.players.has(id) && typeof to === "string" && to.length <= 32) this.pending.push({ c: "sail", id, to });
   }
   end(id, fled = false, won = false) {
     if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: "end", id, ...fled ? { fled: true } : {}, ...won ? { won: true } : {} });
@@ -2987,6 +3557,10 @@ var WorldService = class {
           if (Number.isInteger(m.bits)) host.field(phone.id, m.bits);
         } else if (m.t === "pick") {
           if (typeof m.map === "string") host.pick(phone.id, m.map.slice(0, 64));
+        } else if (m.t === "sail") {
+          if (typeof m.to === "string") host.sail(phone.id, m.to);
+        } else if (m.t === "open") {
+          if (Number.isInteger(m.n)) host.open(phone.id, m.n);
         } else if (m.t === "traded") {
           if (Number.isInteger(m.n) && Number.isInteger(m.sp)) host.traded(phone.id, m.n, m.sp);
         } else if (m.t === "bots") {

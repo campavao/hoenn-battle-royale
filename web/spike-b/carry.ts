@@ -1,3 +1,5 @@
+import type { MatchTally } from '../src/match/tally';
+import type { addTotals } from '../src/match/career';
 import HMS from '../src/data/hms.json';
 import { MOVE_CUT, MOVE_STRENGTH, MOVE_SURF } from '../src/bots/party';
 
@@ -75,6 +77,31 @@ export function spillOf(bag: Uint8Array, key: number): { items: { id: number; n:
       if (id && n) items.push({ id, n });
     }
   return { items, money: (v.getUint32(0, true) ^ key) >>> 0 };
+}
+
+// Every pocket (global.h's SaveBlock1): items, key items, balls, machines, berries.
+const POCKETS: [number, number][] = [[0x560, 30], [0x5d8, 30], [0x650, 16], [0x690, 64], [0x790, 46]];
+
+/** The bag run with one `item` fewer, its pocket closed up behind it (RemoveBagItem and
+ *  CompactItemsInBagPocket); null when it has none. */
+export function withoutItem(bag: Uint8Array, key: number, item: number): Uint8Array | null {
+  const out = bag.slice();
+  const v = new DataView(out.buffer);
+  for (const [at, slots] of POCKETS) {
+    const base = at - BAG_AT;
+    for (let i = 0; i < slots; i++) {
+      const o = base + 4 * i;
+      if (v.getUint16(o, true) !== item) continue;
+      const n = v.getUint16(o + 2, true) ^ (key & 0xffff);
+      if (!n) continue;
+      if (n > 1) { v.setUint16(o + 2, (n - 1) ^ (key & 0xffff), true); return out; }
+      for (let j = i; j < slots - 1; j++) v.setUint32(base + 4 * j, v.getUint32(base + 4 * (j + 1), true), true);
+      v.setUint16(base + 4 * (slots - 1), 0, true);
+      v.setUint16(base + 4 * (slots - 1) + 2, key & 0xffff, true);
+      return out;
+    }
+  }
+  return null;
 }
 
 /** The bag run with `more` money in it, capped at the game's 999,999 (AddMoney). */
@@ -161,4 +188,17 @@ export function fieldOf(party: Uint8Array, count: number): number {
     if (moves.includes(MOVE_SURF) || has(HMS.surf, species)) bits |= 4;
   }
   return bits;
+}
+
+/** What a round added to MY STATS (career.ts's addTotals, POK-416): the hidden ROM's
+ *  gBrTally now less what it had when the round began (it counts from boot here, not
+ *  from a match's start), and the steps the page counted, since the ROM walks none. */
+export function tallySince(from: MatchTally | null, now: MatchTally | null, steps: number): Parameters<typeof addTotals>[1] {
+  const less = (a: Record<number, number>, b: Record<number, number> = {}) => {
+    const out: Record<number, number> = {};
+    for (const [id, n] of Object.entries(a)) { const d = n - (b[Number(id)] ?? 0); if (d > 0) out[Number(id)] = d; }
+    return out;
+  };
+  const d = (k: 'won' | 'caught' | 'items') => Math.max(0, (now?.[k] ?? 0) - (from?.[k] ?? 0));
+  return { won: d('won'), caught: d('caught'), items: d('items'), steps, trainers: 0, duelsWon: 0, took: 0, mons: now ? less(now.mons, from?.mons) : {}, moves: now ? less(now.moves, from?.moves) : {} };
 }

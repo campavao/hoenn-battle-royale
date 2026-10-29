@@ -18,11 +18,15 @@ import { Mailbox, MAILBOX } from '../src/net/mailbox';
 import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from '../src/net/slots';
 import { PROTOCOL, type Dir, type Msg, type PackedMon } from '../src/net/wire';
 import { loadCheckedRelease } from '../src/release';
-import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fieldOf, healed, rekey, spillOf, teamOf, withMoney } from './carry';
+import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fieldOf, healed, rekey, spillOf, teamOf, withMoney, withoutItem } from './carry';
 import { startMenuTable } from '../src/touch';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 import { CATCH_UP_SPEED, spectatePace } from '../src/match/spectate';
 import type { SpMsg } from './shared/wire';
+import { readTally, type MatchTally } from '../src/match/tally';
+
+/** sizeof(struct BrTally) (include/br/br_tally.h). */
+const TALLY_LEN = 52;
 
 const BOOT_MAP_TESTMON = 0x81;
 const ME = 0;
@@ -132,6 +136,9 @@ export interface RomBattles {
   /** The fog's bite between battles (br_ring.c Bleed): a tenth of each mon's max HP, at
    *  least 1, a fainted one's status cleared. How many are still standing. */
   bleed(): Promise<number>;
+  /** gBrTally (POK-416): what the hidden battles have counted since boot, for MY STATS;
+   *  null for a build without it. */
+  tally(): MatchTally | null;
   /** The ring closed on the trainer in the middle of a battle: from the next turn's end
    *  that battle is fought in the fog. Nothing between battles. */
   fogNow(): void;
@@ -176,6 +183,8 @@ export interface RomBattles {
   reseed(seed: number): void;
   /** Money out of somebody's bag (br_loot.c's Take pays it). */
   addMoney(n: number): Promise<void>;
+  /** One `item` out of the bag (a person wanted it); false when there is none. */
+  take(item: number): Promise<boolean>;
   /** The money the trainer has. */
   money(): Promise<number>;
   /** The trainer's own (party, bag, Pokédex), as text for a reload to bring back. */
@@ -282,6 +291,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   const catchAt = sym('gBrCatch');
   const ringAt = sym('gBrRing');
   const levelsAt = sym('gBrLevels');
+  // gBrTally (POK-416), carried with the trainer like the levels: every battle ends in the
+  // parked boot snapshot, which would put the counts back to the boot's.
+  const tallyAt = sym('gBrTally');
+  const tallyOf = (u: Uint8Array) => { const v = new DataView(u.buffer, u.byteOffset, u.byteLength); return readTally((a, bits) => (bits === 8 ? v.getUint8(a) : bits === 16 ? v.getUint16(a, true) : v.getUint32(a, true)), 0); };
   const mapAt = sym('gBrMap');
   const romView = new DataView(rom.buffer, rom.byteOffset, rom.byteLength);
   const headerAt = sym('gMapHeader');
@@ -316,6 +329,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       seen2: emu.bytes(s1 + SEEN2_AT, SEEN_LEN).slice(),
       // The rung the party was lifted to, and the rod it holds for it (br_levels.c).
       levels: emu.bytes(levelsAt, 8).slice(),
+      tally: Number.isNaN(tallyAt) ? new Uint8Array(TALLY_LEN) : emu.bytes(tallyAt, TALLY_LEN).slice(),
     };
   };
   const keep = (k: ReturnType<typeof kept>) => {
@@ -327,6 +341,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     emu.bytes(s1 + SEEN1_AT, SEEN_LEN).set(k.seen1);
     emu.bytes(s1 + SEEN2_AT, SEEN_LEN).set(k.seen2);
     emu.bytes(levelsAt, 8).set(k.levels);
+    if (!Number.isNaN(tallyAt)) emu.bytes(tallyAt, TALLY_LEN).set(k.tally);
   };
   const send = (msg: Parameters<typeof packSlot>[0]) => {
     for (const s of packSlot(msg)) box.push(s.type, s.payload);
@@ -491,6 +506,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       const now = kept();
       last = now;
       if (result.outcome !== LOST && result.outcome !== DREW) carried = now;
+      // The counts stand either way: a lost battle was still fought (MY STATS).
+      else carried = { ...(carried ?? start), tally: now.tally };
     }
     fighting = false;
     pub();
@@ -519,6 +536,11 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         send({ t: 'challenge', seat: FOE_SEAT, opponent: ME, nonce: 0 });
       }, () => emu.read(fightAt + 2, 8) === 1, () => emu.read(fightAt + 2, 8) === 0, onStart,
       () => ({ outcome: emu.read(outcomeAt, 8), species: 0, level: 0 })));
+    },
+    tally() {
+      // The trainer's own counts, as the last battle left them (the ROM sits in the boot
+      // snapshot between battles).
+      return Number.isNaN(tallyAt) ? null : tallyOf((carried ?? kept()).tally);
     },
     bleed() {
       return inTurn(async () => {
@@ -616,6 +638,18 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         const next = { ...k, party: healed(k.party, k.count, basePp) as typeof k.party };
         keep(next);
         carried = last = next;
+      });
+    },
+    take(item) {
+      return inTurn(async () => {
+        if (broken) return false;
+        const k = carried ?? kept();
+        const bag = withoutItem(k.bag, k.key, item);
+        if (!bag) return false;
+        const next = { ...k, bag: bag as typeof k.bag };
+        keep(next);
+        carried = last = next;
+        return true;
       });
     },
     addMoney(n) {
@@ -827,8 +861,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     fresh() {
       return inTurn(async () => {
         if (broken) return;
-        keep(start);
-        carried = start;
+        // A fresh team, but the counts go on (record() takes each round's difference).
+        const k = { ...start, tally: (carried ?? kept()).tally };
+        keep(k);
+        carried = k;
         last = null;
       });
     },
@@ -874,7 +910,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       return inTurn(async () => {
         const k = carried ?? kept();
         const b64 = (u: Uint8Array) => btoa(String.fromCharCode(...u));
-        return JSON.stringify({ count: k.count, key: k.key, party: b64(k.party), bag: b64(k.bag), dex: b64(k.dex), seen1: b64(k.seen1), seen2: b64(k.seen2), levels: b64(k.levels) });
+        return JSON.stringify({ count: k.count, key: k.key, party: b64(k.party), bag: b64(k.bag), dex: b64(k.dex), seen1: b64(k.seen1), seen2: b64(k.seen2), levels: b64(k.levels), tally: b64(k.tally) });
       });
     },
     load(text) {
@@ -890,6 +926,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
           const k = {
             count: j.count >>> 0, key: j.key >>> 0, party: un(j.party, PARTY_LEN), bag: un(j.bag, BAG_LEN),
             dex: un(j.dex, DEX2_LEN), seen1: un(j.seen1, SEEN_LEN), seen2: un(j.seen2, SEEN_LEN), levels: un(j.levels, 8),
+            // A save from before the tally rode along: the counts start again.
+            tally: typeof j.tally === 'string' ? un(j.tally, TALLY_LEN) : new Uint8Array(TALLY_LEN),
           };
           keep(k);
           carried = last = k;

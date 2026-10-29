@@ -1,0 +1,168 @@
+# spike-gate: spike B's page asks the hidden ROM for a story gate's boss (br_wild.h's
+# BR_WILD_BOSS past the eight leaders, br_story.c's BrStory_StartGate). Past the six
+# gates refuses at once (DONE, outcome 0); SHELLY (gate 2, ask 10) fights with her
+# CARVANHA and MIGHTYENA as a leader does (BR_BossArgs' gate rows), and beaten answers
+# DONE with outcome 1 and no "Somebody got there first": the page hands her piece over.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 D3 C9 CF FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 4
+wait 2
+# ask 14: gate 6, which there is not
+pokebytes gBrWildAsk+1 FF 0E 00
+poke u8 gBrWildAsk+7 9
+poke u8 gBrWildAsk 1
+wait 10
+expect u8 gBrWildAsk 3
+expect u8 gBrWildAsk+7 0
+# SHELLY: ask 10
+pokebytes gBrWildAsk+1 FF 0A 00
+poke u8 gBrWildAsk 1
+wait 10
+expect u8 gBrWildAsk 2
+wait 600
+# straight into her battle, as a leader's (no page of speech to hold the page's ROM)
+shot battle
+expect u16 gBattleTypeFlags 0xC
+# TREECKO's ATTACK held at 999 while A fights (FIGHT, POUND) and reads on to her defeat
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+shot after
+# DONE, B_OUTCOME_WON
+expect u8 gBrWildAsk 3
+expect u8 gBrWildAsk+7 1
+say spike gate ok

@@ -2,15 +2,19 @@
 // host's Room, frame for frame -- with bots wandering, trainers' keys arriving late and
 // bunched, a battle started and ended, and a phone that joins halfway from a snapshot.
 import { GIFTS } from '../../src/match/gifts';
+import { GOLD } from '../../src/match/events';
+import ballsC from '../../../src/br/br_balls.c?raw';
+import roomsJson from '../data/rooms.json';
 import { describe, expect, it } from 'vitest';
 import type { WorldMap } from '../../src/bots/world';
 import type { PatchTable } from '../../src/bots/patches';
 import worldJson from '../data/world.json';
+import { STORIES } from '../../src/match/story';
 import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
 import { over } from './over';
-import { cleanBag, isTm, within } from './items';
-import { AFTER_WIN, FIELD_SURF, SAFARI, GROUND_PER_MAP, RING_PHASE, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, eventPiece, makeRoom } from './room';
+import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, isTm, within } from './items';
+import { AFTER_WIN, FIELD_SURF, SAFARI, GROUND_PER_MAP, RING_PHASE, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, WALKUP_BANG, eventPiece, makeRoom } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -129,8 +133,11 @@ describe('bots', () => {
 
 describe('bots with somewhere to be', () => {
   it('walk into the coming ring before it closes, and some to an event while its legendary stands', () => {
-    const host = new Host(makeRoom(MAPS, PATCHES, 5), 64, MAPS);
+    const host = new Host(makeRoom(MAPS, PATCHES, 8), 64, MAPS);
     const room = host.room;
+    // A legendary's event, not a story's (STORY_CHANCE), and not the final ring's sea.
+    (room as unknown as { storyFor(): undefined }).storyFor = () => undefined;
+    expect(room.centre(room.ring().round).final).toBeUndefined();
     const r0 = room.ring();
     // How far the bots are from the ring's centre, on average, in tiles of the plane.
     const far = () => {
@@ -253,29 +260,57 @@ describe('room battles', () => {
 
 describe('trainer against trainer', () => {
   const L = 'MAP_LITTLEROOT_TOWN';
+  /** Frames on until a fight's events (after the "!" and the walk-up): them, and how many. */
+  const fightAfter = (room: ReturnType<typeof makeRoom>, max = 400) => {
+    for (let i = 0; i < max; i++) {
+      const e = room.step(new Map());
+      if (e.length) return { e, i };
+    }
+    return { e: [], i: max };
+  };
+  it('the one who walks up leaving, or a new round, frees the other: no battle is coming', () => {
+    for (const how of ['leave', 'out', 'round'] as const) {
+      const room = makeRoom(MAPS, PATCHES, 99);
+      room.apply({ c: 'join', id: 3, bot: false, name: 'A', skin: 0, spot: { map: L, x: 9, y: 12 }, facing: 1 });
+      room.apply({ c: 'join', id: 5, bot: false, name: 'B', skin: 1, spot: { map: L, x: 12, y: 12 }, facing: 3 });
+      const a = room.actor(3)!;
+      for (let i = 0; i < 300; i++) room.step(new Map());
+      expect(a.meet?.walk).toBe(false);
+      if (how === 'round') (room as unknown as { newRound(n: number): void }).newRound(1);
+      else room.apply({ c: how, id: 5 });
+      expect([a.battling, a.meet, a.foe]).toEqual([false, undefined, 0]);
+    }
+  });
+
   it('two trainers who see each other fight once, and stand until each one ends it', () => {
     const room = makeRoom(MAPS, PATCHES, 99);
     room.apply({ c: 'join', id: 3, bot: false, name: 'A', skin: 0, spot: { map: L, x: 9, y: 12 }, facing: 1 });
     room.apply({ c: 'join', id: 5, bot: false, name: 'B', skin: 1, spot: { map: L, x: 12, y: 12 }, facing: 3 });
     const a = room.actor(3)!, b = room.actor(5)!;
     // New by the truck: a grace first.
-    for (let i = 0; i < 299; i++) expect(room.step(new Map())).toEqual([]);
-    // B looks west along the row at A, three cells off: an engage, whoever looks.
-    expect(room.step(new Map())).toMatchObject([
+    for (let i = 0; i < 300; i++) expect(room.step(new Map())).toEqual([]);
+    // B looks west along the row at A, three cells off: an engage, whoever looks. B
+    // looked, so B walks up (br_walkup.h), after the "!".
+    expect(a.battling && b.battling).toBe(true);
+    expect([a.meet?.walk, b.meet?.walk]).toEqual([false, true]);
+    const { e, i } = fightAfter(room);
+    expect(i).toBeGreaterThanOrEqual(WALKUP_BANG);
+    expect(e).toMatchObject([
       { type: 'duel', id: 3, foe: 5, first: true },
       { type: 'duel', id: 5, foe: 3, first: false },
     ]);
-    expect(a.battling && b.battling).toBe(true);
+    expect([a.m.spot.x, b.m.spot.x]).toEqual([9, 10]); // beside
     expect([a.m.facing, b.m.facing]).toEqual([4, 3]); // face to face
     expect(room.step(new Map([[3, [KEY_DOWN]], [5, [KEY_A]]]))).toEqual([]);
-    expect([a.m.spot.y, b.m.spot.y]).toEqual([12, 12]);
+    expect([a.m.spot.x, b.m.spot.x, a.m.spot.y, b.m.spot.y]).toEqual([9, 10, 12, 12]);
     // One side's battle over first: the other is still in theirs.
     room.apply({ c: 'end', id: 3 });
     expect([a.battling, b.battling]).toEqual([false, true]);
     room.apply({ c: 'end', id: 5 });
     // The grace: no second fight straight away.
-    for (let i = 0; i < 119; i++) expect(room.step(new Map())).toEqual([]);
-    expect(room.step(new Map())).toMatchObject([{ type: 'duel' }, { type: 'duel' }]);
+    for (let i = 0; i < 120; i++) expect(room.step(new Map())).toEqual([]);
+    expect(a.meet && b.meet).toBeTruthy();
+    expect(fightAfter(room).e).toMatchObject([{ type: 'duel' }, { type: 'duel' }]);
   });
 
   it('sees five cells along the look and no further; a beaten bot beside them stays out of it', () => {
@@ -292,11 +327,11 @@ describe('trainer against trainer', () => {
       room.actor(1)!.beaten = true;
       room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: L, x: x0, y: y0 }, facing: 4 });
       room.apply({ c: 'join', id: 3, bot: false, name: 'B', skin: 1, spot: { map: L, x: x0 + dx, y: y0 }, facing: 2 });
-      for (let i = 0; i < 299; i++) room.step(new Map());
-      return room.step(new Map()).length;
+      for (let i = 0; i < 300; i++) room.step(new Map());
+      return !!room.actor(2)!.meet;
     };
-    expect(at(6)).toBe(0); // six cells
-    expect(at(5)).toBe(2); // five
+    expect(at(6)).toBe(false); // six cells
+    expect(at(5)).toBe(true); // five
   });
 
   it('a bot that sees a trainer challenges them, once its grace is over; not one the trainer fled', () => {
@@ -306,7 +341,11 @@ describe('trainer against trainer', () => {
     const bot = room.actor(1)!, me = room.actor(2)!;
     const events: ReturnType<typeof room.step> = [];
     for (let i = 0; i < 400 && !me.battling; i++) events.push(...room.step(new Map()));
-    expect(events).toMatchObject([{ type: 'fight', id: 2, foe: 1 }]);
+    expect(events).toEqual([]);
+    // It faced the trainer down the line: it walks up, a map trainer's way.
+    expect(bot.meet?.walk).toBe(true);
+    expect(fightAfter(room).e).toMatchObject([{ type: 'fight', id: 2, foe: 1 }]);
+    expect([me.m.spot.x, bot.m.spot.x]).toEqual([7, 8]);
     expect(me.m.facing).toBe(4); // turned to the bot
     expect(bot.m.facing).toBe(3);
     room.apply({ c: 'end', id: 2, fled: true });
@@ -355,18 +394,20 @@ describe('trainer against trainer', () => {
     room.apply({ c: 'join', id: 5, bot: false, name: 'B', skin: 1, spot: { map: L, x: 11, y: 12 }, facing: 3 });
     for (let i = 0; i < 300; i++) room.step(new Map());
     expect(room.actor(3)!.battling).toBe(true);
+    expect(fightAfter(room).e).toHaveLength(2);
     room.apply({ c: 'end', id: 3, fled: true });
     room.apply({ c: 'end', id: 5 });
-    for (let i = 0; i < 599; i++) expect(room.step(new Map())).toEqual([]);
-    expect(room.step(new Map())).toHaveLength(2);
+    for (let i = 0; i < 600; i++) expect(room.step(new Map())).toEqual([]);
+    expect(room.actor(3)!.meet).toBeTruthy();
+    expect(fightAfter(room).e).toHaveLength(2);
   });
 
   it('a trainer whose foe left is still in the fight until their page ends it', () => {
     const room = makeRoom(MAPS, PATCHES, 99);
     room.apply({ c: 'join', id: 3, bot: false, name: 'A', skin: 0, spot: { map: L, x: 9, y: 12 }, facing: 4 });
     room.apply({ c: 'join', id: 5, bot: false, name: 'B', skin: 1, spot: { map: L, x: 11, y: 12 }, facing: 1 });
-    for (let i = 0; i < 299; i++) room.step(new Map());
-    expect(room.step(new Map())).toHaveLength(2);
+    for (let i = 0; i < 300; i++) room.step(new Map());
+    expect(fightAfter(room).e).toHaveLength(2);
     room.apply({ c: 'leave', id: 5 });
     expect(room.actor(3)!.battling).toBe(true);
     room.apply({ c: 'end', id: 3 });
@@ -388,9 +429,173 @@ describe('item balls', () => {
       expect(one.world.cell(b.map, b.x, b.y)).toBe(0);
       expect(one.patchesOn(b.map).some((q) => q.x === b.x && q.y === b.y)).toBe(false);
       expect(b.item).toBeGreaterThan(0);
-      expect(isTm(b.item)).toBe(false); // no machines until one is taught off the ground
     }
     expect(new Set(g.map((b) => b.key)).size).toBe(g.length);
+  });
+
+  it('every house and floor with a cache in the live match has its ball: a machine, or gold', () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const rooms = roomsJson as [string, number, number, boolean, boolean, number, number, boolean][];
+    const g = [...room.ground().values()];
+    const caches = g.filter((b) => !room.places.has(b.map));
+    expect(caches.length).toBeGreaterThan(20);
+    for (const b of caches) {
+      expect(rooms.some(([m, x, y, , cache]) => cache && m === b.map && x === b.x && y === b.y)).toBe(true);
+      expect(isTm(b.item) || GOLD.includes(b.item)).toBe(true);
+    }
+    // ...and the table is br_balls.c's as it stands (tools/br/spike-rooms.py makes it).
+    const houses = Number(/#define BR_HOUSES (\d+)/.exec(ballsC)![1]);
+    const body = ballsC.slice(ballsC.indexOf('static const struct BrRoom sRooms[] ='));
+    const rows = [...body.slice(0, body.indexOf('};')).matchAll(/\{ (MAP_\w+), (\d+), (\d+), (\d+), (\d+), (TRUE|FALSE), (\w+) \}/g)];
+    expect(rooms).toEqual(rows.map((r, i) => [r[1], Number(r[2]), Number(r[3]), i < houses, r[6] === 'TRUE', Number(r[4]), Number(r[5]), r[7] !== 'BR_NO_TRADER']));
+  });
+
+  it("a story event lays its reward where Emerald set it, and is told once a round", () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const r = room as unknown as { storyFor(rng: () => number, ring: unknown): { id: string } | undefined; tellStory(n: number, ring: unknown, s: unknown, rng: () => number): void };
+    const ring = { ...room.ring(), r: Infinity, phase: 2 };
+    const told = new Set<string>();
+    for (let i = 0; i < 40; i++) {
+      const s = r.storyFor(() => (i * 0.37) % 1, ring);
+      if (!s) break;
+      expect(told.has(s.id)).toBe(false);
+      told.add(s.id);
+      r.tellStory(i, ring, s, () => 0.5);
+    }
+    // The place-and-reward rows this world has the maps for.
+    expect([...told].sort()).toEqual(expect.arrayContaining(['abandoned-ship', 'ancient-tomb', 'desert-ruins', 'granite-cave', 'island-cave', 'lavaridge-egg', 'mirage-tower', 'stevens-house']));
+    // ...and the islands, which the ferry sails to; not the final ring's two.
+    expect(told.has('southern-island')).toBe(true);
+    expect(told.has('sky-pillar') || told.has('sootopolis')).toBe(false);
+    // CAPT. STERN stands at his harbour with what he gives for the SCANNER.
+    const stern = [...room.spills.values()].find((b) => b.person?.wants);
+    expect(stern).toMatchObject({ map: 'MAP_SLATEPORT_CITY_HARBOR', x: 6, y: 13, person: { name: 'CAPT. STERN', wants: 278 } });
+    const steven = room.events.find((e) => e.story === 'stevens-house')!;
+    expect(steven.species).toBe(0);
+    expect(room.spillAt('MAP_MOSSDEEP_CITY_STEVENS_HOUSE', 4, 2)?.bag.mons?.[0].species).toBe(398);
+    expect(steven.trader).toMatchObject({ x: 5, y: 2 });
+  });
+
+  it("a REGI chamber's wall is shut until its story opens it: DESERT RUINS' with A", () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const r = room as unknown as { tellStory(n: number, ring: unknown, s: unknown, rng: () => number): void };
+    const at = { map: 'MAP_DESERT_RUINS', x: 8, y: 21 };
+    room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: at, facing: 2 });
+    room.step();
+    const a = room.actor(1000)!;
+    a.calm = 0;
+    // No story: the chamber is shut, as the match's is.
+    expect(room.stepFor(a)(at, 2)).toBeNull();
+    r.tellStory(0, { ...room.ring(), r: Infinity, phase: 2 }, STORIES.find((s) => s.id === 'desert-ruins'), () => 0.5);
+    expect(room.stepFor(a)(at, 2)).toBeNull();
+    // Its REGIROCK stands inside as an event's legendary does.
+    expect(room.spillAt('MAP_DESERT_RUINS', 8, 7)?.legend).toBe(true);
+    expect(room.events[0].species).toBe(401);
+    const evs = room.step(new Map([[1000, [KEY_A]]]));
+    expect(evs).toContainEqual(expect.objectContaining({ type: 'door', id: 1000, how: 'smash', opened: true }));
+    expect(room.stepFor(a)(at, 2)?.to).toEqual({ map: 'MAP_DESERT_RUINS', x: 8, y: 11 });
+  });
+
+  it("a gate's boss guards his story's pieces, and A at him is his own fight", () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const r = room as unknown as { tellStory(n: number, ring: unknown, s: unknown, rng: () => number): void };
+    r.tellStory(0, { ...room.ring(), r: Infinity }, STORIES.find((s) => s.id === 'weather-institute'), () => 0.5);
+    // SHELLY at (4,6) holds the CASTFORM; the supplies at (5,6) wait on her.
+    const shelly = room.spillAt('MAP_ROUTE119_WEATHER_INSTITUTE_2F', 4, 6)!;
+    expect(shelly.person).toMatchObject({ name: 'SHELLY', gate: 2 });
+    expect(shelly.legend).toBeUndefined();
+    room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_ROUTE119_WEATHER_INSTITUTE_2F', x: 5, y: 7 }, facing: 2 });
+    room.step();
+    const a = room.actor(1000)!;
+    a.calm = 0;
+    expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'guarded', name: 'SHELLY' }));
+    a.m.spot = { map: 'MAP_ROUTE119_WEATHER_INSTITUTE_2F', x: 4, y: 7 };
+    room.step(new Map([[1000, [0]]]));
+    expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'gate', gate: 2, key: shelly.key }));
+    expect(room.picked.get(shelly.key)).toBe(1000);
+    expect(a.battling).toBe(true);
+    // Left mid-fight: SHELLY stands for the next one.
+    room.apply({ c: 'leave', id: 1000 });
+    expect(room.picked.has(shelly.key)).toBe(false);
+  });
+
+  it("door-only outdoor places are anchored; SKY PILLAR's final ring waits for land near it", () => {
+    const room = makeRoom(MAPS, PATCHES, 5);
+    for (const id of ['MAP_MT_CHIMNEY', 'MAP_MT_PYRE_SUMMIT', 'MAP_SKY_PILLAR_TOP']) {
+      expect(room.places.has(id)).toBe(false);
+      expect(room.anchors.has(id)).toBe(true);
+    }
+    // The mainland walkers stand nowhere near Route 131: no seed centres a ring at sea.
+    for (let seed = 0; seed < 40; seed++) expect(makeRoom(MAPS, PATCHES, seed).centre(0).final).toBeUndefined();
+  });
+
+  it("the ferry sails to a live island's story and back, and nowhere without one", () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const r = room as unknown as { tellStory(n: number, ring: unknown, s: unknown, rng: () => number): void };
+    const harbor = { map: 'MAP_LILYCOVE_CITY_HARBOR', x: 8, y: 11 };
+    room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: harbor, facing: 2 });
+    room.step();
+    const a = room.actor(1000)!;
+    a.calm = 0;
+    expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'ferry', to: [] }));
+    room.step(new Map([[1000, [0]]]));
+    expect(room.maps.has('MAP_SOUTHERN_ISLAND_INTERIOR')).toBe(true);
+    r.tellStory(0, { ...room.ring(), r: Infinity }, STORIES.find((s) => s.id === 'southern-island'), () => 0.5);
+    expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'ferry', to: [{ id: 'southern-island', name: 'SOUTHERN ISLAND' }] }));
+    room.apply({ c: 'sail', id: 1000, to: 'southern-island' });
+    expect(room.actor(1000)!.m.spot).toEqual({ map: 'MAP_SOUTHERN_ISLAND_EXTERIOR', x: 13, y: 22 });
+    // The island is measured by the dock (the fog there is Lilycove's).
+    expect(room.inFog(room.actor(1000)!.m.spot, { ...room.ring(), r: 1e6 })).toBe(false);
+    // The sailor behind, facing him: home.
+    room.actor(1000)!.m.facing = 1;
+    room.step(new Map([[1000, [0]]]));
+    expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'ferry', home: true }));
+    room.apply({ c: 'sail', id: 1000, to: '' });
+    expect(room.actor(1000)!.m.spot).toEqual(harbor);
+  });
+
+  it("ISLAND CAVE's wall opens by itself a phase on; ANCIENT TOMB's for the page that saw a flier", () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const r = room as unknown as { tellStory(n: number, ring: unknown, s: unknown, rng: () => number): void };
+    const ring = room.ring();
+    r.tellStory(0, { ...ring, r: Infinity }, STORIES.find((s) => s.id === 'island-cave'), () => 0.5);
+    r.tellStory(1, { ...ring, r: Infinity }, STORIES.find((s) => s.id === 'ancient-tomb'), () => 0.5);
+    const tomb = { map: 'MAP_ANCIENT_TOMB', x: 8, y: 21 };
+    room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: tomb, facing: 2 });
+    room.step();
+    room.actor(1000)!.calm = 0;
+    expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'door', how: 'fly' }));
+    expect(room.events[1].opened).toBe(false);
+    room.apply({ c: 'open', id: 1000, n: 1 });
+    expect(room.events[1].opened).toBe(true);
+    expect(room.events[0].opened).toBe(false);
+    while (room.ring().phase === ring.phase) room.step();
+    expect(room.events[0].opened).toBe(true);
+  });
+
+  it('the ground has the odd LINK CABLE and POKe DOLL, as the map balls do (BrBalls_Deal)', () => {
+    const g = [...makeRoom(MAPS, PATCHES, 4242).ground().values()].filter((b) => !b.gift);
+    const n = (item: number) => g.filter((b) => b.item === item).length;
+    expect(n(ITEM_LINK_CABLE)).toBeGreaterThan(0);
+    expect(n(ITEM_POKE_DOLL)).toBeGreaterThan(0);
+    expect(n(ITEM_LINK_CABLE)).toBeLessThan(g.length / 6);
+  });
+
+  it('somebody is home in one house in eight, and the big floors trade; a giver gives once', () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const homes = room.homes;
+    expect(homes.some((h) => !h.gives)).toBe(true);
+    for (const h of homes) expect(room.traderAt(h.map, h.x, h.y)?.n).toBe(h.n);
+    // The same seed deals the same people; a state carries them.
+    expect(makeRoom(MAPS, PATCHES, 4242).homes).toEqual(homes);
+    const h = homes[0];
+    room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: h.map, x: h.x, y: h.y + 1 }, facing: 2 });
+    for (let i = 0; i < 2; i++) room.step(new Map([[2, [i ? KEY_A : 0]]]));
+    expect(h.busy).toBe(2);
+    room.apply({ c: 'traded', id: 2, n: h.n, given: 25 });
+    expect(h.busy).toBe(0);
+    if (h.gives) expect(room.traderAt(h.map, h.x, h.y)).toBeUndefined();
+    else expect(h.species).toBe(25);
   });
 
   it('a gift-giver stands in every town and city, holding one held item', () => {
@@ -726,7 +931,9 @@ describe('doors', () => {
 
 describe('events', () => {
   it('every other ring from the first shrink drops a legendary, two rares, three gold balls and supplies; A on the legendary is its battle', () => {
-    const room = makeRoom(MAPS, PATCHES, 5);
+    const room = makeRoom(MAPS, PATCHES, 8);
+    // The legendary's cluster, not a story told in its place (STORY_CHANCE).
+    (room as unknown as { storyFor(): undefined }).storyFor = () => undefined;
     room.ringPhase = 60;
     room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 }, facing: 1 });
     for (let i = 0; i < 60; i++) room.step(new Map());

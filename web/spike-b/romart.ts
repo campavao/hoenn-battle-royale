@@ -96,8 +96,10 @@ export class RomArt {
     return t;
   }
 
-  /** Ground, cover and border for map (group, num), as render-maps.py draws them. */
-  map(group: number, num: number): MapArt {
+  /** Ground, cover and border for map (group, num), as render-maps.py draws them; `over`
+   *  puts other metatiles on some cells (a cell's y * width + x), as MapGridSetMetatileIdAt
+   *  does in the game. */
+  map(group: number, num: number, over?: ReadonlyMap<number, number>): MapArt {
     const header = this.u32(this.u32(this.sym('gMapGroups') + group * 4) + num * 4);
     const layout = this.u32(header);
     const w = this.dv.getInt32(layout - ROM, true), h = this.dv.getInt32(layout + 4 - ROM, true);
@@ -146,10 +148,10 @@ export class RomArt {
     };
     const W = w * BLOCK;
     const ground = paint(W, h * BLOCK, 0xff000000, (px) => {
-      for (let i = 0; i < w * h; i++) draw(px, W, (i % w) * BLOCK, Math.floor(i / w) * BLOCK, this.u16(blocks + i * 2), false);
+      for (let i = 0; i < w * h; i++) draw(px, W, (i % w) * BLOCK, Math.floor(i / w) * BLOCK, over?.get(i) ?? this.u16(blocks + i * 2), false);
     });
     const cover = paint(W, h * BLOCK, 0, (px) => {
-      for (let i = 0; i < w * h; i++) draw(px, W, (i % w) * BLOCK, Math.floor(i / w) * BLOCK, this.u16(blocks + i * 2), true);
+      for (let i = 0; i < w * h; i++) draw(px, W, (i % w) * BLOCK, Math.floor(i / w) * BLOCK, over?.get(i) ?? this.u16(blocks + i * 2), true);
     });
     const borderCv = paint(2 * BLOCK, 2 * BLOCK, 0xff000000, (px) => {
       for (let i = 0; i < 4; i++) draw(px, 2 * BLOCK, (i & 1) * BLOCK, (i >> 1) * BLOCK, this.u16(border + i * 2), false);

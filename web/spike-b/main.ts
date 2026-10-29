@@ -21,16 +21,23 @@ import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { DIR_EAST } from './sim';
-import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Ring } from './shared/room';
+import { ATTENDANT, DOCKS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Ring, type Spill } from './shared/room';
+type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink } from './net';
 import { over } from './shared/over';
 import { Lobby, me, type RoomInfo } from './lobby';
 import { recordMatch } from '../src/match/career';
+import type { MatchTally } from '../src/match/tally';
+import { tallySince } from './carry';
+import { moveInfo, type Rom as MoveTables } from '../src/battle/movebook';
 import { OUT_BATCH_MS, outs, won } from '../src/match/ticker';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
-import { groundCount, isTm } from './shared/items';
+import { groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
+import { GOLD } from '../src/match/events';
+import { FLYING, STORIES } from '../src/match/story';
+import hiddenJson from './data/hidden.json';
 import { RomArt } from './romart';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
@@ -66,6 +73,8 @@ interface Placed {
   border?: HTMLCanvasElement;
   borderTint?: string;
   mips?: HTMLCanvasElement[]; // 1/4, 1/8, 1/16, each averaged from the one before
+  /** Painted with its REGI wall open (br_story.c's Open). */
+  open?: boolean;
   classes: Uint8Array;
   /** The cut trees and Strength boulders standing on it: [x, y, gfx]. */
   props?: [number, number, number][];
@@ -85,6 +94,8 @@ function decode(grid: string, cells: number): Uint8Array {
 
 /** BFS over the seams from Littleroot: a neighbour's origin is this map's, shifted by the
  *  connection's offset along the shared edge (World.landAcross is the same sum backwards). */
+/** The ferry's islands (room.ts islandMaps): not a place to drop. */
+const ISLANDS = new Set<string>();
 function layout(maps: WorldMap[]): Map<string, Placed> {
   const byId = new Map(maps.map((m) => [m.id, m]));
   const placed = new Map<string, Placed>();
@@ -118,6 +129,14 @@ function layout(maps: WorldMap[]): Map<string, Placed> {
     x += m.w + GAP;
     rowH = Math.max(rowH, m.h);
   }
+  // The ferry's islands, each on its own, in the row past the buildings'.
+  x = right + 200; y += rowH + GAP; rowH = 0;
+  for (const m of islandMaps(maps)) {
+    ISLANDS.add(m.id);
+    placed.set(m.id, { m, gx: x, gy: y, classes: decode(m.grid, m.w * m.h) });
+    x += m.w + GAP;
+    rowH = Math.max(rowH, m.h);
+  }
   // The Safari Zone (the opening's, behind a closed gate), by its own seams, below them.
   const south = byId.get('MAP_SAFARI_ZONE_SOUTH');
   if (south) {
@@ -142,13 +161,31 @@ function layout(maps: WorldMap[]): Map<string, Placed> {
 }
 
 let art: RomArt | null = null;
+/** METATILE_Cave_SealedChamberEntrance_* (metatile_labels.h), where Open lays them. */
+const SEALED_CHAMBER: [number, number, number][] = [[7, 19, 0x22a], [8, 19, 0x22b], [9, 19, 0x22c], [7, 20, 0x232], [8, 20, 0x233], [9, 20, 0x234]];
+/** METATILE_Cave_EntranceCover over SealedChamberBraille_Mid: the wall before it opens. */
+const HIDDEN_CHAMBER: [number, number, number][] = [[7, 19, 0x229], [8, 19, 0x229], [9, 19, 0x229], [7, 20, 0x235], [8, 20, 0x235], [9, 20, 0x235]];
+const DOOR_MAPS = new Set(STORIES.filter((s) => s.door).map((s) => s.map));
+/** A wall opened since its map was painted: painted again. */
+function doorsFrame(): void {
+  for (const e of link.room.events) {
+    const p = e.opened ? placed.get(e.map) : undefined;
+    if (p && !p.open) { p.open = true; p.ground = p.cover = p.mips = undefined; }
+  }
+  // A new round's walls are shut again.
+  for (const p of placed.values()) if (p.open && !link.room.events.some((e) => e.opened && e.map === p.m.id)) { p.open = false; p.ground = p.cover = p.mips = undefined; }
+}
 let ringMap: RingMap | null = null;
 /** A map's pictures, cut from the ROM the first time it is seen (~20 ms a map); the rest
  *  are cut in the background after boot so a zoom-out never waits on them. */
 function paint(p: Placed): boolean {
   if (p.ground) return true;
   if (!art) return false;
-  const a = art.map(p.m.group, p.m.num);
+  // A REGI wall: shut as the map's OnLoad hides it (HideRegiEntrance), or open, the
+  // sealed chamber's entrance on its six cells (br_story.c's Open).
+  const wall = !DOOR_MAPS.has(p.m.id) ? undefined : p.open ? SEALED_CHAMBER : HIDDEN_CHAMBER;
+  const over = wall && new Map(wall.map(([x, y, block]) => [y * p.m.w + x, block]));
+  const a = art.map(p.m.group, p.m.num, over);
   p.ground = a.ground;
   p.cover = a.cover;
   p.border = a.border;
@@ -186,6 +223,7 @@ addEventListener('keydown', (e) => {
   if (intro()) return;
   if (e.key === 'v' || e.key === 'V') { toggleSpectate(); return; }
   if ((e.key === 'm' || e.key === 'M' || e.key === 'Escape') && !e.repeat) { void openMenu(); return; }
+  if ((e.key === 'f' || e.key === 'F') && !e.repeat) { itemfinder(); return; }
   const k = KEYMAP[e.key];
   if (!k) return;
   e.preventDefault();
@@ -293,7 +331,7 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
 // and waits for the ROM if it is still booting.
 const foundEl = document.getElementById('found')!;
 let foundUntil = 0;
-const toGive: ({ key: number; item: number; gift?: boolean } | { key: number; bag: Bag; name: string })[] = [];
+const toGive: ({ key: number; item: number; gift?: boolean; hidden?: string } | { key: number; bag: Bag; name: string; person?: Person })[] = [];
 let giving = false;
 
 function say(text: string): void {
@@ -308,10 +346,10 @@ function giveNext(): void {
   const next = toGive.shift()!;
   const name = (id: number) => art?.itemName(id) || `item ${id}`;
   if ('bag' in next) {
-    openBag(next.key, next.bag, next.name).catch((e) => console.warn('spike bag failed', e)).finally(() => { giving = false; giveNext(); });
+    (next.person ? meet(next.key, next.bag, next.person) : openBag(next.key, next.bag, next.name)).catch((e) => console.warn('spike bag failed', e)).finally(() => { giving = false; giveNext(); });
     return;
   }
-  const { key, item, gift } = next;
+  const { key, item, gift, hidden } = next;
   // A TM is taught and a held item given, there and then, on the ROM's own screens.
   const screen = isTm(item) || GIFTS.includes(item);
   if (screen) { if (gift) say(`A gift: ${name(item)}!`); romUp = true; }
@@ -322,11 +360,12 @@ function giveNext(): void {
     // What the ROM made of it (br_items.c's Apply), not what was on the ground.
     if (!got) {
       say(`No room in the bag for ${name(item)}.`);
-      link.drop(key); // it stays where it lay
+      if (hidden) dug.delete(hidden); // still buried
+      else link.drop(key); // it stays where it lay
     } else if (screen) {
       const kept = got.items.some((g) => g.id === item);
       if (kept) say(`${name(item)} went in the BAG.`);
-      else if (!gift) say(`${name(item)}! Taught.`);
+      else if (!gift) say(`Taught ${name(item)}!`);
     }
     else if (got.items.length) say(`Found ${got.items.map((g) => `${g.n > 1 ? `${g.n} ` : ''}${name(g.id)}`).join(', ')}!`);
     else if (got.money) say(`Sold ${name(item)} for ¥${got.money}.`);
@@ -427,9 +466,48 @@ async function openMenu(): Promise<void> {
   }
 }
 
+/** A at a REGI chamber's sealed wall (br_story.c): DESERT RUINS' cracks for anybody,
+ *  ANCIENT TOMB's for a team with a Flying-type in it, ISLAND CAVE's by itself once the
+ *  ring has moved on. */
+async function door(n: number, how: string, opened: boolean): Promise<void> {
+  if (opened) { say('The wall crumbled away! A way in opened up.'); return; }
+  if (how === 'wait') { say("It's sealed tight. It will open when the ring closes in."); return; }
+  const mons = rom ? (await rom.spill()).mons : [];
+  if (mons.some((m) => FLYING.has(m.species))) {
+    link.open(n);
+    say('Your Flying-type POKéMON beat its wings... The wall opened!');
+  } else say('A gust of wind seems to come from inside. A Flying-type POKéMON could open it.');
+}
+
+/** The ferry (br_story.c): Lilycove's attendant sails to an island a live story is on, and
+ *  its sailor sails back. Bots never take it. */
+async function ferry(to: { id: string; name: string }[], home: boolean): Promise<void> {
+  if (home) {
+    if (await ask('Sail back to LILYCOVE CITY?', [['YES', 'y'], ['NO', '']]) === 'y') link.sail('');
+    return;
+  }
+  if (!to.length) { say('The ferry is not sailing anywhere right now.'); return; }
+  const c = await ask('Where would you like to sail?', [...to.map((t): [string, string] => [t.name, t.id]), ['CANCEL', '']]);
+  if (c) link.sail(c);
+}
+
+/** A story's person (story.ts's people): STEVEN hands his over; CAPT. STERN wants the
+ *  SCANNER first, out of my bag, as br_story.c's BrStory_Hands asks. */
+async function meet(key: number, bag: Bag, person: Person): Promise<void> {
+  const item = (id: number) => art?.itemName(id) || `item ${id}`;
+  if (person.wants && !(await rom!.take(person.wants))) {
+    say(`${person.name} wants the ${item(person.wants)}.`);
+    link.drop(key, bag);
+    return;
+  }
+  const given = bag.items.map((r) => item(r.id)).join(', ');
+  await takeBag(key, bag, person.name, true);
+  say(person.wants ? `${person.name} took the ${item(person.wants)} and gave you ${given}!` : `${person.name} gave you ${given}!`);
+}
+
 /** A fallen trainer's bag, row by row into mine the ROM's way, and its money. What did
  *  not fit, and the team, go back down as the bag. */
-async function takeBag(key: number, bag: Bag, who: string): Promise<void> {
+async function takeBag(key: number, bag: Bag, who: string, quiet = false): Promise<void> {
   const r = rom!;
   const rest: Bag = { items: [], money: 0, mons: bag.mons };
   let took = 0;
@@ -449,7 +527,7 @@ async function takeBag(key: number, bag: Bag, who: string): Promise<void> {
   if (isOut) rest.money = bag.money;
   else await r.addMoney(bag.money);
   const money = bag.money && !isOut ? ` and ¥${bag.money}` : '';
-  say(`Took ${who}'s bag: ${took} item${took === 1 ? '' : 's'}${money}.${rest.items.length ? ' Some would not fit.' : ''}`);
+  if (!quiet) say(`Took ${who}'s bag: ${took} item${took === 1 ? '' : 's'}${money}.${rest.items.length ? ' Some would not fit.' : ''}`);
   if (!emptyBag(rest)) link.drop(key, rest);
 }
 
@@ -458,7 +536,26 @@ async function takeBag(key: number, bag: Bag, who: string): Promise<void> {
 function startFor(e: RoomEvent): void {
   if (e.type === 'nurse') { void nurse(); return; }
   if (e.type === 'mart') { void mart(e.map); return; }
-  if (e.type === 'trade') { void trade(e.n, e.species); return; }
+  if (e.type === 'trade') { void (e.gives ? gift(e.n, e.species) : trade(e.n, e.species)); return; }
+  if (e.type === 'door') { void door(e.n, e.how, !!e.opened); return; }
+  if (e.type === 'guarded') { say(`${e.name} guards it!`); return; }
+  if (e.type === 'ferry') { void ferry(e.to, !!e.home); return; }
+  if (e.type === 'gate') {
+    // A story's gate (br_story.c): his own fight in the hidden ROM, past the eight gym
+    // leaders (BrStory_StartGate); won, what he held is mine, and lost, it is his again.
+    if (swapping) rom?.leave();
+    asking?.done('');
+    const l = link, key = e.key, fog = inFogNow();
+    handOff(null, (r, onStart) => r.boss(LEADERS.length + e.gate, onStart, fog).then((f) => {
+      if (f.ok && f.outcome === 1) {
+        say(`You beat ${e.name}!`);
+        toGive.push({ key, bag: e.bag, name: e.name });
+        giveNext();
+      } else l.drop(key);
+      return f;
+    }, (err) => { l.drop(key); throw err; }));
+    return;
+  }
   if (e.type === 'legend') {
     // Its own battle; caught, it is mine, and anything else puts it back where it stood
     // for the next trainer (Cam: losing to one puts you out, and it goes back for retries).
@@ -485,7 +582,7 @@ function startFor(e: RoomEvent): void {
     return;
   }
   if (e.type === 'item' || e.type === 'bag') {
-    toGive.push(e.type === 'item' ? { key: e.key, item: e.item, gift: e.gift } : { key: e.key, bag: e.bag, name: e.name });
+    toGive.push(e.type === 'item' ? { key: e.key, item: e.item, gift: e.gift } : { key: e.key, bag: e.bag, name: e.name, person: e.person });
     giveNext();
     return;
   }
@@ -578,11 +675,14 @@ async function trade(n: number, species: number): Promise<void> {
     asking?.done('');
     const name = speciesName(species);
     const c = await ask(`I'll trade you my ${name} for one of yours. Which one?`, [['CHOOSE', 'y'], ['NO, THANKS', '']]);
+    // Somebody at home's goes through a trade's evolution on the way over (br_loot.c's
+    // BrLoot_HomeTrade); an event's trader's does not (br_event.c's Swap).
+    const got = n >= HOME_N ? tradedInto(species) : species;
     if (c !== 'y' || !rom || isOut) return;
     swapping = true;
     held.clear();
     try {
-      given = await rom.trade(species, () => battleEl.classList.add('on'));
+      given = await rom.trade(got, () => battleEl.classList.add('on'));
     } finally {
       swapping = false;
       battleEl.classList.remove('on');
@@ -590,9 +690,39 @@ async function trade(n: number, species: number): Promise<void> {
       pressed.clear();
       calmUntil = frame + 30;
     }
-    if (given) say(`Traded for ${name}!`);
+    if (given) say(got === species ? `Traded for ${name}!` : `Traded for ${name}! It evolved into ${speciesName(got)}!`);
   } finally {
     if (link === l) l.traded(n, given);
+  }
+}
+
+/** Somebody at home with a Pokémon to give (br_balls.c): taken across on the ROM's team
+ *  screen, as a dropped bag's team is; taken, he is gone for everybody. */
+async function gift(n: number, species: number): Promise<void> {
+  const l = link;
+  let taken = 0;
+  try {
+    if (!rom || isOut || battle || swapping) return;
+    asking?.done('');
+    const name = speciesName(species);
+    const c = await ask(`Will you look after my ${name} for me?`, [['YES', 'y'], ['NO, THANKS', '']]);
+    if (c !== 'y' || !rom || isOut) return;
+    swapping = true;
+    held.clear();
+    try {
+      const left = await rom.team([{ species, level: rungForPhase(link.room.ring().phase + 1) }], 'GIFT', () => battleEl.classList.add('on'));
+      if (!left.length) taken = species;
+    } finally {
+      swapping = false;
+      battleEl.classList.remove('on');
+      held.clear();
+      pressed.clear();
+      calmUntil = frame + 30;
+    }
+    // The team screen takes it across as somebody else's, so a trade evolution goes off.
+    if (taken) say(`Took the ${speciesName(tradedInto(species))}!`);
+  } finally {
+    if (link === l) l.traded(n, taken);
   }
 }
 
@@ -796,7 +926,24 @@ function record(round: number): void {
   const i = res.fallen.findIndex((f) => f.id === link.me);
   // Placed by when I went out: the last out is second; never out, and nobody won, a tie for first.
   const placement = res.winner === link.me ? 1 : i >= 0 ? res.entrants.length - i : res.winner ? 2 : 1;
-  recordMatch(placement);
+  const now = rom?.tally() ?? null;
+  recordMatch(placement, localStorage, tallySince(tallyFrom, now, myStepsN));
+  tallyFrom = now;
+  myStepsN = 0;
+}
+
+/** The ROM's move table, for MY STATS' favourite move. */
+let romTables: MoveTables = { bytes: new Uint8Array(0), sym: () => undefined };
+
+/** MY STATS for the round I am in: the hidden ROM's tally as it began, and my steps. */
+let tallyFrom: MatchTally | null = null;
+let myStepsN = 0;
+let mySpotWas = '';
+function stepsFrame(): void {
+  const s = link.mine()?.m.spot;
+  const k = s ? `${s.map}:${s.x}:${s.y}` : '';
+  if (k && mySpotWas && k !== mySpotWas) myStepsN++;
+  mySpotWas = k;
 }
 
 /** A screen of the ROM's own the page shows (the Hall of Fame, a TM's party screen): it
@@ -913,7 +1060,8 @@ async function pickDrop(): Promise<void> {
   const byPlace = new Map<string, string>();
   for (const id of [...placed.keys()].sort()) {
     const p = placed.get(id)!;
-    if (!p.m.outdoor || id.startsWith(SAFARI)) continue;
+    // Hoenn's own outdoor places (room.ts places), not a door's or the ferry's.
+    if (!link.room.places.has(id) || id.startsWith(SAFARI) || ISLANDS.has(id)) continue;
     const name = ringMap?.placeOf(id);
     if (name && !byPlace.has(name)) byPlace.set(name, id);
   }
@@ -959,7 +1107,10 @@ function startMatch(l: WorldLink): void {
   lobby?.hide();
   isOut = waiting = shownWin = false;
   // Every match's rounds count from 0: what was told or recorded of the last one is not.
-  seenRound = lastPhase = recordedRound = safariRound = pickAsked = hudRound = -1;
+  seenRound = lastPhase = recordedRound = safariRound = pickAsked = hudRound = dugRound = -1;
+  tallyFrom = rom?.tally() ?? null;
+  myStepsN = 0;
+  mySpotWas = '';
   wasSafari = false;
   ticks.length = 0;
   toldEvents = 0;
@@ -998,6 +1149,71 @@ function matchOver(): void {
   endingAt = performance.now();
 }
 document.getElementById('menu')!.addEventListener('click', () => { void openMenu(); });
+document.getElementById('find')!.addEventListener('click', () => itemfinder());
+
+// Sound (the live match's MUTE, its own key): the ROM's, heard while its screen is the
+// one shown -- a battle, the team screen, a menu, the parade. Its field runs hidden under
+// ours between those, and its route music would come through in snatches.
+const MUTE_KEY = 'hbr:muted';
+let muted = false;
+try { muted = localStorage.getItem(MUTE_KEY) === '1'; } catch { /* private window: on */ }
+const soundBtn = document.getElementById('sound')!;
+let heard = -1;
+function soundFrame(): void {
+  const v = !muted && battleEl.classList.contains('on') ? 100 : 0;
+  if (rom && v !== heard) { rom.emu.setVolume(v); heard = v; }
+}
+function paintSound(): void { soundBtn.textContent = `Sound: ${muted ? 'off' : 'on'}`; }
+soundBtn.addEventListener('click', () => {
+  muted = !muted;
+  try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); } catch { /* not kept */ }
+  paintSound();
+});
+paintSound();
+
+// ---- Hoenn's hidden items and the ITEMFINDER (br_levels.c, Cam 2026-10-18) -----------
+
+/** Every map's hidden items (tools/br/spike-hidden.py): still buried in a match, and each
+ *  trainer can dig each one up once, as each ROM's own flag lets them. */
+const HIDDEN = new Map((hiddenJson as [string, number, number, number][]).map(([m, x, y, item]) => [`${m}:${x}:${y}`, { map: m, x, y, item }]));
+/** What I dug up this round. */
+const dug = new Set<string>();
+let dugRound = -1;
+function digReady(): boolean {
+  const me = link.mine();
+  if (link.room.results.round !== dugRound) { dug.clear(); dugRound = link.room.results.round; }
+  return !!me && !!rom && !isOut && !spectating && !battle && !swapping && !romUp && !asking && !intro() && !me.battling && !me.m.action;
+}
+/** A pressed at a buried item's cell: it is mine. */
+function dig(): void {
+  const me = link.mine();
+  if (!me || !digReady() || frame < calmUntil) return;
+  const d = ({ 1: [0, 1], 2: [0, -1], 3: [-1, 0], 4: [1, 0] } as Record<number, number[]>)[me.m.facing];
+  const k = `${me.m.spot.map}:${me.m.spot.x + d[0]}:${me.m.spot.y + d[1]}`;
+  const h = HIDDEN.get(k);
+  if (!h || dug.has(k)) return;
+  dug.add(k);
+  toGive.push({ key: 0, item: h.item, hidden: k });
+  giveNext();
+}
+/** The ITEMFINDER: the nearest buried item on this map within its reach (x 7, y 5, the
+ *  screen Emerald's searches), as which way and how far; or no response. */
+function itemfinder(): void {
+  const me = link.mine();
+  if (!me || !digReady()) return;
+  let best: { x: number; y: number } | null = null;
+  for (const h of HIDDEN.values()) {
+    if (h.map !== me.m.spot.map || dug.has(`${h.map}:${h.x}:${h.y}`)) continue;
+    const dx = h.x - me.m.spot.x, dy = h.y - me.m.spot.y;
+    if (Math.abs(dx) > 7 || Math.abs(dy) > 5) continue;
+    if (!best || Math.abs(dx) + Math.abs(dy) < Math.abs(best.x) + Math.abs(best.y)) best = { x: dx, y: dy };
+  }
+  if (!best) { say("Nope! There's no response."); return; }
+  const n = Math.abs(best.x) + Math.abs(best.y);
+  if (n <= 1) { say('The ITEMFINDER is shaking! It is right here: face it and press A.'); return; }
+  const way = (best.y < 0 ? '↑' : best.y > 0 ? '↓' : '') + (best.x < 0 ? '←' : best.x > 0 ? '→' : '');
+  say(`The ITEMFINDER responds! Something is buried ${way}, ${n} steps away.`);
+}
 
 // ---- the HUD (the live match's corner and ticker: br_hud.c, ticker.ts) -----------------
 
@@ -1077,7 +1293,7 @@ function fogFrame(): void {
     // An event dropped with the ring (DESIGN §Events): the ticker says what and where.
     const evs = link.room.events;
     if (toldEvents > evs.length) toldEvents = 0;
-    for (const e of evs.slice(toldEvents)) tick(`A legendary ${speciesName(e.species)} at ${ringMap?.placeOf(e.map) || 'HOENN'}!`, true);
+    for (const e of evs.slice(toldEvents)) tick(e.species ? `A legendary ${speciesName(e.species)} at ${ringMap?.placeOf(e.map) || 'HOENN'}!` : `A rare find at ${e.place ?? (ringMap?.placeOf(e.map) || 'HOENN')}!`, !!e.species);
     toldEvents = evs.length;
     lastPhase = ring.phase;
   }
@@ -1129,18 +1345,21 @@ function fogLine(): string {
 }
 
 // While the ROM has the screen, the pad is the ROM's.
-const GBA_KEY: Record<string, GbaKey> = { up: 'up', down: 'down', left: 'left', right: 'right', a: 'a', b: 'b' };
+const GBA_KEY: Record<string, GbaKey> = { up: 'up', down: 'down', left: 'left', right: 'right', a: 'a', b: 'b', start: 'start' };
+// Enter is A on the field and START on the ROM's own screens (the swap's MOVE).
+const romKey = (key: string): string | undefined => key === 'Enter' && (swapping || romUp) ? 'start' : KEYMAP[key];
 addEventListener('keydown', (e) => {
-  const k = KEYMAP[e.key];
+  const k = romKey(e.key);
   if (k && asking) { if (!e.repeat) askKey(k); }
   else if ((battle || swapping || romUp) && rom && k) rom.press(GBA_KEY[k]);
 });
-addEventListener('keyup', (e) => { const k = KEYMAP[e.key]; if (rom && k) rom.release(GBA_KEY[k]); });
+addEventListener('keyup', (e) => { const k = romKey(e.key); if (rom && k) rom.release(GBA_KEY[k]); });
 for (const el of document.querySelectorAll<HTMLElement>('.k')) {
   const k = el.dataset.k!;
   el.addEventListener('pointerdown', () => {
     if (asking) askKey(k);
     else if ((battle || swapping || romUp) && rom) rom.press(GBA_KEY[k]);
+    else if (k === 'start') void openMenu();
   });
   el.addEventListener('pointerup', () => rom?.release(GBA_KEY[k]));
 }
@@ -1398,6 +1617,11 @@ function drawNurses(visible: Placed[]): void {
 /** The MARTs' clerks (marts.ts), each the way it faces: the first three frames are
  *  down, up and left; right is left turned over. */
 const clerkArt = new Map<number, HTMLCanvasElement>();
+/** OBJ_EVENT_GFX_BEAUTY at Lilycove's harbour, OBJ_EVENT_GFX_SAILOR on each dock. */
+const FERRY_PEOPLE: [string, number, number, number][] = [
+  [ATTENDANT.map, ATTENDANT.x, ATTENDANT.y, 45],
+  ...[...new Map(Object.values(DOCKS).map((d) => [d.map, d])).values()].map((d): [string, number, number, number] => [d.map, d.sailor[0], d.sailor[1], 49]),
+];
 function drawClerks(visible: Placed[]): void {
   if (!art) return;
   // Events' traders, facing down (br_event.c's GENTLEMAN).
@@ -1408,6 +1632,21 @@ function drawClerks(visible: Placed[]): void {
     if (!img) clerkArt.set(OBJ_EVENT_GFX_GENTLEMAN, (img = art.sprite(OBJ_EVENT_GFX_GENTLEMAN, 3)));
     const w = img.width / 3;
     ctx.drawImage(img, 0, 0, w, img.height, (p.gx + e.trader!.x) * TILE + (TILE - w) / 2, (p.gy + e.trader!.y) * TILE + TILE - img.height, w, img.height);
+  }
+  // The ferry's attendant in Lilycove's harbour and each island's sailor (br_story.c).
+  for (const [map, x, y, gfx] of FERRY_PEOPLE) {
+    const p = placed.get(map);
+    if (!p || !visible.includes(p)) continue;
+    let img = clerkArt.get(gfx);
+    if (!img) clerkArt.set(gfx, (img = art.sprite(gfx, 3)));
+    const w = img.width / 3;
+    ctx.drawImage(img, 0, 0, w, img.height, (p.gx + x) * TILE + (TILE - w) / 2, (p.gy + y) * TILE + TILE - img.height, w, img.height);
+  }
+  // People at home and floor traders (br_balls.c), facing down: a gift-giver's people.
+  for (const h of link.room.homes) {
+    const p = !h.gone && placed.get(h.map);
+    const img = p && visible.includes(p) ? giftArt(h.n) : null;
+    if (p && img) ctx.drawImage(img, (p.gx + h.x) * TILE + (TILE - img.width) / 2, (p.gy + h.y) * TILE + TILE - img.height);
   }
   for (const p of visible) {
     // The gym leaders nobody has beaten yet, facing down (a beaten one has left the gym).
@@ -1448,15 +1687,42 @@ function drawGround(x0: number, y0: number, x1: number, y1: number): void {
     if (x < x0 - TILE || x > x1 || y < y0 - TILE || y > y1) return;
     ctx.drawImage(img, x + (TILE - img.width) / 2, y + TILE - img.height);
   };
-  for (const g of link.room.ground().values()) if (!link.room.picked.has(g.key)) put(g.gift ? giftArt(g.key) : ballArt, g.map, g.x, g.y);
+  for (const g of link.room.ground().values()) if (!link.room.picked.has(g.key)) put(g.gift ? giftArt(g.key) : tinted(g.item), g.map, g.x, g.y);
   for (const b of link.room.spills.values()) {
     if (link.room.picked.has(b.key)) continue;
     // An event's legendary stands as itself (br_legend.c's sLegends); a piece with one mon
     // or one item in it is a ball (br_loot.c), anything more a bag.
-    const legend = b.legend && art ? legendArt(b.bag.mons![0].species) : null;
+    const legend = b.legend && art ? legendArt(b.bag.mons![0].species) : b.person ? personArt(b.person.gfx) : null;
     const one = (b.bag.mons?.length ?? 0) + b.bag.items.length === 1 && !b.bag.money;
     put(legend ?? (one ? ballArt : bagArt), b.map, b.x, b.y);
   }
+}
+
+/** A ball in its colour (br_balls.h, Cam 2026-10-13: "red = items, blue = TMs, gold =
+ *  rare"): the ROM's red ball with its reds moved. */
+const tints = new Map<number, HTMLCanvasElement>();
+function tinted(item: number): HTMLCanvasElement | null {
+  const tier = GOLD.includes(item) ? 2 : isTm(item) ? 1 : 0;
+  if (!tier || !ballArt) return ballArt;
+  let img = tints.get(tier);
+  if (!img) {
+    img = document.createElement('canvas');
+    img.width = ballArt.width;
+    img.height = ballArt.height;
+    const c = img.getContext('2d')!;
+    c.drawImage(ballArt, 0, 0);
+    const px = c.getImageData(0, 0, img.width, img.height);
+    const d = px.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const [r, g, b] = [d[i], d[i + 1], d[i + 2]];
+      if (r < g + 40 || r < b + 40) continue; // only the ball's reds
+      if (tier === 1) { d[i] = b; d[i + 1] = Math.min(255, g + r / 4); d[i + 2] = r; }
+      else { d[i] = Math.min(255, r + 24); d[i + 1] = Math.round(r * 0.78); d[i + 2] = Math.round(b * 0.4); }
+    }
+    c.putImageData(px, 0, 0);
+    tints.set(tier, img);
+  }
+  return img;
 }
 
 /** Who stands for a gift, by its key (br_loot.c's sGiftGfx): OLD_MAN, OLD_WOMAN,
@@ -1471,6 +1737,14 @@ function giftArt(key: number): HTMLCanvasElement | null {
   return img;
 }
 
+const personArts = new Map<number, HTMLCanvasElement>();
+function personArt(gfx: number): HTMLCanvasElement | null {
+  if (!art) return null;
+  let img = personArts.get(gfx);
+  if (!img) personArts.set(gfx, (img = art.sprite(gfx, 1)));
+  return img;
+}
+
 const LEGEND_GFX: Record<number, number> = { 401: 200, 402: 201, 403: 202, 404: 197, 405: 198, 406: 41, 407: 187, 408: 188 };
 const legendArts = new Map<number, HTMLCanvasElement>();
 function legendArt(species: number): HTMLCanvasElement | null {
@@ -1479,6 +1753,20 @@ function legendArt(species: number): HTMLCanvasElement | null {
   let img = legendArts.get(gfx);
   if (!img) legendArts.set(gfx, (img = art.sprite(gfx, 1)));
   return img;
+}
+
+/** The "!" over a trainer who looked (trainer_see.c's FLDEFF_EXCLAMATION_MARK_ICON, as
+ *  br_walkup.c starts it): a white bubble over their head, popping up, until the walk. */
+function drawBang(x: number, y: number, t: number): void {
+  const bx = Math.round(x + 3), by = Math.round(y - 24 - (t < 6 ? 6 - t : 0));
+  ctx.fillStyle = '#303030';
+  ctx.fillRect(bx + 1, by, 8, 14);
+  ctx.fillRect(bx, by + 1, 10, 12);
+  ctx.fillStyle = '#f8f8f8';
+  ctx.fillRect(bx + 1, by + 1, 8, 12);
+  ctx.fillStyle = '#303030';
+  ctx.fillRect(bx + 4, by + 3, 2, 5);
+  ctx.fillRect(bx + 4, by + 9, 2, 2);
 }
 
 /** The map at world pixel (x, y), or the nearest one to it: whose border fills the space
@@ -1591,6 +1879,7 @@ function draw(): void {
   }
   drawNurses(visible);
   drawClerks(visible);
+  for (const { a, p } of people) if (a.meet?.walk && link.room.tick - a.meet.since < WALKUP_BANG) drawBang(p.x, p.y - p.lift, link.room.tick - a.meet.since);
   drawFog(vx0, vy0, vx1, vy1, home);
   // A door: the screen fades out and back in over the followed trainer's warp.
   const going = followed?.m.action?.kind === 'warp' ? followed.m.action : null;
@@ -1640,11 +1929,15 @@ function loop(now: number): void {
     for (const e of link.frame(myBits())) startFor(e);
     roundFrame();
     fieldFrame();
+    soundFrame();
+    stepsFrame();
+    doorsFrame();
     fogFrame();
     foeFrame();
     remember();
     gymFrame();
     hudFrame();
+    if (pressed.has('a')) dig();
     for (const k of pressed) watch.key(k);
     pressed.clear();
   }
@@ -1690,6 +1983,7 @@ async function boot(): Promise<void> {
   }
   const t0 = performance.now();
   art = new RomArt(files.rom, files.sym);
+  romTables = { bytes: files.rom, sym: (n) => { const a = files.sym(n); return Number.isNaN(a) ? undefined : a; } };
   judge = makeJudge(files);
   paint(placed.get('MAP_LITTLEROOT_TOWN')!);
   artMs = performance.now() - t0;
@@ -1728,6 +2022,7 @@ async function boot(): Promise<void> {
       join: (how) => sock.join(me().name, me().skin, how),
       start: () => sock.start(),
       leave: () => location.reload(),
+      names: { species: speciesName, move: (id) => moveInfo(romTables, id)?.name },
     });
     // Reloaded within a minute of a match: straight back in (or, too late, in to watch).
     const back = token();

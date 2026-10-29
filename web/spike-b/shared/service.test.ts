@@ -40,8 +40,9 @@ describe('world rooms', () => {
     }
   });
   it('a reload within a minute is the same trainer; later, it watches', () => {
+    // Bots on the map keep the match going after bob is the last trainer left.
     let t = 0;
-    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => t, log: () => undefined });
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 3, cap: 30, now: () => t, log: () => undefined });
     try {
       const a = phone(), b = phone();
       const sa = svc.open(a.link), sb = svc.open(b.link);

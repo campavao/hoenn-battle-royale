@@ -29,13 +29,15 @@
 import { clerkAt, type Clerk } from './marts';
 import { leaderAt } from './gyms';
 import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, draw, eventForRing } from '../../src/match/events';
+import { DOOR_Y, FINAL_CHANCE, STORIES, STORY_CHANCE, type Story, type StoryDoor } from '../../src/match/story';
 import { rungForPhase } from '../../src/bots/party';
 import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
-import { scatterItem } from '../../src/match/scatter';
+import { blueTm, scatterItem } from '../../src/match/scatter';
+import roomsJson from '../data/rooms.json';
 import { GIFTS } from '../../src/match/gifts';
-import { isTm, type BagRows } from './items';
-import { eitherSees, type Facing } from '../../src/bots/sight';
+import { cableOrDoll, type BagRows } from './items';
+import { SIGHT_RANGE, eitherSees, type Facing } from '../../src/bots/sight';
 import { CLASS_WATER, DIR_NORTH, dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
 
 export const KEY_UP = 1, KEY_DOWN = 2, KEY_LEFT = 4, KEY_RIGHT = 8, KEY_B = 16, KEY_A = 32;
@@ -89,6 +91,10 @@ export interface Actor {
   bites?: number;
   /** Fighting gym leader n - 1 (gyms.ts). */
   boss?: number;
+  /** A fight that started from a look, before it starts (br_walkup.h): the "!", then the
+   *  walker walks the eyeline to the cell beside the other. On both; `walk` on the one
+   *  who walks, `duel` for two trainers (a bot's is a fight). */
+  meet?: { foe: number; walk: boolean; since: number; duel: boolean };
 }
 
 /** A team with somebody who could SURF: water is walkable (and up a waterfall). */
@@ -102,13 +108,23 @@ export type RoomEvent =
    *  (link id 0, the lower id, as the ROM's own engage has it). */
   | { type: 'duel'; tick: number; id: number; foe: number; first: boolean }
   | { type: 'item'; tick: number; id: number; key: number; item: number; gift?: boolean }
-  | { type: 'bag'; tick: number; id: number; key: number; bag: Bag; name: string }
+  | { type: 'bag'; tick: number; id: number; key: number; bag: Bag; name: string; person?: Spill['person'] }
   /** A at a CENTER's nurse, from the counter. */
   | { type: 'nurse'; tick: number; id: number; map: string }
   /** A at an event's legendary: its battle (the room took it off the ground). */
   | { type: 'legend'; tick: number; id: number; key: number; species: number; level: number }
   /** A at an event's trader: his offer, for one of mine (`traded` says which). */
-  | { type: 'trade'; tick: number; id: number; n: number; species: number }
+  | { type: 'trade'; tick: number; id: number; n: number; species: number; gives?: boolean }
+  /** A at a REGI chamber's sealed wall (br_story.c's PressedAtWall): `opened` when that
+   *  did it, else how it opens, for the page to say or (a FLY wall) to try. */
+  | { type: 'door'; tick: number; id: number; n: number; how: StoryDoor; opened?: boolean }
+  /** A at a gate's boss (br_story.c): his own fight, and his piece if he falls. */
+  | { type: 'gate'; tick: number; id: number; key: number; gate: number; bag: Bag; name: string }
+  /** A at a piece a gate's boss still guards. */
+  | { type: 'guarded'; tick: number; id: number; name: string }
+  /** A at the ferry's attendant (the live islands' stories, none: not sailing) or at a
+   *  dock's sailor (`home`: back to Lilycove). */
+  | { type: 'ferry'; tick: number; id: number; to: { id: string; name: string }[]; home?: boolean }
   /** A at a MART's clerk. */
   | { type: 'mart'; tick: number; id: number; map: string }
   /** A at a gym leader nobody has beaten yet: their own battle (gyms.ts). */
@@ -123,16 +139,87 @@ export type Bag = BagRows;
 
 /** A trainer's bag where they fell (POK-232). Its key is SPILL_KEY + their id. */
 /** `legend`: an event's legendary, its one mon in the bag: A on it is its battle. */
-export interface Spill { key: number; map: string; x: number; y: number; name: string; bag: Bag; legend?: boolean }
+export interface Spill {
+  key: number; map: string; x: number; y: number; name: string; bag: Bag; legend?: boolean;
+  /** A story's person handing it over (story.ts's people): who stands there, and the item
+   *  he wants for it first. */
+  person?: { gfx: number; name: string; wants?: number; gate?: number };
+  /** A gate's other pieces: his own piece's key, which has to be gone first. */
+  guard?: number;
+}
+
+/** The ferry (br_story.c): Lilycove's attendant sails to an island a live story is on,
+ *  and each island's sailor sails back (LilycoveCity_Harbor's and the islands' warps).
+ *  A dock: where the boat lands you, and where its sailor stands. */
+export const ATTENDANT = { map: 'MAP_LILYCOVE_CITY_HARBOR', x: 8, y: 10 };
+const HARBOR_LANDING = { map: 'MAP_LILYCOVE_CITY_HARBOR', x: 8, y: 11 };
+export const DOCKS: Record<string, { map: string; x: number; y: number; sailor: [number, number] }> = {
+  'southern-island': { map: 'MAP_SOUTHERN_ISLAND_EXTERIOR', x: 13, y: 22, sailor: [13, 23] },
+  'birth-island': { map: 'MAP_BIRTH_ISLAND_HARBOR', x: 8, y: 4, sailor: [8, 5] },
+  'faraway-island': { map: 'MAP_FARAWAY_ISLAND_ENTRANCE', x: 13, y: 38, sailor: [13, 39] },
+  'navel-rock-top': { map: 'MAP_NAVEL_ROCK_HARBOR', x: 8, y: 4, sailor: [8, 5] },
+  'navel-rock-bottom': { map: 'MAP_NAVEL_ROCK_HARBOR', x: 8, y: 4, sailor: [8, 5] },
+};
+/** The ferry's people, by cell: the attendant, and each dock's sailor. */
+export function ferryAt(map: string, x: number, y: number): 'attendant' | 'sailor' | undefined {
+  if (map === ATTENDANT.map && x === ATTENDANT.x && y === ATTENDANT.y) return 'attendant';
+  return Object.values(DOCKS).some((d) => d.map === map && d.sailor[0] === x && d.sailor[1] === y) ? 'sailor' : undefined;
+}
+/** Every map the ferry's docks lead to on foot (their warps): the islands, which no
+ *  seam or door joins to Hoenn. */
+export function islandMaps(all: readonly WorldMap[]): WorldMap[] {
+  const byId = new Map(all.map((m) => [m.id, m]));
+  const out = new Map<string, WorldMap>();
+  const queue = [...new Set(Object.values(DOCKS).map((d) => d.map))];
+  while (queue.length) {
+    const m = byId.get(queue.shift()!);
+    if (!m || out.has(m.id)) continue;
+    out.set(m.id, m);
+    for (const w of m.warps ?? []) queue.push(w.to);
+  }
+  return [...out.values()];
+}
+
+/** The REGI chambers' walls (story.ts's door rows): how each opens. */
+const DOORS: Record<string, StoryDoor> = Object.fromEntries(STORIES.filter((s) => s.door).map((s) => [s.id, s.door!]));
+const DOOR_MAPS = new Set(STORIES.filter((s) => s.door).map((s) => s.map));
+/** Standing under the wall's middle, facing it (br_story.c's PressedAtWall). */
+const atWall = (a: Actor): boolean => DOOR_MAPS.has(a.m.spot.map) && a.m.spot.x === 8 && a.m.spot.y === DOOR_Y + 1 && a.m.facing === 2;
+
+/** The people a story stands (include/constants/event_objects.h), by story.ts's names. */
+const PERSON_GFX: Record<string, [number, string]> = {
+  OBJ_EVENT_GFX_STEVEN: [134, 'STEVEN'], OBJ_EVENT_GFX_SCIENTIST_1: [46, 'CAPT. STERN'],
+  OBJ_EVENT_GFX_MAXIE: [196, 'MAXIE'], OBJ_EVENT_GFX_ARCHIE: [195, 'ARCHIE'],
+  OBJ_EVENT_GFX_AQUA_MEMBER_F: [118, 'SHELLY'], OBJ_EVENT_GFX_AQUA_MEMBER_M: [117, 'MATT'],
+};
+/** The gates' bosses in br_story.c's sPeople order: BrStory_StartGate's numbers. */
+const GATES = ['TRAINER_MAXIE_MAGMA_HIDEOUT', 'TRAINER_ARCHIE', 'TRAINER_SHELLY_WEATHER_INSTITUTE', 'TRAINER_MATT', 'TRAINER_MAXIE_MT_CHIMNEY', 'TRAINER_MAXIE_MOSSDEEP'];
 
 /** An event this round (events.ts, DESIGN §Events): its number, where its legendary
  *  stands (its key), and which one. */
-export interface EventMark { n: number; key: number; map: string; x: number; y: number; species: number; trader?: Trader }
+export interface EventMark {
+  n: number; key: number; map: string; x: number; y: number;
+  /** Its legendary, or 0 for a story with none (a rare find). */
+  species: number; trader?: Trader;
+  /** A story event's id (story.ts) and the place the ticker names. */
+  story?: string; place?: string;
+  /** A REGI chamber's story: the phase it dropped on, and whether its wall is open. */
+  phase?: number; opened?: boolean;
+}
 
 /** An event's trader (br_event.c): where he stands, the rare he offers for any one of
  *  yours, and who is trading with him now (0 for nobody). He keeps what he is given and
  *  offers that next (Cam's 2026-10-19 play-test, #9). */
 export interface Trader { x: number; y: number; species: number; busy: number }
+
+/** Somebody at home, or a floor's trader (br_balls.c, POK-379): one house in eight has
+ *  somebody beside its cache with a Pokémon, half of them giving it to the first trainer
+ *  who talks to them (then gone), half trading it; and the big floors' traders. A trader
+ *  keeps what he is given and offers that next. `n` is HOME_N + the row. */
+export interface Home extends Trader { n: number; map: string; gives?: boolean; gone?: boolean }
+export const HOME_N = 1000;
+/** br_balls.c's sHomeMons: what Hoenn's own people give and trade. */
+const HOME_MONS = [277, 280, 283, 1, 4, 7, 64, 67, 75, 93, 385, 143];
 
 /** Event pieces' keys: clear of the dealt balls' and the trainers' (SPILL_KEY + id). */
 export const EVENT_SPILL = 2 << 20;
@@ -148,6 +235,11 @@ const LOCKOUT = 600;
 /** Everybody starts by the truck: five seconds to walk off before an engage. */
 const JOIN_GRACE = 300;
 const BACK: Record<number, number> = { 1: 2, 2: 1, 3: 4, 4: 3 };
+/** br_walkup.h: the "!" holds everything this long before the walk, and a walk that
+ *  cannot finish goes into the fight anyway after the eyeline's length in walks. */
+export const WALKUP_BANG = 30;
+export const APPROACH_FRAMES = (SIGHT_RANGE + 1) * 16 + 90;
+const KEY_TO: Record<number, number> = { 1: KEY_DOWN, 2: KEY_UP, 3: KEY_LEFT, 4: KEY_RIGHT };
 /** One bot-vs-bot fight starts at most this often, room-wide (POK-273's
  *  DUEL_COOLDOWN_MS): every pair that could see each other fighting at once decided a
  *  full room before the first ring moved. */
@@ -158,6 +250,9 @@ export const BOT_DUEL_MAX = 60 * 120;
 /** The fog bites a bot every BOT_BITE frames, and the BOT_BITES-th takes it. */
 export const BOT_BITE = 600;
 export const BOT_BITES = 3;
+
+/** The caches' rooms (tools/br/spike-rooms.py, from br_balls.c): map, cell, a house. */
+const ROOMS = roomsJson as [string, number, number, boolean, boolean, number, number, boolean][];
 
 /** Spill keys, clear of the dealt balls' 1..n. */
 export const SPILL_KEY = 1 << 20;
@@ -193,6 +288,10 @@ export type Command =
   | { c: 'bots'; id: number; a: number; b: number; winner: number }
   /** `id` traded event `n`'s trader the species `given` (0: thought better of it). */
   | { c: 'traded'; id: number; n: number; given: number }
+  /** `id` opened event `n`'s REGI wall (a Flying-type in their party, the page saw). */
+  | { c: 'open'; id: number; n: number }
+  /** `id` sails to story `to`'s island, or ('') from an island back to Lilycove. */
+  | { c: 'sail'; id: number; to: string }
   /** `id`'s page went (a reload), or came back. */
   | { c: 'away'; id: number; on: boolean }
   /** Drop `id` on `map` when the Safari ends. */
@@ -223,6 +322,7 @@ export interface RoomState {
   events?: EventMark[];
   /** The gym leaders beaten this round: leader n, by whom. */
   gyms?: [number, string][];
+  homes?: Home[];
 }
 
 /** A trainer in the world but not on the map: out this round, or come in after the fog
@@ -256,6 +356,9 @@ export const RING_PHASE = 60 * 120;
  *  everywhere. The match measures in region-map sections; here it is tiles, on purpose:
  *  this world is walked tile by tile, and a section-sized ring would fog half a town. */
 const RING_STEPS = [Infinity, 15 / 28, 9 / 28, 7 / 28, 5 / 28, 3 / 28, 2 / 28, 0, -1];
+/** How near a walking trainer must be able to stand to a final story's place for the ring
+ *  to centre on it (FINAL_CHANCE). */
+const FINAL_REACH = 24;
 
 /** The ring at a frame, in the plane layout() places the maps in (tiles). `r` is Infinity
  *  for no fog and -1 for fog everywhere; `left` the frames to the next phase. */
@@ -282,6 +385,8 @@ export class Room {
   events: EventMark[] = [];
   /** Who beat which gym leader this round, in the order they fell. */
   gyms: [number, string][] = [];
+  /** This round's people at home and floor traders (dealHomes). */
+  homes: Home[] = [];
   private readonly base: StepFn;
   /** The StepFn for each FIELD_* combination a team has. */
   private readonly fields: StepFn[] = [];
@@ -300,10 +405,26 @@ export class Room {
     readonly anchors: ReadonlyMap<string, { gx: number; gy: number }> = new Map(),
   ) {
     this.base = stepFn(world);
+    this.homes = this.dealHomes(0);
+  }
+
+  /** Round `round`'s people at home, from the seed: the houses this world goes into,
+   *  one in eight with somebody (half give), and every floor that has a trader. */
+  private dealHomes(round: number): Home[] {
+    let state = (this.seed ^ 0x40e5 ^ Math.imul(round + 1, 0x9e3779b1)) >>> 0 || 1;
+    const rng = () => { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return (state >>> 0) / 4294967296; };
+    const which = Math.floor(rng() * 8);
+    const out: Home[] = [];
+    ROOMS.forEach(([map, , , house, , x, y, trader], i) => {
+      const draw = rng(), gives = rng() < 0.5;
+      if (!this.maps.has(map) || this.places.has(map) || (house ? i % 8 !== which : !trader)) return;
+      out.push({ n: HOME_N + i, map, x, y, species: HOME_MONS[Math.floor(draw * HOME_MONS.length)], busy: 0, ...(house && gives ? { gives: true } : {}) });
+    });
+    return out;
   }
 
   state(): RoomState {
-    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...(this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}), ...(this.epoch ? { epoch: this.epoch } : {}), ...(this.opening ? { opening: this.opening } : {}), ...(this.duelAfter ? { duelAfter: this.duelAfter } : {}), ...(this.events.length ? { events: structuredClone(this.events) } : {}), ...(this.gyms.length ? { gyms: structuredClone(this.gyms) } : {}) };
+    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...(this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}), ...(this.epoch ? { epoch: this.epoch } : {}), ...(this.opening ? { opening: this.opening } : {}), ...(this.duelAfter ? { duelAfter: this.duelAfter } : {}), ...(this.events.length ? { events: structuredClone(this.events) } : {}), ...(this.gyms.length ? { gyms: structuredClone(this.gyms) } : {}), homes: structuredClone(this.homes) };
   }
 
   load(s: RoomState): void {
@@ -314,6 +435,7 @@ export class Room {
     this.duelAfter = s.duelAfter ?? 0;
     this.events = structuredClone(s.events ?? []);
     this.gyms = structuredClone(s.gyms ?? []);
+    this.homes = s.homes ? structuredClone(s.homes) : this.dealHomes(s.results?.round ?? 0);
     this.actors = structuredClone(s.actors);
     this.taken = new Map(s.taken);
     this.picked = new Map(s.picked ?? []);
@@ -336,11 +458,26 @@ export class Room {
     } else if (cmd.c === 'away') {
       const a = this.actor(cmd.id);
       if (a && !a.bot) a.away = cmd.on || undefined;
+    } else if (cmd.c === 'sail') {
+      const a = this.actor(cmd.id);
+      if (!a || a.bot || a.battling || a.m.action) return;
+      const [x, y] = this.ahead(a);
+      const who = ferryAt(a.m.spot.map, x, y);
+      if (cmd.to === '' && who === 'sailor') a.m = newMover(HARBOR_LANDING, 1);
+      else if (who === 'attendant' && this.sailingTo().some((s) => s.id === cmd.to)) {
+        const d = DOCKS[cmd.to];
+        a.m = newMover({ map: d.map, x: d.x, y: d.y }, 2);
+      }
+    } else if (cmd.c === 'open') {
+      const a = this.actor(cmd.id), e = this.events.find((q) => q.n === cmd.n);
+      if (a && e && e.story && DOORS[e.story] && a.m.spot.map === e.map && atWall(a)) e.opened = true;
     } else if (cmd.c === 'traded') {
-      const t = this.events.find((e) => e.n === cmd.n)?.trader;
+      const t: (Trader & { gives?: boolean; gone?: boolean }) | undefined = this.events.find((e) => e.n === cmd.n)?.trader ?? this.homes.find((h) => h.n === cmd.n);
       if (!t || t.busy !== cmd.id) return;
       t.busy = 0;
-      if (cmd.given > 0 && cmd.given < 412) t.species = cmd.given;
+      // A giver's is taken (given: anything but 0), and he is gone; a trader holds yours.
+      if (t.gives) { if (cmd.given) t.gone = true; }
+      else if (cmd.given > 0 && cmd.given < 412) t.species = cmd.given;
       const a = this.actor(cmd.id);
       if (a?.battling && !a.foe) { a.battling = false; a.calm = this.tick + GRACE; }
     } else if (cmd.c === 'bots') {
@@ -378,11 +515,18 @@ export class Room {
       // ROM wins it, BrNetlink_PeerOut) and says so.
       const foe = a?.foe ? this.actor(a.foe) : undefined;
       if (foe?.bot) foe.battling = false;
+      // Whoever they were meeting (the "!" or the walk-up): no battle is coming, so free.
+      for (const o of this.actors) if (o.meet?.foe === cmd.id) this.unmeet(o);
       // Bots whose fight their page was running: no answer is coming, they walk on.
       for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
       // A legendary they were fighting stands again (Cam: they go back for retries).
-      for (const [key, by] of this.picked) if (by === cmd.id && this.spills.get(key)?.legend) this.picked.delete(key);
+      // So does a gate's boss whose fight they left: his pieces wait for the next.
+      for (const [key, by] of this.picked) {
+        const b = this.spills.get(key);
+        if (by === cmd.id && (b?.legend || b?.person?.gate !== undefined)) this.picked.delete(key);
+      }
       for (const e of this.events) if (e.trader?.busy === cmd.id) e.trader.busy = 0;
+      for (const h of this.homes) if (h.busy === cmd.id) h.busy = 0;
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
       if (cmd.c === 'leave') this.bench = this.bench.filter((b) => b.id !== cmd.id);
       if (!a || a.bot) return;
@@ -397,6 +541,11 @@ export class Room {
       a.calm = this.tick + GRACE;
       if (cmd.fled && a.foe) { a.shun = a.foe; a.shunUntil = this.tick + LOCKOUT; }
       const foe = a.foe ? this.actor(a.foe) : undefined;
+      // Ended before the walk-up was over: the other has no battle to end, so is free too.
+      if (a.meet) {
+        a.meet = undefined;
+        if (foe?.meet?.foe === a.id) { foe.meet = undefined; foe.battling = false; foe.foe = 0; foe.calm = this.tick + GRACE; }
+      }
       if (foe?.bot) {
         foe.battling = false;
         foe.calm = this.tick + GRACE;
@@ -411,6 +560,18 @@ export class Room {
         a.boss = undefined;
       }
     }
+  }
+
+  /** The islands the ferry sails to now: a live story's whose first piece still lies there
+   *  (br_story.c's LiveAt), one row an island. */
+  sailingTo(): { id: string; name: string }[] {
+    const out: { id: string; name: string }[] = [];
+    for (const e of this.events) {
+      const d = e.story ? DOCKS[e.story] : undefined;
+      if (!d || !this.spills.has(e.key) || this.picked.has(e.key) || out.some((o) => DOCKS[o.id].map === d.map)) continue;
+      out.push({ id: e.story!, name: e.place ?? e.story! });
+    }
+    return out;
   }
 
   /** Gym leader `n` has been beaten this round. */
@@ -451,12 +612,22 @@ export class Room {
         !(id === 'MAP_LITTLEROOT_TOWN' && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
       for (let i = 0; i < GROUND_PER_MAP && cells.length; i++) {
         const c = cells.splice(Math.floor(rng() * cells.length), 1)[0];
-        // No machines yet: in a match one off the ground is taught there and then (br_items.c
-        // Found), which a bare GIVE would skip.
-        let item = scatterItem(rng);
-        while (isTm(item)) item = scatterItem(rng);
+        // A machine is taught there and then, as a match's is (rom.ts teach).
+        const item = cableOrDoll(scatterItem(rng), rng());
         out.set(`${id}:${c.x}:${c.y}`, { key: ++n, map: id, x: c.x, y: c.y, item });
       }
+    }
+    // A cache in every house and on every other floor that had nothing (br_balls.c's
+    // sRooms, Cam 2026-10-18: "an item, trader, or both on every floor"): a machine, or
+    // gold one time in three in a house and one in eight on a floor.
+    for (const [map, x, y, house, cache] of ROOMS) {
+      if (!cache) continue;
+      // A building this world goes into (makeRoom's interiors), on its floor.
+      if (!this.maps.has(map) || this.places.has(map) || this.world.cell(map, x, y) !== 0 || out.has(`${map}:${x}:${y}`)) continue;
+      // The match keeps its cells off the wild patches (BrBalls_Spot); here the patch has it.
+      if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
+      const gold = Math.floor(rng() * (house ? 3 : 8)) === 0;
+      out.set(`${map}:${x}:${y}`, { key: ++n, map, x, y, item: gold ? GOLD[Math.floor(rng() * GOLD.length)] : blueTm(rng) });
     }
     // A gift-giver in every town and city (gifts.ts, Cam 2026-10-13: "some gift giving
     // NPCs"): a person holding one held item, standing on a free cell. A at him takes it,
@@ -527,10 +698,11 @@ export class Room {
   /** Frames of Safari each round opens with (SAFARI); 0, none (a test's room). */
   opening = 0;
 
-  private centres = new Map<number, { cx: number; cy: number; far: number }>();
-  /** A round's centre: a cell a trainer can stand on, from the seed; and how far the
-   *  farthest reachable cell is from it. */
-  private centre(round: number): { cx: number; cy: number; far: number } {
+  private centres = new Map<number, { cx: number; cy: number; far: number; final?: string }>();
+  /** A round's centre: a cell a trainer can stand on, from the seed, or one round in four
+   *  a final story's place (story.ts's FINAL_CHANCE: SKY PILLAR), which then holds that
+   *  story for the last event; and how far the farthest reachable cell is from it. */
+  centre(round: number): { cx: number; cy: number; far: number; final?: string } {
     const hit = this.centres.get(round);
     if (hit) return hit;
     const cells = this.reachable();
@@ -538,13 +710,20 @@ export class Room {
     h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12;
     const c = cells[(h >>> 0) % cells.length];
     const p = this.places.get(c.map)!;
-    const cx = p.gx + c.x + 0.5, cy = p.gy + c.y + 0.5;
+    let cx = p.gx + c.x + 0.5, cy = p.gy + c.y + 0.5;
+    // Only a final story whose place the walking trainers can stand near: a ring shut on
+    // open sea (SKY PILLAR's, while the deal is the mainland's) would fog every one of them.
+    const near = (x: number, y: number) => cells.some((s) => { const q = this.places.get(s.map)!; return Math.hypot(q.gx + s.x + 0.5 - x, q.gy + s.y + 0.5 - y) <= FINAL_REACH; });
+    const at = (s: Story) => { const q = this.places.get(s.map), a = this.anchors.get(s.map); return q ? { x: q.gx + s.cells[0].x + 0.5, y: q.gy + s.cells[0].y + 0.5 } : a ? { x: a.gx, y: a.gy } : undefined; };
+    const finals = STORIES.filter((s) => { const p = s.final && this.maps.has(s.map) ? at(s) : undefined; return p && near(p.x, p.y); });
+    const story = finals.length && ((h >>> 7) % 1000) / 1000 < FINAL_CHANCE ? finals[((h >>> 17) >>> 0) % finals.length] : undefined;
+    if (story) ({ x: cx, y: cy } = at(story)!);
     let far = 0;
     for (const s of cells) {
       const q = this.places.get(s.map)!;
       far = Math.max(far, Math.hypot(q.gx + s.x + 0.5 - cx, q.gy + s.y + 0.5 - cy));
     }
-    const out = { cx, cy, far };
+    const out = { cx, cy, far, ...(story ? { final: story.id } : {}) };
     if (this.centres.size > 4) this.centres.clear();
     this.centres.set(round, out);
     return out;
@@ -592,6 +771,8 @@ export class Room {
     if (ring.round !== was.round || (r.wonAt !== undefined && this.tick >= r.wonAt + AFTER_WIN)) this.newRound(r.round + 1);
     else if (was.safari && !ring.safari) this.drop(ring.round);
     else if (ring.phase !== was.phase) {
+      // ISLAND CAVE's wall opens by itself once the ring has moved on a phase (br_story.c).
+      for (const e of this.events) if (e.story && DOORS[e.story] === 'wait' && ring.phase > (e.phase ?? 0)) e.opened = true;
       // The fog closes for the first time: who is on the map is the match.
       if (ring.phase === 1 && !r.entrants.length) r.entrants = this.actors.map((a) => [a.id, a.name]);
       const n = eventForRing(ring.phase);
@@ -618,6 +799,7 @@ export class Room {
       if (a.bot) this.move(a, a.keys, events);
       else for (const bits of ins?.get(a.id) ?? []) this.move(a, bits, events);
     }
+    this.approach(events);
     this.engage(events);
     for (const a of this.actors) if (a.judge && this.tick - (a.since ?? 0) > BOT_DUEL_MAX) this.part(a);
     this.engageBots(events);
@@ -636,6 +818,11 @@ export class Room {
       && !this.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y);
     const all = this.reachable().filter(free);
     const plane = (s: Spot) => { const p = this.places.get(s.map)!; return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy); };
+    // The last event is the final ring's: its story, when the ring is centred on one.
+    const final = n === EVENT_MAX - 1 ? STORIES.find((s) => s.id === this.centre(ring.round).final) : undefined;
+    if (final && !this.events.some((e) => e.story === final.id)) return this.tellStory(n, ring, final, rng);
+    const story = n < EVENT_MAX - 1 && rng() < STORY_CHANCE ? this.storyFor(rng, ring) : undefined;
+    if (story) return this.tellStory(n, ring, story, rng);
     let from: Spot | undefined;
     if (n === EVENT_MAX - 1) for (const s of all) { if (!from || plane(s) < plane(from)) from = s; }
     else {
@@ -662,6 +849,55 @@ export class Room {
       this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: '', bag, ...(i === 0 ? { legend: true } : {}) });
     });
     this.events.push({ n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0], ...(trader ? { trader } : {}) });
+  }
+
+  /** A story event this round has not had (story.ts), where Emerald set that beat, inside
+   *  the ring. The ones the page can tell: a place and its reward, or a person handing it
+   *  over, a REGI behind its wall, a gate's boss to beat first, or an island the ferry
+   *  sails to; not the final ring's. */
+  private storyFor(rng: () => number, ring: Ring): Story | undefined {
+    const open = STORIES.filter((s) => (s.people ?? []).every((p) => PERSON_GFX[p.gfx] && (!p.trainer || GATES.includes(p.trainer))) && (!s.boat || DOCKS[s.id]) && !s.final && !s.noBots &&
+      !this.events.some((e) => e.story === s.id) &&
+      s.cells.every((c) => this.maps.has(c.map ?? s.map) && this.world.cell(c.map ?? s.map, c.x, c.y) === 0) &&
+      !this.inFog({ map: s.map, x: s.cells[0].x, y: s.cells[0].y }, ring));
+    return open.length ? open[Math.floor(rng() * open.length)] : undefined;
+  }
+
+  /** The story's pieces on its own cells (story.ts's storyDrop): its mons at the phase's
+   *  rung, its rares, its items, the supplies, and the trader past them. */
+  private tellStory(n: number, ring: Ring, story: Story, rng: () => number): void {
+    const level = rungForPhase(ring.phase + 1);
+    const species = [...(story.mons ?? []).map((pick) => pick[Math.floor(rng() * pick.length)]), ...draw(rng, RARES, story.rares ?? 0)];
+    const bags = [...(story.items ?? []).map((pick) => [{ id: pick[Math.floor(rng() * pick.length)], n: 1 }]), SUPPLIES.map((r) => ({ ...r }))];
+    const cells = story.cells.map((c) => ({ map: c.map ?? story.map, x: c.x, y: c.y }));
+    const pieces = species.length + bags.length;
+    const offers = RARES.filter((r) => !species.includes(r));
+    const spot = cells.length > pieces && offers.length ? cells[pieces] : undefined;
+    cells.slice(0, pieces).forEach((c, i) => {
+      const key = eventPiece(n, i);
+      const bag: Bag = i < species.length ? { items: [], money: 0, mons: [{ species: species[i], level }] } : { items: bags[i - species.length], money: 0 };
+      const p = story.people?.find((q) => q.at === i);
+      const [gfx, name] = p ? PERSON_GFX[p.gfx] : [0, ''];
+      const gate = p?.trainer ? GATES.indexOf(p.trainer) : -1;
+      const person = p ? { gfx, name, ...(p.wants ? { wants: p.wants } : {}), ...(gate >= 0 ? { gate } : {}) } : undefined;
+      // The rest of a gate's story waits on his piece (br_story.c's GuardOf).
+      const boss = story.people?.find((q) => q.trainer);
+      const guard = boss && boss.at !== i ? eventPiece(n, boss.at) : undefined;
+      this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: '', bag, ...(person ? { person } : {}), ...(guard !== undefined ? { guard } : {}) });
+    });
+    const trader = spot ? { x: spot.x, y: spot.y, species: offers[Math.floor(rng() * offers.length)], busy: 0 } : undefined;
+    const legend = species.some((sp) => LEGENDS.flat().includes(sp));
+    // A legendary a gate's boss holds is his to hand over, not a battle of its own.
+    if (legend) { const b = this.spills.get(eventPiece(n, 0)); if (b && !b.person) b.legend = true; }
+    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: legend ? species[0] : 0, story: story.id, place: story.name, ...(trader ? { trader } : {}), ...(story.door ? { phase: ring.phase, opened: false } : {}) });
+  }
+
+  /** Out of a walk-up whose battle never started: walking again after the grace. */
+  private unmeet(a: Actor): void {
+    a.meet = undefined;
+    a.battling = false;
+    a.foe = 0;
+    a.calm = this.tick + GRACE;
   }
 
   /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
@@ -815,12 +1051,46 @@ export class Room {
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
     for (const a of this.actors) if (a.bot) { a.beaten = false; a.bites = 0; if (a.judge) this.part(a); }
+    // A walk-up the old round left half done starts no battle in this one.
+    for (const a of this.actors) if (a.meet) { a.meet = undefined; a.battling = false; a.foe = 0; }
     this.duelAfter = 0;
     this.events = [];
     this.gyms = [];
+    this.homes = this.dealHomes(round);
     this.taken.clear();
     this.picked.clear();
     this.spills.clear();
+  }
+
+  /** The walk-ups under way: after the "!", the walker steps the eyeline toward the
+   *  other, and beside them (or out of time, or the other gone) the fight starts. */
+  private approach(events: RoomEvent[]): void {
+    for (const w of this.actors) {
+      const m = w.meet;
+      if (!m || !m.walk) continue;
+      const o = this.actor(m.foe);
+      // The other is gone (left, out): no fight, and the walker walks on.
+      if (!o || o.meet?.foe !== w.id) { w.meet = undefined; w.battling = false; w.foe = 0; continue; }
+      if (this.tick - m.since < WALKUP_BANG) continue;
+      const dx = o.m.spot.x - w.m.spot.x, dy = o.m.spot.y - w.m.spot.y;
+      const beside = o.m.spot.map === w.m.spot.map && Math.abs(dx) + Math.abs(dy) <= 1;
+      if (w.m.action) { tick(w.m, keysOf(0), this.stepFor(w)); continue; }
+      if (!beside && this.tick - m.since < APPROACH_FRAMES) {
+        const dir = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        const before = w.m.strides;
+        tick(w.m, keysOf(KEY_TO[dir]), this.stepFor(w));
+        if (w.m.strides !== before || w.m.action) continue;
+      }
+      // Face to face, and the fight: the trainer who looked first is the challenger.
+      const toO = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+      if (dx || dy) { w.m.facing = w.m.moveDir = toO; o.m.facing = o.m.moveDir = BACK[toO]; }
+      w.meet = o.meet = undefined;
+      const [h, f] = w.bot ? [o, w] : o.bot ? [w, o] : w.id < o.id ? [w, o] : [o, w];
+      if (m.duel) {
+        events.push({ type: 'duel', tick: this.tick, id: h.id, foe: f.id, first: true });
+        events.push({ type: 'duel', tick: this.tick, id: f.id, foe: h.id, first: false });
+      } else events.push({ type: 'fight', tick: this.tick, id: h.id, foe: f.id });
+    }
   }
 
   /** Two trainers on one map who see each other fight (br_engage.c's BrEngage_Tick): the
@@ -841,14 +1111,17 @@ export class Room {
         if (!eitherSees(this.world, look(a), look(b))) continue;
         const dx = b.m.spot.x - a.m.spot.x, dy = b.m.spot.y - a.m.spot.y;
         const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        // Who walks: the one who was facing down the line at the other; both or neither,
+        // the challenger (br_walkup.h BR_WALKUP_FIRST).
+        const bWalks = b.m.facing === BACK[toB] && a.m.facing !== toB;
         a.m.facing = a.m.moveDir = toB;
         b.m.facing = b.m.moveDir = BACK[toB];
         a.battling = b.battling = true;
         a.foe = b.id;
         b.foe = a.id;
         a.keys = a.last = b.keys = b.last = 0;
-        events.push({ type: 'duel', tick: this.tick, id: a.id, foe: b.id, first: true });
-        events.push({ type: 'duel', tick: this.tick, id: b.id, foe: a.id, first: false });
+        a.meet = { foe: b.id, walk: !bWalks, since: this.tick, duel: true };
+        b.meet = { foe: a.id, walk: bWalks, since: this.tick, duel: true };
         break;
       }
     }
@@ -864,13 +1137,17 @@ export class Room {
         if (!eitherSees(this.world, look(h), look(b))) continue;
         const dx = b.m.spot.x - h.m.spot.x, dy = b.m.spot.y - h.m.spot.y;
         const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        // A bot is a map trainer: it walks when it faced the trainer down the line, and
+        // otherwise the trainer looked, so they do (BR_WALKUP_BOT).
+        const botWalks = b.m.facing === BACK[toB];
         h.m.facing = h.m.moveDir = toB;
         b.m.facing = b.m.moveDir = BACK[toB];
         h.battling = b.battling = true;
         h.foe = b.id;
         b.foe = h.id;
         h.keys = h.last = b.keys = b.last = 0;
-        events.push({ type: 'fight', tick: this.tick, id: h.id, foe: b.id });
+        h.meet = { foe: b.id, walk: !botWalks, since: this.tick, duel: false };
+        b.meet = { foe: h.id, walk: botWalks, since: this.tick, duel: false };
         break;
       }
     }
@@ -905,7 +1182,16 @@ export class Room {
           events.push({ type: 'wild', tick: this.tick, id: a.id, map: a.m.spot.map, x: p.x, y: p.y, key: p.key });
         }
       }
-      if (!a.battling && (bits & KEY_A) && !(a.last & KEY_A)) {
+      const wall = !a.battling && (bits & KEY_A) && !(a.last & KEY_A) && atWall(a) ? this.events.find((e) => e.map === a.m.spot.map && e.story && DOORS[e.story] && !e.opened) : undefined;
+      const ferry = !wall && !a.battling && (bits & KEY_A) && !(a.last & KEY_A) ? ferryAt(a.m.spot.map, ...this.ahead(a)) : undefined;
+      if (ferry) {
+        events.push({ type: 'ferry', tick: this.tick, id: a.id, to: ferry === 'attendant' ? this.sailingTo() : [], ...(ferry === 'sailor' ? { home: true } : {}) });
+      } else if (wall) {
+        const how = DOORS[wall.story!];
+        // DESERT RUINS': ROCK SMASH's crack, which anybody makes here (br_story.c).
+        if (how === 'smash') wall.opened = true;
+        events.push({ type: 'door', tick: this.tick, id: a.id, n: wall.n, how, ...(wall.opened ? { opened: true } : {}) });
+      } else if (!a.battling && (bits & KEY_A) && !(a.last & KEY_A)) {
         const [x, y] = this.ahead(a);
         const g = this.groundAt(a.m.spot.map, x, y);
         const b = g ? undefined : this.spillAt(a.m.spot.map, x, y);
@@ -919,12 +1205,19 @@ export class Room {
         } else if (tr && !tr.t.busy) {
           tr.t.busy = a.id;
           a.battling = true;
-          events.push({ type: 'trade', tick: this.tick, id: a.id, n: tr.n, species: tr.t.species });
+          events.push({ type: 'trade', tick: this.tick, id: a.id, n: tr.n, species: tr.t.species, ...(tr.t.gives ? { gives: true } : {}) });
         } else if (tr) {
           // Somebody is trading with him: nothing.
         } else if (g) {
           this.picked.set(g.key, a.id);
           events.push({ type: 'item', tick: this.tick, id: a.id, key: g.key, item: g.item, ...(g.gift ? { gift: true } : {}) });
+        } else if (b?.guard !== undefined && this.spills.has(b.guard) && !this.picked.has(b.guard)) {
+          events.push({ type: 'guarded', tick: this.tick, id: a.id, name: this.spills.get(b.guard)!.person?.name ?? '' });
+        } else if (b?.person?.gate !== undefined) {
+          // His fight first, in my ROM (BrStory_StartGate); won, his piece is mine.
+          this.picked.set(b.key, a.id);
+          a.battling = true;
+          events.push({ type: 'gate', tick: this.tick, id: a.id, key: b.key, gate: b.person.gate, bag: structuredClone(b.bag), name: b.person.name });
         } else if (b?.legend) {
           const mon = b.bag.mons![0];
           this.picked.set(b.key, a.id);
@@ -932,7 +1225,7 @@ export class Room {
           events.push({ type: 'legend', tick: this.tick, id: a.id, key: b.key, species: mon.species, level: mon.level });
         } else if (b) {
           this.picked.set(b.key, a.id);
-          events.push({ type: 'bag', tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name });
+          events.push({ type: 'bag', tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name, ...(b.person ? { person: { ...b.person } } : {}) });
         } else if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
           a.battling = foe.battling = true;
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
@@ -950,9 +1243,10 @@ export class Room {
     a.last = bits;
   }
 
-  /** An event's trader standing on a cell. */
-  traderAt(map: string, x: number, y: number): { n: number; t: Trader } | undefined {
+  /** An event's trader standing on a cell, or somebody at home (not one who gave theirs). */
+  traderAt(map: string, x: number, y: number): { n: number; t: Trader & { gives?: boolean } } | undefined {
     for (const e of this.events) if (e.trader && e.map === map && e.trader.x === x && e.trader.y === y) return { n: e.n, t: e.trader };
+    for (const h of this.homes) if (!h.gone && h.map === map && h.x === x && h.y === y) return { n: h.n, t: h };
     return undefined;
   }
 
@@ -992,7 +1286,9 @@ export class Room {
       // A townsperson stays out in the street.
       if (a.bot && !this.places.has(r.to.map)) return null;
       const t = r.to;
-      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y)) return null;
+      // A REGI chamber's wall: shut until its story opened it (and in a match without one).
+      if (r.warp && DOOR_MAPS.has(from.map) && from.y === DOOR_Y + 1 && t.y < DOOR_Y && !this.events.some((e) => e.map === from.map && e.opened)) return null;
+      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y) || ferryAt(t.map, t.x, t.y)) return null;
       // The Zone's gate is shut until the drop, both ways.
       if (from.map.startsWith(SAFARI) !== t.map.startsWith(SAFARI) && this.ring().safari) return null;
       const boss = leaderAt(t.map, t.x, t.y);
@@ -1014,13 +1310,15 @@ export class Room {
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
       mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.boss ?? 0); mix(a.pick?.length ?? 0); mix(a.away ? 1 : 0);
+      if (a.meet) { mix(a.meet.foe); mix(a.meet.since); mix((a.meet.walk ? 1 : 0) | (a.meet.duel ? 2 : 0)); }
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
     for (const [k, by] of this.picked) { mix(k); mix(by); }
     for (const b of this.bench) { mix(b.id); mix(b.skin); str(b.name); }
     const r = this.results;
     mix(r.round); mix(r.winner); mix(r.wonAt ?? 0); mix(this.epoch); mix(this.opening); mix(this.duelAfter); for (const [n, w] of this.gyms) { mix(n); mix(w.length); }
-    for (const e of this.events) { mix(e.key); mix(e.x); mix(e.y); mix(e.species); if (e.trader) { mix(e.trader.x); mix(e.trader.y); mix(e.trader.species); mix(e.trader.busy); } }
+    for (const h of this.homes) { mix(h.n); mix(h.species); mix(h.busy); mix(h.gone ? 1 : 0); }
+    for (const e of this.events) { mix(e.key); mix(e.x); mix(e.y); mix(e.species); mix(e.story?.length ?? 0); mix(e.opened ? 1 : 0); if (e.trader) { mix(e.trader.x); mix(e.trader.y); mix(e.trader.species); mix(e.trader.busy); } }
     for (const [id] of r.entrants) mix(id);
     for (const f of r.fallen) { mix(f.id); str(f.by); mix((f.wild ? 1 : 0) | (f.left ? 2 : 0)); }
     for (const b of this.spills.values()) {
@@ -1081,7 +1379,9 @@ export function interiors(all: readonly WorldMap[], outside: ReadonlyMap<string,
     const here = outside.get(id);
     for (const w of m.warps ?? []) {
       const to = byId.get(w.to);
-      if (!to || to.outdoor || CLOSED_DOORS.has(to.id) || out.has(to.id)) continue;
+      // An outdoor map is Hoenn's own place unless a door is the only way to it (SKY
+      // PILLAR's ledge, between its entrance and its first floor).
+      if (!to || outside.has(to.id) || CLOSED_DOORS.has(to.id) || out.has(to.id)) continue;
       const at = here ? { gx: here.gx + w.x + 0.5, gy: here.gy + w.y + 0.5 } : out.get(id)!;
       out.set(to.id, { m: to, gx: at.gx, gy: at.gy });
       queue.push(to.id);
@@ -1102,5 +1402,9 @@ export function makeRoom(all: readonly WorldMap[], patches: PatchTable, seed: nu
   for (const m of zone) maps.set(m.id, m);
   const anchors = new Map([...inside].map(([id, p]) => [id, { gx: p.gx, gy: p.gy }]));
   for (const m of zone) anchors.set(m.id, { gx: -10000, gy: -10000 });
+  // The islands, the ferry's: the ring measures them by the dock it sails from (br_story.c's
+  // BrStory_Dock), Lilycove's harbour.
+  const harbor = anchors.get(ATTENDANT.map);
+  if (harbor) for (const m of islandMaps(all)) { maps.set(m.id, m); anchors.set(m.id, harbor); }
   return new Room(world ?? new World(all as WorldMap[]), maps, patches, seed, places, anchors);
 }

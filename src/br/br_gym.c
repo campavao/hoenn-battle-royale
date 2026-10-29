@@ -11,6 +11,7 @@
 #include "constants/songs.h"
 #include "br/br_hud.h"
 #include "br/br_gym.h"
+#include "br/br_story.h"
 #include "event_object_movement.h"
 #include "palette.h"
 #include "region_map.h"
@@ -169,8 +170,15 @@ void BrGym_Init(void)
 
 bool8 BrGym_StartBoss(u8 i)
 {
+    // Past the leaders, a story gate's boss: BR_BossArgs' rows after JUAN's.
     if (i >= ARRAY_COUNT(sBosses))
-        return FALSE;
+    {
+        if (!BrStory_StartGate(i - ARRAY_COUNT(sBosses)))
+            return FALSE;
+        sBoss = i;
+        ScriptContext_SetupScript(BR_EventScript_Boss);
+        return TRUE;
+    }
     // The gym's own refusal (EventScript_TryDoDoubleTrainerBattle): two of them, two of ours.
     if (sBosses[i].trainerId == TRAINER_TATE_AND_LIZA_1 && GetMonsStateToDoubles() != PLAYER_HAS_TWO_USABLE_MONS)
         return FALSE;

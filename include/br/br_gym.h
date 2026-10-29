@@ -47,7 +47,8 @@ void BrGym_Beaten(u16 trainerId);
 extern u8 gBrGymsBeaten;
 void BrGym_Init(void);
 // Spike B's page asks this ROM for leader `i` (br_wild.h's BR_WILD_BOSS): his own
-// trainer battle, with no gym around it. FALSE when he will not fight.
+// trainer battle, with no gym around it; past the eight, a story gate's boss
+// (BrStory_StartGate). FALSE when he will not fight.
 bool8 BrGym_StartBoss(u8 i);
 // BR_EventScript_Boss's special: the trainer battle's arguments, as the gym's script has them.
 void BrGym_LoadBoss(void);

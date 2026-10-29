@@ -60,7 +60,7 @@ export const SCATTER_TABLE: readonly { id: number | 'tm'; w: number }[] = [
 
 /** A machine for the ground: any but the gold ones, which are for houses and events
  *  (br_balls.c's BlueTm). */
-function blueTm(rng: () => number): number {
+export function blueTm(rng: () => number): number {
   let tm = ITEM_TM01 + pickIndex(rng, ITEM_HM01 - ITEM_TM01);
   while (GOLD.includes(tm)) tm = tm + 1 < ITEM_HM01 ? tm + 1 : ITEM_TM01;
   return tm;
