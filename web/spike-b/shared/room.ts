@@ -71,6 +71,10 @@ export interface Actor {
   /** What the team could do on the field (FIELD_*): SURF, CUT, STRENGTH, as the page
    *  reads its party (br_hm.c asks the same: knows the move or could learn it). */
   field?: number;
+  /** A bot fighting a bot: the trainer whose page fights it out (its hidden ROM, the
+   *  proxy duel), and the frame it began. 0 for none. */
+  judge?: number;
+  since?: number;
 }
 
 /** A team with somebody who could SURF: water is walkable (and up a waterfall). */
@@ -86,7 +90,10 @@ export type RoomEvent =
   | { type: 'item'; tick: number; id: number; key: number; item: number }
   | { type: 'bag'; tick: number; id: number; key: number; bag: Bag; name: string }
   /** A at a CENTER's nurse, from the counter. */
-  | { type: 'nurse'; tick: number; id: number; map: string };
+  | { type: 'nurse'; tick: number; id: number; map: string }
+  /** Two bots saw each other: `id`'s page fights `a` against `b` in a hidden ROM and
+   *  says who won (`bots`). Nobody's coin flip (CLAUDE.md: simulate every battle). */
+  | { type: 'bots'; tick: number; id: number; a: number; b: number };
 
 /** What a trainer who is out carried: the bag's items (not its key items or machines),
  *  money, and their team. */
@@ -105,6 +112,13 @@ const LOCKOUT = 600;
 /** Everybody starts by the truck: five seconds to walk off before an engage. */
 const JOIN_GRACE = 300;
 const BACK: Record<number, number> = { 1: 2, 2: 1, 3: 4, 4: 3 };
+/** One bot-vs-bot fight starts at most this often, room-wide (POK-273's
+ *  DUEL_COOLDOWN_MS): every pair that could see each other fighting at once decided a
+ *  full room before the first ring moved. */
+export const BOT_DUEL_GAP = 60 * 12;
+/** A bot-vs-bot fight nobody has answered for this long lets them go (the proxy's own
+ *  wall-clock cap is 90 s). */
+export const BOT_DUEL_MAX = 60 * 120;
 
 /** Spill keys, clear of the dealt balls' 1..n. */
 export const SPILL_KEY = 1 << 20;
@@ -134,7 +148,10 @@ export type Command =
   /** START (a lobby's): the trainers on the map now are the match; anybody later watches. */
   | { c: 'lock' }
   /** `id`'s team could now do these on the field (FIELD_*). */
-  | { c: 'field'; id: number; bits: number };
+  | { c: 'field'; id: number; bits: number }
+  /** `id`'s page fought bots `a` and `b` (a `bots` event): `winner` beat the other, or
+   *  0 for no answer (its ROM could not), and both walk on. */
+  | { c: 'bots'; id: number; a: number; b: number; winner: number };
 
 /** The marked spots grow back: the ring's phase does it in the game; here, a while. */
 export const REGROW = 60 * 90;
@@ -155,6 +172,8 @@ export interface RoomState {
   ringPhase?: number;
   /** The frame this round started on (a win starts the next early). */
   epoch?: number;
+  /** No bot-vs-bot fight starts before this frame (BOT_DUEL_GAP). */
+  duelAfter?: number;
 }
 
 /** A trainer in the world but not on the map: out this round, or come in after the fog
@@ -204,6 +223,7 @@ export class Room {
   spills = new Map<number, Spill>();
   bench: Benched[] = [];
   results: Results = { round: 0, entrants: [], fallen: [], winner: 0 };
+  duelAfter = 0;
   private readonly base: StepFn;
   /** The StepFn for each FIELD_* combination a team has. */
   private readonly fields: StepFn[] = [];
@@ -225,13 +245,14 @@ export class Room {
   }
 
   state(): RoomState {
-    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...(this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}), ...(this.epoch ? { epoch: this.epoch } : {}) };
+    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...(this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}), ...(this.epoch ? { epoch: this.epoch } : {}), ...(this.duelAfter ? { duelAfter: this.duelAfter } : {}) };
   }
 
   load(s: RoomState): void {
     this.tick = s.tick;
     this.ringPhase = s.ringPhase ?? RING_PHASE;
     this.epoch = s.epoch ?? 0;
+    this.duelAfter = s.duelAfter ?? 0;
     this.actors = structuredClone(s.actors);
     this.taken = new Map(s.taken);
     this.picked = new Map(s.picked ?? []);
@@ -248,6 +269,14 @@ export class Room {
     if (cmd.c === 'field') {
       const a = this.actor(cmd.id);
       if (a && !a.bot) a.field = cmd.bits & 7;
+    } else if (cmd.c === 'bots') {
+      const a = this.actor(cmd.a), b = this.actor(cmd.b);
+      if (!a || !b || !a.bot || !b.bot || a.foe !== b.id || b.foe !== a.id || a.judge !== cmd.id || !a.battling) return;
+      this.part(a);
+      this.part(b);
+      const won = cmd.winner === a.id ? a : cmd.winner === b.id ? b : undefined;
+      const lost = won === a ? b : won === b ? a : undefined;
+      if (won && lost && !lost.beaten) { lost.beaten = true; this.fall(lost, won.name); }
     } else if (cmd.c === 'lock') {
       this.results.entrants = this.actors.map((a) => [a.id, a.name]);
     } else if (cmd.c === 'join') {
@@ -275,6 +304,8 @@ export class Room {
       // ROM wins it, BrNetlink_PeerOut) and says so.
       const foe = a?.foe ? this.actor(a.foe) : undefined;
       if (foe?.bot) foe.battling = false;
+      // Bots whose fight their page was running: no answer is coming, they walk on.
+      for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
       if (cmd.c === 'leave') this.bench = this.bench.filter((b) => b.id !== cmd.id);
       if (!a || a.bot) return;
@@ -479,7 +510,57 @@ export class Room {
       else for (const bits of ins?.get(a.id) ?? []) this.move(a, bits, events);
     }
     this.engage(events);
+    for (const a of this.actors) if (a.judge && this.tick - (a.since ?? 0) > BOT_DUEL_MAX) this.part(a);
+    this.engageBots(events);
     return events;
+  }
+
+  /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
+  private part(a: Actor): void {
+    a.battling = false;
+    a.foe = a.judge = a.since = 0;
+    a.calm = this.tick + GRACE;
+  }
+
+  /** Two bots on one map in each other's eyeline fight (POK-238), one pair at a time
+   *  room-wide (BOT_DUEL_GAP). A bot has no ROM, so a trainer's page fights it in a
+   *  hidden one: the trainers take turns at it, by the frame. Nobody on the map to do it,
+   *  nobody fights. */
+  private engageBots(events: RoomEvent[]): void {
+    if (this.tick < this.duelAfter || this.tick % 8) return;
+    const judges = this.actors.filter((a) => !a.bot);
+    if (!judges.length) return;
+    const byMap = new Map<string, Actor[]>();
+    for (const a of this.actors) {
+      if (!a.bot || a.beaten || a.battling || a.m.action || this.tick < a.calm) continue;
+      const l = byMap.get(a.m.spot.map) ?? [];
+      l.push(a);
+      byMap.set(a.m.spot.map, l);
+    }
+    const look = (o: Actor) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing as Facing });
+    for (const id of [...byMap.keys()].sort()) {
+      const l = byMap.get(id)!;
+      for (let i = 0; i < l.length; i++) {
+        for (let j = i + 1; j < l.length; j++) {
+          const a = l[i], b = l[j];
+          if (!eitherSees(this.world, look(a), look(b))) continue;
+          const dx = b.m.spot.x - a.m.spot.x, dy = b.m.spot.y - a.m.spot.y;
+          const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+          a.m.facing = a.m.moveDir = toB;
+          b.m.facing = b.m.moveDir = BACK[toB];
+          const judge = judges[(this.tick >>> 3) % judges.length];
+          a.battling = b.battling = true;
+          a.foe = b.id;
+          b.foe = a.id;
+          a.judge = b.judge = judge.id;
+          a.since = b.since = this.tick;
+          a.keys = a.last = b.keys = b.last = 0;
+          this.duelAfter = this.tick + BOT_DUEL_GAP;
+          events.push({ type: 'bots', tick: this.tick, id: judge.id, a: a.id, b: b.id });
+          return;
+        }
+      }
+    }
   }
 
   /** `a` is out of this round's match (once; nothing after the win). */
@@ -518,7 +599,8 @@ export class Room {
     });
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
-    for (const a of this.actors) if (a.bot) a.beaten = false;
+    for (const a of this.actors) if (a.bot) { a.beaten = false; if (a.judge) this.part(a); }
+    this.duelAfter = 0;
     this.taken.clear();
     this.picked.clear();
     this.spills.clear();
@@ -672,13 +754,13 @@ export class Room {
       mix(m.facing); mix(m.moveDir); mix(m.runningState); mix(m.run ? 1 : 0); mix(m.strides);
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
-      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last);
+      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0);
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
     for (const [k, by] of this.picked) { mix(k); mix(by); }
     for (const b of this.bench) { mix(b.id); mix(b.skin); str(b.name); }
     const r = this.results;
-    mix(r.round); mix(r.winner); mix(r.wonAt ?? 0); mix(this.epoch);
+    mix(r.round); mix(r.winner); mix(r.wonAt ?? 0); mix(this.epoch); mix(this.duelAfter);
     for (const [id] of r.entrants) mix(id);
     for (const f of r.fallen) { mix(f.id); str(f.by); mix((f.wild ? 1 : 0) | (f.left ? 2 : 0)); }
     for (const b of this.spills.values()) {

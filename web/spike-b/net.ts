@@ -31,6 +31,8 @@ export interface WorldLink {
   end(fled?: boolean, won?: boolean): void;
   /** What my team could do on the field now (FIELD_*). */
   field(bits: number): void;
+  /** The bots the room gave me to fight: `winner` won (0, no answer). */
+  bots(a: number, b: number, winner: number): void;
   /** The ball `key` would not go in my bag: put it back. */
   drop(key: number, rest?: Bag): void;
   /** My team is down: off the map. `by` who beat me, `wild` a wild POKeMON did. */
@@ -61,6 +63,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     mine: () => host.room.actor(me),
     end: (fled, won) => host.end(me, fled, won),
     field: (bits) => host.field(me, bits),
+    bots: (a, b, winner) => host.bots(me, a, b, winner),
     drop: (key, rest) => host.drop(me, key, rest),
     out: (bag, by, wild) => host.out(me, bag, by, wild),
     bt: () => undefined,
@@ -186,6 +189,8 @@ class Online implements WorldLink {
 
   end(fled = false, won = false): void { this.send({ t: 'end', ...(fled ? { fled } : {}), ...(won ? { won } : {}) }); }
   field(bits: number): void { this.send({ t: 'field', bits }); }
+
+  bots(a: number, b: number, winner: number): void { this.send({ t: 'bots', a, b, w: winner }); }
 
   drop(key: number, rest?: Bag): void { this.send({ t: 'drop', k: key, rest }); }
 

@@ -283,6 +283,42 @@ describe('trainer against trainer', () => {
     for (let i = 0; i < 300; i++) expect(room.step(new Map())).toEqual([]); // fled: apart a while
   });
 
+  it('two bots that see each other fight on a trainer\'s page; the loser is out, no answer and both walk on', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 1, bot: true, name: 'ONE', skin: 4, spot: { map: L, x: 9, y: 12 }, facing: 4 });
+    room.apply({ c: 'join', id: 2, bot: true, name: 'TWO', skin: 5, spot: { map: L, x: 11, y: 12 }, facing: 3 });
+    // Nobody to fight it out: no fight.
+    for (let i = 0; i < 400; i++) expect(room.step(new Map())).toEqual([]);
+    room.apply({ c: 'join', id: 7, bot: false, name: 'A', skin: 0, spot: { map: L, x: 3, y: 3 }, facing: 1 });
+    const events: ReturnType<typeof room.step> = [];
+    for (let i = 0; i < 20 && !events.length; i++) events.push(...room.step(new Map()));
+    expect(events).toMatchObject([{ type: 'bots', id: 7, a: 1, b: 2 }]);
+    const one = room.actor(1)!, two = room.actor(2)!;
+    expect([one.battling, two.battling, one.foe, two.foe]).toEqual([true, true, 2, 1]);
+    // Somebody else's answer, or one for another pair, is no answer.
+    room.apply({ c: 'bots', id: 3, a: 1, b: 2, winner: 1 });
+    room.apply({ c: 'bots', id: 7, a: 2, b: 5, winner: 2 });
+    expect(one.battling).toBe(true);
+    room.apply({ c: 'lock' });
+    room.apply({ c: 'bots', id: 7, a: 1, b: 2, winner: 2 });
+    expect([one.battling, one.beaten, two.battling, two.beaten]).toEqual([false, true, false, false]);
+    expect(room.results.fallen).toMatchObject([{ id: 1, by: 'TWO' }]);
+  });
+
+  it('one bot fight at a time, room-wide; the page that ran it leaving lets them go', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 7, bot: false, name: 'A', skin: 0, spot: { map: L, x: 3, y: 3 }, facing: 1 });
+    room.apply({ c: 'join', id: 1, bot: true, name: 'ONE', skin: 4, spot: { map: L, x: 9, y: 12 }, facing: 4 });
+    room.apply({ c: 'join', id: 2, bot: true, name: 'TWO', skin: 5, spot: { map: L, x: 11, y: 12 }, facing: 3 });
+    room.apply({ c: 'join', id: 3, bot: true, name: 'SIX', skin: 4, spot: { map: L, x: 9, y: 15 }, facing: 4 });
+    room.apply({ c: 'join', id: 4, bot: true, name: 'TEN', skin: 5, spot: { map: L, x: 11, y: 15 }, facing: 3 });
+    const events: ReturnType<typeof room.step> = [];
+    for (let i = 0; i < 400; i++) events.push(...room.step(new Map()).filter((e) => e.type === 'bots'));
+    expect(events).toHaveLength(1);
+    room.apply({ c: 'leave', id: 7 });
+    expect(room.actors.filter((a) => a.battling)).toEqual([]);
+  });
+
   it('a fight that never got going, or was fled, keeps that pair apart ten seconds', () => {
     const room = makeRoom(MAPS, PATCHES, 99);
     room.apply({ c: 'join', id: 3, bot: false, name: 'A', skin: 0, spot: { map: L, x: 9, y: 12 }, facing: 4 });

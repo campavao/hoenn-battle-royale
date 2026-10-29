@@ -31,6 +31,7 @@ import { groundCount } from './shared/items';
 import { RomArt } from './romart';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
+import { makeJudge, type Judge } from './judge';
 import type { GbaKey } from '../src/emu';
 import spritesData from '../src/data/sprites.json';
 
@@ -219,6 +220,8 @@ document.getElementById('intro-go')!.addEventListener('click', () => document.ge
 const battleNote = document.getElementById('battle-note')!;
 const gbaCanvas = document.getElementById('gba') as HTMLCanvasElement;
 let rom: RomBattles | null = null;
+/** Bot-vs-bot fights the room gives this page, in a hidden second ROM (judge.ts). */
+let judge: Judge | null = null;
 let artMs = 0;
 let battle: { foe: Actor | null; shownAt: number; foeGone?: boolean; heardAt?: number; round: number; link: WorldLink } | null = null;
 /** The ROM has the screen for a dropped bag's team (rom.team). */
@@ -410,6 +413,7 @@ async function takeBag(key: number, bag: Bag, who: string): Promise<void> {
  *  it as the battle started, as BrPatch_Take does), or A at an item ball. */
 function startFor(e: RoomEvent): void {
   if (e.type === 'nurse') { void nurse(); return; }
+  if (e.type === 'bots') { void judgeBots(e.a, e.b); return; }
   if (e.type === 'item' || e.type === 'bag') {
     toGive.push(e.type === 'item' ? { key: e.key, item: e.item } : { key: e.key, bag: e.bag, name: e.name });
     giveNext();
@@ -454,6 +458,20 @@ function startFor(e: RoomEvent): void {
     const fog = inFogNow();
     handOff(null, (r, onStart) => r.wild(m.group, m.num, art!.behavior(m.group, m.num, e.x, e.y), onStart, fog));
   }
+}
+
+/** Two bots met and the room gave me their fight: both teams as the match deals them,
+ *  fought out in the hidden ROM, and the winner told to the room. No answer (no ROM, a
+ *  fight that would not end, a draw): 0, and both walk on. */
+async function judgeBots(ida: number, idb: number): Promise<void> {
+  const l = link, r = l.room;
+  const side = (id: number) => {
+    const b = r.actor(id);
+    return { seat: id, party: b ? dealParty(r.seed, id, r.ring().phase + 1, b.m.spot.map, gradeOf(r.seed, id)) : [] };
+  };
+  const a = side(ida), b = side(idb);
+  const out = judge ? await judge(a, b).catch(() => null) : null;
+  if (link === l) l.bots(ida, idb, out?.winner ?? 0);
 }
 
 /** Once a second, between battles: what my team could do on the field (SURF, CUT,
@@ -1240,6 +1258,7 @@ async function boot(): Promise<void> {
   }
   const t0 = performance.now();
   art = new RomArt(files.rom, files.sym);
+  judge = makeJudge(files);
   paint(placed.get('MAP_LITTLEROOT_TOWN')!);
   artMs = performance.now() - t0;
   // One Hoenn for everybody on the page: the relay's (?world=<ws url> for another

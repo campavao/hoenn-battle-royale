@@ -15,6 +15,8 @@ export type WorldUp =
   /** My battle is over (`fled`: it never got going, or was run from). */
   | { t: 'end'; fled?: boolean; won?: boolean }
   | { t: 'field'; bits: number }
+  /** The two bots the room gave me to fight (a `bots` event), and who won: 0, nobody. */
+  | { t: 'bots'; a: number; b: number; w: number }
   /** The ball or bag `k` would not go in my bag: put it back (a bag holding `rest`). */
   | { t: 'drop'; k: number; rest?: Bag }
   /** My team is down: take my trainer off the map, my bag where I stood; I keep watching.

@@ -1397,6 +1397,8 @@ var GRACE = 120;
 var LOCKOUT = 600;
 var JOIN_GRACE = 300;
 var BACK = { 1: 2, 2: 1, 3: 4, 4: 3 };
+var BOT_DUEL_GAP = 60 * 12;
+var BOT_DUEL_MAX = 60 * 120;
 var SPILL_KEY = 1 << 20;
 var GROUND_PER_MAP = 6;
 var REGROW = 60 * 90;
@@ -1432,17 +1434,19 @@ var Room = class {
   spills = /* @__PURE__ */ new Map();
   bench = [];
   results = { round: 0, entrants: [], fallen: [], winner: 0 };
+  duelAfter = 0;
   base;
   /** The StepFn for each FIELD_* combination a team has. */
   fields = [];
   dealt = null;
   state() {
-    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}, ...this.epoch ? { epoch: this.epoch } : {} };
+    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}, ...this.epoch ? { epoch: this.epoch } : {}, ...this.duelAfter ? { duelAfter: this.duelAfter } : {} };
   }
   load(s) {
     this.tick = s.tick;
     this.ringPhase = s.ringPhase ?? RING_PHASE;
     this.epoch = s.epoch ?? 0;
+    this.duelAfter = s.duelAfter ?? 0;
     this.actors = structuredClone(s.actors);
     this.taken = new Map(s.taken);
     this.picked = new Map(s.picked ?? []);
@@ -1457,6 +1461,17 @@ var Room = class {
     if (cmd.c === "field") {
       const a = this.actor(cmd.id);
       if (a && !a.bot) a.field = cmd.bits & 7;
+    } else if (cmd.c === "bots") {
+      const a = this.actor(cmd.a), b = this.actor(cmd.b);
+      if (!a || !b || !a.bot || !b.bot || a.foe !== b.id || b.foe !== a.id || a.judge !== cmd.id || !a.battling) return;
+      this.part(a);
+      this.part(b);
+      const won = cmd.winner === a.id ? a : cmd.winner === b.id ? b : void 0;
+      const lost = won === a ? b : won === b ? a : void 0;
+      if (won && lost && !lost.beaten) {
+        lost.beaten = true;
+        this.fall(lost, won.name);
+      }
     } else if (cmd.c === "lock") {
       this.results.entrants = this.actors.map((a) => [a.id, a.name]);
     } else if (cmd.c === "join") {
@@ -1481,6 +1496,7 @@ var Room = class {
       }
       const foe = a?.foe ? this.actor(a.foe) : void 0;
       if (foe?.bot) foe.battling = false;
+      for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
       if (cmd.c === "leave") this.bench = this.bench.filter((b) => b.id !== cmd.id);
       if (!a || a.bot) return;
@@ -1675,7 +1691,55 @@ var Room = class {
       else for (const bits of ins?.get(a.id) ?? []) this.move(a, bits, events);
     }
     this.engage(events);
+    for (const a of this.actors) if (a.judge && this.tick - (a.since ?? 0) > BOT_DUEL_MAX) this.part(a);
+    this.engageBots(events);
     return events;
+  }
+  /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
+  part(a) {
+    a.battling = false;
+    a.foe = a.judge = a.since = 0;
+    a.calm = this.tick + GRACE;
+  }
+  /** Two bots on one map in each other's eyeline fight (POK-238), one pair at a time
+   *  room-wide (BOT_DUEL_GAP). A bot has no ROM, so a trainer's page fights it in a
+   *  hidden one: the trainers take turns at it, by the frame. Nobody on the map to do it,
+   *  nobody fights. */
+  engageBots(events) {
+    if (this.tick < this.duelAfter || this.tick % 8) return;
+    const judges = this.actors.filter((a) => !a.bot);
+    if (!judges.length) return;
+    const byMap = /* @__PURE__ */ new Map();
+    for (const a of this.actors) {
+      if (!a.bot || a.beaten || a.battling || a.m.action || this.tick < a.calm) continue;
+      const l = byMap.get(a.m.spot.map) ?? [];
+      l.push(a);
+      byMap.set(a.m.spot.map, l);
+    }
+    const look = (o) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing });
+    for (const id of [...byMap.keys()].sort()) {
+      const l = byMap.get(id);
+      for (let i = 0; i < l.length; i++) {
+        for (let j = i + 1; j < l.length; j++) {
+          const a = l[i], b = l[j];
+          if (!eitherSees(this.world, look(a), look(b))) continue;
+          const dx = b.m.spot.x - a.m.spot.x, dy = b.m.spot.y - a.m.spot.y;
+          const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+          a.m.facing = a.m.moveDir = toB;
+          b.m.facing = b.m.moveDir = BACK[toB];
+          const judge = judges[(this.tick >>> 3) % judges.length];
+          a.battling = b.battling = true;
+          a.foe = b.id;
+          b.foe = a.id;
+          a.judge = b.judge = judge.id;
+          a.since = b.since = this.tick;
+          a.keys = a.last = b.keys = b.last = 0;
+          this.duelAfter = this.tick + BOT_DUEL_GAP;
+          events.push({ type: "bots", tick: this.tick, id: judge.id, a: a.id, b: b.id });
+          return;
+        }
+      }
+    }
   }
   /** `a` is out of this round's match (once; nothing after the win). */
   fall(a, by, how = {}) {
@@ -1710,7 +1774,11 @@ var Room = class {
     });
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
-    for (const a of this.actors) if (a.bot) a.beaten = false;
+    for (const a of this.actors) if (a.bot) {
+      a.beaten = false;
+      if (a.judge) this.part(a);
+    }
+    this.duelAfter = 0;
     this.taken.clear();
     this.picked.clear();
     this.spills.clear();
@@ -1880,6 +1948,8 @@ var Room = class {
       mix2(a.shunUntil);
       mix2(a.keys);
       mix2(a.last);
+      mix2(a.judge ?? 0);
+      mix2(a.since ?? 0);
     }
     for (const [k, t] of this.taken) {
       mix2(k);
@@ -1899,6 +1969,7 @@ var Room = class {
     mix2(r.winner);
     mix2(r.wonAt ?? 0);
     mix2(this.epoch);
+    mix2(this.duelAfter);
     for (const [id] of r.entrants) mix2(id);
     for (const f of r.fallen) {
       mix2(f.id);
@@ -2109,6 +2180,10 @@ var Host = class {
   field(id, bits) {
     if (this.players.has(id)) this.pending.push({ c: "field", id, bits: bits & 7 });
   }
+  /** The page fought two bots for the room (a `bots` event): who won, 0 for nobody. */
+  bots(id, a, b, winner) {
+    if (this.players.has(id)) this.pending.push({ c: "bots", id, a, b, winner });
+  }
   end(id, fled = false, won = false) {
     if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: "end", id, ...fled ? { fled: true } : {}, ...won ? { won: true } : {} });
   }
@@ -2279,6 +2354,8 @@ var WorldService = class {
           host.input(phone.id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
         } else if (m.t === "field") {
           if (Number.isInteger(m.bits)) host.field(phone.id, m.bits);
+        } else if (m.t === "bots") {
+          if ([m.a, m.b, m.w].every(Number.isInteger)) host.bots(phone.id, m.a, m.b, m.w);
         } else if (m.t === "end") {
           host.end(phone.id, m.fled === true, m.won === true);
         } else if (m.t === "out") {
