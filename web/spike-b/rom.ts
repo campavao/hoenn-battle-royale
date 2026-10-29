@@ -32,7 +32,14 @@ const OPTIONS_AT = 0x14;
 /** sizeof(struct BrTally) (include/br/br_tally.h). */
 const TALLY_LEN = 52;
 
-const BOOT_MAP_TESTMON = 0x81;
+/** br_boot.h's BR_BOOT_MAP with BR_BOOT_FLAG_SAFARIKIT: a fresh game with no POKeMON, as
+ *  a match starts, and the Safari's POKeBLOCKs for its battles. */
+const BOOT_MAP_SAFARIKIT = 0x11;
+/** EnterSafariMode's 30: what each round's opening throws from. */
+const SAFARI_BALLS = 30;
+/** SaveBlock1's POKeBLOCK case, 0x848 up to seen1 (0x988): the Safari battle's feed. */
+const BLOCKS_AT = 0x848;
+const BLOCKS_LEN = 0x988 - 0x848;
 const ME = 0;
 const FOE_SEAT = 31;
 /** Whose a dropped bag is on the hidden ROM: a seat nobody here sits in. */
@@ -56,6 +63,8 @@ const WILD_DONE = 3;
 const WILD_ASKED_SAFARI = 4;
 /** br_wild.h's BR_WILD_ASKED_TEACH: arm the teach for the item in `species`. */
 const WILD_ASKED_TEACH = 5;
+/** br_wild.h's BR_WILD_ASKED_PICK: the fly map as the drop's picker (br_pick.c). */
+const WILD_ASKED_PICK = 6;
 // gBattleOutcome.
 const LOST = 2;
 // include/br/br_ring.h: BR_FOG_TICK_FRAMES.
@@ -134,6 +143,8 @@ export interface RomBattles {
   setPhase(phase: number): void;
   /** The Safari opening (br_zone.c): wild battles draw any first stage while it runs. */
   setSafari(on: boolean): void;
+  /** ROYALe BALLs left to throw in this round's Safari (gNumSafariBalls, 30 a round). */
+  safariBalls(): number;
   /** I won: Emerald's Hall of Fame with my team, the live winner's parade (br_match.c's
    *  RESULT for our own seat). Resolves when it is over (or never came up). */
   fame(onStart: () => void): Promise<boolean>;
@@ -177,6 +188,10 @@ export interface RomBattles {
    *  screen until the row's own screen is up (`onStart`). Resolves back on the field, with
    *  whatever was used or moved kept. False when the row would not open. */
   menu(action: number, onStart: () => void, onEnd: () => void, look?: MapLook): Promise<boolean>;
+  /** The drop (br_pick.c): the fly map, "Drop where?", opened on `look`, every section a
+   *  choice, its own twenty seconds. The section chosen, or 0 when the clock ran out on
+   *  none. `onStart` when the map is up. */
+  drop(look: MapLook, onStart: () => void): Promise<number>;
   /** Somebody else's battle, replayed on this ROM as the match's spectator replays it
    *  (br_spectate.c: a BSTART, its TURNs, a RESULT to finish), the trainer watched near
    *  the camera. `onStart` when the replay is on screen. Resolves back on the field (or
@@ -290,10 +305,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   await emu.startBytes(rom);
   const box = new Mailbox(emu, sym('gBrMailbox'));
 
-  // Power-on, then the boot block: a fresh game in Littleroot (0,9) at 5,8 with a
-  // level 5 Treecko, name "YOU".
+  // Power-on, then the boot block: a fresh game in Littleroot (0,9) at 5,8, no POKeMON
+  // (a match's trainers catch their first in the Safari), name "YOU".
   await frames(emu, 30);
-  const boot = [BOOT_MAP_TESTMON, 0, 0, 9, 5, 0, 8, 0, ...gen3('YOU'), 0xff];
+  const boot = [BOOT_MAP_SAFARIKIT, 0, 0, 9, 5, 0, 8, 0, ...gen3('YOU'), 0xff];
   emu.bytes(box.base + MAILBOX.OFF_BOOT, boot.length).set(boot);
   await frames(emu, 400);
   const match = sym('gBrMatch');
@@ -301,6 +316,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   // The page's match seed: the national stand-ins on the routes are this match's
   // (BrZone_NationalOn), as the spots the page deals are (bots/patches.ts).
   emu.write(match + 8, seed >>> 0, 32);
+  emu.write(sym('gNumSafariBalls'), SAFARI_BALLS, 8);
   await frames(emu, 2);
   // Parked: every battle starts from here and comes back to it. Whatever a battle leaves
   // on the hidden field -- a whiteout's walk home, a story flag -- is undone, so the next
@@ -334,6 +350,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   const partyAt = sym('gPlayerParty');
   const countAt = sym('gPlayerPartyCount');
   const save1 = sym('gSaveBlock1Ptr');
+  const ballsAt = sym('gNumSafariBalls');
   const save2 = sym('gSaveBlock2Ptr');
   // gBattleMoves[move].pp, a move's PP before PP UPs. Its stride is found from POUND,
   // KARATE CHOP and DOUBLESLAP's 35, 25 and 10 rather than assumed.
@@ -357,6 +374,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       // The rung the party was lifted to, and the rod it holds for it (br_levels.c).
       levels: emu.bytes(levelsAt, 8).slice(),
       tally: Number.isNaN(tallyAt) ? new Uint8Array(TALLY_LEN) : emu.bytes(tallyAt, TALLY_LEN).slice(),
+      // The Safari's POKeBLOCKs and ROYALe BALLs, thrown down a round's opening.
+      blocks: emu.bytes(s1 + BLOCKS_AT, BLOCKS_LEN).slice(),
+      balls: emu.read(ballsAt, 8),
     };
   };
   const keep = (k: ReturnType<typeof kept>) => {
@@ -369,6 +389,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     emu.bytes(s1 + SEEN2_AT, SEEN_LEN).set(k.seen2);
     emu.bytes(levelsAt, 8).set(k.levels);
     if (!Number.isNaN(tallyAt)) emu.bytes(tallyAt, TALLY_LEN).set(k.tally);
+    emu.bytes(s1 + BLOCKS_AT, BLOCKS_LEN).set(k.blocks);
+    emu.write(ballsAt, k.balls, 8);
   };
   const send = (msg: Parameters<typeof packSlot>[0]) => {
     for (const s of packSlot(msg)) box.push(s.type, s.payload);
@@ -661,6 +683,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     },
     setPhase(p) { phase = Math.max(1, Math.min(255, p | 0)); },
     setSafari(on) { safari = on; },
+    safariBalls() { return (carried ?? start).balls; },
     fogNow() {
       if (fighting && !broken && emu.read(ringAt + 4, 8) !== 0xff) lay(true);
     },
@@ -828,6 +851,35 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         return up;
       });
     },
+    drop(look, onStart) {
+      return inTurn(async () => {
+        if (broken) return 0;
+        leaving = false;
+        lay();
+        lookFrom(look);
+        emu.resume();
+        drain(() => undefined);
+        let section = -1, ran = 0;
+        const pickAt = sym('gBrPick');
+        const watch = emu.onFrame(() => drain((m) => { if (m.t === 'pick') section = m.section; }));
+        emu.write(askAt, WILD_ASKED_PICK, 8);
+        const up = await until(emu, () => emu.read(askAt, 8) === WILD_FIGHTING && !onField(), 120);
+        if (up) {
+          onStart();
+          // Chosen, or the map's clock (BrPick.timer) ran out with the cursor on no place,
+          // which asks nothing: a second on, it is nobody's choice.
+          await until(emu, () => section >= 0 || leaving || (emu.read(pickAt + 8, 16) === 0 && ++ran > 60), 40 * 60);
+        }
+        watch();
+        emu.pause();
+        const now = kept();
+        if (!emu.restore(parked!)) broken = true;
+        else keep(now);
+        carried = last = now;
+        leaving = false;
+        return section > 0 ? section : 0;
+      });
+    },
     mirror(feed, onStart) {
       return inTurn(async () => {
         if (broken || !Number.isFinite(spectAt) || !Number.isFinite(seatAt)) return;
@@ -964,7 +1016,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       return inTurn(async () => {
         const k = carried ?? kept();
         const b64 = (u: Uint8Array) => btoa(String.fromCharCode(...u));
-        return JSON.stringify({ count: k.count, key: k.key, party: b64(k.party), bag: b64(k.bag), dex: b64(k.dex), seen1: b64(k.seen1), seen2: b64(k.seen2), levels: b64(k.levels), tally: b64(k.tally) });
+        return JSON.stringify({ count: k.count, key: k.key, party: b64(k.party), bag: b64(k.bag), dex: b64(k.dex), seen1: b64(k.seen1), seen2: b64(k.seen2), levels: b64(k.levels), tally: b64(k.tally), blocks: b64(k.blocks), balls: k.balls });
       });
     },
     load(text) {
@@ -982,6 +1034,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
             dex: un(j.dex, DEX2_LEN), seen1: un(j.seen1, SEEN_LEN), seen2: un(j.seen2, SEEN_LEN), levels: un(j.levels, 8),
             // A save from before the tally rode along: the counts start again.
             tally: typeof j.tally === 'string' ? un(j.tally, TALLY_LEN) : new Uint8Array(TALLY_LEN),
+            blocks: typeof j.blocks === 'string' ? un(j.blocks, BLOCKS_LEN) : start.blocks,
+            balls: typeof j.balls === 'number' ? j.balls & 0xff : start.balls,
           };
           keep(k);
           carried = last = k;

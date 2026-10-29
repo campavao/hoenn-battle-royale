@@ -370,7 +370,7 @@ static const struct Pokeblock sSafariBlocks[] =
     {PBLOCK_CLR_YELLOW, 0, 0, 0, 0, 20, 20},
 };
 
-static void GiveSafariBlocks(void)
+void BrMatch_GiveSafariBlocks(void)
 {
     u8 i;
 
@@ -382,7 +382,7 @@ static void GiveSafariBlocks(void)
 void BrMatch_BeginSafari(void)
 {
     EnterSafariMode();
-    GiveSafariBlocks();
+    BrMatch_GiveSafariBlocks();
     gBrMatch.phase = BR_PHASE_SAFARI;
     // The catch pool belongs to the opening, so it is dealt when the opening starts
     // rather than on the first encounter that asks (POK-255).

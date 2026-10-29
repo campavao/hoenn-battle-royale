@@ -85,6 +85,8 @@ u8 BrMatch_LeaveKind(void);
 bool8 BrMatch_InRound(void);
 // Enter the Safari opening on the current map (the boot warped us there).
 void BrMatch_BeginSafari(void);
+// The opening's POKeBLOCKs, in place of whatever the case held.
+void BrMatch_GiveSafariBlocks(void);
 // The opening is over for us: out of time, steps or balls. Empty party -> OUT,
 // else warp to our dealt spawn. Safe to call from a field step hook.
 void BrMatch_SafariOver(void);

@@ -14,7 +14,7 @@ import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
 import { over } from './over';
 import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, isTm, within } from './items';
-import { AFTER_WIN, FIELD_SURF, SAFARI, GROUND_PER_MAP, RING_PHASE, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, WALKUP_BANG, eventPiece, makeRoom } from './room';
+import { AFTER_WIN, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_PER_MAP, RING_PHASE, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, WALKUP_BANG, eventPiece, makeRoom } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -1014,7 +1014,7 @@ describe('marts', () => {
 });
 
 describe('the Safari opening', () => {
-  it('opens every round in the Zone with no fighting; the drop puts each where they asked, or anywhere', () => {
+  it('opens every round in the Zone with no fighting; the fly map drops each where they chose, or anywhere', () => {
     const room = makeRoom(MAPS, PATCHES, 11);
     room.ringPhase = room.opening = 600;
     const at = room.truck();
@@ -1022,8 +1022,9 @@ describe('the Safari opening', () => {
     expect(at.every((s) => s.map.startsWith(SAFARI))).toBe(true);
     room.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: at[0], facing: 1 });
     room.apply({ c: 'join', id: 2, bot: false, name: 'B', skin: 0, spot: at[1], facing: 1 });
-    room.apply({ c: 'pick', id: 1, map: 'MAP_FORTREE_CITY' });
+    room.apply({ c: 'join', id: 3, bot: false, name: 'C', skin: 0, spot: at[2], facing: 1 });
     room.apply({ c: 'pick', id: 2, map: 'MAP_SAFARI_ZONE_NORTH' }); // not a drop
+    expect(room.actor(2)!.m.spot.map.startsWith(SAFARI)).toBe(true);
     expect(room.ring().safari).toBe(true);
     // Side by side, looking at each other: no fight in the Zone.
     const [a, b] = [room.actor(1)!, room.actor(2)!];
@@ -1031,18 +1032,27 @@ describe('the Safari opening', () => {
     b.m = { ...b.m, spot: { ...a.m.spot, x: a.m.spot.x + 1 }, prev: { ...a.m.spot, x: a.m.spot.x + 1 }, facing: 3, moveDir: 3 };
     a.m.facing = a.m.moveDir = 4;
     let fights = 0;
-    for (let i = 0; i < 599; i++) fights += room.step(new Map()).filter((e) => e.type === 'fight' || e.type === 'duel').length;
-    expect(fights).toBe(0);
+    for (let i = 0; i < 300; i++) fights += room.step(new Map()).filter((e) => e.type === 'fight' || e.type === 'duel').length;
+    // Out of balls before the end: C's fly map comes up now, and drops C at once.
+    room.apply({ c: 'pick', id: 3, map: 'MAP_ROUTE101' });
+    expect(room.actor(3)!.m.spot.map).toBe('MAP_ROUTE101');
+    for (let i = 0; i < 299; i++) fights += room.step(new Map()).filter((e) => e.type === 'fight' || e.type === 'duel').length;
     expect(room.ring().safari).toBe(true);
     room.step(new Map());
     expect(room.ring().safari).toBeFalsy();
     expect(room.ring()).toMatchObject({ phase: 0, r: Infinity });
+    // The Safari is over, the fly map is up: everybody waits in the Zone, still not fighting.
+    for (let i = 0; i < 60; i++) fights += room.step(new Map()).filter((e) => e.type === 'fight' || e.type === 'duel').length;
+    expect(fights).toBe(0);
+    expect(a.m.spot.map.startsWith(SAFARI)).toBe(true);
+    room.apply({ c: 'pick', id: 1, map: 'MAP_FORTREE_CITY' });
     expect(a.m.spot.map).toBe('MAP_FORTREE_CITY');
+    // B never chose: dropped anywhere once the fly map's time is up.
+    for (let i = 0; i < PICK_WAIT - 62; i++) room.step(new Map());
+    expect(b.m.spot.map.startsWith(SAFARI)).toBe(true);
+    room.step(new Map());
+    room.step(new Map());
     expect(b.m.spot.map.startsWith(SAFARI)).toBe(false);
-    expect(a.pick).toBeUndefined();
-    // The fog closes a phase after the drop.
-    for (let i = 0; i < 600; i++) room.step(new Map());
-    expect(room.ring().phase).toBe(1);
   });
 });
 
