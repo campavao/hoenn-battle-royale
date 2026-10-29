@@ -23,6 +23,7 @@ import { startMenuTable } from '../src/touch';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 import { CATCH_UP_SPEED, spectatePace } from '../src/match/spectate';
 import type { SpMsg } from './shared/wire';
+import { readTally, type MatchTally } from '../src/match/tally';
 
 const BOOT_MAP_TESTMON = 0x81;
 const ME = 0;
@@ -132,6 +133,9 @@ export interface RomBattles {
   /** The fog's bite between battles (br_ring.c Bleed): a tenth of each mon's max HP, at
    *  least 1, a fainted one's status cleared. How many are still standing. */
   bleed(): Promise<number>;
+  /** gBrTally (POK-416): what the hidden battles have counted since boot, for MY STATS;
+   *  null for a build without it. */
+  tally(): MatchTally | null;
   /** The ring closed on the trainer in the middle of a battle: from the next turn's end
    *  that battle is fought in the fog. Nothing between battles. */
   fogNow(): void;
@@ -521,6 +525,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         send({ t: 'challenge', seat: FOE_SEAT, opponent: ME, nonce: 0 });
       }, () => emu.read(fightAt + 2, 8) === 1, () => emu.read(fightAt + 2, 8) === 0, onStart,
       () => ({ outcome: emu.read(outcomeAt, 8), species: 0, level: 0 })));
+    },
+    tally() {
+      const base = sym('gBrTally');
+      return Number.isNaN(base) ? null : readTally((a, bits) => emu.read(a, bits), base);
     },
     bleed() {
       return inTurn(async () => {

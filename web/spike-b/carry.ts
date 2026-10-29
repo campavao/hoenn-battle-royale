@@ -1,3 +1,5 @@
+import type { MatchTally } from '../src/match/tally';
+import type { addTotals } from '../src/match/career';
 import HMS from '../src/data/hms.json';
 import { MOVE_CUT, MOVE_STRENGTH, MOVE_SURF } from '../src/bots/party';
 
@@ -186,4 +188,17 @@ export function fieldOf(party: Uint8Array, count: number): number {
     if (moves.includes(MOVE_SURF) || has(HMS.surf, species)) bits |= 4;
   }
   return bits;
+}
+
+/** What a round added to MY STATS (career.ts's addTotals, POK-416): the hidden ROM's
+ *  gBrTally now less what it had when the round began (it counts from boot here, not
+ *  from a match's start), and the steps the page counted, since the ROM walks none. */
+export function tallySince(from: MatchTally | null, now: MatchTally | null, steps: number): Parameters<typeof addTotals>[1] {
+  const less = (a: Record<number, number>, b: Record<number, number> = {}) => {
+    const out: Record<number, number> = {};
+    for (const [id, n] of Object.entries(a)) { const d = n - (b[Number(id)] ?? 0); if (d > 0) out[Number(id)] = d; }
+    return out;
+  };
+  const d = (k: 'won' | 'caught' | 'items') => Math.max(0, (now?.[k] ?? 0) - (from?.[k] ?? 0));
+  return { won: d('won'), caught: d('caught'), items: d('items'), steps, trainers: 0, duelsWon: 0, took: 0, mons: now ? less(now.mons, from?.mons) : {}, moves: now ? less(now.moves, from?.moves) : {} };
 }

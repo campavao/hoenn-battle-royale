@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAG_AT, BAG_LEN, arrived, fieldOf, healed, rekey, spillOf, teamOf, withMoney } from './carry';
+import { BAG_AT, BAG_LEN, arrived, fieldOf, healed, rekey, spillOf, tallySince, teamOf, withMoney } from './carry';
 import HMS from '../src/data/hms.json';
 
 describe('rekey', () => {
@@ -155,5 +155,14 @@ describe('healed', () => {
     const out = healed(party, 1, () => 10);
     expect(out).not.toBe(party);
     expect([...out]).toEqual([...party]);
+  });
+});
+
+describe('tallySince', () => {
+  it("is the round's own counts: the ROM's since the round began, and the page's steps", () => {
+    const from = { steps: 0, won: 2, caught: 1, items: 0, mons: { 277: 5 }, moves: { 1: 5 } };
+    const now = { steps: 0, won: 5, caught: 1, items: 0, mons: { 277: 9, 280: 2 }, moves: { 1: 5, 33: 6 } };
+    expect(tallySince(from, now, 40)).toEqual({ won: 3, caught: 0, items: 0, steps: 40, trainers: 0, duelsWon: 0, took: 0, mons: { 277: 4, 280: 2 }, moves: { 33: 6 } });
+    expect(tallySince(null, null, 7)).toMatchObject({ won: 0, steps: 7, mons: {} });
   });
 });

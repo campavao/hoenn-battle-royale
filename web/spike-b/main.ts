@@ -28,6 +28,9 @@ import { connectWorld, soloLink, type WorldLink } from './net';
 import { over } from './shared/over';
 import { Lobby, me, type RoomInfo } from './lobby';
 import { recordMatch } from '../src/match/career';
+import type { MatchTally } from '../src/match/tally';
+import { tallySince } from './carry';
+import { moveInfo, type Rom as MoveTables } from '../src/battle/movebook';
 import { OUT_BATCH_MS, outs, won } from '../src/match/ticker';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { groundCount, isTm, tradedInto } from './shared/items';
@@ -923,7 +926,24 @@ function record(round: number): void {
   const i = res.fallen.findIndex((f) => f.id === link.me);
   // Placed by when I went out: the last out is second; never out, and nobody won, a tie for first.
   const placement = res.winner === link.me ? 1 : i >= 0 ? res.entrants.length - i : res.winner ? 2 : 1;
-  recordMatch(placement);
+  const now = rom?.tally() ?? null;
+  recordMatch(placement, localStorage, tallySince(tallyFrom, now, myStepsN));
+  tallyFrom = now;
+  myStepsN = 0;
+}
+
+/** The ROM's move table, for MY STATS' favourite move. */
+let romTables: MoveTables = { bytes: new Uint8Array(0), sym: () => undefined };
+
+/** MY STATS for the round I am in: the hidden ROM's tally as it began, and my steps. */
+let tallyFrom: MatchTally | null = null;
+let myStepsN = 0;
+let mySpotWas = '';
+function stepsFrame(): void {
+  const s = link.mine()?.m.spot;
+  const k = s ? `${s.map}:${s.x}:${s.y}` : '';
+  if (k && mySpotWas && k !== mySpotWas) myStepsN++;
+  mySpotWas = k;
 }
 
 /** A screen of the ROM's own the page shows (the Hall of Fame, a TM's party screen): it
@@ -1088,6 +1108,9 @@ function startMatch(l: WorldLink): void {
   isOut = waiting = shownWin = false;
   // Every match's rounds count from 0: what was told or recorded of the last one is not.
   seenRound = lastPhase = recordedRound = safariRound = pickAsked = hudRound = -1;
+  tallyFrom = rom?.tally() ?? null;
+  myStepsN = 0;
+  mySpotWas = '';
   wasSafari = false;
   ticks.length = 0;
   toldEvents = 0;
@@ -1907,6 +1930,7 @@ function loop(now: number): void {
     roundFrame();
     fieldFrame();
     soundFrame();
+    stepsFrame();
     doorsFrame();
     fogFrame();
     foeFrame();
@@ -1959,6 +1983,7 @@ async function boot(): Promise<void> {
   }
   const t0 = performance.now();
   art = new RomArt(files.rom, files.sym);
+  romTables = { bytes: files.rom, sym: (n) => { const a = files.sym(n); return Number.isNaN(a) ? undefined : a; } };
   judge = makeJudge(files);
   paint(placed.get('MAP_LITTLEROOT_TOWN')!);
   artMs = performance.now() - t0;
@@ -1997,6 +2022,7 @@ async function boot(): Promise<void> {
       join: (how) => sock.join(me().name, me().skin, how),
       start: () => sock.start(),
       leave: () => location.reload(),
+      names: { species: speciesName, move: (id) => moveInfo(romTables, id)?.name },
     });
     // Reloaded within a minute of a match: straight back in (or, too late, in to watch).
     const back = token();

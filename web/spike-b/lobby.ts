@@ -10,7 +10,10 @@ import { CODE_ENTRY, NAME_ENTRY, entryScreen, newEntry } from '../src/ui/entry';
 import { HOWTO_ROW, countdown, isRoomCode, playRows, type LobbyAction } from '../src/match/lobby';
 import { howToScreen } from '../src/ui/howto';
 import { howToRead, markHowToRead } from '../src/ui/howto-due';
-import { cleanName, loadCareer, saveProfile } from '../src/match/career';
+import { SKINS, cleanName, loadCareer, saveProfile, skinUnlocked } from '../src/match/career';
+import { LINES } from '../src/bots/lines';
+import { lookScreen, statsScreen, trainerScreen } from '../src/ui/profile';
+import type { TallyNames } from '../src/match/tally';
 import type { Member } from './shared/wire';
 
 /** The room as the relay last said it is (wire.ts's `room`). */
@@ -22,6 +25,8 @@ export interface LobbyHooks {
   start(): void;
   /** Out of the room, back to the menu. */
   leave(): void;
+  /** Species and move names for MY STATS: the player's ROM's. */
+  names: TallyNames;
 }
 
 /** Who I am, as the live game keeps it (career.ts): the name and sprite on the trainer card. */
@@ -89,7 +94,49 @@ export class Lobby {
     else if (a.kind === 'code') this.stage.push(this.codeEntry());
     else if (a.kind === 'name') this.stage.push(this.nameEntry());
     else if (a.kind === 'howto') this.stage.push(this.howTo);
+    else if (a.kind === 'skin' || a.kind === 'look') { this.browsed = null; this.stage.push(this.look); }
+    else if (a.kind === 'mystats') this.stage.push(this.myStats);
   }
+
+  /** The TRAINER CARD (the live game's, POK-335): name, sprite and record, and the two
+   *  rows the world has a use for, MY LOOK and MY STATS. */
+  private readonly trainer: DrawnScreen = trainerScreen(() => {
+    const c = loadCareer();
+    return {
+      face: { name: me().name || 'TRAINER', skin: me().skin, wins: c.wins, played: c.matches, best: c.best },
+      rows: [
+        { label: 'MY LOOK', detail: 'sprite and lines', id: 'trainer-look', onPress: () => this.press({ kind: 'look' }) },
+        { label: 'MY STATS', detail: 'every match so far', id: 'trainer-mystats', onPress: () => this.press({ kind: 'mystats' }) },
+      ],
+      note: '',
+      onName: () => this.press({ kind: 'name' }),
+      onSkin: () => this.press({ kind: 'skin' }),
+      onBack: () => this.stage.pop(),
+    };
+  });
+
+  /** The wardrobe strip being looked at: a locked one is looked at, not worn. */
+  private browsed: number | null = null;
+  private readonly look: DrawnScreen = lookScreen(() => {
+    const c = loadCareer();
+    return {
+      wins: c.wins,
+      worn: me().skin,
+      browsing: this.browsed ?? me().skin,
+      lines: LINES,
+      picked: { intro: c.intro ?? 0, win: c.win ?? 0, lose: c.lose ?? 0 },
+      onBrowse: (skin) => {
+        if (skinUnlocked(skin, loadCareer().wins)) saveProfile({ skin });
+        this.browsed = skin;
+        this.stage.redraw();
+      },
+      onLine: (slot, index) => { saveProfile({ [slot]: index }); this.stage.redraw(); },
+      onBack: () => { this.browsed = null; this.stage.pop(); },
+    };
+  });
+
+  /** MY STATS (POK-416): every match so far, off the career. */
+  private readonly myStats: DrawnScreen = statsScreen(() => ({ totals: loadCareer().totals, names: this.hooks.names, onBack: () => this.stage.pop() }));
 
   /** HOW TO PLAY's panels (ui/howto.ts), with the NEW on its tile until the last is read. */
   private readonly howTo: DrawnScreen = howToScreen(() => ({
@@ -110,7 +157,7 @@ export class Lobby {
     tiles: true,
     note: this.note,
     noteId: 'lobby-note',
-    trainer: { name: me().name || 'TRAINER', skin: me().skin, onPress: () => this.press({ kind: 'name' }) },
+    trainer: { name: me().name || 'TRAINER', skin: me().skin, onPress: () => this.stage.push(this.trainer) },
   }));
 
   private codeEntry(): DrawnScreen {
