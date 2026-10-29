@@ -3132,7 +3132,7 @@ function botSpawns(room, maps, count) {
     const n = out.length + 1;
     out.push({ name: SKIN_NAME[skin], skin, spot, facing, brain: { rng: n * 2654435761 >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
   };
-  for (const [x, y] of [[7, 12], [13, 13], [11, 16]]) add({ map: "MAP_LITTLEROOT_TOWN", x, y }, 1, botSkin(out.length * 7 + 1));
+  for (const [x, y] of [[7, 12], [13, 13], [11, 16]].slice(0, count)) add({ map: "MAP_LITTLEROOT_TOWN", x, y }, 1, botSkin(out.length * 7 + 1));
   for (let tries = 0; out.length < count && tries < 5e4; tries++) {
     const m = land[Math.floor(r() * land.length)];
     const x = Math.floor(r() * m.w), y = Math.floor(r() * m.h);
