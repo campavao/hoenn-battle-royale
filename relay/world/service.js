@@ -1721,6 +1721,16 @@ var Room = class {
     if (cmd.c === "field") {
       const a = this.actor(cmd.id);
       if (a && !a.bot) a.field = cmd.bits & 7;
+    } else if (cmd.c === "traded") {
+      const t = this.events.find((e) => e.n === cmd.n)?.trader;
+      if (!t || t.busy !== cmd.id) return;
+      t.busy = 0;
+      if (cmd.given > 0 && cmd.given < 412) t.species = cmd.given;
+      const a = this.actor(cmd.id);
+      if (a?.battling && !a.foe) {
+        a.battling = false;
+        a.calm = this.tick + GRACE;
+      }
     } else if (cmd.c === "bots") {
       const a = this.actor(cmd.a), b = this.actor(cmd.b);
       if (!a || !b || !a.bot || !b.bot || a.foe !== b.id || b.foe !== a.id || a.judge !== cmd.id || !a.battling) return;
@@ -1758,6 +1768,7 @@ var Room = class {
       if (foe?.bot) foe.battling = false;
       for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
       for (const [key, by] of this.picked) if (by === cmd.id && this.spills.get(key)?.legend) this.picked.delete(key);
+      for (const e of this.events) if (e.trader?.busy === cmd.id) e.trader.busy = 0;
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
       if (cmd.c === "leave") this.bench = this.bench.filter((b) => b.id !== cmd.id);
       if (!a || a.bot) return;
@@ -1992,17 +2003,20 @@ var Room = class {
     if (!from) return;
     const f = from;
     const d = (s) => Math.abs(s.x - f.x) + Math.abs(s.y - f.y);
-    const cells = all.filter((s) => s.map === f.map && d(s) <= 8 && d(s) !== 1).sort((p, q) => d(p) - d(q) || p.y - q.y || p.x - q.x).slice(0, 1 + EVENT_RARES + EVENT_GOLD + 1);
+    const cells = all.filter((s) => s.map === f.map && d(s) <= 8 && d(s) !== 1).sort((p, q) => d(p) - d(q) || p.y - q.y || p.x - q.x).slice(0, 1 + EVENT_RARES + EVENT_GOLD + 2);
     const level = rungForPhase(ring.phase + 1);
     const legends = LEGENDS[Math.min(n, LEGENDS.length - 1)];
     const species = [legends[Math.min(legends.length - 1, Math.floor(rng() * legends.length))], ...draw(rng, RARES, EVENT_RARES)];
     const bags = [...draw(rng, GOLD, EVENT_GOLD).map((id) => [{ id, n: 1 }]), SUPPLIES.map((r) => ({ ...r }))];
+    const spot = cells.length > species.length + bags.length ? cells.pop() : void 0;
+    const offers = RARES.filter((r) => !species.includes(r));
+    const trader = spot && offers.length ? { x: spot.x, y: spot.y, species: offers[Math.min(offers.length - 1, Math.floor(rng() * offers.length))], busy: 0 } : void 0;
     cells.forEach((c, i) => {
       const key = eventPiece(n, i);
       const bag = i < species.length ? { items: [], money: 0, mons: [{ species: species[i], level }] } : { items: bags[i - species.length], money: 0 };
       this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: "", bag, ...i === 0 ? { legend: true } : {} });
     });
-    this.events.push({ n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0] });
+    this.events.push({ n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0], ...trader ? { trader } : {} });
   }
   /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
   part(a) {
@@ -2180,7 +2194,13 @@ var Room = class {
         const g = this.groundAt(a.m.spot.map, x, y);
         const b = g ? void 0 : this.spillAt(a.m.spot.map, x, y);
         const foe = g || b ? void 0 : this.facing(a);
-        if (g) {
+        const tr = foe ? void 0 : this.traderAt(a.m.spot.map, x, y);
+        if (tr && !tr.t.busy) {
+          tr.t.busy = a.id;
+          a.battling = true;
+          events.push({ type: "trade", tick: this.tick, id: a.id, n: tr.n, species: tr.t.species });
+        } else if (tr) {
+        } else if (g) {
           this.picked.set(g.key, a.id);
           events.push({ type: "item", tick: this.tick, id: a.id, key: g.key, item: g.item });
         } else if (b?.legend) {
@@ -2205,6 +2225,11 @@ var Room = class {
       }
     } else if (!a.m.action) a.arriving = false;
     a.last = bits;
+  }
+  /** An event's trader standing on a cell. */
+  traderAt(map, x, y) {
+    for (const e of this.events) if (e.trader && e.map === map && e.trader.x === x && e.trader.y === y) return { n: e.n, t: e.trader };
+    return void 0;
   }
   onWater(a) {
     return this.world.cell(a.m.spot.map, a.m.spot.x, a.m.spot.y) === CLASS_WATER2;
@@ -2235,7 +2260,7 @@ var Room = class {
       if (!r || !this.maps.has(r.to.map)) return null;
       if (a.bot && !this.places.has(r.to.map)) return null;
       const t = r.to;
-      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y)) return null;
+      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y)) return null;
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return null;
       return r;
     };
@@ -2303,6 +2328,12 @@ var Room = class {
       mix2(e.x);
       mix2(e.y);
       mix2(e.species);
+      if (e.trader) {
+        mix2(e.trader.x);
+        mix2(e.trader.y);
+        mix2(e.trader.species);
+        mix2(e.trader.busy);
+      }
     }
     for (const [id] of r.entrants) mix2(id);
     for (const f of r.fallen) {
@@ -2598,6 +2629,10 @@ var Host = class {
   bots(id, a, b, winner) {
     if (this.players.has(id)) this.pending.push({ c: "bots", id, a, b, winner });
   }
+  /** The page's trade with event `n`'s trader is done: it gave him `given` (0, none). */
+  traded(id, n, given) {
+    if (this.players.has(id)) this.pending.push({ c: "traded", id, n, given });
+  }
   end(id, fled = false, won = false) {
     if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: "end", id, ...fled ? { fled: true } : {}, ...won ? { won: true } : {} });
   }
@@ -2768,6 +2803,8 @@ var WorldService = class {
           host.input(phone.id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
         } else if (m.t === "field") {
           if (Number.isInteger(m.bits)) host.field(phone.id, m.bits);
+        } else if (m.t === "traded") {
+          if (Number.isInteger(m.n) && Number.isInteger(m.sp)) host.traded(phone.id, m.n, m.sp);
         } else if (m.t === "bots") {
           if ([m.a, m.b, m.w].every(Number.isInteger)) host.bots(phone.id, m.a, m.b, m.w);
         } else if (m.t === "end") {

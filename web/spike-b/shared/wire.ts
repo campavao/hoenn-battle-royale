@@ -17,6 +17,8 @@ export type WorldUp =
   | { t: 'field'; bits: number }
   /** The two bots the room gave me to fight (a `bots` event), and who won: 0, nobody. */
   | { t: 'bots'; a: number; b: number; w: number }
+  /** My trade with event `n`'s trader is over: I gave him `sp` (0, nothing). */
+  | { t: 'traded'; n: number; sp: number }
   /** The ball or bag `k` would not go in my bag: put it back (a bag holding `rest`). */
   | { t: 'drop'; k: number; rest?: Bag }
   /** My team is down: take my trainer off the map, my bag where I stood; I keep watching.

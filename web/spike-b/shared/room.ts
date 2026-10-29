@@ -98,6 +98,8 @@ export type RoomEvent =
   | { type: 'nurse'; tick: number; id: number; map: string }
   /** A at an event's legendary: its battle (the room took it off the ground). */
   | { type: 'legend'; tick: number; id: number; key: number; species: number; level: number }
+  /** A at an event's trader: his offer, for one of mine (`traded` says which). */
+  | { type: 'trade'; tick: number; id: number; n: number; species: number }
   /** A at a MART's clerk. */
   | { type: 'mart'; tick: number; id: number; map: string }
   /** Two bots saw each other: `id`'s page fights `a` against `b` in a hidden ROM and
@@ -114,7 +116,12 @@ export interface Spill { key: number; map: string; x: number; y: number; name: s
 
 /** An event this round (events.ts, DESIGN §Events): its number, where its legendary
  *  stands (its key), and which one. */
-export interface EventMark { n: number; key: number; map: string; x: number; y: number; species: number }
+export interface EventMark { n: number; key: number; map: string; x: number; y: number; species: number; trader?: Trader }
+
+/** An event's trader (br_event.c): where he stands, the rare he offers for any one of
+ *  yours, and who is trading with him now (0 for nobody). He keeps what he is given and
+ *  offers that next (Cam's 2026-10-19 play-test, #9). */
+export interface Trader { x: number; y: number; species: number; busy: number }
 
 /** Event pieces' keys: clear of the dealt balls' and the trainers' (SPILL_KEY + id). */
 export const EVENT_SPILL = 2 << 20;
@@ -172,7 +179,9 @@ export type Command =
   | { c: 'field'; id: number; bits: number }
   /** `id`'s page fought bots `a` and `b` (a `bots` event): `winner` beat the other, or
    *  0 for no answer (its ROM could not), and both walk on. */
-  | { c: 'bots'; id: number; a: number; b: number; winner: number };
+  | { c: 'bots'; id: number; a: number; b: number; winner: number }
+  /** `id` traded event `n`'s trader the species `given` (0: thought better of it). */
+  | { c: 'traded'; id: number; n: number; given: number };
 
 /** The marked spots grow back: the ring's phase does it in the game; here, a while. */
 export const REGROW = 60 * 90;
@@ -294,6 +303,13 @@ export class Room {
     if (cmd.c === 'field') {
       const a = this.actor(cmd.id);
       if (a && !a.bot) a.field = cmd.bits & 7;
+    } else if (cmd.c === 'traded') {
+      const t = this.events.find((e) => e.n === cmd.n)?.trader;
+      if (!t || t.busy !== cmd.id) return;
+      t.busy = 0;
+      if (cmd.given > 0 && cmd.given < 412) t.species = cmd.given;
+      const a = this.actor(cmd.id);
+      if (a?.battling && !a.foe) { a.battling = false; a.calm = this.tick + GRACE; }
     } else if (cmd.c === 'bots') {
       const a = this.actor(cmd.a), b = this.actor(cmd.b);
       if (!a || !b || !a.bot || !b.bot || a.foe !== b.id || b.foe !== a.id || a.judge !== cmd.id || !a.battling) return;
@@ -333,6 +349,7 @@ export class Room {
       for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
       // A legendary they were fighting stands again (Cam: they go back for retries).
       for (const [key, by] of this.picked) if (by === cmd.id && this.spills.get(key)?.legend) this.picked.delete(key);
+      for (const e of this.events) if (e.trader?.busy === cmd.id) e.trader.busy = 0;
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
       if (cmd.c === 'leave') this.bench = this.bench.filter((b) => b.id !== cmd.id);
       if (!a || a.bot) return;
@@ -569,17 +586,21 @@ export class Room {
     const d = (s: Spot) => Math.abs(s.x - f.x) + Math.abs(s.y - f.y);
     // Within eight, never on the legendary's four sides (events.ts's clusterCells).
     const cells = all.filter((s) => s.map === f.map && d(s) <= 8 && d(s) !== 1)
-      .sort((p, q) => d(p) - d(q) || p.y - q.y || p.x - q.x).slice(0, 1 + EVENT_RARES + EVENT_GOLD + 1);
+      .sort((p, q) => d(p) - d(q) || p.y - q.y || p.x - q.x).slice(0, 1 + EVENT_RARES + EVENT_GOLD + 2);
     const level = rungForPhase(ring.phase + 1);
     const legends = LEGENDS[Math.min(n, LEGENDS.length - 1)];
     const species = [legends[Math.min(legends.length - 1, Math.floor(rng() * legends.length))], ...draw(rng, RARES, EVENT_RARES)];
     const bags = [...draw(rng, GOLD, EVENT_GOLD).map((id) => [{ id, n: 1 }]), SUPPLIES.map((r) => ({ ...r }))];
+    // The cell past the pieces is the trader's, with a rare the event did not drop.
+    const spot = cells.length > species.length + bags.length ? cells.pop()! : undefined;
+    const offers = RARES.filter((r) => !species.includes(r));
+    const trader = spot && offers.length ? { x: spot.x, y: spot.y, species: offers[Math.min(offers.length - 1, Math.floor(rng() * offers.length))], busy: 0 } : undefined;
     cells.forEach((c, i) => {
       const key = eventPiece(n, i);
       const bag: Bag = i < species.length ? { items: [], money: 0, mons: [{ species: species[i], level }] } : { items: bags[i - species.length], money: 0 };
       this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: '', bag, ...(i === 0 ? { legend: true } : {}) });
     });
-    this.events.push({ n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0] });
+    this.events.push({ n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0], ...(trader ? { trader } : {}) });
   }
 
   /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
@@ -762,7 +783,14 @@ export class Room {
         const g = this.groundAt(a.m.spot.map, x, y);
         const b = g ? undefined : this.spillAt(a.m.spot.map, x, y);
         const foe = g || b ? undefined : this.facing(a);
-        if (g) {
+        const tr = foe ? undefined : this.traderAt(a.m.spot.map, x, y);
+        if (tr && !tr.t.busy) {
+          tr.t.busy = a.id;
+          a.battling = true;
+          events.push({ type: 'trade', tick: this.tick, id: a.id, n: tr.n, species: tr.t.species });
+        } else if (tr) {
+          // Somebody is trading with him: nothing.
+        } else if (g) {
           this.picked.set(g.key, a.id);
           events.push({ type: 'item', tick: this.tick, id: a.id, key: g.key, item: g.item });
         } else if (b?.legend) {
@@ -788,6 +816,12 @@ export class Room {
       }
     } else if (!a.m.action) a.arriving = false;
     a.last = bits;
+  }
+
+  /** An event's trader standing on a cell. */
+  traderAt(map: string, x: number, y: number): { n: number; t: Trader } | undefined {
+    for (const e of this.events) if (e.trader && e.map === map && e.trader.x === x && e.trader.y === y) return { n: e.n, t: e.trader };
+    return undefined;
   }
 
   private onWater(a: Actor): boolean {
@@ -826,7 +860,7 @@ export class Room {
       // A townsperson stays out in the street.
       if (a.bot && !this.places.has(r.to.map)) return null;
       const t = r.to;
-      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y)) return null;
+      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y)) return null;
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return null;
       return r;
     };
@@ -850,7 +884,7 @@ export class Room {
     for (const b of this.bench) { mix(b.id); mix(b.skin); str(b.name); }
     const r = this.results;
     mix(r.round); mix(r.winner); mix(r.wonAt ?? 0); mix(this.epoch); mix(this.duelAfter);
-    for (const e of this.events) { mix(e.key); mix(e.x); mix(e.y); mix(e.species); }
+    for (const e of this.events) { mix(e.key); mix(e.x); mix(e.y); mix(e.species); if (e.trader) { mix(e.trader.x); mix(e.trader.y); mix(e.trader.species); mix(e.trader.busy); } }
     for (const [id] of r.entrants) mix(id);
     for (const f of r.fallen) { mix(f.id); str(f.by); mix((f.wild ? 1 : 0) | (f.left ? 2 : 0)); }
     for (const b of this.spills.values()) {

@@ -35,6 +35,7 @@ import { makeJudge, type Judge } from './judge';
 import { CLERKS, priceOf, shelf } from './shared/marts';
 import type { GbaKey } from '../src/emu';
 import spritesData from '../src/data/sprites.json';
+import encounterData from '../src/data/encounters.json';
 
 const TILE = 16;
 // include/constants/event_objects.h.
@@ -42,6 +43,7 @@ const OBJ_EVENT_GFX_ITEM_BALL = 59;
 const OBJ_EVENT_GFX_NURSE = 58;
 const OBJ_EVENT_GFX_WOMAN_3 = 24;
 const OBJ_EVENT_GFX_MART_EMPLOYEE = 83;
+const OBJ_EVENT_GFX_GENTLEMAN = 48;
 const OBJ_EVENT_GFX_BRENDAN_SURFING = 2, OBJ_EVENT_GFX_MAY_SURFING = 92;
 const OBJ_EVENT_GFX_CUTTABLE_TREE = 82, OBJ_EVENT_GFX_PUSHABLE_BOULDER = 87;
 // export-world.py's classes for them.
@@ -418,6 +420,7 @@ async function takeBag(key: number, bag: Bag, who: string): Promise<void> {
 function startFor(e: RoomEvent): void {
   if (e.type === 'nurse') { void nurse(); return; }
   if (e.type === 'mart') { void mart(e.map); return; }
+  if (e.type === 'trade') { void trade(e.n, e.species); return; }
   if (e.type === 'legend') {
     // Its own battle; caught, it is mine, and anything else puts it back where it stood
     // for the next trainer (Cam: losing to one puts you out, and it goes back for retries).
@@ -514,6 +517,35 @@ async function nurse(): Promise<void> {
   say('Done. Your POKéMON are fully healed.');
 }
 
+/** An event's trader (br_event.c): his offer, and if yes, the party menu on the ROM's
+ *  screen to pick which one he gets. He keeps it and offers it next. */
+async function trade(n: number, species: number): Promise<void> {
+  const l = link;
+  let given = 0;
+  try {
+    if (!rom || isOut || battle || swapping) return;
+    if (swapping) rom.leave();
+    asking?.done('');
+    const name = speciesName(species);
+    const c = await ask(`I'll trade you my ${name} for one of yours. Which one?`, [['CHOOSE', 'y'], ['NO, THANKS', '']]);
+    if (c !== 'y' || !rom || isOut) return;
+    swapping = true;
+    held.clear();
+    try {
+      given = await rom.trade(species, () => battleEl.classList.add('on'));
+    } finally {
+      swapping = false;
+      battleEl.classList.remove('on');
+      held.clear();
+      pressed.clear();
+      calmUntil = frame + 30;
+    }
+    if (given) say(`Traded for ${name}!`);
+  } finally {
+    if (link === l) l.traded(n, given);
+  }
+}
+
 /** A MART's clerk (pokemart.inc): the shelf at this rung, or the LILYCOVE DEPARTMENT
  *  STORE's, priced as a match prices it; a row, how many, and into the bag the ROM's own
  *  way. Closed in the fog, as the CENTER is. */
@@ -595,7 +627,8 @@ let fogTimer = 0;
 let lastPhase = -1;
 /** The room's events I have told of. */
 let toldEvents = 0;
-const LEGEND_NAMES: Record<number, string> = { 401: 'REGIROCK', 402: 'REGICE', 403: 'REGISTEEL', 404: 'KYOGRE', 405: 'GROUDON', 406: 'RAYQUAZA', 407: 'LATIAS', 408: 'LATIOS' };
+const NAMES = (encounterData as { names: Record<string, string> }).names;
+const speciesName = (id: number) => NAMES[id] ?? 'POKéMON';
 let wasInFog = false;
 /** br_ring.h: BR_FOG_TICK_FRAMES, a bite every four seconds. */
 const FOG_TICK = 240;
@@ -786,7 +819,7 @@ function fogFrame(): void {
     // An event dropped with the ring (DESIGN §Events): the ticker says what and where.
     const evs = link.room.events;
     if (toldEvents > evs.length) toldEvents = 0;
-    for (const e of evs.slice(toldEvents)) foundEl.textContent += ` A LEGENDARY ${LEGEND_NAMES[e.species] ?? 'POKéMON'} appeared ${ringMap?.placeOf(e.map) ? `at ${ringMap.placeOf(e.map)}` : 'nearby'}!`;
+    for (const e of evs.slice(toldEvents)) foundEl.textContent += ` A LEGENDARY ${speciesName(e.species)} appeared ${ringMap?.placeOf(e.map) ? `at ${ringMap.placeOf(e.map)}` : 'nearby'}!`;
     if (evs.length > toldEvents) { foundEl.classList.add('on'); foundUntil = performance.now() + 5000; }
     toldEvents = evs.length;
     lastPhase = ring.phase;
@@ -1104,6 +1137,15 @@ function drawNurses(visible: Placed[]): void {
 const clerkArt = new Map<number, HTMLCanvasElement>();
 function drawClerks(visible: Placed[]): void {
   if (!art) return;
+  // Events' traders, facing down (br_event.c's GENTLEMAN).
+  for (const e of link.room.events) {
+    const p = e.trader && placed.get(e.map);
+    if (!p || !visible.includes(p)) continue;
+    let img = clerkArt.get(OBJ_EVENT_GFX_GENTLEMAN);
+    if (!img) clerkArt.set(OBJ_EVENT_GFX_GENTLEMAN, (img = art.sprite(OBJ_EVENT_GFX_GENTLEMAN, 3)));
+    const w = img.width / 3;
+    ctx.drawImage(img, 0, 0, w, img.height, (p.gx + e.trader!.x) * TILE + (TILE - w) / 2, (p.gy + e.trader!.y) * TILE + TILE - img.height, w, img.height);
+  }
   for (const p of visible) {
     for (const c of CLERKS) {
       if (c.map !== p.m.id) continue;

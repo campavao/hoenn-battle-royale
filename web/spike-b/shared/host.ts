@@ -117,6 +117,11 @@ export class Host {
     if (this.players.has(id)) this.pending.push({ c: 'bots', id, a, b, winner });
   }
 
+  /** The page's trade with event `n`'s trader is done: it gave him `given` (0, none). */
+  traded(id: number, n: number, given: number): void {
+    if (this.players.has(id)) this.pending.push({ c: 'traded', id, n, given });
+  }
+
   end(id: number, fled = false, won = false): void {
     if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: 'end', id, ...(fled ? { fled: true } : {}), ...(won ? { won: true } : {}) });
   }

@@ -751,6 +751,34 @@ describe('events', () => {
   });
 });
 
+describe('event traders', () => {
+  it('stand past the pieces with a rare the event did not drop; one trade at a time; he keeps what he is given', () => {
+    const room = makeRoom(MAPS, PATCHES, 5);
+    room.ringPhase = 60;
+    room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 }, facing: 1 });
+    room.apply({ c: 'join', id: 3, bot: false, name: 'B', skin: 0, spot: { map: 'MAP_LITTLEROOT_TOWN', x: 11, y: 10 }, facing: 1 });
+    for (let i = 0; i < 60; i++) room.step(new Map());
+    const e = room.events[0];
+    const t = e.trader!;
+    expect(t).toBeDefined();
+    const dropped = [...room.spills.values()].flatMap((b) => b.bag.mons ?? []).map((m) => m.species);
+    expect(dropped).not.toContain(t.species);
+    expect(room.spillAt(e.map, t.x, t.y)).toBeUndefined();
+    const put = (id: number, dy: number) => { const a = room.actor(id)!; a.calm = 1e9; a.m = { ...a.m, spot: { map: e.map, x: t.x, y: t.y + dy }, prev: { map: e.map, x: t.x, y: t.y + dy }, facing: dy > 0 ? 2 : 1, moveDir: dy > 0 ? 2 : 1, action: null }; };
+    put(2, 1);
+    put(3, -1);
+    expect(room.step(new Map([[2, [KEY_A]], [3, [KEY_A]]]))).toMatchObject([{ type: 'trade', id: 2, n: 0, species: t.species }]);
+    room.apply({ c: 'traded', id: 3, n: 0, given: 25 }); // not his to say
+    expect(t.busy).toBe(2);
+    room.apply({ c: 'traded', id: 2, n: 0, given: 277 });
+    expect([t.busy, t.species, room.actor(2)!.battling]).toEqual([0, 277, false]);
+    room.step(new Map([[3, [0]]]));
+    expect(room.step(new Map([[3, [KEY_A]]]))).toMatchObject([{ type: 'trade', id: 3, species: 277 }]);
+    room.apply({ c: 'leave', id: 3 });
+    expect(t.busy).toBe(0);
+  });
+});
+
 describe('marts', () => {
   it('A at a clerk, or across the counter at one, opens the MART; nobody walks onto a clerk', () => {
     const room = makeRoom(MAPS, PATCHES, 7);

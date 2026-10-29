@@ -33,6 +33,8 @@ export interface WorldLink {
   field(bits: number): void;
   /** The bots the room gave me to fight: `winner` won (0, no answer). */
   bots(a: number, b: number, winner: number): void;
+  /** My trade with event `n`'s trader is over: I gave him `given` (0, nothing). */
+  traded(n: number, given: number): void;
   /** The ball `key` would not go in my bag: put it back. */
   drop(key: number, rest?: Bag): void;
   /** My team is down: off the map. `by` who beat me, `wild` a wild POKeMON did. */
@@ -64,6 +66,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     end: (fled, won) => host.end(me, fled, won),
     field: (bits) => host.field(me, bits),
     bots: (a, b, winner) => host.bots(me, a, b, winner),
+    traded: (n, given) => host.traded(me, n, given),
     drop: (key, rest) => host.drop(me, key, rest),
     out: (bag, by, wild) => host.out(me, bag, by, wild),
     bt: () => undefined,
@@ -191,6 +194,8 @@ class Online implements WorldLink {
   field(bits: number): void { this.send({ t: 'field', bits }); }
 
   bots(a: number, b: number, winner: number): void { this.send({ t: 'bots', a, b, w: winner }); }
+
+  traded(n: number, given: number): void { this.send({ t: 'traded', n, sp: given }); }
 
   drop(key: number, rest?: Bag): void { this.send({ t: 'drop', k: key, rest }); }
 

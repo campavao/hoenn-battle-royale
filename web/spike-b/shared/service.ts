@@ -127,6 +127,8 @@ export class WorldService {
           host.input(phone.id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
         } else if (m.t === 'field') {
           if (Number.isInteger(m.bits)) host.field(phone.id, m.bits);
+        } else if (m.t === 'traded') {
+          if (Number.isInteger(m.n) && Number.isInteger(m.sp)) host.traded(phone.id, m.n, m.sp);
         } else if (m.t === 'bots') {
           if ([m.a, m.b, m.w].every(Number.isInteger)) host.bots(phone.id, m.a, m.b, m.w);
         } else if (m.t === 'end') {

@@ -29,6 +29,8 @@ const FOE_SEAT = 31;
 const DROP_SEAT = 30;
 /** An event's first piece (web/src/match/events.ts's eventKey(0, 0)). */
 const LEGEND_KEY = 0xb000;
+/** Event 0's trader (BR_EVENT_TRADER_KEY), and below it his claim key. */
+const TRADER_KEY = 0xb00f;
 /** global.h's ObjectEvent: 0x24 bytes, currentCoords at 0x10, facing in 0x18's low bits. */
 const OBJECT_EVENT_SIZE = 0x24;
 /** A facing (DIR_SOUTH..DIR_EAST) as a step. */
@@ -82,6 +84,10 @@ export interface RomBattles {
    *  own sprite, A on it, its cry, its legendary battle. The outcome says whether it was
    *  caught (7); anything else and it goes back where it stood. */
   legend(species: number, level: number, onStart: () => void, fog?: boolean): Promise<Fought>;
+  /** An event's trader (br_event.c), stood before the hidden trainer: A on him, through
+   *  his line, and the party menu on the page (`onStart`) to pick which one he gets for
+   *  `species` at the rung. The species he was given, or 0 for none. */
+  trade(species: number, onStart: () => void): Promise<number>;
   /** A link battle with another trainer (br_netlink.c): this ROM's side of it, the blocks
    *  out through `link.send` and theirs in through `link.recv`. `first` is the side that
    *  challenged (link id 0). Resolves when the ROM is back on the field. */
@@ -695,10 +701,53 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         return took;
       });
     },
+    trade(species, onStart) {
+      return inTurn(async () => {
+        if (broken) return 0;
+        leaving = false;
+        lay();
+        emu.resume();
+        drain(() => undefined);
+        const s1 = emu.read(save1, 32);
+        const self = objectsAt + emu.read(avatarAt + 5, 8) * OBJECT_EVENT_SIZE;
+        const [dx, dy] = STEP[emu.read(self + 0x18, 8) & 15] ?? [0, 1];
+        const x = emu.read(self + 0x10, 16) + dx, y = emu.read(self + 0x12, 16) + dy;
+        send({ t: 'event', seat: DROP_SEAT, n: 0, mapsec: 0, key: LEGEND_KEY, trader: { map: { group: emu.read(s1 + 4, 8), num: emu.read(s1 + 5, 8) }, x, y, species } });
+        let given = 0;
+        // His claim (BR_EVENT_CLAIM_KEY): the room already said he is mine, so yes at once;
+        // the PICKUP of his key naming a species is the trade done (BrLoot_SendHolds).
+        const watch = emu.onFrame(() => drain((m) => {
+          if (m.t !== 'pickup') return;
+          if (m.key === TRADER_KEY - 1) send({ t: 'pickup', seat: emu.read(seatAt, 8), key: TRADER_KEY });
+          else if (m.key === TRADER_KEY && m.item) given = m.item;
+        }));
+        // A on him (a frame for his sprite to stand), then through his one line to the menu.
+        await frames(emu, 4);
+        let n = 0;
+        const up = await until(emu, () => {
+          const k = n++ % 20;
+          if (k === 0) emu.press('a'); else if (k === 4) emu.release('a');
+          return !onField();
+        }, 400);
+        emu.release('a');
+        if (up) {
+          onStart();
+          await backOnField();
+          // The claim, its answer and the swap, on the field after the menu.
+          await until(emu, () => given !== 0, 90);
+        } else console.warn('spike: the trader\'s menu did not open');
+        watch();
+        emu.pause();
+        const now = kept();
+        if (!emu.restore(parked!)) broken = true;
+        else keep(now);
+        carried = last = now;
+        return given;
+      });
+    },
     legend(species, level, onStart, fog = false) {
       let seen = false;
       let stop: (() => void) | null = null;
-      const onField = () => ((emu.read(mainAt + 4, 32) & ~1) >>> 0) === overworldCb;
       return inTurn(() => battle(fog, () => {
         drain(() => undefined);
         // Its piece where the hidden trainer faces, under an event's key (BR_EVENT_KEY_BASE),
