@@ -57,7 +57,9 @@ export class Host {
     for (const b of botSpawns(room, maps, bots)) {
       const id = this.nextId++;
       this.brains.set(id, b.brain);
-      room.apply({ c: 'join', id, bot: true, name: b.name, skin: b.skin, spot: b.spot, facing: b.facing });
+      // The opening: in the Zone with everybody, as the live host deals its bots (bots/host.ts).
+      const spot = room.ring().safari ? room.zone(id)[0] ?? b.spot : b.spot;
+      room.apply({ c: 'join', id, bot: true, name: b.name, skin: b.skin, spot, facing: b.facing });
     }
   }
 
@@ -72,7 +74,7 @@ export class Host {
       const used = (s: Spot) =>
         this.room.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y) ||
         this.pending.some((c) => c.c === 'join' && c.spot.map === s.map && c.spot.x === s.x && c.spot.y === s.y);
-      const near = this.room.truck();
+      const near = this.room.truck(id);
       spot = near.find((s) => !used(s)) ?? near[0];
     }
     this.pending.push({ c: 'join', id, bot: false, name: name || `TRAINER ${id}`.slice(0, 10), skin, spot, facing: 1 });

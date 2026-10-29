@@ -34,7 +34,8 @@ import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, startStickLearn, 
 import { fameOf, resultsView, standingsOf, tallyLines, type FameMon } from '../src/ui/results';
 import { favourite } from '../src/match/tally';
 import { moveInfo, type Rom as MoveTables } from '../src/battle/movebook';
-import { OUT_BATCH_MS, outs, won } from '../src/match/ticker';
+import { OUT_BATCH_MS, event, felled, opening, outs, won } from '../src/match/ticker';
+import { MessageBox } from './msgbox';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
@@ -343,15 +344,17 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
 
 // Item balls (room.ts's ground): what I picked up goes into the ROM's bag, one at a time,
 // and waits for the ROM if it is still booting.
-const foundEl = document.getElementById('found')!;
-let foundUntil = 0;
+/** The message box above the dock (msgbox.ts): what just happened to me, and the ticker. */
+const msgBox = new MessageBox(document.getElementById('msg')!);
+let sayUntil = 0;
+// The phone HUD's scale (wirePhoneHud sets both on a phone).
+msgBox.setScale(Math.min(2, Math.max(1, innerWidth / 250)));
 const toGive: ({ key: number; item: number; gift?: boolean; hidden?: string } | { key: number; bag: Bag; name: string; person?: Person })[] = [];
 let giving = false;
 
 function say(text: string): void {
-  foundEl.textContent = text;
-  foundEl.classList.add('on');
-  foundUntil = performance.now() + 2500;
+  msgBox.show(text);
+  sayUntil = performance.now() + 2500;
 }
 
 function giveNext(): void {
@@ -1193,7 +1196,10 @@ let toldGyms = 0;
 function gymFrame(): void {
   const g = link.room.gyms;
   if (toldGyms > g.length) toldGyms = 0;
-  for (const [n, who] of g.slice(toldGyms)) if (who !== link.room.actor(link.me)?.name) tick(`${who} beat ${LEADERS[n].name}! The gym is closed.`);
+  for (const [n, who] of g.slice(toldGyms)) {
+    const line = who !== link.room.actor(link.me)?.name ? felled(0, who, LEADERS[n].name) : null;
+    if (line) tick(line.text);
+  }
   toldGyms = g.length;
 }
 
@@ -1248,7 +1254,7 @@ function startMatch(l: WorldLink): void {
   lobby?.hide();
   isOut = waiting = shownWin = false;
   // Every match's rounds count from 0: what was told or recorded of the last one is not.
-  seenRound = lastPhase = recordedRound = dropRound = hudRound = dugRound = -1;
+  seenRound = lastPhase = recordedRound = dropRound = hudRound = dugRound = toldOpening = -1;
   teamSent = '';
   tallyFrom = rom?.tally() ?? null;
   myStepsN = 0;
@@ -1414,6 +1420,7 @@ function wirePhoneHud(): void {
     const s = Math.min(2, Math.max(1, innerWidth / 250));
     document.documentElement.style.setProperty('--s', String(s));
     hud.setScale(s);
+    msgBox.setScale(s);
   };
   addEventListener('resize', scale);
   scale();
@@ -1604,7 +1611,6 @@ function itemfinder(): void {
 // ---- the HUD (the live match's corner and ticker: br_hud.c, ticker.ts) -----------------
 
 const cornerEl = document.getElementById('corner')!;
-const tickerEl = document.getElementById('ticker')!;
 /** Lines waiting their turn, and when the one showing goes. */
 const ticks: { text: string; alert: boolean }[] = [];
 let tickUntil = 0;
@@ -1616,6 +1622,7 @@ function tick(text: string, alert = false): void {
 let toldOuts = 0;
 let outsSince = 0;
 let hudRound = -1;
+let toldOpening = -1;
 let toldWin = false;
 let cornerText = '';
 function hudFrame(): void {
@@ -1640,15 +1647,24 @@ function hudFrame(): void {
     const line = won(0, res.entrants.find(([id]) => id === res.winner)?.[1] ?? 'TRAINER');
     if (line) tick(line.text);
   }
+  // The Safari's line as the round opens in it (ticker.ts's opening).
+  const ringNow = link.room.ring();
+  if (ringNow.safari && toldOpening !== ringNow.round) {
+    toldOpening = ringNow.round;
+    const line = opening(0, Math.ceil(ringNow.left / 60));
+    if (line) tick(line.text);
+  }
+  // One line at a time, in the box my own messages use, and not over one of them.
   const now = performance.now();
-  if (now >= tickUntil) {
+  if (!sayUntil && now >= tickUntil) {
     const next = ticks.shift();
     if (next) {
-      tickerEl.textContent = next.text;
-      tickerEl.classList.toggle('alert', next.alert);
-      tickerEl.classList.add('on');
+      msgBox.show(next.text, next.alert);
       tickUntil = now + 3500;
-    } else if (tickerEl.classList.contains('on')) tickerEl.classList.remove('on');
+    } else if (tickUntil) {
+      tickUntil = 0;
+      msgBox.hide();
+    }
   }
   // The corner: how many are left, and the clock (or FOG! while it bites me).
   const ring = link.room.ring();
@@ -1670,16 +1686,22 @@ function fogFrame(): void {
   if (ring.phase !== lastPhase) {
     // The ring phase is the level rung (br_levels.c): the host numbers phases from 1.
     const rung = rungForPhase(ring.phase + 1);
-    const grew = lastPhase >= 0 && rung > rungForPhase(lastPhase + 1) ? ` All POKéMON are now Lv. ${rung}!` : '';
-    if (lastPhase >= 0) {
-      if (ring.phase === 0) tick('The fog lifts. A new round!');
-      else if (ring.last) tick(`THE FOG COVERS ALL OF HOENN!${grew}`, true);
-      else tick(`The fog closes in on ${ringMap?.place(ring) || 'Hoenn'}!${grew}`, true);
+    // The ROM's lines for it (br_ring.c, br_levels.c): where it closes, then the level
+    // every POKeMON is at now when the rung moved; the last phase, that it is everywhere.
+    if (lastPhase >= 0 && ring.phase > 0) {
+      if (ring.last) tick('The fog covers all of HOENN!', true);
+      else {
+        tick(`The fog closes in on ${(ringMap?.place(ring) || 'HOENN').toUpperCase()}`, true);
+        if (rung > rungForPhase(lastPhase + 1)) tick(`All POKéMON are now Lv. ${rung}!`, true);
+      }
     }
     // An event dropped with the ring (DESIGN §Events): the ticker says what and where.
     const evs = link.room.events;
     if (toldEvents > evs.length) toldEvents = 0;
-    for (const e of evs.slice(toldEvents)) tick(e.species ? `A legendary ${speciesName(e.species)} at ${ringMap?.placeOf(e.map) || 'HOENN'}!` : `A rare find at ${e.place ?? (ringMap?.placeOf(e.map) || 'HOENN')}!`, !!e.species);
+    for (const e of evs.slice(toldEvents)) {
+      const line = event(0, e.species ? ringMap?.placeOf(e.map) : e.place ?? ringMap?.placeOf(e.map), !!e.species);
+      if (line) tick(line.text, line.kind === 'alert');
+    }
     toldEvents = evs.length;
     lastPhase = ring.phase;
   }
@@ -2451,7 +2473,7 @@ function loop(now: number): void {
   const t1 = performance.now();
   draw();
   watch.frame();
-  if (foundUntil && performance.now() > foundUntil) { foundUntil = 0; foundEl.classList.remove('on'); }
+  if (sayUntil && performance.now() > sayUntil) { sayUntil = tickUntil = 0; msgBox.hide(); }
   const t2 = performance.now();
   simMs = simMs * 0.9 + (t1 - t0) * 0.1;
   drawMs = drawMs * 0.9 + (t2 - t1) * 0.1;

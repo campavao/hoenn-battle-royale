@@ -1,6 +1,7 @@
 // The shared world's one promise: a Room mirrored from the host's frame records is the
 // host's Room, frame for frame -- with bots wandering, trainers' keys arriving late and
 // bunched, a battle started and ended, and a phone that joins halfway from a snapshot.
+import { SAFARI_CELLS } from '../../src/match/safari';
 import { GIFTS } from '../../src/match/gifts';
 import { GOLD } from '../../src/match/events';
 import ballsC from '../../../src/br/br_balls.c?raw';
@@ -1034,12 +1035,12 @@ describe('the Safari opening', () => {
   it('opens every round in the Zone with no fighting; the fly map drops each where they chose, or anywhere', () => {
     const room = makeRoom(MAPS, PATCHES, 11);
     room.ringPhase = room.opening = 600;
-    const at = room.truck();
-    expect(at.length).toBeGreaterThan(10);
-    expect(at.every((s) => s.map.startsWith(SAFARI))).toBe(true);
-    room.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: at[0], facing: 1 });
-    room.apply({ c: 'join', id: 2, bot: false, name: 'B', skin: 0, spot: at[1], facing: 1 });
-    room.apply({ c: 'join', id: 3, bot: false, name: 'C', skin: 0, spot: at[2], facing: 1 });
+    for (const id of [1, 2, 3]) {
+      const at = room.truck(id);
+      expect(at.length).toBe(8);
+      expect(at.every((s) => s.map.startsWith(SAFARI))).toBe(true);
+      room.apply({ c: 'join', id, bot: false, name: 'ABC'[id - 1], skin: 0, spot: at[0], facing: 1 });
+    }
     room.apply({ c: 'pick', id: 2, map: 'MAP_SAFARI_ZONE_NORTH' }); // not a drop
     expect(room.actor(2)!.m.spot.map.startsWith(SAFARI)).toBe(true);
     expect(room.ring().safari).toBe(true);
@@ -1070,6 +1071,38 @@ describe('the Safari opening', () => {
     room.step(new Map());
     room.step(new Map());
     expect(b.m.spot.map.startsWith(SAFARI)).toBe(false);
+  });
+});
+
+describe('where the Safari opens (HBR-109)', () => {
+  it("deals each trainer one of the live Zone's 24 cells from the seed and the seat, bots too, and drops the bots at the buzzer", () => {
+    const first = (seed: number, id: number) => {
+      const room = makeRoom(MAPS, PATCHES, seed);
+      room.ringPhase = room.opening = 600;
+      return room.zone(id)[0];
+    };
+    // Same seed and seat, same cell; another seed, mostly another area of the Zone.
+    expect(first(5, 1)).toEqual(first(5, 1));
+    const areas = new Set([1, 2, 3, 4, 5, 6, 7, 8].map((seed) => first(seed, 1).map));
+    expect(areas.size).toBeGreaterThan(2);
+    // On (or right by) a live cell.
+    const c = first(5, 1);
+    expect(SAFARI_CELLS.some((s) => s.map === c.map && Math.abs(s.x - c.x) + Math.abs(s.y - c.y) <= 2)).toBe(true);
+
+    const room = makeRoom(MAPS, PATCHES, 9);
+    room.ringPhase = room.opening = 300;
+    const host = new Host(room, 12, MAPS, 0);
+    const me = host.join('ME', 0);
+    host.advance();
+    const bots = room.actors.filter((a) => a.bot);
+    expect(bots.length).toBe(12);
+    expect(room.actors.every((a) => a.m.spot.map.startsWith(SAFARI))).toBe(true);
+    // Nobody on anybody else's cell.
+    expect(new Set(room.actors.map((a) => `${a.m.spot.map}:${a.m.spot.x}:${a.m.spot.y}`)).size).toBe(13);
+    while (room.ring().safari) host.advance();
+    // The buzzer: the bots are out over Hoenn at once; I wait on my fly map.
+    expect(bots.every((a) => !a.m.spot.map.startsWith(SAFARI))).toBe(true);
+    expect(room.actor(me)!.m.spot.map.startsWith(SAFARI)).toBe(true);
   });
 });
 

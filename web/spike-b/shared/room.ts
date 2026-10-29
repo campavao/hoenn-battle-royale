@@ -40,6 +40,7 @@ import roomsJson from '../data/rooms.json';
 import { GIFTS } from '../../src/match/gifts';
 import { cableOrDoll, type BagRows } from './items';
 import { SIGHT_RANGE, eitherSees, type Facing } from '../../src/bots/sight';
+import { SAFARI_CELLS } from '../../src/match/safari';
 import { CLASS_WATER, DIR_NORTH, dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
 
 export const KEY_UP = 1, KEY_DOWN = 2, KEY_LEFT = 4, KEY_RIGHT = 8, KEY_B = 16, KEY_A = 32;
@@ -778,6 +779,10 @@ export class Room {
     const end = this.roundEnd();
     if (end !== undefined && this.tick >= end + AFTER_WIN) this.newRound(r.round + 1);
     else if (this.tick - PICK_WAIT >= this.epoch && this.ring(this.tick - PICK_WAIT).safari && !this.ring(this.tick - PICK_WAIT + 1).safari) this.drop();
+    // The Safari is over: the bots drop at once, anywhere (they have no fly map).
+    else if (was.safari && !ring.safari) {
+      for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) this.dropOne(a);
+    }
     else if (ring.phase !== was.phase) {
       // ISLAND CAVE's wall opens by itself once the ring has moved on a phase (br_story.c).
       for (const e of this.events) if (e.story && DOORS[e.story] === 'wait' && ring.phase > (e.phase ?? 0)) e.opened = true;
@@ -1009,20 +1014,25 @@ export class Room {
   /** The cells by the truck that no bot stands on: along its row first, nearest first, so
    *  trainers stood side by side facing south do not see each other (and fight the moment
    *  their grace is up). */
-  truck(): Spot[] {
-    if (this.ring().safari) return this.zone();
+  truck(id = 0): Spot[] {
+    if (this.ring().safari) return this.zone(id);
     const d = (s: Spot) => Math.abs(s.y - 10) * 64 + Math.abs(s.x - 10) * 2 + (s.x < 10 ? 1 : 0);
     const near = this.reachable().filter((s) => s.map === 'MAP_LITTLEROOT_TOWN').sort((p, q) => d(p) - d(q)).slice(0, TRUCK);
     return near.filter((s) => !this.actors.some((a) => a.bot && a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y));
   }
 
-  /** Where trainers stand when the Safari opens: spread over the Zone's areas, as far
-   *  as one walks from its gate (no bike, no SURF). */
-  zone(): Spot[] {
-    const all = this.safariCells();
-    const taken = (s: Spot) => this.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y);
-    // Every seventh cell, so a crowd starts apart rather than in a line.
-    return all.filter((s, i) => i % 7 === 0 && !taken(s));
+  /** Where trainer `id` stands when the Safari opens: its own of the Zone's twenty-four
+   *  cells, dealt from the seed and the seat as br_match.c's BrMatch_SafariCell deals the
+   *  live one, so every run starts somewhere else; then the free cells nearest it. */
+  zone(id: number): Spot[] {
+    let h = Math.imul(this.seed ^ Math.imul(id + 1, 0x9e3779b1), 0x85ebca6b);
+    h ^= h >>> 13;
+    const c = SAFARI_CELLS[(h >>> 0) % SAFARI_CELLS.length];
+    // Nobody within two steps, while there is room: a crowd dealt one cell starts apart.
+    const near = (s: Spot, r: number) => this.actors.some((a) => a.m.spot.map === s.map && Math.abs(a.m.spot.x - s.x) <= r && Math.abs(a.m.spot.y - s.y) <= r);
+    const d = (s: Spot) => (s.map === c.map ? 0 : 1 << 16) + Math.abs(s.x - c.x) + Math.abs(s.y - c.y);
+    const free = this.safariCells().filter((s) => !near(s, 0)).sort((p, q) => d(p) - d(q));
+    return [...free.filter((s) => !near(s, 2)), ...free.filter((s) => near(s, 2))].slice(0, 8);
   }
 
   private safariCells(): readonly Spot[] {
@@ -1060,8 +1070,12 @@ export class Room {
   private dropOne(a: Actor, want?: string): void {
     let state = (this.seed ^ Math.imul(this.results.round + 1, 0x2545f491) ^ Math.imul(a.id + 1, 0x9e3779b1) ^ this.tick) >>> 0 || 1;
     const rng = () => { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return (state >>> 0) / 4294967296; };
-    const maps = [...this.places.keys()].filter((m) => !m.startsWith(SAFARI)).sort();
     const used = new Set(this.actors.map((o) => `${o.m.spot.map}:${o.m.spot.x}:${o.m.spot.y}`));
+    // A bot only where a trainer could walk to it: it has no SURF, and one dropped on an
+    // island or into a pocket could never be met nor walk into the ring (a trainer may
+    // land anywhere, islands too: Cam, 2026-10-20).
+    const reach = a.bot ? new Set(this.reachable().map((s) => `${s.map}:${s.x}:${s.y}`)) : null;
+    const maps = [...new Set(reach ? this.reachable().map((s) => s.map) : this.places.keys())].filter((m) => !m.startsWith(SAFARI)).sort();
     for (let tries = 0; tries < 4; tries++) {
       const map = tries === 0 && want ? want : maps[Math.floor(rng() * maps.length)];
       const m = this.maps.get(map);
@@ -1069,6 +1083,7 @@ export class Room {
       const cells: Spot[] = [];
       for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
         if (this.world.cell(map, x, y) !== 0 || used.has(`${map}:${x}:${y}`) || this.groundAt(map, x, y) || this.spillAt(map, x, y)) continue;
+        if (reach && !reach.has(`${map}:${x}:${y}`)) continue;
         if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
         cells.push({ map, x, y });
       }
@@ -1092,10 +1107,11 @@ export class Room {
     // The new round's clock first: it opens in the Safari (truck()).
     this.results = { round, entrants: [], fallen: [], winner: 0 };
     this.epoch = this.tick;
-    const spots = this.truck();
+    const safari = this.ring().safari;
+    const spots = safari ? [] : this.truck();
     humans.forEach((a, i) => {
       // Somebody still in a battle of the round before ends it where they now stand.
-      a.m = newMover(spots[i % spots.length], 1);
+      a.m = newMover(safari ? this.zone(a.id)[0] ?? a.m.spot : spots[i % spots.length], 1);
       a.calm = this.tick + JOIN_GRACE;
       a.shun = a.shunUntil = 0;
       a.arriving = false;
@@ -1103,6 +1119,8 @@ export class Room {
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
     for (const a of this.actors) if (a.bot) { a.bites = 0; a.bleedAt = undefined; if (a.judge) this.part(a); }
+    // The bots open in the Zone with everybody, as the live host deals them (bots/host.ts).
+    if (safari) for (const a of this.actors) if (a.bot) a.m = newMover(this.zone(a.id)[0] ?? a.m.spot, a.m.facing);
     // A walk-up the old round left half done starts no battle in this one.
     for (const a of this.actors) if (a.meet) { a.meet = undefined; a.battling = false; a.foe = 0; }
     this.duelAfter = 0;
