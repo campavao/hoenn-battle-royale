@@ -45,6 +45,7 @@ export interface TeamRow { species: number; level: number }
 const WILD_ASKED = 1;
 const WILD_FIGHTING = 2;
 const WILD_DONE = 3;
+const WILD_ASKED_SAFARI = 4;
 // gBattleOutcome.
 const LOST = 2;
 // include/br/br_ring.h: BR_FOG_TICK_FRAMES.
@@ -100,6 +101,9 @@ export interface RomBattles {
   /** The wild battle a marked spot on map (group, num) starts; `behavior` is the spot's
    *  metatile behaviour (water or land, and the backdrop). */
   wild(group: number, num: number, behavior: number, onStart: () => void, fog?: boolean): Promise<Fought>;
+  /** Gym leader `n` (br_gym.c's order): their own battle, music and defeat text; won, the
+   *  gym's TM and purse. Not ok when they would not fight (TATE&LIZA want two POKeMON). */
+  boss(n: number, onStart: () => void, fog?: boolean): Promise<Fought>;
   /** A legendary an event put down (br_legend.c): stood before the hidden trainer as its
    *  own sprite, A on it, its cry, its legendary battle. The outcome says whether it was
    *  caught (7); anything else and it goes back where it stood. */
@@ -118,6 +122,8 @@ export interface RomBattles {
   /** The match's ring phase (1 the first, as the host numbers them): the level rung every
    *  battle from now on starts at. */
   setPhase(phase: number): void;
+  /** The Safari opening (br_zone.c): wild battles draw any first stage while it runs. */
+  setSafari(on: boolean): void;
   /** The fog's bite between battles (br_ring.c Bleed): a tenth of each mon's max HP, at
    *  least 1, a fainted one's status cleared. How many are still standing. */
   bleed(): Promise<number>;
@@ -368,6 +374,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   let phase = 1;
   /** The ring as the ROM should see it on its field or in a battle. */
   let seedNow = seed >>> 0;
+  let safari = false;
   const lay = (fog = false, at = phase) => {
     emu.bytes(ringAt, 10).set(ringBytes(at, fog));
     emu.write(match + 8, seedNow, 32);
@@ -573,6 +580,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       else foeLeft = true;
     },
     setPhase(p) { phase = Math.max(1, Math.min(255, p | 0)); },
+    setSafari(on) { safari = on; },
     fogNow() {
       if (fighting && !broken && emu.read(ringAt + 4, 8) !== 0xff) lay(true);
     },
@@ -900,14 +908,25 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         return seen && onField();
       }, onStart, () => ({ outcome: emu.read(outcomeAt, 8), species, level }))).finally(() => stop?.());
     },
+    boss(n, onStart, fog = false) {
+      // br_wild.h's BR_WILD_BOSS: the same ask, a leader for a map.
+      return inTurn(() => battle(fog, () => {
+        emu.write(askAt + 1, 0xff, 8);
+        emu.write(askAt + 2, n, 8);
+        emu.write(askAt + 3, 0, 8);
+        emu.write(askAt, WILD_ASKED, 8);
+      }, () => emu.read(askAt, 8) !== WILD_ASKED, () => emu.read(askAt, 8) === WILD_DONE, onStart,
+      () => ({ outcome: emu.read(askAt + 7, 8), species: 0, level: 0 })));
+    },
     wild(group, num, behavior, onStart, fog = false) {
       // br_wild.h: the map, then ASKED; FIGHTING once it is under way, DONE when it is over.
       return inTurn(() => battle(fog, () => {
         emu.write(askAt + 1, group, 8);
         emu.write(askAt + 2, num, 8);
         emu.write(askAt + 3, behavior, 8);
-        emu.write(askAt, WILD_ASKED, 8);
-      }, () => emu.read(askAt, 8) !== WILD_ASKED, () => emu.read(askAt, 8) === WILD_DONE, onStart,
+        // br_wild.h's ASKED_SAFARI: the opening's roll, any first stage.
+        emu.write(askAt, safari ? WILD_ASKED_SAFARI : WILD_ASKED, 8);
+      }, () => ![WILD_ASKED, WILD_ASKED_SAFARI].includes(emu.read(askAt, 8)), () => emu.read(askAt, 8) === WILD_DONE, onStart,
       () => ({ outcome: emu.read(askAt + 7, 8), species: emu.read(askAt + 4, 16), level: emu.read(askAt + 6, 8) })));
     },
   };

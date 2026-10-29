@@ -33,6 +33,8 @@ export interface ServiceOptions {
   log: (line: string) => void;
   /** Seconds a ring phase lasts, for a local test (the match's 120 otherwise). */
   ringSecs?: number;
+  /** Seconds of Safari each round opens with (room.ts SAFARI): a ring phase's, unless 0. */
+  safariSecs?: number;
   /** A quick room's count to its own start (match/room.ts's AUTO_START_MS). */
   autoStartMs?: number;
 }
@@ -152,6 +154,8 @@ export class WorldService {
           host.input(phone.id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
         } else if (m.t === 'field') {
           if (Number.isInteger(m.bits)) host.field(phone.id, m.bits);
+        } else if (m.t === 'pick') {
+          if (typeof m.map === 'string') host.pick(phone.id, m.map.slice(0, 64));
         } else if (m.t === 'traded') {
           if (Number.isInteger(m.n) && Number.isInteger(m.sp)) host.traded(phone.id, m.n, m.sp);
         } else if (m.t === 'bots') {
@@ -278,6 +282,7 @@ export class WorldService {
     const seed = (Math.floor(Math.random() * 0xfffffffe) + 1) >>> 0;
     const r = makeRoom(this.opts.maps, this.opts.patches, seed);
     if (this.opts.ringSecs) r.ringPhase = Math.round(this.opts.ringSecs * 60);
+    r.opening = this.opts.safariSecs !== undefined ? Math.round(this.opts.safariSecs * 60) : r.ringPhase;
     const host = new Host(r, this.opts.bots, this.opts.maps);
     for (const p of room.members.values()) { host.join(p.name, p.skin, undefined, p.id); p.heard = room.t0 = this.opts.now(); }
     host.lock();

@@ -9,7 +9,7 @@ import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
 import { over } from './over';
 import { cleanBag, isTm, within } from './items';
-import { AFTER_WIN, FIELD_SURF, GROUND_PER_MAP, RING_PHASE, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, eventPiece, makeRoom } from './room';
+import { AFTER_WIN, FIELD_SURF, SAFARI, GROUND_PER_MAP, RING_PHASE, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, eventPiece, makeRoom } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -793,6 +793,64 @@ describe('marts', () => {
     expect(room.step(new Map([[2, [0]]]))).toEqual([]);
     expect(room.step(new Map([[2, [KEY_A]]]))).toEqual([]);
     expect(room.stepFor(room.actor(2)!)({ map: 'MAP_OLDALE_TOWN_MART', x: 1, y: 2 }, 1)).toBeNull();
+  });
+});
+
+describe('the Safari opening', () => {
+  it('opens every round in the Zone with no fighting; the drop puts each where they asked, or anywhere', () => {
+    const room = makeRoom(MAPS, PATCHES, 11);
+    room.ringPhase = room.opening = 600;
+    const at = room.truck();
+    expect(at.length).toBeGreaterThan(10);
+    expect(at.every((s) => s.map.startsWith(SAFARI))).toBe(true);
+    room.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: at[0], facing: 1 });
+    room.apply({ c: 'join', id: 2, bot: false, name: 'B', skin: 0, spot: at[1], facing: 1 });
+    room.apply({ c: 'pick', id: 1, map: 'MAP_FORTREE_CITY' });
+    room.apply({ c: 'pick', id: 2, map: 'MAP_SAFARI_ZONE_NORTH' }); // not a drop
+    expect(room.ring().safari).toBe(true);
+    // Side by side, looking at each other: no fight in the Zone.
+    const [a, b] = [room.actor(1)!, room.actor(2)!];
+    a.calm = b.calm = 0;
+    b.m = { ...b.m, spot: { ...a.m.spot, x: a.m.spot.x + 1 }, prev: { ...a.m.spot, x: a.m.spot.x + 1 }, facing: 3, moveDir: 3 };
+    a.m.facing = a.m.moveDir = 4;
+    let fights = 0;
+    for (let i = 0; i < 599; i++) fights += room.step(new Map()).filter((e) => e.type === 'fight' || e.type === 'duel').length;
+    expect(fights).toBe(0);
+    expect(room.ring().safari).toBe(true);
+    room.step(new Map());
+    expect(room.ring().safari).toBeFalsy();
+    expect(room.ring()).toMatchObject({ phase: 0, r: Infinity });
+    expect(a.m.spot.map).toBe('MAP_FORTREE_CITY');
+    expect(b.m.spot.map.startsWith(SAFARI)).toBe(false);
+    expect(a.pick).toBeUndefined();
+    // The fog closes a phase after the drop.
+    for (let i = 0; i < 600; i++) room.step(new Map());
+    expect(room.ring().phase).toBe(1);
+  });
+});
+
+describe('gym leaders', () => {
+  it('A at a leader is their battle; the first to beat them closes the gym, and they leave it', () => {
+    const room = makeRoom(MAPS, PATCHES, 7);
+    const G = 'MAP_RUSTBORO_CITY_GYM';
+    room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: G, x: 5, y: 3 }, facing: 2 });
+    room.apply({ c: 'join', id: 3, bot: false, name: 'B', skin: 0, spot: { map: G, x: 4, y: 2 }, facing: 4 });
+    expect(room.stepFor(room.actor(2)!)({ map: G, x: 5, y: 3 }, 2)).toBeNull();
+    // Both at once: both fight ROXANNE, each in their own ROM.
+    expect(room.step(new Map([[2, [KEY_A]], [3, [KEY_A]]]))).toMatchObject([{ type: 'boss', id: 2, n: 0 }, { type: 'boss', id: 3, n: 0 }]);
+    room.apply({ c: 'end', id: 3 }); // B lost or ran
+    room.apply({ c: 'end', id: 2, won: true });
+    expect(room.gyms).toEqual([[0, 'A']]);
+    expect(room.bossDown(0)).toBe(true);
+    expect(room.actor(2)!.battling).toBe(false);
+    // Gone: nothing to talk to, and the cell is open.
+    room.step(new Map([[3, [0]]]));
+    expect(room.step(new Map([[3, [KEY_A]]]))).toEqual([]);
+    expect(room.stepFor(room.actor(2)!)({ map: G, x: 5, y: 3 }, 2)).not.toBeNull();
+    expect(makeRoom(MAPS, PATCHES, 7).hash()).not.toBe(room.hash());
+    const copy = makeRoom(MAPS, PATCHES, 7);
+    copy.load(room.state());
+    expect(copy.hash()).toBe(room.hash());
   });
 });
 

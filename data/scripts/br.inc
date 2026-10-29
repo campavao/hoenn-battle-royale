@@ -24,6 +24,45 @@ BR_EventScript_BossBeaten::
 	releaseall
 	end
 
+@ A leader spike B's page asked for (src/br/br_gym.c, BrGym_StartBoss): his own battle,
+@ his music and his defeat text, with no gym around it. Won, the purse is paid as in a gym
+@ (BrLoot_TrainerBeaten); lost, the whiteout is the gym's too.
+BR_EventScript_Boss::
+	lockall
+	special BrGym_LoadBoss
+	dotrainerbattle
+	releaseall
+	end
+
+@ Each leader's trainerbattle arguments, 21 bytes each in br_gym.c's order: what the
+@ gym's own trainerbattle_single (trainerbattle_double for TATE&LIZA, whose refusal text
+@ BrGym_StartBoss makes unneeded) puts after the command, with no object (local id 0).
+BR_BossArgs::
+	.byte TRAINER_BATTLE_CONTINUE_SCRIPT_NO_MUSIC
+	.2byte TRAINER_ROXANNE_1, 0
+	.4byte RustboroCity_Gym_Text_RoxanneIntro, RustboroCity_Gym_Text_RoxanneDefeat, BR_EventScript_BossBeaten, 0
+	.byte TRAINER_BATTLE_CONTINUE_SCRIPT_NO_MUSIC
+	.2byte TRAINER_BRAWLY_1, 0
+	.4byte DewfordTown_Gym_Text_BrawlyIntro, DewfordTown_Gym_Text_BrawlyDefeat, BR_EventScript_BossBeaten, 0
+	.byte TRAINER_BATTLE_CONTINUE_SCRIPT_NO_MUSIC
+	.2byte TRAINER_WATTSON_1, 0
+	.4byte MauvilleCity_Gym_Text_WattsonIntro, MauvilleCity_Gym_Text_WattsonDefeat, BR_EventScript_BossBeaten, 0
+	.byte TRAINER_BATTLE_CONTINUE_SCRIPT_NO_MUSIC
+	.2byte TRAINER_FLANNERY_1, 0
+	.4byte LavaridgeTown_Gym_1F_Text_FlanneryIntro, LavaridgeTown_Gym_1F_Text_FlanneryDefeat, BR_EventScript_BossBeaten, 0
+	.byte TRAINER_BATTLE_CONTINUE_SCRIPT_NO_MUSIC
+	.2byte TRAINER_NORMAN_1, 0
+	.4byte PetalburgCity_Gym_Text_NormanIntro, PetalburgCity_Gym_Text_NormanDefeat, BR_EventScript_BossBeaten, 0
+	.byte TRAINER_BATTLE_CONTINUE_SCRIPT_NO_MUSIC
+	.2byte TRAINER_WINONA_1, 0
+	.4byte FortreeCity_Gym_Text_WinonaIntro, FortreeCity_Gym_Text_WinonaDefeat, BR_EventScript_BossBeaten, 0
+	.byte TRAINER_BATTLE_CONTINUE_SCRIPT_DOUBLE_NO_MUSIC
+	.2byte TRAINER_TATE_AND_LIZA_1, 0
+	.4byte MossdeepCity_Gym_Text_TateAndLizaIntro, MossdeepCity_Gym_Text_TateAndLizaDefeat, 0, BR_EventScript_BossBeaten
+	.byte TRAINER_BATTLE_CONTINUE_SCRIPT_NO_MUSIC
+	.2byte TRAINER_JUAN_1, 0
+	.4byte SootopolisCity_Gym_1F_Text_JuanIntro, SootopolisCity_Gym_1F_Text_JuanDefeat, BR_EventScript_BossBeaten, 0
+
 @ NORMAN is a leader like the other seven (2026-10-06 play-test). His own script is a
 @ switch over the story -- VAR_PETALBURG_GYM_STATE 7, past the boot, is the TM and
 @ "Dad is going to keep training" -- and its fight is a trainerbattle_no_intro with the

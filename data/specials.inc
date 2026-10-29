@@ -551,4 +551,5 @@ gSpecials::
 	def_special BrLegend_Battle
 	def_special BrLoot_HomeTrade
 	def_special BrLoot_HomeClaim
+	def_special BrGym_LoadBoss
 .endif

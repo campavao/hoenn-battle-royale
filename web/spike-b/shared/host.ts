@@ -125,6 +125,11 @@ export class Host {
     this.pending.push({ c: 'away', id, on });
   }
 
+  /** Drop the page's trainer on `map` when the Safari ends. */
+  pick(id: number, map: string): void {
+    if (this.players.has(id) && typeof map === 'string') this.pending.push({ c: 'pick', id, map });
+  }
+
   /** The page's trade with event `n`'s trader is done: it gave him `given` (0, none). */
   traded(id: number, n: number, given: number): void {
     if (this.players.has(id)) this.pending.push({ c: 'traded', id, n, given });

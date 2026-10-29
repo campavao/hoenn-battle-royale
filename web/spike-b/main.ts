@@ -21,7 +21,7 @@ import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { DIR_EAST } from './sim';
-import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent } from './shared/room';
+import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Ring } from './shared/room';
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink } from './net';
 import { over } from './shared/over';
@@ -32,6 +32,7 @@ import { RomArt } from './romart';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
 import { makeJudge, type Judge } from './judge';
+import { LEADERS } from './shared/gyms';
 import { CLERKS, priceOf, shelf } from './shared/marts';
 import type { GbaKey } from '../src/emu';
 import spritesData from '../src/data/sprites.json';
@@ -113,6 +114,26 @@ function layout(maps: WorldMap[]): Map<string, Placed> {
     placed.set(id, { m, gx: x, gy: y, classes: decode(m.grid, m.w * m.h) });
     x += m.w + GAP;
     rowH = Math.max(rowH, m.h);
+  }
+  // The Safari Zone (the opening's, behind a closed gate), by its own seams, below them.
+  const south = byId.get('MAP_SAFARI_ZONE_SOUTH');
+  if (south) {
+    placed.set(south.id, { m: south, gx: right + 200, gy: y + rowH + 200, classes: decode(south.grid, south.w * south.h) });
+    const q = [south.id];
+    while (q.length) {
+      const p = placed.get(q.shift()!)!;
+      for (const s of p.m.seams) {
+        const to = byId.get(s.to);
+        if (!to || !to.id.startsWith('MAP_SAFARI_ZONE_') || placed.has(to.id)) continue;
+        let gx = p.gx, gy = p.gy;
+        if (s.dir === 'north') { gx += s.offset; gy -= to.h; }
+        else if (s.dir === 'south') { gx += s.offset; gy += p.m.h; }
+        else if (s.dir === 'west') { gx -= to.w; gy += s.offset; }
+        else { gx += p.m.w; gy += s.offset; }
+        placed.set(to.id, { m: to, gx, gy, classes: decode(to.grid, to.w * to.h) });
+        q.push(to.id);
+      }
+    }
   }
   return placed;
 }
@@ -228,7 +249,7 @@ let rom: RomBattles | null = null;
 /** Bot-vs-bot fights the room gives this page, in a hidden second ROM (judge.ts). */
 let judge: Judge | null = null;
 let artMs = 0;
-let battle: { foe: Actor | null; shownAt: number; foeGone?: boolean; heardAt?: number; round: number; link: WorldLink } | null = null;
+let battle: { foe: Actor | null; shownAt: number; foeGone?: boolean; heardAt?: number; round: number; link: WorldLink; boss?: number } | null = null;
 /** The ROM has the screen for a dropped bag's team (rom.team). */
 let swapping = false;
 let calmUntil = 0;
@@ -434,6 +455,18 @@ function startFor(e: RoomEvent): void {
     return;
   }
   if (e.type === 'bots') { void judgeBots(e.a, e.b); return; }
+  if (e.type === 'boss') {
+    // A gym leader (gyms.ts): their own battle in the hidden ROM; won, the gym's TM and purse.
+    if (swapping) rom?.leave();
+    asking?.done('');
+    const leader = LEADERS[e.n], fog = inFogNow();
+    handOff(null, (r, onStart) => r.boss(e.n, onStart, fog).then((f) => {
+      if (!f.ok && f.outcome === 0) say(`${leader.name}: Come back with two POKéMON that can battle!`);
+      return f;
+    }));
+    battle!.boss = e.n;
+    return;
+  }
   if (e.type === 'item' || e.type === 'bag') {
     toGive.push(e.type === 'item' ? { key: e.key, item: e.item } : { key: e.key, bag: e.bag, name: e.name });
     giveNext();
@@ -589,8 +622,10 @@ function endBattle(r: Fought | null): void {
   // nor puts anybody out of this one (the new round's fresh team is already on its way).
   // Another round, or another match altogether (each one's rounds count from 0).
   const stale = !!battle && (battle.link !== link || battle.round !== link.room.results.round);
-  link.end(duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f)), !stale && !!battle?.foe?.bot && !!r?.ok && r.outcome === 1);
-  const wild = battle && !battle.foe;
+  const boss = battle?.boss;
+  link.end(duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f)), !stale && (!!battle?.foe?.bot || boss !== undefined) && !!r?.ok && r.outcome === 1);
+  if (!stale && boss !== undefined && r?.ok && r.outcome === 1) say(`You beat ${LEADERS[boss].name}! Took their TM and ¥1000.`);
+  const wild = battle && !battle.foe && boss === undefined;
   const by = battle?.foe?.id;
   battle = null;
   held.clear();
@@ -790,6 +825,52 @@ function forget(): void {
 /** The team a reload is bringing back, until the ROM has booted to take it. */
 let comingBack: string | null = null;
 let savedAt = 0;
+/** The Safari opening (room.ts SAFARI): its welcome, the drop's question in its last
+ *  half minute, and where the drop put me. */
+let safariRound = -1;
+let pickAsked = -1;
+let wasSafari = false;
+function safariFrame(ring: Ring): void {
+  const me = link.room.actor(link.me);
+  if (ring.safari && safariRound !== ring.round && me) {
+    safariRound = ring.round;
+    say(`Welcome to the SAFARI ZONE! Catch what you can: the drop is in ${Math.ceil(ring.left / 3600)} min.`);
+  }
+  if (ring.safari && me && pickAsked !== ring.round && ring.left < 30 * 60 && !battle && !swapping && !asking && !isOut) {
+    pickAsked = ring.round;
+    void pickDrop();
+  }
+  if (wasSafari && !ring.safari) {
+    asking?.done('');
+    const here = link.room.actor(link.me)?.m.spot.map;
+    if (here && !here.startsWith(SAFARI)) say(`Dropped at ${ringMap?.placeOf(here) || 'somewhere in HOENN'}!`);
+  }
+  wasSafari = !!ring.safari;
+}
+
+/** Drop where? One row a place, the way the fly map names them; ANYWHERE leaves it to the deal. */
+async function pickDrop(): Promise<void> {
+  const byPlace = new Map<string, string>();
+  for (const id of [...placed.keys()].sort()) {
+    const p = placed.get(id)!;
+    if (!p.m.outdoor || id.startsWith(SAFARI)) continue;
+    const name = ringMap?.placeOf(id);
+    if (name && !byPlace.has(name)) byPlace.set(name, id);
+  }
+  const rows = [...byPlace].sort(([a], [b]) => a.localeCompare(b)).map(([name, id]): [string, string] => [name, id]);
+  const c = await ask('Drop where?', [['ANYWHERE', ''], ...rows]);
+  if (c && link.room.ring().safari) { link.pick(c); say(`You will drop at ${ringMap?.placeOf(c) ?? c}.`); }
+}
+
+/** The gym leaders that fell, as the ticker says it (bosses.ts's line). */
+let toldGyms = 0;
+function gymFrame(): void {
+  const g = link.room.gyms;
+  if (toldGyms > g.length) toldGyms = 0;
+  for (const [n, who] of g.slice(toldGyms)) if (who !== link.room.actor(link.me)?.name) say(`${who} beat ${LEADERS[n].name}! The gym is closed.`);
+  toldGyms = g.length;
+}
+
 /** Every few seconds of a match: still here, and the team as it is. */
 function remember(): void {
   if (!link?.online || !link.key || !room || !matchOn || isOut || !link.room.actor(link.me)) return;
@@ -817,6 +898,7 @@ function startMatch(l: WorldLink): void {
   isOut = waiting = shownWin = false;
   seenRound = lastPhase = -1;
   toldEvents = 0;
+  toldGyms = l.room.gyms.length;
   wasInFog = false;
   toGive.length = 0;
   outEl.classList.remove('on');
@@ -873,6 +955,8 @@ function fogFrame(): void {
     lastPhase = ring.phase;
   }
   rom?.setPhase(ring.phase + 1);
+  rom?.setSafari(!!ring.safari);
+  safariFrame(ring);
   if (isOut || !rom) return;
   // The BAG screen is a menu: the fog bites on the field and in battle (BrRing_Tick).
   if (swapping) return;
@@ -911,6 +995,7 @@ function fogLine(): string {
   const clock = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   const way = safeWay();
   const where = inFogNow() ? ` · YOU ARE IN THE FOG${way ? ` · Safe ${way}` : ''}` : '';
+  if (ring.safari) return `SAFARI ZONE · the drop in ${clock}`;
   if (ring.r === Infinity) return `fog in ${clock}${where}`;
   if (ring.last) return `FOG EVERYWHERE · new round in ${clock}${where}`;
   return `fog phase ${ring.phase}, closes again in ${clock}${where}`;
@@ -1198,6 +1283,17 @@ function drawClerks(visible: Placed[]): void {
     ctx.drawImage(img, 0, 0, w, img.height, (p.gx + e.trader!.x) * TILE + (TILE - w) / 2, (p.gy + e.trader!.y) * TILE + TILE - img.height, w, img.height);
   }
   for (const p of visible) {
+    // The gym leaders nobody has beaten yet, facing down (a beaten one has left the gym).
+    for (const l of LEADERS) {
+      if (l.map !== p.m.id || link.room.bossDown(l.n)) continue;
+      l.cells.forEach(([cx, cy], i) => {
+        const gfx = l.gfx[i];
+        let img = clerkArt.get(gfx);
+        if (!img) clerkArt.set(gfx, (img = art!.sprite(gfx, 3)));
+        const w = img.width / 3;
+        ctx.drawImage(img, 0, 0, w, img.height, (p.gx + cx) * TILE + (TILE - w) / 2, (p.gy + cy) * TILE + TILE - img.height, w, img.height);
+      });
+    }
     for (const c of CLERKS) {
       if (c.map !== p.m.id) continue;
       const gfx = c.store ? OBJ_EVENT_GFX_WOMAN_3 : OBJ_EVENT_GFX_MART_EMPLOYEE;
@@ -1405,6 +1501,7 @@ function loop(now: number): void {
     fogFrame();
     foeFrame();
     remember();
+    gymFrame();
     for (const k of pressed) watch.key(k);
     pressed.clear();
   }
@@ -1467,7 +1564,7 @@ async function boot(): Promise<void> {
     // and nobody else. A quicker fog to try it: ?ring=<seconds a phase>.
     startMatch(soloLink(hoenn.maps, patches, hoenn.world, (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0));
     const ringSecs = Number(q.get('ring'));
-    if (ringSecs > 0) link.room.ringPhase = Math.round(ringSecs * 60);
+    if (ringSecs > 0) link.room.ringPhase = link.room.opening = Math.round(ringSecs * 60);
   } else {
     // The live game's way in: the menu, a room, START (lobby.ts).
     document.getElementById('intro')?.remove();

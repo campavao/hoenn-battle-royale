@@ -284,10 +284,15 @@ void BrZone_PlaceChest(void)
 
 u16 BrZone_Pick(void)
 {
-    u8 evolved[BR_EVOLVED_BYTES];
-
     if (gBrMatch.phase != BR_PHASE_SAFARI)
         return SPECIES_NONE;
+    return BrZone_PickAny();
+}
+
+u16 BrZone_PickAny(void)
+{
+    u8 evolved[BR_EVOLVED_BYTES];
+
     BrZone_Ensure();
     if (gBrZone.dealtFor == 0)
         return SPECIES_NONE; // no seed yet: a driver in the Zone, or a START still coming

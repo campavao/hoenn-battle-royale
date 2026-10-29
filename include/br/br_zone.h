@@ -48,6 +48,8 @@ void BrZone_Ensure(void);
 // The species a wild encounter in the opening should use -- any wild first stage -- or
 // SPECIES_NONE outside the opening (the caller then keeps whatever the map's table gave it).
 u16 BrZone_Pick(void);
+// ...whatever the phase: spike B's page says when its Safari is open (br_wild.h).
+u16 BrZone_PickAny(void);
 // Outside the opening: the species a map's own table chose, or this match's stand-in for
 // it from the national dex (2026-10-05 play-test). Seeded by the match, map and species.
 u16 BrZone_National(u16 native);

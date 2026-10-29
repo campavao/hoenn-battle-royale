@@ -35,6 +35,8 @@ export interface WorldLink {
   field(bits: number): void;
   /** The bots the room gave me to fight: `winner` won (0, no answer). */
   bots(a: number, b: number, winner: number): void;
+  /** Where to drop me when the Safari ends. */
+  pick(map: string): void;
   /** My trade with event `n`'s trader is over: I gave him `given` (0, nothing). */
   traded(n: number, given: number): void;
   /** The ball `key` would not go in my bag: put it back. */
@@ -60,7 +62,9 @@ export interface WorldLink {
 const BOTS = 64;
 
 export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, seed: number): WorldLink {
-  const host = new Host(makeRoom(maps, patches, seed, world), BOTS, maps, 0);
+  const room = makeRoom(maps, patches, seed, world);
+  room.opening = room.ringPhase; // the Safari opening, as a match has it
+  const host = new Host(room, BOTS, maps, 0);
   const me = host.join('YOU', 0);
   host.advance();
   let seq = 0;
@@ -77,6 +81,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     field: (bits) => host.field(me, bits),
     bots: (a, b, winner) => host.bots(me, a, b, winner),
     traded: (n, given) => host.traded(me, n, given),
+    pick: (map) => host.pick(me, map),
     drop: (key, rest) => host.drop(me, key, rest),
     out: (bag, by, wild) => host.out(me, bag, by, wild),
     bt: () => undefined,
@@ -218,6 +223,8 @@ class Online implements WorldLink {
   bots(a: number, b: number, winner: number): void { this.send({ t: 'bots', a, b, w: winner }); }
 
   traded(n: number, given: number): void { this.send({ t: 'traded', n, sp: given }); }
+
+  pick(map: string): void { this.send({ t: 'pick', map }); }
 
   drop(key: number, rest?: Bag): void { this.send({ t: 'drop', k: key, rest }); }
 

@@ -18,6 +18,11 @@
 #include "constants/event_objects.h"
 #include "constants/map_groups.h"
 #include "constants/region_map_sections.h"
+#include "battle_setup.h"
+#include "event_data.h"
+#include "pokemon.h"
+#include "script.h"
+#include "constants/battle_setup.h"
 
 #define BR_GYM_PURSE 1000
 
@@ -51,6 +56,15 @@ static const struct BrBoss sBosses[] =
 EWRAM_DATA u8 gBrGymsBeaten = 0;
 
 extern const u8 BR_EventScript_BossBeaten[];
+extern const u8 BR_EventScript_Boss[];
+
+// Each leader's trainerbattle arguments, as the gym's own script has them (br.inc: the
+// texts are labels local to the scripts' assembly), BR_BOSS_ARGS bytes each.
+extern const u8 BR_BossArgs[];
+#define BR_BOSS_ARGS 21
+
+// The leader BR_EventScript_Boss is fighting.
+static u8 sBoss;
 
 static const u8 sText_Took[] = _("Took ");
 // 21 after the newline, so the longest prize name (a TM's move, up to 12) still leaves the
@@ -151,6 +165,26 @@ void BrGym_Beaten(u16 trainerId)
 void BrGym_Init(void)
 {
     gBrGymsBeaten = 0;
+}
+
+bool8 BrGym_StartBoss(u8 i)
+{
+    if (i >= ARRAY_COUNT(sBosses))
+        return FALSE;
+    // The gym's own refusal (EventScript_TryDoDoubleTrainerBattle): two of them, two of ours.
+    if (sBosses[i].trainerId == TRAINER_TATE_AND_LIZA_1 && GetMonsStateToDoubles() != PLAYER_HAS_TWO_USABLE_MONS)
+        return FALSE;
+    sBoss = i;
+    ScriptContext_SetupScript(BR_EventScript_Boss);
+    return TRUE;
+}
+
+// Its battle's arguments: no object to talk to (local id 0, so nothing is dropped for him,
+// BrLoot_TrainerBeaten), and the battle's end is BR_EventScript_Boss's own.
+void BrGym_LoadBoss(void)
+{
+    gSpecialVar_LastTalked = 0;
+    BattleSetup_ConfigureTrainerBattle(BR_BossArgs + sBoss * BR_BOSS_ARGS);
 }
 
 void BrGym_NoteOut(u8 mapGroup, u8 mapNum, u8 localId)
