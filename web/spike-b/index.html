@@ -80,6 +80,8 @@
       #stage[hidden] { display: none; }
       /* Over the game still running under it: the in-match sheet on a phone (POK-320). */
       #stage[data-look='overlay'] { background: transparent; }
+      /* The sheet over the match: the world's own buttons and corner go under it. */
+      body:has(#stage:not([hidden])) :is(#hud, #corner, #ticker, #watch-label) { visibility: hidden; }
       /* Beside the game: the sheet on a desktop, where the room panel always was, in view
          all match. The game makes room for it (body.docked, set by the stage). At twice
          the picture's size only when the window can spare that and still give the game
@@ -125,6 +127,7 @@
     <div id="hud">
       <div id="stats">loading…</div>
       <button id="menu" type="button">Menu (M)</button>
+      <button id="sheet" type="button" hidden>Room (R)</button>
       <button id="find" type="button">Itemfinder (F)</button>
       <button id="mode" type="button">Spectate (V)</button>
       <button id="sound" type="button">Sound: on</button>

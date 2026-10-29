@@ -27,10 +27,10 @@ import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
 import { over } from './shared/over';
 import { Lobby, me, type RoomInfo } from './lobby';
-import { loadCareer, recordMatch } from '../src/match/career';
+import { loadCareer, ordinal, recordMatch } from '../src/match/career';
 import type { MatchTally } from '../src/match/tally';
 import { tallySince } from './carry';
-import { guessedStickKeys, loadStickMap, stickKeys } from '../src/pad';
+import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, startStickLearn, stickKeys, stickLearnStep, type AxisSense, type StickMap } from '../src/pad';
 import { fameOf, resultsView, standingsOf, tallyLines } from '../src/ui/results';
 import { favourite } from '../src/match/tally';
 import { moveInfo, type Rom as MoveTables } from '../src/battle/movebook';
@@ -44,6 +44,8 @@ import hiddenJson from './data/hidden.json';
 import { RomArt } from './romart';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
+import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
+import { cardFields } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
 import { LEADERS } from './shared/gyms';
 import { CLERKS, priceOf, shelf } from './shared/marts';
@@ -214,8 +216,9 @@ const KEYMAP: Record<string, string> = {
 const intro = () => document.getElementById('intro') !== null;
 // The menu and the room (lobby.ts) have the keys while they are up: Emerald's, as the
 // live game's stage takes them, and a keyboard's letters for an entry.
-const STAGE_KEY: Record<string, GbaKey> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', z: 'a', x: 'b', Enter: 'start' };
+const STAGE_KEY: Record<string, GbaKey> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', z: 'a', x: 'b', Enter: 'start', Escape: 'b' };
 addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && remap.cancel) { remap.cancel(); e.stopImmediatePropagation(); return; }
   if (!lobby?.shown) return;
   e.stopImmediatePropagation();
   if (!e.ctrlKey && !e.metaKey && !e.altKey && lobby.stage.char(e.key)) { e.preventDefault(); return; }
@@ -227,6 +230,7 @@ addEventListener('keydown', (e) => {
   if (e.key === 'v' || e.key === 'V') { toggleSpectate(); return; }
   if ((e.key === 'm' || e.key === 'M' || e.key === 'Escape') && !e.repeat) { void openMenu(); return; }
   if ((e.key === 'f' || e.key === 'F') && !e.repeat) { itemfinder(); return; }
+  if ((e.key === 'r' || e.key === 'R') && !e.repeat) { openSheet(); return; }
   const k = KEYMAP[e.key];
   if (!k) return;
   e.preventDefault();
@@ -446,19 +450,8 @@ async function openBag(key: number, bag: Bag, who: string): Promise<void> {
  *  I stand, with this world's fog laid over it (ringmap.ts). */
 async function openMenu(): Promise<void> {
   if (!rom || isOut || battle || swapping || asking || spectating) return;
-  const c = await ask('MENU', [['POKéMON', '1'], ['BAG', '2'], ...(ringMap ? [['MAP', '13'] as [string, string]] : []), ['CARD', '4'], ...(lobby ? [['FEEDBACK', 'fb'] as [string, string], ['LEAVE', 'leave'] as [string, string]] : []), ['EXIT', '']]);
-  if (c === 'leave' && lobby) {
-    // The live sheet's LEAVE, asked once: out of the match for good, back to the menu.
-    if (await ask('Leave the match?', [['STAY', ''], ['LEAVE', 'y']]) === 'y') leaveMatch();
-    return;
-  }
-  if (c === 'fb' && lobby) {
-    // The live game's note, over the match: the world goes on under it.
-    swapping = true;
-    held.clear();
-    lobby.feedbackOver(() => { swapping = false; held.clear(); pressed.clear(); calmUntil = frame + 30; });
-    return;
-  }
+  const c = await ask('MENU', [['POKéMON', '1'], ['BAG', '2'], ...(ringMap ? [['MAP', '13'] as [string, string]] : []), ['CARD', '4'], ...(lobby ? [['ROOM', 'room'] as [string, string]] : []), ['EXIT', '']]);
+  if (c === 'room') { openSheet(); return; }
   if (!c || !rom || isOut || battle || swapping) return;
   const me = link.room.actor(link.me);
   const look = c === '13' && me && ringMap ? ringMap.look(me.m.spot) : undefined;
@@ -1242,6 +1235,111 @@ function leaveMatch(): void {
   lobby.menu('You left the match.');
 }
 
+/** The live match's sheet (ui/screens.ts sheetScreen) over the game: the room's line,
+ *  the strip, the legendary's chip, everybody in it as their sprite (a tap opens their
+ *  card: SPECTATE for somebody out), who I watch once out, LEAVE, the settings. */
+let sheetCard: number | null = null;
+let sheetLeave = false;
+const skinOf = new Map<number, number>();
+const sheetBtn = document.getElementById('sheet')!;
+sheetBtn.addEventListener('click', () => openSheet());
+function openSheet(): void {
+  if (!lobby || !matchOn || lobby.shown) return;
+  held.clear();
+  sheetCard = null;
+  sheetLeave = false;
+  lobby.sheetOver(sheetModel, () => { held.clear(); pressed.clear(); calmUntil = frame + 30; });
+  // The sheet's line and seats move with the match: redrawn while it is up.
+  const tick = setInterval(() => { if (lobby?.sheetUp) lobby.stage.redraw(); else clearInterval(tick); }, 500);
+}
+function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
+  const res = link.room.results;
+  for (const a of link.room.actors) skinOf.set(a.id, a.skin);
+  const nameOf = (id: number) => res.entrants.find(([e]) => e === id)?.[1] ?? link.room.actor(id)?.name ?? 'TRAINER';
+  const ids = res.entrants.length ? res.entrants.map(([id]) => id) : link.room.actors.map((a) => a.id);
+  const fell = new Set(res.fallen.map((f) => f.id));
+  const out = isOut || waiting;
+  const seats: RoomSeat[] = ids.map((id) => ({ seat: id, name: nameOf(id), skin: skinOf.get(id) ?? 0, isMe: id === link.me, spectating: false, alive: !fell.has(id) && !!link.room.actor(id) }));
+  const ring = link.room.ring();
+  const secs = Math.ceil(ring.left / 60);
+  const left = seats.filter((p) => p.alive).length;
+  const strip = `${ring.safari ? 'SAFARI' : (ringMap?.place(ring) || 'HOENN').toUpperCase()}${left ? ` · ${left} left` : ''} · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  const card = sheetCard === null ? null : (() => {
+    const seat = seats.find((p) => p.seat === sheetCard);
+    if (!seat) return null;
+    const m = room?.members.find((x) => x.id === seat.seat);
+    const placed = ids.length - res.fallen.findIndex((f) => f.id === seat.seat);
+    return {
+      seat: seat.seat,
+      skin: seat.skin,
+      lines: [
+        { label: 'NAME', value: seat.name },
+        ...(m?.rec ? cardFields({ name: m.name, skin: m.skin, wins: m.rec.wins, played: m.rec.played, best: m.rec.best }) : []),
+        { label: 'NOW', value: seat.alive ? 'IN' : fell.has(seat.seat) ? `OUT (${ordinal(placed)})` : 'OUT' },
+      ],
+      canKick: false,
+      canWatch: out && seat.alive && !seat.isMe,
+    };
+  })();
+  return {
+    look: 'overlay',
+    status: room ? `Room ${room.code}` : 'SOLO VS BOTS',
+    strip,
+    chips: [legendChip()].filter((c): c is string => c !== null),
+    match: res.round,
+    note: '',
+    seats,
+    card,
+    watch: out ? { name: follow && follow !== link.me ? nameOf(follow) : null } : null,
+    canLeave: true,
+    leaveAsk: sheetLeave,
+    muted,
+    remapping: remap.on,
+    remapLine: remap.line,
+    help: ['Arrows move  Z: A  X: B  M: MENU', 'R: this sheet  V: spectate  pads too'],
+    version: 'spike B',
+    onSeat: (seat) => { sheetCard = seat; lobby?.stage.redraw(); },
+    onKick: () => undefined,
+    onCloseCard: () => { sheetCard = null; lobby?.stage.redraw(); },
+    onWatch: (dir) => { watch.step(dir); lobby?.stage.redraw(); },
+    onWatchSeat: (seat) => { follow = seat; if (zoom < 1) zoom = fitZoom(); sheetCard = null; lobby?.closeSheet(); },
+    onStopWatch: () => { follow = 0; lobby?.stage.redraw(); },
+    onLeave: () => { sheetLeave = true; lobby?.stage.redraw(); },
+    onStay: () => { sheetLeave = false; lobby?.stage.redraw(); },
+    onLeaveSure: () => { sheetLeave = false; leaveMatch(); },
+    onMute: () => { soundBtn.click(); lobby?.stage.redraw(); },
+    onRemap: () => { remapPad(); lobby?.stage.redraw(); },
+    onResetPad: () => { resetPad(); lobby?.stage.redraw(); },
+    onForget: () => { forgetRom(); },
+  };
+}
+/** FORGET ROM, asked first as the live sheet asks it: the ROM this browser keeps goes,
+ *  and the page starts over (the game page asks for it again). */
+let romEmu: { forgetRom(): Promise<void>; stop(): void } | null = null;
+function forgetRom(): void {
+  const st = lobby!.stage;
+  st.push(noticeScreen(() => ({
+    title: 'FORGET ROM',
+    lines: [{ text: 'Forget the ROM stored in this browser? You will pick it again to play.' }],
+    buttons: [
+      { label: 'FORGET', id: 'forget-yes', onPress: () => { void (async () => { await romEmu?.forgetRom(); romEmu?.stop(); location.reload(); })(); } },
+      { label: 'BACK', id: 'forget-no', onPress: () => st.pop() },
+    ],
+    onBack: () => st.pop(),
+  })));
+}
+
+/** The legendary's chip (match/legends.ts's words): where it stands, or whose team has
+ *  it by the teams the phones told. */
+function legendChip(): string | null {
+  for (const e of [...link.room.events].reverse()) {
+    if (!e.species) continue;
+    if (link.room.spills.has(e.key)) return e.place ? `Legendary at ${e.place.toUpperCase()}` : 'Legendary on the map';
+    for (const [id, mons] of link.teams) if (mons.some((m) => m.species === e.species)) return `${link.room.actor(id)?.name ?? 'Somebody'} has the legendary`;
+  }
+  return null;
+}
+
 function matchOver(): void {
   forget();
   matchOn = false;
@@ -1491,22 +1589,91 @@ function padUp(k: string): void {
   held.delete(k);
   rom?.release(GBA_KEY[k]);
 }
+let padKeys = padMap();
+let padStick = loadStickMap();
+/** The remap wizard (the live game's wireRemap): the next button pressed, or where the
+ *  stick moved (null at rest, 'skip' for a button), goes here instead of the game. */
+let padCapture: ((index: number) => void) | null = null;
+let axisCapture: ((input: AxisSense | null | 'skip') => void) | null = null;
+const REMAP_ORDER = ['a', 'b', 'start', 'select', 'l', 'r'];
+const remap = { on: false, line: '', cancel: null as (() => void) | null };
+function remapSay(text: string): void { remap.line = text; lobby?.stage.redraw(); }
+function remapStop(note: string): void {
+  padCapture = axisCapture = null;
+  remap.cancel = null;
+  remap.on = false;
+  remapSay(note);
+}
+/** REMAP PAD: A, B, START, SELECT, L and R by turns, then the stick UP and RIGHT; saved
+ *  where the live game keeps them (hbr.padmap, hbr.padstick). Pressed again: cancel. */
+function remapPad(): void {
+  if (remap.cancel) { remap.cancel(); return; }
+  const taken: Record<number, string> = {};
+  let i = 0;
+  const finish = (stick: StickMap | null) => {
+    try {
+      localStorage.setItem('hbr.padmap', JSON.stringify(taken));
+      if (stick) localStorage.setItem(STICK_KEY, JSON.stringify(stick));
+      else localStorage.removeItem(STICK_KEY);
+    } catch { /* this session only */ }
+    padKeys = { ...taken, 12: 'up', 13: 'down', 14: 'left', 15: 'right' };
+    padStick = stick;
+    remapStop(stick ? 'Pad remapped, stick learned.' : 'Pad remapped.');
+  };
+  const askStick = () => {
+    let learn = startStickLearn();
+    remapSay('Push the LEFT STICK UP, then let go. Any button skips.');
+    axisCapture = (input) => {
+      const was = learn.phase;
+      learn = stickLearnStep(learn, input);
+      if (learn.phase === 'done') { axisCapture = null; finish(learn.result ?? null); }
+      else if (learn.phase !== was) remapSay('Now push the LEFT STICK RIGHT.');
+    };
+  };
+  const ask = () => {
+    if (i >= REMAP_ORDER.length) { askStick(); return; }
+    remapSay(`Press the button for ${REMAP_ORDER[i].toUpperCase()}. Esc cancels.`);
+    padCapture = (index) => { taken[index] = REMAP_ORDER[i]; i++; ask(); };
+  };
+  remap.on = true;
+  remap.cancel = () => remapStop('Remap cancelled.');
+  ask();
+}
+function resetPad(): void {
+  try { localStorage.removeItem('hbr.padmap'); localStorage.removeItem(STICK_KEY); } catch { /* nothing kept */ }
+  padKeys = PAD_DEFAULT;
+  padStick = null;
+  remapStop('Pad mapping reset.');
+}
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && remap.cancel) remap.cancel(); });
 if (typeof navigator.getGamepads === 'function') {
-  const map = padMap();
-  const stick = loadStickMap();
   const rest = new Map<number, readonly number[]>();
   let padHeld = new Set<string>();
+  let buttonsHeld = new Set<number>();
   setInterval(() => {
     const now = new Set<string>();
+    const pressedNow = new Set<number>();
     for (const pad of navigator.getGamepads()) {
       if (!pad) continue;
       if (!rest.has(pad.index)) rest.set(pad.index, [...pad.axes]);
       const base = rest.get(pad.index)!;
-      pad.buttons.forEach((b, i) => { if (b.pressed && map[i]) now.add(map[i]); });
-      for (const k of stick ? stickKeys(pad.axes, base, stick) : guessedStickKeys(pad.axes, base).keys) if (GBA_KEY[k]) now.add(k);
+      pad.buttons.forEach((b, i) => { if (b.pressed) pressedNow.add(i); });
+      if (axisCapture) {
+        const fresh = [...pressedNow].some((i) => !buttonsHeld.has(i));
+        axisCapture(fresh ? 'skip' : learnAxis(pad.axes, base));
+        continue;
+      }
+      if (padCapture) {
+        const fresh = [...pressedNow].find((i) => !buttonsHeld.has(i));
+        if (fresh !== undefined) padCapture(fresh);
+        continue;
+      }
+      for (const i of pressedNow) if (padKeys[i]) now.add(padKeys[i]);
+      for (const k of padStick ? stickKeys(pad.axes, base, padStick) : guessedStickKeys(pad.axes, base).keys) if (GBA_KEY[k]) now.add(k);
       const hat = pad.axes.length >= 10 ? pad.axes[9] : 9;
       if (hat >= -1.1 && hat <= 1.1) for (const k of PAD_HAT[Math.round((hat + 1) * 3.5) % 8]) now.add(k);
     }
+    buttonsHeld = pressedNow;
     for (const k of now) if (!padHeld.has(k)) padDown(k);
     for (const k of padHeld) if (!now.has(k)) padUp(k);
     padHeld = now;
@@ -2127,6 +2294,7 @@ async function boot(): Promise<void> {
   let files: Awaited<ReturnType<typeof loadRom>>;
   try {
     files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; });
+    romEmu = files.emu;
   } catch (e) {
     console.warn('spike ROM not loaded', e);
     return;
@@ -2172,6 +2340,7 @@ async function boot(): Promise<void> {
       onClosed: () => { matchOn = false; lobby!.menu('Lost the relay. Reload to play again.'); },
     });
     worldSock = sock;
+    sheetBtn.hidden = false;
     lobby = new Lobby({
       join: (how) => { const c = loadCareer(); sock.join(me().name, me().skin, { ...how, rec: { wins: c.wins, played: c.matches, ...(c.best ? { best: c.best } : {}) } }); },
       start: () => sock.start(),

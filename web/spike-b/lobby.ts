@@ -5,7 +5,7 @@
 // (ui/screens.ts) on the same stage. Dropping straight into the world is the debug path
 // now (?solo).
 import { Stage, type DrawnScreen } from '../src/ui/stage';
-import { menuScreen, roomScreen, type RoomModel, type RowSpec } from '../src/ui/screens';
+import { menuScreen, roomScreen, sheetScreen, type RoomModel, type RowSpec, type SheetModel } from '../src/ui/screens';
 import { CODE_ENTRY, NAME_ENTRY, PASS_ENTRY, entryScreen, newEntry } from '../src/ui/entry';
 import { FEEDBACK_ROW, HOWTO_ROW, countdown, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction } from '../src/match/lobby';
 import { howToScreen } from '../src/ui/howto';
@@ -63,6 +63,7 @@ export class Lobby {
 
   /** The main menu (with a line under it: a code nobody has, say). */
   menu(note = ''): void {
+    this.inSheet = false;
     this.note = note;
     this.room = null;
     this.stage.show(this.main);
@@ -82,6 +83,7 @@ export class Lobby {
   /** The live game's results over a finished match: PLAY AGAIN is the room, MAIN MENU
    *  leaves it. */
   results(model: Omit<ResultsModel, 'again' | 'menu'>, menu: () => void): void {
+    this.inSheet = false;
     const full: ResultsModel = { ...model, again: { label: 'PLAY AGAIN', id: 'results-again', onPress: () => this.backToRoom() }, menu };
     this.stage.show(resultsScreen(() => full));
   }
@@ -181,6 +183,32 @@ export class Lobby {
   private overMatch: (() => void) | null = null;
 
   /** SEND FEEDBACK over the match, from its MENU; `done` once it is closed. */
+  /** The live match's sheet (ui/screens.ts sheetScreen) over the game, which runs on
+   *  under it: the room's line, everybody in it, who I watch, LEAVE, the settings. Its
+   *  FEEDBACK goes over it and BACK comes back to it; closed, `done`. */
+  sheetOver(model: () => Omit<SheetModel, 'onClose' | 'onFeedback'>, done: () => void): void {
+    this.sheetDone = done;
+    this.inSheet = true;
+    this.stage.show(sheetScreen(() => ({ ...model(), onClose: () => this.closeSheet(), onFeedback: () => this.stage.push(this.feedback) })));
+  }
+
+  /** The sheet is up (or a screen over it). */
+  get sheetUp(): boolean {
+    return this.inSheet && this.stage.active;
+  }
+
+  closeSheet(): void {
+    if (!this.inSheet) return;
+    this.inSheet = false;
+    this.stage.hide();
+    const done = this.sheetDone;
+    this.sheetDone = null;
+    done?.();
+  }
+
+  private inSheet = false;
+  private sheetDone: (() => void) | null = null;
+
   feedbackOver(done: () => void): void {
     if (this.said !== 'sending') this.said = 'typing';
     this.overMatch = done;
@@ -195,7 +223,7 @@ export class Lobby {
       const text = cleanNote(this.draft);
       if (!text || this.said === 'sending') return;
       this.said = 'sending';
-      void sendFeedback(this.hooks.relayUrl, { type: 'feedback', text, v: 'spike B', where: this.overMatch ? 'spikeb-match' : this.room ? 'spikeb-room' : 'spikeb-menu', name: me().name, ...(this.room ? { room: this.room.code } : {}) }).then((result) => {
+      void sendFeedback(this.hooks.relayUrl, { type: 'feedback', text, v: 'spike B', where: this.overMatch || this.inSheet ? 'spikeb-match' : this.room ? 'spikeb-room' : 'spikeb-menu', name: me().name, ...(this.room ? { room: this.room.code } : {}) }).then((result) => {
         this.said = result;
         if (result === 'sent' && cleanNote(this.draft) === text) this.draft = '';
         this.stage.redraw();
