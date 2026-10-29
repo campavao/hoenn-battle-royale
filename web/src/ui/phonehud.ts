@@ -278,6 +278,8 @@ export function readHudView(emu: HudRead, sym: (name: string) => number | undefi
 export const FOG_W = 120;
 export const SIGN_W = 96;
 export const SIGN_H = 40;
+/** What the sign's name keeps clear of the plate's edges, both sides together. */
+export const SIGN_PAD = 6;
 export const DOCK_W = 96;
 export const DOCK_H = 40;
 const LINE = 14;
@@ -520,7 +522,9 @@ export class PhoneHud {
       const plate = picture(`/ui/popup-${v.theme}.png`, redo);
       if (!plate.complete || plate.naturalWidth === 0) return;
       c.drawPicture(plate, 0, 0, SIGN_W, SIGN_H, 0, 0);
-      const name = fitText(v.place, SIGN_W - 16);
+      // The plate's own border is 3 pixels a side: inside it, LITTLEROOT TOWN fits whole
+      // (HBR-111); only DESERT UNDERPASS is cut.
+      const name = fitText(v.place, SIGN_W - SIGN_PAD);
       c.drawTextCentred(name, SIGN_W / 2, 13, TEXT_DARK);
     });
     // Every plate up front, so a new section's sign is whole on its first frame.
