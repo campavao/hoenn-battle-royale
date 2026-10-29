@@ -941,6 +941,21 @@ describe("the ring's size", () => {
   });
 });
 
+describe('a bag in a bot\'s way', () => {
+  it('gives the bot its items and money; the Pokémon stay in it, and the bot steps over', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    const L = 'MAP_LITTLEROOT_TOWN';
+    room.apply({ c: 'join', id: 1, bot: true, name: 'BOT', skin: 4, spot: { map: L, x: 10, y: 12 }, facing: 4 });
+    room.spills.set(SPILL_KEY + 50, { key: SPILL_KEY + 50, map: L, x: 11, y: 12, name: 'MAY', bag: { items: [{ id: 13, n: 2 }], money: 300, mons: [{ species: 25, level: 9 }] } });
+    room.actor(1)!.calm = 0;
+    for (let i = 0; i < 40; i++) { room.actor(1)!.keys = KEY_RIGHT | KEY_A; room.step(); }
+    const bag = room.spillAt(L, 11, 12)!;
+    expect(bag.bag).toEqual({ items: [], money: 0, mons: [{ species: 25, level: 9 }] });
+    expect(room.actor(1)!.loot).toEqual({ items: [{ id: 13, n: 2 }], money: 300 });
+    expect(room.actor(1)!.m.spot.x).toBeGreaterThan(11);
+  });
+});
+
 describe('the last three', () => {
   it('hunt each other, picking up the bags and balls in their way, to a champion', () => {
     // Seed 99 left its last two standing apart behind an item ball until the fog took one.
