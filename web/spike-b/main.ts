@@ -30,6 +30,7 @@ import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattle
 import { groundCount } from './shared/items';
 import { RomArt } from './romart';
 import { RingMap } from './ringmap';
+import { Watch } from './watch';
 import type { GbaKey } from '../src/emu';
 import spritesData from '../src/data/sprites.json';
 
@@ -811,6 +812,14 @@ function toggleSpectate(): void {
   held.clear();
 }
 modeBtn.addEventListener('click', toggleSpectate);
+const watch = new Watch({
+  trainers: () => (link ? actors() : []),
+  me: () => link?.me ?? 0,
+  spectating: () => spectating,
+  follow: () => follow,
+  setFollow: (id) => { follow = id; if (id && zoom < 1) zoom = fitZoom(); },
+  zoom: () => zoom,
+});
 
 // Drag and pinch / wheel, spectating only. A tap on a trainer follows them.
 const pointers = new Map<number, { x: number; y: number }>();
@@ -1184,10 +1193,12 @@ function loop(now: number): void {
     fieldFrame();
     fogFrame();
     foeFrame();
+    for (const k of pressed) watch.key(k);
     pressed.clear();
   }
   const t1 = performance.now();
   draw();
+  watch.frame();
   if (foundUntil && performance.now() > foundUntil) { foundUntil = 0; foundEl.classList.remove('on'); }
   const t2 = performance.now();
   simMs = simMs * 0.9 + (t1 - t0) * 0.1;

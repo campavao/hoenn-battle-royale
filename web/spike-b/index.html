@@ -13,6 +13,11 @@
       #stats { background: #000a; padding: 4px 8px; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-width: calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right)); font-variant-numeric: tabular-nums; }
       #hud button { pointer-events: auto; background: #26313aee; color: #e8eef2; border: 1px solid #4c7a99; border-radius: 6px; padding: 6px 10px; font: inherit; }
       #hud button.on { background: #4c7a99; }
+      /* WATCH (watch.ts): who the camera is on, and the way round. */
+      #watch { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; background: #000a; padding: 4px 6px 4px 10px; border-radius: 6px; pointer-events: auto; }
+      #watch[hidden] { display: none; }
+      #watch-who { font-weight: 700; letter-spacing: 0.04em; margin-right: 4px; }
+      #watch-label { position: fixed; left: 50%; top: 50%; pointer-events: none; background: #000b; color: #fff; font-weight: 700; font-size: 12px; letter-spacing: 0.05em; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
       #pad { z-index: 3; position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 10px); display: none; justify-content: space-between; padding: 0 calc(env(safe-area-inset-right) + 14px) 0 calc(env(safe-area-inset-left) + 14px); pointer-events: none; }
       @media (pointer: coarse) { #pad { display: flex; } }
       .dpad { display: grid; grid-template: repeat(3, 54px) / repeat(3, 54px); gap: 3px; pointer-events: auto; }
@@ -111,7 +116,9 @@
       <div id="stats">loading…</div>
       <button id="menu" type="button">Menu (M)</button>
       <button id="mode" type="button">Spectate (V)</button>
+      <div id="watch" hidden><span id="watch-who"></span><button id="watch-prev" type="button">◀ PREV</button><button id="watch-next" type="button">NEXT ▶</button><button id="watch-stop" type="button">STOP</button></div>
     </div>
+    <div id="watch-label" hidden></div>
     <div id="pad">
       <div class="dpad">
         <span></span><div class="k" data-k="up">▲</div><span></span>
