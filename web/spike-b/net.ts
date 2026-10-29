@@ -41,6 +41,8 @@ export interface WorldLink {
   traded(n: number, given: number): void;
   /** I opened event `n`'s REGI wall. */
   open(n: number): void;
+  /** I sail to story `to`'s island, or ('') back to Lilycove. */
+  sail(to: string): void;
   /** The ball `key` would not go in my bag: put it back. */
   drop(key: number, rest?: Bag): void;
   /** My team is down: off the map. `by` who beat me, `wild` a wild POKeMON did. */
@@ -84,6 +86,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     bots: (a, b, winner) => host.bots(me, a, b, winner),
     traded: (n, given) => host.traded(me, n, given),
     open: (n) => host.open(me, n),
+    sail: (to) => host.sail(me, to),
     pick: (map) => host.pick(me, map),
     drop: (key, rest) => host.drop(me, key, rest),
     out: (bag, by, wild) => host.out(me, bag, by, wild),
@@ -227,6 +230,7 @@ class Online implements WorldLink {
 
   traded(n: number, given: number): void { this.send({ t: 'traded', n, sp: given }); }
   open(n: number): void { this.send({ t: 'open', n }); }
+  sail(to: string): void { this.send({ t: 'sail', to }); }
 
   pick(map: string): void { this.send({ t: 'pick', map }); }
 

@@ -447,8 +447,9 @@ describe('item balls', () => {
     }
     // The place-and-reward rows this world has the maps for.
     expect([...told].sort()).toEqual(expect.arrayContaining(['abandoned-ship', 'ancient-tomb', 'desert-ruins', 'granite-cave', 'island-cave', 'lavaridge-egg', 'mirage-tower', 'stevens-house']));
-    // ...and no boat: the ferry waits on its own ROM work.
-    expect(told.has('southern-island')).toBe(false);
+    // ...and the islands, which the ferry sails to; not the final ring's two.
+    expect(told.has('southern-island')).toBe(true);
+    expect(told.has('sky-pillar') || told.has('sootopolis')).toBe(false);
     // CAPT. STERN stands at his harbour with what he gives for the SCANNER.
     const stern = [...room.spills.values()].find((b) => b.person?.wants);
     expect(stern).toMatchObject({ map: 'MAP_SLATEPORT_CITY_HARBOR', x: 6, y: 13, person: { name: 'CAPT. STERN', wants: 278 } });
@@ -496,6 +497,31 @@ describe('item balls', () => {
     expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'gate', gate: 2, key: shelly.key }));
     expect(room.picked.get(shelly.key)).toBe(1000);
     expect(a.battling).toBe(true);
+  });
+
+  it("the ferry sails to a live island's story and back, and nowhere without one", () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const r = room as unknown as { tellStory(n: number, ring: unknown, s: unknown, rng: () => number): void };
+    const harbor = { map: 'MAP_LILYCOVE_CITY_HARBOR', x: 8, y: 11 };
+    room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: harbor, facing: 2 });
+    room.step();
+    const a = room.actor(1000)!;
+    a.calm = 0;
+    expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'ferry', to: [] }));
+    room.step(new Map([[1000, [0]]]));
+    expect(room.maps.has('MAP_SOUTHERN_ISLAND_INTERIOR')).toBe(true);
+    r.tellStory(0, { ...room.ring(), r: Infinity }, STORIES.find((s) => s.id === 'southern-island'), () => 0.5);
+    expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'ferry', to: [{ id: 'southern-island', name: 'SOUTHERN ISLAND' }] }));
+    room.apply({ c: 'sail', id: 1000, to: 'southern-island' });
+    expect(room.actor(1000)!.m.spot).toEqual({ map: 'MAP_SOUTHERN_ISLAND_EXTERIOR', x: 13, y: 22 });
+    // The island is measured by the dock (the fog there is Lilycove's).
+    expect(room.inFog(room.actor(1000)!.m.spot, { ...room.ring(), r: 1e6 })).toBe(false);
+    // The sailor behind, facing him: home.
+    room.actor(1000)!.m.facing = 1;
+    room.step(new Map([[1000, [0]]]));
+    expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'ferry', home: true }));
+    room.apply({ c: 'sail', id: 1000, to: '' });
+    expect(room.actor(1000)!.m.spot).toEqual(harbor);
   });
 
   it("ISLAND CAVE's wall opens by itself a phase on; ANCIENT TOMB's for the page that saw a flier", () => {

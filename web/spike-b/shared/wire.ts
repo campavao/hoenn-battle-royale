@@ -20,6 +20,7 @@ export type WorldUp =
   /** My trade with event `n`'s trader is over: I gave him `sp` (0, nothing). */
   | { t: 'traded'; n: number; sp: number }
   | { t: 'open'; n: number }
+  | { t: 'sail'; to: string }
   /** Drop me on this map when the Safari ends. */
   | { t: 'pick'; map: string }
   /** The ball or bag `k` would not go in my bag: put it back (a bag holding `rest`). */

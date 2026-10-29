@@ -21,7 +21,7 @@ import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { DIR_EAST } from './sim';
-import { HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Ring, type Spill } from './shared/room';
+import { ATTENDANT, DOCKS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink } from './net';
@@ -91,6 +91,8 @@ function decode(grid: string, cells: number): Uint8Array {
 
 /** BFS over the seams from Littleroot: a neighbour's origin is this map's, shifted by the
  *  connection's offset along the shared edge (World.landAcross is the same sum backwards). */
+/** The ferry's islands (room.ts islandMaps): not a place to drop. */
+const ISLANDS = new Set<string>();
 function layout(maps: WorldMap[]): Map<string, Placed> {
   const byId = new Map(maps.map((m) => [m.id, m]));
   const placed = new Map<string, Placed>();
@@ -121,6 +123,14 @@ function layout(maps: WorldMap[]): Map<string, Placed> {
   for (const [id, { m }] of interiors(maps, placed)) {
     if (x + m.w > right + 200 + ROW) { x = right + 200; y += rowH + GAP; rowH = 0; }
     placed.set(id, { m, gx: x, gy: y, classes: decode(m.grid, m.w * m.h) });
+    x += m.w + GAP;
+    rowH = Math.max(rowH, m.h);
+  }
+  // The ferry's islands, each on its own, in the row past the buildings'.
+  x = right + 200; y += rowH + GAP; rowH = 0;
+  for (const m of islandMaps(maps)) {
+    ISLANDS.add(m.id);
+    placed.set(m.id, { m, gx: x, gy: y, classes: decode(m.grid, m.w * m.h) });
     x += m.w + GAP;
     rowH = Math.max(rowH, m.h);
   }
@@ -466,6 +476,18 @@ async function door(n: number, how: string, opened: boolean): Promise<void> {
   } else say('A gust of wind seems to come from inside. A Flying-type POKéMON could open it.');
 }
 
+/** The ferry (br_story.c): Lilycove's attendant sails to an island a live story is on, and
+ *  its sailor sails back. Bots never take it. */
+async function ferry(to: { id: string; name: string }[], home: boolean): Promise<void> {
+  if (home) {
+    if (await ask('Sail back to LILYCOVE CITY?', [['YES', 'y'], ['NO', '']]) === 'y') link.sail('');
+    return;
+  }
+  if (!to.length) { say('The ferry is not sailing anywhere right now.'); return; }
+  const c = await ask('Where would you like to sail?', [...to.map((t): [string, string] => [t.name, t.id]), ['CANCEL', '']]);
+  if (c) link.sail(c);
+}
+
 /** A story's person (story.ts's people): STEVEN hands his over; CAPT. STERN wants the
  *  SCANNER first, out of my bag, as br_story.c's BrStory_Hands asks. */
 async function meet(key: number, bag: Bag, person: Person): Promise<void> {
@@ -514,6 +536,7 @@ function startFor(e: RoomEvent): void {
   if (e.type === 'trade') { void (e.gives ? gift(e.n, e.species) : trade(e.n, e.species)); return; }
   if (e.type === 'door') { void door(e.n, e.how, !!e.opened); return; }
   if (e.type === 'guarded') { say(`${e.name} guards it!`); return; }
+  if (e.type === 'ferry') { void ferry(e.to, !!e.home); return; }
   if (e.type === 'gate') {
     // A story's gate (br_story.c): his own fight in the hidden ROM, past the eight gym
     // leaders (BrStory_StartGate); won, what he held is mine, and lost, it is his again.
@@ -1017,7 +1040,7 @@ async function pickDrop(): Promise<void> {
   const byPlace = new Map<string, string>();
   for (const id of [...placed.keys()].sort()) {
     const p = placed.get(id)!;
-    if (!p.m.outdoor || id.startsWith(SAFARI)) continue;
+    if (!p.m.outdoor || id.startsWith(SAFARI) || ISLANDS.has(id)) continue;
     const name = ringMap?.placeOf(id);
     if (name && !byPlace.has(name)) byPlace.set(name, id);
   }
@@ -1570,6 +1593,11 @@ function drawNurses(visible: Placed[]): void {
 /** The MARTs' clerks (marts.ts), each the way it faces: the first three frames are
  *  down, up and left; right is left turned over. */
 const clerkArt = new Map<number, HTMLCanvasElement>();
+/** OBJ_EVENT_GFX_BEAUTY at Lilycove's harbour, OBJ_EVENT_GFX_SAILOR on each dock. */
+const FERRY_PEOPLE: [string, number, number, number][] = [
+  [ATTENDANT.map, ATTENDANT.x, ATTENDANT.y, 45],
+  ...[...new Map(Object.values(DOCKS).map((d) => [d.map, d])).values()].map((d): [string, number, number, number] => [d.map, d.sailor[0], d.sailor[1], 49]),
+];
 function drawClerks(visible: Placed[]): void {
   if (!art) return;
   // Events' traders, facing down (br_event.c's GENTLEMAN).
@@ -1580,6 +1608,15 @@ function drawClerks(visible: Placed[]): void {
     if (!img) clerkArt.set(OBJ_EVENT_GFX_GENTLEMAN, (img = art.sprite(OBJ_EVENT_GFX_GENTLEMAN, 3)));
     const w = img.width / 3;
     ctx.drawImage(img, 0, 0, w, img.height, (p.gx + e.trader!.x) * TILE + (TILE - w) / 2, (p.gy + e.trader!.y) * TILE + TILE - img.height, w, img.height);
+  }
+  // The ferry's attendant in Lilycove's harbour and each island's sailor (br_story.c).
+  for (const [map, x, y, gfx] of FERRY_PEOPLE) {
+    const p = placed.get(map);
+    if (!p || !visible.includes(p)) continue;
+    let img = clerkArt.get(gfx);
+    if (!img) clerkArt.set(gfx, (img = art.sprite(gfx, 3)));
+    const w = img.width / 3;
+    ctx.drawImage(img, 0, 0, w, img.height, (p.gx + x) * TILE + (TILE - w) / 2, (p.gy + y) * TILE + TILE - img.height, w, img.height);
   }
   // People at home and floor traders (br_balls.c), facing down: a gift-giver's people.
   for (const h of link.room.homes) {

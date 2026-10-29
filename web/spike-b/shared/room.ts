@@ -122,6 +122,9 @@ export type RoomEvent =
   | { type: 'gate'; tick: number; id: number; key: number; gate: number; bag: Bag; name: string }
   /** A at a piece a gate's boss still guards. */
   | { type: 'guarded'; tick: number; id: number; name: string }
+  /** A at the ferry's attendant (the live islands' stories, none: not sailing) or at a
+   *  dock's sailor (`home`: back to Lilycove). */
+  | { type: 'ferry'; tick: number; id: number; to: { id: string; name: string }[]; home?: boolean }
   /** A at a MART's clerk. */
   | { type: 'mart'; tick: number; id: number; map: string }
   /** A at a gym leader nobody has beaten yet: their own battle (gyms.ts). */
@@ -143,6 +146,38 @@ export interface Spill {
   person?: { gfx: number; name: string; wants?: number; gate?: number };
   /** A gate's other pieces: his own piece's key, which has to be gone first. */
   guard?: number;
+}
+
+/** The ferry (br_story.c): Lilycove's attendant sails to an island a live story is on,
+ *  and each island's sailor sails back (LilycoveCity_Harbor's and the islands' warps).
+ *  A dock: where the boat lands you, and where its sailor stands. */
+export const ATTENDANT = { map: 'MAP_LILYCOVE_CITY_HARBOR', x: 8, y: 10 };
+const HARBOR_LANDING = { map: 'MAP_LILYCOVE_CITY_HARBOR', x: 8, y: 11 };
+export const DOCKS: Record<string, { map: string; x: number; y: number; sailor: [number, number] }> = {
+  'southern-island': { map: 'MAP_SOUTHERN_ISLAND_EXTERIOR', x: 13, y: 22, sailor: [13, 23] },
+  'birth-island': { map: 'MAP_BIRTH_ISLAND_HARBOR', x: 8, y: 4, sailor: [8, 5] },
+  'faraway-island': { map: 'MAP_FARAWAY_ISLAND_ENTRANCE', x: 13, y: 38, sailor: [13, 39] },
+  'navel-rock-top': { map: 'MAP_NAVEL_ROCK_HARBOR', x: 8, y: 4, sailor: [8, 5] },
+  'navel-rock-bottom': { map: 'MAP_NAVEL_ROCK_HARBOR', x: 8, y: 4, sailor: [8, 5] },
+};
+/** The ferry's people, by cell: the attendant, and each dock's sailor. */
+export function ferryAt(map: string, x: number, y: number): 'attendant' | 'sailor' | undefined {
+  if (map === ATTENDANT.map && x === ATTENDANT.x && y === ATTENDANT.y) return 'attendant';
+  return Object.values(DOCKS).some((d) => d.map === map && d.sailor[0] === x && d.sailor[1] === y) ? 'sailor' : undefined;
+}
+/** Every map the ferry's docks lead to on foot (their warps): the islands, which no
+ *  seam or door joins to Hoenn. */
+export function islandMaps(all: readonly WorldMap[]): WorldMap[] {
+  const byId = new Map(all.map((m) => [m.id, m]));
+  const out = new Map<string, WorldMap>();
+  const queue = [...new Set(Object.values(DOCKS).map((d) => d.map))];
+  while (queue.length) {
+    const m = byId.get(queue.shift()!);
+    if (!m || out.has(m.id)) continue;
+    out.set(m.id, m);
+    for (const w of m.warps ?? []) queue.push(w.to);
+  }
+  return [...out.values()];
 }
 
 /** The REGI chambers' walls (story.ts's door rows): how each opens. */
@@ -255,6 +290,8 @@ export type Command =
   | { c: 'traded'; id: number; n: number; given: number }
   /** `id` opened event `n`'s REGI wall (a Flying-type in their party, the page saw). */
   | { c: 'open'; id: number; n: number }
+  /** `id` sails to story `to`'s island, or ('') from an island back to Lilycove. */
+  | { c: 'sail'; id: number; to: string }
   /** `id`'s page went (a reload), or came back. */
   | { c: 'away'; id: number; on: boolean }
   /** Drop `id` on `map` when the Safari ends. */
@@ -418,6 +455,16 @@ export class Room {
     } else if (cmd.c === 'away') {
       const a = this.actor(cmd.id);
       if (a && !a.bot) a.away = cmd.on || undefined;
+    } else if (cmd.c === 'sail') {
+      const a = this.actor(cmd.id);
+      if (!a || a.bot || a.battling || a.m.action) return;
+      const [x, y] = this.ahead(a);
+      const who = ferryAt(a.m.spot.map, x, y);
+      if (cmd.to === '' && who === 'sailor') a.m = newMover(HARBOR_LANDING, 1);
+      else if (who === 'attendant' && this.sailingTo().some((s) => s.id === cmd.to)) {
+        const d = DOCKS[cmd.to];
+        a.m = newMover({ map: d.map, x: d.x, y: d.y }, 2);
+      }
     } else if (cmd.c === 'open') {
       const a = this.actor(cmd.id), e = this.events.find((q) => q.n === cmd.n);
       if (a && e && e.story && DOORS[e.story] && a.m.spot.map === e.map && atWall(a)) e.opened = true;
@@ -504,6 +551,18 @@ export class Room {
         a.boss = undefined;
       }
     }
+  }
+
+  /** The islands the ferry sails to now: a live story's whose first piece still lies there
+   *  (br_story.c's LiveAt), one row an island. */
+  sailingTo(): { id: string; name: string }[] {
+    const out: { id: string; name: string }[] = [];
+    for (const e of this.events) {
+      const d = e.story ? DOCKS[e.story] : undefined;
+      if (!d || !this.spills.has(e.key) || this.picked.has(e.key) || out.some((o) => DOCKS[o.id].map === d.map)) continue;
+      out.push({ id: e.story!, name: e.place ?? e.story! });
+    }
+    return out;
   }
 
   /** Gym leader `n` has been beaten this round. */
@@ -774,10 +833,10 @@ export class Room {
 
   /** A story event this round has not had (story.ts), where Emerald set that beat, inside
    *  the ring. The ones the page can tell: a place and its reward, or a person handing it
-   *  over, a REGI behind its wall, or a gate's boss to beat first; none over the ferry,
-   *  and not the final ring's. */
+   *  over, a REGI behind its wall, a gate's boss to beat first, or an island the ferry
+   *  sails to; not the final ring's. */
   private storyFor(rng: () => number, ring: Ring): Story | undefined {
-    const open = STORIES.filter((s) => (s.people ?? []).every((p) => PERSON_GFX[p.gfx] && (!p.trainer || GATES.includes(p.trainer))) && !s.boat && !s.final && !s.noBots &&
+    const open = STORIES.filter((s) => (s.people ?? []).every((p) => PERSON_GFX[p.gfx] && (!p.trainer || GATES.includes(p.trainer))) && (!s.boat || DOCKS[s.id]) && !s.final && !s.noBots &&
       !this.events.some((e) => e.story === s.id) &&
       s.cells.every((c) => this.maps.has(c.map ?? s.map) && this.world.cell(c.map ?? s.map, c.x, c.y) === 0) &&
       !this.inFog({ map: s.map, x: s.cells[0].x, y: s.cells[0].y }, ring));
@@ -1094,7 +1153,10 @@ export class Room {
         }
       }
       const wall = !a.battling && (bits & KEY_A) && !(a.last & KEY_A) && atWall(a) ? this.events.find((e) => e.map === a.m.spot.map && e.story && DOORS[e.story] && !e.opened) : undefined;
-      if (wall) {
+      const ferry = !wall && !a.battling && (bits & KEY_A) && !(a.last & KEY_A) ? ferryAt(a.m.spot.map, ...this.ahead(a)) : undefined;
+      if (ferry) {
+        events.push({ type: 'ferry', tick: this.tick, id: a.id, to: ferry === 'attendant' ? this.sailingTo() : [], ...(ferry === 'sailor' ? { home: true } : {}) });
+      } else if (wall) {
         const how = DOORS[wall.story!];
         // DESERT RUINS': ROCK SMASH's crack, which anybody makes here (br_story.c).
         if (how === 'smash') wall.opened = true;
@@ -1196,7 +1258,7 @@ export class Room {
       const t = r.to;
       // A REGI chamber's wall: shut until its story opened it (and in a match without one).
       if (r.warp && DOOR_MAPS.has(from.map) && from.y === DOOR_Y + 1 && t.y < DOOR_Y && !this.events.some((e) => e.map === from.map && e.opened)) return null;
-      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y)) return null;
+      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y) || ferryAt(t.map, t.x, t.y)) return null;
       // The Zone's gate is shut until the drop, both ways.
       if (from.map.startsWith(SAFARI) !== t.map.startsWith(SAFARI) && this.ring().safari) return null;
       const boss = leaderAt(t.map, t.x, t.y);
@@ -1308,5 +1370,9 @@ export function makeRoom(all: readonly WorldMap[], patches: PatchTable, seed: nu
   for (const m of zone) maps.set(m.id, m);
   const anchors = new Map([...inside].map(([id, p]) => [id, { gx: p.gx, gy: p.gy }]));
   for (const m of zone) anchors.set(m.id, { gx: -10000, gy: -10000 });
+  // The islands, the ferry's: the ring measures them by the dock it sails from (br_story.c's
+  // BrStory_Dock), Lilycove's harbour.
+  const harbor = anchors.get(ATTENDANT.map);
+  if (harbor) for (const m of islandMaps(all)) { maps.set(m.id, m); anchors.set(m.id, harbor); }
   return new Room(world ?? new World(all as WorldMap[]), maps, patches, seed, places, anchors);
 }

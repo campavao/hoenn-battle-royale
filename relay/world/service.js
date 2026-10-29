@@ -1984,6 +1984,31 @@ function keysOf(bits) {
   return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A) };
 }
 var FIELD_SURF = 4;
+var ATTENDANT = { map: "MAP_LILYCOVE_CITY_HARBOR", x: 8, y: 10 };
+var HARBOR_LANDING = { map: "MAP_LILYCOVE_CITY_HARBOR", x: 8, y: 11 };
+var DOCKS = {
+  "southern-island": { map: "MAP_SOUTHERN_ISLAND_EXTERIOR", x: 13, y: 22, sailor: [13, 23] },
+  "birth-island": { map: "MAP_BIRTH_ISLAND_HARBOR", x: 8, y: 4, sailor: [8, 5] },
+  "faraway-island": { map: "MAP_FARAWAY_ISLAND_ENTRANCE", x: 13, y: 38, sailor: [13, 39] },
+  "navel-rock-top": { map: "MAP_NAVEL_ROCK_HARBOR", x: 8, y: 4, sailor: [8, 5] },
+  "navel-rock-bottom": { map: "MAP_NAVEL_ROCK_HARBOR", x: 8, y: 4, sailor: [8, 5] }
+};
+function ferryAt(map, x, y) {
+  if (map === ATTENDANT.map && x === ATTENDANT.x && y === ATTENDANT.y) return "attendant";
+  return Object.values(DOCKS).some((d) => d.map === map && d.sailor[0] === x && d.sailor[1] === y) ? "sailor" : void 0;
+}
+function islandMaps(all) {
+  const byId = new Map(all.map((m) => [m.id, m]));
+  const out = /* @__PURE__ */ new Map();
+  const queue = [...new Set(Object.values(DOCKS).map((d) => d.map))];
+  while (queue.length) {
+    const m = byId.get(queue.shift());
+    if (!m || out.has(m.id)) continue;
+    out.set(m.id, m);
+    for (const w of m.warps ?? []) queue.push(w.to);
+  }
+  return [...out.values()];
+}
 var DOORS = Object.fromEntries(STORIES.filter((s) => s.door).map((s) => [s.id, s.door]));
 var DOOR_MAPS = new Set(STORIES.filter((s) => s.door).map((s) => s.map));
 var atWall = (a) => DOOR_MAPS.has(a.m.spot.map) && a.m.spot.x === 8 && a.m.spot.y === DOOR_Y + 1 && a.m.facing === 2;
@@ -2112,6 +2137,16 @@ var Room = class {
     } else if (cmd.c === "away") {
       const a = this.actor(cmd.id);
       if (a && !a.bot) a.away = cmd.on || void 0;
+    } else if (cmd.c === "sail") {
+      const a = this.actor(cmd.id);
+      if (!a || a.bot || a.battling || a.m.action) return;
+      const [x, y] = this.ahead(a);
+      const who = ferryAt(a.m.spot.map, x, y);
+      if (cmd.to === "" && who === "sailor") a.m = newMover(HARBOR_LANDING, 1);
+      else if (who === "attendant" && this.sailingTo().some((s) => s.id === cmd.to)) {
+        const d = DOCKS[cmd.to];
+        a.m = newMover({ map: d.map, x: d.x, y: d.y }, 2);
+      }
     } else if (cmd.c === "open") {
       const a = this.actor(cmd.id), e = this.events.find((q) => q.n === cmd.n);
       if (a && e && e.story && DOORS[e.story] && a.m.spot.map === e.map && atWall(a)) e.opened = true;
@@ -2206,6 +2241,17 @@ var Room = class {
         a.boss = void 0;
       }
     }
+  }
+  /** The islands the ferry sails to now: a live story's whose first piece still lies there
+   *  (br_story.c's LiveAt), one row an island. */
+  sailingTo() {
+    const out = [];
+    for (const e of this.events) {
+      const d = e.story ? DOCKS[e.story] : void 0;
+      if (!d || !this.spills.has(e.key) || this.picked.has(e.key) || out.some((o) => DOCKS[o.id].map === d.map)) continue;
+      out.push({ id: e.story, name: e.place ?? e.story });
+    }
+    return out;
   }
   /** Gym leader `n` has been beaten this round. */
   bossDown(n) {
@@ -2457,10 +2503,10 @@ var Room = class {
   }
   /** A story event this round has not had (story.ts), where Emerald set that beat, inside
    *  the ring. The ones the page can tell: a place and its reward, or a person handing it
-   *  over, a REGI behind its wall, or a gate's boss to beat first; none over the ferry,
-   *  and not the final ring's. */
+   *  over, a REGI behind its wall, a gate's boss to beat first, or an island the ferry
+   *  sails to; not the final ring's. */
   storyFor(rng, ring) {
-    const open = STORIES.filter((s) => (s.people ?? []).every((p) => PERSON_GFX[p.gfx] && (!p.trainer || GATES.includes(p.trainer))) && !s.boat && !s.final && !s.noBots && !this.events.some((e) => e.story === s.id) && s.cells.every((c) => this.maps.has(c.map ?? s.map) && this.world.cell(c.map ?? s.map, c.x, c.y) === 0) && !this.inFog({ map: s.map, x: s.cells[0].x, y: s.cells[0].y }, ring));
+    const open = STORIES.filter((s) => (s.people ?? []).every((p) => PERSON_GFX[p.gfx] && (!p.trainer || GATES.includes(p.trainer))) && (!s.boat || DOCKS[s.id]) && !s.final && !s.noBots && !this.events.some((e) => e.story === s.id) && s.cells.every((c) => this.maps.has(c.map ?? s.map) && this.world.cell(c.map ?? s.map, c.x, c.y) === 0) && !this.inFog({ map: s.map, x: s.cells[0].x, y: s.cells[0].y }, ring));
     return open.length ? open[Math.floor(rng() * open.length)] : void 0;
   }
   /** The story's pieces on its own cells (story.ts's storyDrop): its mons at the phase's
@@ -2772,7 +2818,10 @@ var Room = class {
         }
       }
       const wall = !a.battling && bits & KEY_A && !(a.last & KEY_A) && atWall(a) ? this.events.find((e) => e.map === a.m.spot.map && e.story && DOORS[e.story] && !e.opened) : void 0;
-      if (wall) {
+      const ferry = !wall && !a.battling && bits & KEY_A && !(a.last & KEY_A) ? ferryAt(a.m.spot.map, ...this.ahead(a)) : void 0;
+      if (ferry) {
+        events.push({ type: "ferry", tick: this.tick, id: a.id, to: ferry === "attendant" ? this.sailingTo() : [], ...ferry === "sailor" ? { home: true } : {} });
+      } else if (wall) {
         const how = DOORS[wall.story];
         if (how === "smash") wall.opened = true;
         events.push({ type: "door", tick: this.tick, id: a.id, n: wall.n, how, ...wall.opened ? { opened: true } : {} });
@@ -2860,7 +2909,7 @@ var Room = class {
       if (a.bot && !this.places.has(r.to.map)) return null;
       const t = r.to;
       if (r.warp && DOOR_MAPS.has(from.map) && from.y === DOOR_Y + 1 && t.y < DOOR_Y && !this.events.some((e) => e.map === from.map && e.opened)) return null;
-      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y)) return null;
+      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y) || ferryAt(t.map, t.x, t.y)) return null;
       if (from.map.startsWith(SAFARI) !== t.map.startsWith(SAFARI) && this.ring().safari) return null;
       const boss = leaderAt(t.map, t.x, t.y);
       if (boss && !this.bossDown(boss.n)) return null;
@@ -3052,6 +3101,11 @@ function makeRoom(all, patches, seed, world) {
   for (const m of zone) maps.set(m.id, m);
   const anchors = new Map([...inside].map(([id, p]) => [id, { gx: p.gx, gy: p.gy }]));
   for (const m of zone) anchors.set(m.id, { gx: -1e4, gy: -1e4 });
+  const harbor = anchors.get(ATTENDANT.map);
+  if (harbor) for (const m of islandMaps(all)) {
+    maps.set(m.id, m);
+    anchors.set(m.id, harbor);
+  }
   return new Room(world ?? new World(all), maps, patches, seed, places, anchors);
 }
 
@@ -3280,6 +3334,10 @@ var Host = class {
   open(id, n) {
     if (this.players.has(id)) this.pending.push({ c: "open", id, n });
   }
+  /** The page asked the ferry for story `to`'s island ('' home). */
+  sail(id, to) {
+    if (this.players.has(id) && typeof to === "string" && to.length <= 32) this.pending.push({ c: "sail", id, to });
+  }
   end(id, fled = false, won = false) {
     if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: "end", id, ...fled ? { fled: true } : {}, ...won ? { won: true } : {} });
   }
@@ -3464,6 +3522,8 @@ var WorldService = class {
           if (Number.isInteger(m.bits)) host.field(phone.id, m.bits);
         } else if (m.t === "pick") {
           if (typeof m.map === "string") host.pick(phone.id, m.map.slice(0, 64));
+        } else if (m.t === "sail") {
+          if (typeof m.to === "string") host.sail(phone.id, m.to);
         } else if (m.t === "open") {
           if (Number.isInteger(m.n)) host.open(phone.id, m.n);
         } else if (m.t === "traded") {
