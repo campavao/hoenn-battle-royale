@@ -350,7 +350,7 @@ async function openBag(key: number, bag: Bag, who: string): Promise<void> {
  *  I stand, with this world's fog laid over it (ringmap.ts). */
 async function openMenu(): Promise<void> {
   if (!rom || isOut || battle || swapping || asking || spectating) return;
-  const c = await ask('MENU', [['POKéMON', '1'], ['BAG', '2'], ['MAP', '13'], ['CARD', '4'], ['EXIT', '']]);
+  const c = await ask('MENU', [['POKéMON', '1'], ['BAG', '2'], ...(ringMap ? [['MAP', '13'] as [string, string]] : []), ['CARD', '4'], ['EXIT', '']]);
   if (!c || !rom || isOut || battle || swapping) return;
   const me = link.room.actor(link.me);
   const look = c === '13' && me && ringMap ? ringMap.look(me.m.spot) : undefined;
@@ -652,7 +652,8 @@ let looping = false;
  *  match begins it -- a fresh team, nobody out, the camera on my trainer. */
 function startMatch(l: WorldLink): void {
   link = l;
-  ringMap = art ? new RingMap(l.room, art) : null;
+  // A patch whose symbols predate the MAP's (gRegionMapEntries, gPlttBufferFaded) has none.
+  ringMap = art && RingMap.SYMBOLS.every((n) => Number.isFinite(art!.sym(n))) ? new RingMap(l.room, art) : null;
   matchOn = true;
   endingAt = 0;
   lobby?.hide();

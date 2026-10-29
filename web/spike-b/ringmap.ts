@@ -50,6 +50,8 @@ const R_ALL = -1;
 interface Section { id: number; x: number; y: number; w: number; h: number; letters: number[] }
 
 export class RingMap {
+  /** What it reads that the ROM's symbols must name. */
+  static readonly SYMBOLS = ['gRegionMapEntries', 'gPlttBufferFaded', 'gMain', 'gMapGroups'];
   /** Each grid pixel's point in the plane layout() places the maps in, in tiles: x, y. */
   private plane = new Float32Array(GRID_W * CELL * GRID_H * CELL * 2);
   private sections = new Map<string, Section>();
