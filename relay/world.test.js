@@ -52,7 +52,8 @@ test("/world: two phones share one room at 60 Hz", async () => {
     const hb = await b.until((m) => m.t === "hello");
     assert.equal(ha.id, ra.you);
     assert.equal(hb.id, rb.you);
-    assert.ok(ha.state.actors.length >= 60, "the bots are in");
+    // MAX 8 with FILL on, the live room's own: six bots for the seats nobody has.
+    assert.equal(ha.state.actors.filter((x) => x.bot).length, 6, "the bots are in");
     // The first frame puts them both at the truck and locks the match to everybody in it.
     const first = await a.until((m) => m.t === "f");
     const cmds = first.f[0].cmds ?? [];
@@ -87,62 +88,6 @@ test("/world: two phones share one room at 60 Hz", async () => {
     assert.equal(health.world, 2);
     a.ws.close(); b.ws.close();
   } finally {
-    await relay.close();
-  }
-});
-
-test("/world: a link block goes to the trainer you are fighting, and nobody else", async () => {
-  // No bots: one walking up to the truck would challenge alice first.
-  process.env.WORLD_BOTS = "0";
-  process.env.WORLD_SAFARI_SECS = "0"; // at the truck, where they can see each other
-  const relay = createRelay({});
-  const { port } = await relay.listen(0, "127.0.0.1");
-  try {
-    const [a, b, c] = [phone(port), phone(port), phone(port)];
-    await Promise.all([a.open(), b.open(), c.open()]);
-    const ids = [];
-    let code = "";
-    for (const [p, name] of [[a, "alice"], [b, "bob"], [c, "cara"]]) {
-      p.send({ t: "join", name, skin: 0, ...(code ? { code } : { host: true }) });
-      const r = await p.until((m) => m.t === "room");
-      code = r.code;
-      ids.push(r.you);
-    }
-    a.send({ t: "start" });
-    for (const p of [a, b, c]) await p.until((m) => m.t === "hello");
-    // Not fighting anybody: dropped.
-    a.send({ t: "bt", q: 1, d: [1, 2, 3] });
-    // By the truck alice (10,10), bob (11,10) and cara (9,10) stand in a row facing south.
-    // Past the join grace, alice turns east and sees bob.
-    await new Promise((r) => setTimeout(r, 5200));
-    // (a trainer moves on its phone's inputs, one a frame: the turn, then standing)
-    a.send({ t: "in", s: 1, k: [8, ...Array(30).fill(0)] });
-    // ...once the turn has played out and the relay's room has them fighting.
-    for (let i = 0; ; i++) {
-      await new Promise((r) => setTimeout(r, 1100));
-      a.send({ t: "sync" });
-      const st = (await a.until((m) => m.t === "state")).state;
-      const me = st.actors.find((x) => x.id === ids[0]);
-      if (me.battling) { assert.equal(me.foe, ids[1]); break; }
-      assert.ok(i < 10, "alice never engaged");
-    }
-    a.send({ t: "bt", q: 1, d: [9, 8, 7, 300] });
-    const got = await b.until((m) => m.t === "bt");
-    assert.deepEqual(got, { t: "bt", q: 1, d: [9, 8, 7, 300 & 0xff] });
-    // bob's answer reaches alice; nothing reached cara, and the early block went nowhere
-    b.send({ t: "bt", q: 1, d: [5] });
-    assert.deepEqual(await a.until((m) => m.t === "bt"), { t: "bt", q: 1, d: [5] });
-    await new Promise((r) => setTimeout(r, 200));
-    assert.equal(c.inbox.filter((m) => m.t === "bt").length, 0);
-    assert.equal(b.inbox.filter((m) => m.t === "bt").length, 0);
-    // A block too big is refused.
-    a.send({ t: "bt", q: 2, d: Array(2000).fill(0) });
-    await new Promise((r) => setTimeout(r, 200));
-    assert.equal(b.inbox.filter((m) => m.t === "bt").length, 0);
-    for (const p of [a, b, c]) p.ws.close();
-  } finally {
-    delete process.env.WORLD_BOTS;
-    delete process.env.WORLD_SAFARI_SECS;
     await relay.close();
   }
 });

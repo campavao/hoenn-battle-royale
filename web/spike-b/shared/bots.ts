@@ -7,12 +7,13 @@
 
 import { decodeGrid, sameSpot, type SeamDir, type Spot, type WorldMap } from '../../src/bots/world';
 import { findPath, findPathToAny, type Path } from '../../src/bots/path';
+import { NAMES } from '../../src/bots/roster';
+import { mulberry32, pickIndex } from '../../src/match/clock';
 import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, type Actor, type Room } from './room';
 
 // The wardrobe (br_ghosts.c sSkinGraphics, career.ts SKINS): a bot wears a skin so the
 // trainer you walk up to is the trainer the ROM puts in the battle.
 export const SKIN_GFX = [0, 89, 100, 105, 55, 45, 31, 32, 42, 43, 21, 22, 25, 18, 35, 47];
-export const SKIN_NAME = ['BRENDAN', 'MAY', 'BRENDAN', 'MAY', 'HIKER', 'BEAUTY', 'CAMPER', 'PICNIC', 'SWIMMER', 'SWIMMER', 'EXPERT', 'EXPERT', 'POKEFAN', 'POKEFAN', 'JOEY', 'LASS'];
 export const botSkin = (n: number) => 4 + (n % 12);
 
 /** `wait`: frames left to stand; `dir`: the way it went last. A bot with somewhere to be
@@ -32,6 +33,10 @@ function rand(b: Brain): number {
 }
 
 const DELAYS = [32, 64, 96, 128];
+/** How near another bot has to be for a bot to walk up to it, and a trainer (on its
+ *  screen, 15 x 10 cells round it) (brain.ts NEAR_TILES, NEAR_PLAYER). */
+const NEAR_TILES = 4;
+const NEAR_PLAYER = { x: 7, y: 5 };
 
 const DIR_OF: Record<SeamDir, number> = { south: 1, north: 2, west: 3, east: 4 };
 
@@ -109,7 +114,8 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
   const at = `${ring.round}:${ring.phase}:${room.events.length}`;
   // A new phase or event: each bot rethinks on its own frame of the next half second, so
   // sixty-four searches never land on one frame.
-  if (b.plan !== at && (room.tick + a.id * 7) % 30 === 0) {
+  // One the fog has caught with nowhere to go (its walk gave up) thinks again too.
+  if ((b.plan !== at || (!b.goal && room.inFog(a.m.spot, ring))) && (room.tick + a.id * 7) % 30 === 0) {
     b.plan = at;
     b.goal = goal(room, a, b);
     b.steps = undefined;
@@ -121,6 +127,17 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
     b.steps = path?.found ? path.steps : undefined;
     if (!b.steps) b.goal = null;
     b.stuck = 0;
+  }
+  // Somebody to fight close by (brain.ts approach): a trainer on the bot's screen, or
+  // another bot within NEAR_TILES while a bot fight could start (the room's one at a
+  // time). Up to them, so the eyelines meet. Out of the fog first.
+  if (!b.steps?.length && (room.tick + a.id * 7) % 30 === 0 && room.tick >= a.calm && !ring.safari && !room.inFog(a.m.spot, ring)) {
+    const here = (o: Actor) => o !== a && !o.battling && !o.away && room.tick >= o.calm && o.m.spot.map === a.m.spot.map;
+    const dx = (o: Actor) => Math.abs(o.m.spot.x - a.m.spot.x), dy = (o: Actor) => Math.abs(o.m.spot.y - a.m.spot.y);
+    const o = room.actors.find((o) => !o.bot && here(o) && dx(o) <= NEAR_PLAYER.x && dy(o) <= NEAR_PLAYER.y) ??
+      (room.tick >= room.duelAfter ? room.actors.find((o) => o.bot && here(o) && dx(o) + dy(o) <= NEAR_TILES) : undefined);
+    const path = o ? findPath(room.world, a.m.spot, o.m.spot, 2000, true, true) : null;
+    if (path?.found && path.steps.length >= 2) { b.steps = path.steps.slice(0, -1); b.stuck = 0; }
   }
   if (b.steps?.length) {
     if (sameSpot(b.steps[0].to, a.m.spot)) { b.steps.shift(); b.stuck = 0; }
@@ -147,20 +164,30 @@ export function botSpawns(room: Room, maps: readonly WorldMap[], count: number):
   const grids = new Map(land.map((m) => [m.id, decodeGrid(m.grid, m.w * m.h)]));
   const out: { name: string; skin: number; spot: Spot; facing: number; brain: Brain }[] = [];
   const taken = new Set<string>();
+  // Named as the live match names its bots (bots/roster.ts), so no two rows of the
+  // standings read the same (HBR-96): Hoenn's names, dealt from the seed, then BOTn.
+  const deal = mulberry32(room.seed ^ 0x8b07);
+  const names = [...NAMES];
   const add = (spot: Spot, facing: number, skin: number) => {
     taken.add(`${spot.map}:${spot.x}:${spot.y}`);
     const n = out.length + 1;
-    out.push({ name: SKIN_NAME[skin], skin, spot, facing, brain: { rng: (n * 2654435761) >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
+    const name = names.length > 0 ? names.splice(pickIndex(deal, names.length), 1)[0] : `BOT${n}`;
+    out.push({ name, skin, spot, facing, brain: { rng: (n * 2654435761) >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
   };
   for (const [x, y] of [[7, 12], [13, 13], [11, 16]].slice(0, count)) add({ map: 'MAP_LITTLEROOT_TOWN', x, y }, 1, botSkin(out.length * 7 + 1));
-  for (let tries = 0; out.length < count && tries < 50000; tries++) {
-    const m = land[Math.floor(r() * land.length)];
-    const x = Math.floor(r() * m.w), y = Math.floor(r() * m.h);
-    const c = grids.get(m.id)![y * m.w + x];
-    if ((c !== 0 && c !== 7) || taken.has(`${m.id}:${x}:${y}`) || room.groundAt(m.id, x, y)) continue;
-    // Not on the new trainers' corner of Littleroot.
-    if (m.id === 'MAP_LITTLEROOT_TOWN' && x >= 7 && x <= 13 && y >= 9 && y <= 13) continue;
-    add({ map: m.id, x, y }, 1 + Math.floor(r() * 4), botSkin(Math.floor(r() * 12)));
+  // Only where a trainer could walk to them from the truck: a bot dealt into a pocket
+  // (north of the woods, a fenced corner, an island) could never be met, nor walk into
+  // the ring, and only ever went out to the fog.
+  const cells = room.reachable().filter((s) => {
+    const m = grids.get(s.map);
+    const c = m?.[s.y * room.maps.get(s.map)!.w + s.x];
+    return m && (c === 0 || c === 7) && !room.groundAt(s.map, s.x, s.y) &&
+      !(s.map === 'MAP_LITTLEROOT_TOWN' && s.x >= 7 && s.x <= 13 && s.y >= 9 && s.y <= 13);
+  });
+  for (let tries = 0; out.length < count && cells.length && tries < 50000; tries++) {
+    const s = cells[Math.floor(r() * cells.length)];
+    if (taken.has(`${s.map}:${s.x}:${s.y}`)) continue;
+    add(s, 1 + Math.floor(r() * 4), botSkin(Math.floor(r() * 12)));
   }
   return out;
 }

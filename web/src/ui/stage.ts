@@ -275,8 +275,11 @@ export class Mirror {
         pressable.set(el, w);
       }
       if (w.scroll) scrolls.set(el, w);
-      // A drag over a list is the list's, not the page's.
+      // A drag over a list is the list's, not the page's. A list with no container is a
+      // top-level <div>, which index.html's `#ui-hits > div` lets every touch pass through
+      // like a container (HBR-91), so it takes them back.
       el.style.touchAction = w.scroll ? 'none' : '';
+      el.style.pointerEvents = w.scroll ? 'auto' : '';
       if (!w.field && el.textContent !== w.text) el.textContent = w.text;
       if (w.id) el.id = w.id;
       else el.removeAttribute('id');

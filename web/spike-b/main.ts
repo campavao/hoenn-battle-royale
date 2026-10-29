@@ -34,7 +34,8 @@ import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, startStickLearn, 
 import { fameOf, resultsView, standingsOf, tallyLines, type FameMon } from '../src/ui/results';
 import { favourite } from '../src/match/tally';
 import { moveInfo, type Rom as MoveTables } from '../src/battle/movebook';
-import { OUT_BATCH_MS, outs, won } from '../src/match/ticker';
+import { OUT_BATCH_MS, event, felled, opening, outs, won } from '../src/match/ticker';
+import { MessageBox } from './msgbox';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
@@ -46,6 +47,8 @@ import { RingMap } from './ringmap';
 import { Watch } from './watch';
 import { keyPicture } from '../src/field';
 import { PadPrefsControl } from '../src/ui/padprefs';
+import { wireDpad } from './dpad';
+import { StartMenu } from './startmenu';
 import { BattleMenu, battleWantsNoPad, readBattleView } from '../src/ui/battlemenu';
 import { BAG_POSITION_POCKET, readBattleBag } from '../src/ui/bag';
 import { MENU_ACTION, TouchLayer } from '../src/touch';
@@ -219,6 +222,9 @@ const KEYMAP: Record<string, string> = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
   w: 'up', s: 'down', a: 'left', d: 'right', x: 'b', X: 'b', z: 'a', Z: 'a', Shift: 'b', Enter: 'a', ' ': 'a',
 };
+// A long press is a held button, never a page's selection, callout or drag (HBR-98).
+const typing = (t: EventTarget | null) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
+for (const type of ['contextmenu', 'selectstart', 'dragstart']) document.addEventListener(type, (e) => { if (!typing(e.target)) e.preventDefault(); });
 /** The start card is up: nothing behind it moves (review of #157). */
 const intro = () => document.getElementById('intro') !== null;
 // The menu and the room (lobby.ts) have the keys while they are up: Emerald's, as the
@@ -246,15 +252,6 @@ addEventListener('keydown', (e) => {
 });
 addEventListener('keyup', (e) => { const k = KEYMAP[e.key]; if (k) held.delete(k); });
 addEventListener('blur', () => held.clear());
-for (const el of document.querySelectorAll<HTMLElement>('.k')) {
-  const k = el.dataset.k!;
-  const down = (e: PointerEvent) => { e.preventDefault(); if (intro()) return; el.setPointerCapture(e.pointerId); el.classList.add('down'); if (!held.has(k)) pressed.add(k); held.add(k); };
-  const up = () => { el.classList.remove('down'); held.delete(k); };
-  el.addEventListener('pointerdown', down);
-  el.addEventListener('pointerup', up);
-  el.addEventListener('pointercancel', up);
-}
-
 // ---- the room ------------------------------------------------------------------------
 
 let placed: Map<string, Placed>;
@@ -343,15 +340,17 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
 
 // Item balls (room.ts's ground): what I picked up goes into the ROM's bag, one at a time,
 // and waits for the ROM if it is still booting.
-const foundEl = document.getElementById('found')!;
-let foundUntil = 0;
+/** The message box above the dock (msgbox.ts): what just happened to me, and the ticker. */
+const msgBox = new MessageBox(document.getElementById('msg')!);
+let sayUntil = 0;
+// The phone HUD's scale (wirePhoneHud sets both on a phone).
+msgBox.setScale(Math.min(2, Math.max(1, innerWidth / 250)));
 const toGive: ({ key: number; item: number; gift?: boolean; hidden?: string } | { key: number; bag: Bag; name: string; person?: Person })[] = [];
 let giving = false;
 
 function say(text: string): void {
-  foundEl.textContent = text;
-  foundEl.classList.add('on');
-  foundUntil = performance.now() + 2500;
+  msgBox.show(text);
+  sayUntil = performance.now() + 2500;
 }
 
 function giveNext(): void {
@@ -391,9 +390,19 @@ function giveNext(): void {
 // BAG, its items. B or CANCEL leaves it lying. The pad drives the question.
 const askEl = document.getElementById('ask')!;
 let askButtons: HTMLButtonElement[] = [];
-let asking: { pick: number; done: (c: string) => void } | null = null;
+let asking: { pick: number; start: boolean; done: (c: string) => void } | null = null;
+const startMenu = new StartMenu(document.getElementById('startmenu') as HTMLCanvasElement, document.getElementById('stock') as HTMLCanvasElement);
+document.getElementById('startmenu')!.addEventListener('pointerdown', (e) => {
+  const i = startMenu.rowFor(e.clientX, e.clientY);
+  if (asking && i >= 0) { asking.pick = i; asking.done(askButtons[i].dataset.c!); }
+});
 
 function askPaint(): void {
+  if (asking?.start) {
+    const balls = link.room.ring().safari && rom ? rom.safariBalls() : null;
+    startMenu.show(askButtons.map((b) => b.textContent ?? ''), asking.pick, balls, zoom / (devicePixelRatio || 1));
+    return;
+  }
   askButtons.forEach((b, i) => b.classList.toggle('on', i === asking?.pick));
   askButtons[asking?.pick ?? -1]?.scrollIntoView({ block: 'nearest' });
 }
@@ -404,12 +413,13 @@ function askKey(k: string): void {
   if (k === 'up') asking.pick = (asking.pick + n - 1) % n;
   else if (k === 'down') asking.pick = (asking.pick + 1) % n;
   else if (k === 'a') return asking.done(askButtons[asking.pick].dataset.c!);
-  else if (k === 'b') return asking.done('');
+  else if (k === 'b' || (k === 'start' && asking.start)) return asking.done('');
   askPaint();
 }
 
-/** A question on the page, its rows `[label, answer]`; '' is no (B answers it too). */
-function ask(title: string, rows: [string, string][]): Promise<string> {
+/** A question on the page, its rows `[label, answer]`; '' is no (B answers it too). The
+ *  START menu (`start`) is Emerald's window on the field instead. */
+function ask(title: string, rows: [string, string][], start = false): Promise<string> {
   document.getElementById('ask-title')!.textContent = title;
   for (const b of askButtons) b.remove();
   askButtons = rows.map(([label, c], i) => {
@@ -421,9 +431,9 @@ function ask(title: string, rows: [string, string][]): Promise<string> {
     askEl.append(b);
     return b;
   });
-  askEl.classList.add('on');
+  if (!start) askEl.classList.add('on');
   return new Promise((resolve) => {
-    asking = { pick: 0, done: (c) => { asking = null; askEl.classList.remove('on'); calmUntil = frame + 30; resolve(c); } };
+    asking = { pick: 0, start, done: (c) => { asking = null; askEl.classList.remove('on'); startMenu.hide(); calmUntil = frame + 30; resolve(c); } };
     askPaint();
   });
 }
@@ -457,7 +467,18 @@ async function openBag(key: number, bag: Bag, who: string): Promise<void> {
  *  I stand, with this world's fog laid over it (ringmap.ts). */
 async function openMenu(): Promise<void> {
   if (!rom || isOut || battle || swapping || asking || spectating) return;
-  const c = await ask('MENU', [['POKéMON', '1'], ['BAG', '2'], ...(ringMap ? [['MAP', '13'] as [string, string]] : []), ['CARD', '4'], ...(lobby ? [['ROOM', 'room'] as [string, string]] : []), ['EXIT', '']]);
+  // The ROM's rows (start_menu.c): POKéMON once I have one, no MAP in the Safari, my
+  // name for the trainer card. A phone has the room on its dock, as live.
+  const name = link.room.actor(link.me)?.name || 'YOU';
+  const rows: [string, string][] = [
+    ...(rom.partyCount() > 0 ? [['POKéMON', '1'] as [string, string]] : []),
+    ['BAG', '2'],
+    ...(ringMap && !link.room.ring().safari ? [['MAP', '13'] as [string, string]] : []),
+    [name, '4'],
+    ...(lobby && !touchPad ? [['ROOM', 'room'] as [string, string]] : []),
+    ['EXIT', ''],
+  ];
+  const c = await ask('MENU', rows, true);
   if (c === 'room') { openSheet(); return; }
   await runMenu(c);
 }
@@ -688,6 +709,7 @@ function seeFrame(): void {
     keyCanvas.getContext('2d')?.putImageData(keyImage, 0, 0);
   } else if (rom && !up) rom.seeThrough(false);
   if (keyed !== seeing) { seeing = keyed; battleEl.classList.toggle('see', keyed); }
+  battleEl.classList.toggle('screen', up && !battle);
 }
 
 /** Every few seconds, between battles: my team as it stands, told to the room when it
@@ -972,11 +994,11 @@ function roundFrame(): void {
     else standings(false);
   }
   // A match of the page's own, in a lobby (QUICK PLAY with no relay): over when one is
-  // left or I am out, with nobody to say so but the room itself.
-  if (lobby && !link.online && matchOn && !endingAt && (isOut || over(link.room))) matchOver();
+  // left, with nobody to say so but the room itself. Out, I watch the rest, as live (HBR-96).
+  if (lobby && !link.online && matchOn && !endingAt && over(link.room)) matchOver();
   // The relay said the match is over: once the frames that ended it have played here (or
   // a moment has passed), the standings and PLAY AGAIN.
-  if (endingAt && (over(link.room) || (isOut && !link.online) || performance.now() - endingAt > 1500)) {
+  if (endingAt && (over(link.room) || performance.now() - endingAt > 1500)) {
     endingAt = 0;
     record(res.round);
     endingShown = true;
@@ -1059,15 +1081,17 @@ function results(res: Results, waited = 0): void {
   const survived = Math.max(0, Math.round((end - link.room.epoch) / 60));
   const placed = [...place].map(([seat, placement]) => ({ seat, placement })).sort((p, q) => p.placement - q.placement);
   const t = lastRound;
-  const beaten = res.fallen.filter((f) => f.by && f.by === nameOf(link.me)).length;
+  const beaten = (id: number) => res.fallen.filter((f) => f.by && f.by === nameOf(id)).length;
   lobby!.results({
     view: resultsView({ placement: place.get(link.me), survived, winner: res.winner || undefined, ended: true }, n, link.me, nameOf),
     fame: fameOf(res.winner || undefined, link.me, res.winner ? link.teams.get(res.winner) : undefined, nameOf, speciesName, (id) => moveInfo(romTables, id)?.name),
     standings: standingsOf(placed, link.me, nameOf),
     record: [
-      { label: 'BEATEN', value: String(beaten) },
+      { label: 'BEATEN', value: String(beaten(link.me)) },
       ...(t ? tallyLines({ won: t.won, caught: t.caught, steps: t.steps, items: t.items, mon: favourite(t.mons), move: favourite(t.moves) }, { species: speciesName, move: (id) => moveInfo(romTables, id)?.name }) : []),
     ],
+    // The CHAMPION page, a bot's too, as live (HBR-96).
+    champion: res.winner && res.winner !== link.me ? { name: nameOf(res.winner), lines: [{ label: 'BEATEN', value: String(beaten(res.winner)) }] } : undefined,
   }, () => { worldSock?.leave(); room = null; lobby!.menu(); });
 }
 
@@ -1193,7 +1217,10 @@ let toldGyms = 0;
 function gymFrame(): void {
   const g = link.room.gyms;
   if (toldGyms > g.length) toldGyms = 0;
-  for (const [n, who] of g.slice(toldGyms)) if (who !== link.room.actor(link.me)?.name) tick(`${who} beat ${LEADERS[n].name}! The gym is closed.`);
+  for (const [n, who] of g.slice(toldGyms)) {
+    const line = who !== link.room.actor(link.me)?.name ? felled(0, who, LEADERS[n].name) : null;
+    if (line) tick(line.text);
+  }
   toldGyms = g.length;
 }
 
@@ -1248,7 +1275,7 @@ function startMatch(l: WorldLink): void {
   lobby?.hide();
   isOut = waiting = shownWin = false;
   // Every match's rounds count from 0: what was told or recorded of the last one is not.
-  seenRound = lastPhase = recordedRound = dropRound = hudRound = dugRound = -1;
+  seenRound = lastPhase = recordedRound = dropRound = hudRound = dugRound = toldOpening = -1;
   teamSent = '';
   tallyFrom = rom?.tally() ?? null;
   myStepsN = 0;
@@ -1312,7 +1339,7 @@ const skinOf = new Map<number, number>();
 const padPrefs = new PadPrefsControl({
   root: document.documentElement,
   body: document.body,
-  dpad: document.querySelector<HTMLElement>('#pad .dpad')!,
+  dpad: document.getElementById('dpad-surface')!,
   ab: document.querySelector<HTMLElement>('#pad .ab')!,
   bar: document.getElementById('pad-edit')!,
   scale: () => 2,
@@ -1414,6 +1441,7 @@ function wirePhoneHud(): void {
     const s = Math.min(2, Math.max(1, innerWidth / 250));
     document.documentElement.style.setProperty('--s', String(s));
     hud.setScale(s);
+    msgBox.setScale(s);
   };
   addEventListener('resize', scale);
   scale();
@@ -1441,7 +1469,7 @@ function wirePhoneHud(): void {
       fogEverywhere: !!ring.last,
       safe: way ? `Safe ${way}` : null,
       ctx: { label: 'BIKE', item: ITEM_MACH_BIKE, enabled: false },
-      party: 1,
+      party: rom?.partyCount() ?? 0,
       moves: [],
     });
   }, 100);
@@ -1604,7 +1632,6 @@ function itemfinder(): void {
 // ---- the HUD (the live match's corner and ticker: br_hud.c, ticker.ts) -----------------
 
 const cornerEl = document.getElementById('corner')!;
-const tickerEl = document.getElementById('ticker')!;
 /** Lines waiting their turn, and when the one showing goes. */
 const ticks: { text: string; alert: boolean }[] = [];
 let tickUntil = 0;
@@ -1616,6 +1643,7 @@ function tick(text: string, alert = false): void {
 let toldOuts = 0;
 let outsSince = 0;
 let hudRound = -1;
+let toldOpening = -1;
 let toldWin = false;
 let cornerText = '';
 function hudFrame(): void {
@@ -1640,15 +1668,24 @@ function hudFrame(): void {
     const line = won(0, res.entrants.find(([id]) => id === res.winner)?.[1] ?? 'TRAINER');
     if (line) tick(line.text);
   }
+  // The Safari's line as the round opens in it (ticker.ts's opening).
+  const ringNow = link.room.ring();
+  if (ringNow.safari && toldOpening !== ringNow.round) {
+    toldOpening = ringNow.round;
+    const line = opening(0, Math.ceil(ringNow.left / 60));
+    if (line) tick(line.text);
+  }
+  // One line at a time, in the box my own messages use, and not over one of them.
   const now = performance.now();
-  if (now >= tickUntil) {
+  if (!sayUntil && now >= tickUntil) {
     const next = ticks.shift();
     if (next) {
-      tickerEl.textContent = next.text;
-      tickerEl.classList.toggle('alert', next.alert);
-      tickerEl.classList.add('on');
+      msgBox.show(next.text, next.alert);
       tickUntil = now + 3500;
-    } else if (tickerEl.classList.contains('on')) tickerEl.classList.remove('on');
+    } else if (tickUntil) {
+      tickUntil = 0;
+      msgBox.hide();
+    }
   }
   // The corner: how many are left, and the clock (or FOG! while it bites me).
   const ring = link.room.ring();
@@ -1670,16 +1707,22 @@ function fogFrame(): void {
   if (ring.phase !== lastPhase) {
     // The ring phase is the level rung (br_levels.c): the host numbers phases from 1.
     const rung = rungForPhase(ring.phase + 1);
-    const grew = lastPhase >= 0 && rung > rungForPhase(lastPhase + 1) ? ` All POKéMON are now Lv. ${rung}!` : '';
-    if (lastPhase >= 0) {
-      if (ring.phase === 0) tick('The fog lifts. A new round!');
-      else if (ring.last) tick(`THE FOG COVERS ALL OF HOENN!${grew}`, true);
-      else tick(`The fog closes in on ${ringMap?.place(ring) || 'Hoenn'}!${grew}`, true);
+    // The ROM's lines for it (br_ring.c, br_levels.c): where it closes, then the level
+    // every POKeMON is at now when the rung moved; the last phase, that it is everywhere.
+    if (lastPhase >= 0 && ring.phase > 0) {
+      if (ring.last) tick('The fog covers all of HOENN!', true);
+      else {
+        tick(`The fog closes in on ${(ringMap?.place(ring) || 'HOENN').toUpperCase()}`, true);
+        if (rung > rungForPhase(lastPhase + 1)) tick(`All POKéMON are now Lv. ${rung}!`, true);
+      }
     }
     // An event dropped with the ring (DESIGN §Events): the ticker says what and where.
     const evs = link.room.events;
     if (toldEvents > evs.length) toldEvents = 0;
-    for (const e of evs.slice(toldEvents)) tick(e.species ? `A legendary ${speciesName(e.species)} at ${ringMap?.placeOf(e.map) || 'HOENN'}!` : `A rare find at ${e.place ?? (ringMap?.placeOf(e.map) || 'HOENN')}!`, !!e.species);
+    for (const e of evs.slice(toldEvents)) {
+      const line = event(0, e.species ? ringMap?.placeOf(e.map) : e.place ?? ringMap?.placeOf(e.map), !!e.species);
+      if (line) tick(line.text, line.kind === 'alert');
+    }
     toldEvents = evs.length;
     lastPhase = ring.phase;
   }
@@ -1726,7 +1769,7 @@ function fogLine(): string {
   const where = inFogNow() ? ` · YOU ARE IN THE FOG${way ? ` · Safe ${way}` : ''}` : '';
   if (ring.safari) return `SAFARI ZONE · the drop in ${clock}`;
   if (ring.r === Infinity) return `fog in ${clock}${where}`;
-  if (ring.last) return `FOG EVERYWHERE · new round in ${clock}${where}`;
+  if (ring.last) return `FOG EVERYWHERE${where}`;
   return `fog phase ${ring.phase}, closes again in ${clock}${where}`;
 }
 
@@ -1740,16 +1783,6 @@ addEventListener('keydown', (e) => {
   else if ((battle || swapping || romUp) && rom && k) rom.press(GBA_KEY[k]);
 });
 addEventListener('keyup', (e) => { const k = romKey(e.key); if (rom && k) rom.release(GBA_KEY[k]); });
-for (const el of document.querySelectorAll<HTMLElement>('.k')) {
-  const k = el.dataset.k!;
-  el.addEventListener('pointerdown', () => {
-    if (asking) askKey(k);
-    else if ((battle || swapping || romUp) && rom) rom.press(GBA_KEY[k]);
-    else if (k === 'start') void openMenu();
-  });
-  el.addEventListener('pointerup', () => rom?.release(GBA_KEY[k]));
-}
-
 // ---- a controller (the live game's wireGamepad, the parts the world uses) -------------
 // The live game's map for this device (hbr.padmap, its remap wizard's) and stick
 // (hbr.padstick), else the standard layout: face bottom/left A, right/top B, START, the
@@ -1777,6 +1810,15 @@ function padDown(k: string): void {
 function padUp(k: string): void {
   held.delete(k);
   rom?.release(GBA_KEY[k]);
+}
+// The touch pad: the live game's D-pad, A, B and START, the same as a controller's.
+wireDpad(document.getElementById('dpad-surface')!, padDown, padUp);
+for (const el of document.querySelectorAll<HTMLElement>('#pad .k')) {
+  const k = el.dataset.k!;
+  const up = () => { el.classList.remove('down'); padUp(k); };
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); el.classList.add('down'); padDown(k); });
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
 }
 let padKeys = padMap();
 let padStick = loadStickMap();
@@ -2451,7 +2493,7 @@ function loop(now: number): void {
   const t1 = performance.now();
   draw();
   watch.frame();
-  if (foundUntil && performance.now() > foundUntil) { foundUntil = 0; foundEl.classList.remove('on'); }
+  if (sayUntil && performance.now() > sayUntil) { sayUntil = tickUntil = 0; msgBox.hide(); }
   const t2 = performance.now();
   simMs = simMs * 0.9 + (t1 - t0) * 0.1;
   drawMs = drawMs * 0.9 + (t2 - t1) * 0.1;

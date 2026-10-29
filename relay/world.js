@@ -8,9 +8,10 @@
 import { WebSocketServer } from "ws";
 
 export const WORLD_PATH = "/world";
-// Bots wandering Hoenn, and trainers at most (Cam's cap: 30).
-const BOTS = 64;
+// Trainers at most (Cam's cap: 30), and the bots a match may fill its seats with: the
+// host's MAX and FILL decide how many it gets (spike-b/shared/service.ts start).
 const CAP = 30;
+const BOTS = CAP - 1;
 // A household's phones share one address: a few of them, not a script's hundred.
 const PER_IP = Number(process.env.BR_WORLD_PER_IP) || 8;
 // Output a phone has not read yet: past this it is not keeping up (or not reading at

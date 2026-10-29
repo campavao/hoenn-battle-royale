@@ -43,6 +43,17 @@ var world_default = { maps: [{ id: "MAP_PETALBURG_CITY", group: 0, num: 0, w: 30
 var import_patches2 = __toESM(require_patches(), 1);
 
 // web/src/match/clock.ts
+function mulberry32(seed, state) {
+  let a = (state ?? seed) | 0;
+  const rng = () => {
+    a = a + 1831565813 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+  rng.state = () => a;
+  return rng;
+}
 function pickIndex(rng, length) {
   return Math.min(length - 1, Math.floor(rng() * length));
 }
@@ -856,7 +867,7 @@ var World = class {
     if (!cells) {
       const out = [];
       const seen = /* @__PURE__ */ new Set();
-      const add = (s) => {
+      const add2 = (s) => {
         const k = s && s.map === to ? this.key(s) : -1;
         if (k < 0 || seen.has(k)) return;
         seen.add(k);
@@ -864,8 +875,8 @@ var World = class {
       };
       for (const exit of this.exitCells(from, to, surf, cut)) {
         const door = this.warpAt(from, exit.x, exit.y);
-        if (door) add({ map: door.to, x: door.toX, y: door.toY });
-        for (const dir of DIRS) add(this.step(exit, dir, surf, cut));
+        if (door) add2({ map: door.to, x: door.toX, y: door.toY });
+        for (const dir of DIRS) add2(this.step(exit, dir, surf, cut));
       }
       cells = out;
       this.entryCache.set(asked, cells);
@@ -877,14 +888,14 @@ var World = class {
     if (!m) return [];
     const out = [];
     const seen = /* @__PURE__ */ new Set();
-    const add = (x, y) => {
+    const add2 = (x, y) => {
       const k = `${x},${y}`;
       if (seen.has(k)) return;
       seen.add(k);
       out.push({ map: from, x, y });
     };
     for (const w of m.warps ?? []) {
-      if (w.to === to && this.standable(from, w.x, w.y, surf, cut)) add(w.x, w.y);
+      if (w.to === to && this.standable(from, w.x, w.y, surf, cut)) add2(w.x, w.y);
     }
     for (const seam of m.seams) {
       if (seam.to !== to) continue;
@@ -893,7 +904,7 @@ var World = class {
         const cell = seam.dir === "north" ? { map: from, x: i, y: 0 } : seam.dir === "south" ? { map: from, x: i, y: m.h - 1 } : seam.dir === "west" ? { map: from, x: 0, y: i } : { map: from, x: m.w - 1, y: i };
         if (!this.standable(from, cell.x, cell.y, surf, cut)) continue;
         const landed = this.step(cell, seam.dir, surf, cut);
-        if (landed && landed.map === to) add(cell.x, cell.y);
+        if (landed && landed.map === to) add2(cell.x, cell.y);
       }
     }
     return out;
@@ -1219,6 +1230,53 @@ function findPathToAny(world, from, goals, maxVisited = DEFAULT_BUDGET, surf = f
   return search(world, start, { cell: -1, any: wanted, map: -1, x: 0, y: 0, stayOn: world.mapOf(start) }, maxVisited, surf, cut, solid);
 }
 
+// web/src/bots/roster.ts
+var GRADES = [
+  0 /* Rookie */,
+  0 /* Rookie */,
+  1 /* Regular */,
+  1 /* Regular */,
+  2 /* Ace */
+];
+function gradeOf(seed, seat) {
+  const rng = mulberry32((seed ^ seat * 625341585) >>> 0);
+  return GRADES[pickIndex(rng, GRADES.length)];
+}
+var NAMES = [
+  "BRENDAN",
+  "MAY",
+  "WALLY",
+  "ROXANNE",
+  "BRAWLY",
+  "WATTSON",
+  "FLANNERY",
+  "NORMAN",
+  "WINONA",
+  "TATE",
+  "LIZA",
+  "JUAN",
+  "SIDNEY",
+  "PHOEBE",
+  "GLACIA",
+  "DRAKE",
+  "STEVEN",
+  "WALLACE",
+  "ARCHIE",
+  "MAXIE",
+  "COURTNEY",
+  "TABITHA",
+  "SHELLY",
+  "MATT",
+  "RILEY",
+  "CAMERON",
+  "DEVON",
+  "BIRCH",
+  "LANETTE",
+  "BILL",
+  "SCOTT",
+  "GABBY"
+];
+
 // web/spike-b/shared/marts.ts
 var MARTS = [
   "FALLARBOR_TOWN",
@@ -1288,10 +1346,113 @@ var encounters_default = { maps: { MAP_ALTERING_CAVE: [41, 179, 190, 204, 213, 2
 // web/src/bots/party.ts
 var EXPORTED = encounters_default;
 var ENCOUNTERS = EXPORTED.maps;
+function evolutionOf(species) {
+  const row = EXPORTED.evolve[String(species)];
+  return row ? { level: row[0], into: row[1] } : void 0;
+}
+function grownUp(species, level) {
+  let at = species;
+  for (let step = 0; step < 4; step++) {
+    const evo = evolutionOf(at);
+    if (!evo || level < evo.level) return at;
+    at = evo.into;
+  }
+  return at;
+}
 var LADDER = [5, 15, 30, 50, 75, 100];
 function rungForPhase(phase) {
   const i = phase === 0 ? 0 : phase - 1;
   return LADDER[Math.min(i, LADDER.length - 1)];
+}
+var MOVE_SURF = 57;
+var MOVE_CUT = 15;
+var MOVE_FLY = 19;
+var SURF_RUNG = 30;
+var CUT_RUNG = 20;
+var FLY_RUNG = 25;
+var POOL = [
+  { species: 277, name: "TREECKO", moves: [1, 43] },
+  // POUND, LEER
+  { species: 280, name: "TORCHIC", moves: [10, 45] },
+  // SCRATCH, GROWL
+  { species: 283, name: "MUDKIP", moves: [33, 45], water: true },
+  // TACKLE, GROWL
+  { species: 286, name: "POOCHYENA", moves: [33, 43] },
+  { species: 288, name: "ZIGZAGOON", moves: [33, 39] },
+  // TACKLE, TAIL WHIP
+  { species: 290, name: "WURMPLE", moves: [33, 81] },
+  { species: 304, name: "TAILLOW", moves: [33, 45], flier: true },
+  { species: 309, name: "WINGULL", moves: [55, 39], water: true, flier: true },
+  // WATER GUN
+  { species: 392, name: "RALTS", moves: [93, 45] },
+  // CONFUSION
+  { species: 382, name: "ARON", moves: [33, 106] },
+  { species: 337, name: "ELECTRIKE", moves: [33, 84] },
+  // THUNDER SHOCK
+  { species: 335, name: "MAKUHITA", moves: [4, 43] }
+];
+function hp(level) {
+  return Math.max(10, Math.floor(level * 2.2) + 10);
+}
+function speciesName(species) {
+  return EXPORTED.names[String(species)] ?? String(species);
+}
+function speciesAt(mapId) {
+  return ENCOUNTERS[mapId] ?? [];
+}
+function mon(level, rng, mapId, from = []) {
+  const local = from.length > 0 ? from : mapId ? speciesAt(mapId) : [];
+  if (local.length > 0) {
+    const species2 = grownUp(local[pickIndex(rng, local.length)], level);
+    const max2 = hp(level);
+    return {
+      species: species2,
+      level,
+      hp: max2,
+      maxHp: max2,
+      status: 0,
+      // TACKLE. A real move set per species is the ROM's own learnset table, and
+      // building one here would be a second implementation of what the ROM already
+      // does when it makes the mon.
+      moves: [{ id: 33, pp: 25, ppUps: 0 }],
+      heldItem: 0,
+      otId: 0,
+      personality: Math.floor(rng() * 4294967295) >>> 0,
+      exp: 0,
+      nickname: speciesName(species2),
+      ot: "BR"
+    };
+  }
+  const pick = POOL[pickIndex(rng, POOL.length)];
+  const species = grownUp(pick.species, level);
+  const max = hp(level);
+  const moves = [...pick.moves];
+  if (pick.water && level >= SURF_RUNG && !moves.includes(MOVE_SURF)) moves.push(MOVE_SURF);
+  if (!pick.water && level >= CUT_RUNG && !moves.includes(MOVE_CUT)) moves.push(MOVE_CUT);
+  if (pick.flier && level >= FLY_RUNG && !moves.includes(MOVE_FLY)) moves.push(MOVE_FLY);
+  return {
+    species,
+    level,
+    hp: max,
+    maxHp: max,
+    status: 0,
+    moves: moves.map((id) => ({ id, pp: 25, ppUps: 0 })),
+    heldItem: 0,
+    otId: 0,
+    personality: Math.floor(rng() * 4294967295) >>> 0,
+    exp: 0,
+    nickname: species === pick.species ? pick.name : speciesName(species),
+    ot: "BR"
+  };
+}
+function dealParty(seed, seat, phase, mapId, grade = 1 /* Regular */, pool = []) {
+  const rng = mulberry32((seed ^ seat * 40503) >>> 0);
+  const level = rungForPhase(phase);
+  const bring = grade === 2 /* Ace */ ? 1 : grade === 0 /* Rookie */ ? -1 : 0;
+  const count = Math.max(1, Math.min(6, 1 + Math.floor(Math.max(0, phase - 1) / 2) + bring));
+  const party = [];
+  for (let i = 0; i < count; i++) party.push(mon(level, rng, mapId, i === 0 ? pool : []));
+  return party;
 }
 
 // web/src/net/wire.ts
@@ -1671,6 +1832,65 @@ var STORIES = [
   }
 ];
 
+// web/src/match/gifts.ts
+var ITEM_BRIGHT_POWDER = 179;
+var ITEM_WHITE_HERB = 180;
+var ITEM_QUICK_CLAW = 183;
+var ITEM_CHOICE_BAND2 = 186;
+var ITEM_KINGS_ROCK = 187;
+var ITEM_FOCUS_BAND2 = 196;
+var ITEM_SCOPE_LENS = 198;
+var ITEM_LEFTOVERS2 = 200;
+var ITEM_SHELL_BELL2 = 219;
+var GIFTS = [
+  ITEM_BRIGHT_POWDER,
+  ITEM_WHITE_HERB,
+  ITEM_QUICK_CLAW,
+  ITEM_CHOICE_BAND2,
+  ITEM_KINGS_ROCK,
+  ITEM_FOCUS_BAND2,
+  ITEM_SCOPE_LENS,
+  ITEM_LEFTOVERS2,
+  ITEM_SHELL_BELL2
+];
+
+// web/src/bots/bag.ts
+var ITEM = {
+  POTION: 13,
+  FULL_RESTORE: 19,
+  MAX_POTION: 20,
+  HYPER_POTION: 21,
+  SUPER_POTION: 22,
+  FULL_HEAL: 23,
+  GUARD_SPEC: 73,
+  DIRE_HIT: 74,
+  X_ATTACK: 75,
+  X_DEFEND: 76,
+  X_SPEED: 77
+};
+var HEAL = {
+  [ITEM.POTION]: 20,
+  [ITEM.SUPER_POTION]: 50,
+  [ITEM.HYPER_POTION]: 200,
+  [ITEM.MAX_POTION]: 9999,
+  [ITEM.FULL_RESTORE]: 9999
+};
+function add(bag, id, n = 1) {
+  const mine = bag.find((s) => s.id === id);
+  if (mine) mine.n = Math.min(99, mine.n + n);
+  else if (bag.length < 32) bag.push({ id, n: Math.min(99, n) });
+}
+function carried(party, bag) {
+  const out = bag.map((stack) => ({ ...stack }));
+  for (const mon2 of party) if (mon2.heldItem) add(out, mon2.heldItem);
+  return out;
+}
+function purse(phase, grade = 1 /* Regular */) {
+  const level = rungForPhase(phase);
+  const mult = grade === 2 /* Ace */ ? 3 : grade === 0 /* Rookie */ ? 1 : 2;
+  return level * 20 * mult;
+}
+
 // web/src/bots/patches.ts
 var PATCH_KEY_BASE = 8192;
 var PATCH_MAX = 8;
@@ -1766,28 +1986,6 @@ function scatterItem(rng) {
 // web/spike-b/data/rooms.json
 var rooms_default = [["MAP_DEWFORD_TOWN_HOUSE1", 5, 4, true, true, 3, 4, false], ["MAP_DEWFORD_TOWN_HOUSE2", 7, 5, true, true, 6, 4, false], ["MAP_FALLARBOR_TOWN_COZMOS_HOUSE", 3, 5, true, true, 1, 4, false], ["MAP_FALLARBOR_TOWN_MOVE_RELEARNERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_FORTREE_CITY_HOUSE1", 6, 2, true, true, 6, 3, false], ["MAP_FORTREE_CITY_HOUSE2", 6, 4, true, true, 1, 3, false], ["MAP_FORTREE_CITY_HOUSE3", 6, 2, true, true, 6, 3, false], ["MAP_FORTREE_CITY_HOUSE4", 6, 3, true, true, 7, 3, false], ["MAP_FORTREE_CITY_HOUSE5", 6, 2, true, true, 1, 3, false], ["MAP_LAVARIDGE_TOWN_HOUSE", 5, 4, true, true, 3, 3, false], ["MAP_LILYCOVE_CITY_HOUSE1", 3, 5, true, true, 1, 4, false], ["MAP_LILYCOVE_CITY_HOUSE2", 2, 4, true, true, 0, 3, false], ["MAP_LILYCOVE_CITY_HOUSE3", 5, 5, true, true, 4, 4, false], ["MAP_LILYCOVE_CITY_HOUSE4", 3, 5, true, true, 1, 5, false], ["MAP_LILYCOVE_CITY_MOVE_DELETERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_1F", 3, 4, true, true, 1, 4, false], ["MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_2F", 3, 3, true, true, 3, 5, false], ["MAP_LITTLEROOT_TOWN_MAYS_HOUSE_1F", 7, 4, true, true, 9, 4, false], ["MAP_LITTLEROOT_TOWN_MAYS_HOUSE_2F", 5, 3, true, true, 5, 5, false], ["MAP_MAUVILLE_CITY_HOUSE1", 5, 5, true, true, 4, 5, false], ["MAP_MAUVILLE_CITY_HOUSE2", 3, 5, true, true, 1, 4, false], ["MAP_MOSSDEEP_CITY_HOUSE1", 5, 5, true, true, 4, 4, false], ["MAP_MOSSDEEP_CITY_HOUSE2", 3, 5, true, true, 1, 4, false], ["MAP_MOSSDEEP_CITY_HOUSE3", 5, 5, true, true, 4, 5, false], ["MAP_MOSSDEEP_CITY_HOUSE4", 5, 4, true, true, 4, 3, false], ["MAP_MOSSDEEP_CITY_STEVENS_HOUSE", 5, 4, true, true, 3, 3, false], ["MAP_OLDALE_TOWN_HOUSE1", 3, 5, true, true, 1, 4, false], ["MAP_OLDALE_TOWN_HOUSE2", 5, 5, true, true, 4, 5, false], ["MAP_PACIFIDLOG_TOWN_HOUSE1", 5, 5, true, true, 3, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE2", 5, 5, true, true, 3, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE3", 5, 5, true, true, 3, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE4", 5, 5, true, true, 3, 5, false], ["MAP_PACIFIDLOG_TOWN_HOUSE5", 5, 5, true, true, 3, 5, false], ["MAP_PETALBURG_CITY_HOUSE1", 3, 5, true, true, 1, 4, false], ["MAP_PETALBURG_CITY_HOUSE2", 5, 4, true, true, 4, 3, false], ["MAP_PETALBURG_CITY_WALLYS_HOUSE", 5, 5, true, true, 4, 4, false], ["MAP_ROUTE104_MR_BRINEYS_HOUSE", 7, 5, true, true, 6, 4, false], ["MAP_ROUTE109_SEASHORE_HOUSE", 8, 4, true, true, 7, 4, false], ["MAP_ROUTE111_WINSTRATE_FAMILYS_HOUSE", 5, 5, true, true, 5, 3, false], ["MAP_ROUTE114_FOSSIL_MANIACS_HOUSE", 2, 5, true, true, 0, 4, false], ["MAP_ROUTE114_LANETTES_HOUSE", 7, 5, true, true, 5, 3, false], ["MAP_ROUTE116_TUNNELERS_REST_HOUSE", 7, 5, true, true, 6, 4, false], ["MAP_ROUTE119_HOUSE", 3, 5, true, true, 1, 4, false], ["MAP_ROUTE123_BERRY_MASTERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_ROUTE124_DIVING_TREASURE_HUNTERS_HOUSE", 4, 5, true, true, 2, 4, false], ["MAP_RUSTBORO_CITY_CUTTERS_HOUSE", 8, 5, true, true, 7, 4, false], ["MAP_RUSTBORO_CITY_HOUSE1", 4, 5, true, true, 2, 4, false], ["MAP_RUSTBORO_CITY_HOUSE2", 6, 5, true, true, 7, 4, false], ["MAP_RUSTBORO_CITY_HOUSE3", 6, 5, true, true, 7, 4, false], ["MAP_SLATEPORT_CITY_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_SLATEPORT_CITY_NAME_RATERS_HOUSE", 5, 4, true, true, 4, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE1", 4, 3, true, true, 5, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE2", 5, 4, true, true, 3, 4, false], ["MAP_SOOTOPOLIS_CITY_HOUSE3", 4, 3, true, true, 3, 2, false], ["MAP_SOOTOPOLIS_CITY_HOUSE4", 4, 3, true, true, 5, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE5", 5, 4, true, true, 3, 4, false], ["MAP_SOOTOPOLIS_CITY_HOUSE6", 3, 2, true, true, 4, 2, false], ["MAP_SOOTOPOLIS_CITY_HOUSE7", 4, 3, true, true, 2, 3, false], ["MAP_SOOTOPOLIS_CITY_LOTAD_AND_SEEDOT_HOUSE", 4, 3, true, true, 2, 3, false], ["MAP_VERDANTURF_TOWN_FRIENDSHIP_RATERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_VERDANTURF_TOWN_HOUSE", 3, 5, true, true, 1, 4, false], ["MAP_VERDANTURF_TOWN_WANDAS_HOUSE", 4, 5, true, true, 2, 5, false], ["MAP_ABANDONED_SHIP_CORRIDORS_1F", 9, 6, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_CORRIDORS_B1F", 2, 6, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_DECK", 10, 10, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_HIDDEN_FLOOR_CORRIDORS", 11, 2, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_HIDDEN_FLOOR_ROOMS", 0, 0, false, false, 20, 5, true], ["MAP_ABANDONED_SHIP_ROOMS_1F", 0, 0, false, false, 7, 6, true], ["MAP_ALTERING_CAVE", 16, 12, false, true, 15, 13, true], ["MAP_ANCIENT_TOMB", 4, 21, false, true, 5, 21, true], ["MAP_AQUA_HIDEOUT_1F", 17, 17, false, true, 18, 17, true], ["MAP_AQUA_HIDEOUT_B1F", 0, 0, false, false, 26, 10, true], ["MAP_AQUA_HIDEOUT_B2F", 0, 0, false, false, 16, 11, true], ["MAP_CAVE_OF_ORIGIN_1F", 8, 8, false, true, 0, 0, false], ["MAP_CAVE_OF_ORIGIN_B1F", 6, 12, false, true, 0, 0, false], ["MAP_CAVE_OF_ORIGIN_ENTRANCE", 9, 13, false, true, 0, 0, false], ["MAP_DESERT_RUINS", 4, 21, false, true, 5, 21, true], ["MAP_DESERT_UNDERPASS", 69, 9, false, true, 70, 9, true], ["MAP_DEWFORD_TOWN_HALL", 3, 5, false, true, 0, 0, false], ["MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F", 15, 9, false, true, 9, 5, true], ["MAP_FIERY_PATH", 0, 0, false, false, 18, 18, true], ["MAP_FORTREE_CITY_DECORATION_SHOP", 5, 3, false, true, 0, 0, false], ["MAP_GRANITE_CAVE_1F", 0, 0, false, false, 21, 7, true], ["MAP_GRANITE_CAVE_B1F", 0, 0, false, false, 15, 12, true], ["MAP_GRANITE_CAVE_B2F", 0, 0, false, false, 16, 14, true], ["MAP_GRANITE_CAVE_STEVENS_ROOM", 6, 6, false, true, 0, 0, false], ["MAP_ISLAND_CAVE", 4, 21, false, true, 5, 21, true], ["MAP_JAGGED_PASS", 0, 0, false, false, 13, 21, true], ["MAP_LAVARIDGE_TOWN_HERB_SHOP", 4, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_CONTEST_HALL", 24, 17, false, true, 25, 17, true], ["MAP_LILYCOVE_CITY_CONTEST_LOBBY", 15, 3, false, true, 15, 6, true], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_1F", 8, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_2F", 8, 4, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_1F", 9, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_2F", 9, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_3F", 9, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_4F", 9, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_5F", 9, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_ROOFTOP", 9, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_HARBOR", 9, 11, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_1F", 5, 10, false, true, 10, 7, true], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F", 12, 6, false, true, 11, 7, true], ["MAP_LILYCOVE_CITY_POKEMON_TRAINER_FAN_CLUB", 5, 10, false, true, 0, 0, false], ["MAP_MAGMA_HIDEOUT_1F", 0, 0, false, false, 22, 14, true], ["MAP_MAGMA_HIDEOUT_2F_1R", 16, 19, false, true, 15, 19, true], ["MAP_MAGMA_HIDEOUT_2F_2R", 0, 0, false, false, 25, 13, true], ["MAP_MAGMA_HIDEOUT_2F_3R", 21, 11, false, true, 0, 0, false], ["MAP_MAGMA_HIDEOUT_3F_1R", 0, 0, false, false, 15, 10, true], ["MAP_MAGMA_HIDEOUT_4F", 0, 0, false, false, 29, 14, true], ["MAP_MARINE_CAVE_END", 14, 13, false, true, 15, 13, true], ["MAP_MARINE_CAVE_ENTRANCE", 7, 7, false, true, 8, 6, true], ["MAP_MAUVILLE_CITY_BIKE_SHOP", 5, 3, false, true, 0, 0, false], ["MAP_MAUVILLE_CITY_GAME_CORNER", 11, 3, false, true, 0, 0, false], ["MAP_METEOR_FALLS_1F_1R", 0, 0, false, false, 16, 20, true], ["MAP_METEOR_FALLS_1F_2R", 14, 16, false, true, 13, 16, true], ["MAP_METEOR_FALLS_B1F_1R", 14, 19, false, true, 15, 18, true], ["MAP_METEOR_FALLS_STEVENS_CAVE", 17, 15, false, true, 17, 16, true], ["MAP_MIRAGE_TOWER_1F", 5, 3, false, true, 0, 0, false], ["MAP_MIRAGE_TOWER_2F", 5, 3, false, true, 0, 0, false], ["MAP_MIRAGE_TOWER_3F", 5, 3, false, true, 0, 0, false], ["MAP_MIRAGE_TOWER_4F", 4, 3, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_GAME_CORNER_1F", 6, 3, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_GAME_CORNER_B1F", 4, 1, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_1F", 10, 5, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_2F", 8, 7, false, true, 0, 0, false], ["MAP_MT_CHIMNEY", 18, 21, false, true, 21, 25, true], ["MAP_MT_CHIMNEY_CABLE_CAR_STATION", 4, 7, false, true, 0, 0, false], ["MAP_MT_PYRE_1F", 11, 7, false, true, 0, 0, false], ["MAP_MT_PYRE_EXTERIOR", 0, 0, false, false, 17, 27, true], ["MAP_MT_PYRE_SUMMIT", 24, 17, false, true, 24, 19, true], ["MAP_NEW_MAUVILLE_ENTRANCE", 3, 3, false, true, 0, 0, false], ["MAP_PETALBURG_WOODS", 0, 0, false, false, 26, 22, true], ["MAP_ROUTE104_PRETTY_PETAL_FLOWER_SHOP", 7, 7, false, true, 0, 0, false], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_NORTH_ENTRANCE", 7, 3, false, true, 0, 0, false], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_SOUTH_ENTRANCE", 7, 3, false, true, 0, 0, false], ["MAP_ROUTE111_OLD_LADYS_REST_STOP", 5, 4, false, true, 0, 0, false], ["MAP_ROUTE112_CABLE_CAR_STATION", 4, 7, false, true, 0, 0, false], ["MAP_ROUTE113_GLASS_WORKSHOP", 7, 5, false, true, 0, 0, false], ["MAP_ROUTE114_FOSSIL_MANIACS_TUNNEL", 6, 13, false, true, 0, 0, false], ["MAP_ROUTE117_POKEMON_DAY_CARE", 3, 3, false, true, 0, 0, false], ["MAP_ROUTE119_WEATHER_INSTITUTE_1F", 11, 6, false, true, 9, 6, true], ["MAP_ROUTE119_WEATHER_INSTITUTE_2F", 9, 9, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_1F", 7, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_2F", 11, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_3F", 15, 6, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT1_1F", 10, 5, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT1_2F", 3, 5, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT2_1F", 9, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT2_2F", 6, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT2_3F", 6, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_POKEMON_SCHOOL", 6, 4, false, true, 0, 0, false], ["MAP_RUSTURF_TUNNEL", 0, 0, false, false, 18, 15, true], ["MAP_SEAFLOOR_CAVERN_ENTRANCE", 7, 7, false, true, 8, 7, true], ["MAP_SEAFLOOR_CAVERN_ROOM1", 12, 8, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM2", 7, 6, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM3", 7, 7, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM4", 11, 11, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM5", 8, 8, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM6", 5, 4, false, true, 5, 5, true], ["MAP_SEAFLOOR_CAVERN_ROOM7", 3, 19, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM8", 3, 8, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM9", 0, 0, false, false, 13, 23, true], ["MAP_SEALED_CHAMBER_INNER_ROOM", 10, 11, false, true, 9, 10, true], ["MAP_SEALED_CHAMBER_OUTER_ROOM", 8, 9, false, true, 8, 11, true], ["MAP_SHOAL_CAVE_LOW_TIDE_ENTRANCE_ROOM", 0, 0, false, false, 18, 17, true], ["MAP_SHOAL_CAVE_LOW_TIDE_ICE_ROOM", 0, 0, false, false, 10, 15, true], ["MAP_SHOAL_CAVE_LOW_TIDE_INNER_ROOM", 0, 0, false, false, 23, 19, true], ["MAP_SHOAL_CAVE_LOW_TIDE_LOWER_ROOM", 13, 5, false, true, 0, 0, false], ["MAP_SKY_PILLAR_1F", 10, 4, false, true, 0, 0, false], ["MAP_SKY_PILLAR_2F", 10, 4, false, true, 0, 0, false], ["MAP_SKY_PILLAR_3F", 10, 5, false, true, 0, 0, false], ["MAP_SKY_PILLAR_4F", 10, 5, false, true, 0, 0, false], ["MAP_SKY_PILLAR_5F", 11, 3, false, true, 0, 0, false], ["MAP_SKY_PILLAR_ENTRANCE", 8, 8, false, true, 0, 0, false], ["MAP_SKY_PILLAR_OUTSIDE", 13, 10, false, true, 0, 0, false], ["MAP_SKY_PILLAR_TOP", 12, 11, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_HARBOR", 9, 11, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_1F", 12, 6, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F", 12, 4, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_POKEMON_FAN_CLUB", 7, 7, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_STERNS_SHIPYARD_1F", 9, 8, false, true, 8, 6, true], ["MAP_SLATEPORT_CITY_STERNS_SHIPYARD_2F", 7, 6, false, true, 0, 0, false], ["MAP_TERRA_CAVE_END", 10, 12, false, true, 11, 12, true], ["MAP_TERRA_CAVE_ENTRANCE", 11, 10, false, true, 0, 0, false], ["MAP_TRAINER_HILL_ENTRANCE", 9, 8, false, true, 0, 0, false], ["MAP_VICTORY_ROAD_1F", 0, 0, false, false, 23, 22, true], ["MAP_VICTORY_ROAD_B1F", 0, 0, false, false, 22, 14, true], ["MAP_VICTORY_ROAD_B2F", 0, 0, false, false, 23, 19, true]];
 
-// web/src/match/gifts.ts
-var ITEM_BRIGHT_POWDER = 179;
-var ITEM_WHITE_HERB = 180;
-var ITEM_QUICK_CLAW = 183;
-var ITEM_CHOICE_BAND2 = 186;
-var ITEM_KINGS_ROCK = 187;
-var ITEM_FOCUS_BAND2 = 196;
-var ITEM_SCOPE_LENS = 198;
-var ITEM_LEFTOVERS2 = 200;
-var ITEM_SHELL_BELL2 = 219;
-var GIFTS = [
-  ITEM_BRIGHT_POWDER,
-  ITEM_WHITE_HERB,
-  ITEM_QUICK_CLAW,
-  ITEM_CHOICE_BAND2,
-  ITEM_KINGS_ROCK,
-  ITEM_FOCUS_BAND2,
-  ITEM_SCOPE_LENS,
-  ITEM_LEFTOVERS2,
-  ITEM_SHELL_BELL2
-];
-
 // web/spike-b/shared/items.ts
 var ITEM_TM012 = 289;
 var ITEM_HM08 = 346;
@@ -1864,6 +2062,34 @@ function eitherSees(world, a, b) {
   if (a.map !== b.map) return false;
   return sees(world, a, b.x, b.y) || sees(world, b, a.x, a.y);
 }
+
+// web/src/match/safari.ts
+var SAFARI_CELLS = [
+  { map: "MAP_SAFARI_ZONE_NORTHWEST", x: 6, y: 7 },
+  { map: "MAP_SAFARI_ZONE_NORTHWEST", x: 36, y: 15 },
+  { map: "MAP_SAFARI_ZONE_NORTHWEST", x: 13, y: 22 },
+  { map: "MAP_SAFARI_ZONE_NORTHWEST", x: 29, y: 32 },
+  { map: "MAP_SAFARI_ZONE_NORTH", x: 5, y: 11 },
+  { map: "MAP_SAFARI_ZONE_NORTH", x: 29, y: 19 },
+  { map: "MAP_SAFARI_ZONE_NORTH", x: 19, y: 32 },
+  { map: "MAP_SAFARI_ZONE_NORTH", x: 3, y: 36 },
+  { map: "MAP_SAFARI_ZONE_NORTHEAST", x: 10, y: 13 },
+  { map: "MAP_SAFARI_ZONE_NORTHEAST", x: 27, y: 9 },
+  { map: "MAP_SAFARI_ZONE_NORTHEAST", x: 21, y: 26 },
+  { map: "MAP_SAFARI_ZONE_NORTHEAST", x: 7, y: 36 },
+  { map: "MAP_SAFARI_ZONE_SOUTHWEST", x: 8, y: 5 },
+  { map: "MAP_SAFARI_ZONE_SOUTHWEST", x: 36, y: 7 },
+  { map: "MAP_SAFARI_ZONE_SOUTHWEST", x: 16, y: 25 },
+  { map: "MAP_SAFARI_ZONE_SOUTHWEST", x: 34, y: 36 },
+  { map: "MAP_SAFARI_ZONE_SOUTH", x: 29, y: 3 },
+  { map: "MAP_SAFARI_ZONE_SOUTH", x: 5, y: 5 },
+  { map: "MAP_SAFARI_ZONE_SOUTH", x: 24, y: 26 },
+  { map: "MAP_SAFARI_ZONE_SOUTH", x: 4, y: 36 },
+  { map: "MAP_SAFARI_ZONE_SOUTHEAST", x: 31, y: 3 },
+  { map: "MAP_SAFARI_ZONE_SOUTHEAST", x: 15, y: 14 },
+  { map: "MAP_SAFARI_ZONE_SOUTHEAST", x: 14, y: 32 },
+  { map: "MAP_SAFARI_ZONE_SOUTHEAST", x: 31, y: 36 }
+];
 
 // web/spike-b/sim.ts
 var DIR_SOUTH = 1;
@@ -2036,8 +2262,8 @@ var APPROACH_FRAMES = (SIGHT_RANGE + 1) * 16 + 90;
 var KEY_TO = { 1: KEY_DOWN, 2: KEY_UP, 3: KEY_LEFT, 4: KEY_RIGHT };
 var BOT_DUEL_GAP = 60 * 12;
 var BOT_DUEL_MAX = 60 * 120;
-var BOT_BITE = 600;
-var BOT_BITES = 3;
+var BOT_BITE = 240;
+var BOT_BITES = 10;
 var ROOMS = rooms_default;
 var SPILL_KEY = 1 << 20;
 var GROUND_PER_MAP = 6;
@@ -2172,19 +2398,19 @@ var Room = class {
       this.part(b);
       const won = cmd.winner === a.id ? a : cmd.winner === b.id ? b : void 0;
       const lost = won === a ? b : won === b ? a : void 0;
-      if (won && lost && !lost.beaten) {
-        lost.beaten = true;
-        this.fall(lost, won.name);
-      }
+      if (won && lost) this.botOut(lost, won.name);
     } else if (cmd.c === "lock") {
       this.results.entrants = this.actors.map((a) => [a.id, a.name]);
+      if (!this.opening) {
+        for (const a of this.actors) if (!a.bot) this.dropOne(a);
+      }
     } else if (cmd.c === "join") {
       if (this.actor(cmd.id) || this.bench.some((b) => b.id === cmd.id)) return;
       if (this.results.entrants.length && !cmd.bot) {
         this.bench.push({ id: cmd.id, name: cmd.name, skin: cmd.skin });
         return;
       }
-      const a = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: this.tick + JOIN_GRACE, shun: 0, shunUntil: 0, arriving: false };
+      const a = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, foe: 0, calm: this.tick + JOIN_GRACE, shun: 0, shunUntil: 0, arriving: false };
       this.actors.push(a);
       this.actors.sort((p, q) => p.id - q.id);
     } else if (cmd.c === "drop") {
@@ -2198,17 +2424,7 @@ var Room = class {
         const key = SPILL_KEY + a.id;
         this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag: structuredClone(cmd.bag) });
       }
-      const foe = a?.foe ? this.actor(a.foe) : void 0;
-      if (foe?.bot) foe.battling = false;
-      for (const o of this.actors) if (o.meet?.foe === cmd.id) this.unmeet(o);
-      for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
-      for (const [key, by] of this.picked) {
-        const b = this.spills.get(key);
-        if (by === cmd.id && (b?.legend || b?.person?.gate !== void 0)) this.picked.delete(key);
-      }
-      for (const e of this.events) if (e.trader?.busy === cmd.id) e.trader.busy = 0;
-      for (const h of this.homes) if (h.busy === cmd.id) h.busy = 0;
-      this.actors = this.actors.filter((o) => o.id !== cmd.id);
+      this.remove(cmd.id);
       if (cmd.c === "leave") this.bench = this.bench.filter((b) => b.id !== cmd.id);
       if (!a || a.bot) return;
       if (cmd.c === "out") this.bench.push({ id: a.id, name: a.name, skin: a.skin });
@@ -2237,10 +2453,7 @@ var Room = class {
       if (foe?.bot) {
         foe.battling = false;
         foe.calm = this.tick + GRACE;
-        if (cmd.won && !foe.beaten) {
-          foe.beaten = true;
-          this.fall(foe, a.name);
-        }
+        if (cmd.won) this.botOut(foe, a.name);
       }
       a.foe = 0;
       if (a.boss) {
@@ -2349,17 +2562,25 @@ var Room = class {
   /** The ring this frame (or at `tick`). */
   ring(tick2 = this.tick) {
     const len = this.ringPhase;
-    const cycle = RING_STEPS.length * len + this.opening;
-    const n = Math.floor((tick2 - this.epoch) / cycle);
-    const round = this.results.round + n;
-    let t = tick2 - this.epoch - n * cycle;
+    const round = this.results.round;
+    let t = tick2 - this.epoch;
     const { cx, cy, far } = this.centre(round);
     if (t < this.opening) return { round, phase: 0, last: false, cx, cy, r: Infinity, next: Infinity, left: this.opening - t, safari: true };
     t -= this.opening;
-    const phase = Math.floor(t / len);
+    const phase = Math.min(RING_STEPS.length - 1, Math.floor(t / len));
     const at = (i) => RING_STEPS[i] === Infinity || RING_STEPS[i] < 0 ? RING_STEPS[i] : RING_STEPS[i] * far;
     const last = phase === RING_STEPS.length - 1;
-    return { round, phase, last, cx, cy, r: at(phase), next: last ? void 0 : at(phase + 1), left: len - (t - phase * len) };
+    return { round, phase, last, cx, cy, r: at(phase), next: last ? void 0 : at(phase + 1), left: last ? 0 : len - (t - phase * len) };
+  }
+  /** The frame this round is over from, for the next to start AFTER_WIN on: its win;
+   *  everybody in it out with nobody left standing; or, with nobody in it at all (a world
+   *  nobody locked), a whole phase of the fog everywhere. */
+  roundEnd() {
+    const r = this.results;
+    if (r.wonAt !== void 0) return r.wonAt;
+    if (r.entrants.length) return r.fallen.length >= r.entrants.length ? r.fallen[r.fallen.length - 1].at : void 0;
+    const end = this.epoch + this.opening + RING_STEPS.length * this.ringPhase;
+    return this.tick >= end ? end - AFTER_WIN : void 0;
   }
   /** Frames a phase lasts: RING_PHASE, or shorter for a solo test (`?ring=` seconds). */
   ringPhase = RING_PHASE;
@@ -2440,9 +2661,12 @@ var Room = class {
     const ring = this.ring();
     const was = this.tick - 1 >= this.epoch ? this.ring(this.tick - 1) : { ...ring, phase: -1 };
     const r = this.results;
-    if (ring.round !== was.round || r.wonAt !== void 0 && this.tick >= r.wonAt + AFTER_WIN) this.newRound(r.round + 1);
+    const end = this.roundEnd();
+    if (end !== void 0 && this.tick >= end + AFTER_WIN) this.newRound(r.round + 1);
     else if (this.tick - PICK_WAIT >= this.epoch && this.ring(this.tick - PICK_WAIT).safari && !this.ring(this.tick - PICK_WAIT + 1).safari) this.drop();
-    else if (ring.phase !== was.phase) {
+    else if (was.safari && !ring.safari) {
+      for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) this.dropOne(a);
+    } else if (ring.phase !== was.phase) {
       for (const e of this.events) if (e.story && DOORS[e.story] === "wait" && ring.phase > (e.phase ?? 0)) e.opened = true;
       if (ring.phase === 1 && !r.entrants.length) r.entrants = this.actors.map((a) => [a.id, a.name]);
       const n = eventForRing(ring.phase);
@@ -2455,15 +2679,18 @@ var Room = class {
         r.wonAt = this.tick;
       }
     }
-    if ((this.tick - this.epoch) % Math.max(1, Math.round(this.ringPhase / RING_PHASE * BOT_BITE)) === 0) {
-      for (const a of this.actors) {
-        if (!a.bot || a.beaten || a.battling || !this.inFog(a.m.spot, ring)) continue;
-        a.bites = (a.bites ?? 0) + 1;
-        if (a.bites >= BOT_BITES) {
-          a.beaten = true;
-          this.fall(a, "");
-        }
+    const bite = Math.max(1, Math.min(BOT_BITE, Math.round(this.ringPhase / (30 * 60) * BOT_BITE)));
+    for (const a of [...this.actors]) {
+      if (!a.bot) continue;
+      if (a.battling || !this.inFog(a.m.spot, ring)) {
+        a.bleedAt = void 0;
+        continue;
       }
+      a.bleedAt ??= this.tick + bite;
+      if (this.tick < a.bleedAt) continue;
+      a.bleedAt += bite;
+      a.bites = (a.bites ?? 0) + 1;
+      if (a.bites >= BOT_BITES) this.botOut(a, "");
     }
     for (const [key, at] of this.taken) if (this.tick - at >= REGROW) this.taken.delete(key);
     const events = [];
@@ -2586,7 +2813,7 @@ var Room = class {
     if (!judges.length) return;
     const byMap = /* @__PURE__ */ new Map();
     for (const a of this.actors) {
-      if (!a.bot || a.beaten || a.battling || a.m.action || this.tick < a.calm) continue;
+      if (!a.bot || a.battling || a.m.action || this.tick < a.calm) continue;
       const l = byMap.get(a.m.spot.map) ?? [];
       l.push(a);
       byMap.set(a.m.spot.map, l);
@@ -2616,6 +2843,34 @@ var Room = class {
       }
     }
   }
+  /** `id` off the map, and everything that waited on them let go. */
+  remove(id) {
+    const a = this.actor(id);
+    const foe = a?.foe ? this.actor(a.foe) : void 0;
+    if (foe?.bot) foe.battling = false;
+    for (const o of this.actors) if (o.meet?.foe === id) this.unmeet(o);
+    for (const o of this.actors) if (o.bot && o.judge === id) this.part(o);
+    for (const [key, by] of this.picked) {
+      const b = this.spills.get(key);
+      if (by === id && (b?.legend || b?.person?.gate !== void 0)) this.picked.delete(key);
+    }
+    for (const e of this.events) if (e.trader?.busy === id) e.trader.busy = 0;
+    for (const h of this.homes) if (h.busy === id) h.busy = 0;
+    this.actors = this.actors.filter((o) => o.id !== id);
+  }
+  /** A bot is beaten (by `by`, '' the fog): out of the match and off the map, its team and
+   *  purse in a bag where it stood, as the live bots' eliminate() drops theirs. */
+  botOut(a, by) {
+    if (!this.actor(a.id)) return;
+    const phase = this.ring().phase + 1;
+    const grade = gradeOf(this.seed, a.id);
+    const party = dealParty(this.seed, a.id, phase, a.m.spot.map, grade);
+    const bag = { items: carried(party, []), money: purse(phase, grade), mons: party.map((m) => ({ species: m.species, level: m.level })) };
+    const key = SPILL_KEY + a.id;
+    if (!emptyBag(bag)) this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag });
+    this.fall(a, by);
+    this.remove(a.id);
+  }
   /** `a` is out of this round's match (once; nothing after the win). */
   fall(a, by, how = {}) {
     const r = this.results;
@@ -2625,18 +2880,23 @@ var Room = class {
   /** The cells by the truck that no bot stands on: along its row first, nearest first, so
    *  trainers stood side by side facing south do not see each other (and fight the moment
    *  their grace is up). */
-  truck() {
-    if (this.ring().safari) return this.zone();
+  truck(id = 0) {
+    if (this.ring().safari) return this.zone(id);
     const d = (s) => Math.abs(s.y - 10) * 64 + Math.abs(s.x - 10) * 2 + (s.x < 10 ? 1 : 0);
     const near = this.reachable().filter((s) => s.map === "MAP_LITTLEROOT_TOWN").sort((p, q) => d(p) - d(q)).slice(0, TRUCK);
     return near.filter((s) => !this.actors.some((a) => a.bot && a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y));
   }
-  /** Where trainers stand when the Safari opens: spread over the Zone's areas, as far
-   *  as one walks from its gate (no bike, no SURF). */
-  zone() {
-    const all = this.safariCells();
-    const taken = (s) => this.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y);
-    return all.filter((s, i) => i % 7 === 0 && !taken(s));
+  /** Where trainer `id` stands when the Safari opens: its own of the Zone's twenty-four
+   *  cells, dealt from the seed and the seat as br_match.c's BrMatch_SafariCell deals the
+   *  live one, so every run starts somewhere else; then the free cells nearest it. */
+  zone(id) {
+    let h = Math.imul(this.seed ^ Math.imul(id + 1, 2654435761), 2246822507);
+    h ^= h >>> 13;
+    const c = SAFARI_CELLS[(h >>> 0) % SAFARI_CELLS.length];
+    const near = (s, r) => this.actors.some((a) => a.m.spot.map === s.map && Math.abs(a.m.spot.x - s.x) <= r && Math.abs(a.m.spot.y - s.y) <= r);
+    const d = (s) => (s.map === c.map ? 0 : 1 << 16) + Math.abs(s.x - c.x) + Math.abs(s.y - c.y);
+    const free = this.safariCells().filter((s) => !near(s, 0)).sort((p, q) => d(p) - d(q));
+    return [...free.filter((s) => !near(s, 2)), ...free.filter((s) => near(s, 2))].slice(0, 8);
   }
   safariCells() {
     const id = "safari:" + [...this.maps.keys()].join();
@@ -2676,8 +2936,9 @@ var Room = class {
       state ^= state << 5;
       return (state >>> 0) / 4294967296;
     };
-    const maps = [...this.places.keys()].filter((m) => !m.startsWith(SAFARI)).sort();
     const used = new Set(this.actors.map((o) => `${o.m.spot.map}:${o.m.spot.x}:${o.m.spot.y}`));
+    const reach = a.bot ? new Set(this.reachable().map((s) => `${s.map}:${s.x}:${s.y}`)) : null;
+    const maps = [...new Set(reach ? this.reachable().map((s) => s.map) : this.places.keys())].filter((m) => !m.startsWith(SAFARI)).sort();
     for (let tries = 0; tries < 4; tries++) {
       const map = tries === 0 && want ? want : maps[Math.floor(rng() * maps.length)];
       const m = this.maps.get(map);
@@ -2685,6 +2946,7 @@ var Room = class {
       const cells = [];
       for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
         if (this.world.cell(map, x, y) !== 0 || used.has(`${map}:${x}:${y}`) || this.groundAt(map, x, y) || this.spillAt(map, x, y)) continue;
+        if (reach && !reach.has(`${map}:${x}:${y}`)) continue;
         if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
         cells.push({ map, x, y });
       }
@@ -2700,15 +2962,16 @@ var Room = class {
     const humans = [];
     for (const a of this.actors) if (!a.bot) humans.push(a);
     for (const b of this.bench) {
-      humans.push({ id: b.id, bot: false, name: b.name, skin: b.skin, m: newMover({ map: "MAP_LITTLEROOT_TOWN", x: 10, y: 10 }, 1), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: 0, shun: 0, shunUntil: 0, arriving: false });
+      humans.push({ id: b.id, bot: false, name: b.name, skin: b.skin, m: newMover({ map: "MAP_LITTLEROOT_TOWN", x: 10, y: 10 }, 1), keys: 0, last: 0, battling: false, foe: 0, calm: 0, shun: 0, shunUntil: 0, arriving: false });
     }
     humans.sort((p, q) => p.id - q.id);
     this.bench = [];
     this.results = { round, entrants: [], fallen: [], winner: 0 };
     this.epoch = this.tick;
-    const spots = this.truck();
+    const safari = this.ring().safari;
+    const spots = safari ? [] : this.truck();
     humans.forEach((a, i) => {
-      a.m = newMover(spots[i % spots.length], 1);
+      a.m = newMover(safari ? this.zone(a.id)[0] ?? a.m.spot : spots[i % spots.length], 1);
       a.calm = this.tick + JOIN_GRACE;
       a.shun = a.shunUntil = 0;
       a.arriving = false;
@@ -2716,9 +2979,12 @@ var Room = class {
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
     for (const a of this.actors) if (a.bot) {
-      a.beaten = false;
       a.bites = 0;
+      a.bleedAt = void 0;
       if (a.judge) this.part(a);
+    }
+    if (safari) {
+      for (const a of this.actors) if (a.bot) a.m = newMover(this.zone(a.id)[0] ?? a.m.spot, a.m.facing);
     }
     for (const a of this.actors) if (a.meet) {
       a.meet = void 0;
@@ -2805,7 +3071,7 @@ var Room = class {
     for (const h of free) {
       if (h.battling) continue;
       for (const b of this.actors) {
-        if (!b.bot || b.beaten || b.battling || b.m.action || this.tick < b.calm || b.m.spot.map !== h.m.spot.map) continue;
+        if (!b.bot || b.battling || b.m.action || this.tick < b.calm || b.m.spot.map !== h.m.spot.map) continue;
         if (h.shun === b.id && this.tick < h.shunUntil) continue;
         const look = (o) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing });
         if (!eitherSees(this.world, look(h), look(b))) continue;
@@ -2889,14 +3155,14 @@ var Room = class {
           a.battling = true;
           events.push({ type: "gate", tick: this.tick, id: a.id, key: b.key, gate: b.person.gate, bag: structuredClone(b.bag), name: b.person.name });
         } else if (b?.legend) {
-          const mon = b.bag.mons[0];
+          const mon2 = b.bag.mons[0];
           this.picked.set(b.key, a.id);
           a.battling = true;
-          events.push({ type: "legend", tick: this.tick, id: a.id, key: b.key, species: mon.species, level: mon.level });
+          events.push({ type: "legend", tick: this.tick, id: a.id, key: b.key, species: mon2.species, level: mon2.level });
         } else if (b) {
           this.picked.set(b.key, a.id);
           events.push({ type: "bag", tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name, ...b.person ? { person: { ...b.person } } : {} });
-        } else if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
+        } else if (foe && foe.bot && !foe.battling && !foe.m.action) {
           a.battling = foe.battling = true;
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
@@ -2983,7 +3249,7 @@ var Room = class {
       mix2(m.py + 1024);
       mix2(m.lift + 1024);
       mix2(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 65535);
-      mix2((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0) | (a.field ?? 0) << 3);
+      mix2((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | (a.field ?? 0) << 3);
       mix2(a.foe);
       mix2(a.calm);
       mix2(a.shun);
@@ -2993,6 +3259,7 @@ var Room = class {
       mix2(a.judge ?? 0);
       mix2(a.since ?? 0);
       mix2(a.bites ?? 0);
+      mix2(a.bleedAt ?? 0);
       mix2(a.boss ?? 0);
       mix2(a.away ? 1 : 0);
       if (a.meet) {
@@ -3147,7 +3414,6 @@ function makeRoom(all, patches, seed, world) {
 }
 
 // web/spike-b/shared/bots.ts
-var SKIN_NAME = ["BRENDAN", "MAY", "BRENDAN", "MAY", "HIKER", "BEAUTY", "CAMPER", "PICNIC", "SWIMMER", "SWIMMER", "EXPERT", "EXPERT", "POKEFAN", "POKEFAN", "JOEY", "LASS"];
 var botSkin = (n) => 4 + n % 12;
 var KEY_OF = { 1: KEY_DOWN | KEY_B, 2: KEY_UP | KEY_B, 3: KEY_LEFT | KEY_B, 4: KEY_RIGHT | KEY_B };
 function rand(b) {
@@ -3159,6 +3425,8 @@ function rand(b) {
   return b.rng / 4294967296;
 }
 var DELAYS = [32, 64, 96, 128];
+var NEAR_TILES = 4;
+var NEAR_PLAYER = { x: 7, y: 5 };
 var DIR_OF = { south: 1, north: 2, west: 3, east: 4 };
 var GRIDS = /* @__PURE__ */ new WeakMap();
 var INSIDE = /* @__PURE__ */ new WeakMap();
@@ -3220,7 +3488,7 @@ function botKeys(room, a, b) {
   if (a.m.action) return 0;
   const ring = room.ring();
   const at = `${ring.round}:${ring.phase}:${room.events.length}`;
-  if (b.plan !== at && (room.tick + a.id * 7) % 30 === 0) {
+  if ((b.plan !== at || !b.goal && room.inFog(a.m.spot, ring)) && (room.tick + a.id * 7) % 30 === 0) {
     b.plan = at;
     b.goal = goal(room, a, b);
     b.steps = void 0;
@@ -3231,6 +3499,16 @@ function botKeys(room, a, b) {
     b.steps = path?.found ? path.steps : void 0;
     if (!b.steps) b.goal = null;
     b.stuck = 0;
+  }
+  if (!b.steps?.length && (room.tick + a.id * 7) % 30 === 0 && room.tick >= a.calm && !ring.safari && !room.inFog(a.m.spot, ring)) {
+    const here = (o2) => o2 !== a && !o2.battling && !o2.away && room.tick >= o2.calm && o2.m.spot.map === a.m.spot.map;
+    const dx = (o2) => Math.abs(o2.m.spot.x - a.m.spot.x), dy = (o2) => Math.abs(o2.m.spot.y - a.m.spot.y);
+    const o = room.actors.find((o2) => !o2.bot && here(o2) && dx(o2) <= NEAR_PLAYER.x && dy(o2) <= NEAR_PLAYER.y) ?? (room.tick >= room.duelAfter ? room.actors.find((o2) => o2.bot && here(o2) && dx(o2) + dy(o2) <= NEAR_TILES) : void 0);
+    const path = o ? findPath(room.world, a.m.spot, o.m.spot, 2e3, true, true) : null;
+    if (path?.found && path.steps.length >= 2) {
+      b.steps = path.steps.slice(0, -1);
+      b.stuck = 0;
+    }
   }
   if (b.steps?.length) {
     if (sameSpot(b.steps[0].to, a.m.spot)) {
@@ -3260,19 +3538,24 @@ function botSpawns(room, maps, count) {
   const grids = new Map(land.map((m) => [m.id, decodeGrid(m.grid, m.w * m.h)]));
   const out = [];
   const taken = /* @__PURE__ */ new Set();
-  const add = (spot, facing, skin) => {
+  const deal = mulberry32(room.seed ^ 35591);
+  const names = [...NAMES];
+  const add2 = (spot, facing, skin) => {
     taken.add(`${spot.map}:${spot.x}:${spot.y}`);
     const n = out.length + 1;
-    out.push({ name: SKIN_NAME[skin], skin, spot, facing, brain: { rng: n * 2654435761 >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
+    const name = names.length > 0 ? names.splice(pickIndex(deal, names.length), 1)[0] : `BOT${n}`;
+    out.push({ name, skin, spot, facing, brain: { rng: n * 2654435761 >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
   };
-  for (const [x, y] of [[7, 12], [13, 13], [11, 16]].slice(0, count)) add({ map: "MAP_LITTLEROOT_TOWN", x, y }, 1, botSkin(out.length * 7 + 1));
-  for (let tries = 0; out.length < count && tries < 5e4; tries++) {
-    const m = land[Math.floor(r() * land.length)];
-    const x = Math.floor(r() * m.w), y = Math.floor(r() * m.h);
-    const c = grids.get(m.id)[y * m.w + x];
-    if (c !== 0 && c !== 7 || taken.has(`${m.id}:${x}:${y}`) || room.groundAt(m.id, x, y)) continue;
-    if (m.id === "MAP_LITTLEROOT_TOWN" && x >= 7 && x <= 13 && y >= 9 && y <= 13) continue;
-    add({ map: m.id, x, y }, 1 + Math.floor(r() * 4), botSkin(Math.floor(r() * 12)));
+  for (const [x, y] of [[7, 12], [13, 13], [11, 16]].slice(0, count)) add2({ map: "MAP_LITTLEROOT_TOWN", x, y }, 1, botSkin(out.length * 7 + 1));
+  const cells = room.reachable().filter((s) => {
+    const m = grids.get(s.map);
+    const c = m?.[s.y * room.maps.get(s.map).w + s.x];
+    return m && (c === 0 || c === 7) && !room.groundAt(s.map, s.x, s.y) && !(s.map === "MAP_LITTLEROOT_TOWN" && s.x >= 7 && s.x <= 13 && s.y >= 9 && s.y <= 13);
+  });
+  for (let tries = 0; out.length < count && cells.length && tries < 5e4; tries++) {
+    const s = cells[Math.floor(r() * cells.length)];
+    if (taken.has(`${s.map}:${s.x}:${s.y}`)) continue;
+    add2(s, 1 + Math.floor(r() * 4), botSkin(Math.floor(r() * 12)));
   }
   return out;
 }
@@ -3289,7 +3572,8 @@ var Host = class {
     for (const b of botSpawns(room, maps, bots)) {
       const id = this.nextId++;
       this.brains.set(id, b.brain);
-      room.apply({ c: "join", id, bot: true, name: b.name, skin: b.skin, spot: b.spot, facing: b.facing });
+      const spot = room.ring().safari ? room.zone(id)[0] ?? b.spot : b.spot;
+      room.apply({ c: "join", id, bot: true, name: b.name, skin: b.skin, spot, facing: b.facing });
     }
   }
   jitter;
@@ -3307,7 +3591,7 @@ var Host = class {
     if (given !== void 0 && given >= this.nextId) this.nextId = given + 1;
     if (!spot) {
       const used = (s) => this.room.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y) || this.pending.some((c) => c.c === "join" && c.spot.map === s.map && c.spot.x === s.x && c.spot.y === s.y);
-      const near = this.room.truck();
+      const near = this.room.truck(id);
       spot = near.find((s) => !used(s)) ?? near[0];
     }
     this.pending.push({ c: "join", id, bot: false, name: name || `TRAINER ${id}`.slice(0, 10), skin, spot, facing: 1 });
@@ -3460,6 +3744,10 @@ var Host = class {
 
 // web/src/match/room.ts
 var MAX_STEPS = [2, 4, 6, 8, 12, 16, 20, 26, 30];
+function dealable(humans, bots) {
+  return humans + bots >= 2;
+}
+var BOT_FILL = 8;
 var FOG_STEPS = [30, 60, 90, 120, 180];
 var SAFARI_STEPS = [0, 60, 120, 180];
 
@@ -3467,12 +3755,14 @@ var SAFARI_STEPS = [0, 60, 120, 180];
 function over(room) {
   const r = room.results;
   if (r.winner) return true;
-  if (r.entrants.length && !r.entrants.some(([id]) => room.actor(id) && !room.actor(id).bot && !r.fallen.some((f) => f.id === id))) return true;
-  return room.ring().round > r.round;
+  return r.entrants.length > 0 && r.entrants.every(([id]) => r.fallen.some((f) => f.id === id));
 }
 
 // web/spike-b/shared/wire.ts
 var HASH_EVERY = 60;
+function fillFor(set, trainers) {
+  return set.bots ? Math.max(0, set.max - trainers) : 0;
+}
 
 // web/spike-b/shared/service.ts
 function recOf(r) {
@@ -3769,18 +4059,28 @@ var WorldService = class {
       for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
     } while (this.rooms.has(code));
     const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
-    const set = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: ROOM_MAX, door: "open", textSpeed: 5, animations: false };
+    const set = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: BOT_FILL, door: "open", textSpeed: 5, animations: false };
     const room = { pass: "", code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map(), set };
     this.rooms.set(code, room);
     return room;
   }
-  /** START: the Room, everybody in it at the truck, and the match locked to them. */
+  /** START: the Room, everybody in it and FILL's bots for the seats nobody has, and the
+   *  match locked to them. Not a match nobody could win (dealable: two at the least); a
+   *  quick room's count that runs out on one counts again. */
   start(room) {
+    const bots = Math.min(this.opts.bots, fillFor(room.set, room.members.size));
+    if (!dealable(room.members.size, bots)) {
+      if (room.quick) {
+        room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS);
+        this.roster(room);
+      }
+      return;
+    }
     const seed = Math.floor(Math.random() * 4294967294) + 1 >>> 0;
     const r = makeRoom(this.opts.maps, this.opts.patches, seed);
     r.ringPhase = Math.round(room.set.fogSecs * 60);
     r.opening = Math.round(room.set.safariSecs * 60);
-    const host = new Host(r, room.set.bots ? this.opts.bots : 0, this.opts.maps);
+    const host = new Host(r, bots, this.opts.maps);
     for (const p of room.members.values()) {
       host.join(p.name, p.skin, void 0, p.id);
       p.heard = room.t0 = this.opts.now();
@@ -3789,7 +4089,7 @@ var WorldService = class {
     room.host = host;
     room.startsAt = null;
     room.t0 = this.opts.now();
-    this.opts.log(`world: room ${room.code} starts, ${room.members.size} trainers, seed ${seed}`);
+    this.opts.log(`world: room ${room.code} starts, ${room.members.size} trainers and ${bots} bots, seed ${seed}`);
     const state = r.state();
     for (const p of room.members.values()) {
       p.team = void 0;

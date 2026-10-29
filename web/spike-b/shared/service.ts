@@ -16,11 +16,11 @@ import type { PatchTable } from '../../src/bots/patches';
 import { CODE_ALPHABET, CODE_LENGTH } from '../../src/match/lobby';
 import { Host } from './host';
 import { RING_PHASE, makeRoom } from './room';
-import { FOG_STEPS, MAX_STEPS, SAFARI_STEPS } from '../../src/match/room';
+import { BOT_FILL, FOG_STEPS, MAX_STEPS, SAFARI_STEPS, dealable } from '../../src/match/room';
 import { cleanBag } from './items';
 import { over } from './over';
 import type { FameMon } from '../../src/ui/results';
-import { HASH_EVERY, type Again, type CardRecord, type Listed, type Member, type Settings, type SpMsg, type WireFrame, type WorldDown, type WorldUp } from './wire';
+import { HASH_EVERY, fillFor, type Again, type CardRecord, type Listed, type Member, type Settings, type SpMsg, type WireFrame, type WorldDown, type WorldUp } from './wire';
 
 /** A career off the wire, whole numbers or nothing: what a seat's card shows. */
 function recOf(r: unknown): { rec?: CardRecord } {
@@ -64,6 +64,8 @@ export interface Session { onText(text: string): void; onClose(): void }
 export interface ServiceOptions {
   maps: WorldMap[];
   patches: PatchTable;
+  /** Bots a match may have at most (0: none, a test's room); FILL deals the seats nobody
+   *  has up to it. */
   bots: number;
   /** Trainers at most, in all rooms; the next is told `full`. */
   cap: number;
@@ -199,7 +201,7 @@ export class WorldService {
         if (!phone || !room) return;
         const host = room.host;
         if (m.t === 'start') {
-          if (!host && (phone.id === room.owner)) this.start(room);
+          if (!host && phone.id === room.owner) this.start(room);
         } else if (m.t === 'set') {
           if (!host && phone.id === room.owner && !room.quick && m.set && typeof m.set === 'object') {
             const s = m.set;
@@ -386,25 +388,33 @@ export class WorldService {
       for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
     } while (this.rooms.has(code));
     const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
-    const set: Settings = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: ROOM_MAX, door: 'open', textSpeed: 5, animations: false };
+    // The live room's: MAX 8 with FILL on (BOT_FILL), a quick room's the same.
+    const set: Settings = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: BOT_FILL, door: 'open', textSpeed: 5, animations: false };
     const room: Lobby = { pass: '', code, quick, owner: 0, members: new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: new Map(), set };
     this.rooms.set(code, room);
     return room;
   }
 
-  /** START: the Room, everybody in it at the truck, and the match locked to them. */
+  /** START: the Room, everybody in it and FILL's bots for the seats nobody has, and the
+   *  match locked to them. Not a match nobody could win (dealable: two at the least); a
+   *  quick room's count that runs out on one counts again. */
   private start(room: Lobby): void {
+    const bots = Math.min(this.opts.bots, fillFor(room.set, room.members.size));
+    if (!dealable(room.members.size, bots)) {
+      if (room.quick) { room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS); this.roster(room); }
+      return;
+    }
     const seed = (Math.floor(Math.random() * 0xfffffffe) + 1) >>> 0;
     const r = makeRoom(this.opts.maps, this.opts.patches, seed);
     r.ringPhase = Math.round(room.set.fogSecs * 60);
     r.opening = Math.round(room.set.safariSecs * 60);
-    const host = new Host(r, room.set.bots ? this.opts.bots : 0, this.opts.maps);
+    const host = new Host(r, bots, this.opts.maps);
     for (const p of room.members.values()) { host.join(p.name, p.skin, undefined, p.id); p.heard = room.t0 = this.opts.now(); }
     host.lock();
     room.host = host;
     room.startsAt = null;
     room.t0 = this.opts.now();
-    this.opts.log(`world: room ${room.code} starts, ${room.members.size} trainers, seed ${seed}`);
+    this.opts.log(`world: room ${room.code} starts, ${room.members.size} trainers and ${bots} bots, seed ${seed}`);
     const state = r.state();
     for (const p of room.members.values()) {
       p.team = undefined;

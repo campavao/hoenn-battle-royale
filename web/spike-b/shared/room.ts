@@ -30,7 +30,9 @@ import { clerkAt, type Clerk } from './marts';
 import { leaderAt } from './gyms';
 import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, draw, eventForRing } from '../../src/match/events';
 import { DOOR_Y, FINAL_CHANCE, STORIES, STORY_CHANCE, type Story, type StoryDoor } from '../../src/match/story';
-import { rungForPhase } from '../../src/bots/party';
+import { dealParty, rungForPhase } from '../../src/bots/party';
+import { gradeOf } from '../../src/bots/roster';
+import { carried, purse } from '../../src/bots/bag';
 import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
 import { blueTm, scatterItem } from '../../src/match/scatter';
@@ -38,6 +40,7 @@ import roomsJson from '../data/rooms.json';
 import { GIFTS } from '../../src/match/gifts';
 import { cableOrDoll, type BagRows } from './items';
 import { SIGHT_RANGE, eitherSees, type Facing } from '../../src/bots/sight';
+import { SAFARI_CELLS } from '../../src/match/safari';
 import { CLASS_WATER, DIR_NORTH, dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
 
 export const KEY_UP = 1, KEY_DOWN = 2, KEY_LEFT = 4, KEY_RIGHT = 8, KEY_B = 16, KEY_A = 32;
@@ -63,8 +66,6 @@ export interface Actor {
   last: number;
   /** In a battle: stands still, keys ignored, until end(). */
   battling: boolean;
-  /** A bot somebody has fought: it does not ask again. */
-  beaten: boolean;
   /** Who this trainer is fighting, a bot or a trainer, 0 for none (ids start at 1). */
   foe: number;
   /** No engage before this frame: the grace after a fight (BR_ENGAGE_GRACE). */
@@ -85,8 +86,10 @@ export interface Actor {
   /** A trainer whose page is gone for now (a reload): they stand, and nobody engages
    *  them, until it is back or the relay gives up on it. */
   away?: boolean;
-  /** Bites the fog has taken out of a bot (BOT_BITES and it is out). */
+  /** Bites the fog has taken out of a bot (BOT_BITES and it is out), and the frame the
+   *  next is due while it stands in the fog (its own clock, as brain.ts's bleedAt). */
   bites?: number;
+  bleedAt?: number;
   /** Fighting gym leader n - 1 (gyms.ts). */
   boss?: number;
   /** A fight that started from a look, before it starts (br_walkup.h): the "!", then the
@@ -245,9 +248,12 @@ export const BOT_DUEL_GAP = 60 * 12;
 /** A bot-vs-bot fight nobody has answered for this long lets them go (the proxy's own
  *  wall-clock cap is 90 s). */
 export const BOT_DUEL_MAX = 60 * 120;
-/** The fog bites a bot every BOT_BITE frames, and the BOT_BITES-th takes it. */
-export const BOT_BITE = 600;
-export const BOT_BITES = 3;
+/** The fog bites a bot every BOT_BITE frames it stands in it, and the BOT_BITES-th takes
+ *  it: the live bots' bleed, a tenth of the team every four seconds (brain.ts FOG_TICK_MS,
+ *  FOG_BITE), whatever the room's FOG. Each bot on its own clock from when it walked in,
+ *  so a ring closing on many does not take them all on one frame. */
+export const BOT_BITE = 240;
+export const BOT_BITES = 10;
 
 /** The caches' rooms (tools/br/spike-rooms.py, from br_balls.c): map, cell, a house. */
 const ROOMS = roomsJson as [string, number, number, boolean, boolean, number, number, boolean][];
@@ -490,14 +496,18 @@ export class Room {
       this.part(b);
       const won = cmd.winner === a.id ? a : cmd.winner === b.id ? b : undefined;
       const lost = won === a ? b : won === b ? a : undefined;
-      if (won && lost && !lost.beaten) { lost.beaten = true; this.fall(lost, won.name); }
+      if (won && lost) this.botOut(lost, won.name);
     } else if (cmd.c === 'lock') {
       this.results.entrants = this.actors.map((a) => [a.id, a.name]);
+      // No Safari (SAFARI 0, the live room's escape hatch): straight to a dealt drop,
+      // each trainer somewhere of their own, not side by side at the truck and into a
+      // duel the moment the grace is up (HBR-104).
+      if (!this.opening) for (const a of this.actors) if (!a.bot) this.dropOne(a);
     } else if (cmd.c === 'join') {
       if (this.actor(cmd.id) || this.bench.some((b) => b.id === cmd.id)) return;
       // The fog has closed on this round: in from the next.
       if (this.results.entrants.length && !cmd.bot) { this.bench.push({ id: cmd.id, name: cmd.name, skin: cmd.skin }); return; }
-      const a: Actor = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: this.tick + JOIN_GRACE, shun: 0, shunUntil: 0, arriving: false };
+      const a: Actor = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, foe: 0, calm: this.tick + JOIN_GRACE, shun: 0, shunUntil: 0, arriving: false };
       // Ordered by id, on every machine: who moves first decides who gets a contested cell.
       this.actors.push(a);
       this.actors.sort((p, q) => p.id - q.id);
@@ -514,23 +524,7 @@ export class Room {
         const key = SPILL_KEY + a.id;
         this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag: structuredClone(cmd.bag) });
       }
-      // A trainer they were fighting is still in that battle: their page ends it (their
-      // ROM wins it, BrNetlink_PeerOut) and says so.
-      const foe = a?.foe ? this.actor(a.foe) : undefined;
-      if (foe?.bot) foe.battling = false;
-      // Whoever they were meeting (the "!" or the walk-up): no battle is coming, so free.
-      for (const o of this.actors) if (o.meet?.foe === cmd.id) this.unmeet(o);
-      // Bots whose fight their page was running: no answer is coming, they walk on.
-      for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
-      // A legendary they were fighting stands again (Cam: they go back for retries).
-      // So does a gate's boss whose fight they left: his pieces wait for the next.
-      for (const [key, by] of this.picked) {
-        const b = this.spills.get(key);
-        if (by === cmd.id && (b?.legend || b?.person?.gate !== undefined)) this.picked.delete(key);
-      }
-      for (const e of this.events) if (e.trader?.busy === cmd.id) e.trader.busy = 0;
-      for (const h of this.homes) if (h.busy === cmd.id) h.busy = 0;
-      this.actors = this.actors.filter((o) => o.id !== cmd.id);
+      this.remove(cmd.id);
       if (cmd.c === 'leave') this.bench = this.bench.filter((b) => b.id !== cmd.id);
       if (!a || a.bot) return;
       if (cmd.c === 'out') this.bench.push({ id: a.id, name: a.name, skin: a.skin });
@@ -552,9 +546,9 @@ export class Room {
       if (foe?.bot) {
         foe.battling = false;
         foe.calm = this.tick + GRACE;
-        // Beaten, and out of the round (the page says nothing of a fight that ran over
-        // into a new round: that was the old round's).
-        if (cmd.won && !foe.beaten) { foe.beaten = true; this.fall(foe, a.name); }
+        // Beaten: out, and its bag down where it stood (the page says nothing of a fight
+        // that ran over into a new round: that was the old round's).
+        if (cmd.won) this.botOut(foe, a.name);
       }
       a.foe = 0;
       // A gym leader falls once: the first to beat them closes the gym.
@@ -680,18 +674,29 @@ export class Room {
   /** The ring this frame (or at `tick`). */
   ring(tick = this.tick): Ring {
     const len = this.ringPhase;
-    const cycle = RING_STEPS.length * len + this.opening;
-    const n = Math.floor((tick - this.epoch) / cycle);
-    const round = this.results.round + n;
-    let t = tick - this.epoch - n * cycle;
+    const round = this.results.round;
+    let t = tick - this.epoch;
     const { cx, cy, far } = this.centre(round);
     // The Safari: phase 0's no-fog, before it.
     if (t < this.opening) return { round, phase: 0, last: false, cx, cy, r: Infinity, next: Infinity, left: this.opening - t, safari: true };
     t -= this.opening;
-    const phase = Math.floor(t / len);
+    // The fog everywhere holds until somebody wins (director.ts stops its ring timer
+    // there): it used to lift on a timer and end the match with nobody crowned.
+    const phase = Math.min(RING_STEPS.length - 1, Math.floor(t / len));
     const at = (i: number) => (RING_STEPS[i] === Infinity || RING_STEPS[i] < 0 ? RING_STEPS[i] : RING_STEPS[i] * far);
     const last = phase === RING_STEPS.length - 1;
-    return { round, phase, last, cx, cy, r: at(phase), next: last ? undefined : at(phase + 1), left: len - (t - phase * len) };
+    return { round, phase, last, cx, cy, r: at(phase), next: last ? undefined : at(phase + 1), left: last ? 0 : len - (t - phase * len) };
+  }
+
+  /** The frame this round is over from, for the next to start AFTER_WIN on: its win;
+   *  everybody in it out with nobody left standing; or, with nobody in it at all (a world
+   *  nobody locked), a whole phase of the fog everywhere. */
+  private roundEnd(): number | undefined {
+    const r = this.results;
+    if (r.wonAt !== undefined) return r.wonAt;
+    if (r.entrants.length) return r.fallen.length >= r.entrants.length ? r.fallen[r.fallen.length - 1].at : undefined;
+    const end = this.epoch + this.opening + RING_STEPS.length * this.ringPhase;
+    return this.tick >= end ? end - AFTER_WIN : undefined;
   }
 
   /** Frames a phase lasts: RING_PHASE, or shorter for a solo test (`?ring=` seconds). */
@@ -771,8 +776,13 @@ export class Room {
     // The round's first frame has no frame before it in the round.
     const was = this.tick - 1 >= this.epoch ? this.ring(this.tick - 1) : { ...ring, phase: -1 };
     const r = this.results;
-    if (ring.round !== was.round || (r.wonAt !== undefined && this.tick >= r.wonAt + AFTER_WIN)) this.newRound(r.round + 1);
+    const end = this.roundEnd();
+    if (end !== undefined && this.tick >= end + AFTER_WIN) this.newRound(r.round + 1);
     else if (this.tick - PICK_WAIT >= this.epoch && this.ring(this.tick - PICK_WAIT).safari && !this.ring(this.tick - PICK_WAIT + 1).safari) this.drop();
+    // The Safari is over: the bots drop at once, anywhere (they have no fly map).
+    else if (was.safari && !ring.safari) {
+      for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) this.dropOne(a);
+    }
     else if (ring.phase !== was.phase) {
       // ISLAND CAVE's wall opens by itself once the ring has moved on a phase (br_story.c).
       for (const e of this.events) if (e.story && DOORS[e.story] === 'wait' && ring.phase > (e.phase ?? 0)) e.opened = true;
@@ -787,14 +797,19 @@ export class Room {
       const alive = r.entrants.filter(([id]) => !r.fallen.some((f) => f.id === id));
       if (alive.length === 1) { r.winner = alive[0][0]; r.wonAt = this.tick; }
     }
-    // The fog bites a bot in it every ten seconds and takes it at the third (a match's
-    // bleed, in bites): time to walk out, which a bot on its way does (bots.ts).
-    if ((this.tick - this.epoch) % Math.max(1, Math.round(this.ringPhase / RING_PHASE * BOT_BITE)) === 0) {
-      for (const a of this.actors) {
-        if (!a.bot || a.beaten || a.battling || !this.inFog(a.m.spot, ring)) continue;
-        a.bites = (a.bites ?? 0) + 1;
-        if (a.bites >= BOT_BITES) { a.beaten = true; this.fall(a, ''); }
-      }
+    // The fog bites a bot standing in it (not in a fight: the fog leaves those alone)
+    // every BOT_BITE frames from when it walked in; out of it, the clock stops but the
+    // bites stay. Time to walk out, which a bot on its way does (bots.ts).
+    // A test's fog quicker than any room's (FOG 30 s at the least) bites as much quicker.
+    const bite = Math.max(1, Math.min(BOT_BITE, Math.round(this.ringPhase / (30 * 60) * BOT_BITE)));
+    for (const a of [...this.actors]) {
+      if (!a.bot) continue;
+      if (a.battling || !this.inFog(a.m.spot, ring)) { a.bleedAt = undefined; continue; }
+      a.bleedAt ??= this.tick + bite;
+      if (this.tick < a.bleedAt) continue;
+      a.bleedAt += bite;
+      a.bites = (a.bites ?? 0) + 1;
+      if (a.bites >= BOT_BITES) this.botOut(a, '');
     }
     for (const [key, at] of this.taken) if (this.tick - at >= REGROW) this.taken.delete(key);
     const events: RoomEvent[] = [];
@@ -922,7 +937,7 @@ export class Room {
     if (!judges.length) return;
     const byMap = new Map<string, Actor[]>();
     for (const a of this.actors) {
-      if (!a.bot || a.beaten || a.battling || a.m.action || this.tick < a.calm) continue;
+      if (!a.bot || a.battling || a.m.action || this.tick < a.calm) continue;
       const l = byMap.get(a.m.spot.map) ?? [];
       l.push(a);
       byMap.set(a.m.spot.map, l);
@@ -953,6 +968,42 @@ export class Room {
     }
   }
 
+  /** `id` off the map, and everything that waited on them let go. */
+  private remove(id: number): void {
+    const a = this.actor(id);
+    // A trainer they were fighting is still in that battle: their page ends it (their
+    // ROM wins it, BrNetlink_PeerOut) and says so.
+    const foe = a?.foe ? this.actor(a.foe) : undefined;
+    if (foe?.bot) foe.battling = false;
+    // Whoever they were meeting (the "!" or the walk-up): no battle is coming, so free.
+    for (const o of this.actors) if (o.meet?.foe === id) this.unmeet(o);
+    // Bots whose fight their page was running: no answer is coming, they walk on.
+    for (const o of this.actors) if (o.bot && o.judge === id) this.part(o);
+    // A legendary they were fighting stands again (Cam: they go back for retries).
+    // So does a gate's boss whose fight they left: his pieces wait for the next.
+    for (const [key, by] of this.picked) {
+      const b = this.spills.get(key);
+      if (by === id && (b?.legend || b?.person?.gate !== undefined)) this.picked.delete(key);
+    }
+    for (const e of this.events) if (e.trader?.busy === id) e.trader.busy = 0;
+    for (const h of this.homes) if (h.busy === id) h.busy = 0;
+    this.actors = this.actors.filter((o) => o.id !== id);
+  }
+
+  /** A bot is beaten (by `by`, '' the fog): out of the match and off the map, its team and
+   *  purse in a bag where it stood, as the live bots' eliminate() drops theirs. */
+  private botOut(a: Actor, by: string): void {
+    if (!this.actor(a.id)) return;
+    const phase = this.ring().phase + 1;
+    const grade = gradeOf(this.seed, a.id);
+    const party = dealParty(this.seed, a.id, phase, a.m.spot.map, grade);
+    const bag: Bag = { items: carried(party, []), money: purse(phase, grade), mons: party.map((m) => ({ species: m.species, level: m.level })) };
+    const key = SPILL_KEY + a.id;
+    if (!emptyBag(bag)) this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag });
+    this.fall(a, by);
+    this.remove(a.id);
+  }
+
   /** `a` is out of this round's match (once; nothing after the win). */
   private fall(a: Actor, by: string, how: { wild?: boolean; left?: boolean } = {}): void {
     const r = this.results;
@@ -963,20 +1014,25 @@ export class Room {
   /** The cells by the truck that no bot stands on: along its row first, nearest first, so
    *  trainers stood side by side facing south do not see each other (and fight the moment
    *  their grace is up). */
-  truck(): Spot[] {
-    if (this.ring().safari) return this.zone();
+  truck(id = 0): Spot[] {
+    if (this.ring().safari) return this.zone(id);
     const d = (s: Spot) => Math.abs(s.y - 10) * 64 + Math.abs(s.x - 10) * 2 + (s.x < 10 ? 1 : 0);
     const near = this.reachable().filter((s) => s.map === 'MAP_LITTLEROOT_TOWN').sort((p, q) => d(p) - d(q)).slice(0, TRUCK);
     return near.filter((s) => !this.actors.some((a) => a.bot && a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y));
   }
 
-  /** Where trainers stand when the Safari opens: spread over the Zone's areas, as far
-   *  as one walks from its gate (no bike, no SURF). */
-  zone(): Spot[] {
-    const all = this.safariCells();
-    const taken = (s: Spot) => this.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y);
-    // Every seventh cell, so a crowd starts apart rather than in a line.
-    return all.filter((s, i) => i % 7 === 0 && !taken(s));
+  /** Where trainer `id` stands when the Safari opens: its own of the Zone's twenty-four
+   *  cells, dealt from the seed and the seat as br_match.c's BrMatch_SafariCell deals the
+   *  live one, so every run starts somewhere else; then the free cells nearest it. */
+  zone(id: number): Spot[] {
+    let h = Math.imul(this.seed ^ Math.imul(id + 1, 0x9e3779b1), 0x85ebca6b);
+    h ^= h >>> 13;
+    const c = SAFARI_CELLS[(h >>> 0) % SAFARI_CELLS.length];
+    // Nobody within two steps, while there is room: a crowd dealt one cell starts apart.
+    const near = (s: Spot, r: number) => this.actors.some((a) => a.m.spot.map === s.map && Math.abs(a.m.spot.x - s.x) <= r && Math.abs(a.m.spot.y - s.y) <= r);
+    const d = (s: Spot) => (s.map === c.map ? 0 : 1 << 16) + Math.abs(s.x - c.x) + Math.abs(s.y - c.y);
+    const free = this.safariCells().filter((s) => !near(s, 0)).sort((p, q) => d(p) - d(q));
+    return [...free.filter((s) => !near(s, 2)), ...free.filter((s) => near(s, 2))].slice(0, 8);
   }
 
   private safariCells(): readonly Spot[] {
@@ -1014,8 +1070,12 @@ export class Room {
   private dropOne(a: Actor, want?: string): void {
     let state = (this.seed ^ Math.imul(this.results.round + 1, 0x2545f491) ^ Math.imul(a.id + 1, 0x9e3779b1) ^ this.tick) >>> 0 || 1;
     const rng = () => { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return (state >>> 0) / 4294967296; };
-    const maps = [...this.places.keys()].filter((m) => !m.startsWith(SAFARI)).sort();
     const used = new Set(this.actors.map((o) => `${o.m.spot.map}:${o.m.spot.x}:${o.m.spot.y}`));
+    // A bot only where a trainer could walk to it: it has no SURF, and one dropped on an
+    // island or into a pocket could never be met nor walk into the ring (a trainer may
+    // land anywhere, islands too: Cam, 2026-10-20).
+    const reach = a.bot ? new Set(this.reachable().map((s) => `${s.map}:${s.x}:${s.y}`)) : null;
+    const maps = [...new Set(reach ? this.reachable().map((s) => s.map) : this.places.keys())].filter((m) => !m.startsWith(SAFARI)).sort();
     for (let tries = 0; tries < 4; tries++) {
       const map = tries === 0 && want ? want : maps[Math.floor(rng() * maps.length)];
       const m = this.maps.get(map);
@@ -1023,6 +1083,7 @@ export class Room {
       const cells: Spot[] = [];
       for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
         if (this.world.cell(map, x, y) !== 0 || used.has(`${map}:${x}:${y}`) || this.groundAt(map, x, y) || this.spillAt(map, x, y)) continue;
+        if (reach && !reach.has(`${map}:${x}:${y}`)) continue;
         if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
         cells.push({ map, x, y });
       }
@@ -1039,24 +1100,27 @@ export class Room {
     const humans: Actor[] = [];
     for (const a of this.actors) if (!a.bot) humans.push(a);
     for (const b of this.bench) {
-      humans.push({ id: b.id, bot: false, name: b.name, skin: b.skin, m: newMover({ map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 }, 1), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: 0, shun: 0, shunUntil: 0, arriving: false });
+      humans.push({ id: b.id, bot: false, name: b.name, skin: b.skin, m: newMover({ map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 }, 1), keys: 0, last: 0, battling: false, foe: 0, calm: 0, shun: 0, shunUntil: 0, arriving: false });
     }
     humans.sort((p, q) => p.id - q.id);
     this.bench = [];
     // The new round's clock first: it opens in the Safari (truck()).
     this.results = { round, entrants: [], fallen: [], winner: 0 };
     this.epoch = this.tick;
-    const spots = this.truck();
+    const safari = this.ring().safari;
+    const spots = safari ? [] : this.truck();
     humans.forEach((a, i) => {
       // Somebody still in a battle of the round before ends it where they now stand.
-      a.m = newMover(spots[i % spots.length], 1);
+      a.m = newMover(safari ? this.zone(a.id)[0] ?? a.m.spot : spots[i % spots.length], 1);
       a.calm = this.tick + JOIN_GRACE;
       a.shun = a.shunUntil = 0;
       a.arriving = false;
     });
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
-    for (const a of this.actors) if (a.bot) { a.beaten = false; a.bites = 0; if (a.judge) this.part(a); }
+    for (const a of this.actors) if (a.bot) { a.bites = 0; a.bleedAt = undefined; if (a.judge) this.part(a); }
+    // The bots open in the Zone with everybody, as the live host deals them (bots/host.ts).
+    if (safari) for (const a of this.actors) if (a.bot) a.m = newMover(this.zone(a.id)[0] ?? a.m.spot, a.m.facing);
     // A walk-up the old round left half done starts no battle in this one.
     for (const a of this.actors) if (a.meet) { a.meet = undefined; a.battling = false; a.foe = 0; }
     this.duelAfter = 0;
@@ -1133,12 +1197,12 @@ export class Room {
       }
     }
     // A bot that sees a trainer (or is seen) walks up to no one: it challenges there and
-    // then, as a route trainer does (Bots engage players, DESIGN §10). Not one already
-    // beaten, fighting, mid-step or in its grace; nor one the trainer fled.
+    // then, as a route trainer does (Bots engage players, DESIGN §10). Not one fighting,
+    // mid-step or in its grace; nor one the trainer fled.
     for (const h of free) {
       if (h.battling) continue;
       for (const b of this.actors) {
-        if (!b.bot || b.beaten || b.battling || b.m.action || this.tick < b.calm || b.m.spot.map !== h.m.spot.map) continue;
+        if (!b.bot || b.battling || b.m.action || this.tick < b.calm || b.m.spot.map !== h.m.spot.map) continue;
         if (h.shun === b.id && this.tick < h.shunUntil) continue;
         const look = (o: Actor) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing as Facing });
         if (!eitherSees(this.world, look(h), look(b))) continue;
@@ -1233,7 +1297,7 @@ export class Room {
         } else if (b) {
           this.picked.set(b.key, a.id);
           events.push({ type: 'bag', tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name, ...(b.person ? { person: { ...b.person } } : {}) });
-        } else if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
+        } else if (foe && foe.bot && !foe.battling && !foe.m.action) {
           a.battling = foe.battling = true;
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
@@ -1316,7 +1380,7 @@ export class Room {
       mix(m.facing); mix(m.moveDir); mix(m.runningState); mix(m.run ? 1 : 0); mix(m.strides);
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
-      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.boss ?? 0); mix(a.away ? 1 : 0);
+      mix((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.bleedAt ?? 0); mix(a.boss ?? 0); mix(a.away ? 1 : 0);
       if (a.meet) { mix(a.meet.foe); mix(a.meet.since); mix((a.meet.walk ? 1 : 0) | (a.meet.duel ? 2 : 0)); }
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
