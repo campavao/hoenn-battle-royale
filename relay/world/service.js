@@ -1879,7 +1879,7 @@ var MOVING = 2;
 var CLASS_WATER2 = 2;
 var WARP_FRAMES = 32;
 function newMover(spot, facing = DIR_SOUTH) {
-  return { spot, prev: spot, facing, moveDir: facing, runningState: NOT_MOVING, action: null, px: 0, py: 0, lift: 0, run: true, strides: 0 };
+  return { spot, prev: spot, facing, moveDir: facing, runningState: NOT_MOVING, action: null, px: 0, py: 0, lift: 0, run: true, strides: 0, bike: false, bikeSpeed: 0, bikeCount: 0, sel: false };
 }
 function dirOf(k) {
   if (k.up) return DIR_NORTH;
@@ -1916,8 +1916,18 @@ function tick(m, keys, step) {
     m.lift = 0;
   }
 }
+var BIKE_PX = [1, 2, 4];
 function begin(m, keys, step) {
   m.prev = m.spot;
+  const press = !!keys.select && !m.sel;
+  m.sel = !!keys.select;
+  if (press && (m.bike || step.cycling?.(m.spot))) {
+    m.bike = !m.bike;
+    m.bikeSpeed = m.bikeCount = 0;
+    m.runningState = NOT_MOVING;
+    return;
+  }
+  if (m.bike) return bikeBegin(m, dirOf(keys), step);
   const dir = dirOf(keys);
   if (!dir) {
     m.runningState = NOT_MOVING;
@@ -1957,8 +1967,74 @@ function begin(m, keys, step) {
     m.py = -DXY[dir][1] * 16;
   }
 }
+function bikeBegin(m, input, step) {
+  let dir = input;
+  if (!dir) {
+    dir = m.moveDir;
+    if (m.bikeSpeed === 0) {
+      m.runningState = NOT_MOVING;
+      m.bikeCount = 0;
+      return;
+    }
+    m.runningState = MOVING;
+    return bikeGo(m, dir, step, true);
+  }
+  if (dir !== m.moveDir && m.runningState !== MOVING) {
+    if (m.bikeSpeed !== 0) {
+      m.runningState = MOVING;
+      return bikeGo(m, m.moveDir, step, true);
+    }
+    m.runningState = TURN_DIRECTION;
+    m.facing = m.moveDir = dir;
+    m.bikeCount = 0;
+    m.action = { kind: "turn", t: 0, len: 8, speed: 0, dir };
+    return;
+  }
+  m.runningState = MOVING;
+  bikeGo(m, dir, step, false);
+}
+function bikeGo(m, dir, step, slow) {
+  if (slow && m.bikeSpeed !== 0) m.bikeCount = --m.bikeSpeed;
+  m.facing = m.moveDir = dir;
+  const to = step(m.spot, dir);
+  if (!to) {
+    m.bikeSpeed = m.bikeCount = 0;
+    m.action = { kind: "bump", t: 0, len: 16, speed: 0, dir };
+    return;
+  }
+  m.prev = m.spot;
+  m.strides += 1;
+  if (to.warp) {
+    m.spot = to.to;
+    m.action = { kind: "warp", t: 0, len: WARP_FRAMES, speed: 0, dir };
+    m.px = m.py = 0;
+    if (!step.cycling?.(to.to)) m.bike = false;
+    m.bikeSpeed = m.bikeCount = 0;
+    return;
+  }
+  if (to.hop) {
+    m.spot = { map: to.to.map, x: to.to.x - DXY[dir][0], y: to.to.y - DXY[dir][1] };
+    m.action = { kind: "hop", t: 0, len: 32, speed: 1, dir, land: to.to };
+    m.px = -DXY[dir][0] * 16;
+    m.py = -DXY[dir][1] * 16;
+    return;
+  }
+  m.spot = to.to;
+  let speed = BIKE_PX[m.bikeCount];
+  if (to.water) {
+    m.bike = false;
+    m.bikeSpeed = m.bikeCount = 0;
+    speed = 2;
+  } else if (!slow) {
+    m.bikeSpeed = m.bikeCount + (m.bikeCount >> 1);
+    if (m.bikeCount < 2) m.bikeCount += 1;
+  }
+  m.action = { kind: "step", t: 0, len: 16 / speed, speed, dir };
+  m.px = -DXY[dir][0] * 16;
+  m.py = -DXY[dir][1] * 16;
+}
 function stepFn(world, field = { surf: false, cut: 0 }) {
-  return (from, dir) => {
+  const fn = (from, dir) => {
     const to = world.step(from, SEAM_OF[dir], field.surf, field.cut);
     if (!to) {
       const mat = dir === DIR_SOUTH && !world.map(from.map)?.outdoor ? world.warpAt(from.map, from.x, from.y) : void 0;
@@ -1972,6 +2048,8 @@ function stepFn(world, field = { surf: false, cut: 0 }) {
     if (!hop && cls >= 3 && cls <= 6) return null;
     return cls === CLASS_WATER2 ? { to, hop, water: true } : { to, hop };
   };
+  fn.cycling = (s) => !!world.map(s.map)?.outdoor && !s.map.startsWith("MAP_SAFARI_ZONE") && world.cell(s.map, s.x, s.y) !== CLASS_WATER2;
+  return fn;
 }
 
 // web/spike-b/shared/room.ts
@@ -1981,8 +2059,9 @@ var KEY_LEFT = 4;
 var KEY_RIGHT = 8;
 var KEY_B = 16;
 var KEY_A = 32;
+var KEY_SELECT = 64;
 function keysOf(bits) {
-  return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A) };
+  return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A), select: !!(bits & KEY_SELECT) };
 }
 var FIELD_SURF = 4;
 var ATTENDANT = { map: "MAP_LILYCOVE_CITY_HARBOR", x: 8, y: 10 };
@@ -2940,7 +3019,7 @@ var Room = class {
    *  standing there (a step's destination is the trainer's spot from its first frame, so
    *  two can't both walk into one cell). */
   stepFor(a) {
-    return (from, dir) => {
+    const fn = (from, dir) => {
       const bits = a.bot ? 7 : a.field ?? 0;
       const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir) : this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
@@ -2954,6 +3033,8 @@ var Room = class {
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return null;
       return r;
     };
+    fn.cycling = !a.bot && !this.ring().safari ? this.base.cycling : void 0;
+    return fn;
   }
   /** A short fingerprint of the room: two machines that disagree find out within a second. */
   hash() {
@@ -2979,6 +3060,7 @@ var Room = class {
       mix2(m.runningState);
       mix2(m.run ? 1 : 0);
       mix2(m.strides);
+      mix2(m.bike ? 1 + m.bikeSpeed * 4 + m.bikeCount * 16 : 0);
       mix2(m.px + 1024);
       mix2(m.py + 1024);
       mix2(m.lift + 1024);
@@ -3332,7 +3414,7 @@ var Host = class {
     if (!p) return;
     const known = p.seq + p.queue.length;
     const skip = Math.max(0, known + 1 - first);
-    for (let i = skip; i < k.length; i++) p.queue.push(k[i] & 63);
+    for (let i = skip; i < k.length; i++) p.queue.push(k[i] & 127);
     while (p.queue.length > MAX_QUEUE) {
       p.queue.shift();
       p.seq += 1;
@@ -3628,7 +3710,7 @@ var WorldService = class {
           return;
         } else if (m.t === "in") {
           if (!Number.isInteger(m.s) || m.s < 1 || !Array.isArray(m.k) || m.k.length > 120) return;
-          host.input(phone.id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
+          host.input(phone.id, m.s, m.k.map((v) => (Number(v) | 0) & 127));
         } else if (m.t === "field") {
           if (Number.isInteger(m.bits)) host.field(phone.id, m.bits);
         } else if (m.t === "pick") {

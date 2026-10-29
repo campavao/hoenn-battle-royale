@@ -10,6 +10,9 @@
 //   a wall: walk-in-place slow, 32 frames, no movement (PlayerNotOnBikeCollide); a new
 //          direction cuts it short
 //   a ledge: 32 frames at 1 px, lifted by sJumpY_High[t >> 1] (DoJumpSpriteMovement)
+//   the MACH BIKE (bike.c): SELECT gets on and off where a bike may go; on it each step
+//          is 16, then 8, then 4 frames while a direction is held, and let go it coasts
+//          down the same speeds to a stop; a wall stops it dead (walk in place, 16)
 
 import type { Spot, SeamDir } from '../src/bots/world';
 
@@ -20,7 +23,7 @@ const JUMP_Y_HIGH = [-4, -6, -8, -10, -11, -12, -12, -12, -11, -10, -9, -8, -6, 
 
 export const NOT_MOVING = 0, TURN_DIRECTION = 1, MOVING = 2;
 
-export interface Keys { up?: boolean; down?: boolean; left?: boolean; right?: boolean; b?: boolean; a?: boolean }
+export interface Keys { up?: boolean; down?: boolean; left?: boolean; right?: boolean; b?: boolean; a?: boolean; select?: boolean }
 
 export type ActionKind = 'step' | 'turn' | 'bump' | 'hop' | 'warp';
 export interface Action { kind: ActionKind; t: number; len: number; speed: number; dir: number; land?: Spot }
@@ -41,11 +44,20 @@ export interface Mover {
   run: boolean;
   /** Whole frames counted toward the walk anim (feet alternate per step). */
   strides: number;
+  /** On the MACH BIKE, and gPlayerAvatar's bikeSpeed and bikeFrameCounter for it. */
+  bike: boolean;
+  bikeSpeed: number;
+  bikeCount: number;
+  /** SELECT was held when the last action was chosen: a press is a new one. */
+  sel: boolean;
 }
 
 /** Where a step toward `dir` lands, or null for a wall. 2 cells away is a ledge hop; `warp`
  *  is a door, stairs or a cave mouth, which lands on the other side's own cell. */
-export type StepFn = (from: Spot, dir: number) => { to: Spot; hop: boolean; warp?: boolean; water?: boolean } | null;
+export type StepFn = ((from: Spot, dir: number) => { to: Spot; hop: boolean; warp?: boolean; water?: boolean } | null) & {
+  /** Whether a bike may be ridden on `s`'s map; none of it without. */
+  cycling?: (s: Spot) => boolean;
+};
 
 /** export-world.py's water class: SURF's ground. */
 export const CLASS_WATER = 2;
@@ -54,7 +66,7 @@ export const CLASS_WATER = 2;
 export const WARP_FRAMES = 32;
 
 export function newMover(spot: Spot, facing = DIR_SOUTH): Mover {
-  return { spot, prev: spot, facing, moveDir: facing, runningState: NOT_MOVING, action: null, px: 0, py: 0, lift: 0, run: true, strides: 0 };
+  return { spot, prev: spot, facing, moveDir: facing, runningState: NOT_MOVING, action: null, px: 0, py: 0, lift: 0, run: true, strides: 0, bike: false, bikeSpeed: 0, bikeCount: 0, sel: false };
 }
 
 export function dirOf(k: Keys): number {
@@ -100,8 +112,21 @@ export function tick(m: Mover, keys: Keys, step: StepFn): void {
   }
 }
 
+/** bike.c's sMachBikeSpeedCallbacks: PlayerWalkNormal, PlayerWalkFast, PlayerWalkFaster. */
+const BIKE_PX = [1, 2, 4];
+
 function begin(m: Mover, keys: Keys, step: StepFn): void {
   m.prev = m.spot;
+  // SELECT, the registered MACH BIKE (GetOnOffBike): on where cycling is allowed, off anywhere.
+  const press = !!keys.select && !m.sel;
+  m.sel = !!keys.select;
+  if (press && (m.bike || step.cycling?.(m.spot))) {
+    m.bike = !m.bike;
+    m.bikeSpeed = m.bikeCount = 0;
+    m.runningState = NOT_MOVING;
+    return;
+  }
+  if (m.bike) return bikeBegin(m, dirOf(keys), step);
   const dir = dirOf(keys);
   if (!dir) {
     m.runningState = NOT_MOVING;
@@ -145,6 +170,72 @@ function begin(m: Mover, keys: Keys, step: StepFn): void {
   }
 }
 
+/** GetMachBikeTransition and its four transitions: face, turn, speed up, slow down. */
+function bikeBegin(m: Mover, input: number, step: StepFn): void {
+  let dir = input;
+  if (!dir) {
+    dir = m.moveDir;
+    if (m.bikeSpeed === 0) { m.runningState = NOT_MOVING; m.bikeCount = 0; return; }
+    m.runningState = MOVING;
+    return bikeGo(m, dir, step, true);
+  }
+  if (dir !== m.moveDir && m.runningState !== MOVING) {
+    if (m.bikeSpeed !== 0) { m.runningState = MOVING; return bikeGo(m, m.moveDir, step, true); }
+    m.runningState = TURN_DIRECTION;
+    m.facing = m.moveDir = dir;
+    m.bikeCount = 0;
+    m.action = { kind: 'turn', t: 0, len: 8, speed: 0, dir };
+    return;
+  }
+  m.runningState = MOVING;
+  bikeGo(m, dir, step, false);
+}
+
+/** MachBikeTransition_TrySpeedUp (`slow` false) or _TrySlowDown toward `dir`. */
+function bikeGo(m: Mover, dir: number, step: StepFn, slow: boolean): void {
+  if (slow && m.bikeSpeed !== 0) m.bikeCount = --m.bikeSpeed;
+  m.facing = m.moveDir = dir;
+  const to = step(m.spot, dir);
+  if (!to) {
+    // Bike_SetBikeStill, then PlayerOnBikeCollide's walk in place.
+    m.bikeSpeed = m.bikeCount = 0;
+    m.action = { kind: 'bump', t: 0, len: 16, speed: 0, dir };
+    return;
+  }
+  m.prev = m.spot;
+  m.strides += 1;
+  if (to.warp) {
+    m.spot = to.to;
+    m.action = { kind: 'warp', t: 0, len: WARP_FRAMES, speed: 0, dir };
+    m.px = m.py = 0;
+    // Into a building or a cave the bike is put away (no cycling there).
+    if (!step.cycling?.(to.to)) m.bike = false;
+    m.bikeSpeed = m.bikeCount = 0;
+    return;
+  }
+  if (to.hop) {
+    m.spot = { map: to.to.map, x: to.to.x - DXY[dir][0], y: to.to.y - DXY[dir][1] };
+    m.action = { kind: 'hop', t: 0, len: 32, speed: 1, dir, land: to.to };
+    m.px = -DXY[dir][0] * 16;
+    m.py = -DXY[dir][1] * 16;
+    return;
+  }
+  m.spot = to.to;
+  let speed = BIKE_PX[m.bikeCount];
+  if (to.water) {
+    // Onto the water the bike goes: SURF's pace.
+    m.bike = false;
+    m.bikeSpeed = m.bikeCount = 0;
+    speed = 2;
+  } else if (!slow) {
+    m.bikeSpeed = m.bikeCount + (m.bikeCount >> 1);
+    if (m.bikeCount < 2) m.bikeCount += 1;
+  }
+  m.action = { kind: 'step', t: 0, len: 16 / speed, speed, dir };
+  m.px = -DXY[dir][0] * 16;
+  m.py = -DXY[dir][1] * 16;
+}
+
 /** A StepFn off the bots' World, corrected to the ROM: a ledge's collision bits are set,
  *  so its cell is a wall to anything but the hop it faces (World lets a trainer stand on
  *  one, which never mattered while export-world.py classed every ledge as a wall). */
@@ -154,7 +245,7 @@ export function stepFn(world: {
   warpAt(id: string, x: number, y: number): { to: string; toX: number; toY: number; kind: string } | undefined;
   map(id: string): { outdoor: boolean } | undefined;
 }, field: { surf: boolean; cut: number } = { surf: false, cut: 0 }): StepFn {
-  return (from, dir) => {
+  const fn: StepFn = (from, dir) => {
     const to = world.step(from, SEAM_OF[dir], field.surf, field.cut);
     if (!to) {
       // A building's doormat is an arrow: down on it goes out (MetatileBehavior's
@@ -170,4 +261,7 @@ export function stepFn(world: {
     if (!hop && cls >= 3 && cls <= 6) return null;
     return cls === CLASS_WATER ? { to, hop, water: true } : { to, hop };
   };
+  // Where the live dock's BIKE is lit (ui/phonehud.ts contextFor): outdoors, not the Safari.
+  fn.cycling = (s) => !!world.map(s.map)?.outdoor && !s.map.startsWith('MAP_SAFARI_ZONE') && world.cell(s.map, s.x, s.y) !== CLASS_WATER;
+  return fn;
 }
