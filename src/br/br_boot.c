@@ -468,6 +468,8 @@ void BrBoot_Tick(void)
         }
         if (b->mode & BR_BOOT_FLAG_TESTSWIM)
             ScriptGiveMon(SPECIES_MUDKIP, 5, 0, 0, 0, 0);
+        if (b->mode & BR_BOOT_FLAG_SAFARIKIT)
+            BrMatch_GiveSafariBlocks();
         ClearTheLateStory();
         if (BR_BOOT_MODE(b->mode) == BR_BOOT_SAFARI)
             BrMatch_BeginSafari();

@@ -1149,42 +1149,43 @@ function forget(): void {
 /** The team a reload is bringing back, until the ROM has booted to take it. */
 let comingBack: string | null = null;
 let savedAt = 0;
-/** The Safari opening (room.ts SAFARI): its welcome, the drop's question in its last
- *  half minute, and where the drop put me. */
-let safariRound = -1;
-let pickAsked = -1;
-let wasSafari = false;
+/** The Safari opening (room.ts SAFARI) ends as the match's does (br_match.c's
+ *  BrMatch_SafariOver): at the clock, or sooner for whoever threw their last ROYALe BALL.
+ *  Caught nothing: out at the buzzer. Otherwise the fly map, "Drop where?", and the room
+ *  drops me where I chose. */
+let dropRound = -1;
 function safariFrame(ring: Ring): void {
   const me = link.room.actor(link.me);
-  if (ring.safari && safariRound !== ring.round && me) {
-    safariRound = ring.round;
-    say(`Welcome to the SAFARI ZONE! Catch what you can: the drop is in ${Math.ceil(ring.left / 3600)} min.`);
-  }
-  if (ring.safari && me && pickAsked !== ring.round && ring.left < 30 * 60 && !battle && !swapping && !asking && !isOut) {
-    pickAsked = ring.round;
-    void pickDrop();
-  }
-  if (wasSafari && !ring.safari) {
-    asking?.done('');
-    const here = link.room.actor(link.me)?.m.spot.map;
-    if (here && !here.startsWith(SAFARI)) say(`Dropped at ${ringMap?.placeOf(here) || 'somewhere in HOENN'}!`);
-  }
-  wasSafari = !!ring.safari;
+  if (!me || isOut || !rom || dropRound === ring.round || !me.m.spot.map.startsWith(SAFARI)) return;
+  if (ring.safari && rom.safariBalls() > 0) return;
+  // The battle, the menu or the question on screen first: the map comes up after it.
+  if (battle || swapping) return;
+  asking?.done('');
+  dropRound = ring.round;
+  void flyDrop();
 }
 
-/** Drop where? One row a place, the way the fly map names them; ANYWHERE leaves it to the deal. */
-async function pickDrop(): Promise<void> {
-  const byPlace = new Map<string, string>();
-  for (const id of [...placed.keys()].sort()) {
-    const p = placed.get(id)!;
-    // Hoenn's own outdoor places (room.ts places), not a door's or the ferry's.
-    if (!link.room.places.has(id) || id.startsWith(SAFARI) || ISLANDS.has(id)) continue;
-    const name = ringMap?.placeOf(id);
-    if (name && !byPlace.has(name)) byPlace.set(name, id);
+async function flyDrop(): Promise<void> {
+  const r = rom, me = link.room.actor(link.me);
+  if (!r || !me || !ringMap) return;
+  if (!(await r.spill()).mons.length) { goOut('You caught nothing in the SAFARI ZONE.'); return; }
+  let section = 0;
+  swapping = true;
+  held.clear();
+  try {
+    section = await r.drop(ringMap.look(me.m.spot), () => { if (swapping) battleEl.classList.add('on'); });
+  } finally {
+    swapping = false;
+    battleEl.classList.remove('on');
+    held.clear();
+    pressed.clear();
+    calmUntil = frame + 30;
   }
-  const rows = [...byPlace].sort(([a], [b]) => a.localeCompare(b)).map(([name, id]): [string, string] => [name, id]);
-  const c = await ask('Drop where?', [['ANYWHERE', ''], ...rows]);
-  if (c && link.room.ring().safari) { link.pick(c); say(`You will drop at ${ringMap?.placeOf(c) ?? c}.`); }
+  // The host deals a cell inside the section (one of its maps here); no section, anywhere.
+  const out = (m: string) => link.room.places.has(m) && !m.startsWith(SAFARI);
+  const inIt = section ? ringMap.mapsIn(section).filter(out) : [];
+  const maps = inIt.length ? inIt : [...link.room.places.keys()].filter(out);
+  if (maps.length) link.pick(maps[Math.floor(Math.random() * maps.length)]);
 }
 
 /** The gym leaders that fell, as the ticker says it (bosses.ts's line). */
@@ -1247,12 +1248,11 @@ function startMatch(l: WorldLink): void {
   lobby?.hide();
   isOut = waiting = shownWin = false;
   // Every match's rounds count from 0: what was told or recorded of the last one is not.
-  seenRound = lastPhase = recordedRound = safariRound = pickAsked = hudRound = dugRound = -1;
+  seenRound = lastPhase = recordedRound = dropRound = hudRound = dugRound = -1;
   teamSent = '';
   tallyFrom = rom?.tally() ?? null;
   myStepsN = 0;
   mySpotWas = '';
-  wasSafari = false;
   ticks.length = 0;
   toldEvents = 0;
   toldGyms = l.room.gyms.length;

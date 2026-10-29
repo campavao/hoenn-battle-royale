@@ -24,6 +24,9 @@
 // (BrMoves_TeachSoon) and answers DONE; the GIVE that follows opens the party screen to
 // teach it, or the bag's GIVE screen to hold it, as a match's pickup does.
 #define BR_WILD_ASKED_TEACH 5
+// Spike B's drop: the fly map in pick mode (BrPick_Start) once the field is running,
+// answering FIGHTING when it is up. The choice goes out as the match's `pick`.
+#define BR_WILD_ASKED_PICK 6
 
 // mapGroup BR_WILD_BOSS asks for a gym leader instead (spike B, br_gym.c): mapNum is the
 // leader, BrGym's order. A leader who will not fight (TATE&LIZA with one POKeMON standing)

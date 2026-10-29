@@ -55,6 +55,9 @@ export class RingMap {
   /** Each grid pixel's point in the plane layout() places the maps in, in tiles: x, y. */
   private plane = new Float32Array(GRID_W * CELL * GRID_H * CELL * 2);
   private sections = new Map<string, Section>();
+  /** The SAFARI ZONE's own section: no place of the ring's, but where the drop's fly map
+   *  opens (the Zone is where everybody stands when it comes up). */
+  private zone: number | undefined;
   private img: ImageData | null = null;
   private px = new Uint32Array(240 * 160);
   private lcd = new Uint8ClampedArray(240 * 160 * 4);
@@ -70,6 +73,8 @@ export class RingMap {
       if (!s) { s = { id, ...art.section(id) }; ids.set(id, s); }
       this.sections.set(m.id, s);
     }
+    const zone = [...room.maps.values()].find((m) => m.id.startsWith('MAP_SAFARI_ZONE_'));
+    if (zone) this.zone = art.mapsec(zone.group, zone.num);
     this.lay();
   }
 
@@ -152,9 +157,16 @@ export class RingMap {
     return m && p ? { map: m.id, x: Math.floor(a.gx - p.gx), y: Math.floor(a.gy - p.gy) } : undefined;
   }
 
+  /** The outdoor maps a MAP section `id` covers (the drop's choice, br_pick.c), in id
+   *  order; none for a section no place is in. */
+  mapsIn(id: number): string[] {
+    return [...this.sections].filter(([, s]) => s.id === id).map(([m]) => m).sort();
+  }
+
   /** What the ROM opens the MAP on, for a trainer standing on `spot` (indoors, the
    *  building's door; nowhere known, Littleroot). */
   look(at: Spot, ring = this.room.ring()): MapLook {
+    if (at.map.startsWith('MAP_SAFARI_ZONE_') && this.zone !== undefined) return { mapsec: this.zone, cellX: 0, cellY: 0, r: ring.last ? R_ALL : R_NONE, place: this.placeLetters(ring) };
     const spot = this.outdoors(at) ?? { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 };
     const s = this.sections.get(spot.map)!;
     const m = this.room.maps.get(spot.map)!;

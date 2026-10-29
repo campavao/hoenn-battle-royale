@@ -21,6 +21,9 @@
 // ...and one to take you on the water: a MUDKIP, who could learn SURF, WATERFALL, DIVE and
 // STRENGTH, for the drivers that swim now that the water needs one (br_hm.h).
 #define BR_BOOT_FLAG_TESTSWIM 0x20
+// ...and the opening's POKeBLOCKs without the opening: spike B's parked ROM stays in
+// Littleroot, and its Safari battles (br_wild.c) throw from the same eight the Zone gives.
+#define BR_BOOT_FLAG_SAFARIKIT 0x10
 #define BR_BOOT_MODE(m) ((m) & 0x0F)
 
 struct BrBoot

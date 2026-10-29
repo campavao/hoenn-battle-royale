@@ -3,12 +3,18 @@
 # (BrZone_PickAny), outside the Safari phase, where the plain ask's BrZone_Pick rolls
 # nothing. Which roll it was the driver cannot tell apart (any first stage can be a
 # route's stand-in); what it checks is that the new state is taken, fights, and comes
-# back DONE like a plain ask, and that a plain ask after it is plain again.
+# back DONE like a plain ask, and that a plain ask after it is plain again. The opening's
+# battle is the Zone's own (BATTLE_TYPE_SAFARI, BALL/POKeBLOCK/GO NEAR/RUN) with the balls
+# the page set and the POKeBLOCKs BR_BOOT_FLAG_SAFARIKIT gave. Then the drop: ASKED_PICK
+# opens the fly map in pick mode and A sends the match's `pick`.
 wait 30
-pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 D3 C9 CF FF
+pokebytes gBrMailbox+0x2018 91 00 00 09 05 00 08 00 D3 C9 CF FF
 wait 400
 poke u8 gBrMatch 2
 poke u32 gBrMatch+8 4
+poke u8 gNumSafariBalls 30
+# the Safari's eight POKeBLOCKs in the case
+expectne u8 *gSaveBlock1Ptr+0x848 0
 wait 2
 # ROUTE 102 (0:17) tall grass, asked as the Safari's
 pokebytes gBrWildAsk+1 00 11 02
@@ -17,13 +23,12 @@ wait 10
 expect u8 gBrWildAsk 2
 expectne u16 gBrWildAsk+4 0
 wait 600
+expectbits u16 gBattleTypeFlags 0x80 0x80
+shot safari
 tap B
 wait 300
 tap B
 wait 300
-poke u32 *gSaveBlock2Ptr+0xAC 0
-poke u16 *gSaveBlock1Ptr+0x560 0x50
-poke u16 *gSaveBlock1Ptr+0x562 1
 tap DOWN
 wait 10
 tap RIGHT
@@ -44,3 +49,56 @@ wait 600
 shot plain
 expect u16 gBattleTypeFlags 4
 say spike safari ok
+# out of it through the plain battle's RUN (again if it failed), then the drop's fly map
+tap B
+wait 60
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 240
+tap B
+wait 60
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 240
+tap B
+wait 60
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 240
+tap B
+wait 60
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 240
+expect u8 gBrWildAsk 3
+poke u8 gBrWildAsk 6
+wait 120
+expect u8 gBrWildAsk 2
+expect u8 gBrPick 1
+shot pick
+tap A
+wait 30
+# pick {seat 0, section LITTLEROOT TOWN (0)}, where the hidden field stands
+expectmsg 24 u8 0 0
+expectmsg 24 u16 1 0
+say spike pick ok

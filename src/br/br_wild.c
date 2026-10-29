@@ -8,6 +8,7 @@
 #include "random.h"
 #include "script.h"
 #include "script_pokemon_util.h"
+#include "event_data.h"
 #include "wild_encounter.h"
 #include "constants/battle.h"
 #include "constants/items.h"
@@ -20,6 +21,7 @@
 #include "br/br_gym.h"
 #include "br/br_levels.h"
 #include "br/br_moves.h"
+#include "br/br_pick.h"
 #include "br/br_wild.h"
 #include "br/br_zone.h"
 
@@ -104,6 +106,12 @@ static void Start(void)
     species = info->wildPokemon[water ? WaterSlot() : LandSlot()].species;
     // The opening's any-first-stage, or the route's national stand-in: CreateWildMon's.
     gBrWildAsk.species = sSafari ? BrZone_PickAny() : BrZone_Pick();
+    // The opening's battle is the Zone's own: BALL / POKeBLOCK / GO NEAR / RUN, thrown
+    // from gNumSafariBalls, which the page sets (spike B). A plain ask is a plain battle.
+    if (sSafari)
+        FlagSet(FLAG_SYS_SAFARI_MODE);
+    else
+        FlagClear(FLAG_SYS_SAFARI_MODE);
     sSafari = FALSE;
     if (gBrWildAsk.species == SPECIES_NONE)
         gBrWildAsk.species = BrZone_NationalOn(species, gBrWildAsk.mapGroup, gBrWildAsk.mapNum);
@@ -140,6 +148,12 @@ void BrWild_Tick(void)
     {
         BrMoves_TeachSoon(gBrWildAsk.species);
         gBrWildAsk.state = BR_WILD_DONE;
+        return;
+    }
+    if (gBrWildAsk.state == BR_WILD_ASKED_PICK)
+    {
+        if (BrField_OverworldRunning() && !ScriptContext_IsEnabled() && BrPick_Start())
+            gBrWildAsk.state = BR_WILD_FIGHTING;
         return;
     }
     if (gBrWildAsk.state == BR_WILD_ASKED_SAFARI)

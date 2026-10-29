@@ -2050,6 +2050,7 @@ var RING_PHASE = 60 * 120;
 var RING_STEPS = [Infinity, 15 / 28, 9 / 28, 7 / 28, 5 / 28, 3 / 28, 2 / 28, 0, -1];
 var FINAL_REACH = 24;
 var SAFARI = "MAP_SAFARI_ZONE_";
+var PICK_WAIT = 35 * 60;
 var Room = class {
   constructor(world, maps, patches, seed, places, anchors = /* @__PURE__ */ new Map()) {
     this.world = world;
@@ -2135,7 +2136,7 @@ var Room = class {
       if (a && !a.bot) a.field = cmd.bits & 7;
     } else if (cmd.c === "pick") {
       const a = this.actor(cmd.id);
-      if (a && !a.bot && this.places.has(cmd.map) && !cmd.map.startsWith(SAFARI)) a.pick = cmd.map;
+      if (a && !a.bot && a.m.spot.map.startsWith(SAFARI) && this.places.has(cmd.map) && !cmd.map.startsWith(SAFARI)) this.dropOne(a, cmd.map);
     } else if (cmd.c === "away") {
       const a = this.actor(cmd.id);
       if (a && !a.bot) a.away = cmd.on || void 0;
@@ -2440,7 +2441,7 @@ var Room = class {
     const was = this.tick - 1 >= this.epoch ? this.ring(this.tick - 1) : { ...ring, phase: -1 };
     const r = this.results;
     if (ring.round !== was.round || r.wonAt !== void 0 && this.tick >= r.wonAt + AFTER_WIN) this.newRound(r.round + 1);
-    else if (was.safari && !ring.safari) this.drop(ring.round);
+    else if (this.tick - PICK_WAIT >= this.epoch && this.ring(this.tick - PICK_WAIT).safari && !this.ring(this.tick - PICK_WAIT + 1).safari) this.drop();
     else if (ring.phase !== was.phase) {
       for (const e of this.events) if (e.story && DOORS[e.story] === "wait" && ring.phase > (e.phase ?? 0)) e.opened = true;
       if (ring.phase === 1 && !r.entrants.length) r.entrants = this.actors.map((a) => [a.id, a.name]);
@@ -2660,10 +2661,15 @@ var Room = class {
     REACH.set(id, out);
     return out;
   }
-  /** The Safari is over: everybody still in the Zone drops where they asked (or, asking
-   *  nowhere, anywhere outdoors), on a free cell of that map dealt from the seed. */
-  drop(round) {
-    let state = (this.seed ^ Math.imul(round + 1, 625341585)) >>> 0 || 1;
+  /** The fly map is over for everybody (PICK_WAIT after the Safari): whoever is still
+   *  in the Zone, having chosen nowhere, drops anywhere outdoors (br_pick.c's timeout). */
+  drop() {
+    for (const a of this.actors) if (!a.bot && a.m.spot.map.startsWith(SAFARI)) this.dropOne(a);
+  }
+  /** `a` out of the Zone onto a free cell of `want` (or of any outdoor map), dealt from
+   *  the seed, the round and who it is, as the host deals the live drop's cell. */
+  dropOne(a, want) {
+    let state = (this.seed ^ Math.imul(this.results.round + 1, 625341585) ^ Math.imul(a.id + 1, 2654435761) ^ this.tick) >>> 0 || 1;
     const rng = () => {
       state ^= state << 13;
       state ^= state >>> 17;
@@ -2671,24 +2677,21 @@ var Room = class {
       return (state >>> 0) / 4294967296;
     };
     const maps = [...this.places.keys()].filter((m) => !m.startsWith(SAFARI)).sort();
-    const used = new Set(this.actors.map((a) => `${a.m.spot.map}:${a.m.spot.x}:${a.m.spot.y}`));
-    for (const a of this.actors) {
-      if (a.bot || !a.m.spot.map.startsWith(SAFARI)) continue;
-      const want = a.pick && this.places.has(a.pick) ? a.pick : maps[Math.floor(rng() * maps.length)];
-      a.pick = void 0;
-      const m = this.maps.get(want);
+    const used = new Set(this.actors.map((o) => `${o.m.spot.map}:${o.m.spot.x}:${o.m.spot.y}`));
+    for (let tries = 0; tries < 4; tries++) {
+      const map = tries === 0 && want ? want : maps[Math.floor(rng() * maps.length)];
+      const m = this.maps.get(map);
       if (!m) continue;
       const cells = [];
       for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
-        if (this.world.cell(want, x, y) !== 0 || used.has(`${want}:${x}:${y}`) || this.groundAt(want, x, y) || this.spillAt(want, x, y)) continue;
-        if (this.patchesOn(want).some((q) => q.x === x && q.y === y)) continue;
-        cells.push({ map: want, x, y });
+        if (this.world.cell(map, x, y) !== 0 || used.has(`${map}:${x}:${y}`) || this.groundAt(map, x, y) || this.spillAt(map, x, y)) continue;
+        if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
+        cells.push({ map, x, y });
       }
       if (!cells.length) continue;
-      const to = cells[Math.floor(rng() * cells.length)];
-      used.add(`${to.map}:${to.x}:${to.y}`);
-      a.m = newMover(to, 1);
+      a.m = newMover(cells[Math.floor(rng() * cells.length)], 1);
       a.calm = this.tick + JOIN_GRACE;
+      return;
     }
   }
   /** The fog lifted: a new match. Every trainer, out or in, back at the truck with the
@@ -2775,7 +2778,7 @@ var Room = class {
    *  other, and the lower id is the side that challenged. */
   engage(events) {
     if (this.ring().safari) return;
-    const free = this.actors.filter((a) => !a.bot && !a.away && !a.battling && !a.m.action && this.tick >= a.calm);
+    const free = this.actors.filter((a) => !a.bot && !a.away && !a.battling && !a.m.action && this.tick >= a.calm && !a.m.spot.map.startsWith(SAFARI));
     for (let i = 0; i < free.length; i++) {
       const a = free[i];
       if (a.battling) continue;
@@ -2991,7 +2994,6 @@ var Room = class {
       mix2(a.since ?? 0);
       mix2(a.bites ?? 0);
       mix2(a.boss ?? 0);
-      mix2(a.pick?.length ?? 0);
       mix2(a.away ? 1 : 0);
       if (a.meet) {
         mix2(a.meet.foe);
