@@ -18,6 +18,8 @@
 import { WorldIndex } from '../src/bots/hoenn';
 import { isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
 import { loadPatches } from '../src/bots/patches';
+import { dealParty, rungForPhase } from '../src/bots/party';
+import { gradeOf } from '../src/bots/roster';
 import { DIR_EAST } from './sim';
 import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, emptyBag, makeRoom, type Actor, type Bag, type RoomEvent } from './shared/room';
 import { SKIN_GFX } from './shared/bots';
@@ -26,7 +28,6 @@ import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattle
 import { groundCount } from './shared/items';
 import { RomArt } from './romart';
 import type { GbaKey } from '../src/emu';
-import type { PackedMon } from '../src/net/wire';
 import spritesData from '../src/data/sprites.json';
 
 const TILE = 16;
@@ -120,6 +121,7 @@ const intro = () => document.getElementById('intro') !== null;
 addEventListener('keydown', (e) => {
   if (intro()) return;
   if (e.key === 'v' || e.key === 'V') { toggleSpectate(); return; }
+  if ((e.key === 'm' || e.key === 'M' || e.key === 'Escape') && !e.repeat) { void openMenu(); return; }
   const k = KEYMAP[e.key];
   if (!k) return;
   e.preventDefault();
@@ -189,13 +191,6 @@ let swapping = false;
 let calmUntil = 0;
 const handoff: number[] = []; // ms from the trigger to the ROM's first battle frame, and back
 
-function mon(species: number, level: number): PackedMon {
-  const hp = level * 3 + 10;
-  return {
-    species, level, hp, maxHp: hp, status: 0, moves: [{ id: 33, pp: 35, ppUps: 0 }], heldItem: 0,
-    otId: 0, personality: (species * 2654435761) >>> 0, exp: 0, nickname: '', ot: '',
-  };
-}
 
 /** A battle the ROM fights, the page showing it from its first frame and taking the
  *  screen back when it is over. */
@@ -261,7 +256,7 @@ function giveNext(): void {
 // A dropped bag asks what to take (HBR-82): POKéMON, its team on the ROM's BAG screen, or
 // BAG, its items. B or CANCEL leaves it lying. The pad drives the question.
 const askEl = document.getElementById('ask')!;
-const askButtons = [...askEl.querySelectorAll<HTMLButtonElement>('button')];
+let askButtons: HTMLButtonElement[] = [];
 let asking: { pick: number; done: (c: string) => void } | null = null;
 
 function askPaint(): void {
@@ -278,10 +273,19 @@ function askKey(k: string): void {
   askPaint();
 }
 
-askButtons.forEach((b, i) => b.addEventListener('click', () => { if (asking) { asking.pick = i; asking.done(b.dataset.c!); } }));
-
-function ask(title: string): Promise<string> {
+/** A question on the page, its rows `[label, answer]`; '' is no (B answers it too). */
+function ask(title: string, rows: [string, string][]): Promise<string> {
   document.getElementById('ask-title')!.textContent = title;
+  for (const b of askButtons) b.remove();
+  askButtons = rows.map(([label, c], i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.dataset.c = c;
+    b.addEventListener('click', () => { if (asking) { asking.pick = i; asking.done(c); } });
+    askEl.append(b);
+    return b;
+  });
   askEl.classList.add('on');
   return new Promise((resolve) => {
     asking = { pick: 0, done: (c) => { asking = null; askEl.classList.remove('on'); calmUntil = frame + 30; resolve(c); } };
@@ -294,7 +298,7 @@ function ask(title: string): Promise<string> {
 async function openBag(key: number, bag: Bag, who: string): Promise<void> {
   const mons = bag.mons ?? [];
   const things = bag.items.length > 0 || bag.money > 0;
-  const c = mons.length && things ? await ask(`${who}'s BAG`) : mons.length ? 'mons' : 'items';
+  const c = mons.length && things ? await ask(`${who}'s BAG`, [['POKéMON', 'mons'], ['BAG', 'items'], ['CANCEL', '']]) : mons.length ? 'mons' : 'items';
   if (c === 'items') return takeBag(key, bag, who);
   if (c !== 'mons' || isOut || !rom) { link.drop(key, bag); return; }
   swapping = true;
@@ -311,6 +315,26 @@ async function openBag(key: number, bag: Bag, who: string): Promise<void> {
   }
   const rest: Bag = { items: bag.items, money: bag.money, mons: left };
   if (!emptyBag(rest)) link.drop(key, rest);
+}
+
+/** START: the match's own menu rows on the ROM's screens (start_menu.c's MENU_ACTION_*),
+ *  asked here first so the hidden field never shows. MAP is left out: the hidden ROM's
+ *  ring is not this world's. */
+async function openMenu(): Promise<void> {
+  if (!rom || isOut || battle || swapping || asking || spectating) return;
+  const c = await ask('MENU', [['POKéMON', '1'], ['BAG', '2'], ['CARD', '4'], ['EXIT', '']]);
+  if (!c || !rom || isOut || battle || swapping) return;
+  swapping = true;
+  held.clear();
+  try {
+    await rom.menu(Number(c), () => { if (swapping) battleEl.classList.add('on'); }, () => battleEl.classList.remove('on'));
+  } finally {
+    swapping = false;
+    battleEl.classList.remove('on');
+    held.clear();
+    pressed.clear();
+    calmUntil = frame + 30;
+  }
 }
 
 /** A fallen trainer's bag, row by row into mine the ROM's way, and its money. What did
@@ -350,12 +374,18 @@ function startFor(e: RoomEvent): void {
   if (e.type === 'fight') {
     const foe = link.room.actor(e.foe);
     if (!foe) { link.end(); return; }
-    // POOCHYENA and ZIGZAGOON (Emerald's internal species ids, not the dex's).
-    const party = [mon(286, 5), mon(288, 5)];
+    // A bot's team as the match deals it (bots/party.ts): from the seed and its seat, the
+    // map it stands on, at the rung, one more mon every two phases.
+    // Its grade too (roster.ts). No Zone pool: the ROM deals one at the Safari opening,
+    // which this world has not got yet.
+    const party = dealParty(link.room.seed, foe.id, link.room.ring().phase + 1, foe.m.spot.map, gradeOf(link.room.seed, foe.id));
     const fog = inFogNow();
     handOff(foe, (r, onStart) => r.fight(foe.name, party, foe.skin, onStart, fog));
   } else if (e.type === 'duel') {
     // Another trainer: both ROMs fight it out as a link battle, the blocks through the relay.
+    // A menu is no hiding place: whatever screen I have open closes, a question goes unanswered.
+    if (swapping) rom?.leave();
+    asking?.done('');
     const foe = link.room.actor(e.foe);
     const me = link.room.actor(link.me);
     if (!foe || !me) { link.end(); return; }
@@ -445,18 +475,23 @@ function goOut(why: string): void {
   if (!spectating) toggleSpectate();
 }
 document.getElementById('rejoin')!.addEventListener('click', () => location.reload());
+document.getElementById('menu')!.addEventListener('click', () => { void openMenu(); });
 
 /** Once a frame: the ring's news, and the fog's bite while I stand in it. */
 function fogFrame(): void {
   const ring = link.room.ring();
   if (ring.phase !== lastPhase) {
+    // The ring phase is the level rung (br_levels.c): the host numbers phases from 1.
+    const rung = rungForPhase(ring.phase + 1);
+    const grew = lastPhase >= 0 && rung > rungForPhase(lastPhase + 1) ? ` All POKéMON are now Lv. ${rung}!` : '';
     if (lastPhase >= 0) {
       if (ring.phase === 0) say('The fog lifts. A new round!');
-      else if (ring.last) say('THE FOG COVERS ALL OF HOENN!');
-      else say(ring.phase === 1 ? 'The fog is rolling in!' : 'The fog is closing in!');
+      else if (ring.last) say(`THE FOG COVERS ALL OF HOENN!${grew}`);
+      else say(`${ring.phase === 1 ? 'The fog is rolling in!' : 'The fog is closing in!'}${grew}`);
     }
     lastPhase = ring.phase;
   }
+  rom?.setPhase(ring.phase + 1);
   if (isOut || !rom) return;
   // The BAG screen is a menu: the fog bites on the field and in battle (BrRing_Tick).
   if (swapping) return;
@@ -925,7 +960,7 @@ async function boot(): Promise<void> {
   const next = () => { const p = rest.find((r) => !r.mips); if (p) { paint(p); mipFor(p, 0); setTimeout(next, 16); } };
   setTimeout(next, 500);
   bootRom(files, link.room.seed).then((r) => { rom = r; giveNext(); }, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { link, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; } };
+  (window as unknown as { __spike: unknown }).__spike = { link, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; } };
 }
 
 void boot();
