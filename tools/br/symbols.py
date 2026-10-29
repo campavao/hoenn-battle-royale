@@ -90,6 +90,9 @@ ENGINE_SYMBOLS = [
     # (web/src/battle/movebook.ts): its stats, name, description, type name, and how
     # well each type lands on each.
     "gBattleMoves", "gMoveNames", "gMoveDescriptionPointers", "gTypeNames", "gTypeEffectiveness",
+    # Spike B's route music (br_music.h): which song the BGM player is on, against the
+    # song table's headers (spike-music.txt), and each map's song (web/spike-b/music.ts).
+    "gMPlayInfo_BGM", "gSongTable",
     # Spike B draws SURF's blob under a surfing trainer (web/spike-b/romart.ts surfBlob).
     "gFieldEffectObjectTemplate_SurfBlob",
     # The fog map's prompt, "FOG: <place>", is built here (br_map.c, ring-map.txt).

@@ -34,6 +34,7 @@
 #include "br/br_legend.h"
 #include "br/br_story.h"
 #include "br/br_field.h"
+#include "br/br_music.h"
 
 // Readable from the ROM image itself, so a tool can tell which patch it holds without
 // running it: `strings pokeemerald.gba | grep HOENN-BR`.
@@ -95,6 +96,7 @@ void BrFrame(void)
     BrLegend_Tick();
     BrPatch_Tick();
     BrWild_Tick(); // spike B's page asks for a wild battle
+    BrMusic_Tick(); // ...and for its trainer's song
     BrBot_Tick();
     BrDuel_Tick();
     BrRing_Tick();
