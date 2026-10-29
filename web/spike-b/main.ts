@@ -462,7 +462,7 @@ async function takeBag(key: number, bag: Bag, who: string): Promise<void> {
 function startFor(e: RoomEvent): void {
   if (e.type === 'nurse') { void nurse(); return; }
   if (e.type === 'mart') { void mart(e.map); return; }
-  if (e.type === 'trade') { void trade(e.n, e.species); return; }
+  if (e.type === 'trade') { void (e.gives ? gift(e.n, e.species) : trade(e.n, e.species)); return; }
   if (e.type === 'legend') {
     // Its own battle; caught, it is mine, and anything else puts it back where it stood
     // for the next trainer (Cam: losing to one puts you out, and it goes back for retries).
@@ -597,6 +597,35 @@ async function trade(n: number, species: number): Promise<void> {
     if (given) say(`Traded for ${name}!`);
   } finally {
     if (link === l) l.traded(n, given);
+  }
+}
+
+/** Somebody at home with a Pokémon to give (br_balls.c): taken across on the ROM's team
+ *  screen, as a dropped bag's team is; taken, he is gone for everybody. */
+async function gift(n: number, species: number): Promise<void> {
+  const l = link;
+  let taken = 0;
+  try {
+    if (!rom || isOut || battle || swapping) return;
+    asking?.done('');
+    const name = speciesName(species);
+    const c = await ask(`Will you look after my ${name} for me?`, [['YES', 'y'], ['NO, THANKS', '']]);
+    if (c !== 'y' || !rom || isOut) return;
+    swapping = true;
+    held.clear();
+    try {
+      const left = await rom.team([{ species, level: rungForPhase(link.room.ring().phase + 1) }], 'GIFT', () => battleEl.classList.add('on'));
+      if (!left.length) taken = species;
+    } finally {
+      swapping = false;
+      battleEl.classList.remove('on');
+      held.clear();
+      pressed.clear();
+      calmUntil = frame + 30;
+    }
+    if (taken) say(`Took the ${name}!`);
+  } finally {
+    if (link === l) l.traded(n, taken);
   }
 }
 
@@ -1178,18 +1207,21 @@ function fogLine(): string {
 }
 
 // While the ROM has the screen, the pad is the ROM's.
-const GBA_KEY: Record<string, GbaKey> = { up: 'up', down: 'down', left: 'left', right: 'right', a: 'a', b: 'b' };
+const GBA_KEY: Record<string, GbaKey> = { up: 'up', down: 'down', left: 'left', right: 'right', a: 'a', b: 'b', start: 'start' };
+// Enter is A on the field and START on the ROM's own screens (the swap's MOVE).
+const romKey = (key: string): string | undefined => key === 'Enter' && (swapping || romUp) ? 'start' : KEYMAP[key];
 addEventListener('keydown', (e) => {
-  const k = KEYMAP[e.key];
+  const k = romKey(e.key);
   if (k && asking) { if (!e.repeat) askKey(k); }
   else if ((battle || swapping || romUp) && rom && k) rom.press(GBA_KEY[k]);
 });
-addEventListener('keyup', (e) => { const k = KEYMAP[e.key]; if (rom && k) rom.release(GBA_KEY[k]); });
+addEventListener('keyup', (e) => { const k = romKey(e.key); if (rom && k) rom.release(GBA_KEY[k]); });
 for (const el of document.querySelectorAll<HTMLElement>('.k')) {
   const k = el.dataset.k!;
   el.addEventListener('pointerdown', () => {
     if (asking) askKey(k);
     else if ((battle || swapping || romUp) && rom) rom.press(GBA_KEY[k]);
+    else if (k === 'start') void openMenu();
   });
   el.addEventListener('pointerup', () => rom?.release(GBA_KEY[k]));
 }
@@ -1457,6 +1489,12 @@ function drawClerks(visible: Placed[]): void {
     if (!img) clerkArt.set(OBJ_EVENT_GFX_GENTLEMAN, (img = art.sprite(OBJ_EVENT_GFX_GENTLEMAN, 3)));
     const w = img.width / 3;
     ctx.drawImage(img, 0, 0, w, img.height, (p.gx + e.trader!.x) * TILE + (TILE - w) / 2, (p.gy + e.trader!.y) * TILE + TILE - img.height, w, img.height);
+  }
+  // People at home and floor traders (br_balls.c), facing down: a gift-giver's people.
+  for (const h of link.room.homes) {
+    const p = !h.gone && placed.get(h.map);
+    const img = p && visible.includes(p) ? giftArt(h.n) : null;
+    if (p && img) ctx.drawImage(img, (p.gx + h.x) * TILE + (TILE - img.width) / 2, (p.gy + h.y) * TILE + TILE - img.height);
   }
   for (const p of visible) {
     // The gym leaders nobody has beaten yet, facing down (a beaten one has left the gym).

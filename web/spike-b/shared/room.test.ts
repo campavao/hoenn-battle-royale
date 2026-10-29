@@ -417,19 +417,36 @@ describe('item balls', () => {
 
   it('every house and floor with a cache in the live match has its ball: a machine, or gold', () => {
     const room = makeRoom(MAPS, PATCHES, 4242);
-    const rooms = roomsJson as [string, number, number, boolean][];
+    const rooms = roomsJson as [string, number, number, boolean, boolean, number, number, boolean][];
     const g = [...room.ground().values()];
     const caches = g.filter((b) => !room.places.has(b.map));
     expect(caches.length).toBeGreaterThan(20);
     for (const b of caches) {
-      expect(rooms.some(([m, x, y]) => m === b.map && x === b.x && y === b.y)).toBe(true);
+      expect(rooms.some(([m, x, y, , cache]) => cache && m === b.map && x === b.x && y === b.y)).toBe(true);
       expect(isTm(b.item) || GOLD.includes(b.item)).toBe(true);
     }
     // ...and the table is br_balls.c's as it stands (tools/br/spike-rooms.py makes it).
     const houses = Number(/#define BR_HOUSES (\d+)/.exec(ballsC)![1]);
     const body = ballsC.slice(ballsC.indexOf('static const struct BrRoom sRooms[] ='));
-    const rows = [...body.slice(0, body.indexOf('};')).matchAll(/\{ (MAP_\w+), (\d+), (\d+), \d+, \d+, (TRUE|FALSE), \w+ \}/g)];
-    expect(rooms).toEqual(rows.map((r, i) => [r[1], Number(r[2]), Number(r[3]), i < houses, r[4]]).filter((r) => r[4] === 'TRUE').map((r) => r.slice(0, 4)));
+    const rows = [...body.slice(0, body.indexOf('};')).matchAll(/\{ (MAP_\w+), (\d+), (\d+), (\d+), (\d+), (TRUE|FALSE), (\w+) \}/g)];
+    expect(rooms).toEqual(rows.map((r, i) => [r[1], Number(r[2]), Number(r[3]), i < houses, r[6] === 'TRUE', Number(r[4]), Number(r[5]), r[7] !== 'BR_NO_TRADER']));
+  });
+
+  it('somebody is home in one house in eight, and the big floors trade; a giver gives once', () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const homes = room.homes;
+    expect(homes.some((h) => !h.gives)).toBe(true);
+    for (const h of homes) expect(room.traderAt(h.map, h.x, h.y)?.n).toBe(h.n);
+    // The same seed deals the same people; a state carries them.
+    expect(makeRoom(MAPS, PATCHES, 4242).homes).toEqual(homes);
+    const h = homes[0];
+    room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: h.map, x: h.x, y: h.y + 1 }, facing: 2 });
+    for (let i = 0; i < 2; i++) room.step(new Map([[2, [i ? KEY_A : 0]]]));
+    expect(h.busy).toBe(2);
+    room.apply({ c: 'traded', id: 2, n: h.n, given: 25 });
+    expect(h.busy).toBe(0);
+    if (h.gives) expect(room.traderAt(h.map, h.x, h.y)).toBeUndefined();
+    else expect(h.species).toBe(25);
   });
 
   it('a gift-giver stands in every town and city, holding one held item', () => {

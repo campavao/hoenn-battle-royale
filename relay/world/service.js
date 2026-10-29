@@ -1473,7 +1473,7 @@ function scatterItem(rng) {
 }
 
 // web/spike-b/data/rooms.json
-var rooms_default = [["MAP_DEWFORD_TOWN_HOUSE1", 5, 4, true], ["MAP_DEWFORD_TOWN_HOUSE2", 7, 5, true], ["MAP_FALLARBOR_TOWN_COZMOS_HOUSE", 3, 5, true], ["MAP_FALLARBOR_TOWN_MOVE_RELEARNERS_HOUSE", 5, 5, true], ["MAP_FORTREE_CITY_HOUSE1", 6, 2, true], ["MAP_FORTREE_CITY_HOUSE2", 6, 4, true], ["MAP_FORTREE_CITY_HOUSE3", 6, 2, true], ["MAP_FORTREE_CITY_HOUSE4", 6, 3, true], ["MAP_FORTREE_CITY_HOUSE5", 6, 2, true], ["MAP_LAVARIDGE_TOWN_HOUSE", 5, 4, true], ["MAP_LILYCOVE_CITY_HOUSE1", 3, 5, true], ["MAP_LILYCOVE_CITY_HOUSE2", 2, 4, true], ["MAP_LILYCOVE_CITY_HOUSE3", 5, 5, true], ["MAP_LILYCOVE_CITY_HOUSE4", 3, 5, true], ["MAP_LILYCOVE_CITY_MOVE_DELETERS_HOUSE", 5, 5, true], ["MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_1F", 3, 4, true], ["MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_2F", 3, 3, true], ["MAP_LITTLEROOT_TOWN_MAYS_HOUSE_1F", 7, 4, true], ["MAP_LITTLEROOT_TOWN_MAYS_HOUSE_2F", 5, 3, true], ["MAP_MAUVILLE_CITY_HOUSE1", 5, 5, true], ["MAP_MAUVILLE_CITY_HOUSE2", 3, 5, true], ["MAP_MOSSDEEP_CITY_HOUSE1", 5, 5, true], ["MAP_MOSSDEEP_CITY_HOUSE2", 3, 5, true], ["MAP_MOSSDEEP_CITY_HOUSE3", 5, 5, true], ["MAP_MOSSDEEP_CITY_HOUSE4", 5, 4, true], ["MAP_MOSSDEEP_CITY_STEVENS_HOUSE", 5, 4, true], ["MAP_OLDALE_TOWN_HOUSE1", 3, 5, true], ["MAP_OLDALE_TOWN_HOUSE2", 5, 5, true], ["MAP_PACIFIDLOG_TOWN_HOUSE1", 5, 5, true], ["MAP_PACIFIDLOG_TOWN_HOUSE2", 5, 5, true], ["MAP_PACIFIDLOG_TOWN_HOUSE3", 5, 5, true], ["MAP_PACIFIDLOG_TOWN_HOUSE4", 5, 5, true], ["MAP_PACIFIDLOG_TOWN_HOUSE5", 5, 5, true], ["MAP_PETALBURG_CITY_HOUSE1", 3, 5, true], ["MAP_PETALBURG_CITY_HOUSE2", 5, 4, true], ["MAP_PETALBURG_CITY_WALLYS_HOUSE", 5, 5, true], ["MAP_ROUTE104_MR_BRINEYS_HOUSE", 7, 5, true], ["MAP_ROUTE109_SEASHORE_HOUSE", 8, 4, true], ["MAP_ROUTE111_WINSTRATE_FAMILYS_HOUSE", 5, 5, true], ["MAP_ROUTE114_FOSSIL_MANIACS_HOUSE", 2, 5, true], ["MAP_ROUTE114_LANETTES_HOUSE", 7, 5, true], ["MAP_ROUTE116_TUNNELERS_REST_HOUSE", 7, 5, true], ["MAP_ROUTE119_HOUSE", 3, 5, true], ["MAP_ROUTE123_BERRY_MASTERS_HOUSE", 5, 5, true], ["MAP_ROUTE124_DIVING_TREASURE_HUNTERS_HOUSE", 4, 5, true], ["MAP_RUSTBORO_CITY_CUTTERS_HOUSE", 8, 5, true], ["MAP_RUSTBORO_CITY_HOUSE1", 4, 5, true], ["MAP_RUSTBORO_CITY_HOUSE2", 6, 5, true], ["MAP_RUSTBORO_CITY_HOUSE3", 6, 5, true], ["MAP_SLATEPORT_CITY_HOUSE", 5, 5, true], ["MAP_SLATEPORT_CITY_NAME_RATERS_HOUSE", 5, 4, true], ["MAP_SOOTOPOLIS_CITY_HOUSE1", 4, 3, true], ["MAP_SOOTOPOLIS_CITY_HOUSE2", 5, 4, true], ["MAP_SOOTOPOLIS_CITY_HOUSE3", 4, 3, true], ["MAP_SOOTOPOLIS_CITY_HOUSE4", 4, 3, true], ["MAP_SOOTOPOLIS_CITY_HOUSE5", 5, 4, true], ["MAP_SOOTOPOLIS_CITY_HOUSE6", 3, 2, true], ["MAP_SOOTOPOLIS_CITY_HOUSE7", 4, 3, true], ["MAP_SOOTOPOLIS_CITY_LOTAD_AND_SEEDOT_HOUSE", 4, 3, true], ["MAP_VERDANTURF_TOWN_FRIENDSHIP_RATERS_HOUSE", 5, 5, true], ["MAP_VERDANTURF_TOWN_HOUSE", 3, 5, true], ["MAP_VERDANTURF_TOWN_WANDAS_HOUSE", 4, 5, true], ["MAP_ABANDONED_SHIP_CORRIDORS_1F", 9, 6, false], ["MAP_ABANDONED_SHIP_CORRIDORS_B1F", 2, 6, false], ["MAP_ABANDONED_SHIP_DECK", 10, 10, false], ["MAP_ABANDONED_SHIP_HIDDEN_FLOOR_CORRIDORS", 11, 2, false], ["MAP_ALTERING_CAVE", 16, 12, false], ["MAP_ANCIENT_TOMB", 4, 21, false], ["MAP_AQUA_HIDEOUT_1F", 17, 17, false], ["MAP_CAVE_OF_ORIGIN_1F", 8, 8, false], ["MAP_CAVE_OF_ORIGIN_B1F", 6, 12, false], ["MAP_CAVE_OF_ORIGIN_ENTRANCE", 9, 13, false], ["MAP_DESERT_RUINS", 4, 21, false], ["MAP_DESERT_UNDERPASS", 69, 9, false], ["MAP_DEWFORD_TOWN_HALL", 3, 5, false], ["MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F", 15, 9, false], ["MAP_FORTREE_CITY_DECORATION_SHOP", 5, 3, false], ["MAP_GRANITE_CAVE_STEVENS_ROOM", 6, 6, false], ["MAP_ISLAND_CAVE", 4, 21, false], ["MAP_LAVARIDGE_TOWN_HERB_SHOP", 4, 3, false], ["MAP_LILYCOVE_CITY_CONTEST_HALL", 24, 17, false], ["MAP_LILYCOVE_CITY_CONTEST_LOBBY", 15, 3, false], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_1F", 8, 5, false], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_2F", 8, 4, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_1F", 9, 3, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_2F", 9, 5, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_3F", 9, 3, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_4F", 9, 5, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_5F", 9, 3, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_ROOFTOP", 9, 5, false], ["MAP_LILYCOVE_CITY_HARBOR", 9, 11, false], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_1F", 5, 10, false], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F", 12, 6, false], ["MAP_LILYCOVE_CITY_POKEMON_TRAINER_FAN_CLUB", 5, 10, false], ["MAP_MAGMA_HIDEOUT_2F_1R", 16, 19, false], ["MAP_MAGMA_HIDEOUT_2F_3R", 21, 11, false], ["MAP_MARINE_CAVE_END", 14, 13, false], ["MAP_MARINE_CAVE_ENTRANCE", 7, 7, false], ["MAP_MAUVILLE_CITY_BIKE_SHOP", 5, 3, false], ["MAP_MAUVILLE_CITY_GAME_CORNER", 11, 3, false], ["MAP_METEOR_FALLS_1F_2R", 14, 16, false], ["MAP_METEOR_FALLS_B1F_1R", 14, 19, false], ["MAP_METEOR_FALLS_STEVENS_CAVE", 17, 15, false], ["MAP_MIRAGE_TOWER_1F", 5, 3, false], ["MAP_MIRAGE_TOWER_2F", 5, 3, false], ["MAP_MIRAGE_TOWER_3F", 5, 3, false], ["MAP_MIRAGE_TOWER_4F", 4, 3, false], ["MAP_MOSSDEEP_CITY_GAME_CORNER_1F", 6, 3, false], ["MAP_MOSSDEEP_CITY_GAME_CORNER_B1F", 4, 1, false], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_1F", 10, 5, false], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_2F", 8, 7, false], ["MAP_MT_CHIMNEY", 18, 21, false], ["MAP_MT_CHIMNEY_CABLE_CAR_STATION", 4, 7, false], ["MAP_MT_PYRE_1F", 11, 7, false], ["MAP_MT_PYRE_SUMMIT", 24, 17, false], ["MAP_NEW_MAUVILLE_ENTRANCE", 3, 3, false], ["MAP_ROUTE104_PRETTY_PETAL_FLOWER_SHOP", 7, 7, false], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_NORTH_ENTRANCE", 7, 3, false], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_SOUTH_ENTRANCE", 7, 3, false], ["MAP_ROUTE111_OLD_LADYS_REST_STOP", 5, 4, false], ["MAP_ROUTE112_CABLE_CAR_STATION", 4, 7, false], ["MAP_ROUTE113_GLASS_WORKSHOP", 7, 5, false], ["MAP_ROUTE114_FOSSIL_MANIACS_TUNNEL", 6, 13, false], ["MAP_ROUTE117_POKEMON_DAY_CARE", 3, 3, false], ["MAP_ROUTE119_WEATHER_INSTITUTE_1F", 11, 6, false], ["MAP_ROUTE119_WEATHER_INSTITUTE_2F", 9, 9, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_1F", 7, 4, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_2F", 11, 4, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_3F", 15, 6, false], ["MAP_RUSTBORO_CITY_FLAT1_1F", 10, 5, false], ["MAP_RUSTBORO_CITY_FLAT1_2F", 3, 5, false], ["MAP_RUSTBORO_CITY_FLAT2_1F", 9, 4, false], ["MAP_RUSTBORO_CITY_FLAT2_2F", 6, 4, false], ["MAP_RUSTBORO_CITY_FLAT2_3F", 6, 4, false], ["MAP_RUSTBORO_CITY_POKEMON_SCHOOL", 6, 4, false], ["MAP_SEAFLOOR_CAVERN_ENTRANCE", 7, 7, false], ["MAP_SEAFLOOR_CAVERN_ROOM1", 12, 8, false], ["MAP_SEAFLOOR_CAVERN_ROOM2", 7, 6, false], ["MAP_SEAFLOOR_CAVERN_ROOM3", 7, 7, false], ["MAP_SEAFLOOR_CAVERN_ROOM4", 11, 11, false], ["MAP_SEAFLOOR_CAVERN_ROOM5", 8, 8, false], ["MAP_SEAFLOOR_CAVERN_ROOM6", 5, 4, false], ["MAP_SEAFLOOR_CAVERN_ROOM7", 3, 19, false], ["MAP_SEAFLOOR_CAVERN_ROOM8", 3, 8, false], ["MAP_SEALED_CHAMBER_INNER_ROOM", 10, 11, false], ["MAP_SEALED_CHAMBER_OUTER_ROOM", 8, 9, false], ["MAP_SHOAL_CAVE_LOW_TIDE_LOWER_ROOM", 13, 5, false], ["MAP_SKY_PILLAR_1F", 10, 4, false], ["MAP_SKY_PILLAR_2F", 10, 4, false], ["MAP_SKY_PILLAR_3F", 10, 5, false], ["MAP_SKY_PILLAR_4F", 10, 5, false], ["MAP_SKY_PILLAR_5F", 11, 3, false], ["MAP_SKY_PILLAR_ENTRANCE", 8, 8, false], ["MAP_SKY_PILLAR_OUTSIDE", 13, 10, false], ["MAP_SKY_PILLAR_TOP", 12, 11, false], ["MAP_SLATEPORT_CITY_HARBOR", 9, 11, false], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_1F", 12, 6, false], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F", 12, 4, false], ["MAP_SLATEPORT_CITY_POKEMON_FAN_CLUB", 7, 7, false], ["MAP_SLATEPORT_CITY_STERNS_SHIPYARD_1F", 9, 8, false], ["MAP_SLATEPORT_CITY_STERNS_SHIPYARD_2F", 7, 6, false], ["MAP_TERRA_CAVE_END", 10, 12, false], ["MAP_TERRA_CAVE_ENTRANCE", 11, 10, false], ["MAP_TRAINER_HILL_ENTRANCE", 9, 8, false]];
+var rooms_default = [["MAP_DEWFORD_TOWN_HOUSE1", 5, 4, true, true, 3, 4, false], ["MAP_DEWFORD_TOWN_HOUSE2", 7, 5, true, true, 6, 4, false], ["MAP_FALLARBOR_TOWN_COZMOS_HOUSE", 3, 5, true, true, 1, 4, false], ["MAP_FALLARBOR_TOWN_MOVE_RELEARNERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_FORTREE_CITY_HOUSE1", 6, 2, true, true, 6, 3, false], ["MAP_FORTREE_CITY_HOUSE2", 6, 4, true, true, 1, 3, false], ["MAP_FORTREE_CITY_HOUSE3", 6, 2, true, true, 6, 3, false], ["MAP_FORTREE_CITY_HOUSE4", 6, 3, true, true, 7, 3, false], ["MAP_FORTREE_CITY_HOUSE5", 6, 2, true, true, 1, 3, false], ["MAP_LAVARIDGE_TOWN_HOUSE", 5, 4, true, true, 3, 3, false], ["MAP_LILYCOVE_CITY_HOUSE1", 3, 5, true, true, 1, 4, false], ["MAP_LILYCOVE_CITY_HOUSE2", 2, 4, true, true, 0, 3, false], ["MAP_LILYCOVE_CITY_HOUSE3", 5, 5, true, true, 4, 4, false], ["MAP_LILYCOVE_CITY_HOUSE4", 3, 5, true, true, 1, 5, false], ["MAP_LILYCOVE_CITY_MOVE_DELETERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_1F", 3, 4, true, true, 1, 4, false], ["MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_2F", 3, 3, true, true, 3, 5, false], ["MAP_LITTLEROOT_TOWN_MAYS_HOUSE_1F", 7, 4, true, true, 9, 4, false], ["MAP_LITTLEROOT_TOWN_MAYS_HOUSE_2F", 5, 3, true, true, 5, 5, false], ["MAP_MAUVILLE_CITY_HOUSE1", 5, 5, true, true, 4, 5, false], ["MAP_MAUVILLE_CITY_HOUSE2", 3, 5, true, true, 1, 4, false], ["MAP_MOSSDEEP_CITY_HOUSE1", 5, 5, true, true, 4, 4, false], ["MAP_MOSSDEEP_CITY_HOUSE2", 3, 5, true, true, 1, 4, false], ["MAP_MOSSDEEP_CITY_HOUSE3", 5, 5, true, true, 4, 5, false], ["MAP_MOSSDEEP_CITY_HOUSE4", 5, 4, true, true, 4, 3, false], ["MAP_MOSSDEEP_CITY_STEVENS_HOUSE", 5, 4, true, true, 3, 3, false], ["MAP_OLDALE_TOWN_HOUSE1", 3, 5, true, true, 1, 4, false], ["MAP_OLDALE_TOWN_HOUSE2", 5, 5, true, true, 4, 5, false], ["MAP_PACIFIDLOG_TOWN_HOUSE1", 5, 5, true, true, 3, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE2", 5, 5, true, true, 3, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE3", 5, 5, true, true, 3, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE4", 5, 5, true, true, 3, 5, false], ["MAP_PACIFIDLOG_TOWN_HOUSE5", 5, 5, true, true, 3, 5, false], ["MAP_PETALBURG_CITY_HOUSE1", 3, 5, true, true, 1, 4, false], ["MAP_PETALBURG_CITY_HOUSE2", 5, 4, true, true, 4, 3, false], ["MAP_PETALBURG_CITY_WALLYS_HOUSE", 5, 5, true, true, 4, 4, false], ["MAP_ROUTE104_MR_BRINEYS_HOUSE", 7, 5, true, true, 6, 4, false], ["MAP_ROUTE109_SEASHORE_HOUSE", 8, 4, true, true, 7, 4, false], ["MAP_ROUTE111_WINSTRATE_FAMILYS_HOUSE", 5, 5, true, true, 5, 3, false], ["MAP_ROUTE114_FOSSIL_MANIACS_HOUSE", 2, 5, true, true, 0, 4, false], ["MAP_ROUTE114_LANETTES_HOUSE", 7, 5, true, true, 5, 3, false], ["MAP_ROUTE116_TUNNELERS_REST_HOUSE", 7, 5, true, true, 6, 4, false], ["MAP_ROUTE119_HOUSE", 3, 5, true, true, 1, 4, false], ["MAP_ROUTE123_BERRY_MASTERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_ROUTE124_DIVING_TREASURE_HUNTERS_HOUSE", 4, 5, true, true, 2, 4, false], ["MAP_RUSTBORO_CITY_CUTTERS_HOUSE", 8, 5, true, true, 7, 4, false], ["MAP_RUSTBORO_CITY_HOUSE1", 4, 5, true, true, 2, 4, false], ["MAP_RUSTBORO_CITY_HOUSE2", 6, 5, true, true, 7, 4, false], ["MAP_RUSTBORO_CITY_HOUSE3", 6, 5, true, true, 7, 4, false], ["MAP_SLATEPORT_CITY_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_SLATEPORT_CITY_NAME_RATERS_HOUSE", 5, 4, true, true, 4, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE1", 4, 3, true, true, 5, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE2", 5, 4, true, true, 3, 4, false], ["MAP_SOOTOPOLIS_CITY_HOUSE3", 4, 3, true, true, 3, 2, false], ["MAP_SOOTOPOLIS_CITY_HOUSE4", 4, 3, true, true, 5, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE5", 5, 4, true, true, 3, 4, false], ["MAP_SOOTOPOLIS_CITY_HOUSE6", 3, 2, true, true, 4, 2, false], ["MAP_SOOTOPOLIS_CITY_HOUSE7", 4, 3, true, true, 2, 3, false], ["MAP_SOOTOPOLIS_CITY_LOTAD_AND_SEEDOT_HOUSE", 4, 3, true, true, 2, 3, false], ["MAP_VERDANTURF_TOWN_FRIENDSHIP_RATERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_VERDANTURF_TOWN_HOUSE", 3, 5, true, true, 1, 4, false], ["MAP_VERDANTURF_TOWN_WANDAS_HOUSE", 4, 5, true, true, 2, 5, false], ["MAP_ABANDONED_SHIP_CORRIDORS_1F", 9, 6, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_CORRIDORS_B1F", 2, 6, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_DECK", 10, 10, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_HIDDEN_FLOOR_CORRIDORS", 11, 2, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_HIDDEN_FLOOR_ROOMS", 0, 0, false, false, 20, 5, true], ["MAP_ABANDONED_SHIP_ROOMS_1F", 0, 0, false, false, 7, 6, true], ["MAP_ALTERING_CAVE", 16, 12, false, true, 15, 13, true], ["MAP_ANCIENT_TOMB", 4, 21, false, true, 5, 21, true], ["MAP_AQUA_HIDEOUT_1F", 17, 17, false, true, 18, 17, true], ["MAP_AQUA_HIDEOUT_B1F", 0, 0, false, false, 26, 10, true], ["MAP_AQUA_HIDEOUT_B2F", 0, 0, false, false, 16, 11, true], ["MAP_CAVE_OF_ORIGIN_1F", 8, 8, false, true, 0, 0, false], ["MAP_CAVE_OF_ORIGIN_B1F", 6, 12, false, true, 0, 0, false], ["MAP_CAVE_OF_ORIGIN_ENTRANCE", 9, 13, false, true, 0, 0, false], ["MAP_DESERT_RUINS", 4, 21, false, true, 5, 21, true], ["MAP_DESERT_UNDERPASS", 69, 9, false, true, 70, 9, true], ["MAP_DEWFORD_TOWN_HALL", 3, 5, false, true, 0, 0, false], ["MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F", 15, 9, false, true, 9, 5, true], ["MAP_FIERY_PATH", 0, 0, false, false, 18, 18, true], ["MAP_FORTREE_CITY_DECORATION_SHOP", 5, 3, false, true, 0, 0, false], ["MAP_GRANITE_CAVE_1F", 0, 0, false, false, 21, 7, true], ["MAP_GRANITE_CAVE_B1F", 0, 0, false, false, 15, 12, true], ["MAP_GRANITE_CAVE_B2F", 0, 0, false, false, 16, 14, true], ["MAP_GRANITE_CAVE_STEVENS_ROOM", 6, 6, false, true, 0, 0, false], ["MAP_ISLAND_CAVE", 4, 21, false, true, 5, 21, true], ["MAP_JAGGED_PASS", 0, 0, false, false, 13, 21, true], ["MAP_LAVARIDGE_TOWN_HERB_SHOP", 4, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_CONTEST_HALL", 24, 17, false, true, 25, 17, true], ["MAP_LILYCOVE_CITY_CONTEST_LOBBY", 15, 3, false, true, 15, 6, true], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_1F", 8, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_2F", 8, 4, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_1F", 9, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_2F", 9, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_3F", 9, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_4F", 9, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_5F", 9, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_ROOFTOP", 9, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_HARBOR", 9, 11, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_1F", 5, 10, false, true, 10, 7, true], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F", 12, 6, false, true, 11, 7, true], ["MAP_LILYCOVE_CITY_POKEMON_TRAINER_FAN_CLUB", 5, 10, false, true, 0, 0, false], ["MAP_MAGMA_HIDEOUT_1F", 0, 0, false, false, 22, 14, true], ["MAP_MAGMA_HIDEOUT_2F_1R", 16, 19, false, true, 15, 19, true], ["MAP_MAGMA_HIDEOUT_2F_2R", 0, 0, false, false, 25, 13, true], ["MAP_MAGMA_HIDEOUT_2F_3R", 21, 11, false, true, 0, 0, false], ["MAP_MAGMA_HIDEOUT_3F_1R", 0, 0, false, false, 15, 10, true], ["MAP_MAGMA_HIDEOUT_4F", 0, 0, false, false, 29, 14, true], ["MAP_MARINE_CAVE_END", 14, 13, false, true, 15, 13, true], ["MAP_MARINE_CAVE_ENTRANCE", 7, 7, false, true, 8, 6, true], ["MAP_MAUVILLE_CITY_BIKE_SHOP", 5, 3, false, true, 0, 0, false], ["MAP_MAUVILLE_CITY_GAME_CORNER", 11, 3, false, true, 0, 0, false], ["MAP_METEOR_FALLS_1F_1R", 0, 0, false, false, 16, 20, true], ["MAP_METEOR_FALLS_1F_2R", 14, 16, false, true, 13, 16, true], ["MAP_METEOR_FALLS_B1F_1R", 14, 19, false, true, 15, 18, true], ["MAP_METEOR_FALLS_STEVENS_CAVE", 17, 15, false, true, 17, 16, true], ["MAP_MIRAGE_TOWER_1F", 5, 3, false, true, 0, 0, false], ["MAP_MIRAGE_TOWER_2F", 5, 3, false, true, 0, 0, false], ["MAP_MIRAGE_TOWER_3F", 5, 3, false, true, 0, 0, false], ["MAP_MIRAGE_TOWER_4F", 4, 3, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_GAME_CORNER_1F", 6, 3, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_GAME_CORNER_B1F", 4, 1, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_1F", 10, 5, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_2F", 8, 7, false, true, 0, 0, false], ["MAP_MT_CHIMNEY", 18, 21, false, true, 21, 25, true], ["MAP_MT_CHIMNEY_CABLE_CAR_STATION", 4, 7, false, true, 0, 0, false], ["MAP_MT_PYRE_1F", 11, 7, false, true, 0, 0, false], ["MAP_MT_PYRE_EXTERIOR", 0, 0, false, false, 17, 27, true], ["MAP_MT_PYRE_SUMMIT", 24, 17, false, true, 24, 19, true], ["MAP_NEW_MAUVILLE_ENTRANCE", 3, 3, false, true, 0, 0, false], ["MAP_PETALBURG_WOODS", 0, 0, false, false, 26, 22, true], ["MAP_ROUTE104_PRETTY_PETAL_FLOWER_SHOP", 7, 7, false, true, 0, 0, false], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_NORTH_ENTRANCE", 7, 3, false, true, 0, 0, false], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_SOUTH_ENTRANCE", 7, 3, false, true, 0, 0, false], ["MAP_ROUTE111_OLD_LADYS_REST_STOP", 5, 4, false, true, 0, 0, false], ["MAP_ROUTE112_CABLE_CAR_STATION", 4, 7, false, true, 0, 0, false], ["MAP_ROUTE113_GLASS_WORKSHOP", 7, 5, false, true, 0, 0, false], ["MAP_ROUTE114_FOSSIL_MANIACS_TUNNEL", 6, 13, false, true, 0, 0, false], ["MAP_ROUTE117_POKEMON_DAY_CARE", 3, 3, false, true, 0, 0, false], ["MAP_ROUTE119_WEATHER_INSTITUTE_1F", 11, 6, false, true, 9, 6, true], ["MAP_ROUTE119_WEATHER_INSTITUTE_2F", 9, 9, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_1F", 7, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_2F", 11, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_3F", 15, 6, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT1_1F", 10, 5, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT1_2F", 3, 5, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT2_1F", 9, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT2_2F", 6, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT2_3F", 6, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_POKEMON_SCHOOL", 6, 4, false, true, 0, 0, false], ["MAP_RUSTURF_TUNNEL", 0, 0, false, false, 18, 15, true], ["MAP_SEAFLOOR_CAVERN_ENTRANCE", 7, 7, false, true, 8, 7, true], ["MAP_SEAFLOOR_CAVERN_ROOM1", 12, 8, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM2", 7, 6, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM3", 7, 7, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM4", 11, 11, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM5", 8, 8, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM6", 5, 4, false, true, 5, 5, true], ["MAP_SEAFLOOR_CAVERN_ROOM7", 3, 19, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM8", 3, 8, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM9", 0, 0, false, false, 13, 23, true], ["MAP_SEALED_CHAMBER_INNER_ROOM", 10, 11, false, true, 9, 10, true], ["MAP_SEALED_CHAMBER_OUTER_ROOM", 8, 9, false, true, 8, 11, true], ["MAP_SHOAL_CAVE_LOW_TIDE_ENTRANCE_ROOM", 0, 0, false, false, 18, 17, true], ["MAP_SHOAL_CAVE_LOW_TIDE_ICE_ROOM", 0, 0, false, false, 10, 15, true], ["MAP_SHOAL_CAVE_LOW_TIDE_INNER_ROOM", 0, 0, false, false, 23, 19, true], ["MAP_SHOAL_CAVE_LOW_TIDE_LOWER_ROOM", 13, 5, false, true, 0, 0, false], ["MAP_SKY_PILLAR_1F", 10, 4, false, true, 0, 0, false], ["MAP_SKY_PILLAR_2F", 10, 4, false, true, 0, 0, false], ["MAP_SKY_PILLAR_3F", 10, 5, false, true, 0, 0, false], ["MAP_SKY_PILLAR_4F", 10, 5, false, true, 0, 0, false], ["MAP_SKY_PILLAR_5F", 11, 3, false, true, 0, 0, false], ["MAP_SKY_PILLAR_ENTRANCE", 8, 8, false, true, 0, 0, false], ["MAP_SKY_PILLAR_OUTSIDE", 13, 10, false, true, 0, 0, false], ["MAP_SKY_PILLAR_TOP", 12, 11, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_HARBOR", 9, 11, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_1F", 12, 6, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F", 12, 4, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_POKEMON_FAN_CLUB", 7, 7, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_STERNS_SHIPYARD_1F", 9, 8, false, true, 8, 6, true], ["MAP_SLATEPORT_CITY_STERNS_SHIPYARD_2F", 7, 6, false, true, 0, 0, false], ["MAP_TERRA_CAVE_END", 10, 12, false, true, 11, 12, true], ["MAP_TERRA_CAVE_ENTRANCE", 11, 10, false, true, 0, 0, false], ["MAP_TRAINER_HILL_ENTRANCE", 9, 8, false, true, 0, 0, false], ["MAP_VICTORY_ROAD_1F", 0, 0, false, false, 23, 22, true], ["MAP_VICTORY_ROAD_B1F", 0, 0, false, false, 22, 14, true], ["MAP_VICTORY_ROAD_B2F", 0, 0, false, false, 23, 19, true]];
 
 // web/src/match/gifts.ts
 var ITEM_BRIGHT_POWDER = 179;
@@ -1643,6 +1643,8 @@ function keysOf(bits) {
   return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A) };
 }
 var FIELD_SURF = 4;
+var HOME_N = 1e3;
+var HOME_MONS = [277, 280, 283, 1, 4, 7, 64, 67, 75, 93, 385, 143];
 var EVENT_SPILL = 2 << 20;
 var eventPiece = (n, i) => EVENT_SPILL | n << 4 | i;
 var emptyBag = (b) => !b.items.length && !b.money && !b.mons?.length;
@@ -1677,6 +1679,7 @@ var Room = class {
     this.places = places;
     this.anchors = anchors;
     this.base = stepFn(world);
+    this.homes = this.dealHomes(0);
   }
   world;
   maps;
@@ -1699,12 +1702,33 @@ var Room = class {
   events = [];
   /** Who beat which gym leader this round, in the order they fell. */
   gyms = [];
+  /** This round's people at home and floor traders (dealHomes). */
+  homes = [];
   base;
   /** The StepFn for each FIELD_* combination a team has. */
   fields = [];
   dealt = null;
+  /** Round `round`'s people at home, from the seed: the houses this world goes into,
+   *  one in eight with somebody (half give), and every floor that has a trader. */
+  dealHomes(round) {
+    let state = (this.seed ^ 16613 ^ Math.imul(round + 1, 2654435761)) >>> 0 || 1;
+    const rng = () => {
+      state ^= state << 13;
+      state ^= state >>> 17;
+      state ^= state << 5;
+      return (state >>> 0) / 4294967296;
+    };
+    const which = Math.floor(rng() * 8);
+    const out = [];
+    ROOMS.forEach(([map, , , house, , x, y, trader], i) => {
+      const draw2 = rng(), gives = rng() < 0.5;
+      if (!this.maps.has(map) || this.places.has(map) || (house ? i % 8 !== which : !trader)) return;
+      out.push({ n: HOME_N + i, map, x, y, species: HOME_MONS[Math.floor(draw2 * HOME_MONS.length)], busy: 0, ...house && gives ? { gives: true } : {} });
+    });
+    return out;
+  }
   state() {
-    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}, ...this.epoch ? { epoch: this.epoch } : {}, ...this.opening ? { opening: this.opening } : {}, ...this.duelAfter ? { duelAfter: this.duelAfter } : {}, ...this.events.length ? { events: structuredClone(this.events) } : {}, ...this.gyms.length ? { gyms: structuredClone(this.gyms) } : {} };
+    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}, ...this.epoch ? { epoch: this.epoch } : {}, ...this.opening ? { opening: this.opening } : {}, ...this.duelAfter ? { duelAfter: this.duelAfter } : {}, ...this.events.length ? { events: structuredClone(this.events) } : {}, ...this.gyms.length ? { gyms: structuredClone(this.gyms) } : {}, homes: structuredClone(this.homes) };
   }
   load(s) {
     this.tick = s.tick;
@@ -1714,6 +1738,7 @@ var Room = class {
     this.duelAfter = s.duelAfter ?? 0;
     this.events = structuredClone(s.events ?? []);
     this.gyms = structuredClone(s.gyms ?? []);
+    this.homes = s.homes ? structuredClone(s.homes) : this.dealHomes(s.results?.round ?? 0);
     this.actors = structuredClone(s.actors);
     this.taken = new Map(s.taken);
     this.picked = new Map(s.picked ?? []);
@@ -1735,10 +1760,12 @@ var Room = class {
       const a = this.actor(cmd.id);
       if (a && !a.bot) a.away = cmd.on || void 0;
     } else if (cmd.c === "traded") {
-      const t = this.events.find((e) => e.n === cmd.n)?.trader;
+      const t = this.events.find((e) => e.n === cmd.n)?.trader ?? this.homes.find((h) => h.n === cmd.n);
       if (!t || t.busy !== cmd.id) return;
       t.busy = 0;
-      if (cmd.given > 0 && cmd.given < 412) t.species = cmd.given;
+      if (t.gives) {
+        if (cmd.given) t.gone = true;
+      } else if (cmd.given > 0 && cmd.given < 412) t.species = cmd.given;
       const a = this.actor(cmd.id);
       if (a?.battling && !a.foe) {
         a.battling = false;
@@ -1782,6 +1809,7 @@ var Room = class {
       for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
       for (const [key, by] of this.picked) if (by === cmd.id && this.spills.get(key)?.legend) this.picked.delete(key);
       for (const e of this.events) if (e.trader?.busy === cmd.id) e.trader.busy = 0;
+      for (const h of this.homes) if (h.busy === cmd.id) h.busy = 0;
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
       if (cmd.c === "leave") this.bench = this.bench.filter((b) => b.id !== cmd.id);
       if (!a || a.bot) return;
@@ -1865,7 +1893,8 @@ var Room = class {
         out.set(`${id2}:${c.x}:${c.y}`, { key: ++n, map: id2, x: c.x, y: c.y, item });
       }
     }
-    for (const [map, x, y, house] of ROOMS) {
+    for (const [map, x, y, house, cache2] of ROOMS) {
+      if (!cache2) continue;
       if (!this.maps.has(map) || this.places.has(map) || this.world.cell(map, x, y) !== 0 || out.has(`${map}:${x}:${y}`)) continue;
       if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
       const gold = Math.floor(rng() * (house ? 3 : 8)) === 0;
@@ -2219,6 +2248,7 @@ var Room = class {
     this.duelAfter = 0;
     this.events = [];
     this.gyms = [];
+    this.homes = this.dealHomes(round);
     this.taken.clear();
     this.picked.clear();
     this.spills.clear();
@@ -2359,7 +2389,7 @@ var Room = class {
         } else if (tr && !tr.t.busy) {
           tr.t.busy = a.id;
           a.battling = true;
-          events.push({ type: "trade", tick: this.tick, id: a.id, n: tr.n, species: tr.t.species });
+          events.push({ type: "trade", tick: this.tick, id: a.id, n: tr.n, species: tr.t.species, ...tr.t.gives ? { gives: true } : {} });
         } else if (tr) {
         } else if (g) {
           this.picked.set(g.key, a.id);
@@ -2387,9 +2417,10 @@ var Room = class {
     } else if (!a.m.action) a.arriving = false;
     a.last = bits;
   }
-  /** An event's trader standing on a cell. */
+  /** An event's trader standing on a cell, or somebody at home (not one who gave theirs). */
   traderAt(map, x, y) {
     for (const e of this.events) if (e.trader && e.map === map && e.trader.x === x && e.trader.y === y) return { n: e.n, t: e.trader };
+    for (const h of this.homes) if (!h.gone && h.map === map && h.x === x && h.y === y) return { n: h.n, t: h };
     return void 0;
   }
   onWater(a) {
@@ -2499,6 +2530,12 @@ var Room = class {
     for (const [n, w] of this.gyms) {
       mix2(n);
       mix2(w.length);
+    }
+    for (const h2 of this.homes) {
+      mix2(h2.n);
+      mix2(h2.species);
+      mix2(h2.busy);
+      mix2(h2.gone ? 1 : 0);
     }
     for (const e of this.events) {
       mix2(e.key);

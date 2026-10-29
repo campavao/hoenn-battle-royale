@@ -113,7 +113,7 @@ export type RoomEvent =
   /** A at an event's legendary: its battle (the room took it off the ground). */
   | { type: 'legend'; tick: number; id: number; key: number; species: number; level: number }
   /** A at an event's trader: his offer, for one of mine (`traded` says which). */
-  | { type: 'trade'; tick: number; id: number; n: number; species: number }
+  | { type: 'trade'; tick: number; id: number; n: number; species: number; gives?: boolean }
   /** A at a MART's clerk. */
   | { type: 'mart'; tick: number; id: number; map: string }
   /** A at a gym leader nobody has beaten yet: their own battle (gyms.ts). */
@@ -138,6 +138,15 @@ export interface EventMark { n: number; key: number; map: string; x: number; y: 
  *  yours, and who is trading with him now (0 for nobody). He keeps what he is given and
  *  offers that next (Cam's 2026-10-19 play-test, #9). */
 export interface Trader { x: number; y: number; species: number; busy: number }
+
+/** Somebody at home, or a floor's trader (br_balls.c, POK-379): one house in eight has
+ *  somebody beside its cache with a Pokémon, half of them giving it to the first trainer
+ *  who talks to them (then gone), half trading it; and the big floors' traders. A trader
+ *  keeps what he is given and offers that next. `n` is HOME_N + the row. */
+export interface Home extends Trader { n: number; map: string; gives?: boolean; gone?: boolean }
+export const HOME_N = 1000;
+/** br_balls.c's sHomeMons: what Hoenn's own people give and trade. */
+const HOME_MONS = [277, 280, 283, 1, 4, 7, 64, 67, 75, 93, 385, 143];
 
 /** Event pieces' keys: clear of the dealt balls' and the trainers' (SPILL_KEY + id). */
 export const EVENT_SPILL = 2 << 20;
@@ -170,7 +179,7 @@ export const BOT_BITE = 600;
 export const BOT_BITES = 3;
 
 /** The caches' rooms (tools/br/spike-rooms.py, from br_balls.c): map, cell, a house. */
-const ROOMS = roomsJson as [string, number, number, boolean][];
+const ROOMS = roomsJson as [string, number, number, boolean, boolean, number, number, boolean][];
 
 /** Spill keys, clear of the dealt balls' 1..n. */
 export const SPILL_KEY = 1 << 20;
@@ -236,6 +245,7 @@ export interface RoomState {
   events?: EventMark[];
   /** The gym leaders beaten this round: leader n, by whom. */
   gyms?: [number, string][];
+  homes?: Home[];
 }
 
 /** A trainer in the world but not on the map: out this round, or come in after the fog
@@ -295,6 +305,8 @@ export class Room {
   events: EventMark[] = [];
   /** Who beat which gym leader this round, in the order they fell. */
   gyms: [number, string][] = [];
+  /** This round's people at home and floor traders (dealHomes). */
+  homes: Home[] = [];
   private readonly base: StepFn;
   /** The StepFn for each FIELD_* combination a team has. */
   private readonly fields: StepFn[] = [];
@@ -313,10 +325,26 @@ export class Room {
     readonly anchors: ReadonlyMap<string, { gx: number; gy: number }> = new Map(),
   ) {
     this.base = stepFn(world);
+    this.homes = this.dealHomes(0);
+  }
+
+  /** Round `round`'s people at home, from the seed: the houses this world goes into,
+   *  one in eight with somebody (half give), and every floor that has a trader. */
+  private dealHomes(round: number): Home[] {
+    let state = (this.seed ^ 0x40e5 ^ Math.imul(round + 1, 0x9e3779b1)) >>> 0 || 1;
+    const rng = () => { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return (state >>> 0) / 4294967296; };
+    const which = Math.floor(rng() * 8);
+    const out: Home[] = [];
+    ROOMS.forEach(([map, , , house, , x, y, trader], i) => {
+      const draw = rng(), gives = rng() < 0.5;
+      if (!this.maps.has(map) || this.places.has(map) || (house ? i % 8 !== which : !trader)) return;
+      out.push({ n: HOME_N + i, map, x, y, species: HOME_MONS[Math.floor(draw * HOME_MONS.length)], busy: 0, ...(house && gives ? { gives: true } : {}) });
+    });
+    return out;
   }
 
   state(): RoomState {
-    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...(this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}), ...(this.epoch ? { epoch: this.epoch } : {}), ...(this.opening ? { opening: this.opening } : {}), ...(this.duelAfter ? { duelAfter: this.duelAfter } : {}), ...(this.events.length ? { events: structuredClone(this.events) } : {}), ...(this.gyms.length ? { gyms: structuredClone(this.gyms) } : {}) };
+    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...(this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}), ...(this.epoch ? { epoch: this.epoch } : {}), ...(this.opening ? { opening: this.opening } : {}), ...(this.duelAfter ? { duelAfter: this.duelAfter } : {}), ...(this.events.length ? { events: structuredClone(this.events) } : {}), ...(this.gyms.length ? { gyms: structuredClone(this.gyms) } : {}), homes: structuredClone(this.homes) };
   }
 
   load(s: RoomState): void {
@@ -327,6 +355,7 @@ export class Room {
     this.duelAfter = s.duelAfter ?? 0;
     this.events = structuredClone(s.events ?? []);
     this.gyms = structuredClone(s.gyms ?? []);
+    this.homes = s.homes ? structuredClone(s.homes) : this.dealHomes(s.results?.round ?? 0);
     this.actors = structuredClone(s.actors);
     this.taken = new Map(s.taken);
     this.picked = new Map(s.picked ?? []);
@@ -350,10 +379,12 @@ export class Room {
       const a = this.actor(cmd.id);
       if (a && !a.bot) a.away = cmd.on || undefined;
     } else if (cmd.c === 'traded') {
-      const t = this.events.find((e) => e.n === cmd.n)?.trader;
+      const t: (Trader & { gives?: boolean; gone?: boolean }) | undefined = this.events.find((e) => e.n === cmd.n)?.trader ?? this.homes.find((h) => h.n === cmd.n);
       if (!t || t.busy !== cmd.id) return;
       t.busy = 0;
-      if (cmd.given > 0 && cmd.given < 412) t.species = cmd.given;
+      // A giver's is taken (given: anything but 0), and he is gone; a trader holds yours.
+      if (t.gives) { if (cmd.given) t.gone = true; }
+      else if (cmd.given > 0 && cmd.given < 412) t.species = cmd.given;
       const a = this.actor(cmd.id);
       if (a?.battling && !a.foe) { a.battling = false; a.calm = this.tick + GRACE; }
     } else if (cmd.c === 'bots') {
@@ -396,6 +427,7 @@ export class Room {
       // A legendary they were fighting stands again (Cam: they go back for retries).
       for (const [key, by] of this.picked) if (by === cmd.id && this.spills.get(key)?.legend) this.picked.delete(key);
       for (const e of this.events) if (e.trader?.busy === cmd.id) e.trader.busy = 0;
+      for (const h of this.homes) if (h.busy === cmd.id) h.busy = 0;
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
       if (cmd.c === 'leave') this.bench = this.bench.filter((b) => b.id !== cmd.id);
       if (!a || a.bot) return;
@@ -477,7 +509,8 @@ export class Room {
     // A cache in every house and on every other floor that had nothing (br_balls.c's
     // sRooms, Cam 2026-10-18: "an item, trader, or both on every floor"): a machine, or
     // gold one time in three in a house and one in eight on a floor.
-    for (const [map, x, y, house] of ROOMS) {
+    for (const [map, x, y, house, cache] of ROOMS) {
+      if (!cache) continue;
       // A building this world goes into (makeRoom's interiors), on its floor.
       if (!this.maps.has(map) || this.places.has(map) || this.world.cell(map, x, y) !== 0 || out.has(`${map}:${x}:${y}`)) continue;
       // The match keeps its cells off the wild patches (BrBalls_Spot); here the patch has it.
@@ -846,6 +879,7 @@ export class Room {
     this.duelAfter = 0;
     this.events = [];
     this.gyms = [];
+    this.homes = this.dealHomes(round);
     this.taken.clear();
     this.picked.clear();
     this.spills.clear();
@@ -985,7 +1019,7 @@ export class Room {
         } else if (tr && !tr.t.busy) {
           tr.t.busy = a.id;
           a.battling = true;
-          events.push({ type: 'trade', tick: this.tick, id: a.id, n: tr.n, species: tr.t.species });
+          events.push({ type: 'trade', tick: this.tick, id: a.id, n: tr.n, species: tr.t.species, ...(tr.t.gives ? { gives: true } : {}) });
         } else if (tr) {
           // Somebody is trading with him: nothing.
         } else if (g) {
@@ -1016,9 +1050,10 @@ export class Room {
     a.last = bits;
   }
 
-  /** An event's trader standing on a cell. */
-  traderAt(map: string, x: number, y: number): { n: number; t: Trader } | undefined {
+  /** An event's trader standing on a cell, or somebody at home (not one who gave theirs). */
+  traderAt(map: string, x: number, y: number): { n: number; t: Trader & { gives?: boolean } } | undefined {
     for (const e of this.events) if (e.trader && e.map === map && e.trader.x === x && e.trader.y === y) return { n: e.n, t: e.trader };
+    for (const h of this.homes) if (!h.gone && h.map === map && h.x === x && h.y === y) return { n: h.n, t: h };
     return undefined;
   }
 
@@ -1087,6 +1122,7 @@ export class Room {
     for (const b of this.bench) { mix(b.id); mix(b.skin); str(b.name); }
     const r = this.results;
     mix(r.round); mix(r.winner); mix(r.wonAt ?? 0); mix(this.epoch); mix(this.opening); mix(this.duelAfter); for (const [n, w] of this.gyms) { mix(n); mix(w.length); }
+    for (const h of this.homes) { mix(h.n); mix(h.species); mix(h.busy); mix(h.gone ? 1 : 0); }
     for (const e of this.events) { mix(e.key); mix(e.x); mix(e.y); mix(e.species); if (e.trader) { mix(e.trader.x); mix(e.trader.y); mix(e.trader.species); mix(e.trader.busy); } }
     for (const [id] of r.entrants) mix(id);
     for (const f of r.fallen) { mix(f.id); str(f.by); mix((f.wild ? 1 : 0) | (f.left ? 2 : 0)); }
