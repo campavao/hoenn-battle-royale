@@ -50,6 +50,7 @@ import { BattleMenu, battleWantsNoPad, readBattleView } from '../src/ui/battleme
 import { BAG_POSITION_POCKET, readBattleBag } from '../src/ui/bag';
 import { MENU_ACTION, TouchLayer } from '../src/touch';
 import { HUD } from '../src/net/hud';
+import { ITEM_MACH_BIKE, PhoneHud, signFor } from '../src/ui/phonehud';
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
 import { cardFields } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
@@ -458,7 +459,13 @@ async function openMenu(): Promise<void> {
   if (!rom || isOut || battle || swapping || asking || spectating) return;
   const c = await ask('MENU', [['POKéMON', '1'], ['BAG', '2'], ...(ringMap ? [['MAP', '13'] as [string, string]] : []), ['CARD', '4'], ...(lobby ? [['ROOM', 'room'] as [string, string]] : []), ['EXIT', '']]);
   if (c === 'room') { openSheet(); return; }
-  if (!c || !rom || isOut || battle || swapping) return;
+  await runMenu(c);
+}
+
+/** A row of the START menu (start_menu.c's MENU_ACTION_*) on the ROM's own screen: what
+ *  MENU picked, or the phone dock's PARTY and MAP straight away. */
+async function runMenu(c: string): Promise<void> {
+  if (!c || !rom || isOut || battle || swapping || asking || spectating) return;
   const me = link.room.actor(link.me);
   const look = c === '13' && me && ringMap ? ringMap.look(me.m.spot) : undefined;
   let uncover = () => {};
@@ -1387,6 +1394,58 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
     } : undefined,
   };
 }
+/** A phone's HUD and dock (the live game's ui/phonehud.ts) in place of the corner and the
+ *  buttons: the sign of the place I stand in, the fog window (Safari or Fog, the clock,
+ *  how many are left, which way is safe), and PARTY, MAP, START and the room under it. */
+function wirePhoneHud(): void {
+  const top = document.getElementById('phud')!;
+  const dock = document.getElementById('pdock')!;
+  const hud = new PhoneHud({
+    top,
+    dock,
+    onParty: () => void runMenu('1'),
+    onMap: () => void runMenu('13'),
+    onStart: () => void openMenu(),
+    onUse: () => undefined,
+  });
+  document.getElementById('hud-menu')!.addEventListener('click', () => openSheet());
+  const scale = () => {
+    const s = Math.min(2, Math.max(1, innerWidth / 250));
+    document.documentElement.style.setProperty('--s', String(s));
+    hud.setScale(s);
+  };
+  addEventListener('resize', scale);
+  scale();
+  document.body.classList.add('phone-hud');
+  setInterval(() => {
+    // On the map: a trainer out, or watching, has neither (the watch strip is theirs).
+    const me = link?.room.actor(link.me);
+    top.hidden = dock.hidden = !me;
+    if (!me) { hud.hide(); return; }
+    const ring = link.room.ring();
+    const res = link.room.results;
+    const fogged = link.room.inFog(me.m.spot);
+    const way = ringMap?.way(me.m.spot, ring) ?? '';
+    const section = link.room.maps.get(me.m.spot.map)?.section ?? '';
+    const sign = signFor(section);
+    hud.update({
+      onField: !battle && !swapping && !romUp && !asking && !spectating,
+      place: sign.name,
+      theme: sign.theme,
+      clock: Math.ceil(ring.left / 60),
+      left: res.entrants.length ? res.entrants.length - res.fallen.length : link.room.actors.length,
+      eyes: watch.eyes,
+      flash: fogged ? (frame % 60 < 30 ? 2 : 1) : 0,
+      ring: ring.safari ? null : ring.last ? 'Fog everywhere' : ringMap?.place(ring) ?? '',
+      fogEverywhere: !!ring.last,
+      safe: way ? `Safe ${way}` : null,
+      ctx: { label: 'BIKE', item: ITEM_MACH_BIKE, enabled: false },
+      party: 1,
+      moves: [],
+    });
+  }, 100);
+}
+
 /** A phone's battle menu (the live game's ui/battlemenu.ts): FIGHT, BAG, POKeMON, RUN
  *  and the moves as windows under the hidden ROM's picture, tapped rather than walked to
  *  with the D-pad; the live TouchLayer walks the ROM's cursor to what was tapped. */
@@ -2426,7 +2485,7 @@ async function boot(): Promise<void> {
     files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; });
     romEmu = files.emu;
     versionLine = files.version;
-    if (touchPad) wireBattleMenu(files);
+    if (touchPad) { wireBattleMenu(files); wirePhoneHud(); }
   } catch (e) {
     console.warn('spike ROM not loaded', e);
     return;
