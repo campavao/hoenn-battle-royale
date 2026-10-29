@@ -3582,6 +3582,7 @@ var WorldService = class {
           if (room2.host) {
             room2.host.join(phone.name, phone.skin, void 0, id);
             this.send(link, { t: "hello", id, state: room2.host.room.state(), key: phone.key });
+            this.teamsTo(room2, link);
           }
           this.run();
           return;
@@ -3719,7 +3720,7 @@ var WorldService = class {
     room.host.away(p.id, false);
     this.opts.log(`world: #${p.id} back in room ${room.code}`);
     this.send(link, { t: "hello", id: p.id, state: room.host.room.state(), key: p.key });
-    for (const o of room.members.values()) if (o.team) this.send(link, { t: "team", id: o.id, mons: o.team });
+    this.teamsTo(room, link);
     this.roster(room);
     return p;
   }
@@ -3826,6 +3827,11 @@ var WorldService = class {
     if (own) return own;
     const foe = a.foe ? r.actor(a.foe) : void 0;
     return foe?.battling && foe.foe === id ? room.streams.get(foe.id) : void 0;
+  }
+  /** Every team the room's trainers have told, to one phone just in (the legendary's
+   *  chip and the champion's hall of fame read them). */
+  teamsTo(room, link) {
+    for (const o of room.members.values()) if (o.team) this.send(link, { t: "team", id: o.id, mons: o.team });
   }
   /** How many watch trainer `id`, to them. */
   eyes(room, id) {

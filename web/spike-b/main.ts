@@ -26,12 +26,12 @@ type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
 import { over } from './shared/over';
-import { Lobby, me, type RoomInfo } from './lobby';
+import { Lobby, me, seeThrough, type RoomInfo } from './lobby';
 import { loadCareer, ordinal, recordMatch } from '../src/match/career';
 import type { MatchTally } from '../src/match/tally';
 import { tallySince } from './carry';
 import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, startStickLearn, stickKeys, stickLearnStep, type AxisSense, type StickMap } from '../src/pad';
-import { fameOf, resultsView, standingsOf, tallyLines } from '../src/ui/results';
+import { fameOf, resultsView, standingsOf, tallyLines, type FameMon } from '../src/ui/results';
 import { favourite } from '../src/match/tally';
 import { moveInfo, type Rom as MoveTables } from '../src/battle/movebook';
 import { OUT_BATCH_MS, outs, won } from '../src/match/ticker';
@@ -44,6 +44,7 @@ import hiddenJson from './data/hidden.json';
 import { RomArt } from './romart';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
+import { keyPicture } from '../src/field';
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
 import { cardFields } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
@@ -661,6 +662,22 @@ function fieldFrame(): void {
   void rom.field().then((bits) => { if (l === link && bits !== (link.room.actor(link.me)?.field ?? 0)) link.field(bits); }).finally(() => { fieldAsking = false; });
 }
 
+/** BATTLE BACKDROP (the live trainer card's row, the same browser setting): OVER MAP,
+ *  the default, has the ROM paint the battle's backdrop in the key blue and the page key
+ *  it out (field.ts keyPicture), so the world shows under the fight; CLASSIC is black. */
+const keyCanvas = document.getElementById('gba-key') as HTMLCanvasElement;
+const keyImage = new ImageData(240, 160);
+let seeing = false;
+function seeFrame(): void {
+  const up = !!rom && battleEl.classList.contains('on');
+  const keyed = up && rom!.seeThrough(seeThrough()) && rom!.picture(keyImage.data);
+  if (keyed) {
+    keyPicture(keyImage.data);
+    keyCanvas.getContext('2d')?.putImageData(keyImage, 0, 0);
+  } else if (rom && !up) rom.seeThrough(false);
+  if (keyed !== seeing) { seeing = keyed; battleEl.classList.toggle('see', keyed); }
+}
+
 /** Every few seconds, between battles: my team as it stands, told to the room when it
  *  changes, so the results screen can show the champion's (the live game's PARTY). */
 let teamAsking = false;
@@ -670,17 +687,19 @@ function teamFrame(): void {
   tellTeam();
 }
 
+function sendTeam(mons: FameMon[]): void {
+  const text = JSON.stringify(mons);
+  if (text === teamSent) return;
+  teamSent = text;
+  link.team(mons);
+}
+
 /** My team to the room now, if it changed since I last told it. */
 function tellTeam(): void {
   if (teamAsking || !rom) return;
   teamAsking = true;
   const l = link;
-  void rom.fameTeam().then((mons) => {
-    const text = JSON.stringify(mons);
-    if (l !== link || text === teamSent) return;
-    teamSent = text;
-    l.team(mons);
-  }).catch(() => undefined).finally(() => { teamAsking = false; });
+  void rom.fameTeam().then((mons) => { if (l === link) sendTeam(mons); }).catch(() => undefined).finally(() => { teamAsking = false; });
 }
 
 /** The CENTER's nurse, as the match has her (pkmn_center_nurse.inc): one question, and
@@ -800,6 +819,10 @@ function endBattle(r: Fought | null): void {
   // Another round, or another match altogether (each one's rounds count from 0).
   const stale = !!battle && (battle.link !== link || battle.round !== link.room.results.round);
   const boss = battle?.boss;
+  // My team as the fight left it, to the room before the fight's end: a last battle that
+  // wins the match shows on everybody's results as it ended (review of batch 3).
+  const after = rom?.teamNow();
+  if (after && !stale) sendTeam(after);
   (battle?.link ?? link).end(duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f)), !stale && (!!battle?.foe?.bot || boss !== undefined) && !!r?.ok && r.outcome === 1);
   if (!stale && boss !== undefined && r?.ok && r.outcome === 1) say(`You beat ${LEADERS[boss].name}! Took their TM and ¥1000.`);
   const wild = battle && !battle.foe && boss === undefined;
@@ -2265,6 +2288,7 @@ function loop(now: number): void {
     roundFrame();
     fieldFrame();
     teamFrame();
+    seeFrame();
     soundFrame();
     stepsFrame();
     doorsFrame();

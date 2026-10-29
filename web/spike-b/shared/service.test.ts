@@ -177,6 +177,10 @@ describe('world rooms', () => {
       expect(b.got.length).toBe(n);
       const teams = () => [...(svc as unknown as { rooms: Map<string, { members: Map<number, { team?: unknown }> }> }).rooms.get(code)!.members.values()].map((p) => p.team);
       expect(teams().filter(Boolean)).toHaveLength(1);
+      // In mid-match, to watch: the teams told so far come with the hello.
+      const c = phone();
+      svc.open(c.link).onText(JSON.stringify({ t: 'join', name: 'cy', skin: 0, code }));
+      expect(c.got.find((m) => m.t === 'team')).toEqual({ t: 'team', id, mons: [{ ...mons[0], moves: [{ id: 1 }, { id: 43 }] }] });
     } finally {
       svc.stop();
     }

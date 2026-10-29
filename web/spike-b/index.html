@@ -64,6 +64,12 @@
       /* The page's fog lies on the ROM's MAP, pixel for pixel (ringmap.ts). */
       #battle canvas { grid-area: 1 / 1; }
       #ringfog { display: none; pointer-events: none; }
+      /* BATTLE BACKDROP: OVER MAP -- the backdrop keyed out, the world dimmed under it. */
+      #gba-key { display: none; }
+      #battle.see { background: #0007; }
+      #battle.see #gba { visibility: hidden; }
+      #battle.see #gba-key { display: block; }
+      body:has(#battle.see) #hud { visibility: hidden; }
       #ringfog.on { display: block; }
       #battle canvas { image-rendering: pixelated; width: min(100vw, 150vh); aspect-ratio: 240 / 160; height: auto; }
       /* A phone on its side: the battle between the pad's two halves, not under them. */
@@ -150,7 +156,7 @@
     <div id="ask"><b id="ask-title"></b></div>
     <div id="out"><b id="out-title">OUT</b><span id="out-why"></span><br><span id="out-next">You're back at the truck when the fog lifts.</span><br><button id="out-ok" type="button">Watch</button></div>
     <div id="win"><b id="win-title"></b><ol id="win-list"></ol><button id="win-ok" type="button">OK</button></div>
-    <div id="battle"><div class="note" id="battle-note"></div><canvas id="gba" width="240" height="160"></canvas><canvas id="ringfog" width="240" height="160"></canvas></div>
+    <div id="battle"><div class="note" id="battle-note"></div><canvas id="gba" width="240" height="160"></canvas><canvas id="gba-key" width="240" height="160"></canvas><canvas id="ringfog" width="240" height="160"></canvas></div>
     <div id="stage" hidden>
       <div id="stage-box">
         <canvas id="ui" width="240" height="320"></canvas>

@@ -145,6 +145,11 @@ export interface RomBattles {
   /** The host's TEXT speed and ANIM (the live room's pace, br_match.c): set on the save
    *  before each battle, since every battle starts from the parked boot (FAST, none). */
   pace(textSpeed: 1 | 3 | 5, animations: boolean): void;
+  /** BATTLE BACKDROP's OVER MAP (gBrSeeThrough, br_battle.h): `on` asks the ROM to paint
+   *  the battle's backdrop in the key blue; true while it does (its count of frames). */
+  seeThrough(on: boolean): boolean;
+  /** This frame's picture, RGBA, into `out`; false when the core cannot hand it over. */
+  picture(out: Uint8ClampedArray): boolean;
   /** The ring closed on the trainer in the middle of a battle: from the next turn's end
    *  that battle is fought in the fog. Nothing between battles. */
   fogNow(): void;
@@ -206,6 +211,9 @@ export interface RomBattles {
   field(): Promise<number>;
   /** The team as the results screen's hall of fame shows it. */
   fameTeam(): Promise<FameMon[]>;
+  /** The same, now, from the team the last battle left (null before any): for the end of
+   *  a battle, told before the battle's end is. */
+  teamNow(): FameMon[] | null;
   press(k: GbaKey): void;
   release(k: GbaKey): void;
   emu: Emulator;
@@ -551,6 +559,15 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       }, () => emu.read(fightAt + 2, 8) === 1, () => emu.read(fightAt + 2, 8) === 0, onStart,
       () => ({ outcome: emu.read(outcomeAt, 8), species: 0, level: 0 })));
     },
+    seeThrough(on) {
+      const at = sym('gBrSeeThrough');
+      if (Number.isNaN(at)) return false;
+      emu.write(at, on ? 1 : 0, 8);
+      return on && emu.read(at + 1, 8) > 0;
+    },
+    picture(out) {
+      return emu.lcdPixels(out);
+    },
     pace(textSpeed, animations) {
       paceBits = Math.max(0, [1, 3, 5].indexOf(textSpeed)) | (animations ? 0 : 0x400);
     },
@@ -647,6 +664,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         const k = carried ?? kept();
         return fieldOf(k.party, k.count);
       });
+    },
+    teamNow() {
+      return carried ? fameTeam(carried.party, carried.count) : null;
     },
     fameTeam() {
       return inTurn(async () => {

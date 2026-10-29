@@ -40,6 +40,15 @@ export interface LobbyHooks {
   names: TallyNames;
 }
 
+/** BATTLE BACKDROP: OVER MAP (the default, nothing stored) or CLASSIC ('0'), as the live
+ *  game keeps it (app.ts SEE_THROUGH_KEY). */
+export function seeThrough(): boolean {
+  try { return localStorage.getItem('hbr-see-through') !== '0'; } catch { return true; }
+}
+function setSeeThrough(on: boolean): void {
+  try { if (on) localStorage.removeItem('hbr-see-through'); else localStorage.setItem('hbr-see-through', '0'); } catch { /* the default holds */ }
+}
+
 /** Who I am, as the live game keeps it (career.ts): the name and sprite on the trainer card. */
 export function me(): { name: string; skin: number } {
   const c = loadCareer();
@@ -145,6 +154,8 @@ export class Lobby {
       rows: [
         { label: 'MY LOOK', detail: 'sprite and lines', id: 'trainer-look', onPress: () => this.press({ kind: 'look' }) },
         { label: 'MY STATS', detail: 'every match so far', id: 'trainer-mystats', onPress: () => this.press({ kind: 'mystats' }) },
+        // The live card's BATTLE BACKDROP, the same browser setting (hbr-see-through).
+        { label: 'BATTLE BACKDROP', detail: seeThrough() ? 'OVER MAP' : 'CLASSIC', id: 'trainer-seethrough', onPress: () => { setSeeThrough(!seeThrough()); this.stage.redraw(); } },
       ],
       note: '',
       onName: () => this.press({ kind: 'name' }),
