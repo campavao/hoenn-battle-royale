@@ -124,6 +124,9 @@ export interface RomBattles {
   setPhase(phase: number): void;
   /** The Safari opening (br_zone.c): wild battles draw any first stage while it runs. */
   setSafari(on: boolean): void;
+  /** I won: Emerald's Hall of Fame with my team, the live winner's parade (br_match.c's
+   *  RESULT for our own seat). Resolves when it is over (or never came up). */
+  fame(onStart: () => void): Promise<boolean>;
   /** The fog's bite between battles (br_ring.c Bleed): a tenth of each mon's max HP, at
    *  least 1, a fainted one's status cleared. How many are still standing. */
   bleed(): Promise<number>;
@@ -782,6 +785,27 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         emu.pause();
         if (!emu.restore(parked!)) broken = true;
         else if (carried) keep(carried);
+      });
+    },
+    fame(onStart) {
+      return inTurn(async () => {
+        if (broken) return false;
+        if (carried) keep(carried);
+        lay();
+        emu.resume();
+        // br_match.h: BR_PHASE_PLAY, so the RESULT is a win and not an out's; DONE (5)
+        // once the parade has run.
+        emu.write(match, 2, 8);
+        send({ t: 'result', seat: ME, outcome: 'win' });
+        const up = await until(emu, () => { drain(() => undefined); return !onField(); }, 600);
+        if (up) {
+          onStart();
+          await until(emu, () => { drain(() => undefined); return emu.read(match, 8) === 5 || onField(); }, 60 * 120);
+        }
+        emu.pause();
+        if (!emu.restore(parked!)) broken = true;
+        else if (carried) keep(carried);
+        return up;
       });
     },
     publish(to) { publishTo = to; },

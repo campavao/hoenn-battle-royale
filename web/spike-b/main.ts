@@ -26,6 +26,7 @@ import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink } from './net';
 import { over } from './shared/over';
 import { Lobby, me, type RoomInfo } from './lobby';
+import { recordMatch } from '../src/match/career';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { groundCount } from './shared/items';
 import { RomArt } from './romart';
@@ -227,7 +228,7 @@ function actors(): Actor[] {
  *  room's business (a bot you face, a marked spot you land on); the page only keeps a
  *  held A from the last battle's text out of the next one. */
 function myBits(): number {
-  if (spectating || battle || swapping || asking || intro()) return 0;
+  if (spectating || battle || swapping || parading || asking || intro()) return 0;
   const bits = (held.has('up') ? KEY_UP : 0) | (held.has('down') ? KEY_DOWN : 0) | (held.has('left') ? KEY_LEFT : 0) |
     (held.has('right') ? KEY_RIGHT : 0) | (held.has('b') ? KEY_B : 0) | (held.has('a') && frame >= calmUntil ? KEY_A : 0);
   return bits;
@@ -746,20 +747,51 @@ function roundFrame(): void {
   }
   if (res.winner && !shownWin) {
     shownWin = true;
-    standings(false);
+    record(res.round);
+    // Mine: the Hall of Fame first, as the live winner's ROM runs it, then the standings.
+    // The parade outlasts AFTER_WIN, so the next round may have begun: these standings, kept.
+    if (res.winner === link.me && rom && !battle) {
+      const kept = structuredClone(res), bots = botIds();
+      void parade().finally(() => standings(false, kept, bots));
+    }
+    else standings(false);
   }
   // The relay said the match is over: once the frames that ended it have played here (or
   // a moment has passed), the standings and PLAY AGAIN.
   if (endingAt && (over(link.room) || performance.now() - endingAt > 1500)) {
     endingAt = 0;
+    record(res.round);
     standings(true);
   }
 }
 
+/** The round I played, into my career on this device (career.ts, the live game's own):
+ *  played, won, best placing. Once a round; not for a round I only watched. */
+let recordedRound = -1;
+function record(round: number): void {
+  const res = link.room.results;
+  if (recordedRound === round || !res.entrants.some(([id]) => id === link.me)) return;
+  recordedRound = round;
+  const i = res.fallen.findIndex((f) => f.id === link.me);
+  // Placed by when I went out: the last out is second; never out, and nobody won, a tie for first.
+  const placement = res.winner === link.me ? 1 : i >= 0 ? res.entrants.length - i : res.winner ? 2 : 1;
+  recordMatch(placement);
+}
+
+/** The Hall of Fame: the ROM has the screen, and the pad, until it is over. */
+let parading = false;
+async function parade(): Promise<void> {
+  if (!rom) return;
+  parading = true;
+  try { await rom.fame(() => battleEl.classList.add('on')); } catch (e) { console.warn('spike fame failed', e); }
+  parading = false;
+  battleEl.classList.remove('on');
+}
+
 /** The last one standing (or MATCH OVER, with nobody), and how everybody else went out,
  *  the last out first. `over`: the match has ended, and the button is PLAY AGAIN. */
-function standings(done: boolean): void {
-  const res = link.room.results;
+const botIds = () => new Set(link.room.actors.filter((a) => a.bot).map((a) => a.id));
+function standings(done: boolean, res = link.room.results, bots = botIds()): void {
   const name = res.entrants.find(([id]) => id === res.winner)?.[1] ?? 'TRAINER';
   document.getElementById('win-title')!.textContent = !res.winner ? 'MATCH OVER' : res.winner === link.me ? 'YOU WIN!' : `${name} WINS`;
   const list = document.getElementById('win-list')!;
@@ -773,25 +805,28 @@ function standings(done: boolean): void {
   if (res.winner) row(res.winner, `${name}, last one standing`);
   else {
     // Trainers by name; the bots still wandering, as a count.
-    let bots = 0;
+    let standing = 0;
     for (const [id, who] of res.entrants) {
       if (res.fallen.some((f) => f.id === id)) continue;
-      if (link.room.actor(id)?.bot) bots++;
+      if (bots.has(id)) standing++;
       else row(id, `${who}, still standing`);
     }
     // The bots go last: the trainers are who the standings are for.
     for (const f of [...res.fallen].reverse()) {
-      if (!link.room.actor(f.id)?.bot) row(f.id, `${f.name}, ${f.left ? 'left' : f.wild ? 'beaten by a wild POKéMON' : f.by ? `beaten by ${f.by}` : 'out in the fog'}`);
+      if (!f.bot) row(f.id, `${f.name}, ${f.left ? 'left' : f.wild ? 'beaten by a wild POKéMON' : f.by ? `beaten by ${f.by}` : 'out in the fog'}`);
     }
-    if (bots) row(0, `${bots} bot trainers still standing`);
+    if (standing) row(0, `${standing} bot trainers still standing`);
     document.getElementById('win-ok')!.textContent = done && lobby ? 'PLAY AGAIN' : 'OK';
     outEl.classList.remove('on');
     winEl.classList.add('on');
     return;
   }
+  // Trainers by name, last out first; the bots they and the fog beat, as a count.
   for (const f of [...res.fallen].reverse()) {
-    row(f.id, `${f.name}, ${f.left ? 'left' : f.wild ? 'beaten by a wild POKéMON' : f.by ? `beaten by ${f.by}` : 'out in the fog'}`);
+    if (!f.bot) row(f.id, `${f.name}, ${f.left ? 'left' : f.wild ? 'beaten by a wild POKéMON' : f.by ? `beaten by ${f.by}` : 'out in the fog'}`);
   }
+  const out = res.fallen.filter((f) => f.bot).length;
+  if (out) row(0, `${out} bot trainers beaten`);
   document.getElementById('win-ok')!.textContent = done && lobby ? 'PLAY AGAIN' : 'OK';
   outEl.classList.remove('on');
   winEl.classList.add('on');
@@ -1006,14 +1041,14 @@ const GBA_KEY: Record<string, GbaKey> = { up: 'up', down: 'down', left: 'left', 
 addEventListener('keydown', (e) => {
   const k = KEYMAP[e.key];
   if (k && asking) { if (!e.repeat) askKey(k); }
-  else if ((battle || swapping) && rom && k) rom.press(GBA_KEY[k]);
+  else if ((battle || swapping || parading) && rom && k) rom.press(GBA_KEY[k]);
 });
 addEventListener('keyup', (e) => { const k = KEYMAP[e.key]; if (rom && k) rom.release(GBA_KEY[k]); });
 for (const el of document.querySelectorAll<HTMLElement>('.k')) {
   const k = el.dataset.k!;
   el.addEventListener('pointerdown', () => {
     if (asking) askKey(k);
-    else if ((battle || swapping) && rom) rom.press(GBA_KEY[k]);
+    else if ((battle || swapping || parading) && rom) rom.press(GBA_KEY[k]);
   });
   el.addEventListener('pointerup', () => rom?.release(GBA_KEY[k]));
 }

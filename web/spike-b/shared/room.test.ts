@@ -583,7 +583,7 @@ describe('rounds', () => {
       mirror.actor(b)!.battling = mirror.actor(bot.id)!.battling = true; mirror.actor(b)!.foe = bot.id;
       host.end(b, false, true);
       run(1);
-      expect(host.room.results.fallen.find((f) => f.id === bot.id)).toEqual({ id: bot.id, name: bot.name, by: 'B' });
+      expect(host.room.results.fallen.find((f) => f.id === bot.id)).toEqual({ id: bot.id, name: bot.name, by: 'B', bot: true });
       expect(bot.beaten).toBe(true);
     }
     while (!host.room.results.winner) run(PHASE);
