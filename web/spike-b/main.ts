@@ -197,7 +197,7 @@ const battleNote = document.getElementById('battle-note')!;
 const gbaCanvas = document.getElementById('gba') as HTMLCanvasElement;
 let rom: RomBattles | null = null;
 let artMs = 0;
-let battle: { foe: Actor | null; shownAt: number; foeGone?: boolean; heardAt?: number; round: number } | null = null;
+let battle: { foe: Actor | null; shownAt: number; foeGone?: boolean; heardAt?: number; round: number; link: WorldLink } | null = null;
 /** The ROM has the screen for a dropped bag's team (rom.team). */
 let swapping = false;
 let calmUntil = 0;
@@ -208,7 +208,7 @@ const handoff: number[] = []; // ms from the trigger to the ROM's first battle f
  *  screen back when it is over. */
 function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>): void {
   held.clear();
-  battle = { foe, shownAt: performance.now(), round: link.room.results.round };
+  battle = { foe, shownAt: performance.now(), round: link.room.results.round, link };
   if (!rom) {
     battleEl.classList.add('on');
     battleNote.textContent = 'The game is still loading. Try again in a moment.';
@@ -431,7 +431,8 @@ function endBattle(r: Fought | null): void {
   const duel = !!battle?.foe && !battle.foe.bot;
   // A fight that ran over into a new round was the old round's: it neither beats a bot
   // nor puts anybody out of this one (the new round's fresh team is already on its way).
-  const stale = !!battle && battle.round !== link.room.results.round;
+  // Another round, or another match altogether (each one's rounds count from 0).
+  const stale = !!battle && (battle.link !== link || battle.round !== link.room.results.round);
   link.end(duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f)), !stale && !!battle?.foe?.bot && !!r?.ok && r.outcome === 1);
   const wild = battle && !battle.foe;
   const by = battle?.foe?.id;
@@ -506,7 +507,7 @@ const winEl = document.getElementById('win')!;
 document.getElementById('win-ok')!.addEventListener('click', () => {
   winEl.classList.remove('on');
   // PLAY AGAIN: the room, for its next START.
-  if (!matchOn && lobby) lobby.backToRoom();
+  if (!matchOn && lobby) { if (room) lobby.roomIs(room); else lobby.backToRoom(); }
 });
 /** On the bench: came in after the fog closed on this round. */
 let waiting = false;
@@ -1122,7 +1123,8 @@ async function boot(): Promise<void> {
       onRoom: (r) => {
         room = r;
         if (matchOn && !r.playing) matchOver();
-        else if (!matchOn) lobby!.roomIs(r);
+        // The standings stay up until PLAY AGAIN; then the room as it is by then.
+        else if (!matchOn && !winEl.classList.contains('on')) lobby!.roomIs(r);
       },
       onNoRoom: (code) => lobby!.menu(code ? `There is no room ${code}.` : 'Every place in the world is taken.'),
       onMatch: (l) => startMatch(l),

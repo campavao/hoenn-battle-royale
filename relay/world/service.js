@@ -2259,7 +2259,10 @@ var WorldService = class {
     const r = makeRoom(this.opts.maps, this.opts.patches, seed);
     if (this.opts.ringSecs) r.ringPhase = Math.round(this.opts.ringSecs * 60);
     const host = new Host(r, this.opts.bots, this.opts.maps);
-    for (const p of room.members.values()) host.join(p.name, p.skin, void 0, p.id);
+    for (const p of room.members.values()) {
+      host.join(p.name, p.skin, void 0, p.id);
+      p.heard = room.t0 = this.opts.now();
+    }
     host.lock();
     room.host = host;
     room.startsAt = null;
@@ -2308,7 +2311,9 @@ var WorldService = class {
     const now = this.opts.now();
     for (const room of [...this.rooms.values()]) {
       try {
-        for (const p of [...room.members.values()]) if (now - p.heard > QUIET_MS) p.link.close();
+        if (room.host) {
+          for (const p of [...room.members.values()]) if (now - p.heard > QUIET_MS) p.link.close();
+        }
         if (!room.host && room.startsAt !== null && now >= room.startsAt) this.start(room);
         if (room.host) this.frames(room, now);
       } catch (err) {
