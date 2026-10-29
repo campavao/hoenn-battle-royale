@@ -145,6 +145,8 @@ export interface RomBattles {
   setSafari(on: boolean): void;
   /** ROYALe BALLs left to throw in this round's Safari (gNumSafariBalls, 30 a round). */
   safariBalls(): number;
+  /** How many POKeMON I carry (gPlayerPartyCount): none until the Safari's first catch. */
+  partyCount(): number;
   /** I won: Emerald's Hall of Fame with my team, the live winner's parade (br_match.c's
    *  RESULT for our own seat). Resolves when it is over (or never came up). */
   fame(onStart: () => void): Promise<boolean>;
@@ -684,6 +686,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     setPhase(p) { phase = Math.max(1, Math.min(255, p | 0)); },
     setSafari(on) { safari = on; },
     safariBalls() { return (carried ?? start).balls; },
+    partyCount() { return (carried ?? start).count; },
     fogNow() {
       if (fighting && !broken && emu.read(ringAt + 4, 8) !== 0xff) lay(true);
     },
