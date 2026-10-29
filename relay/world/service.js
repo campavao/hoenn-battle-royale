@@ -3165,6 +3165,7 @@ var Room = class {
     for (const a of this.actors) if (a.bot) {
       a.bites = 0;
       a.bleedAt = void 0;
+      a.loot = void 0;
       if (a.judge) this.part(a);
     }
     if (safari) {
