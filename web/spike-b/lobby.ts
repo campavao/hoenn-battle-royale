@@ -7,7 +7,9 @@
 import { Stage, type DrawnScreen } from '../src/ui/stage';
 import { menuScreen, roomScreen, type RoomModel, type RowSpec } from '../src/ui/screens';
 import { CODE_ENTRY, NAME_ENTRY, entryScreen, newEntry } from '../src/ui/entry';
-import { countdown, isRoomCode, playRows, type LobbyAction } from '../src/match/lobby';
+import { HOWTO_ROW, countdown, isRoomCode, playRows, type LobbyAction } from '../src/match/lobby';
+import { howToScreen } from '../src/ui/howto';
+import { howToRead, markHowToRead } from '../src/ui/howto-due';
 import { cleanName, loadCareer, saveProfile } from '../src/match/career';
 import type { Member } from './shared/wire';
 
@@ -86,14 +88,24 @@ export class Lobby {
     else if (a.kind === 'host') this.hooks.join({ host: true });
     else if (a.kind === 'code') this.stage.push(this.codeEntry());
     else if (a.kind === 'name') this.stage.push(this.nameEntry());
+    else if (a.kind === 'howto') this.stage.push(this.howTo);
   }
+
+  /** HOW TO PLAY's panels (ui/howto.ts), with the NEW on its tile until the last is read. */
+  private readonly howTo: DrawnScreen = howToScreen(() => ({
+    skin: me().skin,
+    onDone: () => this.stage.pop(),
+    onRead: () => markHowToRead(localStorage),
+    redraw: () => { if (this.stage.current === this.howTo) this.stage.redraw(); },
+  }));
 
   private readonly main: DrawnScreen = menuScreen(() => ({
     title: 'HOENN BATTLE ROYALE',
     // The ways in the world has: no LOBBIES list or daily game here yet.
     rows: playRows('up')
       .filter((r) => r.action.kind === 'quick' || r.action.kind === 'host' || r.action.kind === 'code')
-      .map((r): RowSpec => ({ label: r.label, id: r.id, art: r.art, onPress: () => this.press(r.action) })),
+      .concat(HOWTO_ROW)
+      .map((r): RowSpec => ({ label: r.label, id: r.id, art: r.art, onPress: () => this.press(r.action), ...(r.id === HOWTO_ROW.id && !howToRead(localStorage) ? { badge: true } : {}) })),
     rowsId: 'lobby-rows',
     tiles: true,
     note: this.note,
