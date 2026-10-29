@@ -906,7 +906,7 @@ function endBattle(r: Fought | null): void {
   if (r && !r.ok) lastResult = 'last battle: the ROM did not start it';
   else if (r) lastResult = `last battle: ${wild ? `wild #${r.species} Lv${r.level}, ` : ''}${OUTCOME[r.outcome] ?? r.outcome}`;
   // A whiteout is the end of a trainer's match (Kanto's rules, DESIGN.md §10).
-  if (!stale && r?.ok && (r.outcome === 2 || r.outcome === 3)) goOut(r.outcome === 2 ? 'Your team lost the battle.' : 'Your team went down with theirs.', by, !!wild);
+  if (!stale && r?.ok && (r.outcome === 2 || r.outcome === 3)) goOut('', by, !!wild);
 }
 
 /** How long a trainer the room says is no longer fighting me may go quiet before the
@@ -927,7 +927,6 @@ function foeFrame(): void {
 
 // ---- the fog (room.ts's ring) ----------------------------------------------------------
 
-const outEl = document.getElementById('out')!;
 let isOut = false;
 let fogTimer = 0;
 let lastPhase = -1;
@@ -960,19 +959,21 @@ function goOut(why: string, by?: number, wild?: boolean): void {
   // What I carried lies where I fell (POK-232), once what was already going in is in.
   if (rom) rom.spill().then((bag) => link.out(bag, by, wild), () => link.out(undefined, by, wild));
   else link.out(undefined, by, wild);
-  showOut('OUT', why);
+  // A battle's loss said itself (the ROM's whiteout); the fog's or the Safari's says why.
+  if (why) say(why);
+  watchOn(by);
 }
 
-function showOut(title: string, why: string): void {
-  document.getElementById('out-title')!.textContent = title;
-  document.getElementById('out-why')!.textContent = why;
-  // From a room, out is out until the room's next match (?solo goes round by round).
-  document.getElementById('out-next')!.textContent = lobby ? 'You can watch the rest of the match.' : "You're back at the truck when the fog lifts.";
-  // The winner's own panel says it all: no OUT over it.
-  if (!winEl.classList.contains('on')) outEl.classList.add('on');
+/** Out, or benched: straight to following somebody else, as live (HBR-106, Cam's pick),
+ *  with no card to dismiss. Who beat me, if they are still in it; else whoever is nearest
+ *  the camera. */
+function watchOn(by?: number): void {
   if (!spectating) toggleSpectate();
+  const others = actors().filter((a) => a.id !== link.me);
+  const near = (a: Actor) => { const p = pixelOf(a); return Math.hypot(p.x - cam.x, p.y - cam.y); };
+  const next = others.find((a) => a.id === by) ?? others.sort((p, q) => near(p) - near(q))[0];
+  if (next) { follow = next.id; if (zoom < 1) zoom = fitZoom(); }
 }
-document.getElementById('out-ok')!.addEventListener('click', () => outEl.classList.remove('on'));
 
 // ---- rounds (room.ts's results) --------------------------------------------------------
 
@@ -1002,7 +1003,6 @@ function roundFrame(): void {
     if (!first && here) {
       if (isOut || waiting) {
         isOut = waiting = false;
-        outEl.classList.remove('on');
         if (spectating) toggleSpectate();
       }
       follow = link.me;
@@ -1015,7 +1015,7 @@ function roundFrame(): void {
   }
   if (!here && !isOut && !waiting && link.room.bench.some((b) => b.id === link.me)) {
     waiting = true;
-    showOut('WATCHING', lobby ? 'This match had started without you. You are in the next one.' : 'The fog had already closed on this round.');
+    watchOn();
   }
   if (res.winner && !shownWin) {
     shownWin = true;
@@ -1159,7 +1159,6 @@ function standings(done: boolean, res = link.room.results, bots = botIds()): voi
     }
     if (standing) row(0, `${standing} bot trainers still standing`);
     document.getElementById('win-ok')!.textContent = done && lobby ? 'PLAY AGAIN' : 'OK';
-    outEl.classList.remove('on');
     winEl.classList.add('on');
     return;
   }
@@ -1170,7 +1169,6 @@ function standings(done: boolean, res = link.room.results, bots = botIds()): voi
   const out = res.fallen.filter((f) => f.bot).length;
   if (out) row(0, `${out} bot trainers beaten`);
   document.getElementById('win-ok')!.textContent = done && lobby ? 'PLAY AGAIN' : 'OK';
-  outEl.classList.remove('on');
   winEl.classList.add('on');
 }
 
@@ -1321,7 +1319,6 @@ function startMatch(l: WorldLink): void {
   toldGyms = l.room.gyms.length;
   wasInFog = false;
   toGive.length = 0;
-  outEl.classList.remove('on');
   winEl.classList.remove('on');
   if (spectating) toggleSpectate();
   follow = link.me;
@@ -1360,7 +1357,6 @@ function leaveMatch(): void {
   room = null;
   isOut = waiting = false;
   if (spectating) toggleSpectate();
-  outEl.classList.remove('on');
   winEl.classList.remove('on');
   lobby.menu('You left the match.');
 }
