@@ -1021,36 +1021,71 @@ export class Room {
     return out;
   }
 
-  /** Cells a drop may land on: outdoors, in a stretch of ground one can walk at least
-   *  LANDING cells of. A pocket walled in by water or rock (the bank behind the ABANDONED
-   *  SHIP, a ledge's island) is no place to be dropped without SURF. */
+  /** Cells a drop may land on: outdoors, from which one can walk to a stretch of ground
+   *  where every cell reaches every other, LANDING cells or more (a strongly connected
+   *  component of the step graph: ledges go one way). A pocket walled in by water or rock
+   *  (the bank behind the ABANDONED SHIP), or one a ledge drops into with no way back to
+   *  open ground, is no place to be dropped without SURF. */
   landing(): ReadonlySet<string> {
     const id = 'landing:' + [...this.maps.keys()].join();
     const hit = LANDS.get(id);
     if (hit) return hit;
-    const seen = new Set<string>(), out = new Set<string>();
+    // The graph: every outdoor cell a step reaches, numbered, with its steps out.
+    const index = new Map<string, number>(), spots: Spot[] = [], next: number[][] = [];
+    // A bridge cell is two places (Spot.z); a drop lands with none, which is either.
+    const node = (s: Spot) => {
+      const k = `${s.map}:${s.x}:${s.y}:${s.z ?? ''}`;
+      let n = index.get(k);
+      if (n === undefined) { n = spots.length; index.set(k, n); spots.push(s); next.push([]); }
+      return n;
+    };
     for (const map of this.places.keys()) {
       if (map.startsWith(SAFARI)) continue;
       const m = this.maps.get(map)!;
-      for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
-        const k = `${map}:${x}:${y}`;
-        if (seen.has(k) || this.world.cell(map, x, y) !== 0) continue;
-        seen.add(k);
-        const part = [k], queue: Spot[] = [{ map, x, y }];
-        while (queue.length) {
-          const at = queue.pop()!;
-          for (let dir = 1; dir <= 4; dir++) {
-            const r = this.base(at, dir as Facing);
-            if (!r || !this.places.has(r.to.map)) continue;
-            const kk = `${r.to.map}:${r.to.x}:${r.to.y}`;
-            if (seen.has(kk)) continue;
-            seen.add(kk);
-            part.push(kk);
-            queue.push(r.to);
-          }
-        }
-        if (part.length >= LANDING) for (const c of part) out.add(c);
+      for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (this.world.cell(map, x, y) === 0) node({ map, x, y });
+    }
+    for (let n = 0; n < spots.length; n++) {
+      for (let dir = 1; dir <= 4; dir++) {
+        const r = this.base(spots[n], dir as Facing);
+        if (r && this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) next[n].push(node(r.to));
       }
+    }
+    // Tarjan's components, without recursion (23k cells).
+    const N = spots.length, order = new Int32Array(N).fill(-1), low = new Int32Array(N), comp = new Int32Array(N).fill(-1);
+    const stack: number[] = [], onStack = new Uint8Array(N), sizes: number[] = [];
+    let time = 0;
+    for (let root = 0; root < N; root++) {
+      if (order[root] >= 0) continue;
+      const work: [number, number][] = [[root, 0]];
+      order[root] = low[root] = time++; stack.push(root); onStack[root] = 1;
+      while (work.length) {
+        const top = work[work.length - 1], v = top[0];
+        if (top[1] < next[v].length) {
+          const w = next[v][top[1]++];
+          if (order[w] < 0) { order[w] = low[w] = time++; stack.push(w); onStack[w] = 1; work.push([w, 0]); }
+          else if (onStack[w]) low[v] = Math.min(low[v], order[w]);
+          continue;
+        }
+        work.pop();
+        if (work.length) { const u = work[work.length - 1][0]; low[u] = Math.min(low[u], low[v]); }
+        if (low[v] === order[v]) {
+          const c = sizes.length;
+          let size = 0, w: number;
+          do { w = stack.pop()!; onStack[w] = 0; comp[w] = c; size++; } while (w !== v);
+          sizes.push(size);
+        }
+      }
+    }
+    // Back from every cell of a big component: whoever can walk to one.
+    const prev: number[][] = spots.map(() => []);
+    for (let v = 0; v < N; v++) for (const w of next[v]) prev[w].push(v);
+    const ok = new Uint8Array(N), queue: number[] = [];
+    for (let v = 0; v < N; v++) if (sizes[comp[v]] >= LANDING) { ok[v] = 1; queue.push(v); }
+    while (queue.length) for (const u of prev[queue.pop()!]) if (!ok[u]) { ok[u] = 1; queue.push(u); }
+    const out = new Set<string>();
+    for (let v = 0; v < N; v++) {
+      const s = spots[v];
+      if (ok[v] && s.z === undefined && this.world.cell(s.map, s.x, s.y) === 0) out.add(`${s.map}:${s.x}:${s.y}`);
     }
     LANDS.set(id, out);
     return out;
@@ -1479,5 +1514,8 @@ export function makeRoom(all: readonly WorldMap[], patches: PatchTable, seed: nu
   // BrStory_Dock), Lilycove's harbour.
   const harbor = anchors.get(ATTENDANT.map);
   if (harbor) for (const m of islandMaps(all)) { maps.set(m.id, m); anchors.set(m.id, harbor); }
-  return new Room(world ?? new World(all as WorldMap[]), maps, patches, seed, places, anchors);
+  const room = new Room(world ?? new World(all as WorldMap[]), maps, patches, seed, places, anchors);
+  // Built now, once per world (cached), not on the frame of the first drop.
+  room.landing();
+  return room;
 }
