@@ -449,6 +449,22 @@ bool8 BrStory_Hands(const struct BrLootItem *it)
     return FALSE;
 }
 
+bool8 BrStory_StartGate(u8 i)
+{
+    u8 j;
+
+    for (j = 0; j < ARRAY_COUNT(sPeople); j++)
+    {
+        if (sPeople[j].trainer == TRAINER_NONE)
+            continue;
+        if (i-- != 0)
+            continue;
+        ClearTrainerFlag(sPeople[j].trainer);
+        return TRUE;
+    }
+    return FALSE;
+}
+
 // The gate's boss fell (BR_EventScript_GateBeaten): what he held is ours, if nobody
 // else beat him to it while we fought; if somebody did, say so.
 void BrStory_GateBeaten(void)

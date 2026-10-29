@@ -59,6 +59,13 @@ bool8 BrStory_Guarded(const struct BrLootItem *it);
 // object he stands as is the story's piece, and what he gives is its reward.
 bool8 BrStory_IsGate(u16 trainerId);
 
+// Spike B's page asked for gate `i`'s fight (sPeople's bosses in order: MAXIE in his
+// hideout, ARCHIE, SHELLY, MATT, MAXIE at MT. CHIMNEY and at the SPACE CENTER): his
+// flag cleared so he fights again, as BrStory_Hands does. FALSE: no such gate. The fight
+// is a leader's (BrGym_StartBoss past the eight, BR_BossArgs' gate rows), with no object
+// and no piece: the page stands him and hands his piece over itself.
+bool8 BrStory_StartGate(u8 i);
+
 // The special the gate's post-battle script calls: the win hands over what he held, or
 // says SOMEBODY GOT THERE FIRST; he is beaten for this match either way.
 void BrStory_GateBeaten(void);

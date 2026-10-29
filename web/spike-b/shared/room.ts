@@ -118,6 +118,10 @@ export type RoomEvent =
   /** A at a REGI chamber's sealed wall (br_story.c's PressedAtWall): `opened` when that
    *  did it, else how it opens, for the page to say or (a FLY wall) to try. */
   | { type: 'door'; tick: number; id: number; n: number; how: StoryDoor; opened?: boolean }
+  /** A at a gate's boss (br_story.c): his own fight, and his piece if he falls. */
+  | { type: 'gate'; tick: number; id: number; key: number; gate: number; bag: Bag; name: string }
+  /** A at a piece a gate's boss still guards. */
+  | { type: 'guarded'; tick: number; id: number; name: string }
   /** A at a MART's clerk. */
   | { type: 'mart'; tick: number; id: number; map: string }
   /** A at a gym leader nobody has beaten yet: their own battle (gyms.ts). */
@@ -136,7 +140,9 @@ export interface Spill {
   key: number; map: string; x: number; y: number; name: string; bag: Bag; legend?: boolean;
   /** A story's person handing it over (story.ts's people): who stands there, and the item
    *  he wants for it first. */
-  person?: { gfx: number; name: string; wants?: number };
+  person?: { gfx: number; name: string; wants?: number; gate?: number };
+  /** A gate's other pieces: his own piece's key, which has to be gone first. */
+  guard?: number;
 }
 
 /** The REGI chambers' walls (story.ts's door rows): how each opens. */
@@ -146,7 +152,13 @@ const DOOR_MAPS = new Set(STORIES.filter((s) => s.door).map((s) => s.map));
 const atWall = (a: Actor): boolean => DOOR_MAPS.has(a.m.spot.map) && a.m.spot.x === 8 && a.m.spot.y === DOOR_Y + 1 && a.m.facing === 2;
 
 /** The people a story stands (include/constants/event_objects.h), by story.ts's names. */
-const PERSON_GFX: Record<string, [number, string]> = { OBJ_EVENT_GFX_STEVEN: [134, 'STEVEN'], OBJ_EVENT_GFX_SCIENTIST_1: [46, 'CAPT. STERN'] };
+const PERSON_GFX: Record<string, [number, string]> = {
+  OBJ_EVENT_GFX_STEVEN: [134, 'STEVEN'], OBJ_EVENT_GFX_SCIENTIST_1: [46, 'CAPT. STERN'],
+  OBJ_EVENT_GFX_MAXIE: [196, 'MAXIE'], OBJ_EVENT_GFX_ARCHIE: [195, 'ARCHIE'],
+  OBJ_EVENT_GFX_AQUA_MEMBER_F: [118, 'SHELLY'], OBJ_EVENT_GFX_AQUA_MEMBER_M: [117, 'MATT'],
+};
+/** The gates' bosses in br_story.c's sPeople order: BrStory_StartGate's numbers. */
+const GATES = ['TRAINER_MAXIE_MAGMA_HIDEOUT', 'TRAINER_ARCHIE', 'TRAINER_SHELLY_WEATHER_INSTITUTE', 'TRAINER_MATT', 'TRAINER_MAXIE_MT_CHIMNEY', 'TRAINER_MAXIE_MOSSDEEP'];
 
 /** An event this round (events.ts, DESIGN §Events): its number, where its legendary
  *  stands (its key), and which one. */
@@ -762,10 +774,10 @@ export class Room {
 
   /** A story event this round has not had (story.ts), where Emerald set that beat, inside
    *  the ring. The ones the page can tell: a place and its reward, or a person handing it
-   *  over, or a REGI behind its wall; none behind a gate's fight or the ferry, and not
-   *  the final ring's. */
+   *  over, a REGI behind its wall, or a gate's boss to beat first; none over the ferry,
+   *  and not the final ring's. */
   private storyFor(rng: () => number, ring: Ring): Story | undefined {
-    const open = STORIES.filter((s) => (s.people ?? []).every((p) => !p.trainer && PERSON_GFX[p.gfx]) && !s.boat && !s.final && !s.noBots &&
+    const open = STORIES.filter((s) => (s.people ?? []).every((p) => PERSON_GFX[p.gfx] && (!p.trainer || GATES.includes(p.trainer))) && !s.boat && !s.final && !s.noBots &&
       !this.events.some((e) => e.story === s.id) &&
       s.cells.every((c) => this.maps.has(c.map ?? s.map) && this.world.cell(c.map ?? s.map, c.x, c.y) === 0) &&
       !this.inFog({ map: s.map, x: s.cells[0].x, y: s.cells[0].y }, ring));
@@ -787,11 +799,17 @@ export class Room {
       const bag: Bag = i < species.length ? { items: [], money: 0, mons: [{ species: species[i], level }] } : { items: bags[i - species.length], money: 0 };
       const p = story.people?.find((q) => q.at === i);
       const [gfx, name] = p ? PERSON_GFX[p.gfx] : [0, ''];
-      this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: '', bag, ...(p ? { person: { gfx, name, ...(p.wants ? { wants: p.wants } : {}) } } : {}) });
+      const gate = p?.trainer ? GATES.indexOf(p.trainer) : -1;
+      const person = p ? { gfx, name, ...(p.wants ? { wants: p.wants } : {}), ...(gate >= 0 ? { gate } : {}) } : undefined;
+      // The rest of a gate's story waits on his piece (br_story.c's GuardOf).
+      const boss = story.people?.find((q) => q.trainer);
+      const guard = boss && boss.at !== i ? eventPiece(n, boss.at) : undefined;
+      this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: '', bag, ...(person ? { person } : {}), ...(guard !== undefined ? { guard } : {}) });
     });
     const trader = spot ? { x: spot.x, y: spot.y, species: offers[Math.floor(rng() * offers.length)], busy: 0 } : undefined;
     const legend = species.some((sp) => LEGENDS.flat().includes(sp));
-    if (legend) { const b = this.spills.get(eventPiece(n, 0)); if (b) b.legend = true; }
+    // A legendary a gate's boss holds is his to hand over, not a battle of its own.
+    if (legend) { const b = this.spills.get(eventPiece(n, 0)); if (b && !b.person) b.legend = true; }
     this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: legend ? species[0] : 0, story: story.id, place: story.name, ...(trader ? { trader } : {}), ...(story.door ? { phase: ring.phase, opened: false } : {}) });
   }
 
@@ -1101,6 +1119,13 @@ export class Room {
         } else if (g) {
           this.picked.set(g.key, a.id);
           events.push({ type: 'item', tick: this.tick, id: a.id, key: g.key, item: g.item, ...(g.gift ? { gift: true } : {}) });
+        } else if (b?.guard !== undefined && this.spills.has(b.guard) && !this.picked.has(b.guard)) {
+          events.push({ type: 'guarded', tick: this.tick, id: a.id, name: this.spills.get(b.guard)!.person?.name ?? '' });
+        } else if (b?.person?.gate !== undefined) {
+          // His fight first, in my ROM (BrStory_StartGate); won, his piece is mine.
+          this.picked.set(b.key, a.id);
+          a.battling = true;
+          events.push({ type: 'gate', tick: this.tick, id: a.id, key: b.key, gate: b.person.gate, bag: structuredClone(b.bag), name: b.person.name });
         } else if (b?.legend) {
           const mon = b.bag.mons![0];
           this.picked.set(b.key, a.id);

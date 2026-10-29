@@ -62,6 +62,26 @@ BR_BossArgs::
 	.byte TRAINER_BATTLE_CONTINUE_SCRIPT_NO_MUSIC
 	.2byte TRAINER_JUAN_1, 0
 	.4byte SootopolisCity_Gym_1F_Text_JuanIntro, SootopolisCity_Gym_1F_Text_JuanDefeat, BR_EventScript_BossBeaten, 0
+@ ...then the story gates' bosses, br_story.c's sPeople order (BrStory_StartGate): the
+@ page stands him and hands over what he held, so his win's script is a leader's.
+	.byte TRAINER_BATTLE_CONTINUE_SCRIPT_NO_MUSIC
+	.2byte TRAINER_MAXIE_MAGMA_HIDEOUT, 0
+	.4byte BR_Text_GateMaxieHideout, BR_Text_GateDefeat, BR_EventScript_BossBeaten, 0
+	.byte TRAINER_BATTLE_CONTINUE_SCRIPT_NO_MUSIC
+	.2byte TRAINER_ARCHIE, 0
+	.4byte BR_Text_GateArchie, BR_Text_GateDefeat, BR_EventScript_BossBeaten, 0
+	.byte TRAINER_BATTLE_CONTINUE_SCRIPT_NO_MUSIC
+	.2byte TRAINER_SHELLY_WEATHER_INSTITUTE, 0
+	.4byte BR_Text_GateShelly, BR_Text_GateDefeat, BR_EventScript_BossBeaten, 0
+	.byte TRAINER_BATTLE_CONTINUE_SCRIPT_NO_MUSIC
+	.2byte TRAINER_MATT, 0
+	.4byte BR_Text_GateMatt, BR_Text_GateDefeat, BR_EventScript_BossBeaten, 0
+	.byte TRAINER_BATTLE_CONTINUE_SCRIPT_NO_MUSIC
+	.2byte TRAINER_MAXIE_MT_CHIMNEY, 0
+	.4byte BR_Text_GateMaxieChimney, BR_Text_GateDefeat, BR_EventScript_BossBeaten, 0
+	.byte TRAINER_BATTLE_CONTINUE_SCRIPT_NO_MUSIC
+	.2byte TRAINER_MAXIE_MOSSDEEP, 0
+	.4byte BR_Text_GateMaxieSpace, BR_Text_GateDefeat, BR_EventScript_BossBeaten, 0
 
 @ NORMAN is a leader like the other seven (2026-10-06 play-test). His own script is a
 @ switch over the story -- VAR_PETALBURG_GYM_STATE 7, past the boot, is the TM and

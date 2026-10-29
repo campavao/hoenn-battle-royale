@@ -447,8 +447,8 @@ describe('item balls', () => {
     }
     // The place-and-reward rows this world has the maps for.
     expect([...told].sort()).toEqual(expect.arrayContaining(['abandoned-ship', 'ancient-tomb', 'desert-ruins', 'granite-cave', 'island-cave', 'lavaridge-egg', 'mirage-tower', 'stevens-house']));
-    // ...and no gate or boat: those wait on their own ROM work.
-    for (const id of ['magma-hideout', 'southern-island']) expect(told.has(id)).toBe(false);
+    // ...and no boat: the ferry waits on its own ROM work.
+    expect(told.has('southern-island')).toBe(false);
     // CAPT. STERN stands at his harbour with what he gives for the SCANNER.
     const stern = [...room.spills.values()].find((b) => b.person?.wants);
     expect(stern).toMatchObject({ map: 'MAP_SLATEPORT_CITY_HARBOR', x: 6, y: 13, person: { name: 'CAPT. STERN', wants: 278 } });
@@ -476,6 +476,26 @@ describe('item balls', () => {
     const evs = room.step(new Map([[1000, [KEY_A]]]));
     expect(evs).toContainEqual(expect.objectContaining({ type: 'door', id: 1000, how: 'smash', opened: true }));
     expect(room.stepFor(a)(at, 2)?.to).toEqual({ map: 'MAP_DESERT_RUINS', x: 8, y: 11 });
+  });
+
+  it("a gate's boss guards his story's pieces, and A at him is his own fight", () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const r = room as unknown as { tellStory(n: number, ring: unknown, s: unknown, rng: () => number): void };
+    r.tellStory(0, { ...room.ring(), r: Infinity }, STORIES.find((s) => s.id === 'weather-institute'), () => 0.5);
+    // SHELLY at (4,6) holds the CASTFORM; the supplies at (5,6) wait on her.
+    const shelly = room.spillAt('MAP_ROUTE119_WEATHER_INSTITUTE_2F', 4, 6)!;
+    expect(shelly.person).toMatchObject({ name: 'SHELLY', gate: 2 });
+    expect(shelly.legend).toBeUndefined();
+    room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_ROUTE119_WEATHER_INSTITUTE_2F', x: 5, y: 7 }, facing: 2 });
+    room.step();
+    const a = room.actor(1000)!;
+    a.calm = 0;
+    expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'guarded', name: 'SHELLY' }));
+    a.m.spot = { map: 'MAP_ROUTE119_WEATHER_INSTITUTE_2F', x: 4, y: 7 };
+    room.step(new Map([[1000, [0]]]));
+    expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'gate', gate: 2, key: shelly.key }));
+    expect(room.picked.get(shelly.key)).toBe(1000);
+    expect(a.battling).toBe(true);
   });
 
   it("ISLAND CAVE's wall opens by itself a phase on; ANCIENT TOMB's for the page that saw a flier", () => {

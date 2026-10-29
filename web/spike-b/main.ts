@@ -513,6 +513,23 @@ function startFor(e: RoomEvent): void {
   if (e.type === 'mart') { void mart(e.map); return; }
   if (e.type === 'trade') { void (e.gives ? gift(e.n, e.species) : trade(e.n, e.species)); return; }
   if (e.type === 'door') { void door(e.n, e.how, !!e.opened); return; }
+  if (e.type === 'guarded') { say(`${e.name} guards it!`); return; }
+  if (e.type === 'gate') {
+    // A story's gate (br_story.c): his own fight in the hidden ROM, past the eight gym
+    // leaders (BrStory_StartGate); won, what he held is mine, and lost, it is his again.
+    if (swapping) rom?.leave();
+    asking?.done('');
+    const l = link, key = e.key, fog = inFogNow();
+    handOff(null, (r, onStart) => r.boss(LEADERS.length + e.gate, onStart, fog).then((f) => {
+      if (f.ok && f.outcome === 1) {
+        say(`You beat ${e.name}!`);
+        toGive.push({ key, bag: e.bag, name: e.name });
+        giveNext();
+      } else l.drop(key);
+      return f;
+    }, (err) => { l.drop(key); throw err; }));
+    return;
+  }
   if (e.type === 'legend') {
     // Its own battle; caught, it is mine, and anything else puts it back where it stood
     // for the next trainer (Cam: losing to one puts you out, and it goes back for retries).
