@@ -2,12 +2,11 @@
 // standings once the frames that ended it have played on its own copy (main.ts).
 import type { Room } from './room';
 
-/** One left standing; every trainer in it out (the bots would only play it out among
- *  themselves); or the fog lifting on the round after. */
+/** One left standing, or nobody (the last two out on one frame). A trainer who is out
+ *  watches the bots play it out, as live (HBR-96), and the fog everywhere holds until
+ *  then: the results wait for the end. */
 export function over(room: Room): boolean {
   const r = room.results;
   if (r.winner) return true;
-  // A trainer still in it is on the map: out or gone, they are among the fallen.
-  if (r.entrants.length && !r.entrants.some(([id]) => room.actor(id) && !room.actor(id)!.bot && !r.fallen.some((f) => f.id === id))) return true;
-  return room.ring().round > r.round;
+  return r.entrants.length > 0 && r.entrants.every(([id]) => r.fallen.some((f) => f.id === id));
 }

@@ -16,11 +16,11 @@ import type { PatchTable } from '../../src/bots/patches';
 import { CODE_ALPHABET, CODE_LENGTH } from '../../src/match/lobby';
 import { Host } from './host';
 import { RING_PHASE, makeRoom } from './room';
-import { FOG_STEPS, MAX_STEPS, SAFARI_STEPS } from '../../src/match/room';
+import { BOT_FILL, FOG_STEPS, MAX_STEPS, SAFARI_STEPS, dealable } from '../../src/match/room';
 import { cleanBag } from './items';
 import { over } from './over';
 import type { FameMon } from '../../src/ui/results';
-import { HASH_EVERY, type Again, type CardRecord, type Listed, type Member, type Settings, type SpMsg, type WireFrame, type WorldDown, type WorldUp } from './wire';
+import { HASH_EVERY, fillFor, type Again, type CardRecord, type Listed, type Member, type Settings, type SpMsg, type WireFrame, type WorldDown, type WorldUp } from './wire';
 
 /** A career off the wire, whole numbers or nothing: what a seat's card shows. */
 function recOf(r: unknown): { rec?: CardRecord } {
@@ -64,6 +64,8 @@ export interface Session { onText(text: string): void; onClose(): void }
 export interface ServiceOptions {
   maps: WorldMap[];
   patches: PatchTable;
+  /** Bots a match may have at most (0: none, a test's room); FILL deals the seats nobody
+   *  has up to it. */
   bots: number;
   /** Trainers at most, in all rooms; the next is told `full`. */
   cap: number;
@@ -124,7 +126,7 @@ interface Phone {
 
 /** The battle a phone's ROM is publishing, as sent: for a watcher who comes in after it
  *  started (the replay must start from its BSTART). */
-interface Stream { battle: number; sent: string[]; bytes: number }
+interface Stream { battle: number; sent: string[]; bytes: number; foe: number }
 
 interface Lobby {
   code: string;
@@ -167,6 +169,7 @@ export class WorldService {
         if (!m || typeof m !== 'object') return;
         if (phone?.kicked) phone = null;
         if (phone) phone.heard = this.opts.now();
+        if (m.t === 'here') return;
         if (m.t === 'list') { this.send(link, { t: 'rooms', rooms: this.listed() }); return; }
         if (m.t === 'join' && !phone && m.again && typeof m.again === 'object') {
           const back = this.back(m.again, link);
@@ -199,7 +202,7 @@ export class WorldService {
         if (!phone || !room) return;
         const host = room.host;
         if (m.t === 'start') {
-          if (!host && (phone.id === room.owner)) this.start(room);
+          if (!host && phone.id === room.owner) this.start(room);
         } else if (m.t === 'set') {
           if (!host && phone.id === room.owner && !room.quick && m.set && typeof m.set === 'object') {
             const s = m.set;
@@ -231,7 +234,7 @@ export class WorldService {
           return;
         } else if (m.t === 'in') {
           if (!Number.isInteger(m.s) || m.s < 1 || !Array.isArray(m.k) || m.k.length > 120) return;
-          host.input(phone.id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
+          host.input(phone.id, m.s, m.k.map((v) => (Number(v) | 0) & 127));
         } else if (m.t === 'field') {
           if (Number.isInteger(m.bits)) host.field(phone.id, m.bits);
         } else if (m.t === 'pick') {
@@ -262,7 +265,7 @@ export class WorldService {
           const to = room.members.get(foe.id);
           if (to) this.send(to.link, { t: 'bt', q: m.q & 0xffff, d: m.d.map((v) => (Number(v) | 0) & 0xff) });
         } else if (m.t === 'sp') {
-          this.publish(room, phone, m.m);
+          this.publish(room, phone, m.m, m.as);
 
         } else if (m.t === 'watch') {
           if (!Number.isInteger(m.id) || m.id < 0 || m.id === phone.id || m.id === phone.watching) return;
@@ -292,9 +295,11 @@ export class WorldService {
         const was = p.watching;
         p.watching = 0;
         if (room) { room.streams.delete(p.id); this.eyes(room, was); }
-        // Mid-match, a reload comes back within the minute to the trainer it left; a
-        // reload mid-battle is a forfeit (Cam), and a page waiting on the bench just goes.
-        if (room?.host && me && !me.battling) {
+        // Mid-match, a reload comes back within the minute to the trainer it left, or to
+        // watching (out, or in for the next match): it went back to the menu, a match it
+        // was still in (Cam 10-29, "the game reset"). A reload mid-battle is a forfeit (Cam).
+        const benched = !me && room?.host?.room.bench.some((x) => x.id === p.id);
+        if (room?.host && ((me && !me.battling) || benched)) {
           p.away = this.opts.now();
           p.link = NOWHERE;
           room.host.away(p.id, true);
@@ -354,15 +359,18 @@ export class WorldService {
   }
 
   /** The room a join asks for: its code, a new one of its own (HOST), or quick play's. */
-  /** LOBBIES: every hosted room with somebody in it (a quick room is QUICK PLAY's own). */
+  /** LOBBIES: the live relay's list_rooms door. A hosted room a stranger could walk into
+   *  now: not quick play's, not unlisted, not mid-match, not waiting on its host's reload;
+   *  its count the trainers here of the host's MAX, fullest first. */
   private listed(): Listed[] {
     const out: Listed[] = [];
     for (const r of this.rooms.values()) {
       const owner = r.members.get(r.owner);
-      if (r.quick || !owner || r.set.door === 'private') continue;
-      out.push({ code: r.code, host: owner.name, skin: owner.skin, players: r.members.size, seats: r.set.max, playing: !!r.host, pass: r.set.door === 'pass' });
+      if (r.quick || r.host || !owner || owner.away || r.set.door === 'private') continue;
+      const players = [...r.members.values()].filter((p) => !p.away).length;
+      out.push({ code: r.code, host: owner.name, skin: owner.skin, players, seats: r.set.max, playing: false, pass: r.set.door === 'pass' });
     }
-    return out;
+    return out.sort((a, b) => b.players - a.players || (a.code < b.code ? -1 : 1));
   }
 
   private pick(m: Extract<WorldUp, { t: 'join' }>): Lobby | null {
@@ -386,25 +394,33 @@ export class WorldService {
       for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
     } while (this.rooms.has(code));
     const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
-    const set: Settings = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: ROOM_MAX, door: 'open', textSpeed: 5, animations: false };
+    // The live room's: MAX 8 with FILL on (BOT_FILL), a quick room's the same.
+    const set: Settings = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: BOT_FILL, door: 'open', textSpeed: 5, animations: false };
     const room: Lobby = { pass: '', code, quick, owner: 0, members: new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: new Map(), set };
     this.rooms.set(code, room);
     return room;
   }
 
-  /** START: the Room, everybody in it at the truck, and the match locked to them. */
+  /** START: the Room, everybody in it and FILL's bots for the seats nobody has, and the
+   *  match locked to them. Not a match nobody could win (dealable: two at the least); a
+   *  quick room's count that runs out on one counts again. */
   private start(room: Lobby): void {
+    const bots = Math.min(this.opts.bots, fillFor(room.set, room.members.size));
+    if (!dealable(room.members.size, bots)) {
+      if (room.quick) { room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS); this.roster(room); }
+      return;
+    }
     const seed = (Math.floor(Math.random() * 0xfffffffe) + 1) >>> 0;
     const r = makeRoom(this.opts.maps, this.opts.patches, seed);
     r.ringPhase = Math.round(room.set.fogSecs * 60);
     r.opening = Math.round(room.set.safariSecs * 60);
-    const host = new Host(r, room.set.bots ? this.opts.bots : 0, this.opts.maps);
+    const host = new Host(r, bots, this.opts.maps);
     for (const p of room.members.values()) { host.join(p.name, p.skin, undefined, p.id); p.heard = room.t0 = this.opts.now(); }
     host.lock();
     room.host = host;
     room.startsAt = null;
     room.t0 = this.opts.now();
-    this.opts.log(`world: room ${room.code} starts, ${room.members.size} trainers, seed ${seed}`);
+    this.opts.log(`world: room ${room.code} starts, ${room.members.size} trainers and ${bots} bots, seed ${seed}`);
     const state = r.state();
     for (const p of room.members.values()) {
       p.team = undefined;
@@ -432,20 +448,24 @@ export class WorldService {
   }
 
   /** One of a fighter's published battle's messages: kept, and on to everybody watching
-   *  either side of it. Only from a trainer in a battle; a TURN only after its BSTART. */
-  private publish(room: Lobby, phone: Phone, raw: SpMsg): void {
+   *  either side of it. Only from a trainer in a battle, or from the judge of a bots'
+   *  fight (`as`, the bot it is published as: its judge watching gets it too); a TURN only
+   *  after its BSTART. */
+  private publish(room: Lobby, phone: Phone, raw: SpMsg, as?: number): void {
     if (!raw || (raw.t !== 'bstart' && raw.t !== 'turn') || !Number.isInteger(raw.battle) || !Array.isArray(raw.data)) return;
     if (raw.data.length > (raw.t === 'bstart' ? BSTART_MAX : TURN_MAX)) return;
-    const me = room.host?.room.actor(phone.id);
+    const bot = as === undefined ? undefined : room.host?.room.actor(as);
+    if (as !== undefined && (!bot?.bot || bot.judge !== phone.id)) return;
+    const me = bot ?? room.host?.room.actor(phone.id);
     if (!me?.battling) return;
     const m: SpMsg = { t: raw.t, battle: raw.battle & 0xffff, data: raw.data.map((v) => (Number(v) | 0) & 0xff) };
-    let s = room.streams.get(phone.id);
-    if (m.t === 'bstart') room.streams.set(phone.id, (s = { battle: m.battle, sent: [], bytes: 0 }));
+    let s = room.streams.get(me.id);
+    if (m.t === 'bstart') room.streams.set(me.id, (s = { battle: m.battle, sent: [], bytes: 0, foe: me.foe }));
     if (!s || s.battle !== m.battle) return;
-    const text = JSON.stringify({ t: 'sp', from: phone.id, m } satisfies WorldDown);
+    const text = JSON.stringify({ t: 'sp', from: me.id, m } satisfies WorldDown);
     if (s.bytes + text.length <= STREAM_MAX) { s.sent.push(text); s.bytes += text.length; }
     for (const w of room.members.values()) {
-      if (w !== phone && w.watching && (w.watching === phone.id || w.watching === me.foe)) w.link.send(text);
+      if ((w !== phone || bot) && w.watching && (w.watching === me.id || w.watching === me.foe)) w.link.send(text);
     }
   }
 
@@ -455,10 +475,13 @@ export class WorldService {
     const r = room.host?.room;
     const a = r?.actor(id);
     if (!r || !a?.battling) return undefined;
+    // A stream is the fight it began with: a bot's is never dropped (no end of its own
+    // comes), so one against somebody else is an old fight, not this one.
     const own = room.streams.get(id);
-    if (own) return own;
+    if (own && own.foe === a.foe) return own;
     const foe = a.foe ? r.actor(a.foe) : undefined;
-    return foe?.battling && foe.foe === id ? room.streams.get(foe.id) : undefined;
+    const theirs = foe?.battling && foe.foe === id ? room.streams.get(foe.id) : undefined;
+    return theirs && theirs.foe === id ? theirs : undefined;
   }
 
   /** Every team the room's trainers have told, to one phone just in (the legendary's

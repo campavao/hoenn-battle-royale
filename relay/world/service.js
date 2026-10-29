@@ -43,9 +43,21 @@ var world_default = { maps: [{ id: "MAP_PETALBURG_CITY", group: 0, num: 0, w: 30
 var import_patches2 = __toESM(require_patches(), 1);
 
 // web/src/match/clock.ts
+function mulberry32(seed, state) {
+  let a = (state ?? seed) | 0;
+  const rng = () => {
+    a = a + 1831565813 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+  rng.state = () => a;
+  return rng;
+}
 function pickIndex(rng, length) {
   return Math.min(length - 1, Math.floor(rng() * length));
 }
+var RING_RADII = [28, 15, 9, 7, 5, 3, 2, 0, -1];
 
 // web/src/data/lines.json
 var lines_default = [
@@ -856,7 +868,7 @@ var World = class {
     if (!cells) {
       const out = [];
       const seen = /* @__PURE__ */ new Set();
-      const add = (s) => {
+      const add2 = (s) => {
         const k = s && s.map === to ? this.key(s) : -1;
         if (k < 0 || seen.has(k)) return;
         seen.add(k);
@@ -864,8 +876,8 @@ var World = class {
       };
       for (const exit of this.exitCells(from, to, surf, cut)) {
         const door = this.warpAt(from, exit.x, exit.y);
-        if (door) add({ map: door.to, x: door.toX, y: door.toY });
-        for (const dir of DIRS) add(this.step(exit, dir, surf, cut));
+        if (door) add2({ map: door.to, x: door.toX, y: door.toY });
+        for (const dir of DIRS) add2(this.step(exit, dir, surf, cut));
       }
       cells = out;
       this.entryCache.set(asked, cells);
@@ -877,14 +889,14 @@ var World = class {
     if (!m) return [];
     const out = [];
     const seen = /* @__PURE__ */ new Set();
-    const add = (x, y) => {
+    const add2 = (x, y) => {
       const k = `${x},${y}`;
       if (seen.has(k)) return;
       seen.add(k);
       out.push({ map: from, x, y });
     };
     for (const w of m.warps ?? []) {
-      if (w.to === to && this.standable(from, w.x, w.y, surf, cut)) add(w.x, w.y);
+      if (w.to === to && this.standable(from, w.x, w.y, surf, cut)) add2(w.x, w.y);
     }
     for (const seam of m.seams) {
       if (seam.to !== to) continue;
@@ -893,7 +905,7 @@ var World = class {
         const cell = seam.dir === "north" ? { map: from, x: i, y: 0 } : seam.dir === "south" ? { map: from, x: i, y: m.h - 1 } : seam.dir === "west" ? { map: from, x: 0, y: i } : { map: from, x: m.w - 1, y: i };
         if (!this.standable(from, cell.x, cell.y, surf, cut)) continue;
         const landed = this.step(cell, seam.dir, surf, cut);
-        if (landed && landed.map === to) add(cell.x, cell.y);
+        if (landed && landed.map === to) add2(cell.x, cell.y);
       }
     }
     return out;
@@ -1219,6 +1231,53 @@ function findPathToAny(world, from, goals, maxVisited = DEFAULT_BUDGET, surf = f
   return search(world, start, { cell: -1, any: wanted, map: -1, x: 0, y: 0, stayOn: world.mapOf(start) }, maxVisited, surf, cut, solid);
 }
 
+// web/src/bots/roster.ts
+var GRADES = [
+  0 /* Rookie */,
+  0 /* Rookie */,
+  1 /* Regular */,
+  1 /* Regular */,
+  2 /* Ace */
+];
+function gradeOf(seed, seat) {
+  const rng = mulberry32((seed ^ seat * 625341585) >>> 0);
+  return GRADES[pickIndex(rng, GRADES.length)];
+}
+var NAMES = [
+  "BRENDAN",
+  "MAY",
+  "WALLY",
+  "ROXANNE",
+  "BRAWLY",
+  "WATTSON",
+  "FLANNERY",
+  "NORMAN",
+  "WINONA",
+  "TATE",
+  "LIZA",
+  "JUAN",
+  "SIDNEY",
+  "PHOEBE",
+  "GLACIA",
+  "DRAKE",
+  "STEVEN",
+  "WALLACE",
+  "ARCHIE",
+  "MAXIE",
+  "COURTNEY",
+  "TABITHA",
+  "SHELLY",
+  "MATT",
+  "RILEY",
+  "CAMERON",
+  "DEVON",
+  "BIRCH",
+  "LANETTE",
+  "BILL",
+  "SCOTT",
+  "GABBY"
+];
+
 // web/spike-b/shared/marts.ts
 var MARTS = [
   "FALLARBOR_TOWN",
@@ -1288,10 +1347,113 @@ var encounters_default = { maps: { MAP_ALTERING_CAVE: [41, 179, 190, 204, 213, 2
 // web/src/bots/party.ts
 var EXPORTED = encounters_default;
 var ENCOUNTERS = EXPORTED.maps;
+function evolutionOf(species) {
+  const row = EXPORTED.evolve[String(species)];
+  return row ? { level: row[0], into: row[1] } : void 0;
+}
+function grownUp(species, level) {
+  let at = species;
+  for (let step = 0; step < 4; step++) {
+    const evo = evolutionOf(at);
+    if (!evo || level < evo.level) return at;
+    at = evo.into;
+  }
+  return at;
+}
 var LADDER = [5, 15, 30, 50, 75, 100];
 function rungForPhase(phase) {
   const i = phase === 0 ? 0 : phase - 1;
   return LADDER[Math.min(i, LADDER.length - 1)];
+}
+var MOVE_SURF = 57;
+var MOVE_CUT = 15;
+var MOVE_FLY = 19;
+var SURF_RUNG = 30;
+var CUT_RUNG = 20;
+var FLY_RUNG = 25;
+var POOL = [
+  { species: 277, name: "TREECKO", moves: [1, 43] },
+  // POUND, LEER
+  { species: 280, name: "TORCHIC", moves: [10, 45] },
+  // SCRATCH, GROWL
+  { species: 283, name: "MUDKIP", moves: [33, 45], water: true },
+  // TACKLE, GROWL
+  { species: 286, name: "POOCHYENA", moves: [33, 43] },
+  { species: 288, name: "ZIGZAGOON", moves: [33, 39] },
+  // TACKLE, TAIL WHIP
+  { species: 290, name: "WURMPLE", moves: [33, 81] },
+  { species: 304, name: "TAILLOW", moves: [33, 45], flier: true },
+  { species: 309, name: "WINGULL", moves: [55, 39], water: true, flier: true },
+  // WATER GUN
+  { species: 392, name: "RALTS", moves: [93, 45] },
+  // CONFUSION
+  { species: 382, name: "ARON", moves: [33, 106] },
+  { species: 337, name: "ELECTRIKE", moves: [33, 84] },
+  // THUNDER SHOCK
+  { species: 335, name: "MAKUHITA", moves: [4, 43] }
+];
+function hp(level) {
+  return Math.max(10, Math.floor(level * 2.2) + 10);
+}
+function speciesName(species) {
+  return EXPORTED.names[String(species)] ?? String(species);
+}
+function speciesAt(mapId) {
+  return ENCOUNTERS[mapId] ?? [];
+}
+function mon(level, rng, mapId, from = []) {
+  const local = from.length > 0 ? from : mapId ? speciesAt(mapId) : [];
+  if (local.length > 0) {
+    const species2 = grownUp(local[pickIndex(rng, local.length)], level);
+    const max2 = hp(level);
+    return {
+      species: species2,
+      level,
+      hp: max2,
+      maxHp: max2,
+      status: 0,
+      // TACKLE. A real move set per species is the ROM's own learnset table, and
+      // building one here would be a second implementation of what the ROM already
+      // does when it makes the mon.
+      moves: [{ id: 33, pp: 25, ppUps: 0 }],
+      heldItem: 0,
+      otId: 0,
+      personality: Math.floor(rng() * 4294967295) >>> 0,
+      exp: 0,
+      nickname: speciesName(species2),
+      ot: "BR"
+    };
+  }
+  const pick = POOL[pickIndex(rng, POOL.length)];
+  const species = grownUp(pick.species, level);
+  const max = hp(level);
+  const moves = [...pick.moves];
+  if (pick.water && level >= SURF_RUNG && !moves.includes(MOVE_SURF)) moves.push(MOVE_SURF);
+  if (!pick.water && level >= CUT_RUNG && !moves.includes(MOVE_CUT)) moves.push(MOVE_CUT);
+  if (pick.flier && level >= FLY_RUNG && !moves.includes(MOVE_FLY)) moves.push(MOVE_FLY);
+  return {
+    species,
+    level,
+    hp: max,
+    maxHp: max,
+    status: 0,
+    moves: moves.map((id) => ({ id, pp: 25, ppUps: 0 })),
+    heldItem: 0,
+    otId: 0,
+    personality: Math.floor(rng() * 4294967295) >>> 0,
+    exp: 0,
+    nickname: species === pick.species ? pick.name : speciesName(species),
+    ot: "BR"
+  };
+}
+function dealParty(seed, seat, phase, mapId, grade = 1 /* Regular */, pool = []) {
+  const rng = mulberry32((seed ^ seat * 40503) >>> 0);
+  const level = rungForPhase(phase);
+  const bring = grade === 2 /* Ace */ ? 1 : grade === 0 /* Rookie */ ? -1 : 0;
+  const count = Math.max(1, Math.min(6, 1 + Math.floor(Math.max(0, phase - 1) / 2) + bring));
+  const party = [];
+  for (let i = 0; i < count; i++) party.push(mon(level, rng, mapId, i === 0 ? pool : []));
+  return party;
 }
 
 // web/src/net/wire.ts
@@ -1671,6 +1833,65 @@ var STORIES = [
   }
 ];
 
+// web/src/match/gifts.ts
+var ITEM_BRIGHT_POWDER = 179;
+var ITEM_WHITE_HERB = 180;
+var ITEM_QUICK_CLAW = 183;
+var ITEM_CHOICE_BAND2 = 186;
+var ITEM_KINGS_ROCK = 187;
+var ITEM_FOCUS_BAND2 = 196;
+var ITEM_SCOPE_LENS = 198;
+var ITEM_LEFTOVERS2 = 200;
+var ITEM_SHELL_BELL2 = 219;
+var GIFTS = [
+  ITEM_BRIGHT_POWDER,
+  ITEM_WHITE_HERB,
+  ITEM_QUICK_CLAW,
+  ITEM_CHOICE_BAND2,
+  ITEM_KINGS_ROCK,
+  ITEM_FOCUS_BAND2,
+  ITEM_SCOPE_LENS,
+  ITEM_LEFTOVERS2,
+  ITEM_SHELL_BELL2
+];
+
+// web/src/bots/bag.ts
+var ITEM = {
+  POTION: 13,
+  FULL_RESTORE: 19,
+  MAX_POTION: 20,
+  HYPER_POTION: 21,
+  SUPER_POTION: 22,
+  FULL_HEAL: 23,
+  GUARD_SPEC: 73,
+  DIRE_HIT: 74,
+  X_ATTACK: 75,
+  X_DEFEND: 76,
+  X_SPEED: 77
+};
+var HEAL = {
+  [ITEM.POTION]: 20,
+  [ITEM.SUPER_POTION]: 50,
+  [ITEM.HYPER_POTION]: 200,
+  [ITEM.MAX_POTION]: 9999,
+  [ITEM.FULL_RESTORE]: 9999
+};
+function add(bag, id, n = 1) {
+  const mine = bag.find((s) => s.id === id);
+  if (mine) mine.n = Math.min(99, mine.n + n);
+  else if (bag.length < 32) bag.push({ id, n: Math.min(99, n) });
+}
+function carried(party, bag) {
+  const out = bag.map((stack) => ({ ...stack }));
+  for (const mon2 of party) if (mon2.heldItem) add(out, mon2.heldItem);
+  return out;
+}
+function purse(phase, grade = 1 /* Regular */) {
+  const level = rungForPhase(phase);
+  const mult = grade === 2 /* Ace */ ? 3 : grade === 0 /* Rookie */ ? 1 : 2;
+  return level * 20 * mult;
+}
+
 // web/src/bots/patches.ts
 var PATCH_KEY_BASE = 8192;
 var PATCH_MAX = 8;
@@ -1765,28 +1986,6 @@ function scatterItem(rng) {
 
 // web/spike-b/data/rooms.json
 var rooms_default = [["MAP_DEWFORD_TOWN_HOUSE1", 5, 4, true, true, 3, 4, false], ["MAP_DEWFORD_TOWN_HOUSE2", 7, 5, true, true, 6, 4, false], ["MAP_FALLARBOR_TOWN_COZMOS_HOUSE", 3, 5, true, true, 1, 4, false], ["MAP_FALLARBOR_TOWN_MOVE_RELEARNERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_FORTREE_CITY_HOUSE1", 6, 2, true, true, 6, 3, false], ["MAP_FORTREE_CITY_HOUSE2", 6, 4, true, true, 1, 3, false], ["MAP_FORTREE_CITY_HOUSE3", 6, 2, true, true, 6, 3, false], ["MAP_FORTREE_CITY_HOUSE4", 6, 3, true, true, 7, 3, false], ["MAP_FORTREE_CITY_HOUSE5", 6, 2, true, true, 1, 3, false], ["MAP_LAVARIDGE_TOWN_HOUSE", 5, 4, true, true, 3, 3, false], ["MAP_LILYCOVE_CITY_HOUSE1", 3, 5, true, true, 1, 4, false], ["MAP_LILYCOVE_CITY_HOUSE2", 2, 4, true, true, 0, 3, false], ["MAP_LILYCOVE_CITY_HOUSE3", 5, 5, true, true, 4, 4, false], ["MAP_LILYCOVE_CITY_HOUSE4", 3, 5, true, true, 1, 5, false], ["MAP_LILYCOVE_CITY_MOVE_DELETERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_1F", 3, 4, true, true, 1, 4, false], ["MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_2F", 3, 3, true, true, 3, 5, false], ["MAP_LITTLEROOT_TOWN_MAYS_HOUSE_1F", 7, 4, true, true, 9, 4, false], ["MAP_LITTLEROOT_TOWN_MAYS_HOUSE_2F", 5, 3, true, true, 5, 5, false], ["MAP_MAUVILLE_CITY_HOUSE1", 5, 5, true, true, 4, 5, false], ["MAP_MAUVILLE_CITY_HOUSE2", 3, 5, true, true, 1, 4, false], ["MAP_MOSSDEEP_CITY_HOUSE1", 5, 5, true, true, 4, 4, false], ["MAP_MOSSDEEP_CITY_HOUSE2", 3, 5, true, true, 1, 4, false], ["MAP_MOSSDEEP_CITY_HOUSE3", 5, 5, true, true, 4, 5, false], ["MAP_MOSSDEEP_CITY_HOUSE4", 5, 4, true, true, 4, 3, false], ["MAP_MOSSDEEP_CITY_STEVENS_HOUSE", 5, 4, true, true, 3, 3, false], ["MAP_OLDALE_TOWN_HOUSE1", 3, 5, true, true, 1, 4, false], ["MAP_OLDALE_TOWN_HOUSE2", 5, 5, true, true, 4, 5, false], ["MAP_PACIFIDLOG_TOWN_HOUSE1", 5, 5, true, true, 3, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE2", 5, 5, true, true, 3, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE3", 5, 5, true, true, 3, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE4", 5, 5, true, true, 3, 5, false], ["MAP_PACIFIDLOG_TOWN_HOUSE5", 5, 5, true, true, 3, 5, false], ["MAP_PETALBURG_CITY_HOUSE1", 3, 5, true, true, 1, 4, false], ["MAP_PETALBURG_CITY_HOUSE2", 5, 4, true, true, 4, 3, false], ["MAP_PETALBURG_CITY_WALLYS_HOUSE", 5, 5, true, true, 4, 4, false], ["MAP_ROUTE104_MR_BRINEYS_HOUSE", 7, 5, true, true, 6, 4, false], ["MAP_ROUTE109_SEASHORE_HOUSE", 8, 4, true, true, 7, 4, false], ["MAP_ROUTE111_WINSTRATE_FAMILYS_HOUSE", 5, 5, true, true, 5, 3, false], ["MAP_ROUTE114_FOSSIL_MANIACS_HOUSE", 2, 5, true, true, 0, 4, false], ["MAP_ROUTE114_LANETTES_HOUSE", 7, 5, true, true, 5, 3, false], ["MAP_ROUTE116_TUNNELERS_REST_HOUSE", 7, 5, true, true, 6, 4, false], ["MAP_ROUTE119_HOUSE", 3, 5, true, true, 1, 4, false], ["MAP_ROUTE123_BERRY_MASTERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_ROUTE124_DIVING_TREASURE_HUNTERS_HOUSE", 4, 5, true, true, 2, 4, false], ["MAP_RUSTBORO_CITY_CUTTERS_HOUSE", 8, 5, true, true, 7, 4, false], ["MAP_RUSTBORO_CITY_HOUSE1", 4, 5, true, true, 2, 4, false], ["MAP_RUSTBORO_CITY_HOUSE2", 6, 5, true, true, 7, 4, false], ["MAP_RUSTBORO_CITY_HOUSE3", 6, 5, true, true, 7, 4, false], ["MAP_SLATEPORT_CITY_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_SLATEPORT_CITY_NAME_RATERS_HOUSE", 5, 4, true, true, 4, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE1", 4, 3, true, true, 5, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE2", 5, 4, true, true, 3, 4, false], ["MAP_SOOTOPOLIS_CITY_HOUSE3", 4, 3, true, true, 3, 2, false], ["MAP_SOOTOPOLIS_CITY_HOUSE4", 4, 3, true, true, 5, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE5", 5, 4, true, true, 3, 4, false], ["MAP_SOOTOPOLIS_CITY_HOUSE6", 3, 2, true, true, 4, 2, false], ["MAP_SOOTOPOLIS_CITY_HOUSE7", 4, 3, true, true, 2, 3, false], ["MAP_SOOTOPOLIS_CITY_LOTAD_AND_SEEDOT_HOUSE", 4, 3, true, true, 2, 3, false], ["MAP_VERDANTURF_TOWN_FRIENDSHIP_RATERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_VERDANTURF_TOWN_HOUSE", 3, 5, true, true, 1, 4, false], ["MAP_VERDANTURF_TOWN_WANDAS_HOUSE", 4, 5, true, true, 2, 5, false], ["MAP_ABANDONED_SHIP_CORRIDORS_1F", 9, 6, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_CORRIDORS_B1F", 2, 6, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_DECK", 10, 10, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_HIDDEN_FLOOR_CORRIDORS", 11, 2, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_HIDDEN_FLOOR_ROOMS", 0, 0, false, false, 20, 5, true], ["MAP_ABANDONED_SHIP_ROOMS_1F", 0, 0, false, false, 7, 6, true], ["MAP_ALTERING_CAVE", 16, 12, false, true, 15, 13, true], ["MAP_ANCIENT_TOMB", 4, 21, false, true, 5, 21, true], ["MAP_AQUA_HIDEOUT_1F", 17, 17, false, true, 18, 17, true], ["MAP_AQUA_HIDEOUT_B1F", 0, 0, false, false, 26, 10, true], ["MAP_AQUA_HIDEOUT_B2F", 0, 0, false, false, 16, 11, true], ["MAP_CAVE_OF_ORIGIN_1F", 8, 8, false, true, 0, 0, false], ["MAP_CAVE_OF_ORIGIN_B1F", 6, 12, false, true, 0, 0, false], ["MAP_CAVE_OF_ORIGIN_ENTRANCE", 9, 13, false, true, 0, 0, false], ["MAP_DESERT_RUINS", 4, 21, false, true, 5, 21, true], ["MAP_DESERT_UNDERPASS", 69, 9, false, true, 70, 9, true], ["MAP_DEWFORD_TOWN_HALL", 3, 5, false, true, 0, 0, false], ["MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F", 15, 9, false, true, 9, 5, true], ["MAP_FIERY_PATH", 0, 0, false, false, 18, 18, true], ["MAP_FORTREE_CITY_DECORATION_SHOP", 5, 3, false, true, 0, 0, false], ["MAP_GRANITE_CAVE_1F", 0, 0, false, false, 21, 7, true], ["MAP_GRANITE_CAVE_B1F", 0, 0, false, false, 15, 12, true], ["MAP_GRANITE_CAVE_B2F", 0, 0, false, false, 16, 14, true], ["MAP_GRANITE_CAVE_STEVENS_ROOM", 6, 6, false, true, 0, 0, false], ["MAP_ISLAND_CAVE", 4, 21, false, true, 5, 21, true], ["MAP_JAGGED_PASS", 0, 0, false, false, 13, 21, true], ["MAP_LAVARIDGE_TOWN_HERB_SHOP", 4, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_CONTEST_HALL", 24, 17, false, true, 25, 17, true], ["MAP_LILYCOVE_CITY_CONTEST_LOBBY", 15, 3, false, true, 15, 6, true], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_1F", 8, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_2F", 8, 4, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_1F", 9, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_2F", 9, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_3F", 9, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_4F", 9, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_5F", 9, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_ROOFTOP", 9, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_HARBOR", 9, 11, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_1F", 5, 10, false, true, 10, 7, true], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F", 12, 6, false, true, 11, 7, true], ["MAP_LILYCOVE_CITY_POKEMON_TRAINER_FAN_CLUB", 5, 10, false, true, 0, 0, false], ["MAP_MAGMA_HIDEOUT_1F", 0, 0, false, false, 22, 14, true], ["MAP_MAGMA_HIDEOUT_2F_1R", 16, 19, false, true, 15, 19, true], ["MAP_MAGMA_HIDEOUT_2F_2R", 0, 0, false, false, 25, 13, true], ["MAP_MAGMA_HIDEOUT_2F_3R", 21, 11, false, true, 0, 0, false], ["MAP_MAGMA_HIDEOUT_3F_1R", 0, 0, false, false, 15, 10, true], ["MAP_MAGMA_HIDEOUT_4F", 0, 0, false, false, 29, 14, true], ["MAP_MARINE_CAVE_END", 14, 13, false, true, 15, 13, true], ["MAP_MARINE_CAVE_ENTRANCE", 7, 7, false, true, 8, 6, true], ["MAP_MAUVILLE_CITY_BIKE_SHOP", 5, 3, false, true, 0, 0, false], ["MAP_MAUVILLE_CITY_GAME_CORNER", 11, 3, false, true, 0, 0, false], ["MAP_METEOR_FALLS_1F_1R", 0, 0, false, false, 16, 20, true], ["MAP_METEOR_FALLS_1F_2R", 14, 16, false, true, 13, 16, true], ["MAP_METEOR_FALLS_B1F_1R", 14, 19, false, true, 15, 18, true], ["MAP_METEOR_FALLS_STEVENS_CAVE", 17, 15, false, true, 17, 16, true], ["MAP_MIRAGE_TOWER_1F", 5, 3, false, true, 0, 0, false], ["MAP_MIRAGE_TOWER_2F", 5, 3, false, true, 0, 0, false], ["MAP_MIRAGE_TOWER_3F", 5, 3, false, true, 0, 0, false], ["MAP_MIRAGE_TOWER_4F", 4, 3, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_GAME_CORNER_1F", 6, 3, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_GAME_CORNER_B1F", 4, 1, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_1F", 10, 5, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_2F", 8, 7, false, true, 0, 0, false], ["MAP_MT_CHIMNEY", 18, 21, false, true, 21, 25, true], ["MAP_MT_CHIMNEY_CABLE_CAR_STATION", 4, 7, false, true, 0, 0, false], ["MAP_MT_PYRE_1F", 11, 7, false, true, 0, 0, false], ["MAP_MT_PYRE_EXTERIOR", 0, 0, false, false, 17, 27, true], ["MAP_MT_PYRE_SUMMIT", 24, 17, false, true, 24, 19, true], ["MAP_NEW_MAUVILLE_ENTRANCE", 3, 3, false, true, 0, 0, false], ["MAP_PETALBURG_WOODS", 0, 0, false, false, 26, 22, true], ["MAP_ROUTE104_PRETTY_PETAL_FLOWER_SHOP", 7, 7, false, true, 0, 0, false], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_NORTH_ENTRANCE", 7, 3, false, true, 0, 0, false], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_SOUTH_ENTRANCE", 7, 3, false, true, 0, 0, false], ["MAP_ROUTE111_OLD_LADYS_REST_STOP", 5, 4, false, true, 0, 0, false], ["MAP_ROUTE112_CABLE_CAR_STATION", 4, 7, false, true, 0, 0, false], ["MAP_ROUTE113_GLASS_WORKSHOP", 7, 5, false, true, 0, 0, false], ["MAP_ROUTE114_FOSSIL_MANIACS_TUNNEL", 6, 13, false, true, 0, 0, false], ["MAP_ROUTE117_POKEMON_DAY_CARE", 3, 3, false, true, 0, 0, false], ["MAP_ROUTE119_WEATHER_INSTITUTE_1F", 11, 6, false, true, 9, 6, true], ["MAP_ROUTE119_WEATHER_INSTITUTE_2F", 9, 9, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_1F", 7, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_2F", 11, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_3F", 15, 6, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT1_1F", 10, 5, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT1_2F", 3, 5, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT2_1F", 9, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT2_2F", 6, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT2_3F", 6, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_POKEMON_SCHOOL", 6, 4, false, true, 0, 0, false], ["MAP_RUSTURF_TUNNEL", 0, 0, false, false, 18, 15, true], ["MAP_SEAFLOOR_CAVERN_ENTRANCE", 7, 7, false, true, 8, 7, true], ["MAP_SEAFLOOR_CAVERN_ROOM1", 12, 8, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM2", 7, 6, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM3", 7, 7, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM4", 11, 11, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM5", 8, 8, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM6", 5, 4, false, true, 5, 5, true], ["MAP_SEAFLOOR_CAVERN_ROOM7", 3, 19, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM8", 3, 8, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM9", 0, 0, false, false, 13, 23, true], ["MAP_SEALED_CHAMBER_INNER_ROOM", 10, 11, false, true, 9, 10, true], ["MAP_SEALED_CHAMBER_OUTER_ROOM", 8, 9, false, true, 8, 11, true], ["MAP_SHOAL_CAVE_LOW_TIDE_ENTRANCE_ROOM", 0, 0, false, false, 18, 17, true], ["MAP_SHOAL_CAVE_LOW_TIDE_ICE_ROOM", 0, 0, false, false, 10, 15, true], ["MAP_SHOAL_CAVE_LOW_TIDE_INNER_ROOM", 0, 0, false, false, 23, 19, true], ["MAP_SHOAL_CAVE_LOW_TIDE_LOWER_ROOM", 13, 5, false, true, 0, 0, false], ["MAP_SKY_PILLAR_1F", 10, 4, false, true, 0, 0, false], ["MAP_SKY_PILLAR_2F", 10, 4, false, true, 0, 0, false], ["MAP_SKY_PILLAR_3F", 10, 5, false, true, 0, 0, false], ["MAP_SKY_PILLAR_4F", 10, 5, false, true, 0, 0, false], ["MAP_SKY_PILLAR_5F", 11, 3, false, true, 0, 0, false], ["MAP_SKY_PILLAR_ENTRANCE", 8, 8, false, true, 0, 0, false], ["MAP_SKY_PILLAR_OUTSIDE", 13, 10, false, true, 0, 0, false], ["MAP_SKY_PILLAR_TOP", 12, 11, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_HARBOR", 9, 11, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_1F", 12, 6, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F", 12, 4, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_POKEMON_FAN_CLUB", 7, 7, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_STERNS_SHIPYARD_1F", 9, 8, false, true, 8, 6, true], ["MAP_SLATEPORT_CITY_STERNS_SHIPYARD_2F", 7, 6, false, true, 0, 0, false], ["MAP_TERRA_CAVE_END", 10, 12, false, true, 11, 12, true], ["MAP_TERRA_CAVE_ENTRANCE", 11, 10, false, true, 0, 0, false], ["MAP_TRAINER_HILL_ENTRANCE", 9, 8, false, true, 0, 0, false], ["MAP_VICTORY_ROAD_1F", 0, 0, false, false, 23, 22, true], ["MAP_VICTORY_ROAD_B1F", 0, 0, false, false, 22, 14, true], ["MAP_VICTORY_ROAD_B2F", 0, 0, false, false, 23, 19, true]];
-
-// web/src/match/gifts.ts
-var ITEM_BRIGHT_POWDER = 179;
-var ITEM_WHITE_HERB = 180;
-var ITEM_QUICK_CLAW = 183;
-var ITEM_CHOICE_BAND2 = 186;
-var ITEM_KINGS_ROCK = 187;
-var ITEM_FOCUS_BAND2 = 196;
-var ITEM_SCOPE_LENS = 198;
-var ITEM_LEFTOVERS2 = 200;
-var ITEM_SHELL_BELL2 = 219;
-var GIFTS = [
-  ITEM_BRIGHT_POWDER,
-  ITEM_WHITE_HERB,
-  ITEM_QUICK_CLAW,
-  ITEM_CHOICE_BAND2,
-  ITEM_KINGS_ROCK,
-  ITEM_FOCUS_BAND2,
-  ITEM_SCOPE_LENS,
-  ITEM_LEFTOVERS2,
-  ITEM_SHELL_BELL2
-];
 
 // web/spike-b/shared/items.ts
 var ITEM_TM012 = 289;
@@ -1907,7 +2106,7 @@ var MOVING = 2;
 var CLASS_WATER2 = 2;
 var WARP_FRAMES = 32;
 function newMover(spot, facing = DIR_SOUTH) {
-  return { spot, prev: spot, facing, moveDir: facing, runningState: NOT_MOVING, action: null, px: 0, py: 0, lift: 0, run: true, strides: 0 };
+  return { spot, prev: spot, facing, moveDir: facing, runningState: NOT_MOVING, action: null, px: 0, py: 0, lift: 0, run: true, strides: 0, bike: false, bikeSpeed: 0, bikeCount: 0, sel: false };
 }
 function dirOf(k) {
   if (k.up) return DIR_NORTH;
@@ -1944,8 +2143,18 @@ function tick(m, keys, step) {
     m.lift = 0;
   }
 }
+var BIKE_PX = [1, 2, 4];
 function begin(m, keys, step) {
   m.prev = m.spot;
+  const press = !!keys.select && !m.sel;
+  m.sel = !!keys.select;
+  if (press && (m.bike || step.cycling?.(m.spot))) {
+    m.bike = !m.bike;
+    m.bikeSpeed = m.bikeCount = 0;
+    m.runningState = NOT_MOVING;
+    return;
+  }
+  if (m.bike) return bikeBegin(m, dirOf(keys), step);
   const dir = dirOf(keys);
   if (!dir) {
     m.runningState = NOT_MOVING;
@@ -1985,8 +2194,74 @@ function begin(m, keys, step) {
     m.py = -DXY[dir][1] * 16;
   }
 }
+function bikeBegin(m, input, step) {
+  let dir = input;
+  if (!dir) {
+    dir = m.moveDir;
+    if (m.bikeSpeed === 0) {
+      m.runningState = NOT_MOVING;
+      m.bikeCount = 0;
+      return;
+    }
+    m.runningState = MOVING;
+    return bikeGo(m, dir, step, true);
+  }
+  if (dir !== m.moveDir && m.runningState !== MOVING) {
+    if (m.bikeSpeed !== 0) {
+      m.runningState = MOVING;
+      return bikeGo(m, m.moveDir, step, true);
+    }
+    m.runningState = TURN_DIRECTION;
+    m.facing = m.moveDir = dir;
+    m.bikeCount = 0;
+    m.action = { kind: "turn", t: 0, len: 8, speed: 0, dir };
+    return;
+  }
+  m.runningState = MOVING;
+  bikeGo(m, dir, step, false);
+}
+function bikeGo(m, dir, step, slow) {
+  if (slow && m.bikeSpeed !== 0) m.bikeCount = --m.bikeSpeed;
+  m.facing = m.moveDir = dir;
+  const to = step(m.spot, dir);
+  if (!to) {
+    m.bikeSpeed = m.bikeCount = 0;
+    m.action = { kind: "bump", t: 0, len: 16, speed: 0, dir };
+    return;
+  }
+  m.prev = m.spot;
+  m.strides += 1;
+  if (to.warp) {
+    m.spot = to.to;
+    m.action = { kind: "warp", t: 0, len: WARP_FRAMES, speed: 0, dir };
+    m.px = m.py = 0;
+    if (!step.cycling?.(to.to)) m.bike = false;
+    m.bikeSpeed = m.bikeCount = 0;
+    return;
+  }
+  if (to.hop) {
+    m.spot = { map: to.to.map, x: to.to.x - DXY[dir][0], y: to.to.y - DXY[dir][1] };
+    m.action = { kind: "hop", t: 0, len: 32, speed: 1, dir, land: to.to };
+    m.px = -DXY[dir][0] * 16;
+    m.py = -DXY[dir][1] * 16;
+    return;
+  }
+  m.spot = to.to;
+  let speed = BIKE_PX[m.bikeCount];
+  if (to.water) {
+    m.bike = false;
+    m.bikeSpeed = m.bikeCount = 0;
+    speed = 2;
+  } else if (!slow) {
+    m.bikeSpeed = m.bikeCount + (m.bikeCount >> 1);
+    if (m.bikeCount < 2) m.bikeCount += 1;
+  }
+  m.action = { kind: "step", t: 0, len: 16 / speed, speed, dir };
+  m.px = -DXY[dir][0] * 16;
+  m.py = -DXY[dir][1] * 16;
+}
 function stepFn(world, field = { surf: false, cut: 0 }) {
-  return (from, dir) => {
+  const fn = (from, dir) => {
     const to = world.step(from, SEAM_OF[dir], field.surf, field.cut);
     if (!to) {
       const mat = dir === DIR_SOUTH && !world.map(from.map)?.outdoor ? world.warpAt(from.map, from.x, from.y) : void 0;
@@ -2000,6 +2275,8 @@ function stepFn(world, field = { surf: false, cut: 0 }) {
     if (!hop && cls >= 3 && cls <= 6) return null;
     return cls === CLASS_WATER2 ? { to, hop, water: true } : { to, hop };
   };
+  fn.cycling = (s) => !!world.map(s.map)?.outdoor && !s.map.startsWith("MAP_SAFARI_ZONE") && world.cell(s.map, s.x, s.y) !== CLASS_WATER2;
+  return fn;
 }
 
 // web/spike-b/shared/room.ts
@@ -2009,8 +2286,9 @@ var KEY_LEFT = 4;
 var KEY_RIGHT = 8;
 var KEY_B = 16;
 var KEY_A = 32;
+var KEY_SELECT = 64;
 function keysOf(bits) {
-  return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A) };
+  return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A), select: !!(bits & KEY_SELECT) };
 }
 var FIELD_SURF = 4;
 var ATTENDANT = { map: "MAP_LILYCOVE_CITY_HARBOR", x: 8, y: 10 };
@@ -2064,8 +2342,8 @@ var APPROACH_FRAMES = (SIGHT_RANGE + 1) * 16 + 90;
 var KEY_TO = { 1: KEY_DOWN, 2: KEY_UP, 3: KEY_LEFT, 4: KEY_RIGHT };
 var BOT_DUEL_GAP = 60 * 12;
 var BOT_DUEL_MAX = 60 * 120;
-var BOT_BITE = 600;
-var BOT_BITES = 3;
+var BOT_BITE = 240;
+var BOT_BITES = 10;
 var ROOMS = rooms_default;
 var SPILL_KEY = 1 << 20;
 var GROUND_PER_MAP = 6;
@@ -2078,7 +2356,8 @@ var LANDS = /* @__PURE__ */ new Map();
 var LANDED = /* @__PURE__ */ new WeakMap();
 var LANDING = 200;
 var RING_PHASE = 60 * 120;
-var RING_STEPS = [Infinity, 15 / 28, 9 / 28, 7 / 28, 5 / 28, 3 / 28, 2 / 28, 0, -1];
+var SECTION_TILES = 27;
+var RING_STEPS = RING_RADII.map((r, i) => i === 0 ? Infinity : r < 0 ? r : Math.max(r, 0.5) * SECTION_TILES);
 var FINAL_REACH = 24;
 var SAFARI = "MAP_SAFARI_ZONE_";
 var PICK_WAIT = 35 * 60;
@@ -2169,8 +2448,8 @@ var Room = class {
       const a = this.actor(cmd.id);
       if (a && !a.bot && a.m.spot.map.startsWith(SAFARI) && this.places.has(cmd.map) && !cmd.map.startsWith(SAFARI)) this.dropOne(a, cmd.map);
     } else if (cmd.c === "away") {
-      const a = this.actor(cmd.id);
-      if (a && !a.bot) a.away = cmd.on || void 0;
+      const a = this.actor(cmd.id) ?? this.bench.find((b) => b.id === cmd.id);
+      if (a && !("bot" in a && a.bot)) a.away = cmd.on || void 0;
     } else if (cmd.c === "sail") {
       const a = this.actor(cmd.id);
       if (!a || a.bot || a.battling || a.m.action) return;
@@ -2203,19 +2482,19 @@ var Room = class {
       this.part(b);
       const won = cmd.winner === a.id ? a : cmd.winner === b.id ? b : void 0;
       const lost = won === a ? b : won === b ? a : void 0;
-      if (won && lost && !lost.beaten) {
-        lost.beaten = true;
-        this.fall(lost, won.name);
-      }
+      if (won && lost) this.botOut(lost, won.name);
     } else if (cmd.c === "lock") {
       this.results.entrants = this.actors.map((a) => [a.id, a.name]);
+      if (!this.opening) {
+        for (const a of this.actors) if (!a.bot) this.dropOne(a);
+      }
     } else if (cmd.c === "join") {
       if (this.actor(cmd.id) || this.bench.some((b) => b.id === cmd.id)) return;
       if (this.results.entrants.length && !cmd.bot) {
         this.bench.push({ id: cmd.id, name: cmd.name, skin: cmd.skin });
         return;
       }
-      const a = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: this.tick + JOIN_GRACE, shun: 0, shunUntil: 0, arriving: false };
+      const a = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, foe: 0, calm: this.tick + JOIN_GRACE, shun: 0, shunUntil: 0, arriving: false };
       this.actors.push(a);
       this.actors.sort((p, q) => p.id - q.id);
     } else if (cmd.c === "drop") {
@@ -2229,17 +2508,7 @@ var Room = class {
         const key = SPILL_KEY + a.id;
         this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag: structuredClone(cmd.bag) });
       }
-      const foe = a?.foe ? this.actor(a.foe) : void 0;
-      if (foe?.bot) foe.battling = false;
-      for (const o of this.actors) if (o.meet?.foe === cmd.id) this.unmeet(o);
-      for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
-      for (const [key, by] of this.picked) {
-        const b = this.spills.get(key);
-        if (by === cmd.id && (b?.legend || b?.person?.gate !== void 0)) this.picked.delete(key);
-      }
-      for (const e of this.events) if (e.trader?.busy === cmd.id) e.trader.busy = 0;
-      for (const h of this.homes) if (h.busy === cmd.id) h.busy = 0;
-      this.actors = this.actors.filter((o) => o.id !== cmd.id);
+      this.remove(cmd.id);
       if (cmd.c === "leave") this.bench = this.bench.filter((b) => b.id !== cmd.id);
       if (!a || a.bot) return;
       if (cmd.c === "out") this.bench.push({ id: a.id, name: a.name, skin: a.skin });
@@ -2268,10 +2537,7 @@ var Room = class {
       if (foe?.bot) {
         foe.battling = false;
         foe.calm = this.tick + GRACE;
-        if (cmd.won && !foe.beaten) {
-          foe.beaten = true;
-          this.fall(foe, a.name);
-        }
+        if (cmd.won) this.botOut(foe, a.name);
       }
       a.foe = 0;
       if (a.boss) {
@@ -2380,17 +2646,25 @@ var Room = class {
   /** The ring this frame (or at `tick`). */
   ring(tick2 = this.tick) {
     const len = this.ringPhase;
-    const cycle = RING_STEPS.length * len + this.opening;
-    const n = Math.floor((tick2 - this.epoch) / cycle);
-    const round = this.results.round + n;
-    let t = tick2 - this.epoch - n * cycle;
-    const { cx, cy, far } = this.centre(round);
+    const round = this.results.round;
+    let t = tick2 - this.epoch;
+    const { cx, cy } = this.centre(round);
     if (t < this.opening) return { round, phase: 0, last: false, cx, cy, r: Infinity, next: Infinity, left: this.opening - t, safari: true };
     t -= this.opening;
-    const phase = Math.floor(t / len);
-    const at = (i) => RING_STEPS[i] === Infinity || RING_STEPS[i] < 0 ? RING_STEPS[i] : RING_STEPS[i] * far;
+    const phase = Math.min(RING_STEPS.length - 1, Math.floor(t / len));
+    const at = (i) => RING_STEPS[i];
     const last = phase === RING_STEPS.length - 1;
-    return { round, phase, last, cx, cy, r: at(phase), next: last ? void 0 : at(phase + 1), left: len - (t - phase * len) };
+    return { round, phase, last, cx, cy, r: at(phase), next: last ? void 0 : at(phase + 1), left: last ? 0 : len - (t - phase * len) };
+  }
+  /** The frame this round is over from, for the next to start AFTER_WIN on: its win;
+   *  everybody in it out with nobody left standing; or, with nobody in it at all (a world
+   *  nobody locked), a whole phase of the fog everywhere. */
+  roundEnd() {
+    const r = this.results;
+    if (r.wonAt !== void 0) return r.wonAt;
+    if (r.entrants.length) return r.fallen.length >= r.entrants.length ? r.fallen[r.fallen.length - 1].at : void 0;
+    const end = this.epoch + this.opening + RING_STEPS.length * this.ringPhase;
+    return this.tick >= end ? end - AFTER_WIN : void 0;
   }
   /** Frames a phase lasts: RING_PHASE, or shorter for a solo test (`?ring=` seconds). */
   ringPhase = RING_PHASE;
@@ -2471,7 +2745,8 @@ var Room = class {
     const ring = this.ring();
     const was = this.tick - 1 >= this.epoch ? this.ring(this.tick - 1) : { ...ring, phase: -1 };
     const r = this.results;
-    if (ring.round !== was.round || r.wonAt !== void 0 && this.tick >= r.wonAt + AFTER_WIN) this.newRound(r.round + 1);
+    const end = this.roundEnd();
+    if (end !== void 0 && this.tick >= end + AFTER_WIN) this.newRound(r.round + 1);
     else if (was.safari && !ring.safari) {
       for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) this.dropOne(a);
     } else if (ring.phase !== was.phase) {
@@ -2488,15 +2763,18 @@ var Room = class {
         r.wonAt = this.tick;
       }
     }
-    if ((this.tick - this.epoch) % Math.max(1, Math.round(this.ringPhase / RING_PHASE * BOT_BITE)) === 0) {
-      for (const a of this.actors) {
-        if (!a.bot || a.beaten || a.battling || !this.inFog(a.m.spot, ring)) continue;
-        a.bites = (a.bites ?? 0) + 1;
-        if (a.bites >= BOT_BITES) {
-          a.beaten = true;
-          this.fall(a, "");
-        }
+    const bite = Math.max(1, Math.min(BOT_BITE, Math.round(this.ringPhase / (30 * 60) * BOT_BITE)));
+    for (const a of [...this.actors]) {
+      if (!a.bot) continue;
+      if (a.battling || !this.inFog(a.m.spot, ring)) {
+        a.bleedAt = void 0;
+        continue;
       }
+      a.bleedAt ??= this.tick + bite;
+      if (this.tick < a.bleedAt) continue;
+      a.bleedAt += bite;
+      a.bites = (a.bites ?? 0) + 1;
+      if (a.bites >= BOT_BITES) this.botOut(a, "");
     }
     for (const [key, at] of this.taken) if (this.tick - at >= REGROW) this.taken.delete(key);
     const events = [];
@@ -2615,11 +2893,11 @@ var Room = class {
   engageBots(events) {
     if (this.ring().safari) return;
     if (this.tick < this.duelAfter || this.tick % 8) return;
-    const judges = this.actors.filter((a) => !a.bot && !a.away && !a.battling);
+    const judges = [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b) => !b.away)];
     if (!judges.length) return;
     const byMap = /* @__PURE__ */ new Map();
     for (const a of this.actors) {
-      if (!a.bot || a.beaten || a.battling || a.m.action || this.tick < a.calm) continue;
+      if (!a.bot || a.battling || a.m.action || this.tick < a.calm) continue;
       const l = byMap.get(a.m.spot.map) ?? [];
       l.push(a);
       byMap.set(a.m.spot.map, l);
@@ -2648,6 +2926,47 @@ var Room = class {
         }
       }
     }
+  }
+  /** `id` off the map, and everything that waited on them let go. */
+  remove(id) {
+    const a = this.actor(id);
+    const foe = a?.foe ? this.actor(a.foe) : void 0;
+    if (foe?.bot) foe.battling = false;
+    for (const o of this.actors) if (o.meet?.foe === id) this.unmeet(o);
+    for (const o of this.actors) if (o.bot && o.judge === id) this.part(o);
+    for (const [key, by] of this.picked) {
+      const b = this.spills.get(key);
+      if (by === id && (b?.legend || b?.person?.gate !== void 0)) this.picked.delete(key);
+    }
+    for (const e of this.events) if (e.trader?.busy === id) e.trader.busy = 0;
+    for (const h of this.homes) if (h.busy === id) h.busy = 0;
+    this.actors = this.actors.filter((o) => o.id !== id);
+  }
+  /** A bot is beaten (by `by`, '' the fog): out of the match and off the map, its team and
+   *  purse in a bag where it stood, as the live bots' eliminate() drops theirs. */
+  botOut(a, by) {
+    if (!this.actor(a.id)) return;
+    const phase = this.ring().phase + 1;
+    const grade = gradeOf(this.seed, a.id);
+    const party = dealParty(this.seed, a.id, phase, a.m.spot.map, grade);
+    const loot = [];
+    let money = purse(phase, grade);
+    const mine = /* @__PURE__ */ new Set();
+    for (const [k, who] of this.picked) if (who === a.id) mine.add(k);
+    if (mine.size) {
+      for (const g of this.ground().values()) if (mine.has(g.key)) add(loot, g.item);
+      for (const k of mine) {
+        const b = this.spills.get(k);
+        if (!b) continue;
+        for (const st of b.bag.items) add(loot, st.id, st.n);
+        money += b.bag.money;
+      }
+    }
+    const bag = { items: carried(party, loot), money, mons: party.map((m) => ({ species: m.species, level: m.level })) };
+    const key = SPILL_KEY + a.id;
+    if (!emptyBag(bag)) this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag });
+    this.fall(a, by);
+    this.remove(a.id);
   }
   /** `a` is out of this round's match (once; nothing after the win). */
   fall(a, by, how = {}) {
@@ -2809,11 +3128,12 @@ var Room = class {
       state ^= state << 5;
       return (state >>> 0) / 4294967296;
     };
+    const used = new Set(this.actors.map((o) => `${o.m.spot.map}:${o.m.spot.x}:${o.m.spot.y}`));
+    const reach = a.bot ? new Set(this.reachable().map((s) => `${s.map}:${s.x}:${s.y}`)) : null;
     const land = this.landing();
     let landed = LANDED.get(land);
     if (!landed) LANDED.set(land, landed = new Set([...land].map((k) => k.slice(0, k.indexOf(":")))));
-    const maps = [...this.places.keys()].filter((m) => !m.startsWith(SAFARI) && landed.has(m)).sort();
-    const used = new Set(this.actors.map((o) => `${o.m.spot.map}:${o.m.spot.x}:${o.m.spot.y}`));
+    const maps = [...new Set(reach ? this.reachable().map((s) => s.map) : this.places.keys())].filter((m) => !m.startsWith(SAFARI) && landed.has(m)).sort();
     for (let tries = 0; tries < 4; tries++) {
       const map = tries === 0 && want ? want : maps[Math.floor(rng() * maps.length)];
       const m = this.maps.get(map);
@@ -2821,6 +3141,7 @@ var Room = class {
       const cells = [];
       for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
         if (this.world.cell(map, x, y) !== 0 || !land.has(`${map}:${x}:${y}`) || used.has(`${map}:${x}:${y}`) || this.groundAt(map, x, y) || this.spillAt(map, x, y)) continue;
+        if (reach && !reach.has(`${map}:${x}:${y}`)) continue;
         if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
         cells.push({ map, x, y });
       }
@@ -2837,7 +3158,7 @@ var Room = class {
     const humans = [];
     for (const a of this.actors) if (!a.bot) humans.push(a);
     for (const b of this.bench) {
-      humans.push({ id: b.id, bot: false, name: b.name, skin: b.skin, m: newMover({ map: "MAP_LITTLEROOT_TOWN", x: 10, y: 10 }, 1), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: 0, shun: 0, shunUntil: 0, arriving: false });
+      humans.push({ id: b.id, bot: false, name: b.name, skin: b.skin, m: newMover({ map: "MAP_LITTLEROOT_TOWN", x: 10, y: 10 }, 1), keys: 0, last: 0, battling: false, foe: 0, calm: 0, shun: 0, shunUntil: 0, arriving: false });
     }
     humans.sort((p, q) => p.id - q.id);
     this.bench = [];
@@ -2855,8 +3176,8 @@ var Room = class {
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
     for (const a of this.actors) if (a.bot) {
-      a.beaten = false;
       a.bites = 0;
+      a.bleedAt = void 0;
       if (a.judge) this.part(a);
     }
     if (safari) {
@@ -2947,7 +3268,7 @@ var Room = class {
     for (const h of free) {
       if (h.battling) continue;
       for (const b of this.actors) {
-        if (!b.bot || b.beaten || b.battling || b.m.action || this.tick < b.calm || b.m.spot.map !== h.m.spot.map) continue;
+        if (!b.bot || b.battling || b.m.action || this.tick < b.calm || b.m.spot.map !== h.m.spot.map) continue;
         if (h.shun === b.id && this.tick < h.shunUntil) continue;
         const look = (o) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing });
         if (!eitherSees(this.world, look(h), look(b))) continue;
@@ -2978,6 +3299,13 @@ var Room = class {
       if (dir) {
         a.m.facing = a.m.moveDir = dir;
         const r = this.stepFor(a)(a.m.spot, dir);
+        if (!r && bits & KEY_A) {
+          const [x, y] = this.ahead(a);
+          const g = this.groundAt(a.m.spot.map, x, y);
+          const b = g ? void 0 : this.spillAt(a.m.spot.map, x, y);
+          if (g && !g.gift) this.picked.set(g.key, a.id);
+          if (b && !b.legend && !b.person && b.guard === void 0) this.picked.set(b.key, a.id);
+        }
         if (!r || (r.hop || r.water && !this.onWater(a)) && !(bits & KEY_A)) {
           a.last = bits;
           return;
@@ -3031,14 +3359,14 @@ var Room = class {
           a.battling = true;
           events.push({ type: "gate", tick: this.tick, id: a.id, key: b.key, gate: b.person.gate, bag: structuredClone(b.bag), name: b.person.name });
         } else if (b?.legend) {
-          const mon = b.bag.mons[0];
+          const mon2 = b.bag.mons[0];
           this.picked.set(b.key, a.id);
           a.battling = true;
-          events.push({ type: "legend", tick: this.tick, id: a.id, key: b.key, species: mon.species, level: mon.level });
+          events.push({ type: "legend", tick: this.tick, id: a.id, key: b.key, species: mon2.species, level: mon2.level });
         } else if (b) {
           this.picked.set(b.key, a.id);
           events.push({ type: "bag", tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name, ...b.person ? { person: { ...b.person } } : {} });
-        } else if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
+        } else if (foe && foe.bot && !foe.battling && !foe.m.action) {
           a.battling = foe.battling = true;
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
@@ -3082,7 +3410,7 @@ var Room = class {
    *  standing there (a step's destination is the trainer's spot from its first frame, so
    *  two can't both walk into one cell). */
   stepFor(a) {
-    return (from, dir) => {
+    const fn = (from, dir) => {
       const bits = a.bot ? 7 : a.field ?? 0;
       const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir) : this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
@@ -3096,6 +3424,8 @@ var Room = class {
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return null;
       return r;
     };
+    fn.cycling = !a.bot && !this.ring().safari ? this.base.cycling : void 0;
+    return fn;
   }
   /** A short fingerprint of the room: two machines that disagree find out within a second. */
   hash() {
@@ -3121,11 +3451,12 @@ var Room = class {
       mix2(m.runningState);
       mix2(m.run ? 1 : 0);
       mix2(m.strides);
+      mix2(m.bike ? 1 + m.bikeSpeed * 4 + m.bikeCount * 16 : 0);
       mix2(m.px + 1024);
       mix2(m.py + 1024);
       mix2(m.lift + 1024);
       mix2(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 65535);
-      mix2((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0) | (a.field ?? 0) << 3);
+      mix2((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | (a.field ?? 0) << 3);
       mix2(a.foe);
       mix2(a.calm);
       mix2(a.shun);
@@ -3135,6 +3466,7 @@ var Room = class {
       mix2(a.judge ?? 0);
       mix2(a.since ?? 0);
       mix2(a.bites ?? 0);
+      mix2(a.bleedAt ?? 0);
       mix2(a.boss ?? 0);
       mix2(a.away ? 1 : 0);
       mix2(a.pickBy ?? 0);
@@ -3155,6 +3487,7 @@ var Room = class {
     for (const b of this.bench) {
       mix2(b.id);
       mix2(b.skin);
+      mix2(b.away ? 1 : 0);
       str(b.name);
     }
     const r = this.results;
@@ -3292,7 +3625,6 @@ function makeRoom(all, patches, seed, world) {
 }
 
 // web/spike-b/shared/bots.ts
-var SKIN_NAME = ["BRENDAN", "MAY", "BRENDAN", "MAY", "HIKER", "BEAUTY", "CAMPER", "PICNIC", "SWIMMER", "SWIMMER", "EXPERT", "EXPERT", "POKEFAN", "POKEFAN", "JOEY", "LASS"];
 var botSkin = (n) => 4 + n % 12;
 var KEY_OF = { 1: KEY_DOWN | KEY_B, 2: KEY_UP | KEY_B, 3: KEY_LEFT | KEY_B, 4: KEY_RIGHT | KEY_B };
 function rand(b) {
@@ -3304,6 +3636,8 @@ function rand(b) {
   return b.rng / 4294967296;
 }
 var DELAYS = [32, 64, 96, 128];
+var NEAR_TILES = 4;
+var NEAR_PLAYER = { x: 7, y: 5 };
 var DIR_OF = { south: 1, north: 2, west: 3, east: 4 };
 var GRIDS = /* @__PURE__ */ new WeakMap();
 var INSIDE = /* @__PURE__ */ new WeakMap();
@@ -3329,6 +3663,20 @@ function insideNext(room) {
   return cells;
 }
 function goal(room, a, b) {
+  if (hunting(room)) {
+    const p2 = room.places.get(a.m.spot.map);
+    let best2, bestD2 = Infinity;
+    for (const o of room.actors) {
+      const q = room.places.get(o.m.spot.map);
+      if (o === a || o.away || !p2 || !q || room.inFog(o.m.spot)) continue;
+      const d = Math.abs(q.gx + o.m.spot.x - p2.gx - a.m.spot.x) + Math.abs(q.gy + o.m.spot.y - p2.gy - a.m.spot.y);
+      if (d < bestD2) {
+        bestD2 = d;
+        best2 = o;
+      }
+    }
+    if (best2) return { ...best2.m.spot };
+  }
   const ev = room.events[room.events.length - 1];
   if (ev && room.spills.has(ev.key) && !room.picked.has(ev.key) && rand(b) < 1 / 3 && !room.inFog({ map: ev.map, x: ev.x, y: ev.y })) {
     const near = room.reachable().filter((s) => s.map === ev.map && Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
@@ -3361,11 +3709,17 @@ function leg(room, from, to) {
   const hop = hops.find((m) => room.places.has(m));
   return hop ? findPathToAny(room.world, from, room.world.entryCells(from.map, hop, true, true), 6e3, true, true) : null;
 }
+var HUNT_AT = 3;
+function hunting(room) {
+  const r = room.results;
+  return !room.ring().safari && r.entrants.length > 0 && r.entrants.length - r.fallen.length <= HUNT_AT;
+}
 function botKeys(room, a, b) {
   if (a.m.action) return 0;
   const ring = room.ring();
   const at = `${ring.round}:${ring.phase}:${room.events.length}`;
-  if (b.plan !== at && (room.tick + a.id * 7) % 30 === 0) {
+  const hunt = hunting(room) && (!b.steps?.length || (room.tick + a.id * 7) % 240 === 0);
+  if ((b.plan !== at || hunt || !b.goal && room.inFog(a.m.spot, ring)) && (room.tick + a.id * 7) % 30 === 0) {
     b.plan = at;
     b.goal = goal(room, a, b);
     b.steps = void 0;
@@ -3374,8 +3728,23 @@ function botKeys(room, a, b) {
   if (b.goal && !b.steps?.length && (room.tick + a.id * 7) % 30 === 0) {
     const path = !sameSpot(a.m.spot, b.goal) && (b.legs = (b.legs ?? 0) + 1) <= 24 ? leg(room, a.m.spot, b.goal) : null;
     b.steps = path?.found ? path.steps : void 0;
-    if (!b.steps) b.goal = null;
+    const end = b.steps?.[b.steps.length - 1]?.to;
+    if (end && room.actors.some((o) => o !== a && sameSpot(o.m.spot, end))) b.steps = b.steps.slice(0, -1);
+    if (!b.steps?.length) {
+      b.steps = void 0;
+      b.goal = null;
+    }
     b.stuck = 0;
+  }
+  if (!b.steps?.length && (room.tick + a.id * 7) % 30 === 0 && room.tick >= a.calm && !ring.safari && !room.inFog(a.m.spot, ring)) {
+    const here = (o2) => o2 !== a && !o2.battling && !o2.away && room.tick >= o2.calm && o2.m.spot.map === a.m.spot.map;
+    const dx = (o2) => Math.abs(o2.m.spot.x - a.m.spot.x), dy = (o2) => Math.abs(o2.m.spot.y - a.m.spot.y);
+    const o = room.actors.find((o2) => !o2.bot && here(o2) && dx(o2) <= NEAR_PLAYER.x && dy(o2) <= NEAR_PLAYER.y) ?? (room.tick >= room.duelAfter ? room.actors.find((o2) => o2.bot && here(o2) && dx(o2) + dy(o2) <= NEAR_TILES) : void 0);
+    const path = o ? findPath(room.world, a.m.spot, o.m.spot, 2e3, true, true) : null;
+    if (path?.found && path.steps.length >= 2) {
+      b.steps = path.steps.slice(0, -1);
+      b.stuck = 0;
+    }
   }
   if (b.steps?.length) {
     if (sameSpot(b.steps[0].to, a.m.spot)) {
@@ -3405,19 +3774,24 @@ function botSpawns(room, maps, count) {
   const grids = new Map(land.map((m) => [m.id, decodeGrid(m.grid, m.w * m.h)]));
   const out = [];
   const taken = /* @__PURE__ */ new Set();
-  const add = (spot, facing, skin) => {
+  const deal = mulberry32(room.seed ^ 35591);
+  const names = [...NAMES];
+  const add2 = (spot, facing, skin) => {
     taken.add(`${spot.map}:${spot.x}:${spot.y}`);
     const n = out.length + 1;
-    out.push({ name: SKIN_NAME[skin], skin, spot, facing, brain: { rng: n * 2654435761 >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
+    const name = names.length > 0 ? names.splice(pickIndex(deal, names.length), 1)[0] : `BOT${n}`;
+    out.push({ name, skin, spot, facing, brain: { rng: n * 2654435761 >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
   };
-  for (const [x, y] of [[7, 12], [13, 13], [11, 16]].slice(0, count)) add({ map: "MAP_LITTLEROOT_TOWN", x, y }, 1, botSkin(out.length * 7 + 1));
-  for (let tries = 0; out.length < count && tries < 5e4; tries++) {
-    const m = land[Math.floor(r() * land.length)];
-    const x = Math.floor(r() * m.w), y = Math.floor(r() * m.h);
-    const c = grids.get(m.id)[y * m.w + x];
-    if (c !== 0 && c !== 7 || taken.has(`${m.id}:${x}:${y}`) || room.groundAt(m.id, x, y)) continue;
-    if (m.id === "MAP_LITTLEROOT_TOWN" && x >= 7 && x <= 13 && y >= 9 && y <= 13) continue;
-    add({ map: m.id, x, y }, 1 + Math.floor(r() * 4), botSkin(Math.floor(r() * 12)));
+  for (const [x, y] of [[7, 12], [13, 13], [11, 16]].slice(0, count)) add2({ map: "MAP_LITTLEROOT_TOWN", x, y }, 1, botSkin(out.length * 7 + 1));
+  const cells = room.reachable().filter((s) => {
+    const m = grids.get(s.map);
+    const c = m?.[s.y * room.maps.get(s.map).w + s.x];
+    return m && (c === 0 || c === 7) && !room.groundAt(s.map, s.x, s.y) && !(s.map === "MAP_LITTLEROOT_TOWN" && s.x >= 7 && s.x <= 13 && s.y >= 9 && s.y <= 13);
+  });
+  for (let tries = 0; out.length < count && cells.length && tries < 5e4; tries++) {
+    const s = cells[Math.floor(r() * cells.length)];
+    if (taken.has(`${s.map}:${s.x}:${s.y}`)) continue;
+    add2(s, 1 + Math.floor(r() * 4), botSkin(Math.floor(r() * 12)));
   }
   return out;
 }
@@ -3478,7 +3852,7 @@ var Host = class {
     if (!p) return;
     const known = p.seq + p.queue.length;
     const skip = Math.max(0, known + 1 - first);
-    for (let i = skip; i < k.length; i++) p.queue.push(k[i] & 63);
+    for (let i = skip; i < k.length; i++) p.queue.push(k[i] & 127);
     while (p.queue.length > MAX_QUEUE) {
       p.queue.shift();
       p.seq += 1;
@@ -3606,6 +3980,10 @@ var Host = class {
 
 // web/src/match/room.ts
 var MAX_STEPS = [2, 4, 6, 8, 12, 16, 20, 26, 30];
+function dealable(humans, bots) {
+  return humans + bots >= 2;
+}
+var BOT_FILL = 8;
 var FOG_STEPS = [30, 60, 90, 120, 180];
 var SAFARI_STEPS = [0, 60, 120, 180];
 
@@ -3613,12 +3991,14 @@ var SAFARI_STEPS = [0, 60, 120, 180];
 function over(room) {
   const r = room.results;
   if (r.winner) return true;
-  if (r.entrants.length && !r.entrants.some(([id]) => room.actor(id) && !room.actor(id).bot && !r.fallen.some((f) => f.id === id))) return true;
-  return room.ring().round > r.round;
+  return r.entrants.length > 0 && r.entrants.every(([id]) => r.fallen.some((f) => f.id === id));
 }
 
 // web/spike-b/shared/wire.ts
 var HASH_EVERY = 60;
+function fillFor(set, trainers) {
+  return set.bots ? Math.max(0, set.max - trainers) : 0;
+}
 
 // web/spike-b/shared/service.ts
 function recOf(r) {
@@ -3692,6 +4072,7 @@ var WorldService = class {
         if (!m || typeof m !== "object") return;
         if (phone?.kicked) phone = null;
         if (phone) phone.heard = this.opts.now();
+        if (m.t === "here") return;
         if (m.t === "list") {
           this.send(link, { t: "rooms", rooms: this.listed() });
           return;
@@ -3774,7 +4155,7 @@ var WorldService = class {
           return;
         } else if (m.t === "in") {
           if (!Number.isInteger(m.s) || m.s < 1 || !Array.isArray(m.k) || m.k.length > 120) return;
-          host.input(phone.id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
+          host.input(phone.id, m.s, m.k.map((v) => (Number(v) | 0) & 127));
         } else if (m.t === "field") {
           if (Number.isInteger(m.bits)) host.field(phone.id, m.bits);
         } else if (m.t === "pick") {
@@ -3803,7 +4184,7 @@ var WorldService = class {
           const to = room.members.get(foe.id);
           if (to) this.send(to.link, { t: "bt", q: m.q & 65535, d: m.d.map((v) => (Number(v) | 0) & 255) });
         } else if (m.t === "sp") {
-          this.publish(room, phone, m.m);
+          this.publish(room, phone, m.m, m.as);
         } else if (m.t === "watch") {
           if (!Number.isInteger(m.id) || m.id < 0 || m.id === phone.id || m.id === phone.watching) return;
           const was = phone.watching;
@@ -3832,7 +4213,8 @@ var WorldService = class {
           room.streams.delete(p.id);
           this.eyes(room, was);
         }
-        if (room?.host && me && !me.battling) {
+        const benched = !me && room?.host?.room.bench.some((x) => x.id === p.id);
+        if (room?.host && (me && !me.battling || benched)) {
           p.away = this.opts.now();
           p.link = NOWHERE;
           room.host.away(p.id, true);
@@ -3886,15 +4268,18 @@ var WorldService = class {
     return p;
   }
   /** The room a join asks for: its code, a new one of its own (HOST), or quick play's. */
-  /** LOBBIES: every hosted room with somebody in it (a quick room is QUICK PLAY's own). */
+  /** LOBBIES: the live relay's list_rooms door. A hosted room a stranger could walk into
+   *  now: not quick play's, not unlisted, not mid-match, not waiting on its host's reload;
+   *  its count the trainers here of the host's MAX, fullest first. */
   listed() {
     const out = [];
     for (const r of this.rooms.values()) {
       const owner = r.members.get(r.owner);
-      if (r.quick || !owner || r.set.door === "private") continue;
-      out.push({ code: r.code, host: owner.name, skin: owner.skin, players: r.members.size, seats: r.set.max, playing: !!r.host, pass: r.set.door === "pass" });
+      if (r.quick || r.host || !owner || owner.away || r.set.door === "private") continue;
+      const players = [...r.members.values()].filter((p) => !p.away).length;
+      out.push({ code: r.code, host: owner.name, skin: owner.skin, players, seats: r.set.max, playing: false, pass: r.set.door === "pass" });
     }
-    return out;
+    return out.sort((a, b) => b.players - a.players || (a.code < b.code ? -1 : 1));
   }
   pick(m) {
     if (typeof m.code === "string" && m.code) {
@@ -3915,18 +4300,28 @@ var WorldService = class {
       for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
     } while (this.rooms.has(code));
     const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
-    const set = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: ROOM_MAX, door: "open", textSpeed: 5, animations: false };
+    const set = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: BOT_FILL, door: "open", textSpeed: 5, animations: false };
     const room = { pass: "", code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map(), set };
     this.rooms.set(code, room);
     return room;
   }
-  /** START: the Room, everybody in it at the truck, and the match locked to them. */
+  /** START: the Room, everybody in it and FILL's bots for the seats nobody has, and the
+   *  match locked to them. Not a match nobody could win (dealable: two at the least); a
+   *  quick room's count that runs out on one counts again. */
   start(room) {
+    const bots = Math.min(this.opts.bots, fillFor(room.set, room.members.size));
+    if (!dealable(room.members.size, bots)) {
+      if (room.quick) {
+        room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS);
+        this.roster(room);
+      }
+      return;
+    }
     const seed = Math.floor(Math.random() * 4294967294) + 1 >>> 0;
     const r = makeRoom(this.opts.maps, this.opts.patches, seed);
     r.ringPhase = Math.round(room.set.fogSecs * 60);
     r.opening = Math.round(room.set.safariSecs * 60);
-    const host = new Host(r, room.set.bots ? this.opts.bots : 0, this.opts.maps);
+    const host = new Host(r, bots, this.opts.maps);
     for (const p of room.members.values()) {
       host.join(p.name, p.skin, void 0, p.id);
       p.heard = room.t0 = this.opts.now();
@@ -3935,7 +4330,7 @@ var WorldService = class {
     room.host = host;
     room.startsAt = null;
     room.t0 = this.opts.now();
-    this.opts.log(`world: room ${room.code} starts, ${room.members.size} trainers, seed ${seed}`);
+    this.opts.log(`world: room ${room.code} starts, ${room.members.size} trainers and ${bots} bots, seed ${seed}`);
     const state = r.state();
     for (const p of room.members.values()) {
       p.team = void 0;
@@ -3959,23 +4354,27 @@ var WorldService = class {
     if (!this.rooms.size) this.stop();
   }
   /** One of a fighter's published battle's messages: kept, and on to everybody watching
-   *  either side of it. Only from a trainer in a battle; a TURN only after its BSTART. */
-  publish(room, phone, raw) {
+   *  either side of it. Only from a trainer in a battle, or from the judge of a bots'
+   *  fight (`as`, the bot it is published as: its judge watching gets it too); a TURN only
+   *  after its BSTART. */
+  publish(room, phone, raw, as) {
     if (!raw || raw.t !== "bstart" && raw.t !== "turn" || !Number.isInteger(raw.battle) || !Array.isArray(raw.data)) return;
     if (raw.data.length > (raw.t === "bstart" ? BSTART_MAX : TURN_MAX)) return;
-    const me = room.host?.room.actor(phone.id);
+    const bot = as === void 0 ? void 0 : room.host?.room.actor(as);
+    if (as !== void 0 && (!bot?.bot || bot.judge !== phone.id)) return;
+    const me = bot ?? room.host?.room.actor(phone.id);
     if (!me?.battling) return;
     const m = { t: raw.t, battle: raw.battle & 65535, data: raw.data.map((v) => (Number(v) | 0) & 255) };
-    let s = room.streams.get(phone.id);
-    if (m.t === "bstart") room.streams.set(phone.id, s = { battle: m.battle, sent: [], bytes: 0 });
+    let s = room.streams.get(me.id);
+    if (m.t === "bstart") room.streams.set(me.id, s = { battle: m.battle, sent: [], bytes: 0, foe: me.foe });
     if (!s || s.battle !== m.battle) return;
-    const text = JSON.stringify({ t: "sp", from: phone.id, m });
+    const text = JSON.stringify({ t: "sp", from: me.id, m });
     if (s.bytes + text.length <= STREAM_MAX) {
       s.sent.push(text);
       s.bytes += text.length;
     }
     for (const w of room.members.values()) {
-      if (w !== phone && w.watching && (w.watching === phone.id || w.watching === me.foe)) w.link.send(text);
+      if ((w !== phone || bot) && w.watching && (w.watching === me.id || w.watching === me.foe)) w.link.send(text);
     }
   }
   /** The battle trainer `id` is in now, as published: by their ROM, or by the ROM of the
@@ -3985,9 +4384,10 @@ var WorldService = class {
     const a = r?.actor(id);
     if (!r || !a?.battling) return void 0;
     const own = room.streams.get(id);
-    if (own) return own;
+    if (own && own.foe === a.foe) return own;
     const foe = a.foe ? r.actor(a.foe) : void 0;
-    return foe?.battling && foe.foe === id ? room.streams.get(foe.id) : void 0;
+    const theirs = foe?.battling && foe.foe === id ? room.streams.get(foe.id) : void 0;
+    return theirs && theirs.foe === id ? theirs : void 0;
   }
   /** Every team the room's trainers have told, to one phone just in (the legendary's
    *  chip and the champion's hall of fame read them). */

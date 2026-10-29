@@ -20,6 +20,9 @@ export type WorldUp =
   | { t: 'kick'; id: number }
   /** LOBBIES: the rooms somebody hosted, answered by `rooms` (before a join, or in one). */
   | { t: 'list' }
+  /** Still here: a hidden tab sends no frames (no requestAnimationFrame), so it says so,
+   *  or the relay takes its silence for a phone gone (QUIET_MS). */
+  | { t: 'here' }
   /** My keys for frames `s`, `s`+1, ... (numbered from 1, never reset). */
   | { t: 'in'; s: number; k: number[] }
   /** My battle is over (`fled`: it never got going, or was run from). */
@@ -47,8 +50,9 @@ export type WorldUp =
    *  fought, and they see one more eye. */
   | { t: 'watch'; id: number }
   /** What my ROM published of the battle I am in (a BSTART, then its TURNs), for whoever
-   *  watches me or the one I fight. */
-  | { t: 'sp'; m: SpMsg }
+   *  watches me or the one I fight. `as`: a bot's fight I judge (judge.ts), published as
+   *  side A of it, so a page out of the match can watch two bots fight as live does. */
+  | { t: 'sp'; m: SpMsg; as?: number }
   /** My team as it stands (after a battle, a catch, a trade): the results screen's hall
    *  of fame when I win. */
   | { t: 'team'; mons: FameMon[] };
@@ -71,11 +75,12 @@ export interface Member { id: number; name: string; skin: number; rec?: CardReco
 /** A trainer's career as their device keeps it (career.ts), for the card on their seat. */
 export interface CardRecord { wins: number; played: number; best?: number }
 
-/** What the host sets for a match (the live room's options): bots in it or none, how
- *  long a ring phase lasts (FOG), and the Safari it opens with (0: none). */
+/** What the host sets for a match (the live room's options): FILL (bots in the seats
+ *  nobody has) or none, how long a ring phase lasts (FOG), and the Safari it opens with
+ *  (0: none). */
 export interface Settings {
   bots: boolean; fogSecs: number; safariSecs: number;
-  /** Trainers the room lets in (match/room.ts MAX_STEPS). */
+  /** The match's seats, trainers and bots (the live MAX, match/room.ts MAX_STEPS). */
   max: number;
   /** On LOBBIES (open), off it (private), or on it behind a passcode (pass). */
   door: 'open' | 'private' | 'pass';
@@ -114,3 +119,8 @@ export type WorldDown =
   | { t: 'full' };
 
 export const HASH_EVERY = 60;
+
+/** The bots START deals: the seats nobody has, with FILL on (match/room.ts botFillFor). */
+export function fillFor(set: Pick<Settings, 'bots' | 'max'>, trainers: number): number {
+  return set.bots ? Math.max(0, set.max - trainers) : 0;
+}

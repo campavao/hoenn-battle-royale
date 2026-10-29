@@ -71,7 +71,7 @@ export interface Bot {
 }
 
 /** Ten characters is the ROM's name field, and these are read off a HUD at a glance. */
-const NAMES = [
+export const NAMES = [
   'BRENDAN', 'MAY', 'WALLY', 'ROXANNE', 'BRAWLY', 'WATTSON', 'FLANNERY', 'NORMAN',
   'WINONA', 'TATE', 'LIZA', 'JUAN', 'SIDNEY', 'PHOEBE', 'GLACIA', 'DRAKE',
   'STEVEN', 'WALLACE', 'ARCHIE', 'MAXIE', 'COURTNEY', 'TABITHA', 'SHELLY', 'MATT',

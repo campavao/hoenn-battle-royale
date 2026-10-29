@@ -19,7 +19,7 @@ import type { RecordLine } from '../match/record';
 import type { TallyNames } from '../match/tally';
 import type { TallyMsg } from '../net/wire';
 import type { MatchResult } from '../match/results';
-import { TEXT_BLUE, TEXT_DARK, type EmeraldCanvas, fitText, measure } from './emerald';
+import { TEXT_BLUE, TEXT_DARK, type EmeraldCanvas, type Rect, fitText, measure } from './emerald';
 import { ROW_H, W, layoutRows, paintButtons, paintRows, paintTitle, type ButtonSpec } from './screens';
 import type { DrawnScreen, Painted, Widget } from './stage';
 
@@ -306,7 +306,17 @@ function standingsFree(m: ResultsModel, h: number): number {
 const ARROW = measure('↓');
 const ARROW_W = ARROW + 2;
 
-function paintStandings(c: EmeraldCanvas, y: number, survived: string | undefined, view: StandingsView, total: number): number {
+/** The standings' frame, and where its arrows are, for a tap (HBR-91: Cam tapped them). */
+interface PaintedStandings {
+  bottom: number;
+  up?: Rect;
+  down?: Rect;
+}
+
+/** An arrow's tap target: its row's height, wide enough for a thumb. */
+const ARROW_HIT_W = 24;
+
+function paintStandings(c: EmeraldCanvas, y: number, survived: string | undefined, view: StandingsView, total: number): PaintedStandings {
   const lay = layoutRows(y, (survived === undefined ? 0 : 1) + view.rows);
   c.drawFrame(lay.frame);
   let row = 0;
@@ -324,13 +334,21 @@ function paintStandings(c: EmeraldCanvas, y: number, survived: string | undefine
     c.drawText(s.place, x0, r.y, color);
     c.drawText(fitText(s.name, x1 - x0 - PLACE_W), x0 + PLACE_W, r.y, color);
   });
+  const out: PaintedStandings = { bottom: lay.frame.y + lay.frame.h };
   if (more) {
     const first = lay.rows[row];
     const last = lay.rows[row + view.rows - 1];
-    if (view.top > 0) c.drawText('↑', first.x + first.w - ARROW, first.y, TEXT_DARK);
-    if (view.top + view.rows < total) c.drawText('↓', last.x + last.w - ARROW, last.y, TEXT_DARK);
+    const hit = (r: Rect): Rect => ({ x: r.x + r.w - ARROW_HIT_W + 4, y: r.y, w: ARROW_HIT_W, h: ROW_H });
+    if (view.top > 0) {
+      c.drawText('↑', first.x + first.w - ARROW, first.y, TEXT_DARK);
+      out.up = hit(first);
+    }
+    if (view.top + view.rows < total) {
+      c.drawText('↓', last.x + last.w - ARROW, last.y, TEXT_DARK);
+      out.down = hit(last);
+    }
   }
-  return lay.frame.y + lay.frame.h;
+  return out;
 }
 
 /** How far down the first page ends: the title, the standings and the record, each a
@@ -431,7 +449,8 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
         if (listTop !== null) listTop = view.top;
         listRows = view.rows;
         listTotal = m.standings.length;
-        const bottom = paintStandings(c, y, m.view.survived, view, m.standings.length);
+        const list = paintStandings(c, y, m.view.survived, view, m.standings.length);
+        const bottom = list.bottom;
         widgets.push({
           rect: { x: 0, y: 6, w: W, h: ROW_H },
           text: m.view.line,
@@ -448,6 +467,9 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
           // The window takes the wheel and a finger's drag (Cam's 10-26 play-test).
           scroll: listTotal > listRows ? scroll : undefined,
         });
+        // A tap on an arrow turns a page of it.
+        if (list.up) widgets.push({ rect: list.up, text: 'Up', id: 'results-up', cursor: null, onPress: () => scroll(-listRows) });
+        if (list.down) widgets.push({ rect: list.down, text: 'Down', id: 'results-down', cursor: null, onPress: () => scroll(listRows) });
         y = bottom + 4;
         record('results-record', m.record);
       } else if (card) {
