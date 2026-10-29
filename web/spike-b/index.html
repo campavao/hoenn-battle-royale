@@ -27,6 +27,13 @@
       .k { display: grid; place-items: center; background: #26313acc; border-radius: 10px; color: #cfe3ef; font-weight: 700; touch-action: none; user-select: none; -webkit-user-select: none; }
       .k.down { background: #4c7a99; }
       .ab .k { width: 62px; height: 62px; border-radius: 50%; }
+      #corner { position: fixed; z-index: 1; top: calc(env(safe-area-inset-top) + 6px); right: calc(env(safe-area-inset-right) + 8px); background: #f8f8f8; color: #303030; border: 3px solid #4c7a99; border-radius: 8px; padding: 4px 10px; white-space: pre; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; pointer-events: none; }
+      #corner:empty { display: none; }
+      #corner.fog { color: #c03028; }
+      #ticker { position: fixed; z-index: 1; left: 50%; top: calc(env(safe-area-inset-top) + 60px); transform: translateX(-50%); width: max-content; max-width: min(520px, calc(100vw - 32px)); background: #303030e8; color: #f8f8f8; border-radius: 6px; padding: 4px 12px; text-align: center; text-wrap: balance; display: none; pointer-events: none; }
+      #ticker.on { display: block; }
+      #ticker.alert { color: #ff9a8a; }
+      #stats:not(.debug) { display: none; }
       #found { z-index: 1; position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 200px); transform: translateX(-50%); background: #f8f8f8; color: #303030; border: 3px solid #4c7a99; border-radius: 8px; padding: 8px 14px; display: none; white-space: nowrap; }
       @media (pointer: fine) { #found { bottom: 32px; } }
       #found.on { display: block; }
@@ -122,6 +129,8 @@
       <div id="watch" hidden><span id="watch-who"></span><button id="watch-prev" type="button">◀ PREV</button><button id="watch-next" type="button">NEXT ▶</button><button id="watch-stop" type="button">STOP</button></div>
     </div>
     <div id="watch-label" hidden></div>
+    <div id="corner"></div>
+    <div id="ticker"></div>
     <div id="pad">
       <div class="dpad">
         <span></span><div class="k" data-k="up">▲</div><span></span>

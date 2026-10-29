@@ -27,6 +27,7 @@ import { connectWorld, soloLink, type WorldLink } from './net';
 import { over } from './shared/over';
 import { Lobby, me, type RoomInfo } from './lobby';
 import { recordMatch } from '../src/match/career';
+import { OUT_BATCH_MS, outs, won } from '../src/match/ticker';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { groundCount } from './shared/items';
 import { RomArt } from './romart';
@@ -902,7 +903,7 @@ let toldGyms = 0;
 function gymFrame(): void {
   const g = link.room.gyms;
   if (toldGyms > g.length) toldGyms = 0;
-  for (const [n, who] of g.slice(toldGyms)) if (who !== link.room.actor(link.me)?.name) say(`${who} beat ${LEADERS[n].name}! The gym is closed.`);
+  for (const [n, who] of g.slice(toldGyms)) if (who !== link.room.actor(link.me)?.name) tick(`${who} beat ${LEADERS[n].name}! The gym is closed.`);
   toldGyms = g.length;
 }
 
@@ -969,6 +970,69 @@ function matchOver(): void {
 }
 document.getElementById('menu')!.addEventListener('click', () => { void openMenu(); });
 
+// ---- the HUD (the live match's corner and ticker: br_hud.c, ticker.ts) -----------------
+
+const cornerEl = document.getElementById('corner')!;
+const tickerEl = document.getElementById('ticker')!;
+/** Lines waiting their turn, and when the one showing goes. */
+const ticks: { text: string; alert: boolean }[] = [];
+let tickUntil = 0;
+/** Everybody's news, one line at a time (ticker.ts): outs, the ring, a gym, the win. */
+function tick(text: string, alert = false): void {
+  if (ticks.length < 6) ticks.push({ text, alert });
+}
+/** Outs that land together go out as one line (POK-324). */
+let toldOuts = 0;
+let outsSince = 0;
+let hudRound = -1;
+let toldWin = false;
+let cornerText = '';
+function hudFrame(): void {
+  const res = link.room.results;
+  if (res.round !== hudRound) { hudRound = res.round; toldOuts = res.fallen.length; toldWin = !!res.winner; outsSince = 0; }
+  const left = res.entrants.length - res.fallen.length;
+  if (res.fallen.length > toldOuts) {
+    const now = performance.now();
+    if (!outsSince) outsSince = now;
+    // The endgame's count is everything: each out at once.
+    if (now - outsSince >= OUT_BATCH_MS || left <= 3 || res.winner) {
+      const batch = res.fallen.slice(toldOuts);
+      const lone = batch.length === 1 && batch[0].by ? batch[0].by : undefined;
+      const line = outs(0, batch.map((f) => f.name), left, lone);
+      if (line) tick(line.text);
+      toldOuts = res.fallen.length;
+      outsSince = 0;
+    }
+  }
+  if (res.winner && !toldWin) {
+    toldWin = true;
+    const line = won(0, res.entrants.find(([id]) => id === res.winner)?.[1] ?? 'TRAINER');
+    if (line) tick(line.text);
+  }
+  const now = performance.now();
+  if (now >= tickUntil) {
+    const next = ticks.shift();
+    if (next) {
+      tickerEl.textContent = next.text;
+      tickerEl.classList.toggle('alert', next.alert);
+      tickerEl.classList.add('on');
+      tickUntil = now + 3500;
+    } else if (tickerEl.classList.contains('on')) tickerEl.classList.remove('on');
+  }
+  // The corner: how many are left, and the clock (or FOG! while it bites me).
+  const ring = link.room.ring();
+  const s = Math.ceil(ring.left / 60);
+  const clock = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const count = ring.safari ? 'SAFARI' : res.entrants.length ? `${left} LEFT` : `${link.room.actors.length} IN`;
+  const fog = !isOut && inFogNow() && frame % 60 < 30;
+  const text = `${count}\n${fog ? 'FOG!' : clock}`;
+  if (text !== cornerText) {
+    cornerText = text;
+    cornerEl.textContent = text;
+    cornerEl.classList.toggle('fog', fog);
+  }
+}
+
 /** Once a frame: the ring's news, and the fog's bite while I stand in it. */
 function fogFrame(): void {
   const ring = link.room.ring();
@@ -977,15 +1041,14 @@ function fogFrame(): void {
     const rung = rungForPhase(ring.phase + 1);
     const grew = lastPhase >= 0 && rung > rungForPhase(lastPhase + 1) ? ` All POKéMON are now Lv. ${rung}!` : '';
     if (lastPhase >= 0) {
-      if (ring.phase === 0) say('The fog lifts. A new round!');
-      else if (ring.last) say(`THE FOG COVERS ALL OF HOENN!${grew}`);
-      else say(`The fog closes in on ${ringMap?.place(ring) || 'Hoenn'}!${grew}`);
+      if (ring.phase === 0) tick('The fog lifts. A new round!');
+      else if (ring.last) tick(`THE FOG COVERS ALL OF HOENN!${grew}`, true);
+      else tick(`The fog closes in on ${ringMap?.place(ring) || 'Hoenn'}!${grew}`, true);
     }
     // An event dropped with the ring (DESIGN §Events): the ticker says what and where.
     const evs = link.room.events;
     if (toldEvents > evs.length) toldEvents = 0;
-    for (const e of evs.slice(toldEvents)) foundEl.textContent += ` A LEGENDARY ${speciesName(e.species)} appeared ${ringMap?.placeOf(e.map) ? `at ${ringMap.placeOf(e.map)}` : 'nearby'}!`;
-    if (evs.length > toldEvents) { foundEl.classList.add('on'); foundUntil = performance.now() + 5000; }
+    for (const e of evs.slice(toldEvents)) tick(`A legendary ${speciesName(e.species)} at ${ringMap?.placeOf(e.map) || 'HOENN'}!`, true);
     toldEvents = evs.length;
     lastPhase = ring.phase;
   }
@@ -1512,6 +1575,9 @@ function draw(): void {
 // ---- loop: a fixed 60 Hz sim, drawn on rAF --------------------------------------------
 
 const statsEl = document.getElementById('stats')!;
+/** The numbers box is a dev's (?stats); a player sees it only while the ROM loads. */
+const SHOW_STATS = new URLSearchParams(location.search).has('stats');
+statsEl.classList.add('debug');
 const gaps: number[] = [];
 let last = performance.now();
 let acc = 0;
@@ -1537,6 +1603,7 @@ function loop(now: number): void {
     foeFrame();
     remember();
     gymFrame();
+    hudFrame();
     for (const k of pressed) watch.key(k);
     pressed.clear();
   }
@@ -1548,6 +1615,7 @@ function loop(now: number): void {
   simMs = simMs * 0.9 + (t1 - t0) * 0.1;
   drawMs = drawMs * 0.9 + (t2 - t1) * 0.1;
   if (frame % 15 === 0) {
+    statsEl.classList.toggle('debug', SHOW_STATS || !rom);
     const sorted = [...gaps].sort((a, b) => a - b);
     const p95 = sorted[Math.floor(sorted.length * 0.95)] ?? 0;
     const fps = 1000 / (gaps.reduce((s, g) => s + g, 0) / gaps.length);
