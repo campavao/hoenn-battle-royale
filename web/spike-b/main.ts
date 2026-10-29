@@ -2015,12 +2015,14 @@ async function boot(): Promise<void> {
         else if (!matchOn && !winEl.classList.contains('on')) lobby!.roomIs(r);
       },
       onNoRoom: (code) => { forget(); lobby!.menu(code ? `There is no room ${code}.` : 'Every place in the world is taken.'); },
+      onRooms: (rooms) => lobby?.listed(rooms),
       onMatch: (l) => startMatch(l),
       onClosed: () => { matchOn = false; lobby!.menu('Lost the relay. Reload to play again.'); },
     });
     lobby = new Lobby({
       join: (how) => sock.join(me().name, me().skin, how),
       start: () => sock.start(),
+      list: () => sock.list(),
       leave: () => location.reload(),
       names: { species: speciesName, move: (id) => moveInfo(romTables, id)?.name },
     });

@@ -10,6 +10,8 @@ export type WorldUp =
   | { t: 'join'; name: string; skin: number; code?: string; host?: boolean; again?: Again }
   /** START (the room's host): the match begins for everybody in the room. */
   | { t: 'start' }
+  /** LOBBIES: the rooms somebody hosted, answered by `rooms` (before a join, or in one). */
+  | { t: 'list' }
   /** My keys for frames `s`, `s`+1, ... (numbered from 1, never reset). */
   | { t: 'in'; s: number; k: number[] }
   /** My battle is over (`fled`: it never got going, or was run from). */
@@ -56,10 +58,16 @@ export interface Again { code: string; id: number; key: string }
 export interface Member { id: number; name: string; skin: number }
 
 /** Relay to phone. */
+/** A room on LOBBIES' list. */
+export interface Listed { code: string; host: string; skin: number; players: number; seats: number; playing: boolean }
+
 export type WorldDown =
   /** The room as it is now, whenever anything in it changes: its code, who is in it, who
    *  has START (`owner`), whether a match is on, and a quick room's count to its start. */
   | { t: 'room'; code: string; quick: boolean; you: number; owner: number; members: Member[]; playing: boolean; startsIn?: number }
+  /** The hosted rooms (LOBBIES): whose, how many in it of ROOM_MAX, and whether its
+   *  match is on (joining one under way watches it until the next). */
+  | { t: 'rooms'; rooms: Listed[] }
   /** No room by that code (or it is full). */
   | { t: 'no_room'; code: string }
   /** A match: my trainer's id in it and the Room as it starts (or as it is, joining late). */

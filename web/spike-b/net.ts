@@ -17,7 +17,7 @@ import type { PatchTable } from '../src/bots/patches';
 import { tick } from './sim';
 import { Host, play } from './shared/host';
 import { keysOf, makeRoom, type Actor, type Bag, type Room, type RoomEvent } from './shared/room';
-import type { Again, SpMsg, WireFrame, WorldDown, WorldUp } from './shared/wire';
+import type { Again, Listed, SpMsg, WireFrame, WorldDown, WorldUp } from './shared/wire';
 
 export interface WorldLink {
   readonly room: Room;
@@ -257,12 +257,15 @@ class Online implements WorldLink {
 export interface WorldSocket {
   join(name: string, skin: number, how: { code?: string; host?: boolean; again?: Again }): void;
   start(): void;
+  /** LOBBIES: ask for the hosted rooms (`onRooms`). */
+  list(): void;
   close(): void;
 }
 
 export interface WorldHandlers {
   onRoom(r: Extract<WorldDown, { t: 'room' }>): void;
   onNoRoom(code: string): void;
+  onRooms(rooms: Listed[]): void;
   onMatch(link: WorldLink): void;
   /** The socket closed (or never opened). */
   onClosed(): void;
@@ -278,7 +281,7 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
     else queue.push(m);
   };
   try { ws = new WebSocket(url); } catch { ws = null; }
-  if (!ws) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, close: () => undefined }; }
+  if (!ws) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, list: () => undefined, close: () => undefined }; }
   const sock = ws;
   sock.addEventListener('open', () => { for (const m of queue.splice(0)) sock.send(JSON.stringify(m)); });
   sock.addEventListener('close', () => { if (!closed) { closed = true; h.onClosed(); } });
@@ -286,6 +289,7 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
     const m = JSON.parse(String(ev.data)) as WorldDown;
     if (m.t === 'room') h.onRoom(m);
     else if (m.t === 'no_room') h.onNoRoom(m.code);
+    else if (m.t === 'rooms') h.onRooms(m.rooms);
     else if (m.t === 'full') h.onNoRoom('');
     else if (m.t === 'hello') {
       const next = new Online(sock, make);
@@ -297,6 +301,7 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
   return {
     join: (name, skin, how) => send({ t: 'join', name, skin, ...how }),
     start: () => send({ t: 'start' }),
+    list: () => send({ t: 'list' }),
     close: () => { closed = true; sock.close(); },
   };
 }

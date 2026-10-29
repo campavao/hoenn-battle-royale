@@ -18,7 +18,7 @@ import { Host } from './host';
 import { makeRoom } from './room';
 import { cleanBag } from './items';
 import { over } from './over';
-import { HASH_EVERY, type Again, type Member, type SpMsg, type WireFrame, type WorldDown, type WorldUp } from './wire';
+import { HASH_EVERY, type Again, type Listed, type Member, type SpMsg, type WireFrame, type WorldDown, type WorldUp } from './wire';
 
 export interface Link { send(text: string): void; close(): void }
 export interface Session { onText(text: string): void; onClose(): void }
@@ -117,6 +117,7 @@ export class WorldService {
         try { m = JSON.parse(text) as WorldUp; } catch { return; }
         if (!m || typeof m !== 'object') return;
         if (phone) phone.heard = this.opts.now();
+        if (m.t === 'list') { this.send(link, { t: 'rooms', rooms: this.listed() }); return; }
         if (m.t === 'join' && !phone && m.again && typeof m.again === 'object') {
           const back = this.back(m.again, link);
           if (back) { phone = back; return; }
@@ -258,6 +259,17 @@ export class WorldService {
   }
 
   /** The room a join asks for: its code, a new one of its own (HOST), or quick play's. */
+  /** LOBBIES: every hosted room with somebody in it (a quick room is QUICK PLAY's own). */
+  private listed(): Listed[] {
+    const out: Listed[] = [];
+    for (const r of this.rooms.values()) {
+      const owner = r.members.get(r.owner);
+      if (r.quick || !owner) continue;
+      out.push({ code: r.code, host: owner.name, skin: owner.skin, players: r.members.size, seats: ROOM_MAX, playing: !!r.host });
+    }
+    return out;
+  }
+
   private pick(m: Extract<WorldUp, { t: 'join' }>): Lobby | null {
     if (typeof m.code === 'string' && m.code) {
       const r = this.rooms.get(m.code.toUpperCase());

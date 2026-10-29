@@ -3509,6 +3509,10 @@ var WorldService = class {
         }
         if (!m || typeof m !== "object") return;
         if (phone) phone.heard = this.opts.now();
+        if (m.t === "list") {
+          this.send(link, { t: "rooms", rooms: this.listed() });
+          return;
+        }
         if (m.t === "join" && !phone && m.again && typeof m.again === "object") {
           const back = this.back(m.again, link);
           if (back) {
@@ -3650,6 +3654,16 @@ var WorldService = class {
     return p;
   }
   /** The room a join asks for: its code, a new one of its own (HOST), or quick play's. */
+  /** LOBBIES: every hosted room with somebody in it (a quick room is QUICK PLAY's own). */
+  listed() {
+    const out = [];
+    for (const r of this.rooms.values()) {
+      const owner = r.members.get(r.owner);
+      if (r.quick || !owner) continue;
+      out.push({ code: r.code, host: owner.name, skin: owner.skin, players: r.members.size, seats: ROOM_MAX, playing: !!r.host });
+    }
+    return out;
+  }
   pick(m) {
     if (typeof m.code === "string" && m.code) {
       const r = this.rooms.get(m.code.toUpperCase());

@@ -39,6 +39,23 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it('LOBBIES lists the hosted rooms, not quick play\'s, to anybody who asks', () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
+    try {
+      const a = phone(), q = phone(), c = phone();
+      svc.open(a.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 3, host: true }));
+      svc.open(q.link).onText(JSON.stringify({ t: 'join', name: 'quinn', skin: 0 }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      const s = svc.open(c.link);
+      s.onText(JSON.stringify({ t: 'list' }));
+      expect(c.got.at(-1)).toEqual({ t: 'rooms', rooms: [{ code, host: 'ALICE', skin: 3, players: 1, seats: expect.any(Number), playing: false }] });
+      // And in by its code.
+      s.onText(JSON.stringify({ t: 'join', name: 'carl', skin: 0, code }));
+      expect(c.got.at(-1)).toMatchObject({ t: 'room', code, members: [{ name: 'ALICE' }, { name: 'CARL' }] });
+    } finally {
+      svc.stop();
+    }
+  });
   it('a reload within a minute is the same trainer; later, it watches', () => {
     // Bots on the map keep the match going after bob is the last trainer left.
     let t = 0;

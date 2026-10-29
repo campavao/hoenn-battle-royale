@@ -7,14 +7,14 @@
 import { Stage, type DrawnScreen } from '../src/ui/stage';
 import { menuScreen, roomScreen, type RoomModel, type RowSpec } from '../src/ui/screens';
 import { CODE_ENTRY, NAME_ENTRY, entryScreen, newEntry } from '../src/ui/entry';
-import { HOWTO_ROW, countdown, isRoomCode, playRows, type LobbyAction } from '../src/match/lobby';
+import { HOWTO_ROW, countdown, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction } from '../src/match/lobby';
 import { howToScreen } from '../src/ui/howto';
 import { howToRead, markHowToRead } from '../src/ui/howto-due';
 import { SKINS, cleanName, loadCareer, saveProfile, skinUnlocked } from '../src/match/career';
 import { LINES } from '../src/bots/lines';
 import { lookScreen, statsScreen, trainerScreen } from '../src/ui/profile';
 import type { TallyNames } from '../src/match/tally';
-import type { Member } from './shared/wire';
+import type { Listed, Member } from './shared/wire';
 
 /** The room as the relay last said it is (wire.ts's `room`). */
 export interface RoomInfo { code: string; quick: boolean; you: number; owner: number; members: Member[]; playing: boolean; startsIn?: number }
@@ -25,6 +25,8 @@ export interface LobbyHooks {
   start(): void;
   /** Out of the room, back to the menu. */
   leave(): void;
+  /** LOBBIES: ask the relay for its hosted rooms (answered through `listed`). */
+  list(): void;
   /** Species and move names for MY STATS: the player's ROM's. */
   names: TallyNames;
 }
@@ -42,6 +44,8 @@ export class Lobby {
   private heardAt = 0;
   private note = '';
   private ticker: ReturnType<typeof setInterval> | null = null;
+  /** LOBBIES' rooms, as the relay last listed them. */
+  private rooms: Listed[] = [];
 
   constructor(private readonly hooks: LobbyHooks) {
     const $ = (id: string) => document.getElementById(id) as HTMLElement;
@@ -66,6 +70,12 @@ export class Lobby {
     this.open();
   }
 
+  /** The relay's list of hosted rooms (LOBBIES). */
+  listed(rooms: Listed[]): void {
+    this.rooms = rooms;
+    if (this.stage.current === this.lobbies) this.stage.redraw();
+  }
+
   /** Back to the room after a match: what the relay last said of it. */
   backToRoom(): void {
     if (this.room) { this.stage.show(this.roomShown); this.open(); }
@@ -84,8 +94,12 @@ export class Lobby {
   }
 
   private open(): void {
-    // A quick room's count goes down a second at a time.
-    this.ticker ??= setInterval(() => { if (this.room?.startsIn !== undefined) this.stage.redraw(); }, 1000);
+    // A quick room's count goes down a second at a time; LOBBIES asks again every three.
+    let n = 0;
+    this.ticker ??= setInterval(() => {
+      if (this.room?.startsIn !== undefined) this.stage.redraw();
+      if (this.stage.current === this.lobbies && ++n % 3 === 0) this.hooks.list();
+    }, 1000);
   }
 
   private press(a: LobbyAction): void {
@@ -94,6 +108,8 @@ export class Lobby {
     else if (a.kind === 'code') this.stage.push(this.codeEntry());
     else if (a.kind === 'name') this.stage.push(this.nameEntry());
     else if (a.kind === 'howto') this.stage.push(this.howTo);
+    else if (a.kind === 'lobbies') { this.hooks.list(); this.stage.push(this.lobbies); }
+    else if (a.kind === 'join') this.hooks.join({ code: a.code });
     else if (a.kind === 'skin' || a.kind === 'look') { this.browsed = null; this.stage.push(this.look); }
     else if (a.kind === 'mystats') this.stage.push(this.myStats);
   }
@@ -114,6 +130,28 @@ export class Lobby {
       onBack: () => this.stage.pop(),
     };
   });
+
+  /** LOBBIES (the live game's, POK-320): the hosted rooms, one row each; a match under
+   *  way is joined to watch it until the next. HOST makes one of my own. */
+  private readonly lobbies: DrawnScreen = menuScreen(() => ({
+    title: 'LOBBIES',
+    rows: roomRows(this.rooms.map((r) => ({ code: r.code, host: r.host, skin: String(r.skin), players: r.players, seats: r.seats, pass: false, full: r.players >= r.seats })))
+      .map((row, i): RowSpec => ({
+        label: row.label,
+        detail: `${row.detail ?? ''}${this.rooms[i].playing ? ' · PLAYING' : ''}`,
+        disabled: row.disabled,
+        id: `lobbies-${this.rooms[i].code}`,
+        onPress: () => this.press(row.action),
+      })),
+    rowsId: 'lobby-rooms',
+    note: this.rooms.length === 0 ? emptyNote(true) : '',
+    noteId: 'lobby-rooms-note',
+    buttons: [
+      { label: 'HOST', id: 'lobbies-host', onPress: () => this.press({ kind: 'host' }) },
+      { label: 'BACK', id: 'lobbies-back', onPress: () => this.stage.pop() },
+    ],
+    onBack: () => this.stage.pop(),
+  }));
 
   /** The wardrobe strip being looked at: a locked one is looked at, not worn. */
   private browsed: number | null = null;
@@ -150,7 +188,7 @@ export class Lobby {
     title: 'HOENN BATTLE ROYALE',
     // The ways in the world has: no LOBBIES list or daily game here yet.
     rows: playRows('up')
-      .filter((r) => r.action.kind === 'quick' || r.action.kind === 'host' || r.action.kind === 'code')
+      .filter((r) => r.action.kind === 'quick' || r.action.kind === 'host' || r.action.kind === 'lobbies' || r.action.kind === 'code')
       .concat(HOWTO_ROW)
       .map((r): RowSpec => ({ label: r.label, id: r.id, art: r.art, onPress: () => this.press(r.action), ...(r.id === HOWTO_ROW.id && !howToRead(localStorage) ? { badge: true } : {}) })),
     rowsId: 'lobby-rows',
