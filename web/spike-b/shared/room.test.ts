@@ -953,6 +953,9 @@ describe('a bag in a bot\'s way', () => {
     expect(bag.bag).toEqual({ items: [], money: 0, mons: [{ species: 25, level: 9 }] });
     expect(room.actor(1)!.loot).toEqual({ items: [{ id: 13, n: 2 }], money: 300 });
     expect(room.actor(1)!.m.spot.x).toBeGreaterThan(11);
+    // A new round's bag starts empty of the old round's pickings (review of batch 12).
+    (room as unknown as { newRound(n: number): void }).newRound(1);
+    expect(room.actor(1)!.loot).toBeUndefined();
   });
 });
 
