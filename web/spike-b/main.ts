@@ -32,6 +32,7 @@ import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattle
 import { groundCount, isTm } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
 import { GOLD } from '../src/match/events';
+import hiddenJson from './data/hidden.json';
 import { RomArt } from './romart';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
@@ -187,6 +188,7 @@ addEventListener('keydown', (e) => {
   if (intro()) return;
   if (e.key === 'v' || e.key === 'V') { toggleSpectate(); return; }
   if ((e.key === 'm' || e.key === 'M' || e.key === 'Escape') && !e.repeat) { void openMenu(); return; }
+  if ((e.key === 'f' || e.key === 'F') && !e.repeat) { itemfinder(); return; }
   const k = KEYMAP[e.key];
   if (!k) return;
   e.preventDefault();
@@ -294,7 +296,7 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
 // and waits for the ROM if it is still booting.
 const foundEl = document.getElementById('found')!;
 let foundUntil = 0;
-const toGive: ({ key: number; item: number; gift?: boolean } | { key: number; bag: Bag; name: string })[] = [];
+const toGive: ({ key: number; item: number; gift?: boolean; hidden?: string } | { key: number; bag: Bag; name: string })[] = [];
 let giving = false;
 
 function say(text: string): void {
@@ -312,7 +314,7 @@ function giveNext(): void {
     openBag(next.key, next.bag, next.name).catch((e) => console.warn('spike bag failed', e)).finally(() => { giving = false; giveNext(); });
     return;
   }
-  const { key, item, gift } = next;
+  const { key, item, gift, hidden } = next;
   // A TM is taught and a held item given, there and then, on the ROM's own screens.
   const screen = isTm(item) || GIFTS.includes(item);
   if (screen) { if (gift) say(`A gift: ${name(item)}!`); romUp = true; }
@@ -323,7 +325,8 @@ function giveNext(): void {
     // What the ROM made of it (br_items.c's Apply), not what was on the ground.
     if (!got) {
       say(`No room in the bag for ${name(item)}.`);
-      link.drop(key); // it stays where it lay
+      if (hidden) dug.delete(hidden); // still buried
+      else link.drop(key); // it stays where it lay
     } else if (screen) {
       const kept = got.items.some((g) => g.id === item);
       if (kept) say(`${name(item)} went in the BAG.`);
@@ -999,6 +1002,51 @@ function matchOver(): void {
   endingAt = performance.now();
 }
 document.getElementById('menu')!.addEventListener('click', () => { void openMenu(); });
+document.getElementById('find')!.addEventListener('click', () => itemfinder());
+
+// ---- Hoenn's hidden items and the ITEMFINDER (br_levels.c, Cam 2026-10-18) -----------
+
+/** Every map's hidden items (tools/br/spike-hidden.py): still buried in a match, and each
+ *  trainer can dig each one up once, as each ROM's own flag lets them. */
+const HIDDEN = new Map((hiddenJson as [string, number, number, number][]).map(([m, x, y, item]) => [`${m}:${x}:${y}`, { map: m, x, y, item }]));
+/** What I dug up this round. */
+const dug = new Set<string>();
+let dugRound = -1;
+function digReady(): boolean {
+  const me = link.mine();
+  if (link.room.results.round !== dugRound) { dug.clear(); dugRound = link.room.results.round; }
+  return !!me && !!rom && !isOut && !spectating && !battle && !swapping && !romUp && !asking && !intro() && !me.battling && !me.m.action;
+}
+/** A pressed at a buried item's cell: it is mine. */
+function dig(): void {
+  const me = link.mine();
+  if (!me || !digReady() || frame < calmUntil) return;
+  const d = ({ 1: [0, 1], 2: [0, -1], 3: [-1, 0], 4: [1, 0] } as Record<number, number[]>)[me.m.facing];
+  const k = `${me.m.spot.map}:${me.m.spot.x + d[0]}:${me.m.spot.y + d[1]}`;
+  const h = HIDDEN.get(k);
+  if (!h || dug.has(k)) return;
+  dug.add(k);
+  toGive.push({ key: 0, item: h.item, hidden: k });
+  giveNext();
+}
+/** The ITEMFINDER: the nearest buried item on this map within its reach (x 7, y 5, the
+ *  screen Emerald's searches), as which way and how far; or no response. */
+function itemfinder(): void {
+  const me = link.mine();
+  if (!me || !digReady()) return;
+  let best: { x: number; y: number } | null = null;
+  for (const h of HIDDEN.values()) {
+    if (h.map !== me.m.spot.map || dug.has(`${h.map}:${h.x}:${h.y}`)) continue;
+    const dx = h.x - me.m.spot.x, dy = h.y - me.m.spot.y;
+    if (Math.abs(dx) > 7 || Math.abs(dy) > 5) continue;
+    if (!best || Math.abs(dx) + Math.abs(dy) < Math.abs(best.x) + Math.abs(best.y)) best = { x: dx, y: dy };
+  }
+  if (!best) { say("Nope! There's no response."); return; }
+  const n = Math.abs(best.x) + Math.abs(best.y);
+  if (n <= 1) { say('The ITEMFINDER is shaking! It is right here: face it and press A.'); return; }
+  const way = (best.y < 0 ? '↑' : best.y > 0 ? '↓' : '') + (best.x < 0 ? '←' : best.x > 0 ? '→' : '');
+  say(`The ITEMFINDER responds! Something is buried ${way}, ${n} steps away.`);
+}
 
 // ---- the HUD (the live match's corner and ticker: br_hud.c, ticker.ts) -----------------
 
@@ -1688,6 +1736,7 @@ function loop(now: number): void {
     remember();
     gymFrame();
     hudFrame();
+    if (pressed.has('a')) dig();
     for (const k of pressed) watch.key(k);
     pressed.clear();
   }
