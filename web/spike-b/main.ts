@@ -1037,6 +1037,26 @@ function matchOver(): void {
 document.getElementById('menu')!.addEventListener('click', () => { void openMenu(); });
 document.getElementById('find')!.addEventListener('click', () => itemfinder());
 
+// Sound (the live match's MUTE, its own key): the ROM's, heard while its screen is the
+// one shown -- a battle, the team screen, a menu, the parade. Its field runs hidden under
+// ours between those, and its route music would come through in snatches.
+const MUTE_KEY = 'hbr:muted';
+let muted = false;
+try { muted = localStorage.getItem(MUTE_KEY) === '1'; } catch { /* private window: on */ }
+const soundBtn = document.getElementById('sound')!;
+let heard = -1;
+function soundFrame(): void {
+  const v = !muted && battleEl.classList.contains('on') ? 100 : 0;
+  if (rom && v !== heard) { rom.emu.setVolume(v); heard = v; }
+}
+function paintSound(): void { soundBtn.textContent = `Sound: ${muted ? 'off' : 'on'}`; }
+soundBtn.addEventListener('click', () => {
+  muted = !muted;
+  try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); } catch { /* not kept */ }
+  paintSound();
+});
+paintSound();
+
 // ---- Hoenn's hidden items and the ITEMFINDER (br_levels.c, Cam 2026-10-18) -----------
 
 /** Every map's hidden items (tools/br/spike-hidden.py): still buried in a match, and each
@@ -1773,6 +1793,7 @@ function loop(now: number): void {
     for (const e of link.frame(myBits())) startFor(e);
     roundFrame();
     fieldFrame();
+    soundFrame();
     fogFrame();
     foeFrame();
     remember();
