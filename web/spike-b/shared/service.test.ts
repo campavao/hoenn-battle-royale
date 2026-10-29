@@ -118,6 +118,19 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it("a trainer's career rides their seat, whole numbers or nothing", () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
+    try {
+      const a = phone(), g = phone();
+      svc.open(a.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true, rec: { wins: 3, played: 9, best: 1 } }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      svc.open(g.link).onText(JSON.stringify({ t: 'join', name: 'gus', skin: 0, code, rec: { wins: 'lots', played: 2 } }));
+      expect(g.got.at(-1)).toMatchObject({ members: [{ name: 'ALICE', rec: { wins: 3, played: 9, best: 1 } }, { name: 'GUS' }] });
+      expect((g.got.at(-1) as unknown as { members: { rec?: unknown }[] }).members[1].rec).toBeUndefined();
+    } finally {
+      svc.stop();
+    }
+  });
   it('a reload within a minute is the same trainer; later, it watches', () => {
     // Bots on the map keep the match going after bob is the last trainer left.
     let t = 0;

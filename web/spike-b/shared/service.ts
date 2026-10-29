@@ -15,6 +15,15 @@ import type { WorldMap } from '../../src/bots/world';
 import type { PatchTable } from '../../src/bots/patches';
 import { CODE_ALPHABET, CODE_LENGTH } from '../../src/match/lobby';
 
+/** A career off the wire, whole numbers or nothing: what a seat's card shows. */
+function recOf(r: unknown): { rec?: CardRecord } {
+  if (!r || typeof r !== 'object') return {};
+  const n = (v: unknown) => (Number.isInteger(v) && (v as number) >= 0 && (v as number) < 1e6 ? (v as number) : undefined);
+  const { wins, played, best } = r as { [k: string]: unknown };
+  const w = n(wins), p = n(played), b = n(best);
+  return w === undefined || p === undefined ? {} : { rec: { wins: w, played: p, ...(b ? { best: b } : {}) } };
+}
+
 /** A passcode: four of the room codes' letters (ui/entry.ts PASS_ENTRY). */
 const isPass = (s: string) => s.length === 4 && [...s.toUpperCase()].every((c) => CODE_ALPHABET.includes(c));
 import { Host } from './host';
@@ -22,7 +31,7 @@ import { RING_PHASE, makeRoom } from './room';
 import { FOG_STEPS, MAX_STEPS, SAFARI_STEPS } from '../../src/match/room';
 import { cleanBag } from './items';
 import { over } from './over';
-import { HASH_EVERY, type Again, type Listed, type Member, type Settings, type SpMsg, type WireFrame, type WorldDown, type WorldUp } from './wire';
+import { HASH_EVERY, type Again, type CardRecord, type Listed, type Member, type Settings, type SpMsg, type WireFrame, type WorldDown, type WorldUp } from './wire';
 
 export interface Link { send(text: string): void; close(): void }
 export interface Session { onText(text: string): void; onClose(): void }
@@ -79,6 +88,8 @@ interface Phone {
   away: number;
   /** The trainer this one watches, 0 for nobody. */
   watching: number;
+  /** Their career, as their page said it (a seat's card). */
+  rec?: CardRecord;
   /** The host took them out: the socket's next join starts afresh. */
   kicked?: boolean;
 }
@@ -141,7 +152,7 @@ export class WorldService {
           const name = String(m.name ?? '').toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim().slice(0, 10);
           const skin = Number.isInteger(m.skin) && m.skin >= 0 && m.skin < 16 ? m.skin : 0;
           const id = this.nextId++;
-          phone = { id, name: name || `TRAINER ${id - FIRST_ID + 1}`.slice(0, 10), skin, link, heard: this.opts.now(), synced: -Infinity, key: Math.random().toString(36).slice(2, 12), away: 0, watching: 0 };
+          phone = { id, name: name || `TRAINER ${id - FIRST_ID + 1}`.slice(0, 10), skin, link, heard: this.opts.now(), synced: -Infinity, key: Math.random().toString(36).slice(2, 12), away: 0, watching: 0, ...recOf(m.rec) };
           room.members.set(id, phone);
           this.where.set(id, room);
           if (!room.owner) room.owner = id;
@@ -402,7 +413,7 @@ export class WorldService {
   }
 
   private roster(room: Lobby): void {
-    const members: Member[] = [...room.members.values()].filter((p) => !p.away).map((p) => ({ id: p.id, name: p.name, skin: p.skin }));
+    const members: Member[] = [...room.members.values()].filter((p) => !p.away).map((p) => ({ id: p.id, name: p.name, skin: p.skin, ...(p.rec ? { rec: p.rec } : {}) }));
     const now = this.opts.now();
     for (const p of room.members.values()) {
       this.send(p.link, {

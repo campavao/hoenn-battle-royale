@@ -12,7 +12,7 @@ import { howToScreen } from '../src/ui/howto';
 import { howToRead, markHowToRead } from '../src/ui/howto-due';
 import { SKINS, cleanName, loadCareer, saveProfile, skinUnlocked } from '../src/match/career';
 import { LINES } from '../src/bots/lines';
-import { lookScreen, statsScreen, trainerScreen } from '../src/ui/profile';
+import { cardFields, lookScreen, statsScreen, trainerScreen } from '../src/ui/profile';
 import type { TallyNames } from '../src/match/tally';
 import { feedbackScreen, type FeedbackState } from '../src/ui/feedback';
 import { cleanNote, sendFeedback } from '../src/net/feedback';
@@ -331,7 +331,7 @@ export class Lobby {
       ] : null,
       card: (() => {
         const m = this.card === null ? undefined : r.members.find((x) => x.id === this.card);
-        return m ? { seat: m.id, skin: m.skin, lines: [{ label: 'NAME', value: m.name }], canKick: isHost && !r.playing && m.id !== r.you } : null;
+        return m ? { seat: m.id, skin: m.skin, lines: [{ label: 'NAME', value: m.name }, ...(m.rec ? cardFields({ name: m.name, skin: m.skin, wins: m.rec.wins, played: m.rec.played, best: m.rec.best }) : [])], canKick: isHost && !r.playing && m.id !== r.you } : null;
       })(),
       onStart: () => this.hooks.start(),
       onLeave: () => this.hooks.leave(),

@@ -7,7 +7,7 @@ import type { Bag, RoomState } from './room';
 export type WorldUp =
   /** In: who I am, and which room -- a code, a new one of my own (`host`), or, with
    *  neither, quick play. Answered by `room` (or `no_room`, `full`). */
-  | { t: 'join'; name: string; skin: number; code?: string; host?: boolean; again?: Again; pass?: string }
+  | { t: 'join'; name: string; skin: number; code?: string; host?: boolean; again?: Again; pass?: string; rec?: CardRecord }
   /** START (the room's host): the match begins for everybody in the room. */
   | { t: 'start' }
   /** The host's settings for the room's next match (the live room's options). */
@@ -59,7 +59,10 @@ export type WireFrame = Frame & { a?: number; h?: number };
 export interface Again { code: string; id: number; key: string }
 
 /** A trainer in a room, as the roster shows them. */
-export interface Member { id: number; name: string; skin: number }
+export interface Member { id: number; name: string; skin: number; rec?: CardRecord }
+
+/** A trainer's career as their device keeps it (career.ts), for the card on their seat. */
+export interface CardRecord { wins: number; played: number; best?: number }
 
 /** What the host sets for a match (the live room's options): bots in it or none, how
  *  long a ring phase lasts (FOG), and the Safari it opens with (0: none). */

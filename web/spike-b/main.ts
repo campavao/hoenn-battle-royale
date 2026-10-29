@@ -27,7 +27,7 @@ import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink } from './net';
 import { over } from './shared/over';
 import { Lobby, me, type RoomInfo } from './lobby';
-import { recordMatch } from '../src/match/career';
+import { loadCareer, recordMatch } from '../src/match/career';
 import type { MatchTally } from '../src/match/tally';
 import { tallySince } from './carry';
 import { moveInfo, type Rom as MoveTables } from '../src/battle/movebook';
@@ -2028,7 +2028,7 @@ async function boot(): Promise<void> {
       onClosed: () => { matchOn = false; lobby!.menu('Lost the relay. Reload to play again.'); },
     });
     lobby = new Lobby({
-      join: (how) => sock.join(me().name, me().skin, how),
+      join: (how) => { const c = loadCareer(); sock.join(me().name, me().skin, { ...how, rec: { wins: c.wins, played: c.matches, ...(c.best ? { best: c.best } : {}) } }); },
       start: () => sock.start(),
       set: (set) => sock.set(set),
       kick: (id) => sock.kick(id),

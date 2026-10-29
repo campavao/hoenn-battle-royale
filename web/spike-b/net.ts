@@ -17,7 +17,7 @@ import type { PatchTable } from '../src/bots/patches';
 import { tick } from './sim';
 import { Host, play } from './shared/host';
 import { keysOf, makeRoom, type Actor, type Bag, type Room, type RoomEvent } from './shared/room';
-import type { Again, Listed, Settings, SpMsg, WireFrame, WorldDown, WorldUp } from './shared/wire';
+import type { Again, CardRecord, Listed, Settings, SpMsg, WireFrame, WorldDown, WorldUp } from './shared/wire';
 
 export interface WorldLink {
   readonly room: Room;
@@ -255,7 +255,7 @@ class Online implements WorldLink {
  *  in them. `onMatch` hands over the match's link each time one starts for me (or I come
  *  into one under way, to watch). */
 export interface WorldSocket {
-  join(name: string, skin: number, how: { code?: string; host?: boolean; again?: Again; pass?: string }): void;
+  join(name: string, skin: number, how: { code?: string; host?: boolean; again?: Again; pass?: string; rec?: CardRecord }): void;
   start(): void;
   /** LOBBIES: ask for the hosted rooms (`onRooms`). */
   list(): void;

@@ -3473,6 +3473,13 @@ function over(room) {
 var HASH_EVERY = 60;
 
 // web/spike-b/shared/service.ts
+function recOf(r) {
+  if (!r || typeof r !== "object") return {};
+  const n = (v) => Number.isInteger(v) && v >= 0 && v < 1e6 ? v : void 0;
+  const { wins, played, best } = r;
+  const w = n(wins), p = n(played), b = n(best);
+  return w === void 0 || p === void 0 ? {} : { rec: { wins: w, played: p, ...b ? { best: b } : {} } };
+}
 var isPass = (s) => s.length === 4 && [...s.toUpperCase()].every((c) => CODE_ALPHABET.includes(c));
 var FRAME_MS = 1e3 / 60;
 var QUIET_MS = 12e4;
@@ -3545,7 +3552,7 @@ var WorldService = class {
           const name = String(m.name ?? "").toUpperCase().replace(/[^A-Z0-9 ]/g, "").trim().slice(0, 10);
           const skin = Number.isInteger(m.skin) && m.skin >= 0 && m.skin < 16 ? m.skin : 0;
           const id = this.nextId++;
-          phone = { id, name: name || `TRAINER ${id - FIRST_ID + 1}`.slice(0, 10), skin, link, heard: this.opts.now(), synced: -Infinity, key: Math.random().toString(36).slice(2, 12), away: 0, watching: 0 };
+          phone = { id, name: name || `TRAINER ${id - FIRST_ID + 1}`.slice(0, 10), skin, link, heard: this.opts.now(), synced: -Infinity, key: Math.random().toString(36).slice(2, 12), away: 0, watching: 0, ...recOf(m.rec) };
           room2.members.set(id, phone);
           this.where.set(id, room2);
           if (!room2.owner) room2.owner = id;
@@ -3794,7 +3801,7 @@ var WorldService = class {
     this.send(to.link, { t: "eyes", n });
   }
   roster(room) {
-    const members = [...room.members.values()].filter((p) => !p.away).map((p) => ({ id: p.id, name: p.name, skin: p.skin }));
+    const members = [...room.members.values()].filter((p) => !p.away).map((p) => ({ id: p.id, name: p.name, skin: p.skin, ...p.rec ? { rec: p.rec } : {} }));
     const now = this.opts.now();
     for (const p of room.members.values()) {
       this.send(p.link, {
