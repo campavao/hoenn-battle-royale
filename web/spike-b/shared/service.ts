@@ -73,7 +73,7 @@ export class WorldService {
           if (!Number.isInteger(m.s) || m.s < 1 || !Array.isArray(m.k) || m.k.length > 120) return;
           this.host.input(id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
         } else if (m.t === 'end') {
-          this.host.end(id, m.fled === true);
+          this.host.end(id, m.fled === true, m.won === true);
         } else if (m.t === 'out') {
           this.host.out(id, cleanBag(m.bag) ?? undefined, Number.isInteger(m.by) && m.by! > 0 ? m.by : undefined, m.wild === true);
         } else if (m.t === 'drop') {

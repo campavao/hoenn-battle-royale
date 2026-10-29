@@ -10,7 +10,7 @@ export type WorldUp =
   /** My keys for frames `s`, `s`+1, ... (numbered from 1, never reset). */
   | { t: 'in'; s: number; k: number[] }
   /** My battle is over (`fled`: it never got going, or was run from). */
-  | { t: 'end'; fled?: boolean }
+  | { t: 'end'; fled?: boolean; won?: boolean }
   /** The ball or bag `k` would not go in my bag: put it back (a bag holding `rest`). */
   | { t: 'drop'; k: number; rest?: Bag }
   /** My team is down: take my trainer off the map, my bag where I stood; I keep watching.

@@ -185,7 +185,7 @@ const battleNote = document.getElementById('battle-note')!;
 const gbaCanvas = document.getElementById('gba') as HTMLCanvasElement;
 let rom: RomBattles | null = null;
 let artMs = 0;
-let battle: { foe: Actor | null; shownAt: number; foeGone?: boolean; heardAt?: number } | null = null;
+let battle: { foe: Actor | null; shownAt: number; foeGone?: boolean; heardAt?: number; round: number } | null = null;
 /** The ROM has the screen for a dropped bag's team (rom.team). */
 let swapping = false;
 let calmUntil = 0;
@@ -196,7 +196,7 @@ const handoff: number[] = []; // ms from the trigger to the ROM's first battle f
  *  screen back when it is over. */
 function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>): void {
   held.clear();
-  battle = { foe, shownAt: performance.now() };
+  battle = { foe, shownAt: performance.now(), round: link.room.results.round };
   if (!rom) {
     battleEl.classList.add('on');
     battleNote.textContent = 'The game is still loading. Try again in a moment.';
@@ -417,7 +417,10 @@ function endBattle(r: Fought | null): void {
   // A fight with a trainer that never got going, or was run from (a forfeit): we keep
   // apart a while, as the match's fleer does, or the two would engage again at once.
   const duel = !!battle?.foe && !battle.foe.bot;
-  link.end(duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f)));
+  // A fight that ran over into a new round was the old round's: it neither beats a bot
+  // nor puts anybody out of this one (the new round's fresh team is already on its way).
+  const stale = !!battle && battle.round !== link.room.results.round;
+  link.end(duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f)), !stale && !!battle?.foe?.bot && !!r?.ok && r.outcome === 1);
   const wild = battle && !battle.foe;
   const by = battle?.foe?.id;
   battle = null;
@@ -428,7 +431,7 @@ function endBattle(r: Fought | null): void {
   if (r && !r.ok) lastResult = 'last battle: the ROM did not start it';
   else if (r) lastResult = `last battle: ${wild ? `wild #${r.species} Lv${r.level}, ` : ''}${OUTCOME[r.outcome] ?? r.outcome}`;
   // A whiteout is the end of a trainer's match (Kanto's rules, DESIGN.md §10).
-  if (r?.ok && (r.outcome === 2 || r.outcome === 3)) goOut(r.outcome === 2 ? 'Your team lost the battle.' : 'Your team went down with theirs.', by, !!wild);
+  if (!stale && r?.ok && (r.outcome === 2 || r.outcome === 3)) goOut(r.outcome === 2 ? 'Your team lost the battle.' : 'Your team went down with theirs.', by, !!wild);
 }
 
 /** How long a trainer the room says is no longer fighting me may go quiet before the

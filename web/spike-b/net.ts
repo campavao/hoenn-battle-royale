@@ -27,8 +27,8 @@ export interface WorldLink {
   frame(bits: number): RoomEvent[];
   /** My trainer as it is drawn (none for the frame before the room has me). */
   mine(): Actor | undefined;
-  /** My battle is over (`fled`: it never got going, or was run from). */
-  end(fled?: boolean): void;
+  /** My battle is over (`fled`: it never got going, or was run from; `won`: I beat a bot). */
+  end(fled?: boolean, won?: boolean): void;
   /** The ball `key` would not go in my bag: put it back. */
   drop(key: number, rest?: Bag): void;
   /** My team is down: off the map. `by` who beat me, `wild` a wild POKeMON did. */
@@ -57,7 +57,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
       return host.advance().events.filter((e) => e.id === me);
     },
     mine: () => host.room.actor(me),
-    end: (fled) => host.end(me, fled),
+    end: (fled, won) => host.end(me, fled, won),
     drop: (key, rest) => host.drop(me, key, rest),
     out: (bag, by, wild) => host.out(me, bag, by, wild),
     bt: () => undefined,
@@ -181,7 +181,7 @@ class Online implements WorldLink {
     return (this.predicted = a);
   }
 
-  end(fled = false): void { this.send(fled ? { t: 'end', fled } : { t: 'end' }); }
+  end(fled = false, won = false): void { this.send({ t: 'end', ...(fled ? { fled } : {}), ...(won ? { won } : {}) }); }
 
   drop(key: number, rest?: Bag): void { this.send({ t: 'drop', k: key, rest }); }
 

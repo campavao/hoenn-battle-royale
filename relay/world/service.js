@@ -1167,6 +1167,7 @@ var BACK = { 1: 2, 2: 1, 3: 4, 4: 3 };
 var SPILL_KEY = 1 << 20;
 var GROUND_PER_MAP = 6;
 var REGROW = 60 * 90;
+var AFTER_WIN = 60 * 15;
 var TRUCK = 40;
 var DEALS = /* @__PURE__ */ new Map();
 var REACH = /* @__PURE__ */ new Map();
@@ -1199,17 +1200,18 @@ var Room = class {
   base;
   dealt = null;
   state() {
-    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {} };
+    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}, ...this.epoch ? { epoch: this.epoch } : {} };
   }
   load(s) {
     this.tick = s.tick;
     this.ringPhase = s.ringPhase ?? RING_PHASE;
+    this.epoch = s.epoch ?? 0;
     this.actors = structuredClone(s.actors);
     this.taken = new Map(s.taken);
     this.picked = new Map(s.picked ?? []);
     this.spills = new Map(structuredClone(s.spills ?? []).map((b) => [b.key, b]));
     this.bench = structuredClone(s.bench ?? []);
-    this.results = structuredClone(s.results ?? { round: this.ring().round, entrants: [], fallen: [], winner: 0 });
+    this.results = structuredClone(s.results ?? { round: 0, entrants: [], fallen: [], winner: 0 });
   }
   actor(id) {
     return this.actors.find((a) => a.id === id);
@@ -1241,13 +1243,8 @@ var Room = class {
       if (cmd.c === "leave") this.bench = this.bench.filter((b) => b.id !== cmd.id);
       if (!a || a.bot) return;
       if (cmd.c === "out") this.bench.push({ id: a.id, name: a.name, skin: a.skin });
-      const r = this.results;
-      if (r.winner || !r.entrants.some(([id]) => id === a.id) || r.fallen.some((f) => f.id === a.id)) return;
-      if (cmd.c === "leave") r.fallen.push({ id: a.id, name: a.name, by: "", left: true });
-      else {
-        const by = cmd.by ? this.actor(cmd.by)?.name ?? this.bench.find((b) => b.id === cmd.by)?.name ?? "" : "";
-        r.fallen.push({ id: a.id, name: a.name, by, ...cmd.wild ? { wild: true } : {} });
-      }
+      if (cmd.c === "leave") this.fall(a, "", { left: true });
+      else this.fall(a, cmd.by ? this.actor(cmd.by)?.name ?? this.bench.find((b) => b.id === cmd.by)?.name ?? "" : "", cmd.wild ? { wild: true } : {});
     } else {
       const a = this.actor(cmd.id);
       if (!a || !a.battling) return;
@@ -1259,7 +1256,13 @@ var Room = class {
         a.shunUntil = this.tick + LOCKOUT;
       }
       const foe = a.foe ? this.actor(a.foe) : void 0;
-      if (foe?.bot) foe.battling = false;
+      if (foe?.bot) {
+        foe.battling = false;
+        if (cmd.won && !foe.beaten) {
+          foe.beaten = true;
+          this.fall(foe, a.name);
+        }
+      }
       a.foe = 0;
     }
   }
@@ -1334,8 +1337,10 @@ var Room = class {
   /** The ring this frame (or at `tick`). */
   ring(tick2 = this.tick) {
     const len = this.ringPhase;
-    const round = Math.floor(tick2 / (RING_STEPS.length * len));
-    const t = tick2 - round * RING_STEPS.length * len;
+    const cycle = RING_STEPS.length * len;
+    const n = Math.floor((tick2 - this.epoch) / cycle);
+    const round = this.results.round + n;
+    const t = tick2 - this.epoch - n * cycle;
     const phase = Math.floor(t / len);
     const { cx, cy, far } = this.centre(round);
     const at = (i) => RING_STEPS[i] === Infinity || RING_STEPS[i] < 0 ? RING_STEPS[i] : RING_STEPS[i] * far;
@@ -1344,6 +1349,8 @@ var Room = class {
   }
   /** Frames a phase lasts: RING_PHASE, or shorter for a solo test (`?ring=` seconds). */
   ringPhase = RING_PHASE;
+  /** The frame this round started on. */
+  epoch = 0;
   centres = /* @__PURE__ */ new Map();
   /** A round's centre: a cell a trainer can stand on, from the seed; and how far the
    *  farthest reachable cell is from it. */
@@ -1397,13 +1404,24 @@ var Room = class {
    *  on the same tile (net.ts). */
   step(ins) {
     this.tick += 1;
-    const ring = this.ring(), was = this.ring(this.tick - 1);
-    if (ring.round !== was.round) this.newRound(ring.round);
-    else if (ring.phase === 1 && was.phase === 0) this.results.entrants = this.actors.filter((a) => !a.bot).map((a) => [a.id, a.name]);
+    const ring = this.ring();
+    const was = this.tick - 1 >= this.epoch ? this.ring(this.tick - 1) : { ...ring, phase: -1 };
     const r = this.results;
+    if (ring.round !== was.round || r.wonAt !== void 0 && this.tick >= r.wonAt + AFTER_WIN) this.newRound(r.round + 1);
+    else if (ring.phase !== was.phase) {
+      if (ring.phase === 1 && !r.entrants.length) r.entrants = this.actors.map((a) => [a.id, a.name]);
+      for (const a of this.actors) {
+        if (!a.bot || a.beaten || a.battling || !this.inFog(a.m.spot, ring)) continue;
+        a.beaten = true;
+        this.fall(a, "");
+      }
+    }
     if (!r.winner && r.entrants.length >= 2) {
       const alive = r.entrants.filter(([id]) => !r.fallen.some((f) => f.id === id));
-      if (alive.length === 1) r.winner = alive[0][0];
+      if (alive.length === 1) {
+        r.winner = alive[0][0];
+        r.wonAt = this.tick;
+      }
     }
     for (const [key, at] of this.taken) if (this.tick - at >= REGROW) this.taken.delete(key);
     const events = [];
@@ -1413,6 +1431,12 @@ var Room = class {
     }
     this.engage(events);
     return events;
+  }
+  /** `a` is out of this round's match (once; nothing after the win). */
+  fall(a, by, how = {}) {
+    const r = this.results;
+    if (r.winner || !r.entrants.some(([id]) => id === a.id) || r.fallen.some((f) => f.id === a.id)) return;
+    r.fallen.push({ id: a.id, name: a.name, by, ...how });
   }
   /** The cells by the truck that no bot stands on: along its row first, nearest first, so
    *  trainers stood side by side facing south do not see each other (and fight the moment
@@ -1441,11 +1465,12 @@ var Room = class {
     });
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
-    for (const a of this.actors) if (a.bot && !a.battling) a.beaten = false;
+    for (const a of this.actors) if (a.bot) a.beaten = false;
     this.taken.clear();
     this.picked.clear();
     this.spills.clear();
     this.results = { round, entrants: [], fallen: [], winner: 0 };
+    this.epoch = this.tick;
   }
   /** Two trainers on one map who see each other fight (br_engage.c's BrEngage_Tick): the
    *  eyeline both ways, BR_SIGHT_RANGE cells, stopped by collision (bots/sight.ts). Only
@@ -1519,7 +1544,7 @@ var Room = class {
           this.picked.set(b.key, a.id);
           events.push({ type: "bag", tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name });
         } else if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
-          a.battling = foe.battling = foe.beaten = true;
+          a.battling = foe.battling = true;
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
           events.push({ type: "fight", tick: this.tick, id: a.id, foe: foe.id });
@@ -1603,6 +1628,8 @@ var Room = class {
     const r = this.results;
     mix2(r.round);
     mix2(r.winner);
+    mix2(r.wonAt ?? 0);
+    mix2(this.epoch);
     for (const [id] of r.entrants) mix2(id);
     for (const f of r.fallen) {
       mix2(f.id);
@@ -1774,8 +1801,8 @@ var Host = class {
     }
   }
   /** The phone's battle is over: its trainer (and the bot) walk again. */
-  end(id, fled = false) {
-    if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: "end", id, ...fled ? { fled: true } : {} });
+  end(id, fled = false, won = false) {
+    if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: "end", id, ...fled ? { fled: true } : {}, ...won ? { won: true } : {} });
   }
   /** The ball `key` would not go in the phone's bag: back on the ground. A bag goes back
    *  with what did not fit, never more than it held. */
@@ -1916,7 +1943,7 @@ var WorldService = class {
           if (!Number.isInteger(m.s) || m.s < 1 || !Array.isArray(m.k) || m.k.length > 120) return;
           this.host.input(id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
         } else if (m.t === "end") {
-          this.host.end(id, m.fled === true);
+          this.host.end(id, m.fled === true, m.won === true);
         } else if (m.t === "out") {
           this.host.out(id, cleanBag(m.bag) ?? void 0, Number.isInteger(m.by) && m.by > 0 ? m.by : void 0, m.wild === true);
         } else if (m.t === "drop") {
