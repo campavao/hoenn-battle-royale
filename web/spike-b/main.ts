@@ -443,7 +443,14 @@ async function openBag(key: number, bag: Bag, who: string): Promise<void> {
  *  I stand, with this world's fog laid over it (ringmap.ts). */
 async function openMenu(): Promise<void> {
   if (!rom || isOut || battle || swapping || asking || spectating) return;
-  const c = await ask('MENU', [['POKéMON', '1'], ['BAG', '2'], ...(ringMap ? [['MAP', '13'] as [string, string]] : []), ['CARD', '4'], ['EXIT', '']]);
+  const c = await ask('MENU', [['POKéMON', '1'], ['BAG', '2'], ...(ringMap ? [['MAP', '13'] as [string, string]] : []), ['CARD', '4'], ...(lobby ? [['FEEDBACK', 'fb'] as [string, string]] : []), ['EXIT', '']]);
+  if (c === 'fb' && lobby) {
+    // The live game's note, over the match: the world goes on under it.
+    swapping = true;
+    held.clear();
+    lobby.feedbackOver(() => { swapping = false; held.clear(); pressed.clear(); calmUntil = frame + 30; });
+    return;
+  }
   if (!c || !rom || isOut || battle || swapping) return;
   const me = link.room.actor(link.me);
   const look = c === '13' && me && ringMap ? ringMap.look(me.m.spot) : undefined;

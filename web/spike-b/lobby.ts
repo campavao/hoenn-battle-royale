@@ -169,6 +169,16 @@ export class Lobby {
    *  the screen is left, as the live game's does. */
   private draft = '';
   private said: FeedbackState = 'typing';
+  /** Written mid-match (the MENU's FEEDBACK): BACK hides the stage and calls this. */
+  private overMatch: (() => void) | null = null;
+
+  /** SEND FEEDBACK over the match, from its MENU; `done` once it is closed. */
+  feedbackOver(done: () => void): void {
+    if (this.said !== 'sending') this.said = 'typing';
+    this.overMatch = done;
+    this.stage.show(this.feedback);
+  }
+
   private readonly feedback: DrawnScreen = feedbackScreen(() => ({
     text: this.draft,
     state: this.said,
@@ -177,13 +187,19 @@ export class Lobby {
       const text = cleanNote(this.draft);
       if (!text || this.said === 'sending') return;
       this.said = 'sending';
-      void sendFeedback(this.hooks.relayUrl, { type: 'feedback', text, v: 'spike B', where: this.room ? 'spikeb-room' : 'spikeb-menu', name: me().name, ...(this.room ? { room: this.room.code } : {}) }).then((result) => {
+      void sendFeedback(this.hooks.relayUrl, { type: 'feedback', text, v: 'spike B', where: this.overMatch ? 'spikeb-match' : this.room ? 'spikeb-room' : 'spikeb-menu', name: me().name, ...(this.room ? { room: this.room.code } : {}) }).then((result) => {
         this.said = result;
         if (result === 'sent' && cleanNote(this.draft) === text) this.draft = '';
         this.stage.redraw();
       });
     },
-    onBack: () => this.stage.pop(),
+    onBack: () => {
+      const done = this.overMatch;
+      this.overMatch = null;
+      if (!done) { this.stage.pop(); return; }
+      this.stage.hide();
+      done();
+    },
   }));
 
   /** The wardrobe strip being looked at: a locked one is looked at, not worn. */
