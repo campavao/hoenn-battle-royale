@@ -1,7 +1,32 @@
 {
- "readAt": "2026-10-29T07:03:02.654Z",
+ "readAt": "2026-10-29T18:17:46.844Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "7FWME6",
+   "at": "2026-10-29T16:17:32.292Z",
+   "end": "2026-10-29T16:22:02.890Z",
+   "secs": 271,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-10-29T16:17:33.395Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
   {
    "code": "HD6JGN",
    "at": "2026-10-28T15:27:04.914Z",
@@ -3122,14 +3147,14 @@
   {
    "id": "6144a717",
    "first": "2026-10-17T02:37:29.310Z",
-   "last": "2026-10-28T15:27:04.837Z",
+   "last": "2026-10-29T16:17:32.213Z",
    "since": "2026-10-15",
    "versions": [
     "2",
     "3"
    ],
    "solo": 2,
-   "checkins": 12,
+   "checkins": 13,
    "v": "3"
   }
  ],
@@ -3256,6 +3281,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-10-29T16:21:02.208Z",
+   "code": "7FWME6",
+   "v": "bd1142b",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 30,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 0,
+   "drifts": 0,
+   "deploy": "8f7d520a"
+  },
   {
    "t": "2026-10-27T22:55:33.389Z",
    "code": "8VNJVJ",
