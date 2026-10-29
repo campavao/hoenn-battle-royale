@@ -2101,7 +2101,7 @@ var Room = class {
   engageBots(events) {
     if (this.ring().safari) return;
     if (this.tick < this.duelAfter || this.tick % 8) return;
-    const judges = this.actors.filter((a) => !a.bot);
+    const judges = this.actors.filter((a) => !a.bot && !a.away && !a.battling);
     if (!judges.length) return;
     const byMap = /* @__PURE__ */ new Map();
     for (const a of this.actors) {
@@ -3057,7 +3057,7 @@ var WorldService = class {
     this.eyes(room, p.watching);
     if (room.owner === p.id) room.owner = [...room.members.values()].find((q) => !q.away)?.id ?? 0;
     this.opts.log(`world: #${p.id} out of room ${room.code} (${room.members.size} there)`);
-    if (![...room.members.values()].some((q) => !q.away)) this.close(room);
+    if (!room.members.size) this.close(room);
     else this.roster(room);
   }
   /** A reload's way back to the trainer it left, or null. */
@@ -3129,6 +3129,7 @@ var WorldService = class {
     this.roster(room);
   }
   close(room) {
+    for (const id of room.members.keys()) if (this.where.get(id) === room) this.where.delete(id);
     this.rooms.delete(room.code);
     if (!this.rooms.size) this.stop();
   }

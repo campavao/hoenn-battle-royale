@@ -231,7 +231,9 @@ export class WorldService {
     // START passes to whoever came in next.
     if (room.owner === p.id) room.owner = [...room.members.values()].find((q) => !q.away)?.id ?? 0;
     this.opts.log(`world: #${p.id} out of room ${room.code} (${room.members.size} there)`);
-    if (![...room.members.values()].some((q) => !q.away)) this.close(room);
+    // A phone still away is coming back (a reload): the room waits for it, until pump
+    // drops it at AWAY_MS.
+    if (!room.members.size) this.close(room);
     else this.roster(room);
   }
 
@@ -307,6 +309,8 @@ export class WorldService {
   }
 
   private close(room: Lobby): void {
+    // Whoever is still in it (pump's catch closes a room with its phones in) is nowhere now.
+    for (const id of room.members.keys()) if (this.where.get(id) === room) this.where.delete(id);
     this.rooms.delete(room.code);
     if (!this.rooms.size) this.stop();
   }

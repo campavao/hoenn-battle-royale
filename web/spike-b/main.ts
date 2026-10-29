@@ -262,6 +262,9 @@ const handoff: number[] = []; // ms from the trigger to the ROM's first battle f
 /** A battle the ROM fights, the page showing it from its first frame and taking the
  *  screen back when it is over. */
 function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>): void {
+  // One battle at a time: one still running from the match before (its ROM is busy with
+  // it) turns this one down, or its end would be credited to this foe.
+  if (battle) { link.end(); return; }
   held.clear();
   battle = { foe, shownAt: performance.now(), round: link.room.results.round, link };
   if (!rom) {
@@ -637,7 +640,7 @@ function endBattle(r: Fought | null): void {
   // Another round, or another match altogether (each one's rounds count from 0).
   const stale = !!battle && (battle.link !== link || battle.round !== link.room.results.round);
   const boss = battle?.boss;
-  link.end(duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f)), !stale && (!!battle?.foe?.bot || boss !== undefined) && !!r?.ok && r.outcome === 1);
+  (battle?.link ?? link).end(duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f)), !stale && (!!battle?.foe?.bot || boss !== undefined) && !!r?.ok && r.outcome === 1);
   if (!stale && boss !== undefined && r?.ok && r.outcome === 1) say(`You beat ${LEADERS[boss].name}! Took their TM and ¥1000.`);
   const wild = battle && !battle.foe && boss === undefined;
   const by = battle?.foe?.id;
@@ -739,6 +742,8 @@ function roundFrame(): void {
     const first = seenRound < 0;
     seenRound = res.round;
     shownWin = false;
+    // A parade still running ends with its round: the field is the new round's.
+    if (romUp && !battle) rom?.leave();
     winEl.classList.remove('on');
     if (!first && here) {
       if (isOut || waiting) {
@@ -764,8 +769,9 @@ function roundFrame(): void {
     // Mine: the Hall of Fame first, as the live winner's ROM runs it, then the standings.
     // The parade outlasts AFTER_WIN, so the next round may have begun: these standings, kept.
     if (res.winner === link.me && rom && !battle) {
-      const kept = structuredClone(res), bots = botIds();
-      void parade().finally(() => standings(false, kept, bots));
+      const kept = structuredClone(res), bots = botIds(), during = link;
+      // Not over the match's own end (PLAY AGAIN), nor into another match.
+      void parade().finally(() => { if (matchOn && link === during && !endingShown) standings(false, kept, bots); });
     }
     else standings(false);
   }
@@ -774,6 +780,7 @@ function roundFrame(): void {
   if (endingAt && (over(link.room) || performance.now() - endingAt > 1500)) {
     endingAt = 0;
     record(res.round);
+    endingShown = true;
     standings(true);
   }
 }
@@ -783,7 +790,8 @@ function roundFrame(): void {
 let recordedRound = -1;
 function record(round: number): void {
   const res = link.room.results;
-  if (recordedRound === round || !res.entrants.some(([id]) => id === link.me)) return;
+  // ?solo is practice, not a match: it stays out of the career.
+  if (!link.online || recordedRound === round || !res.entrants.some(([id]) => id === link.me)) return;
   recordedRound = round;
   const i = res.fallen.findIndex((f) => f.id === link.me);
   // Placed by when I went out: the last out is second; never out, and nobody won, a tie for first.
@@ -794,6 +802,8 @@ function record(round: number): void {
 /** A screen of the ROM's own the page shows (the Hall of Fame, a TM's party screen): it
  *  has the pad until it is over. */
 let romUp = false;
+/** The match's end standings are up (PLAY AGAIN): nothing puts the round's back over them. */
+let endingShown = false;
 /** The Hall of Fame: the ROM has the screen until it is over. */
 async function parade(): Promise<void> {
   if (!rom) return;
@@ -944,9 +954,14 @@ function startMatch(l: WorldLink): void {
   ringMap = art && RingMap.SYMBOLS.every((n) => Number.isFinite(art!.sym(n))) ? new RingMap(l.room, art) : null;
   matchOn = true;
   endingAt = 0;
+  endingShown = false;
+  if (romUp && !battle) rom?.leave();
   lobby?.hide();
   isOut = waiting = shownWin = false;
-  seenRound = lastPhase = -1;
+  // Every match's rounds count from 0: what was told or recorded of the last one is not.
+  seenRound = lastPhase = recordedRound = safariRound = pickAsked = hudRound = -1;
+  wasSafari = false;
+  ticks.length = 0;
   toldEvents = 0;
   toldGyms = l.room.gyms.length;
   wasInFog = false;

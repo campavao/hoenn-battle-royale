@@ -142,8 +142,20 @@ export class RingMap {
     return text(this.placeLetters(ring));
   }
 
-  /** What the ROM opens the MAP on, for a trainer standing on `spot`. */
-  look(spot: Spot, ring = this.room.ring()): MapLook {
+  /** Where `spot` is outdoors: itself, or for a building or the Safari the cell its
+   *  anchor sits on (room.ts's anchors); undefined for neither. */
+  private outdoors(spot: Spot): Spot | undefined {
+    if (this.room.places.has(spot.map)) return spot;
+    const a = this.room.anchors.get(spot.map);
+    const m = a && this.mapAt(a.gx, a.gy);
+    const p = m && this.room.places.get(m.id);
+    return m && p ? { map: m.id, x: Math.floor(a.gx - p.gx), y: Math.floor(a.gy - p.gy) } : undefined;
+  }
+
+  /** What the ROM opens the MAP on, for a trainer standing on `spot` (indoors, the
+   *  building's door; nowhere known, Littleroot). */
+  look(at: Spot, ring = this.room.ring()): MapLook {
+    const spot = this.outdoors(at) ?? { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 };
     const s = this.sections.get(spot.map)!;
     const m = this.room.maps.get(spot.map)!;
     const cell = (at: number, size: number, cells: number) => Math.min(cells - 1, Math.floor((at * cells) / size));
@@ -160,8 +172,11 @@ export class RingMap {
    *  (br_ring.c BrRing_SafeWay): a way less than half the other is left off. */
   way(spot: Spot, ring = this.room.ring()): string {
     if (ring.r === Infinity || ring.r < 0 || !this.room.inFog(spot, ring)) return '';
-    const p = this.room.places.get(spot.map)!;
-    const dx = ring.cx - (p.gx + spot.x + 0.5), dy = ring.cy - (p.gy + spot.y + 0.5);
+    // Indoors, from the building's anchor on the plane (room.ts inFog's own point).
+    const p = this.room.places.get(spot.map), a = p ? undefined : this.room.anchors.get(spot.map);
+    if (!p && !a) return '';
+    const x = p ? p.gx + spot.x + 0.5 : a!.gx, y = p ? p.gy + spot.y + 0.5 : a!.gy;
+    const dx = ring.cx - x, dy = ring.cy - y;
     const ax = Math.abs(dx), ay = Math.abs(dy);
     let out = '';
     if (ay > 0 && 2 * ay >= ax) out += dy < 0 ? '↑' : '↓';

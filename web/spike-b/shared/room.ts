@@ -678,7 +678,8 @@ export class Room {
   private engageBots(events: RoomEvent[]): void {
     if (this.ring().safari) return;
     if (this.tick < this.duelAfter || this.tick % 8) return;
-    const judges = this.actors.filter((a) => !a.bot);
+    // A page that can run it now: not reloading, not in a battle of its own (its ROM is busy).
+    const judges = this.actors.filter((a) => !a.bot && !a.away && !a.battling);
     if (!judges.length) return;
     const byMap = new Map<string, Actor[]>();
     for (const a of this.actors) {

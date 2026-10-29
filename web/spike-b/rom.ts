@@ -370,9 +370,13 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   let publishTo: ((m: SpMsg) => void) | null = null;
   // ...and a duel's link blocks, to the trainer it is with: whichever drain hears them.
   let blocksTo: ((seq: number, data: number[]) => void) | null = null;
+  // ...and a PICKUP the battle's own kick waits on (a legendary's claim): the drain above
+  // runs first, so it hands them on.
+  let pickupTo: ((m: Extract<Msg, { t: 'pickup' }>) => void) | null = null;
   const published = (m: Msg) => {
     if (m.t === 'bstart' || m.t === 'turn') publishTo?.({ t: m.t, battle: m.battle, data: m.data });
     else if (m.t === 'bt') blocksTo?.(m.seq, m.data);
+    else if (m.t === 'pickup') pickupTo?.(m);
   };
 
   /** One battle: `kick` asks for it, `going` says the ROM took it, `over` that it is back
@@ -802,12 +806,15 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         // br_match.h: BR_PHASE_PLAY, so the RESULT is a win and not an out's; DONE (5)
         // once the parade has run.
         emu.write(match, 2, 8);
+        leaving = false;
         send({ t: 'result', seat: ME, outcome: 'win' });
-        const up = await until(emu, () => { drain(() => undefined); return !onField(); }, 600);
-        if (up) {
+        const up = await until(emu, () => { drain(() => undefined); return leaving || !onField(); }, 600);
+        // leave(): cut short (the next round, or the next match, is starting).
+        if (up && !leaving) {
           onStart();
-          await until(emu, () => { drain(() => undefined); return emu.read(match, 8) === 5 || onField(); }, 60 * 120);
+          await until(emu, () => { drain(() => undefined); return leaving || emu.read(match, 8) === 5 || onField(); }, 60 * 120);
         }
+        leaving = false;
         emu.pause();
         if (!emu.restore(parked!)) broken = true;
         else if (carried) keep(carried);
@@ -832,6 +839,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       return inTurn(async () => {
         if (broken) return null;
         const before = kept();
+        leaving = false;
         lay();
         emu.resume();
         // Armed first: BrMoves_TeachSoon counts the bag, and opens when the GIVE adds one.
@@ -843,8 +851,12 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         const up = await until(emu, () => { drain(() => undefined); return !onField(); }, 180);
         if (up) {
           onStart();
-          await until(emu, () => { drain(() => undefined); return onField(); }, 60 * 300);
+          // leave() backs out of it with B, like a menu.
+          const quiet = emu.onFrame(() => drain(() => undefined));
+          await backOnField();
+          quiet();
         }
+        leaving = false;
         emu.pause();
         const after = kept();
         if (!emu.restore(parked!)) broken = true;
@@ -956,14 +968,13 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         send({ t: 'spill', seat: DROP_SEAT, map: { group: emu.read(s1 + 4, 8), num: emu.read(s1 + 5, 8) }, mons: [{ key: LEGEND_KEY, x, y, species, level }] });
         // Its cry asks the room for it (BR_LEGEND_CLAIM_KEY): this page has already had the
         // room's yes, so the answer is ours at once. Then the battle, and back on the field.
-        stop = emu.onFrame(() => {
-          drain((m) => { if (m.t === 'pickup' && m.key === (LEGEND_KEY | 0x0800)) send({ t: 'pickup', seat: emu.read(seatAt, 8), key: LEGEND_KEY }); });
-          if (!onField()) seen = true;
-        });
+        // battle()'s drain hears it (published): it runs before anything registered here.
+        pickupTo = (m) => { if (m.key === (LEGEND_KEY | 0x0800)) send({ t: 'pickup', seat: emu.read(seatAt, 8), key: LEGEND_KEY }); };
+        stop = emu.onFrame(() => { if (!onField()) seen = true; });
         void frames(emu, 3).then(async () => { emu.press('a'); await frames(emu, 4); emu.release('a'); });
       }, () => emu.read(mainFunc, 32) !== 0, () => {
         return seen && onField();
-      }, onStart, () => ({ outcome: emu.read(outcomeAt, 8), species, level }))).finally(() => stop?.());
+      }, onStart, () => ({ outcome: emu.read(outcomeAt, 8), species, level }))).finally(() => { stop?.(); pickupTo = null; });
     },
     boss(n, onStart, fog = false) {
       // br_wild.h's BR_WILD_BOSS: the same ask, a leader for a map.

@@ -79,6 +79,31 @@ describe('world rooms', () => {
     }
   });
 
+  it('a room with a phone reloading stays open when everybody else leaves', () => {
+    let t = 0;
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => t, log: () => undefined });
+    try {
+      const a = phone(), b = phone();
+      const sa = svc.open(a.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sa.onText(JSON.stringify({ t: 'start' }));
+      const hello = a.got.find((m) => m.t === 'hello') as unknown as { id: number; key: string };
+      t += 1000; svc.pump();
+      // Bob comes in late, alice reloads, bob goes.
+      const sb = svc.open(b.link);
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, code }));
+      sa.onClose();
+      sb.onClose();
+      t += 20_000; svc.pump();
+      const a2 = phone();
+      svc.open(a2.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, code, again: { code, id: hello.id, key: hello.key } }));
+      expect((a2.got.find((m) => m.t === 'hello') as unknown as { id: number }).id).toBe(hello.id);
+    } finally {
+      svc.stop();
+    }
+  });
+
   it('counts who watches a trainer and hands them that trainer\'s battle, from its start', () => {
     let t = 0;
     const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => t, log: () => undefined });

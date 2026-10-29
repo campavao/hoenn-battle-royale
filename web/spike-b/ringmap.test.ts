@@ -60,6 +60,17 @@ describe('ring map', () => {
     expect(map.way(spot, ringAt(at.x + 30, at.y, -1))).toBe('');
   });
 
+  it('indoors, looks and points from the building, never throws', () => {
+    const inside = [...room.anchors.keys()].find((id) => !room.places.has(id) && room.anchors.get(id)!.gx > -1000)!;
+    const spot = { map: inside, x: 3, y: 3 };
+    const a = room.anchors.get(inside)!;
+    // A ring far from the building, so it stands in the fog.
+    const ring = ringAt(a.gx + 500, a.gy, 10);
+    expect(map.way(spot, ring)).toBe('→');
+    expect(() => map.look(spot, ring)).not.toThrow();
+    expect(map.way({ map: 'MAP_NOWHERE', x: 0, y: 0 }, ring)).toBe('');
+  });
+
   it('blends the fog over the picture, solid over a sprite under it, none over the cursor', () => {
     // The picture all one colour, RGB(8, 16, 24); the fog, RGB(13, 3, 22), in BG palette 10.
     const mem = new Map<number, number>();
