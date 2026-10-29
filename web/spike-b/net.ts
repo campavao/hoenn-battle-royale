@@ -27,12 +27,16 @@ export interface WorldLink {
   frame(bits: number): RoomEvent[];
   /** My trainer as it is drawn (none for the frame before the room has me). */
   mine(): Actor | undefined;
-  /** My battle is over. */
-  end(): void;
+  /** My battle is over (`fled`: it never got going, or was run from). */
+  end(fled?: boolean): void;
   /** The ball `key` would not go in my bag: put it back. */
   drop(key: number, rest?: Bag): void;
   /** My team is down: off the map. */
   out(bag?: Bag): void;
+  /** A link block for the trainer I am fighting (online only). */
+  bt(q: number, d: number[]): void;
+  /** Where the blocks from the trainer I am fighting go. */
+  onBt: ((q: number, d: number[]) => void) | null;
   /** For the stats line. */
   status(): string;
 }
@@ -53,9 +57,11 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
       return host.advance().events.filter((e) => e.id === me);
     },
     mine: () => host.room.actor(me),
-    end: () => host.end(me),
+    end: (fled) => host.end(me, fled),
     drop: (key, rest) => host.drop(me, key, rest),
     out: (bag) => host.out(me, bag),
+    bt: () => undefined,
+    onBt: null,
     status: () => 'solo: you and the bots (no relay)',
   };
 }
@@ -82,6 +88,7 @@ class Online implements WorldLink {
   private lastSend = new Map<number, number>();
   private predicted: Actor | null = null;
   private closed = false;
+  onBt: ((q: number, d: number[]) => void) | null = null;
 
   constructor(private readonly ws: WebSocket, private readonly make: (seed: number) => Room) {
     ws.addEventListener('close', () => { this.closed = true; });
@@ -100,6 +107,8 @@ class Online implements WorldLink {
       this.syncing = false;
     } else if (m.t === 'f' && this.room && !this.syncing) {
       this.queue.push(...m.f);
+    } else if (m.t === 'bt') {
+      this.onBt?.(m.q, m.d);
     }
   }
 
@@ -172,11 +181,13 @@ class Online implements WorldLink {
     return (this.predicted = a);
   }
 
-  end(): void { this.send({ t: 'end' }); }
+  end(fled = false): void { this.send(fled ? { t: 'end', fled } : { t: 'end' }); }
 
   drop(key: number, rest?: Bag): void { this.send({ t: 'drop', k: key, rest }); }
 
   out(bag?: Bag): void { this.send({ t: 'out', bag }); }
+
+  bt(q: number, d: number[]): void { this.send({ t: 'bt', q, d }); }
 
   status(): string {
     if (this.closed) return 'the relay closed the connection: reload to rejoin';

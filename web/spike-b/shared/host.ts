@@ -99,8 +99,8 @@ export class Host {
   }
 
   /** The phone's battle is over: its trainer (and the bot) walk again. */
-  end(id: number): void {
-    if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: 'end', id });
+  end(id: number, fled = false): void {
+    if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: 'end', id, ...(fled ? { fled: true } : {}) });
   }
 
   /** The ball `key` would not go in the phone's bag: back on the ground. A bag goes back

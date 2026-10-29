@@ -22,7 +22,7 @@ import { DIR_EAST } from './sim';
 import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, emptyBag, makeRoom, type Actor, type Bag, type RoomEvent } from './shared/room';
 import { SKIN_GFX } from './shared/bots';
 import { onlineLink, soloLink, type WorldLink } from './net';
-import { bootRom, loadRom, lastStart, type Fought, type RomBattles } from './rom';
+import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { groundCount } from './shared/items';
 import { RomArt } from './romart';
 import type { GbaKey } from '../src/emu';
@@ -183,7 +183,7 @@ const battleNote = document.getElementById('battle-note')!;
 const gbaCanvas = document.getElementById('gba') as HTMLCanvasElement;
 let rom: RomBattles | null = null;
 let artMs = 0;
-let battle: { foe: Actor | null; shownAt: number } | null = null;
+let battle: { foe: Actor | null; shownAt: number; foeGone?: boolean; heardAt?: number } | null = null;
 /** The ROM has the screen for a dropped bag's team (rom.team). */
 let swapping = false;
 let calmUntil = 0;
@@ -354,6 +354,24 @@ function startFor(e: RoomEvent): void {
     const party = [mon(286, 5), mon(288, 5)];
     const fog = inFogNow();
     handOff(foe, (r, onStart) => r.fight(foe.name, party, foe.skin, onStart, fog));
+  } else if (e.type === 'duel') {
+    // Another trainer: both ROMs fight it out as a link battle, the blocks through the relay.
+    const foe = link.room.actor(e.foe);
+    const me = link.room.actor(link.me);
+    if (!foe || !me) { link.end(); return; }
+    const fog = inFogNow();
+    // Their blocks can come before our ROM is free to take them: held from now.
+    const early: [number, number[]][] = [];
+    const heard = () => { if (battle) battle.heardAt = performance.now(); };
+    link.onBt = (q, d) => { heard(); early.push([q, d]); };
+    const wire: DuelLink = {
+      send: (q, d) => link.bt(q, d),
+      listen: (take) => {
+        link.onBt = take && ((q, d) => { heard(); take(q, d); });
+        if (take) for (const [q, d] of early.splice(0)) take(q, d);
+      },
+    };
+    handOff(foe, (r, onStart) => r.duel(me.name, foe.name, foe.skin, e.first, wire, onStart, fog));
   } else {
     const m = placed.get(e.map)!.m;
     const fog = inFogNow();
@@ -366,7 +384,10 @@ let lastResult = '';
 
 function endBattle(r: Fought | null): void {
   battleEl.classList.remove('on');
-  link.end();
+  // A fight with a trainer that never got going, or was run from (a forfeit): we keep
+  // apart a while, as the match's fleer does, or the two would engage again at once.
+  const duel = !!battle?.foe && !battle.foe.bot;
+  link.end(duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f)));
   const wild = battle && !battle.foe;
   battle = null;
   held.clear();
@@ -377,6 +398,22 @@ function endBattle(r: Fought | null): void {
   else if (r) lastResult = `last battle: ${wild ? `wild #${r.species} Lv${r.level}, ` : ''}${OUTCOME[r.outcome] ?? r.outcome}`;
   // A whiteout is the end of a trainer's match (Kanto's rules, DESIGN.md §10).
   if (r?.ok && (r.outcome === 2 || r.outcome === 3)) goOut(r.outcome === 2 ? 'Your team lost the battle.' : 'Your team went down with theirs.');
+}
+
+/** How long a trainer the room says is no longer fighting me may go quiet before the
+ *  fight is mine: their page lost the battle engine, or ended it some other way. */
+const FOE_QUIET_MS = 10_000;
+
+/** The trainer I am fighting left the room (closed the tab, or went out elsewhere), or
+ *  stopped fighting me and went quiet: the fight is mine, as in a match (BrNetlink_PeerOut). */
+function foeFrame(): void {
+  const foe = battle?.foe;
+  if (!foe || foe.bot || battle!.foeGone) return;
+  const now = link.room.actor(foe.id);
+  const quiet = performance.now() - (battle!.heardAt ?? battle!.shownAt) > FOE_QUIET_MS;
+  if (now && ((now.battling && now.foe === link.me) || !quiet)) return;
+  battle!.foeGone = true;
+  rom?.foeOut();
 }
 
 // ---- the fog (room.ts's ring) ----------------------------------------------------------
@@ -577,14 +614,21 @@ function pixelOf(a: Actor): { x: number; y: number; lift: number } {
   return { x: g.gx * TILE + a.m.px, y: g.gy * TILE + a.m.py, lift: -a.m.lift };
 }
 
-/** The walk anim's frame: a stride's four frames over the action, feet alternating. */
+/** The walk anim's frame. A step plays half the anim, one foot (SetStepAnimHandleAlternation
+ *  starts it at command 0 or 2 by turns): the stride frame then standing, 8+8 of a walk's 16
+ *  frames, and sAnim_RunSouth's 5+3 of a run's 8. Playing the whole anim each step was
+ *  twice Emerald's cadence. */
 function frameOf(a: Actor): number {
   const act = a.m.action;
-  const tab = a.m.run && act?.kind === 'step' && SHEETS[String(SKIN_GFX[a.skin])].frames >= 18 ? RUN : GO;
-  if (act && act.kind !== 'hop') {
-    const q = Math.min(3, Math.floor((act.t / act.len) * 4));
-    return tab[a.m.facing][(q + (a.m.strides & 1) * 2) % 4];
+  const run = a.m.run && act?.kind === 'step' && SHEETS[String(SKIN_GFX[a.skin])].frames >= 18;
+  if (act?.kind === 'step') {
+    const late = act.t / act.len >= (run ? 5 / 8 : 1 / 2) ? 1 : 0;
+    return (run ? RUN : GO)[a.m.facing][(a.m.strides & 1) * 2 + late];
   }
+  // A turn is a walk in place, one foot like a step: sAnim_GoFastSouth's 4+4. A bump into
+  // a wall plays the whole of sAnim_GoSouth over its 32 frames.
+  if (act?.kind === 'turn') return GO[a.m.facing][(a.m.strides & 1) * 2 + (act.t / act.len >= 1 / 2 ? 1 : 0)];
+  if (act && act.kind !== 'hop') return GO[a.m.facing][Math.min(3, Math.floor((act.t / act.len) * 4))];
   return FACE[a.m.facing];
 }
 
@@ -816,6 +860,7 @@ function loop(now: number): void {
     frame += 1;
     for (const e of link.frame(myBits())) startFor(e);
     fogFrame();
+    foeFrame();
     pressed.clear();
   }
   const t1 = performance.now();
@@ -880,7 +925,7 @@ async function boot(): Promise<void> {
   const next = () => { const p = rest.find((r) => !r.mips); if (p) { paint(p); mipFor(p, 0); setTimeout(next, 16); } };
   setTimeout(next, 500);
   bootRom(files, link.room.seed).then((r) => { rom = r; giveNext(); }, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { link, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; } };
+  (window as unknown as { __spike: unknown }).__spike = { link, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; } };
 }
 
 void boot();
