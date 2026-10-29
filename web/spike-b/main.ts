@@ -75,7 +75,7 @@ const OBJ_EVENT_GFX_MART_EMPLOYEE = 83;
 const OBJ_EVENT_GFX_GENTLEMAN = 48;
 const OBJ_EVENT_GFX_BRENDAN_SURFING = 2, OBJ_EVENT_GFX_MAY_SURFING = 92;
 const BIKE_GFX = [1, 90]; // OBJ_EVENT_GFX_BRENDAN_MACH_BIKE, _MAY_MACH_BIKE
-const OBJ_EVENT_GFX_CUTTABLE_TREE = 82, OBJ_EVENT_GFX_PUSHABLE_BOULDER = 87;
+const OBJ_EVENT_GFX_CUTTABLE_TREE = 82, OBJ_EVENT_GFX_BREAKABLE_ROCK = 86, OBJ_EVENT_GFX_PUSHABLE_BOULDER = 87;
 // export-world.py's classes for them.
 const CLASS_WATER = 2, CLASS_CUT = 9, CLASS_BOULDER = 10;
 const OBJ_EVENT_GFX_BIRCHS_BAG = 97;
@@ -1231,11 +1231,12 @@ function safariFrame(ring: Ring): void {
 async function flyDrop(): Promise<void> {
   const r = rom, me = link.room.actor(link.me);
   if (!r || !me || !ringMap) return;
-  if (!(await r.spill()).mons.length) { goOut('You caught nothing in the SAFARI ZONE.'); return; }
   let section = 0;
+  // The field is held from here: no walk into grass or a trainer while the map comes up.
   swapping = true;
   held.clear();
   try {
+    if (!(await r.spill()).mons.length) { swapping = false; goOut('You caught nothing in the SAFARI ZONE.'); return; }
     section = await r.drop(ringMap.look(me.m.spot), () => { if (swapping) battleEl.classList.add('on'); });
   } finally {
     swapping = false;
@@ -2244,9 +2245,14 @@ function drawProps(visible: Placed[], all: Actor[]): void {
   for (const p of visible) {
     if (!p.props) {
       p.props = [];
+      // A CUT cell is a tree or a Rock Smash rock (export-world.py marks both): the map's
+      // own object there says which (the Safari's are rocks, not trees).
+      const objs = art.objects(p.m.group, p.m.num);
       for (let i = 0; i < p.classes.length; i++) {
-        const c = p.classes[i];
-        if (c === CLASS_CUT || c === CLASS_BOULDER) p.props.push([i % p.m.w, Math.floor(i / p.m.w), c === CLASS_CUT ? OBJ_EVENT_GFX_CUTTABLE_TREE : OBJ_EVENT_GFX_PUSHABLE_BOULDER]);
+        const c = p.classes[i], x = i % p.m.w, y = Math.floor(i / p.m.w);
+        const own = objs.find((o) => o[0] === x && o[1] === y)?.[2];
+        if (c === CLASS_CUT) p.props.push([x, y, own === OBJ_EVENT_GFX_BREAKABLE_ROCK ? own : OBJ_EVENT_GFX_CUTTABLE_TREE]);
+        else if (c === CLASS_BOULDER) p.props.push([x, y, OBJ_EVENT_GFX_PUSHABLE_BOULDER]);
       }
     }
     for (const [x, y, gfx] of p.props) {

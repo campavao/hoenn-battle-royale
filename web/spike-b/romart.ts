@@ -237,6 +237,19 @@ export class RomArt {
     return this.u16(this.sym('gItems') + id * 44 + 16);
   }
 
+  /** Map (group, num)'s object events, as (x, y, graphicsId) (MapHeader.events ->
+   *  MapEvents.objectEvents, struct ObjectEventTemplate: 24 bytes, gfx @1, x @4, y @6). */
+  objects(group: number, num: number): [number, number, number][] {
+    const events = this.u32(this.u32(this.u32(this.sym('gMapGroups') + group * 4) + num * 4) + 4);
+    const n = this.u8(events), list = this.u32(events + 4);
+    const out: [number, number, number][] = [];
+    for (let i = 0; i < n; i++) {
+      const o = list + i * 24;
+      out.push([this.dv.getInt16(o + 4 - ROM, true), this.dv.getInt16(o + 6 - ROM, true), this.u8(o + 1)]);
+    }
+    return out;
+  }
+
   /** Map (group, num)'s MAP section (MapHeader.regionMapSectionId). */
   mapsec(group: number, num: number): number {
     return this.u8(this.u32(this.u32(this.sym('gMapGroups') + group * 4) + num * 4) + 0x14);
