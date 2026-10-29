@@ -30,6 +30,7 @@ import { Lobby, me, type RoomInfo } from './lobby';
 import { loadCareer, recordMatch } from '../src/match/career';
 import type { MatchTally } from '../src/match/tally';
 import { tallySince } from './carry';
+import { guessedStickKeys, loadStickMap, stickKeys } from '../src/pad';
 import { resultsView, standingsOf, tallyLines } from '../src/ui/results';
 import { favourite } from '../src/match/tally';
 import { moveInfo, type Rom as MoveTables } from '../src/battle/movebook';
@@ -1429,6 +1430,56 @@ for (const el of document.querySelectorAll<HTMLElement>('.k')) {
     else if (k === 'start') void openMenu();
   });
   el.addEventListener('pointerup', () => rom?.release(GBA_KEY[k]));
+}
+
+// ---- a controller (the live game's wireGamepad, the parts the world uses) -------------
+// The live game's map for this device (hbr.padmap, its remap wizard's) and stick
+// (hbr.padstick), else the standard layout: face bottom/left A, right/top B, START, the
+// D-pad, the stick and a DirectInput hat. Polled on a timer, as the Gamepad API has no
+// button events: a press is a change since the last poll, sent where a key would go.
+const PAD_DEFAULT: Record<number, string> = { 0: 'a', 1: 'b', 2: 'b', 3: 'a', 9: 'start', 12: 'up', 13: 'down', 14: 'left', 15: 'right' };
+const PAD_HAT: string[][] = [['up'], ['up', 'right'], ['right'], ['down', 'right'], ['down'], ['down', 'left'], ['left'], ['up', 'left']];
+function padMap(): Record<number, string> {
+  try {
+    const saved = JSON.parse(localStorage.getItem('hbr.padmap') ?? 'null') as Record<string, string> | null;
+    const out: Record<number, string> = {};
+    for (const [i, k] of Object.entries(saved ?? {})) if (GBA_KEY[k]) out[Number(i)] = k;
+    return Object.keys(out).length ? { ...out, 12: 'up', 13: 'down', 14: 'left', 15: 'right' } : PAD_DEFAULT;
+  } catch { return PAD_DEFAULT; }
+}
+function padDown(k: string): void {
+  if (intro()) return;
+  if (lobby?.shown) { lobby.stage.key(GBA_KEY[k]); return; }
+  if (!held.has(k)) pressed.add(k);
+  held.add(k);
+  if (asking) askKey(k);
+  else if ((battle || swapping || romUp) && rom) rom.press(GBA_KEY[k]);
+  else if (k === 'start') void openMenu();
+}
+function padUp(k: string): void {
+  held.delete(k);
+  rom?.release(GBA_KEY[k]);
+}
+if (typeof navigator.getGamepads === 'function') {
+  const map = padMap();
+  const stick = loadStickMap();
+  const rest = new Map<number, readonly number[]>();
+  let padHeld = new Set<string>();
+  setInterval(() => {
+    const now = new Set<string>();
+    for (const pad of navigator.getGamepads()) {
+      if (!pad) continue;
+      if (!rest.has(pad.index)) rest.set(pad.index, [...pad.axes]);
+      const base = rest.get(pad.index)!;
+      pad.buttons.forEach((b, i) => { if (b.pressed && map[i]) now.add(map[i]); });
+      for (const k of stick ? stickKeys(pad.axes, base, stick) : guessedStickKeys(pad.axes, base).keys) if (GBA_KEY[k]) now.add(k);
+      const hat = pad.axes.length >= 10 ? pad.axes[9] : 9;
+      if (hat >= -1.1 && hat <= 1.1) for (const k of PAD_HAT[Math.round((hat + 1) * 3.5) % 8]) now.add(k);
+    }
+    for (const k of now) if (!padHeld.has(k)) padDown(k);
+    for (const k of padHeld) if (!now.has(k)) padUp(k);
+    padHeld = now;
+  }, 16);
 }
 
 // ---- camera + drawing -----------------------------------------------------------------
