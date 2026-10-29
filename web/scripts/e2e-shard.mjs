@@ -130,12 +130,16 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     console.error('usage: e2e-shard.mjs <index>/<total>, e.g. 2/4');
     process.exit(2);
   }
-  const shards = cut(listTests(resolve(dirname(fileURLToPath(import.meta.url)), '..')), +m[2]);
+  // A pull request's own specs (scripts/ci-scope.mjs), space-separated; unset is the suite.
+  const only = process.env.E2E_SPECS ? new Set(process.env.E2E_SPECS.split(/\s+/).filter(Boolean)) : undefined;
+  const tests = listTests(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
+  const shards = cut(only ? tests.filter((t) => only.has(t.file)) : tests, +m[2]);
   const mine = shards[+m[1] - 1];
-  // No filters would be no filter at all: playwright would run the whole suite.
+  // No filters would be no filter at all: playwright would run the whole suite. A few specs
+  // leave some shards empty, and those print nothing; the whole suite never should.
   if (mine.filters.length === 0) {
-    console.error(`shard ${m[0]} has no tests; use fewer shards`);
-    process.exit(1);
+    console.error(`shard ${m[0]} has no tests${only ? ` of the ${only.size} specs asked for` : '; use fewer shards'}`);
+    process.exit(only ? 0 : 1);
   }
   console.error(`shard ${m[0]}: ~${mine.seconds}s (${shards.map((s) => s.seconds).join(' / ')})`);
   console.log(mine.filters.join(' '));
