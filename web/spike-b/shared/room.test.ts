@@ -432,6 +432,26 @@ describe('item balls', () => {
     expect(rooms).toEqual(rows.map((r, i) => [r[1], Number(r[2]), Number(r[3]), i < houses, r[6] === 'TRUE', Number(r[4]), Number(r[5]), r[7] !== 'BR_NO_TRADER']));
   });
 
+  it("a story event lays its reward where Emerald set it, and is told once a round", () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const r = room as unknown as { storyFor(rng: () => number, ring: unknown): { id: string } | undefined; tellStory(n: number, ring: unknown, s: unknown, rng: () => number): void };
+    const ring = { ...room.ring(), r: Infinity, phase: 2 };
+    const told = new Set<string>();
+    for (let i = 0; i < 40; i++) {
+      const s = r.storyFor(() => (i * 0.37) % 1, ring);
+      if (!s) break;
+      expect(told.has(s.id)).toBe(false);
+      told.add(s.id);
+      r.tellStory(i % 3, ring, s, () => 0.5);
+    }
+    // The place-and-reward rows this world has the maps for.
+    expect([...told].sort()).toEqual(expect.arrayContaining(['lavaridge-egg', 'mirage-tower', 'stevens-house']));
+    const steven = room.events.find((e) => e.story === 'stevens-house')!;
+    expect(steven.species).toBe(0);
+    expect(room.spillAt('MAP_MOSSDEEP_CITY_STEVENS_HOUSE', 4, 2)?.bag.mons?.[0].species).toBe(398);
+    expect(steven.trader).toMatchObject({ x: 5, y: 2 });
+  });
+
   it('the ground has the odd LINK CABLE and POKe DOLL, as the map balls do (BrBalls_Deal)', () => {
     const g = [...makeRoom(MAPS, PATCHES, 4242).ground().values()].filter((b) => !b.gift);
     const n = (item: number) => g.filter((b) => b.item === item).length;

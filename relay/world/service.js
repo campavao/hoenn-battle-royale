@@ -1380,6 +1380,295 @@ function draw(rng, pool, n) {
   return out;
 }
 
+// web/src/match/story.ts
+var LILEEP = 388;
+var ANORITH = 390;
+var BELDUM = 398;
+var WYNAUT = 360;
+var REGIROCK2 = 401;
+var REGICE2 = 402;
+var REGISTEEL2 = 403;
+var KYOGRE2 = 404;
+var ZUBAT = 41;
+var GOLBAT = 42;
+var CROBAT = 169;
+var MIGHTYENA = 287;
+var CARVANHA = 330;
+var SHARPEDO = 331;
+var CAMERUPT = 340;
+var GROUDON2 = 405;
+var RAYQUAZA2 = 406;
+var CASTFORM = 385;
+var LATIAS2 = 407;
+var LATIOS2 = 408;
+var DEOXYS = 410;
+var MEW = 151;
+var LUGIA = 249;
+var HO_OH = 250;
+var MAPSEC_SOUTHERN_ISLAND = 73;
+var MAPSEC_BIRTH_ISLAND = 200;
+var MAPSEC_FARAWAY_ISLAND = 201;
+var MAPSEC_NAVEL_ROCK = 211;
+var ITEM_FOCUS_BAND = 196;
+var ITEM_SHELL_BELL = 219;
+var ITEM_TM24 = 312;
+var ITEM_TM47 = 335;
+var ITEM_DEEP_SEA_TOOTH = 192;
+var ITEM_DEEP_SEA_SCALE = 193;
+var ITEM_SCANNER = 278;
+var ITEM_MASTER_BALL2 = 1;
+var ITEM_METEORITE = 280;
+var ITEM_SUN_STONE = 93;
+var STORY_CHANCE = 0.5;
+var STORIES = [
+  {
+    id: "mirage-tower",
+    name: "MIRAGE TOWER",
+    section: "MAPSEC_MIRAGE_TOWER",
+    map: "MAP_MIRAGE_TOWER_4F",
+    // The two fossils where the tower's own lie, each already the mon it would revive as.
+    mons: [[LILEEP], [ANORITH]],
+    cells: [{ x: 5, y: 4 }, { x: 7, y: 4 }, { x: 6, y: 3 }, { x: 6, y: 5 }]
+  },
+  {
+    id: "stevens-house",
+    name: "STEVEN'S HOUSE",
+    section: "MAPSEC_MOSSDEEP_CITY",
+    map: "MAP_MOSSDEEP_CITY_STEVENS_HOUSE",
+    // The BELDUM he leaves, at the rung: METANG or METAGROSS late on.
+    mons: [[BELDUM]],
+    cells: [{ x: 4, y: 2 }, { x: 3, y: 3 }, { x: 5, y: 2 }]
+  },
+  {
+    id: "new-mauville",
+    name: "NEW MAUVILLE",
+    section: "MAPSEC_NEW_MAUVILLE",
+    map: "MAP_NEW_MAUVILLE_INSIDE",
+    // Wattson's thanks for the generator. In the hall inside the door: the generator room
+    // is behind the barriers, and a bot walks the layout's, which never open.
+    items: [[ITEM_TM24]],
+    cells: [{ x: 32, y: 35 }, { x: 31, y: 35 }, { x: 33, y: 35 }]
+  },
+  {
+    id: "shoal-cave",
+    name: "SHOAL CAVE",
+    section: "MAPSEC_SHOAL_CAVE",
+    map: "MAP_SHOAL_CAVE_LOW_TIDE_LOWER_ROOM",
+    // The BLACK BELT's FOCUS BAND where he stands, and the bell the shells and salt make.
+    items: [[ITEM_FOCUS_BAND], [ITEM_SHELL_BELL]],
+    cells: [{ x: 11, y: 4 }, { x: 12, y: 4 }, { x: 10, y: 4 }, { x: 11, y: 5 }]
+  },
+  // The three golems in their chambers, where their own sat, the supplies and the trader
+  // outside the wall for whoever cannot open it.
+  {
+    id: "desert-ruins",
+    name: "DESERT RUINS",
+    section: "MAPSEC_DESERT_RUINS",
+    map: "MAP_DESERT_RUINS",
+    mons: [[REGIROCK2]],
+    cells: [{ x: 8, y: 7 }, { x: 7, y: 22 }, { x: 9, y: 22 }],
+    door: "smash"
+  },
+  {
+    id: "island-cave",
+    name: "ISLAND CAVE",
+    section: "MAPSEC_ISLAND_CAVE",
+    map: "MAP_ISLAND_CAVE",
+    mons: [[REGICE2]],
+    cells: [{ x: 8, y: 7 }, { x: 7, y: 22 }, { x: 9, y: 22 }],
+    door: "wait"
+  },
+  {
+    id: "ancient-tomb",
+    name: "ANCIENT TOMB",
+    section: "MAPSEC_ANCIENT_TOMB",
+    map: "MAP_ANCIENT_TOMB",
+    mons: [[REGISTEEL2]],
+    cells: [{ x: 8, y: 7 }, { x: 7, y: 22 }, { x: 9, y: 22 }],
+    door: "fly"
+  },
+  {
+    id: "granite-cave",
+    name: "GRANITE CAVE",
+    section: "MAPSEC_GRANITE_CAVE",
+    map: "MAP_GRANITE_CAVE_STEVENS_ROOM",
+    // Steven and the TM he gives for the letter, where he stands.
+    items: [[ITEM_TM47]],
+    cells: [{ x: 7, y: 8 }, { x: 5, y: 7 }, { x: 9, y: 7 }],
+    people: [{ at: 0, gfx: "OBJ_EVENT_GFX_STEVEN" }]
+  },
+  {
+    id: "lavaridge-egg",
+    name: "LAVARIDGE TOWN",
+    section: "MAPSEC_LAVARIDGE_TOWN",
+    map: "MAP_LAVARIDGE_TOWN",
+    // The egg woman's WYNAUT, hatched, at her feet: she has no flag to stand her down,
+    // so she is her own self above it.
+    mons: [[WYNAUT]],
+    cells: [{ x: 4, y: 8 }, { x: 3, y: 8 }, { x: 3, y: 9 }]
+  },
+  {
+    id: "abandoned-ship",
+    name: "ABANDONED SHIP",
+    section: "MAPSEC_ABANDONED_SHIP",
+    map: "MAP_ABANDONED_SHIP_CAPTAINS_OFFICE",
+    // The SCANNER in the captain's office, and CAPTAIN STERN at his harbour, who gives a
+    // DEEP SEA TOOTH or SCALE for it.
+    items: [[ITEM_DEEP_SEA_TOOTH, ITEM_DEEP_SEA_SCALE], [ITEM_SCANNER]],
+    cells: [{ x: 6, y: 13, map: "MAP_SLATEPORT_CITY_HARBOR" }, { x: 4, y: 3 }, { x: 5, y: 3 }, { x: 6, y: 3 }],
+    people: [{ at: 0, gfx: "OBJ_EVENT_GFX_SCIENTIST_1", wants: ITEM_SCANNER }]
+  },
+  // The gates: the team's boss where Emerald stood him, holding what the team was after,
+  // and handing it over when he falls (one fight, his own, on each ROM; whoever wins
+  // first takes it from the room).
+  {
+    id: "magma-hideout",
+    name: "MAGMA HIDEOUT",
+    section: "MAPSEC_MAGMA_HIDEOUT",
+    map: "MAP_MAGMA_HIDEOUT_4F",
+    // GROUDON awake, and the MASTER BALL MAXIE would have caught it with.
+    mons: [[GROUDON2]],
+    items: [[ITEM_MASTER_BALL2]],
+    cells: [{ x: 16, y: 21 }, { x: 15, y: 22 }, { x: 14, y: 22 }, { x: 13, y: 22 }],
+    people: [{ at: 0, gfx: "OBJ_EVENT_GFX_MAXIE", trainer: "TRAINER_MAXIE_MAGMA_HIDEOUT", party: [MIGHTYENA, CROBAT, CAMERUPT] }]
+  },
+  {
+    id: "route128-kyogre",
+    name: "ROUTE 128 SHOAL",
+    section: "MAPSEC_ROUTE_128",
+    map: "MAP_ROUTE128",
+    // KYOGRE, risen, with ARCHIE on the shoal where he watched it.
+    mons: [[KYOGRE2]],
+    cells: [{ x: 37, y: 22 }, { x: 38, y: 22 }, { x: 36, y: 22 }],
+    people: [{ at: 0, gfx: "OBJ_EVENT_GFX_ARCHIE", trainer: "TRAINER_ARCHIE", party: [MIGHTYENA, CROBAT, SHARPEDO] }]
+  },
+  {
+    id: "weather-institute",
+    name: "WEATHER INSTITUTE",
+    section: "MAPSEC_ROUTE_119",
+    map: "MAP_ROUTE119_WEATHER_INSTITUTE_2F",
+    // The CASTFORM the scientists give for clearing TEAM AQUA out, in SHELLY's hands.
+    mons: [[CASTFORM]],
+    cells: [{ x: 4, y: 6 }, { x: 5, y: 6 }, { x: 3, y: 6 }],
+    people: [{ at: 0, gfx: "OBJ_EVENT_GFX_AQUA_MEMBER_F", trainer: "TRAINER_SHELLY_WEATHER_INSTITUTE", party: [CARVANHA, MIGHTYENA] }]
+  },
+  {
+    id: "aqua-hideout",
+    name: "AQUA HIDEOUT",
+    section: "MAPSEC_AQUA_HIDEOUT",
+    map: "MAP_AQUA_HIDEOUT_B2F",
+    // The MASTER BALL from the hideout's last room, with MATT at the submarine's dock.
+    items: [[ITEM_MASTER_BALL2]],
+    cells: [{ x: 23, y: 19 }, { x: 22, y: 19 }, { x: 24, y: 19 }],
+    people: [{ at: 0, gfx: "OBJ_EVENT_GFX_AQUA_MEMBER_M", trainer: "TRAINER_MATT", party: [MIGHTYENA, GOLBAT] }]
+  },
+  {
+    id: "mt-chimney",
+    name: "MT. CHIMNEY",
+    section: "MAPSEC_MT_CHIMNEY",
+    map: "MAP_MT_CHIMNEY",
+    // The METEORITE at the machine, plus two rares (the doc's row), MAXIE beside it.
+    // He holds the stone (at: 2); the rares are his story's other pieces and open when he falls.
+    rares: 2,
+    items: [[ITEM_METEORITE]],
+    cells: [{ x: 12, y: 6 }, { x: 11, y: 6 }, { x: 13, y: 6 }, { x: 13, y: 7 }, { x: 12, y: 7 }],
+    people: [{ at: 2, gfx: "OBJ_EVENT_GFX_MAXIE", trainer: "TRAINER_MAXIE_MT_CHIMNEY", party: [MIGHTYENA, ZUBAT, CAMERUPT] }]
+  },
+  {
+    id: "space-center",
+    name: "SPACE CENTER",
+    section: "MAPSEC_MOSSDEEP_CITY",
+    map: "MAP_MOSSDEEP_CITY_SPACE_CENTER_2F",
+    // The SUN STONE the center gives, plus two rares (the doc's row), MAXIE at the stairs.
+    // He holds the stone (at: 2); the rares are his story's other pieces and open when he falls.
+    rares: 2,
+    items: [[ITEM_SUN_STONE]],
+    cells: [{ x: 2, y: 9 }, { x: 3, y: 9 }, { x: 1, y: 9 }, { x: 1, y: 8 }, { x: 0, y: 8 }],
+    people: [{ at: 2, gfx: "OBJ_EVENT_GFX_MAXIE", trainer: "TRAINER_MAXIE_MOSSDEEP", party: [MIGHTYENA, CROBAT, CAMERUPT] }]
+  },
+  // The islands. Lilycove's ferry sails to the one a live story is on (br_story.c), and
+  // its own legendary is gone for the match: this is the only one there.
+  {
+    id: "southern-island",
+    name: "SOUTHERN ISLAND",
+    section: "MAPSEC_LILYCOVE_CITY",
+    mapsec: MAPSEC_SOUTHERN_ISLAND,
+    map: "MAP_SOUTHERN_ISLAND_INTERIOR",
+    // The EON pair, one of them, before the stone.
+    mons: [[LATIAS2, LATIOS2]],
+    cells: [{ x: 13, y: 10 }, { x: 12, y: 10 }, { x: 14, y: 10 }],
+    boat: true
+  },
+  {
+    id: "birth-island",
+    name: "BIRTH ISLAND",
+    section: "MAPSEC_LILYCOVE_CITY",
+    mapsec: MAPSEC_BIRTH_ISLAND,
+    map: "MAP_BIRTH_ISLAND_EXTERIOR",
+    // DEOXYS where the triangle's last step would have put it.
+    mons: [[DEOXYS]],
+    cells: [{ x: 15, y: 10 }, { x: 14, y: 11 }, { x: 16, y: 11 }],
+    boat: true
+  },
+  {
+    id: "faraway-island",
+    name: "FARAWAY ISLAND",
+    section: "MAPSEC_LILYCOVE_CITY",
+    mapsec: MAPSEC_FARAWAY_ISLAND,
+    map: "MAP_FARAWAY_ISLAND_INTERIOR",
+    // MEW in the island's long grass.
+    mons: [[MEW]],
+    cells: [{ x: 13, y: 12 }, { x: 12, y: 13 }, { x: 14, y: 13 }],
+    boat: true
+  },
+  {
+    id: "navel-rock-top",
+    name: "NAVEL ROCK PEAK",
+    section: "MAPSEC_LILYCOVE_CITY",
+    mapsec: MAPSEC_NAVEL_ROCK,
+    map: "MAP_NAVEL_ROCK_TOP",
+    // HO-OH at the summit, at the top of the last climb.
+    mons: [[HO_OH]],
+    cells: [{ x: 12, y: 9 }, { x: 11, y: 16 }, { x: 13, y: 16 }],
+    boat: true
+  },
+  {
+    id: "navel-rock-bottom",
+    name: "NAVEL ROCK",
+    section: "MAPSEC_LILYCOVE_CITY",
+    mapsec: MAPSEC_NAVEL_ROCK,
+    map: "MAP_NAVEL_ROCK_BOTTOM",
+    // LUGIA in the hollow at the foot of the rock.
+    mons: [[LUGIA]],
+    cells: [{ x: 11, y: 13 }, { x: 10, y: 12 }, { x: 12, y: 12 }],
+    boat: true
+  },
+  // The final rings. RAYQUAZA at the top of SKY PILLAR, where it sleeps, its own gone for
+  // the match and the door already open (br_boot.c), and the clean pillar the match plays
+  // is the one the bots' world has, so they climb it; SOOTOPOLIS's clash, KYOGRE or
+  // GROUDON at the CAVE OF ORIGIN's mouth, and the city in KYOGRE's rain or GROUDON's
+  // drought while it is there, the seed's pick (br_story.c), so a fight in it starts in it.
+  {
+    id: "sky-pillar",
+    name: "SKY PILLAR",
+    section: "MAPSEC_SKY_PILLAR",
+    map: "MAP_SKY_PILLAR_TOP",
+    mons: [[RAYQUAZA2]],
+    cells: [{ x: 14, y: 5 }, { x: 13, y: 6 }, { x: 15, y: 6 }],
+    final: true
+  },
+  {
+    id: "sootopolis",
+    name: "SOOTOPOLIS CITY",
+    section: "MAPSEC_SOOTOPOLIS_CITY",
+    map: "MAP_SOOTOPOLIS_CITY",
+    mons: [[KYOGRE2, GROUDON2]],
+    cells: [{ x: 31, y: 34 }, { x: 30, y: 35 }, { x: 32, y: 35 }],
+    final: true,
+    noBots: true
+  }
+];
+
 // web/src/bots/patches.ts
 var PATCH_KEY_BASE = 8192;
 var PATCH_MAX = 8;
@@ -1481,20 +1770,20 @@ var ITEM_WHITE_HERB = 180;
 var ITEM_QUICK_CLAW = 183;
 var ITEM_CHOICE_BAND2 = 186;
 var ITEM_KINGS_ROCK = 187;
-var ITEM_FOCUS_BAND = 196;
+var ITEM_FOCUS_BAND2 = 196;
 var ITEM_SCOPE_LENS = 198;
 var ITEM_LEFTOVERS2 = 200;
-var ITEM_SHELL_BELL = 219;
+var ITEM_SHELL_BELL2 = 219;
 var GIFTS = [
   ITEM_BRIGHT_POWDER,
   ITEM_WHITE_HERB,
   ITEM_QUICK_CLAW,
   ITEM_CHOICE_BAND2,
   ITEM_KINGS_ROCK,
-  ITEM_FOCUS_BAND,
+  ITEM_FOCUS_BAND2,
   ITEM_SCOPE_LENS,
   ITEM_LEFTOVERS2,
-  ITEM_SHELL_BELL
+  ITEM_SHELL_BELL2
 ];
 
 // web/spike-b/shared/items.ts
@@ -2121,6 +2410,8 @@ var Room = class {
       const p = this.places.get(s.map);
       return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy);
     };
+    const story = n < EVENT_MAX - 1 && rng() < STORY_CHANCE ? this.storyFor(rng, ring) : void 0;
+    if (story) return this.tellStory(n, ring, story, rng);
     let from;
     if (n === EVENT_MAX - 1) for (const s of all) {
       if (!from || plane(s) < plane(from)) from = s;
@@ -2146,6 +2437,31 @@ var Room = class {
       this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: "", bag, ...i === 0 ? { legend: true } : {} });
     });
     this.events.push({ n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0], ...trader ? { trader } : {} });
+  }
+  /** A story event this round has not had (story.ts), where Emerald set that beat, inside
+   *  the ring. The ones the page can tell: a place and its reward, none behind a door, a
+   *  person's terms or the ferry, and not the final ring's. */
+  storyFor(rng, ring) {
+    const open = STORIES.filter((s) => !s.door && !s.people && !s.boat && !s.final && !s.noBots && !this.events.some((e) => e.story === s.id) && s.cells.every((c) => this.maps.has(c.map ?? s.map) && this.world.cell(c.map ?? s.map, c.x, c.y) === 0) && !this.inFog({ map: s.map, x: s.cells[0].x, y: s.cells[0].y }, ring));
+    return open.length ? open[Math.floor(rng() * open.length)] : void 0;
+  }
+  /** The story's pieces on its own cells (story.ts's storyDrop): its mons at the phase's
+   *  rung, its rares, its items, the supplies, and the trader past them. */
+  tellStory(n, ring, story, rng) {
+    const level = rungForPhase(ring.phase + 1);
+    const species = [...(story.mons ?? []).map((pick) => pick[Math.floor(rng() * pick.length)]), ...draw(rng, RARES, story.rares ?? 0)];
+    const bags = [...(story.items ?? []).map((pick) => [{ id: pick[Math.floor(rng() * pick.length)], n: 1 }]), SUPPLIES.map((r) => ({ ...r }))];
+    const cells = story.cells.map((c) => ({ map: c.map ?? story.map, x: c.x, y: c.y }));
+    const pieces = species.length + bags.length;
+    const offers = RARES.filter((r) => !species.includes(r));
+    const spot = cells.length > pieces && offers.length ? cells[pieces] : void 0;
+    cells.slice(0, pieces).forEach((c, i) => {
+      const key = eventPiece(n, i);
+      const bag = i < species.length ? { items: [], money: 0, mons: [{ species: species[i], level }] } : { items: bags[i - species.length], money: 0 };
+      this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: "", bag });
+    });
+    const trader = spot ? { x: spot.x, y: spot.y, species: offers[Math.floor(rng() * offers.length)], busy: 0 } : void 0;
+    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: 0, story: story.id, place: story.name, ...trader ? { trader } : {} });
   }
   /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
   part(a) {
@@ -2593,6 +2909,7 @@ var Room = class {
       mix2(e.x);
       mix2(e.y);
       mix2(e.species);
+      mix2(e.story?.length ?? 0);
       if (e.trader) {
         mix2(e.trader.x);
         mix2(e.trader.y);

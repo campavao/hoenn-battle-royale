@@ -1159,7 +1159,7 @@ function fogFrame(): void {
     // An event dropped with the ring (DESIGN §Events): the ticker says what and where.
     const evs = link.room.events;
     if (toldEvents > evs.length) toldEvents = 0;
-    for (const e of evs.slice(toldEvents)) tick(`A legendary ${speciesName(e.species)} at ${ringMap?.placeOf(e.map) || 'HOENN'}!`, true);
+    for (const e of evs.slice(toldEvents)) tick(e.species ? `A legendary ${speciesName(e.species)} at ${ringMap?.placeOf(e.map) || 'HOENN'}!` : `A rare find at ${e.place ?? (ringMap?.placeOf(e.map) || 'HOENN')}!`, !!e.species);
     toldEvents = evs.length;
     lastPhase = ring.phase;
   }

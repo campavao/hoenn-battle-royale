@@ -29,6 +29,7 @@
 import { clerkAt, type Clerk } from './marts';
 import { leaderAt } from './gyms';
 import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, draw, eventForRing } from '../../src/match/events';
+import { STORIES, STORY_CHANCE, type Story } from '../../src/match/story';
 import { rungForPhase } from '../../src/bots/party';
 import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
@@ -132,7 +133,13 @@ export interface Spill { key: number; map: string; x: number; y: number; name: s
 
 /** An event this round (events.ts, DESIGN §Events): its number, where its legendary
  *  stands (its key), and which one. */
-export interface EventMark { n: number; key: number; map: string; x: number; y: number; species: number; trader?: Trader }
+export interface EventMark {
+  n: number; key: number; map: string; x: number; y: number;
+  /** Its legendary, or 0 for a story with none (a rare find). */
+  species: number; trader?: Trader;
+  /** A story event's id (story.ts) and the place the ticker names. */
+  story?: string; place?: string;
+}
 
 /** An event's trader (br_event.c): where he stands, the rare he offers for any one of
  *  yours, and who is trading with him now (0 for nobody). He keeps what he is given and
@@ -697,6 +704,8 @@ export class Room {
       && !this.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y);
     const all = this.reachable().filter(free);
     const plane = (s: Spot) => { const p = this.places.get(s.map)!; return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy); };
+    const story = n < EVENT_MAX - 1 && rng() < STORY_CHANCE ? this.storyFor(rng, ring) : undefined;
+    if (story) return this.tellStory(n, ring, story, rng);
     let from: Spot | undefined;
     if (n === EVENT_MAX - 1) for (const s of all) { if (!from || plane(s) < plane(from)) from = s; }
     else {
@@ -723,6 +732,36 @@ export class Room {
       this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: '', bag, ...(i === 0 ? { legend: true } : {}) });
     });
     this.events.push({ n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0], ...(trader ? { trader } : {}) });
+  }
+
+  /** A story event this round has not had (story.ts), where Emerald set that beat, inside
+   *  the ring. The ones the page can tell: a place and its reward, none behind a door, a
+   *  person's terms or the ferry, and not the final ring's. */
+  private storyFor(rng: () => number, ring: Ring): Story | undefined {
+    const open = STORIES.filter((s) => !s.door && !s.people && !s.boat && !s.final && !s.noBots &&
+      !this.events.some((e) => e.story === s.id) &&
+      s.cells.every((c) => this.maps.has(c.map ?? s.map) && this.world.cell(c.map ?? s.map, c.x, c.y) === 0) &&
+      !this.inFog({ map: s.map, x: s.cells[0].x, y: s.cells[0].y }, ring));
+    return open.length ? open[Math.floor(rng() * open.length)] : undefined;
+  }
+
+  /** The story's pieces on its own cells (story.ts's storyDrop): its mons at the phase's
+   *  rung, its rares, its items, the supplies, and the trader past them. */
+  private tellStory(n: number, ring: Ring, story: Story, rng: () => number): void {
+    const level = rungForPhase(ring.phase + 1);
+    const species = [...(story.mons ?? []).map((pick) => pick[Math.floor(rng() * pick.length)]), ...draw(rng, RARES, story.rares ?? 0)];
+    const bags = [...(story.items ?? []).map((pick) => [{ id: pick[Math.floor(rng() * pick.length)], n: 1 }]), SUPPLIES.map((r) => ({ ...r }))];
+    const cells = story.cells.map((c) => ({ map: c.map ?? story.map, x: c.x, y: c.y }));
+    const pieces = species.length + bags.length;
+    const offers = RARES.filter((r) => !species.includes(r));
+    const spot = cells.length > pieces && offers.length ? cells[pieces] : undefined;
+    cells.slice(0, pieces).forEach((c, i) => {
+      const key = eventPiece(n, i);
+      const bag: Bag = i < species.length ? { items: [], money: 0, mons: [{ species: species[i], level }] } : { items: bags[i - species.length], money: 0 };
+      this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: '', bag });
+    });
+    const trader = spot ? { x: spot.x, y: spot.y, species: offers[Math.floor(rng() * offers.length)], busy: 0 } : undefined;
+    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: 0, story: story.id, place: story.name, ...(trader ? { trader } : {}) });
   }
 
   /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
@@ -1123,7 +1162,7 @@ export class Room {
     const r = this.results;
     mix(r.round); mix(r.winner); mix(r.wonAt ?? 0); mix(this.epoch); mix(this.opening); mix(this.duelAfter); for (const [n, w] of this.gyms) { mix(n); mix(w.length); }
     for (const h of this.homes) { mix(h.n); mix(h.species); mix(h.busy); mix(h.gone ? 1 : 0); }
-    for (const e of this.events) { mix(e.key); mix(e.x); mix(e.y); mix(e.species); if (e.trader) { mix(e.trader.x); mix(e.trader.y); mix(e.trader.species); mix(e.trader.busy); } }
+    for (const e of this.events) { mix(e.key); mix(e.x); mix(e.y); mix(e.species); mix(e.story?.length ?? 0); if (e.trader) { mix(e.trader.x); mix(e.trader.y); mix(e.trader.species); mix(e.trader.busy); } }
     for (const [id] of r.entrants) mix(id);
     for (const f of r.fallen) { mix(f.id); str(f.by); mix((f.wild ? 1 : 0) | (f.left ? 2 : 0)); }
     for (const b of this.spills.values()) {
