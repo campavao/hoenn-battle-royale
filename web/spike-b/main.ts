@@ -21,7 +21,8 @@ import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { DIR_EAST } from './sim';
-import { HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Ring } from './shared/room';
+import { HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Ring, type Spill } from './shared/room';
+type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink } from './net';
 import { over } from './shared/over';
@@ -296,7 +297,7 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
 // and waits for the ROM if it is still booting.
 const foundEl = document.getElementById('found')!;
 let foundUntil = 0;
-const toGive: ({ key: number; item: number; gift?: boolean; hidden?: string } | { key: number; bag: Bag; name: string })[] = [];
+const toGive: ({ key: number; item: number; gift?: boolean; hidden?: string } | { key: number; bag: Bag; name: string; person?: Person })[] = [];
 let giving = false;
 
 function say(text: string): void {
@@ -311,7 +312,7 @@ function giveNext(): void {
   const next = toGive.shift()!;
   const name = (id: number) => art?.itemName(id) || `item ${id}`;
   if ('bag' in next) {
-    openBag(next.key, next.bag, next.name).catch((e) => console.warn('spike bag failed', e)).finally(() => { giving = false; giveNext(); });
+    (next.person ? meet(next.key, next.bag, next.person) : openBag(next.key, next.bag, next.name)).catch((e) => console.warn('spike bag failed', e)).finally(() => { giving = false; giveNext(); });
     return;
   }
   const { key, item, gift, hidden } = next;
@@ -431,9 +432,23 @@ async function openMenu(): Promise<void> {
   }
 }
 
+/** A story's person (story.ts's people): STEVEN hands his over; CAPT. STERN wants the
+ *  SCANNER first, out of my bag, as br_story.c's BrStory_Hands asks. */
+async function meet(key: number, bag: Bag, person: Person): Promise<void> {
+  const item = (id: number) => art?.itemName(id) || `item ${id}`;
+  if (person.wants && !(await rom!.take(person.wants))) {
+    say(`${person.name} wants the ${item(person.wants)}.`);
+    link.drop(key, bag);
+    return;
+  }
+  const given = bag.items.map((r) => item(r.id)).join(', ');
+  await takeBag(key, bag, person.name, true);
+  say(person.wants ? `${person.name} took the ${item(person.wants)} and gave you ${given}!` : `${person.name} gave you ${given}!`);
+}
+
 /** A fallen trainer's bag, row by row into mine the ROM's way, and its money. What did
  *  not fit, and the team, go back down as the bag. */
-async function takeBag(key: number, bag: Bag, who: string): Promise<void> {
+async function takeBag(key: number, bag: Bag, who: string, quiet = false): Promise<void> {
   const r = rom!;
   const rest: Bag = { items: [], money: 0, mons: bag.mons };
   let took = 0;
@@ -453,7 +468,7 @@ async function takeBag(key: number, bag: Bag, who: string): Promise<void> {
   if (isOut) rest.money = bag.money;
   else await r.addMoney(bag.money);
   const money = bag.money && !isOut ? ` and ¥${bag.money}` : '';
-  say(`Took ${who}'s bag: ${took} item${took === 1 ? '' : 's'}${money}.${rest.items.length ? ' Some would not fit.' : ''}`);
+  if (!quiet) say(`Took ${who}'s bag: ${took} item${took === 1 ? '' : 's'}${money}.${rest.items.length ? ' Some would not fit.' : ''}`);
   if (!emptyBag(rest)) link.drop(key, rest);
 }
 
@@ -489,7 +504,7 @@ function startFor(e: RoomEvent): void {
     return;
   }
   if (e.type === 'item' || e.type === 'bag') {
-    toGive.push(e.type === 'item' ? { key: e.key, item: e.item, gift: e.gift } : { key: e.key, bag: e.bag, name: e.name });
+    toGive.push(e.type === 'item' ? { key: e.key, item: e.item, gift: e.gift } : { key: e.key, bag: e.bag, name: e.name, person: e.person });
     giveNext();
     return;
   }
@@ -1564,7 +1579,7 @@ function drawGround(x0: number, y0: number, x1: number, y1: number): void {
     if (link.room.picked.has(b.key)) continue;
     // An event's legendary stands as itself (br_legend.c's sLegends); a piece with one mon
     // or one item in it is a ball (br_loot.c), anything more a bag.
-    const legend = b.legend && art ? legendArt(b.bag.mons![0].species) : null;
+    const legend = b.legend && art ? legendArt(b.bag.mons![0].species) : b.person ? personArt(b.person.gfx) : null;
     const one = (b.bag.mons?.length ?? 0) + b.bag.items.length === 1 && !b.bag.money;
     put(legend ?? (one ? ballArt : bagArt), b.map, b.x, b.y);
   }
@@ -1606,6 +1621,14 @@ function giftArt(key: number): HTMLCanvasElement | null {
   if (!art) return null;
   let img = giftArts.get(gfx);
   if (!img) giftArts.set(gfx, (img = art.sprite(gfx, 1)));
+  return img;
+}
+
+const personArts = new Map<number, HTMLCanvasElement>();
+function personArt(gfx: number): HTMLCanvasElement | null {
+  if (!art) return null;
+  let img = personArts.get(gfx);
+  if (!img) personArts.set(gfx, (img = art.sprite(gfx, 1)));
   return img;
 }
 

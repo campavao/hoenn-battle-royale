@@ -442,10 +442,15 @@ describe('item balls', () => {
       if (!s) break;
       expect(told.has(s.id)).toBe(false);
       told.add(s.id);
-      r.tellStory(i % 3, ring, s, () => 0.5);
+      r.tellStory(i, ring, s, () => 0.5);
     }
     // The place-and-reward rows this world has the maps for.
-    expect([...told].sort()).toEqual(expect.arrayContaining(['lavaridge-egg', 'mirage-tower', 'stevens-house']));
+    expect([...told].sort()).toEqual(expect.arrayContaining(['abandoned-ship', 'granite-cave', 'lavaridge-egg', 'mirage-tower', 'stevens-house']));
+    // ...and no gate, door or boat: those wait on their own ROM work.
+    for (const id of ['magma-hideout', 'desert-ruins', 'southern-island']) expect(told.has(id)).toBe(false);
+    // CAPT. STERN stands at his harbour with what he gives for the SCANNER.
+    const stern = [...room.spills.values()].find((b) => b.person?.wants);
+    expect(stern).toMatchObject({ map: 'MAP_SLATEPORT_CITY_HARBOR', x: 6, y: 13, person: { name: 'CAPT. STERN', wants: 278 } });
     const steven = room.events.find((e) => e.story === 'stevens-house')!;
     expect(steven.species).toBe(0);
     expect(room.spillAt('MAP_MOSSDEEP_CITY_STEVENS_HOUSE', 4, 2)?.bag.mons?.[0].species).toBe(398);

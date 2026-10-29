@@ -108,7 +108,7 @@ export type RoomEvent =
    *  (link id 0, the lower id, as the ROM's own engage has it). */
   | { type: 'duel'; tick: number; id: number; foe: number; first: boolean }
   | { type: 'item'; tick: number; id: number; key: number; item: number; gift?: boolean }
-  | { type: 'bag'; tick: number; id: number; key: number; bag: Bag; name: string }
+  | { type: 'bag'; tick: number; id: number; key: number; bag: Bag; name: string; person?: Spill['person'] }
   /** A at a CENTER's nurse, from the counter. */
   | { type: 'nurse'; tick: number; id: number; map: string }
   /** A at an event's legendary: its battle (the room took it off the ground). */
@@ -129,7 +129,15 @@ export type Bag = BagRows;
 
 /** A trainer's bag where they fell (POK-232). Its key is SPILL_KEY + their id. */
 /** `legend`: an event's legendary, its one mon in the bag: A on it is its battle. */
-export interface Spill { key: number; map: string; x: number; y: number; name: string; bag: Bag; legend?: boolean }
+export interface Spill {
+  key: number; map: string; x: number; y: number; name: string; bag: Bag; legend?: boolean;
+  /** A story's person handing it over (story.ts's people): who stands there, and the item
+   *  he wants for it first. */
+  person?: { gfx: number; name: string; wants?: number };
+}
+
+/** The people a story stands (include/constants/event_objects.h), by story.ts's names. */
+const PERSON_GFX: Record<string, [number, string]> = { OBJ_EVENT_GFX_STEVEN: [134, 'STEVEN'], OBJ_EVENT_GFX_SCIENTIST_1: [46, 'CAPT. STERN'] };
 
 /** An event this round (events.ts, DESIGN §Events): its number, where its legendary
  *  stands (its key), and which one. */
@@ -735,10 +743,10 @@ export class Room {
   }
 
   /** A story event this round has not had (story.ts), where Emerald set that beat, inside
-   *  the ring. The ones the page can tell: a place and its reward, none behind a door, a
-   *  person's terms or the ferry, and not the final ring's. */
+   *  the ring. The ones the page can tell: a place and its reward, or a person handing it
+   *  over; none behind a door, a gate's fight or the ferry, and not the final ring's. */
   private storyFor(rng: () => number, ring: Ring): Story | undefined {
-    const open = STORIES.filter((s) => !s.door && !s.people && !s.boat && !s.final && !s.noBots &&
+    const open = STORIES.filter((s) => !s.door && (s.people ?? []).every((p) => !p.trainer && PERSON_GFX[p.gfx]) && !s.boat && !s.final && !s.noBots &&
       !this.events.some((e) => e.story === s.id) &&
       s.cells.every((c) => this.maps.has(c.map ?? s.map) && this.world.cell(c.map ?? s.map, c.x, c.y) === 0) &&
       !this.inFog({ map: s.map, x: s.cells[0].x, y: s.cells[0].y }, ring));
@@ -758,7 +766,9 @@ export class Room {
     cells.slice(0, pieces).forEach((c, i) => {
       const key = eventPiece(n, i);
       const bag: Bag = i < species.length ? { items: [], money: 0, mons: [{ species: species[i], level }] } : { items: bags[i - species.length], money: 0 };
-      this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: '', bag });
+      const p = story.people?.find((q) => q.at === i);
+      const [gfx, name] = p ? PERSON_GFX[p.gfx] : [0, ''];
+      this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: '', bag, ...(p ? { person: { gfx, name, ...(p.wants ? { wants: p.wants } : {}) } } : {}) });
     });
     const trader = spot ? { x: spot.x, y: spot.y, species: offers[Math.floor(rng() * offers.length)], busy: 0 } : undefined;
     this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: 0, story: story.id, place: story.name, ...(trader ? { trader } : {}) });
@@ -1071,7 +1081,7 @@ export class Room {
           events.push({ type: 'legend', tick: this.tick, id: a.id, key: b.key, species: mon.species, level: mon.level });
         } else if (b) {
           this.picked.set(b.key, a.id);
-          events.push({ type: 'bag', tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name });
+          events.push({ type: 'bag', tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name, ...(b.person ? { person: { ...b.person } } : {}) });
         } else if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
           a.battling = foe.battling = true;
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];

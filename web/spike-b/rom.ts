@@ -18,7 +18,7 @@ import { Mailbox, MAILBOX } from '../src/net/mailbox';
 import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from '../src/net/slots';
 import { PROTOCOL, type Dir, type Msg, type PackedMon } from '../src/net/wire';
 import { loadCheckedRelease } from '../src/release';
-import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fieldOf, healed, rekey, spillOf, teamOf, withMoney } from './carry';
+import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fieldOf, healed, rekey, spillOf, teamOf, withMoney, withoutItem } from './carry';
 import { startMenuTable } from '../src/touch';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 import { CATCH_UP_SPEED, spectatePace } from '../src/match/spectate';
@@ -176,6 +176,8 @@ export interface RomBattles {
   reseed(seed: number): void;
   /** Money out of somebody's bag (br_loot.c's Take pays it). */
   addMoney(n: number): Promise<void>;
+  /** One `item` out of the bag (a person wanted it); false when there is none. */
+  take(item: number): Promise<boolean>;
   /** The money the trainer has. */
   money(): Promise<number>;
   /** The trainer's own (party, bag, Pokédex), as text for a reload to bring back. */
@@ -616,6 +618,18 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         const next = { ...k, party: healed(k.party, k.count, basePp) as typeof k.party };
         keep(next);
         carried = last = next;
+      });
+    },
+    take(item) {
+      return inTurn(async () => {
+        if (broken) return false;
+        const k = carried ?? kept();
+        const bag = withoutItem(k.bag, k.key, item);
+        if (!bag) return false;
+        const next = { ...k, bag: bag as typeof k.bag };
+        keep(next);
+        carried = last = next;
+        return true;
       });
     },
     addMoney(n) {

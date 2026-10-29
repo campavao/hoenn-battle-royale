@@ -1983,6 +1983,7 @@ function keysOf(bits) {
   return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A) };
 }
 var FIELD_SURF = 4;
+var PERSON_GFX = { OBJ_EVENT_GFX_STEVEN: [134, "STEVEN"], OBJ_EVENT_GFX_SCIENTIST_1: [46, "CAPT. STERN"] };
 var HOME_N = 1e3;
 var HOME_MONS = [277, 280, 283, 1, 4, 7, 64, 67, 75, 93, 385, 143];
 var EVENT_SPILL = 2 << 20;
@@ -2439,10 +2440,10 @@ var Room = class {
     this.events.push({ n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0], ...trader ? { trader } : {} });
   }
   /** A story event this round has not had (story.ts), where Emerald set that beat, inside
-   *  the ring. The ones the page can tell: a place and its reward, none behind a door, a
-   *  person's terms or the ferry, and not the final ring's. */
+   *  the ring. The ones the page can tell: a place and its reward, or a person handing it
+   *  over; none behind a door, a gate's fight or the ferry, and not the final ring's. */
   storyFor(rng, ring) {
-    const open = STORIES.filter((s) => !s.door && !s.people && !s.boat && !s.final && !s.noBots && !this.events.some((e) => e.story === s.id) && s.cells.every((c) => this.maps.has(c.map ?? s.map) && this.world.cell(c.map ?? s.map, c.x, c.y) === 0) && !this.inFog({ map: s.map, x: s.cells[0].x, y: s.cells[0].y }, ring));
+    const open = STORIES.filter((s) => !s.door && (s.people ?? []).every((p) => !p.trainer && PERSON_GFX[p.gfx]) && !s.boat && !s.final && !s.noBots && !this.events.some((e) => e.story === s.id) && s.cells.every((c) => this.maps.has(c.map ?? s.map) && this.world.cell(c.map ?? s.map, c.x, c.y) === 0) && !this.inFog({ map: s.map, x: s.cells[0].x, y: s.cells[0].y }, ring));
     return open.length ? open[Math.floor(rng() * open.length)] : void 0;
   }
   /** The story's pieces on its own cells (story.ts's storyDrop): its mons at the phase's
@@ -2458,7 +2459,9 @@ var Room = class {
     cells.slice(0, pieces).forEach((c, i) => {
       const key = eventPiece(n, i);
       const bag = i < species.length ? { items: [], money: 0, mons: [{ species: species[i], level }] } : { items: bags[i - species.length], money: 0 };
-      this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: "", bag });
+      const p = story.people?.find((q) => q.at === i);
+      const [gfx, name] = p ? PERSON_GFX[p.gfx] : [0, ""];
+      this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: "", bag, ...p ? { person: { gfx, name, ...p.wants ? { wants: p.wants } : {} } } : {} });
     });
     const trader = spot ? { x: spot.x, y: spot.y, species: offers[Math.floor(rng() * offers.length)], busy: 0 } : void 0;
     this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: 0, story: story.id, place: story.name, ...trader ? { trader } : {} });
@@ -2768,7 +2771,7 @@ var Room = class {
           events.push({ type: "legend", tick: this.tick, id: a.id, key: b.key, species: mon.species, level: mon.level });
         } else if (b) {
           this.picked.set(b.key, a.id);
-          events.push({ type: "bag", tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name });
+          events.push({ type: "bag", tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name, ...b.person ? { person: { ...b.person } } : {} });
         } else if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
           a.battling = foe.battling = true;
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
