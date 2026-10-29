@@ -31,6 +31,7 @@ import { OUT_BATCH_MS, outs, won } from '../src/match/ticker';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { groundCount, isTm } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
+import { GOLD } from '../src/match/events';
 import { RomArt } from './romart';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
@@ -326,7 +327,7 @@ function giveNext(): void {
     } else if (screen) {
       const kept = got.items.some((g) => g.id === item);
       if (kept) say(`${name(item)} went in the BAG.`);
-      else if (!gift) say(`${name(item)}! Taught.`);
+      else if (!gift) say(`Taught ${name(item)}!`);
     }
     else if (got.items.length) say(`Found ${got.items.map((g) => `${g.n > 1 ? `${g.n} ` : ''}${name(g.id)}`).join(', ')}!`);
     else if (got.money) say(`Sold ${name(item)} for ¥${got.money}.`);
@@ -1448,7 +1449,7 @@ function drawGround(x0: number, y0: number, x1: number, y1: number): void {
     if (x < x0 - TILE || x > x1 || y < y0 - TILE || y > y1) return;
     ctx.drawImage(img, x + (TILE - img.width) / 2, y + TILE - img.height);
   };
-  for (const g of link.room.ground().values()) if (!link.room.picked.has(g.key)) put(g.gift ? giftArt(g.key) : ballArt, g.map, g.x, g.y);
+  for (const g of link.room.ground().values()) if (!link.room.picked.has(g.key)) put(g.gift ? giftArt(g.key) : tinted(g.item), g.map, g.x, g.y);
   for (const b of link.room.spills.values()) {
     if (link.room.picked.has(b.key)) continue;
     // An event's legendary stands as itself (br_legend.c's sLegends); a piece with one mon
@@ -1457,6 +1458,33 @@ function drawGround(x0: number, y0: number, x1: number, y1: number): void {
     const one = (b.bag.mons?.length ?? 0) + b.bag.items.length === 1 && !b.bag.money;
     put(legend ?? (one ? ballArt : bagArt), b.map, b.x, b.y);
   }
+}
+
+/** A ball in its colour (br_balls.h, Cam 2026-10-13: "red = items, blue = TMs, gold =
+ *  rare"): the ROM's red ball with its reds moved. */
+const tints = new Map<number, HTMLCanvasElement>();
+function tinted(item: number): HTMLCanvasElement | null {
+  const tier = GOLD.includes(item) ? 2 : isTm(item) ? 1 : 0;
+  if (!tier || !ballArt) return ballArt;
+  let img = tints.get(tier);
+  if (!img) {
+    img = document.createElement('canvas');
+    img.width = ballArt.width;
+    img.height = ballArt.height;
+    const c = img.getContext('2d')!;
+    c.drawImage(ballArt, 0, 0);
+    const px = c.getImageData(0, 0, img.width, img.height);
+    const d = px.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const [r, g, b] = [d[i], d[i + 1], d[i + 2]];
+      if (r < g + 40 || r < b + 40) continue; // only the ball's reds
+      if (tier === 1) { d[i] = b; d[i + 1] = Math.min(255, g + r / 4); d[i + 2] = r; }
+      else { d[i] = Math.min(255, r + 24); d[i + 1] = Math.round(r * 0.78); d[i + 2] = Math.round(b * 0.4); }
+    }
+    c.putImageData(px, 0, 0);
+    tints.set(tier, img);
+  }
+  return img;
 }
 
 /** Who stands for a gift, by its key (br_loot.c's sGiftGfx): OLD_MAN, OLD_WOMAN,

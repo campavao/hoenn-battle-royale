@@ -1472,6 +1472,9 @@ function scatterItem(rng) {
   return ITEM_SUPER_POTION;
 }
 
+// web/spike-b/data/rooms.json
+var rooms_default = [["MAP_DEWFORD_TOWN_HOUSE1", 5, 4, true], ["MAP_DEWFORD_TOWN_HOUSE2", 7, 5, true], ["MAP_FALLARBOR_TOWN_COZMOS_HOUSE", 3, 5, true], ["MAP_FALLARBOR_TOWN_MOVE_RELEARNERS_HOUSE", 5, 5, true], ["MAP_FORTREE_CITY_HOUSE1", 6, 2, true], ["MAP_FORTREE_CITY_HOUSE2", 6, 4, true], ["MAP_FORTREE_CITY_HOUSE3", 6, 2, true], ["MAP_FORTREE_CITY_HOUSE4", 6, 3, true], ["MAP_FORTREE_CITY_HOUSE5", 6, 2, true], ["MAP_LAVARIDGE_TOWN_HOUSE", 5, 4, true], ["MAP_LILYCOVE_CITY_HOUSE1", 3, 5, true], ["MAP_LILYCOVE_CITY_HOUSE2", 2, 4, true], ["MAP_LILYCOVE_CITY_HOUSE3", 5, 5, true], ["MAP_LILYCOVE_CITY_HOUSE4", 3, 5, true], ["MAP_LILYCOVE_CITY_MOVE_DELETERS_HOUSE", 5, 5, true], ["MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_1F", 3, 4, true], ["MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_2F", 3, 3, true], ["MAP_LITTLEROOT_TOWN_MAYS_HOUSE_1F", 7, 4, true], ["MAP_LITTLEROOT_TOWN_MAYS_HOUSE_2F", 5, 3, true], ["MAP_MAUVILLE_CITY_HOUSE1", 5, 5, true], ["MAP_MAUVILLE_CITY_HOUSE2", 3, 5, true], ["MAP_MOSSDEEP_CITY_HOUSE1", 5, 5, true], ["MAP_MOSSDEEP_CITY_HOUSE2", 3, 5, true], ["MAP_MOSSDEEP_CITY_HOUSE3", 5, 5, true], ["MAP_MOSSDEEP_CITY_HOUSE4", 5, 4, true], ["MAP_MOSSDEEP_CITY_STEVENS_HOUSE", 5, 4, true], ["MAP_OLDALE_TOWN_HOUSE1", 3, 5, true], ["MAP_OLDALE_TOWN_HOUSE2", 5, 5, true], ["MAP_PACIFIDLOG_TOWN_HOUSE1", 5, 5, true], ["MAP_PACIFIDLOG_TOWN_HOUSE2", 5, 5, true], ["MAP_PACIFIDLOG_TOWN_HOUSE3", 5, 5, true], ["MAP_PACIFIDLOG_TOWN_HOUSE4", 5, 5, true], ["MAP_PACIFIDLOG_TOWN_HOUSE5", 5, 5, true], ["MAP_PETALBURG_CITY_HOUSE1", 3, 5, true], ["MAP_PETALBURG_CITY_HOUSE2", 5, 4, true], ["MAP_PETALBURG_CITY_WALLYS_HOUSE", 5, 5, true], ["MAP_ROUTE104_MR_BRINEYS_HOUSE", 7, 5, true], ["MAP_ROUTE109_SEASHORE_HOUSE", 8, 4, true], ["MAP_ROUTE111_WINSTRATE_FAMILYS_HOUSE", 5, 5, true], ["MAP_ROUTE114_FOSSIL_MANIACS_HOUSE", 2, 5, true], ["MAP_ROUTE114_LANETTES_HOUSE", 7, 5, true], ["MAP_ROUTE116_TUNNELERS_REST_HOUSE", 7, 5, true], ["MAP_ROUTE119_HOUSE", 3, 5, true], ["MAP_ROUTE123_BERRY_MASTERS_HOUSE", 5, 5, true], ["MAP_ROUTE124_DIVING_TREASURE_HUNTERS_HOUSE", 4, 5, true], ["MAP_RUSTBORO_CITY_CUTTERS_HOUSE", 8, 5, true], ["MAP_RUSTBORO_CITY_HOUSE1", 4, 5, true], ["MAP_RUSTBORO_CITY_HOUSE2", 6, 5, true], ["MAP_RUSTBORO_CITY_HOUSE3", 6, 5, true], ["MAP_SLATEPORT_CITY_HOUSE", 5, 5, true], ["MAP_SLATEPORT_CITY_NAME_RATERS_HOUSE", 5, 4, true], ["MAP_SOOTOPOLIS_CITY_HOUSE1", 4, 3, true], ["MAP_SOOTOPOLIS_CITY_HOUSE2", 5, 4, true], ["MAP_SOOTOPOLIS_CITY_HOUSE3", 4, 3, true], ["MAP_SOOTOPOLIS_CITY_HOUSE4", 4, 3, true], ["MAP_SOOTOPOLIS_CITY_HOUSE5", 5, 4, true], ["MAP_SOOTOPOLIS_CITY_HOUSE6", 3, 2, true], ["MAP_SOOTOPOLIS_CITY_HOUSE7", 4, 3, true], ["MAP_SOOTOPOLIS_CITY_LOTAD_AND_SEEDOT_HOUSE", 4, 3, true], ["MAP_VERDANTURF_TOWN_FRIENDSHIP_RATERS_HOUSE", 5, 5, true], ["MAP_VERDANTURF_TOWN_HOUSE", 3, 5, true], ["MAP_VERDANTURF_TOWN_WANDAS_HOUSE", 4, 5, true], ["MAP_ABANDONED_SHIP_CORRIDORS_1F", 9, 6, false], ["MAP_ABANDONED_SHIP_CORRIDORS_B1F", 2, 6, false], ["MAP_ABANDONED_SHIP_DECK", 10, 10, false], ["MAP_ABANDONED_SHIP_HIDDEN_FLOOR_CORRIDORS", 11, 2, false], ["MAP_ALTERING_CAVE", 16, 12, false], ["MAP_ANCIENT_TOMB", 4, 21, false], ["MAP_AQUA_HIDEOUT_1F", 17, 17, false], ["MAP_CAVE_OF_ORIGIN_1F", 8, 8, false], ["MAP_CAVE_OF_ORIGIN_B1F", 6, 12, false], ["MAP_CAVE_OF_ORIGIN_ENTRANCE", 9, 13, false], ["MAP_DESERT_RUINS", 4, 21, false], ["MAP_DESERT_UNDERPASS", 69, 9, false], ["MAP_DEWFORD_TOWN_HALL", 3, 5, false], ["MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F", 15, 9, false], ["MAP_FORTREE_CITY_DECORATION_SHOP", 5, 3, false], ["MAP_GRANITE_CAVE_STEVENS_ROOM", 6, 6, false], ["MAP_ISLAND_CAVE", 4, 21, false], ["MAP_LAVARIDGE_TOWN_HERB_SHOP", 4, 3, false], ["MAP_LILYCOVE_CITY_CONTEST_HALL", 24, 17, false], ["MAP_LILYCOVE_CITY_CONTEST_LOBBY", 15, 3, false], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_1F", 8, 5, false], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_2F", 8, 4, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_1F", 9, 3, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_2F", 9, 5, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_3F", 9, 3, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_4F", 9, 5, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_5F", 9, 3, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_ROOFTOP", 9, 5, false], ["MAP_LILYCOVE_CITY_HARBOR", 9, 11, false], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_1F", 5, 10, false], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F", 12, 6, false], ["MAP_LILYCOVE_CITY_POKEMON_TRAINER_FAN_CLUB", 5, 10, false], ["MAP_MAGMA_HIDEOUT_2F_1R", 16, 19, false], ["MAP_MAGMA_HIDEOUT_2F_3R", 21, 11, false], ["MAP_MARINE_CAVE_END", 14, 13, false], ["MAP_MARINE_CAVE_ENTRANCE", 7, 7, false], ["MAP_MAUVILLE_CITY_BIKE_SHOP", 5, 3, false], ["MAP_MAUVILLE_CITY_GAME_CORNER", 11, 3, false], ["MAP_METEOR_FALLS_1F_2R", 14, 16, false], ["MAP_METEOR_FALLS_B1F_1R", 14, 19, false], ["MAP_METEOR_FALLS_STEVENS_CAVE", 17, 15, false], ["MAP_MIRAGE_TOWER_1F", 5, 3, false], ["MAP_MIRAGE_TOWER_2F", 5, 3, false], ["MAP_MIRAGE_TOWER_3F", 5, 3, false], ["MAP_MIRAGE_TOWER_4F", 4, 3, false], ["MAP_MOSSDEEP_CITY_GAME_CORNER_1F", 6, 3, false], ["MAP_MOSSDEEP_CITY_GAME_CORNER_B1F", 4, 1, false], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_1F", 10, 5, false], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_2F", 8, 7, false], ["MAP_MT_CHIMNEY", 18, 21, false], ["MAP_MT_CHIMNEY_CABLE_CAR_STATION", 4, 7, false], ["MAP_MT_PYRE_1F", 11, 7, false], ["MAP_MT_PYRE_SUMMIT", 24, 17, false], ["MAP_NEW_MAUVILLE_ENTRANCE", 3, 3, false], ["MAP_ROUTE104_PRETTY_PETAL_FLOWER_SHOP", 7, 7, false], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_NORTH_ENTRANCE", 7, 3, false], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_SOUTH_ENTRANCE", 7, 3, false], ["MAP_ROUTE111_OLD_LADYS_REST_STOP", 5, 4, false], ["MAP_ROUTE112_CABLE_CAR_STATION", 4, 7, false], ["MAP_ROUTE113_GLASS_WORKSHOP", 7, 5, false], ["MAP_ROUTE114_FOSSIL_MANIACS_TUNNEL", 6, 13, false], ["MAP_ROUTE117_POKEMON_DAY_CARE", 3, 3, false], ["MAP_ROUTE119_WEATHER_INSTITUTE_1F", 11, 6, false], ["MAP_ROUTE119_WEATHER_INSTITUTE_2F", 9, 9, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_1F", 7, 4, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_2F", 11, 4, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_3F", 15, 6, false], ["MAP_RUSTBORO_CITY_FLAT1_1F", 10, 5, false], ["MAP_RUSTBORO_CITY_FLAT1_2F", 3, 5, false], ["MAP_RUSTBORO_CITY_FLAT2_1F", 9, 4, false], ["MAP_RUSTBORO_CITY_FLAT2_2F", 6, 4, false], ["MAP_RUSTBORO_CITY_FLAT2_3F", 6, 4, false], ["MAP_RUSTBORO_CITY_POKEMON_SCHOOL", 6, 4, false], ["MAP_SEAFLOOR_CAVERN_ENTRANCE", 7, 7, false], ["MAP_SEAFLOOR_CAVERN_ROOM1", 12, 8, false], ["MAP_SEAFLOOR_CAVERN_ROOM2", 7, 6, false], ["MAP_SEAFLOOR_CAVERN_ROOM3", 7, 7, false], ["MAP_SEAFLOOR_CAVERN_ROOM4", 11, 11, false], ["MAP_SEAFLOOR_CAVERN_ROOM5", 8, 8, false], ["MAP_SEAFLOOR_CAVERN_ROOM6", 5, 4, false], ["MAP_SEAFLOOR_CAVERN_ROOM7", 3, 19, false], ["MAP_SEAFLOOR_CAVERN_ROOM8", 3, 8, false], ["MAP_SEALED_CHAMBER_INNER_ROOM", 10, 11, false], ["MAP_SEALED_CHAMBER_OUTER_ROOM", 8, 9, false], ["MAP_SHOAL_CAVE_LOW_TIDE_LOWER_ROOM", 13, 5, false], ["MAP_SKY_PILLAR_1F", 10, 4, false], ["MAP_SKY_PILLAR_2F", 10, 4, false], ["MAP_SKY_PILLAR_3F", 10, 5, false], ["MAP_SKY_PILLAR_4F", 10, 5, false], ["MAP_SKY_PILLAR_5F", 11, 3, false], ["MAP_SKY_PILLAR_ENTRANCE", 8, 8, false], ["MAP_SKY_PILLAR_OUTSIDE", 13, 10, false], ["MAP_SKY_PILLAR_TOP", 12, 11, false], ["MAP_SLATEPORT_CITY_HARBOR", 9, 11, false], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_1F", 12, 6, false], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F", 12, 4, false], ["MAP_SLATEPORT_CITY_POKEMON_FAN_CLUB", 7, 7, false], ["MAP_SLATEPORT_CITY_STERNS_SHIPYARD_1F", 9, 8, false], ["MAP_SLATEPORT_CITY_STERNS_SHIPYARD_2F", 7, 6, false], ["MAP_TERRA_CAVE_END", 10, 12, false], ["MAP_TERRA_CAVE_ENTRANCE", 11, 10, false], ["MAP_TRAINER_HILL_ENTRANCE", 9, 8, false]];
+
 // web/src/match/gifts.ts
 var ITEM_BRIGHT_POWDER = 179;
 var ITEM_WHITE_HERB = 180;
@@ -1493,49 +1496,6 @@ var GIFTS = [
   ITEM_LEFTOVERS2,
   ITEM_SHELL_BELL
 ];
-
-// web/spike-b/shared/items.ts
-var ITEM_TM012 = 289;
-var ITEM_HM08 = 346;
-var isTm = (item) => item >= ITEM_TM012 && item <= ITEM_HM08;
-var isKeyItem = (item) => item >= 259 && item <= 288 || item >= 349;
-var ITEMS_COUNT = 377;
-var MAX_MONEY = 999999;
-var BAG_ROWS = 30 + 16 + 46;
-var NUM_SPECIES2 = 412;
-var MAX_LEVEL2 = 100;
-var isMon = (m) => {
-  const { species, level } = m ?? {};
-  return Number.isInteger(species) && species > 0 && species < NUM_SPECIES2 && Number.isInteger(level) && level >= 1 && level <= MAX_LEVEL2;
-};
-function cleanBag(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  const { items, money, mons } = raw;
-  if (!Array.isArray(items) || items.length > BAG_ROWS) return null;
-  if (mons !== void 0 && (!Array.isArray(mons) || mons.length > 6 || !mons.every(isMon))) return null;
-  const out = { items: [], money: Number.isInteger(money) ? Math.min(Math.max(money, 0), MAX_MONEY) : 0 };
-  for (const r of items) {
-    const id = Number(r?.id), n = Number(r?.n);
-    if (Number.isInteger(id) && id > 0 && id < ITEMS_COUNT && Number.isInteger(n) && n > 0 && !isTm(id) && !isKeyItem(id)) out.items.push({ id, n: Math.min(n, 999) });
-  }
-  if (Array.isArray(mons) && mons.length) out.mons = mons.map(({ species, level }) => ({ species, level }));
-  return out;
-}
-function within(rest, was) {
-  const left = /* @__PURE__ */ new Map();
-  for (const r of was.items) left.set(r.id, (left.get(r.id) ?? 0) + r.n);
-  const items = [];
-  for (const r of rest.items) {
-    const n = Math.min(r.n, left.get(r.id) ?? 0);
-    if (n > 0) {
-      items.push({ id: r.id, n });
-      left.set(r.id, left.get(r.id) - n);
-    }
-  }
-  const out = { items, money: Math.min(rest.money, was.money) };
-  if (rest.mons?.length) out.mons = rest.mons.slice(0, 6).map(({ species, level }) => ({ species, level }));
-  return out;
-}
 
 // web/src/bots/sight.ts
 var SIGHT_RANGE = 5;
@@ -1694,6 +1654,7 @@ var BOT_DUEL_GAP = 60 * 12;
 var BOT_DUEL_MAX = 60 * 120;
 var BOT_BITE = 600;
 var BOT_BITES = 3;
+var ROOMS = rooms_default;
 var SPILL_KEY = 1 << 20;
 var GROUND_PER_MAP = 6;
 var REGROW = 60 * 90;
@@ -1888,10 +1849,15 @@ var Room = class {
       const cells = land.get(id2).filter((c) => !marked.has(`${c.x}:${c.y}`) && !(id2 === "MAP_LITTLEROOT_TOWN" && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
       for (let i = 0; i < GROUND_PER_MAP && cells.length; i++) {
         const c = cells.splice(Math.floor(rng() * cells.length), 1)[0];
-        let item = scatterItem(rng);
-        while (isTm(item)) item = scatterItem(rng);
+        const item = scatterItem(rng);
         out.set(`${id2}:${c.x}:${c.y}`, { key: ++n, map: id2, x: c.x, y: c.y, item });
       }
+    }
+    for (const [map, x, y, house] of ROOMS) {
+      if (!this.maps.has(map) || this.places.has(map) || this.world.cell(map, x, y) !== 0 || out.has(`${map}:${x}:${y}`)) continue;
+      if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
+      const gold = Math.floor(rng() * (house ? 3 : 8)) === 0;
+      out.set(`${map}:${x}:${y}`, { key: ++n, map, x, y, item: gold ? GOLD[Math.floor(rng() * GOLD.length)] : blueTm(rng) });
     }
     for (const id2 of [...land.keys()].sort()) {
       if (!/^MAP_\w+_(TOWN|CITY)$/.test(id2)) continue;
@@ -2710,6 +2676,49 @@ function botSpawns(room, maps, count) {
     if (m.id === "MAP_LITTLEROOT_TOWN" && x >= 7 && x <= 13 && y >= 9 && y <= 13) continue;
     add({ map: m.id, x, y }, 1 + Math.floor(r() * 4), botSkin(Math.floor(r() * 12)));
   }
+  return out;
+}
+
+// web/spike-b/shared/items.ts
+var ITEM_TM012 = 289;
+var ITEM_HM08 = 346;
+var isTm = (item) => item >= ITEM_TM012 && item <= ITEM_HM08;
+var isKeyItem = (item) => item >= 259 && item <= 288 || item >= 349;
+var ITEMS_COUNT = 377;
+var MAX_MONEY = 999999;
+var BAG_ROWS = 30 + 16 + 46;
+var NUM_SPECIES2 = 412;
+var MAX_LEVEL2 = 100;
+var isMon = (m) => {
+  const { species, level } = m ?? {};
+  return Number.isInteger(species) && species > 0 && species < NUM_SPECIES2 && Number.isInteger(level) && level >= 1 && level <= MAX_LEVEL2;
+};
+function cleanBag(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const { items, money, mons } = raw;
+  if (!Array.isArray(items) || items.length > BAG_ROWS) return null;
+  if (mons !== void 0 && (!Array.isArray(mons) || mons.length > 6 || !mons.every(isMon))) return null;
+  const out = { items: [], money: Number.isInteger(money) ? Math.min(Math.max(money, 0), MAX_MONEY) : 0 };
+  for (const r of items) {
+    const id = Number(r?.id), n = Number(r?.n);
+    if (Number.isInteger(id) && id > 0 && id < ITEMS_COUNT && Number.isInteger(n) && n > 0 && !isTm(id) && !isKeyItem(id)) out.items.push({ id, n: Math.min(n, 999) });
+  }
+  if (Array.isArray(mons) && mons.length) out.mons = mons.map(({ species, level }) => ({ species, level }));
+  return out;
+}
+function within(rest, was) {
+  const left = /* @__PURE__ */ new Map();
+  for (const r of was.items) left.set(r.id, (left.get(r.id) ?? 0) + r.n);
+  const items = [];
+  for (const r of rest.items) {
+    const n = Math.min(r.n, left.get(r.id) ?? 0);
+    if (n > 0) {
+      items.push({ id: r.id, n });
+      left.set(r.id, left.get(r.id) - n);
+    }
+  }
+  const out = { items, money: Math.min(rest.money, was.money) };
+  if (rest.mons?.length) out.mons = rest.mons.slice(0, 6).map(({ species, level }) => ({ species, level }));
   return out;
 }
 

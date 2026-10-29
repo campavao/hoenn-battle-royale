@@ -2,6 +2,9 @@
 // host's Room, frame for frame -- with bots wandering, trainers' keys arriving late and
 // bunched, a battle started and ended, and a phone that joins halfway from a snapshot.
 import { GIFTS } from '../../src/match/gifts';
+import { GOLD } from '../../src/match/events';
+import ballsC from '../../../src/br/br_balls.c?raw';
+import roomsJson from '../data/rooms.json';
 import { describe, expect, it } from 'vitest';
 import type { WorldMap } from '../../src/bots/world';
 import type { PatchTable } from '../../src/bots/patches';
@@ -388,9 +391,25 @@ describe('item balls', () => {
       expect(one.world.cell(b.map, b.x, b.y)).toBe(0);
       expect(one.patchesOn(b.map).some((q) => q.x === b.x && q.y === b.y)).toBe(false);
       expect(b.item).toBeGreaterThan(0);
-      expect(isTm(b.item)).toBe(false); // no machines until one is taught off the ground
     }
     expect(new Set(g.map((b) => b.key)).size).toBe(g.length);
+  });
+
+  it('every house and floor with a cache in the live match has its ball: a machine, or gold', () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const rooms = roomsJson as [string, number, number, boolean][];
+    const g = [...room.ground().values()];
+    const caches = g.filter((b) => !room.places.has(b.map));
+    expect(caches.length).toBeGreaterThan(20);
+    for (const b of caches) {
+      expect(rooms.some(([m, x, y]) => m === b.map && x === b.x && y === b.y)).toBe(true);
+      expect(isTm(b.item) || GOLD.includes(b.item)).toBe(true);
+    }
+    // ...and the table is br_balls.c's as it stands (tools/br/spike-rooms.py makes it).
+    const houses = Number(/#define BR_HOUSES (\d+)/.exec(ballsC)![1]);
+    const body = ballsC.slice(ballsC.indexOf('static const struct BrRoom sRooms[] ='));
+    const rows = [...body.slice(0, body.indexOf('};')).matchAll(/\{ (MAP_\w+), (\d+), (\d+), \d+, \d+, (TRUE|FALSE), \w+ \}/g)];
+    expect(rooms).toEqual(rows.map((r, i) => [r[1], Number(r[2]), Number(r[3]), i < houses, r[4]]).filter((r) => r[4] === 'TRUE').map((r) => r.slice(0, 4)));
   });
 
   it('a gift-giver stands in every town and city, holding one held item', () => {

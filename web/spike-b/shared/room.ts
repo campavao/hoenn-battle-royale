@@ -32,9 +32,10 @@ import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, dra
 import { rungForPhase } from '../../src/bots/party';
 import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
-import { scatterItem } from '../../src/match/scatter';
+import { blueTm, scatterItem } from '../../src/match/scatter';
+import roomsJson from '../data/rooms.json';
 import { GIFTS } from '../../src/match/gifts';
-import { isTm, type BagRows } from './items';
+import type { BagRows } from './items';
 import { eitherSees, type Facing } from '../../src/bots/sight';
 import { CLASS_WATER, DIR_NORTH, dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
 
@@ -158,6 +159,9 @@ export const BOT_DUEL_MAX = 60 * 120;
 /** The fog bites a bot every BOT_BITE frames, and the BOT_BITES-th takes it. */
 export const BOT_BITE = 600;
 export const BOT_BITES = 3;
+
+/** The caches' rooms (tools/br/spike-rooms.py, from br_balls.c): map, cell, a house. */
+const ROOMS = roomsJson as [string, number, number, boolean][];
 
 /** Spill keys, clear of the dealt balls' 1..n. */
 export const SPILL_KEY = 1 << 20;
@@ -451,12 +455,21 @@ export class Room {
         !(id === 'MAP_LITTLEROOT_TOWN' && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
       for (let i = 0; i < GROUND_PER_MAP && cells.length; i++) {
         const c = cells.splice(Math.floor(rng() * cells.length), 1)[0];
-        // No machines yet: in a match one off the ground is taught there and then (br_items.c
-        // Found), which a bare GIVE would skip.
-        let item = scatterItem(rng);
-        while (isTm(item)) item = scatterItem(rng);
+        // A machine is taught there and then, as a match's is (rom.ts teach).
+        const item = scatterItem(rng);
         out.set(`${id}:${c.x}:${c.y}`, { key: ++n, map: id, x: c.x, y: c.y, item });
       }
+    }
+    // A cache in every house and on every other floor that had nothing (br_balls.c's
+    // sRooms, Cam 2026-10-18: "an item, trader, or both on every floor"): a machine, or
+    // gold one time in three in a house and one in eight on a floor.
+    for (const [map, x, y, house] of ROOMS) {
+      // A building this world goes into (makeRoom's interiors), on its floor.
+      if (!this.maps.has(map) || this.places.has(map) || this.world.cell(map, x, y) !== 0 || out.has(`${map}:${x}:${y}`)) continue;
+      // The match keeps its cells off the wild patches (BrBalls_Spot); here the patch has it.
+      if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
+      const gold = Math.floor(rng() * (house ? 3 : 8)) === 0;
+      out.set(`${map}:${x}:${y}`, { key: ++n, map, x, y, item: gold ? GOLD[Math.floor(rng() * GOLD.length)] : blueTm(rng) });
     }
     // A gift-giver in every town and city (gifts.ts, Cam 2026-10-13: "some gift giving
     // NPCs"): a person holding one held item, standing on a free cell. A at him takes it,
