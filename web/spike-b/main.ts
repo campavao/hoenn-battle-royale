@@ -1040,7 +1040,8 @@ async function pickDrop(): Promise<void> {
   const byPlace = new Map<string, string>();
   for (const id of [...placed.keys()].sort()) {
     const p = placed.get(id)!;
-    if (!p.m.outdoor || id.startsWith(SAFARI) || ISLANDS.has(id)) continue;
+    // Hoenn's own outdoor places (room.ts places), not a door's or the ferry's.
+    if (!link.room.places.has(id) || id.startsWith(SAFARI) || ISLANDS.has(id)) continue;
     const name = ringMap?.placeOf(id);
     if (name && !byPlace.has(name)) byPlace.set(name, id);
   }

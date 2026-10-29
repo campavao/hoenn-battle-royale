@@ -133,8 +133,11 @@ describe('bots', () => {
 
 describe('bots with somewhere to be', () => {
   it('walk into the coming ring before it closes, and some to an event while its legendary stands', () => {
-    const host = new Host(makeRoom(MAPS, PATCHES, 5), 64, MAPS);
+    const host = new Host(makeRoom(MAPS, PATCHES, 8), 64, MAPS);
     const room = host.room;
+    // A legendary's event, not a story's (STORY_CHANCE), and not the final ring's sea.
+    (room as unknown as { storyFor(): undefined }).storyFor = () => undefined;
+    expect(room.centre(room.ring().round).final).toBeUndefined();
     const r0 = room.ring();
     // How far the bots are from the ring's centre, on average, in tiles of the plane.
     const far = () => {
@@ -497,6 +500,16 @@ describe('item balls', () => {
     expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'gate', gate: 2, key: shelly.key }));
     expect(room.picked.get(shelly.key)).toBe(1000);
     expect(a.battling).toBe(true);
+  });
+
+  it("door-only outdoor places are anchored; SKY PILLAR's final ring waits for land near it", () => {
+    const room = makeRoom(MAPS, PATCHES, 5);
+    for (const id of ['MAP_MT_CHIMNEY', 'MAP_MT_PYRE_SUMMIT', 'MAP_SKY_PILLAR_TOP']) {
+      expect(room.places.has(id)).toBe(false);
+      expect(room.anchors.has(id)).toBe(true);
+    }
+    // The mainland walkers stand nowhere near Route 131: no seed centres a ring at sea.
+    for (let seed = 0; seed < 40; seed++) expect(makeRoom(MAPS, PATCHES, seed).centre(0).final).toBeUndefined();
   });
 
   it("the ferry sails to a live island's story and back, and nowhere without one", () => {
@@ -901,7 +914,9 @@ describe('doors', () => {
 
 describe('events', () => {
   it('every other ring from the first shrink drops a legendary, two rares, three gold balls and supplies; A on the legendary is its battle', () => {
-    const room = makeRoom(MAPS, PATCHES, 5);
+    const room = makeRoom(MAPS, PATCHES, 8);
+    // The legendary's cluster, not a story told in its place (STORY_CHANCE).
+    (room as unknown as { storyFor(): undefined }).storyFor = () => undefined;
     room.ringPhase = 60;
     room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 }, facing: 1 });
     for (let i = 0; i < 60; i++) room.step(new Map());

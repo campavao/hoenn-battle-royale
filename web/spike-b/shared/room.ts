@@ -29,7 +29,7 @@
 import { clerkAt, type Clerk } from './marts';
 import { leaderAt } from './gyms';
 import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, draw, eventForRing } from '../../src/match/events';
-import { DOOR_Y, STORIES, STORY_CHANCE, type Story, type StoryDoor } from '../../src/match/story';
+import { DOOR_Y, FINAL_CHANCE, STORIES, STORY_CHANCE, type Story, type StoryDoor } from '../../src/match/story';
 import { rungForPhase } from '../../src/bots/party';
 import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
@@ -356,6 +356,9 @@ export const RING_PHASE = 60 * 120;
  *  everywhere. The match measures in region-map sections; here it is tiles, on purpose:
  *  this world is walked tile by tile, and a section-sized ring would fog half a town. */
 const RING_STEPS = [Infinity, 15 / 28, 9 / 28, 7 / 28, 5 / 28, 3 / 28, 2 / 28, 0, -1];
+/** How near a walking trainer must be able to stand to a final story's place for the ring
+ *  to centre on it (FINAL_CHANCE). */
+const FINAL_REACH = 24;
 
 /** The ring at a frame, in the plane layout() places the maps in (tiles). `r` is Infinity
  *  for no fog and -1 for fog everywhere; `left` the frames to the next phase. */
@@ -689,10 +692,11 @@ export class Room {
   /** Frames of Safari each round opens with (SAFARI); 0, none (a test's room). */
   opening = 0;
 
-  private centres = new Map<number, { cx: number; cy: number; far: number }>();
-  /** A round's centre: a cell a trainer can stand on, from the seed; and how far the
-   *  farthest reachable cell is from it. */
-  private centre(round: number): { cx: number; cy: number; far: number } {
+  private centres = new Map<number, { cx: number; cy: number; far: number; final?: string }>();
+  /** A round's centre: a cell a trainer can stand on, from the seed, or one round in four
+   *  a final story's place (story.ts's FINAL_CHANCE: SKY PILLAR), which then holds that
+   *  story for the last event; and how far the farthest reachable cell is from it. */
+  centre(round: number): { cx: number; cy: number; far: number; final?: string } {
     const hit = this.centres.get(round);
     if (hit) return hit;
     const cells = this.reachable();
@@ -700,13 +704,20 @@ export class Room {
     h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12;
     const c = cells[(h >>> 0) % cells.length];
     const p = this.places.get(c.map)!;
-    const cx = p.gx + c.x + 0.5, cy = p.gy + c.y + 0.5;
+    let cx = p.gx + c.x + 0.5, cy = p.gy + c.y + 0.5;
+    // Only a final story whose place the walking trainers can stand near: a ring shut on
+    // open sea (SKY PILLAR's, while the deal is the mainland's) would fog every one of them.
+    const near = (x: number, y: number) => cells.some((s) => { const q = this.places.get(s.map)!; return Math.hypot(q.gx + s.x + 0.5 - x, q.gy + s.y + 0.5 - y) <= FINAL_REACH; });
+    const at = (s: Story) => { const q = this.places.get(s.map), a = this.anchors.get(s.map); return q ? { x: q.gx + s.cells[0].x + 0.5, y: q.gy + s.cells[0].y + 0.5 } : a ? { x: a.gx, y: a.gy } : undefined; };
+    const finals = STORIES.filter((s) => { const p = s.final && this.maps.has(s.map) ? at(s) : undefined; return p && near(p.x, p.y); });
+    const story = finals.length && ((h >>> 7) % 1000) / 1000 < FINAL_CHANCE ? finals[((h >>> 17) >>> 0) % finals.length] : undefined;
+    if (story) ({ x: cx, y: cy } = at(story)!);
     let far = 0;
     for (const s of cells) {
       const q = this.places.get(s.map)!;
       far = Math.max(far, Math.hypot(q.gx + s.x + 0.5 - cx, q.gy + s.y + 0.5 - cy));
     }
-    const out = { cx, cy, far };
+    const out = { cx, cy, far, ...(story ? { final: story.id } : {}) };
     if (this.centres.size > 4) this.centres.clear();
     this.centres.set(round, out);
     return out;
@@ -801,6 +812,9 @@ export class Room {
       && !this.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y);
     const all = this.reachable().filter(free);
     const plane = (s: Spot) => { const p = this.places.get(s.map)!; return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy); };
+    // The last event is the final ring's: its story, when the ring is centred on one.
+    const final = n === EVENT_MAX - 1 ? STORIES.find((s) => s.id === this.centre(ring.round).final) : undefined;
+    if (final && !this.events.some((e) => e.story === final.id)) return this.tellStory(n, ring, final, rng);
     const story = n < EVENT_MAX - 1 && rng() < STORY_CHANCE ? this.storyFor(rng, ring) : undefined;
     if (story) return this.tellStory(n, ring, story, rng);
     let from: Spot | undefined;
@@ -1349,7 +1363,9 @@ export function interiors(all: readonly WorldMap[], outside: ReadonlyMap<string,
     const here = outside.get(id);
     for (const w of m.warps ?? []) {
       const to = byId.get(w.to);
-      if (!to || to.outdoor || CLOSED_DOORS.has(to.id) || out.has(to.id)) continue;
+      // An outdoor map is Hoenn's own place unless a door is the only way to it (SKY
+      // PILLAR's ledge, between its entrance and its first floor).
+      if (!to || outside.has(to.id) || CLOSED_DOORS.has(to.id) || out.has(to.id)) continue;
       const at = here ? { gx: here.gx + w.x + 0.5, gy: here.gy + w.y + 0.5 } : out.get(id)!;
       out.set(to.id, { m: to, gx: at.gx, gy: at.gy });
       queue.push(to.id);

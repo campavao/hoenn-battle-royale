@@ -1421,6 +1421,7 @@ var ITEM_METEORITE = 280;
 var ITEM_SUN_STONE = 93;
 var DOOR_Y = 20;
 var STORY_CHANCE = 0.5;
+var FINAL_CHANCE = 0.25;
 var STORIES = [
   {
     id: "mirage-tower",
@@ -2047,6 +2048,7 @@ var DEALS = /* @__PURE__ */ new Map();
 var REACH = /* @__PURE__ */ new Map();
 var RING_PHASE = 60 * 120;
 var RING_STEPS = [Infinity, 15 / 28, 9 / 28, 7 / 28, 5 / 28, 3 / 28, 2 / 28, 0, -1];
+var FINAL_REACH = 24;
 var SAFARI = "MAP_SAFARI_ZONE_";
 var Room = class {
   constructor(world, maps, patches, seed, places, anchors = /* @__PURE__ */ new Map()) {
@@ -2361,8 +2363,9 @@ var Room = class {
   /** Frames of Safari each round opens with (SAFARI); 0, none (a test's room). */
   opening = 0;
   centres = /* @__PURE__ */ new Map();
-  /** A round's centre: a cell a trainer can stand on, from the seed; and how far the
-   *  farthest reachable cell is from it. */
+  /** A round's centre: a cell a trainer can stand on, from the seed, or one round in four
+   *  a final story's place (story.ts's FINAL_CHANCE: SKY PILLAR), which then holds that
+   *  story for the last event; and how far the farthest reachable cell is from it. */
   centre(round) {
     const hit = this.centres.get(round);
     if (hit) return hit;
@@ -2373,13 +2376,27 @@ var Room = class {
     h ^= h >>> 12;
     const c = cells[(h >>> 0) % cells.length];
     const p = this.places.get(c.map);
-    const cx = p.gx + c.x + 0.5, cy = p.gy + c.y + 0.5;
+    let cx = p.gx + c.x + 0.5, cy = p.gy + c.y + 0.5;
+    const near = (x, y) => cells.some((s) => {
+      const q = this.places.get(s.map);
+      return Math.hypot(q.gx + s.x + 0.5 - x, q.gy + s.y + 0.5 - y) <= FINAL_REACH;
+    });
+    const at = (s) => {
+      const q = this.places.get(s.map), a = this.anchors.get(s.map);
+      return q ? { x: q.gx + s.cells[0].x + 0.5, y: q.gy + s.cells[0].y + 0.5 } : a ? { x: a.gx, y: a.gy } : void 0;
+    };
+    const finals = STORIES.filter((s) => {
+      const p2 = s.final && this.maps.has(s.map) ? at(s) : void 0;
+      return p2 && near(p2.x, p2.y);
+    });
+    const story = finals.length && (h >>> 7) % 1e3 / 1e3 < FINAL_CHANCE ? finals[(h >>> 17 >>> 0) % finals.length] : void 0;
+    if (story) ({ x: cx, y: cy } = at(story));
     let far = 0;
     for (const s of cells) {
       const q = this.places.get(s.map);
       far = Math.max(far, Math.hypot(q.gx + s.x + 0.5 - cx, q.gy + s.y + 0.5 - cy));
     }
-    const out = { cx, cy, far };
+    const out = { cx, cy, far, ...story ? { final: story.id } : {} };
     if (this.centres.size > 4) this.centres.clear();
     this.centres.set(round, out);
     return out;
@@ -2473,6 +2490,8 @@ var Room = class {
       const p = this.places.get(s.map);
       return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy);
     };
+    const final = n === EVENT_MAX - 1 ? STORIES.find((s) => s.id === this.centre(ring.round).final) : void 0;
+    if (final && !this.events.some((e) => e.story === final.id)) return this.tellStory(n, ring, final, rng);
     const story = n < EVENT_MAX - 1 && rng() < STORY_CHANCE ? this.storyFor(rng, ring) : void 0;
     if (story) return this.tellStory(n, ring, story, rng);
     let from;
@@ -3084,7 +3103,7 @@ function interiors(all, outside) {
     const here = outside.get(id);
     for (const w of m.warps ?? []) {
       const to = byId.get(w.to);
-      if (!to || to.outdoor || CLOSED_DOORS.has(to.id) || out.has(to.id)) continue;
+      if (!to || outside.has(to.id) || CLOSED_DOORS.has(to.id) || out.has(to.id)) continue;
       const at = here ? { gx: here.gx + w.x + 0.5, gy: here.gy + w.y + 0.5 } : out.get(id);
       out.set(to.id, { m: to, gx: at.gx, gy: at.gy });
       queue.push(to.id);
