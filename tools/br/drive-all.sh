@@ -77,7 +77,7 @@ drive_one() {
   bash "$HERE/drive.sh" "$n" ${ROM:+"$ROM"} > "$log" 2>&1 || ok=0
   if [[ "$ok" -eq 1 && "$kind" == checked-by* ]]; then
     # ROM goes along for a checker that drives a second run (replay-check.py)
-    ROM="$ROM" python3 "$ROOT/${kind#checked-by }" < "$log" > "$log.check" 2>&1 || ok=0
+    ROM="$ROM" BR_DRIVER="$n" python3 "$ROOT/${kind#checked-by }" < "$log" > "$log.check" 2>&1 || ok=0
     cat "$log.check" >> "$log"
   fi
   if [[ "$ok" -eq 1 ]]; then echo ok > "$LOGS/$n.result"; else echo fail > "$LOGS/$n.result"; fi
@@ -91,7 +91,9 @@ if [[ "${#runnable[@]}" -gt 0 ]]; then
   if [[ "${#runnable[@]}" -gt 1 ]]; then
     export -f drive_one how
     export HERE ROOT ROM LOGS
-    printf '%s\n' "${runnable[@]:1}" | xargs -P "$JOBS" -I{} bash -c 'drive_one "$1"' _ {}
+    # `|| true`: a driver xargs lost (killed, say) has no .result, and the summary below
+    # counts it failed; set -e must not skip that summary.
+    printf '%s\n' "${runnable[@]:1}" | xargs -P "$JOBS" -I{} bash -c 'drive_one "$1"' _ {} || true
   fi
 fi
 
