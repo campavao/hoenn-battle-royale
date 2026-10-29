@@ -290,38 +290,76 @@ export interface WorldHandlers {
   onKicked(): void;
   onRooms(rooms: Listed[]): void;
   onMatch(link: WorldLink): void;
-  /** The socket closed (or never opened). */
+  /** The socket closed (or never opened) for good. */
   onClosed(): void;
+  /** The socket dropped and is being tried again (Reconnecting…). Without it, a drop
+   *  is onClosed. */
+  onDropped?(): void;
+  /** Open again after a drop: what to send first to come back in (a join with `again`),
+   *  if anything. */
+  onReconnected?(): WorldUp | undefined;
 }
+
+/** How long a dropped socket is tried again: the relay's hold on an away trainer. */
+export const RECONNECT_MS = 55_000;
 
 export function connectWorld(url: string, make: (seed: number) => Room, h: WorldHandlers): WorldSocket {
   let ws: WebSocket | null = null;
   let match: Online | null = null;
   let closed = false;
+  /** Tries since the socket last dropped, and when it dropped (0: it is up). */
+  let tries = 0;
+  let droppedAt = 0;
   const queue: WorldUp[] = [];
   const send = (m: WorldUp) => {
     if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
     else queue.push(m);
   };
-  try { ws = new WebSocket(url); } catch { ws = null; }
-  if (!ws) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, list: () => undefined, set: () => undefined, kick: () => undefined, leave: () => undefined, close: () => undefined }; }
-  const sock = ws;
-  sock.addEventListener('open', () => { for (const m of queue.splice(0)) sock.send(JSON.stringify(m)); });
-  sock.addEventListener('close', () => { if (!closed) { closed = true; h.onClosed(); } });
-  sock.addEventListener('message', (ev) => {
-    const m = JSON.parse(String(ev.data)) as WorldDown;
-    if (m.t === 'room') h.onRoom(m);
-    else if (m.t === 'no_room') h.onNoRoom(m.code, m.pass);
-    else if (m.t === 'kicked') h.onKicked();
-    else if (m.t === 'rooms') h.onRooms(m.rooms);
-    else if (m.t === 'full') h.onNoRoom('');
-    else if (m.t === 'hello') {
-      const next = new Online(sock, make);
-      next.receive(m, () => undefined);
-      match = next;
-      h.onMatch(next);
-    } else match?.receive(m, () => undefined);
-  });
+  const open = (): boolean => {
+    let sock: WebSocket;
+    try { sock = new WebSocket(url); } catch { return false; }
+    ws = sock;
+    sock.addEventListener('open', () => {
+      const back = droppedAt > 0;
+      droppedAt = 0;
+      tries = 0;
+      // Back after a drop: the page says how to come back in (the room, my id and key)
+      // before anything queued while it was down.
+      const again = back ? h.onReconnected?.() : undefined;
+      if (again) sock.send(JSON.stringify(again));
+      for (const m of queue.splice(0)) sock.send(JSON.stringify(m));
+    });
+    sock.addEventListener('close', () => {
+      if (closed || ws !== sock) return;
+      // A dropped socket (a phone's network blinking) comes back by itself for as long
+      // as the relay holds the trainer (AWAY_MS); the page shows Reconnecting meanwhile.
+      const now = Date.now();
+      if (!droppedAt) droppedAt = now;
+      if (h.onDropped && now - droppedAt < RECONNECT_MS) {
+        h.onDropped();
+        setTimeout(() => { if (!closed && !open()) { closed = true; h.onClosed(); } }, Math.min(8000, 500 * 2 ** tries++));
+        return;
+      }
+      closed = true;
+      h.onClosed();
+    });
+    sock.addEventListener('message', (ev) => {
+      const m = JSON.parse(String(ev.data)) as WorldDown;
+      if (m.t === 'room') h.onRoom(m);
+      else if (m.t === 'no_room') h.onNoRoom(m.code, m.pass);
+      else if (m.t === 'kicked') h.onKicked();
+      else if (m.t === 'rooms') h.onRooms(m.rooms);
+      else if (m.t === 'full') h.onNoRoom('');
+      else if (m.t === 'hello') {
+        const next = new Online(sock, make);
+        next.receive(m, () => undefined);
+        match = next;
+        h.onMatch(next);
+      } else match?.receive(m, () => undefined);
+    });
+    return true;
+  };
+  if (!open()) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, list: () => undefined, set: () => undefined, kick: () => undefined, leave: () => undefined, close: () => undefined }; }
   return {
     join: (name, skin, how) => send({ t: 'join', name, skin, ...how }),
     start: () => send({ t: 'start' }),
@@ -329,6 +367,6 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
     set: (set) => send({ t: 'set', set }),
     kick: (id) => send({ t: 'kick', id }),
     leave: () => send({ t: 'leave' }),
-    close: () => { closed = true; sock.close(); },
+    close: () => { closed = true; ws?.close(); },
   };
 }

@@ -1167,7 +1167,26 @@ let looping = false;
 
 /** A match starts for me (or I come into one under way): its link, and the page as a
  *  match begins it -- a fresh team, nobody out, the camera on my trainer. */
+/** The socket dropped and is being tried again; `resuming`: back with the match's own
+ *  trainer, so the next `hello` is the same match carrying on, not a new one. */
+let reconnecting = false;
+let resuming = false;
+function resumeMatch(l: WorldLink): void {
+  const was = link;
+  link = l;
+  resuming = reconnecting = false;
+  ringMap = art && RingMap.SYMBOLS.every((n) => Number.isFinite(art!.sym(n))) ? new RingMap(l.room, art) : null;
+  // A battle fought through the drop ends on the new link (not as a stale one).
+  if (battle && battle.link === was) battle.link = l;
+  l.onBt = was.onBt;
+  if (follow === was.me) follow = l.me;
+  tick('Back in the match.');
+  if (lobby?.sheetUp) lobby.stage.redraw();
+}
+
 function startMatch(l: WorldLink): void {
+  if (resuming && matchOn) { resumeMatch(l); return; }
+  resuming = reconnecting = false;
   link = l;
   // The room's battle pace (the host's TEXT and ANIM); ?solo keeps the parked FAST, none.
   if (room) rom?.pace(room.set.textSpeed, room.set.animations);
@@ -1283,7 +1302,7 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
   })();
   return {
     look: 'overlay',
-    status: room ? `Room ${room.code}` : 'SOLO VS BOTS',
+    status: reconnecting ? 'Reconnecting…' : room ? `Room ${room.code}` : 'SOLO VS BOTS',
     strip,
     chips: [legendChip()].filter((c): c is string => c !== null),
     match: res.round,
@@ -2337,7 +2356,22 @@ async function boot(): Promise<void> {
       onKicked: () => { room = null; forget(); lobby!.menu('The host took you out of the room.'); },
       onRooms: (rooms) => lobby?.listed(rooms),
       onMatch: (l) => startMatch(l),
-      onClosed: () => { matchOn = false; lobby!.menu('Lost the relay. Reload to play again.'); },
+      onClosed: () => { reconnecting = false; matchOn = false; lobby!.menu('Lost the relay. Reload to play again.'); },
+      onDropped: () => {
+        if (!reconnecting) { reconnecting = true; tick('Reconnecting…', true); }
+        if (lobby?.sheetUp) lobby.stage.redraw();
+      },
+      onReconnected: () => {
+        // Back in as the same trainer (the relay held it, AWAY_MS); in a room between
+        // matches, back into the room.
+        const who = me();
+        if (matchOn && room && link?.online && link.key) {
+          resuming = true;
+          return { t: 'join', name: who.name, skin: who.skin, code: room.code, again: { code: room.code, id: link.me, key: link.key } };
+        }
+        reconnecting = false;
+        return room ? { t: 'join', name: who.name, skin: who.skin, code: room.code } : undefined;
+      },
     });
     worldSock = sock;
     sheetBtn.hidden = false;
