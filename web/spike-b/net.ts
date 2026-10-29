@@ -17,18 +17,28 @@ import type { PatchTable } from '../src/bots/patches';
 import { tick } from './sim';
 import { Host, play } from './shared/host';
 import { keysOf, makeRoom, type Actor, type Bag, type Room, type RoomEvent } from './shared/room';
-import type { WireFrame, WorldDown, WorldUp } from './shared/wire';
+import type { Again, SpMsg, WireFrame, WorldDown, WorldUp } from './shared/wire';
 
 export interface WorldLink {
   readonly room: Room;
   readonly me: number;
   readonly online: boolean;
+  /** What a reload brings back to rejoin as the same trainer (online only). */
+  readonly key?: string;
   /** One frame: my keys in, the battles that started for me out. */
   frame(bits: number): RoomEvent[];
   /** My trainer as it is drawn (none for the frame before the room has me). */
   mine(): Actor | undefined;
   /** My battle is over (`fled`: it never got going, or was run from; `won`: I beat a bot). */
   end(fled?: boolean, won?: boolean): void;
+  /** What my team could do on the field now (FIELD_*). */
+  field(bits: number): void;
+  /** The bots the room gave me to fight: `winner` won (0, no answer). */
+  bots(a: number, b: number, winner: number): void;
+  /** Where to drop me when the Safari ends. */
+  pick(map: string): void;
+  /** My trade with event `n`'s trader is over: I gave him `given` (0, nothing). */
+  traded(n: number, given: number): void;
   /** The ball `key` would not go in my bag: put it back. */
   drop(key: number, rest?: Bag): void;
   /** My team is down: off the map. `by` who beat me, `wild` a wild POKeMON did. */
@@ -37,6 +47,14 @@ export interface WorldLink {
   bt(q: number, d: number[]): void;
   /** Where the blocks from the trainer I am fighting go. */
   onBt: ((q: number, d: number[]) => void) | null;
+  /** Whose battles come to me (0: nobody's), and the eye they see. */
+  watch(id: number): void;
+  /** What my ROM published of the battle I am in, for whoever watches it. */
+  sp(m: SpMsg): void;
+  /** The battle the trainer I watch is in, message by message from its start. */
+  onSp: ((from: number, m: SpMsg) => void) | null;
+  /** How many are watching me. */
+  onEyes: ((n: number) => void) | null;
   /** For the stats line. */
   status(): string;
 }
@@ -44,7 +62,9 @@ export interface WorldLink {
 const BOTS = 64;
 
 export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, seed: number): WorldLink {
-  const host = new Host(makeRoom(maps, patches, seed, world), BOTS, maps, 0);
+  const room = makeRoom(maps, patches, seed, world);
+  room.opening = room.ringPhase; // the Safari opening, as a match has it
+  const host = new Host(room, BOTS, maps, 0);
   const me = host.join('YOU', 0);
   host.advance();
   let seq = 0;
@@ -58,10 +78,18 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     },
     mine: () => host.room.actor(me),
     end: (fled, won) => host.end(me, fled, won),
+    field: (bits) => host.field(me, bits),
+    bots: (a, b, winner) => host.bots(me, a, b, winner),
+    traded: (n, given) => host.traded(me, n, given),
+    pick: (map) => host.pick(me, map),
     drop: (key, rest) => host.drop(me, key, rest),
     out: (bag, by, wild) => host.out(me, bag, by, wild),
     bt: () => undefined,
     onBt: null,
+    watch: () => undefined,
+    sp: () => undefined,
+    onSp: null,
+    onEyes: null,
     status: () => 'solo: you and the bots (no relay)',
   };
 }
@@ -72,6 +100,7 @@ const CUSHION = 3;
 class Online implements WorldLink {
   room!: Room;
   me = 0;
+  key?: string;
   readonly online = true;
   private queue: WireFrame[] = [];
   private playing = false;
@@ -89,6 +118,8 @@ class Online implements WorldLink {
   private predicted: Actor | null = null;
   private closed = false;
   onBt: ((q: number, d: number[]) => void) | null = null;
+  onSp: ((from: number, m: SpMsg) => void) | null = null;
+  onEyes: ((n: number) => void) | null = null;
 
   constructor(private readonly ws: WebSocket, private readonly make: (seed: number) => Room) {
     ws.addEventListener('close', () => { this.closed = true; });
@@ -100,6 +131,7 @@ class Online implements WorldLink {
       this.room = this.make(m.state.seed);
       this.room.load(m.state);
       this.me = m.id;
+      this.key = m.key;
       ready();
     } else if (m.t === 'state') {
       this.room.load(m.state);
@@ -109,6 +141,10 @@ class Online implements WorldLink {
       this.queue.push(...m.f);
     } else if (m.t === 'bt') {
       this.onBt?.(m.q, m.d);
+    } else if (m.t === 'sp') {
+      this.onSp?.(m.from, m.m);
+    } else if (m.t === 'eyes') {
+      this.onEyes?.(m.n);
     }
   }
 
@@ -182,12 +218,23 @@ class Online implements WorldLink {
   }
 
   end(fled = false, won = false): void { this.send({ t: 'end', ...(fled ? { fled } : {}), ...(won ? { won } : {}) }); }
+  field(bits: number): void { this.send({ t: 'field', bits }); }
+
+  bots(a: number, b: number, winner: number): void { this.send({ t: 'bots', a, b, w: winner }); }
+
+  traded(n: number, given: number): void { this.send({ t: 'traded', n, sp: given }); }
+
+  pick(map: string): void { this.send({ t: 'pick', map }); }
 
   drop(key: number, rest?: Bag): void { this.send({ t: 'drop', k: key, rest }); }
 
   out(bag?: Bag, by?: number, wild?: boolean): void { this.send({ t: 'out', bag, by, wild }); }
 
   bt(q: number, d: number[]): void { this.send({ t: 'bt', q, d }); }
+
+  watch(id: number): void { this.send({ t: 'watch', id }); }
+
+  sp(m: SpMsg): void { this.send({ t: 'sp', m }); }
 
   status(): string {
     if (this.closed) return 'the relay closed the connection: reload to rejoin';
@@ -196,22 +243,52 @@ class Online implements WorldLink {
   }
 }
 
-/** The relay's shared world, or null if it is not there within `ms`. */
-export function onlineLink(url: string, name: string, skin: number, make: (seed: number) => Room, ms = 4000): Promise<WorldLink | null> {
-  return new Promise((resolve) => {
-    let ws: WebSocket;
-    try { ws = new WebSocket(url); } catch { resolve(null); return; }
-    const link = new Online(ws, make);
-    let done = false;
-    const finish = (v: WorldLink | null) => { if (!done) { done = true; clearTimeout(timer); resolve(v); } };
-    const timer = setTimeout(() => { ws.close(); finish(null); }, ms);
-    ws.addEventListener('open', () => ws.send(JSON.stringify({ t: 'join', name, skin } satisfies WorldUp)));
-    ws.addEventListener('message', (ev) => {
-      const m = JSON.parse(String(ev.data)) as WorldDown;
-      if (m.t === 'full') { finish(null); return; }
-      link.receive(m, () => finish(link));
-    });
-    ws.addEventListener('error', () => finish(null));
-    ws.addEventListener('close', () => finish(null));
+/** The relay's side of spike B, from the menu on: one socket for the rooms and every match
+ *  in them. `onMatch` hands over the match's link each time one starts for me (or I come
+ *  into one under way, to watch). */
+export interface WorldSocket {
+  join(name: string, skin: number, how: { code?: string; host?: boolean; again?: Again }): void;
+  start(): void;
+  close(): void;
+}
+
+export interface WorldHandlers {
+  onRoom(r: Extract<WorldDown, { t: 'room' }>): void;
+  onNoRoom(code: string): void;
+  onMatch(link: WorldLink): void;
+  /** The socket closed (or never opened). */
+  onClosed(): void;
+}
+
+export function connectWorld(url: string, make: (seed: number) => Room, h: WorldHandlers): WorldSocket {
+  let ws: WebSocket | null = null;
+  let match: Online | null = null;
+  let closed = false;
+  const queue: WorldUp[] = [];
+  const send = (m: WorldUp) => {
+    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
+    else queue.push(m);
+  };
+  try { ws = new WebSocket(url); } catch { ws = null; }
+  if (!ws) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, close: () => undefined }; }
+  const sock = ws;
+  sock.addEventListener('open', () => { for (const m of queue.splice(0)) sock.send(JSON.stringify(m)); });
+  sock.addEventListener('close', () => { if (!closed) { closed = true; h.onClosed(); } });
+  sock.addEventListener('message', (ev) => {
+    const m = JSON.parse(String(ev.data)) as WorldDown;
+    if (m.t === 'room') h.onRoom(m);
+    else if (m.t === 'no_room') h.onNoRoom(m.code);
+    else if (m.t === 'full') h.onNoRoom('');
+    else if (m.t === 'hello') {
+      const next = new Online(sock, make);
+      next.receive(m, () => undefined);
+      match = next;
+      h.onMatch(next);
+    } else match?.receive(m, () => undefined);
   });
+  return {
+    join: (name, skin, how) => send({ t: 'join', name, skin, ...how }),
+    start: () => send({ t: 'start' }),
+    close: () => { closed = true; sock.close(); },
+  };
 }

@@ -46,7 +46,8 @@ const MAX_QUEUE = 600;
 export class Host {
   readonly room: Room;
   private players = new Map<number, Player>();
-  private brains = new Map<number, Brain>();
+  /** Each bot's mind, by id (the host's alone: the room only ever sees its keys). */
+  readonly brains = new Map<number, Brain>();
   private pending: Command[] = [];
   private nextId = 1;
 
@@ -63,8 +64,9 @@ export class Host {
   /** A new trainer, in Littleroot by the truck (or at `spot`), standing on the next frame
    *  (or on the bench until the next round, when the fog has closed on this one). No name:
    *  TRAINER and their number. */
-  join(name: string, skin: number, spot?: Spot): number {
-    const id = this.nextId++;
+  join(name: string, skin: number, spot?: Spot, given?: number): number {
+    const id = given ?? this.nextId++;
+    if (given !== undefined && given >= this.nextId) this.nextId = given + 1;
     if (!spot) {
       // Not where somebody stands, nor where a join this frame will put them.
       const used = (s: Spot) =>
@@ -76,6 +78,11 @@ export class Host {
     this.pending.push({ c: 'join', id, bot: false, name: name || `TRAINER ${id}`.slice(0, 10), skin, spot, facing: 1 });
     this.players.set(id, { id, queue: [], seq: 0, started: false, waited: 0 });
     return id;
+  }
+
+  /** START: who is on the map once this frame's joins are in is the match. */
+  lock(): void {
+    this.pending.push({ c: 'lock' });
   }
 
   leave(id: number): void {
@@ -100,6 +107,34 @@ export class Host {
   }
 
   /** The phone's battle is over: its trainer (and the bot) walk again. */
+  /** The page's team could now do these on the field. */
+  field(id: number, bits: number): void {
+    if (this.players.has(id)) this.pending.push({ c: 'field', id, bits: bits & 7 });
+  }
+
+  /** The page fought two bots for the room (a `bots` event): who won, 0 for nobody. */
+  bots(id: number, a: number, b: number, winner: number): void {
+    if (this.players.has(id)) this.pending.push({ c: 'bots', id, a, b, winner });
+  }
+
+  /** A page gone for now (`on`), or back. Back, it numbers its keys from 1 again. */
+  away(id: number, on: boolean): void {
+    const p = this.players.get(id);
+    if (!p) return;
+    if (!on) { p.queue = []; p.seq = 0; p.started = false; p.waited = 0; }
+    this.pending.push({ c: 'away', id, on });
+  }
+
+  /** Drop the page's trainer on `map` when the Safari ends. */
+  pick(id: number, map: string): void {
+    if (this.players.has(id) && typeof map === 'string') this.pending.push({ c: 'pick', id, map });
+  }
+
+  /** The page's trade with event `n`'s trader is done: it gave him `given` (0, none). */
+  traded(id: number, n: number, given: number): void {
+    if (this.players.has(id)) this.pending.push({ c: 'traded', id, n, given });
+  }
+
   end(id: number, fled = false, won = false): void {
     if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: 'end', id, ...(fled ? { fled: true } : {}), ...(won ? { won: true } : {}) });
   }

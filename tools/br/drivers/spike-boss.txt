@@ -1,0 +1,153 @@
+# spike-boss: spike B's page asks the hidden ROM for a gym leader (br_wild.h's
+# BR_WILD_BOSS, br_gym.c). TATE&LIZA with one POKeMON standing refuse at once (DONE,
+# outcome 0); ROXANNE's own battle starts (FIGHTING, her trainer id), and beaten it
+# answers DONE with outcome 1 once her script has given the TM and gone.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 D3 C9 CF FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 4
+wait 2
+# TATE&LIZA (6): a double, and only one mon in the party
+pokebytes gBrWildAsk+1 FF 06 00
+poke u8 gBrWildAsk+7 9
+poke u8 gBrWildAsk 1
+wait 10
+expect u8 gBrWildAsk 3
+expect u8 gBrWildAsk+7 0
+# ROXANNE (0)
+pokebytes gBrWildAsk+1 FF 00 00
+poke u8 gBrWildAsk 1
+wait 10
+expect u8 gBrWildAsk 2
+wait 600
+shot boss
+# BATTLE_TYPE_TRAINER | BATTLE_TYPE_IS_MASTER (0xC): her intro is on the shot
+expect u16 gBattleTypeFlags 0xC
+# TREECKO's ATTACK held at 999 (at 1 HP she uses her POTIONs) while A fights (FIGHT,
+# POUND) and reads on, through her defeat, the TM and the money
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+tap A
+wait 60
+shot after
+# DONE, B_OUTCOME_WON
+expect u8 gBrWildAsk 3
+expect u8 gBrWildAsk+7 1
+say spike boss ok

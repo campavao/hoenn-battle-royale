@@ -42,6 +42,230 @@ var world_default = { maps: [{ id: "MAP_PETALBURG_CITY", group: 0, num: 0, w: 30
 // web/spike-b/shared/relay-entry.ts
 var import_patches2 = __toESM(require_patches(), 1);
 
+// web/src/match/clock.ts
+function pickIndex(rng, length) {
+  return Math.min(length - 1, Math.floor(rng() * length));
+}
+
+// web/src/data/lines.json
+var lines_default = [
+  "Ack! Ack! Aaack!",
+  "Ah, well played.",
+  "All right, come again!",
+  "And you are?",
+  "Are your friends strong?",
+  "As strong as ever!",
+  "Big bro, I lost!",
+  "Bow! Bowwow!",
+  "But it messed up.",
+  "Close this menu.",
+  "Come on, battle with me!",
+  "Crash and burn!",
+  "Down and out!",
+  "Enjoy your cruise!",
+  "Gwaaah! I blew it!",
+  "H-help me!",
+  "Here is your prize!",
+  "Here you go!",
+  "Huh? Did I just lose?",
+  "I admit defeat!",
+  "I bow to your superiority.",
+  "I failed to win!",
+  "I give up!",
+  "I got trumped in power?",
+  "I hate this!",
+  "I hope to see you again!",
+  "I love plush DOLLS!",
+  "I love shiny things!",
+  "I ran out of energy again!",
+  "I ran out of energy!",
+  "I surrender!",
+  "I took a serious licking!",
+  "I was beaten in heart?",
+  "I was done in?",
+  "I wondrously lost!",
+  "It worked rather well.",
+  "LILYCOVE CITY it is, then!",
+  "Let me see your talent!",
+  "Let the battle begin!",
+  "Little bro, I lost!",
+  "Losing left me bitter!",
+  "Losing makes me sore!",
+  "No signs of tiring at all!",
+  "No! Please!",
+  "Oh, fine then.",
+  "Oh, how super!",
+  "Oh, noooooh!",
+  "Oh, please, no!",
+  "Oh, yes, strong you are.",
+  "Okay, here goes!",
+  "Okay, see you!",
+  "Ouch! My legs cramped up!",
+  "Ouch, ouch, ouch!",
+  "Overall, a weak team.",
+  "Ow! Down and out!",
+  "Please come again!",
+  "Please do visit again.",
+  "Please do visit us again!",
+  "Please enjoy yourself.",
+  "Please enter.",
+  "Please step this way.",
+  "Please wait.",
+  "Please, go ahead.",
+  "Right this way, please!",
+  "Right this way, please.",
+  "Super awesome!",
+  "Superb, it should be said.",
+  "Take good care of it!",
+  "Thank you for playing!",
+  "Thank you for waiting.",
+  "Thank you, dear!",
+  "Thanks for coming.",
+  "The air is tasty here!",
+  "The match ended up a draw.",
+  "They will cost less.",
+  "They will cost more.",
+  "This is a sample message.",
+  "This is sample message 1.",
+  "This is sample message 2.",
+  "This is sample message 3.",
+  "This is sample message 4.",
+  "This is too humiliating!",
+  "Uncle! I give up!",
+  "Use the BASEMENT KEY?",
+  "Uses many popular moves.",
+  "Way too strong!",
+  "We hope to see you again!",
+  "We hope to see you again.",
+  "Well, excuse me?!",
+  "What a high level you are!",
+  "What an expert!",
+  "What happened here?",
+  "Where did you come from?",
+  "Which move should I teach?",
+  "Whoa, you overwhelmed me!",
+  "Why are you so serious?",
+  "Why have you come here?",
+  "Wickedly fast!",
+  "With honor I admit defeat!",
+  "You can have this!",
+  "You got me!",
+  "You had more heart!",
+  "You soared above me!"
+];
+
+// web/src/bots/lines.ts
+var INTRO = [
+  "YOU LOOK LOST.",
+  "NICE TEAM. SHAME.",
+  "I WAS HERE FIRST.",
+  "THE FOG IS COMING.",
+  "LET ME THROUGH!",
+  "NO HARD FEELINGS.",
+  "I NEED YOUR BALLS.",
+  "THIS ROUTE IS MINE.",
+  "YOU AGAIN?",
+  "MAKE IT QUICK.",
+  "I HAVE BEEN WALKING.",
+  "FOUND YOU."
+];
+var WIN = [
+  "TOLD YOU.",
+  "THAT IS ONE MORE.",
+  "BAD LUCK.",
+  "I NEEDED THAT.",
+  "STILL STANDING.",
+  "NEXT!",
+  "GOOD RUN THOUGH.",
+  "THE RING IS MINE."
+];
+var LOSE = [
+  "NOT LIKE THIS...",
+  "TAKE THEM THEN.",
+  "I WAS CLOSE.",
+  "GOOD FIGHT.",
+  "WATCH THE FOG.",
+  "SEE YOU NEXT ONE.",
+  "AT LEAST I WALKED.",
+  "THAT IS ME DONE."
+];
+var VOICE_COUNT = Math.max(INTRO.length, WIN.length, LOSE.length);
+var LINES = [.../* @__PURE__ */ new Set([...INTRO, ...WIN, ...LOSE, ...lines_default])];
+var LINE_COUNT = LINES.length;
+
+// web/src/match/career.ts
+var SKINS = [
+  "BRENDAN",
+  "MAY",
+  "RIVAL BRENDAN",
+  "RIVAL MAY",
+  "HIKER",
+  "BEAUTY",
+  "CAMPER",
+  "PICNICKER",
+  "SWIMMER",
+  "SWIMMER GIRL",
+  "EXPERT",
+  "EXPERT LADY",
+  "POKEFAN",
+  "POKEFAN LADY",
+  "YOUNGSTER",
+  "LASS"
+];
+var RETIRED_SKINS = /* @__PURE__ */ new Set([2, 3]);
+var WARDROBE = SKINS.map((_, i) => i).filter((i) => !RETIRED_SKINS.has(i));
+var SKIN_UNLOCK_WINS = [
+  0,
+  0,
+  Number.POSITIVE_INFINITY,
+  Number.POSITIVE_INFINITY,
+  1,
+  2,
+  4,
+  5,
+  9,
+  10,
+  13,
+  15,
+  18,
+  20,
+  23,
+  25
+];
+
+// web/src/match/lobby.ts
+var CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+var CODE_LENGTH = 6;
+var ART = {
+  quick: { gfx: [0, 89] },
+  host: { gfx: [58] },
+  lobbies: { gfx: [35, 47] },
+  code: { item: 265 },
+  daily: { item: 93 },
+  howto: { item: 361 },
+  // The ITEMFINDER: it finds what is hidden.
+  debug: { item: 261 },
+  feedback: { item: 121 }
+};
+var FEEDBACK_ROW = {
+  label: "SEND FEEDBACK",
+  action: { kind: "feedback" },
+  id: "lobby-feedback",
+  art: ART.feedback
+};
+var HOWTO_ROW = {
+  label: "HOW TO PLAY",
+  action: { kind: "howto" },
+  id: "lobby-howto",
+  art: ART.howto
+};
+var DEBUG_ROW = {
+  label: "DEBUG",
+  action: { kind: "debug" },
+  id: "lobby-debug",
+  art: ART.debug
+};
+
 // web/src/bots/world.ts
 var NO_REACH = { cell: () => false, across: () => false };
 var CLASS_WALL = 1;
@@ -278,10 +502,10 @@ var World = class {
   }
   /** A*'s estimate from a node to (gx, gy) on map `goal`: Manhattan on that map, and
    *  zero anywhere else, where the coordinates mean nothing. */
-  estimate(key, goal, gx, gy) {
+  estimate(key, goal2, gx, gy) {
     const cell = this.cellOf(key);
     const n = this.cellMap[cell];
-    if (n !== goal) return 0;
+    if (n !== goal2) return 0;
     const local = cell - this.bases[n];
     const w = this.widths[n];
     const y = local / w | 0;
@@ -562,8 +786,8 @@ var World = class {
   }
   /** How many map crossings from each map to `goal`, by breadth-first search from the
    *  goal outwards. Undefined entries are maps that cannot reach it at all. */
-  hopsTo(goal, surf, cut) {
-    const asked = `${goal}:${surf ? 1 : 0}${fieldBits(cut)}`;
+  hopsTo(goal2, surf, cut) {
+    const asked = `${goal2}:${surf ? 1 : 0}${fieldBits(cut)}`;
     const cached = this.hopCache.get(asked);
     if (cached) return cached;
     const g = this.graph(surf, cut);
@@ -574,8 +798,8 @@ var World = class {
         back.get(to).add(from);
       }
     }
-    const dist = /* @__PURE__ */ new Map([[goal, 0]]);
-    let edge = [goal];
+    const dist = /* @__PURE__ */ new Map([[goal2, 0]]);
+    let edge = [goal2];
     for (let d = 1; edge.length > 0; d++) {
       const next = [];
       for (const at of edge) {
@@ -591,13 +815,13 @@ var World = class {
     return dist;
   }
   /** Map crossings from `from` to `goal`, or undefined when there is no way at all. */
-  hops(from, goal, surf = false, cut = false) {
-    return this.hopsTo(goal, surf, cut).get(from);
+  hops(from, goal2, surf = false, cut = false) {
+    return this.hopsTo(goal2, surf, cut).get(from);
   }
   /** The neighbouring maps that take a step closer to `goal`, nearest first. Empty when
    *  we are already there, or when nothing from here reaches it. */
-  nextHops(from, goal, surf = false, cut = false) {
-    const dist = this.hopsTo(goal, surf, cut);
+  nextHops(from, goal2, surf = false, cut = false) {
+    const dist = this.hopsTo(goal2, surf, cut);
     const here = dist.get(from);
     if (here === void 0 || here === 0) return [];
     const out = [];
@@ -809,12 +1033,12 @@ var World = class {
    *  bots drifted. A trainer can reach about 265 regions on foot and 525 with SURF, each
    *  flooded once for the tab, so the whole of it is a few dozen ms once and under one
    *  after. */
-  firstCrossing(from, goal, surf = false, cut = false, arrive, limit = Infinity) {
+  firstCrossing(from, goal2, surf = false, cut = false, arrive, limit = Infinity) {
     const start = this.key(from);
-    const goalMap = this.numbers.get(goal);
+    const goalMap = this.numbers.get(goal2);
     if (start < 0 || goalMap === void 0) return void 0;
     const origin = this.regionOf(start, surf, cut);
-    const left = (id) => this.hops(this.ids[this.regionList[id].map], goal, surf, cut);
+    const left = (id) => this.hops(this.ids[this.regionList[id].map], goal2, surf, cut);
     const h0 = left(origin);
     if (h0 === void 0 || h0 === 0) return void 0;
     const cost = /* @__PURE__ */ new Map([[origin, 0]]);
@@ -853,6 +1077,308 @@ var World = class {
     return out;
   }
 };
+function sameSpot(a, b) {
+  return a.map === b.map && a.x === b.x && a.y === b.y;
+}
+
+// web/src/bots/path.ts
+var DEFAULT_BUDGET = 4e3;
+var scratches = /* @__PURE__ */ new WeakMap();
+function scratchFor(world) {
+  let s = scratches.get(world);
+  if (!s) {
+    const n = world.cellCount;
+    s = { gen: 0, state: new Int32Array(n), cost: new Int32Array(n), from: new Int32Array(n), heap: new Heap() };
+    scratches.set(world, s);
+  }
+  if (s.gen >= 1073741808) {
+    s.gen = 0;
+    s.state.fill(0);
+  }
+  s.gen++;
+  s.heap.clear();
+  return s;
+}
+var Heap = class {
+  prio = new Float64Array(1024);
+  keys = new Int32Array(1024);
+  size = 0;
+  pushed = 0;
+  clear() {
+    this.size = 0;
+    this.pushed = 0;
+  }
+  push(key, f) {
+    if (this.size === this.keys.length) {
+      const prio = new Float64Array(this.size * 2);
+      prio.set(this.prio);
+      this.prio = prio;
+      const keys = new Int32Array(this.size * 2);
+      keys.set(this.keys);
+      this.keys = keys;
+    }
+    const p = f * 4294967296 + this.pushed++;
+    let i = this.size++;
+    while (i > 0) {
+      const up = i - 1 >> 1;
+      if (this.prio[up] <= p) break;
+      this.prio[i] = this.prio[up];
+      this.keys[i] = this.keys[up];
+      i = up;
+    }
+    this.prio[i] = p;
+    this.keys[i] = key;
+  }
+  pop() {
+    const top = this.keys[0];
+    const last = --this.size;
+    const p = this.prio[last];
+    const key = this.keys[last];
+    let i = 0;
+    for (; ; ) {
+      let child = 2 * i + 1;
+      if (child >= last) break;
+      if (child + 1 < last && this.prio[child + 1] < this.prio[child]) child++;
+      if (this.prio[child] >= p) break;
+      this.prio[i] = this.prio[child];
+      this.keys[i] = this.keys[child];
+      i = child;
+    }
+    this.prio[i] = p;
+    this.keys[i] = key;
+    return top;
+  }
+};
+function search(world, start, goal2, maxVisited, surf, cut, solid) {
+  const s = scratchFor(world);
+  const { state, cost, from, heap } = s;
+  const open = s.gen * 2;
+  const settled = open + 1;
+  const estimate = goal2.map >= 0;
+  state[start] = open;
+  cost[start] = 0;
+  from[start] = -1;
+  heap.push(start, estimate ? world.estimate(start, goal2.map, goal2.x, goal2.y) : 0);
+  let visited = 0;
+  while (heap.size > 0 && visited < maxVisited) {
+    const at = heap.pop();
+    if (state[at] === settled) continue;
+    state[at] = settled;
+    visited++;
+    const cell = world.cellOf(at);
+    if (cell === goal2.cell || goal2.any !== null && goal2.any.has(cell)) {
+      const steps = [];
+      for (let k = at; from[k] >= 0; k = from[k] >> 2) steps.push({ dir: DIRS[from[k] & 3], to: world.spotAt(k) });
+      steps.reverse();
+      return { steps, found: true, visited };
+    }
+    const next = cost[at] + 1;
+    for (let d = 0; d < 4; d++) {
+      const to = world.stepKey(at, d, surf, cut);
+      if (to < 0) continue;
+      if (goal2.stayOn >= 0 && world.mapOf(to) !== goal2.stayOn && !goal2.any?.has(world.cellOf(to))) continue;
+      if (solid !== void 0 && solid.has(world.cellOf(to)) && world.cellOf(to) !== goal2.cell && !goal2.any?.has(world.cellOf(to))) continue;
+      const was = state[to];
+      if (was === settled) continue;
+      if (was === open && cost[to] <= next) continue;
+      state[to] = open;
+      cost[to] = next;
+      from[to] = at * 4 + d;
+      heap.push(to, estimate ? next + world.estimate(to, goal2.map, goal2.x, goal2.y) : next);
+    }
+  }
+  return { steps: [], found: false, visited };
+}
+function nowhere(maxVisited) {
+  return { steps: [], found: false, visited: maxVisited > 0 ? 1 : 0 };
+}
+function findPath(world, from, to, maxVisited = DEFAULT_BUDGET, surf = false, cut = false, solid) {
+  if (sameSpot(from, to)) return { steps: [], found: true, visited: 0 };
+  const start = world.key(from);
+  if (start < 0) return nowhere(maxVisited);
+  return search(
+    world,
+    start,
+    { cell: world.cellOf(world.key(to)), any: null, map: world.mapNumber(to.map), x: to.x, y: to.y, stayOn: -1 },
+    maxVisited,
+    surf,
+    cut,
+    solid
+  );
+}
+function findPathToAny(world, from, goals, maxVisited = DEFAULT_BUDGET, surf = false, cut = false, solid) {
+  if (goals.length === 0) return { steps: [], found: false, visited: 0 };
+  const wanted = /* @__PURE__ */ new Set();
+  for (const g of goals) {
+    const k = world.key(g);
+    if (k >= 0) wanted.add(world.cellOf(k));
+  }
+  const start = world.key(from);
+  if (start >= 0 ? wanted.has(world.cellOf(start)) : goals.some((g) => sameSpot(g, from))) return { steps: [], found: true, visited: 0 };
+  if (start < 0) return nowhere(maxVisited);
+  return search(world, start, { cell: -1, any: wanted, map: -1, x: 0, y: 0, stayOn: world.mapOf(start) }, maxVisited, surf, cut, solid);
+}
+
+// web/spike-b/shared/marts.ts
+var MARTS = [
+  "FALLARBOR_TOWN",
+  "FORTREE_CITY",
+  "LAVARIDGE_TOWN",
+  "MAUVILLE_CITY",
+  "MOSSDEEP_CITY",
+  "OLDALE_TOWN",
+  "PETALBURG_CITY",
+  "RUSTBORO_CITY",
+  "SLATEPORT_CITY",
+  "SOOTOPOLIS_CITY",
+  "VERDANTURF_TOWN"
+];
+var STORE = "MAP_LILYCOVE_CITY_DEPARTMENT_STORE_";
+var CLERKS = [
+  ...MARTS.map((t) => ({ map: `MAP_${t}_MART`, x: 1, y: 3, facing: 4, store: false })),
+  ...[[2, 10, 6, 2], [2, 7, 6, 2], [3, 8, 2, 1], [3, 10, 2, 1], [4, 7, 6, 2], [4, 9, 6, 2], [5, 7, 2, 1], [5, 9, 2, 1], [5, 15, 6, 3], [5, 17, 6, 2]].map(([f, x, y, facing]) => ({ map: `${STORE}${f}F`, x, y, facing, store: true }))
+];
+var AT = new Map(CLERKS.map((c) => [`${c.map}:${c.x}:${c.y}`, c]));
+function clerkAt(map, x, y) {
+  return AT.get(`${map}:${x}:${y}`);
+}
+var MASTER_BALL = 1;
+var POKE_BALL = 4;
+var FULL_RESTORE = 19;
+var MAX_POTION = 20;
+var REVIVE = 24;
+var MAX_REVIVE = 25;
+var GUARD_SPEC = 73;
+var DIRE_HIT = 74;
+var X_ATTACK = 75;
+var X_DEFEND = 76;
+var X_SPEED = 77;
+var X_ACCURACY = 78;
+var X_SPECIAL = 79;
+var POKE_DOLL = 80;
+var SUN_STONE = 93;
+var MOON_STONE = 94;
+var FIRE_STONE = 95;
+var THUNDER_STONE = 96;
+var WATER_STONE = 97;
+var LEAF_STONE = 98;
+var LINK_CABLE = 52;
+var TOP = [MASTER_BALL, POKE_BALL, MAX_POTION, FULL_RESTORE, REVIVE, MAX_REVIVE, X_ATTACK, X_DEFEND, X_SPEED, X_SPECIAL, X_ACCURACY, GUARD_SPEC, DIRE_HIT, POKE_DOLL];
+var DEPT_STORE = [...TOP, FIRE_STONE, WATER_STONE, THUNDER_STONE, LEAF_STONE, SUN_STONE, MOON_STONE, LINK_CABLE];
+
+// web/spike-b/shared/gyms.ts
+var LEADERS = [
+  { n: 0, name: "ROXANNE", map: "MAP_RUSTBORO_CITY_GYM", cells: [[5, 2]], gfx: [125] },
+  { n: 1, name: "BRAWLY", map: "MAP_DEWFORD_TOWN_GYM", cells: [[4, 3]], gfx: [126] },
+  { n: 2, name: "WATTSON", map: "MAP_MAUVILLE_CITY_GYM", cells: [[5, 2]], gfx: [127] },
+  { n: 3, name: "FLANNERY", map: "MAP_LAVARIDGE_TOWN_GYM_1F", cells: [[13, 9]], gfx: [128] },
+  { n: 4, name: "NORMAN", map: "MAP_PETALBURG_CITY_GYM", cells: [[4, 2]], gfx: [129] },
+  { n: 5, name: "WINONA", map: "MAP_FORTREE_CITY_GYM", cells: [[15, 2]], gfx: [130] },
+  { n: 6, name: "TATE&LIZA", map: "MAP_MOSSDEEP_CITY_GYM", cells: [[23, 7], [24, 7]], gfx: [132, 131] },
+  { n: 7, name: "JUAN", map: "MAP_SOOTOPOLIS_CITY_GYM_1F", cells: [[8, 2]], gfx: [218] }
+];
+var AT2 = new Map(LEADERS.flatMap((l) => l.cells.map(([x, y]) => [`${l.map}:${x}:${y}`, l])));
+function leaderAt(map, x, y) {
+  return AT2.get(`${map}:${x}:${y}`);
+}
+
+// web/src/data/encounters.json
+var encounters_default = { maps: { MAP_ALTERING_CAVE: [41, 179, 190, 204, 213, 216, 228, 234, 235], MAP_ARTISAN_CAVE_1F: [235], MAP_ARTISAN_CAVE_B1F: [235], MAP_CAVE_OF_ORIGIN_1F: [41, 42, 322], MAP_CAVE_OF_ORIGIN_ENTRANCE: [41, 42], MAP_CAVE_OF_ORIGIN_UNUSED_RUBY_SAPPHIRE_MAP1: [41, 42, 322], MAP_CAVE_OF_ORIGIN_UNUSED_RUBY_SAPPHIRE_MAP2: [41, 42, 322], MAP_CAVE_OF_ORIGIN_UNUSED_RUBY_SAPPHIRE_MAP3: [41, 42, 322], MAP_DESERT_UNDERPASS: [132, 370, 371], MAP_FIERY_PATH: [321, 66, 88, 109, 339, 218], MAP_GRANITE_CAVE_1F: [335, 74, 41, 63], MAP_GRANITE_CAVE_B1F: [322, 382, 41, 335, 63], MAP_GRANITE_CAVE_B2F: [322, 382, 41, 63], MAP_GRANITE_CAVE_STEVENS_ROOM: [335, 382, 41, 63], MAP_JAGGED_PASS: [339, 351, 66], MAP_MAGMA_HIDEOUT_1F: [74, 75, 321], MAP_MAGMA_HIDEOUT_2F_1R: [74, 75, 321], MAP_MAGMA_HIDEOUT_2F_2R: [74, 75, 321], MAP_MAGMA_HIDEOUT_2F_3R: [74, 75, 321], MAP_MAGMA_HIDEOUT_3F_1R: [74, 75, 321], MAP_MAGMA_HIDEOUT_3F_2R: [74, 75, 321], MAP_MAGMA_HIDEOUT_3F_3R: [74, 75, 321], MAP_MAGMA_HIDEOUT_4F: [74, 75, 321], MAP_METEOR_FALLS_1F_1R: [41, 349], MAP_METEOR_FALLS_1F_2R: [42, 349], MAP_METEOR_FALLS_B1F_1R: [42, 349], MAP_METEOR_FALLS_B1F_2R: [42, 349, 395], MAP_METEOR_FALLS_STEVENS_CAVE: [42, 349], MAP_MIRAGE_TOWER_1F: [27, 332], MAP_MIRAGE_TOWER_2F: [27, 332], MAP_MIRAGE_TOWER_3F: [27, 332], MAP_MIRAGE_TOWER_4F: [27, 332], MAP_MT_PYRE_1F: [377], MAP_MT_PYRE_2F: [377], MAP_MT_PYRE_3F: [377], MAP_MT_PYRE_4F: [377, 361], MAP_MT_PYRE_5F: [377, 361], MAP_MT_PYRE_6F: [377, 361], MAP_MT_PYRE_EXTERIOR: [37, 309, 377], MAP_MT_PYRE_SUMMIT: [377, 361, 411], MAP_NEW_MAUVILLE_ENTRANCE: [81, 100], MAP_NEW_MAUVILLE_INSIDE: [81, 100, 82, 101], MAP_PETALBURG_WOODS: [286, 290, 304, 306, 364, 291, 293], MAP_ROUTE101: [286, 288, 290], MAP_ROUTE102: [288, 286, 290, 295, 298, 392], MAP_ROUTE103: [309, 286, 288], MAP_ROUTE104: [309, 286, 183, 304, 290], MAP_ROUTE110: [309, 337, 353, 354, 367, 43, 286], MAP_ROUTE111: [27, 318, 332, 344], MAP_ROUTE112: [339, 183], MAP_ROUTE113: [308, 218, 227], MAP_ROUTE114: [296, 358, 379, 295, 299], MAP_ROUTE115: [309, 304, 39, 358, 305], MAP_ROUTE116: [286, 304, 301, 315, 63, 370], MAP_ROUTE117: [387, 43, 286, 183, 298, 386], MAP_ROUTE118: [309, 288, 337, 289, 317, 338], MAP_ROUTE119: [43, 369, 288, 289, 317], MAP_ROUTE120: [43, 183, 287, 376, 286, 298, 317], MAP_ROUTE121: [309, 43, 287, 377, 44, 286, 317], MAP_ROUTE123: [309, 43, 287, 377, 44, 286, 317], MAP_ROUTE130: [360], MAP_RUSTURF_TUNNEL: [370], MAP_SAFARI_ZONE_NORTH: [43, 44, 177, 178, 214, 231], MAP_SAFARI_ZONE_NORTHEAST: [190, 216, 228, 241, 163, 165, 191, 204], MAP_SAFARI_ZONE_NORTHWEST: [43, 44, 84, 85, 111, 127], MAP_SAFARI_ZONE_SOUTH: [202, 25, 43, 203, 44, 84, 177], MAP_SAFARI_ZONE_SOUTHEAST: [179, 191, 207, 234, 163, 167, 190, 209], MAP_SAFARI_ZONE_SOUTHWEST: [202, 25, 43, 203, 44, 84, 177], MAP_SEAFLOOR_CAVERN_ROOM1: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM2: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM3: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM4: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM5: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM6: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM7: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM8: [41, 42], MAP_SHOAL_CAVE_LOW_TIDE_ENTRANCE_ROOM: [341, 41, 42], MAP_SHOAL_CAVE_LOW_TIDE_ICE_ROOM: [341, 41, 346, 42], MAP_SHOAL_CAVE_LOW_TIDE_INNER_ROOM: [341, 41, 42], MAP_SHOAL_CAVE_LOW_TIDE_LOWER_ROOM: [341, 41, 42], MAP_SHOAL_CAVE_LOW_TIDE_STAIRS_ROOM: [341, 41, 42], MAP_SKY_PILLAR_1F: [319, 42, 322, 378], MAP_SKY_PILLAR_3F: [319, 42, 322, 378], MAP_SKY_PILLAR_5F: [319, 359, 42, 322, 378], MAP_VICTORY_ROAD_1F: [42, 336, 370, 382, 41, 335, 371, 383], MAP_VICTORY_ROAD_B1F: [383, 42, 336, 355], MAP_VICTORY_ROAD_B2F: [383, 42, 322, 355] }, evolve: { "1": [16, 2], "2": [32, 3], "4": [16, 5], "5": [36, 6], "7": [16, 8], "8": [36, 9], "10": [7, 11], "11": [10, 12], "13": [7, 14], "14": [10, 15], "16": [18, 17], "17": [36, 18], "19": [20, 20], "21": [20, 22], "23": [22, 24], "27": [22, 28], "29": [16, 30], "32": [16, 33], "41": [22, 42], "43": [21, 44], "46": [24, 47], "48": [31, 49], "50": [26, 51], "52": [28, 53], "54": [33, 55], "56": [28, 57], "60": [25, 61], "63": [16, 64], "66": [28, 67], "69": [21, 70], "72": [30, 73], "74": [25, 75], "77": [40, 78], "79": [37, 80], "81": [30, 82], "84": [31, 85], "86": [34, 87], "88": [38, 89], "92": [25, 93], "96": [26, 97], "98": [28, 99], "100": [30, 101], "104": [28, 105], "109": [35, 110], "111": [42, 112], "116": [32, 117], "118": [33, 119], "129": [20, 130], "138": [40, 139], "140": [40, 141], "147": [30, 148], "148": [55, 149], "152": [16, 153], "153": [32, 154], "155": [14, 156], "156": [36, 157], "158": [18, 159], "159": [30, 160], "161": [15, 162], "163": [20, 164], "165": [18, 166], "167": [22, 168], "170": [27, 171], "177": [25, 178], "179": [15, 180], "180": [30, 181], "183": [18, 184], "187": [18, 188], "188": [27, 189], "194": [20, 195], "204": [31, 205], "209": [23, 210], "216": [30, 217], "218": [38, 219], "220": [33, 221], "223": [25, 224], "228": [24, 229], "231": [25, 232], "236": [20, 107], "238": [30, 124], "239": [30, 125], "240": [30, 126], "246": [30, 247], "247": [55, 248], "277": [16, 278], "278": [36, 279], "280": [16, 281], "281": [36, 282], "283": [16, 284], "284": [36, 285], "286": [18, 287], "288": [20, 289], "290": [7, 291], "291": [10, 292], "293": [10, 294], "295": [14, 296], "298": [14, 299], "301": [20, 302], "304": [22, 305], "306": [23, 307], "309": [25, 310], "311": [22, 312], "313": [40, 314], "318": [36, 319], "323": [30, 324], "326": [30, 327], "330": [30, 331], "332": [35, 333], "333": [45, 334], "335": [24, 336], "337": [26, 338], "339": [33, 340], "341": [32, 342], "342": [44, 343], "344": [32, 345], "346": [42, 347], "351": [32, 352], "356": [37, 357], "358": [35, 359], "360": [15, 202], "361": [37, 362], "364": [18, 365], "365": [36, 366], "367": [26, 368], "370": [20, 371], "371": [40, 372], "377": [37, 378], "382": [32, 383], "383": [42, 384], "388": [40, 389], "390": [40, 391], "392": [20, 393], "393": [30, 394], "395": [30, 396], "396": [50, 397], "398": [20, 399], "399": [45, 400] }, names: { "1": "BULBASAUR", "2": "IVYSAUR", "3": "VENUSAUR", "4": "CHARMANDER", "5": "CHARMELEON", "6": "CHARIZARD", "7": "SQUIRTLE", "8": "WARTORTLE", "9": "BLASTOISE", "10": "CATERPIE", "11": "METAPOD", "12": "BUTTERFREE", "13": "WEEDLE", "14": "KAKUNA", "15": "BEEDRILL", "16": "PIDGEY", "17": "PIDGEOTTO", "18": "PIDGEOT", "19": "RATTATA", "20": "RATICATE", "21": "SPEAROW", "22": "FEAROW", "23": "EKANS", "24": "ARBOK", "25": "PIKACHU", "26": "RAICHU", "27": "SANDSHREW", "28": "SANDSLASH", "29": "NIDORAN♀", "30": "NIDORINA", "31": "NIDOQUEEN", "32": "NIDORAN♂", "33": "NIDORINO", "34": "NIDOKING", "35": "CLEFAIRY", "36": "CLEFABLE", "37": "VULPIX", "38": "NINETALES", "39": "JIGGLYPUFF", "40": "WIGGLYTUFF", "41": "ZUBAT", "42": "GOLBAT", "43": "ODDISH", "44": "GLOOM", "45": "VILEPLUME", "46": "PARAS", "47": "PARASECT", "48": "VENONAT", "49": "VENOMOTH", "50": "DIGLETT", "51": "DUGTRIO", "52": "MEOWTH", "53": "PERSIAN", "54": "PSYDUCK", "55": "GOLDUCK", "56": "MANKEY", "57": "PRIMEAPE", "58": "GROWLITHE", "59": "ARCANINE", "60": "POLIWAG", "61": "POLIWHIRL", "62": "POLIWRATH", "63": "ABRA", "64": "KADABRA", "65": "ALAKAZAM", "66": "MACHOP", "67": "MACHOKE", "68": "MACHAMP", "69": "BELLSPROUT", "70": "WEEPINBELL", "71": "VICTREEBEL", "72": "TENTACOOL", "73": "TENTACRUEL", "74": "GEODUDE", "75": "GRAVELER", "76": "GOLEM", "77": "PONYTA", "78": "RAPIDASH", "79": "SLOWPOKE", "80": "SLOWBRO", "81": "MAGNEMITE", "82": "MAGNETON", "83": "FARFETCH'D", "84": "DODUO", "85": "DODRIO", "86": "SEEL", "87": "DEWGONG", "88": "GRIMER", "89": "MUK", "90": "SHELLDER", "91": "CLOYSTER", "92": "GASTLY", "93": "HAUNTER", "94": "GENGAR", "95": "ONIX", "96": "DROWZEE", "97": "HYPNO", "98": "KRABBY", "99": "KINGLER", "100": "VOLTORB", "101": "ELECTRODE", "102": "EXEGGCUTE", "103": "EXEGGUTOR", "104": "CUBONE", "105": "MAROWAK", "106": "HITMONLEE", "107": "HITMONCHAN", "108": "LICKITUNG", "109": "KOFFING", "110": "WEEZING", "111": "RHYHORN", "112": "RHYDON", "113": "CHANSEY", "114": "TANGELA", "115": "KANGASKHAN", "116": "HORSEA", "117": "SEADRA", "118": "GOLDEEN", "119": "SEAKING", "120": "STARYU", "121": "STARMIE", "122": "MR. MIME", "123": "SCYTHER", "124": "JYNX", "125": "ELECTABUZZ", "126": "MAGMAR", "127": "PINSIR", "128": "TAUROS", "129": "MAGIKARP", "130": "GYARADOS", "131": "LAPRAS", "132": "DITTO", "133": "EEVEE", "134": "VAPOREON", "135": "JOLTEON", "136": "FLAREON", "137": "PORYGON", "138": "OMANYTE", "139": "OMASTAR", "140": "KABUTO", "141": "KABUTOPS", "142": "AERODACTYL", "143": "SNORLAX", "144": "ARTICUNO", "145": "ZAPDOS", "146": "MOLTRES", "147": "DRATINI", "148": "DRAGONAIR", "149": "DRAGONITE", "150": "MEWTWO", "151": "MEW", "152": "CHIKORITA", "153": "BAYLEEF", "154": "MEGANIUM", "155": "CYNDAQUIL", "156": "QUILAVA", "157": "TYPHLOSION", "158": "TOTODILE", "159": "CROCONAW", "160": "FERALIGATR", "161": "SENTRET", "162": "FURRET", "163": "HOOTHOOT", "164": "NOCTOWL", "165": "LEDYBA", "166": "LEDIAN", "167": "SPINARAK", "168": "ARIADOS", "169": "CROBAT", "170": "CHINCHOU", "171": "LANTURN", "172": "PICHU", "173": "CLEFFA", "174": "IGGLYBUFF", "175": "TOGEPI", "176": "TOGETIC", "177": "NATU", "178": "XATU", "179": "MAREEP", "180": "FLAAFFY", "181": "AMPHAROS", "182": "BELLOSSOM", "183": "MARILL", "184": "AZUMARILL", "185": "SUDOWOODO", "186": "POLITOED", "187": "HOPPIP", "188": "SKIPLOOM", "189": "JUMPLUFF", "190": "AIPOM", "191": "SUNKERN", "192": "SUNFLORA", "193": "YANMA", "194": "WOOPER", "195": "QUAGSIRE", "196": "ESPEON", "197": "UMBREON", "198": "MURKROW", "199": "SLOWKING", "200": "MISDREAVUS", "201": "UNOWN", "202": "WOBBUFFET", "203": "GIRAFARIG", "204": "PINECO", "205": "FORRETRESS", "206": "DUNSPARCE", "207": "GLIGAR", "208": "STEELIX", "209": "SNUBBULL", "210": "GRANBULL", "211": "QWILFISH", "212": "SCIZOR", "213": "SHUCKLE", "214": "HERACROSS", "215": "SNEASEL", "216": "TEDDIURSA", "217": "URSARING", "218": "SLUGMA", "219": "MAGCARGO", "220": "SWINUB", "221": "PILOSWINE", "222": "CORSOLA", "223": "REMORAID", "224": "OCTILLERY", "225": "DELIBIRD", "226": "MANTINE", "227": "SKARMORY", "228": "HOUNDOUR", "229": "HOUNDOOM", "230": "KINGDRA", "231": "PHANPY", "232": "DONPHAN", "233": "PORYGON2", "234": "STANTLER", "235": "SMEARGLE", "236": "TYROGUE", "237": "HITMONTOP", "238": "SMOOCHUM", "239": "ELEKID", "240": "MAGBY", "241": "MILTANK", "242": "BLISSEY", "243": "RAIKOU", "244": "ENTEI", "245": "SUICUNE", "246": "LARVITAR", "247": "PUPITAR", "248": "TYRANITAR", "249": "LUGIA", "250": "HO-OH", "251": "CELEBI", "277": "TREECKO", "278": "GROVYLE", "279": "SCEPTILE", "280": "TORCHIC", "281": "COMBUSKEN", "282": "BLAZIKEN", "283": "MUDKIP", "284": "MARSHTOMP", "285": "SWAMPERT", "286": "POOCHYENA", "287": "MIGHTYENA", "288": "ZIGZAGOON", "289": "LINOONE", "290": "WURMPLE", "291": "SILCOON", "292": "BEAUTIFLY", "293": "CASCOON", "294": "DUSTOX", "295": "LOTAD", "296": "LOMBRE", "297": "LUDICOLO", "298": "SEEDOT", "299": "NUZLEAF", "300": "SHIFTRY", "301": "NINCADA", "302": "NINJASK", "303": "SHEDINJA", "304": "TAILLOW", "305": "SWELLOW", "306": "SHROOMISH", "307": "BRELOOM", "308": "SPINDA", "309": "WINGULL", "310": "PELIPPER", "311": "SURSKIT", "312": "MASQUERAIN", "313": "WAILMER", "314": "WAILORD", "315": "SKITTY", "316": "DELCATTY", "317": "KECLEON", "318": "BALTOY", "319": "CLAYDOL", "320": "NOSEPASS", "321": "TORKOAL", "322": "SABLEYE", "323": "BARBOACH", "324": "WHISCASH", "325": "LUVDISC", "326": "CORPHISH", "327": "CRAWDAUNT", "328": "FEEBAS", "329": "MILOTIC", "330": "CARVANHA", "331": "SHARPEDO", "332": "TRAPINCH", "333": "VIBRAVA", "334": "FLYGON", "335": "MAKUHITA", "336": "HARIYAMA", "337": "ELECTRIKE", "338": "MANECTRIC", "339": "NUMEL", "340": "CAMERUPT", "341": "SPHEAL", "342": "SEALEO", "343": "WALREIN", "344": "CACNEA", "345": "CACTURNE", "346": "SNORUNT", "347": "GLALIE", "348": "LUNATONE", "349": "SOLROCK", "350": "AZURILL", "351": "SPOINK", "352": "GRUMPIG", "353": "PLUSLE", "354": "MINUN", "355": "MAWILE", "356": "MEDITITE", "357": "MEDICHAM", "358": "SWABLU", "359": "ALTARIA", "360": "WYNAUT", "361": "DUSKULL", "362": "DUSCLOPS", "363": "ROSELIA", "364": "SLAKOTH", "365": "VIGOROTH", "366": "SLAKING", "367": "GULPIN", "368": "SWALOT", "369": "TROPIUS", "370": "WHISMUR", "371": "LOUDRED", "372": "EXPLOUD", "373": "CLAMPERL", "374": "HUNTAIL", "375": "GOREBYSS", "376": "ABSOL", "377": "SHUPPET", "378": "BANETTE", "379": "SEVIPER", "380": "ZANGOOSE", "381": "RELICANTH", "382": "ARON", "383": "LAIRON", "384": "AGGRON", "385": "CASTFORM", "386": "VOLBEAT", "387": "ILLUMISE", "388": "LILEEP", "389": "CRADILY", "390": "ANORITH", "391": "ARMALDO", "392": "RALTS", "393": "KIRLIA", "394": "GARDEVOIR", "395": "BAGON", "396": "SHELGON", "397": "SALAMENCE", "398": "BELDUM", "399": "METANG", "400": "METAGROSS", "401": "REGIROCK", "402": "REGICE", "403": "REGISTEEL", "404": "KYOGRE", "405": "GROUDON", "406": "RAYQUAZA", "407": "LATIAS", "408": "LATIOS", "409": "JIRACHI", "410": "DEOXYS", "411": "CHIMECHO" } };
+
+// web/src/bots/party.ts
+var EXPORTED = encounters_default;
+var ENCOUNTERS = EXPORTED.maps;
+var LADDER = [5, 15, 30, 50, 75, 100];
+function rungForPhase(phase) {
+  const i = phase === 0 ? 0 : phase - 1;
+  return LADDER[Math.min(i, LADDER.length - 1)];
+}
+
+// web/src/net/wire.ts
+var EVENT_MAX = 4;
+
+// web/src/match/events.ts
+function eventForRing(ringIndex) {
+  if (ringIndex < 1 || ringIndex % 2 === 0) return void 0;
+  const n = (ringIndex - 1) / 2;
+  return n < EVENT_MAX ? n : void 0;
+}
+var REGIROCK = 401;
+var REGICE = 402;
+var REGISTEEL = 403;
+var KYOGRE = 404;
+var GROUDON = 405;
+var RAYQUAZA = 406;
+var LATIAS = 407;
+var LATIOS = 408;
+var LEGENDS = [
+  [REGIROCK, REGICE, REGISTEEL],
+  [LATIAS, LATIOS],
+  [KYOGRE, GROUDON],
+  [RAYQUAZA]
+];
+var RARES = [
+  147,
+  // DRATINI
+  246,
+  // LARVITAR
+  131,
+  // LAPRAS
+  123,
+  // SCYTHER
+  142,
+  // AERODACTYL
+  133,
+  // EEVEE
+  392,
+  // RALTS
+  395,
+  // BAGON
+  398,
+  // BELDUM
+  376,
+  // ABSOL
+  328
+  // FEEBAS
+];
+var EVENT_RARES = 2;
+var ITEM_MASTER_BALL = 1;
+var ITEM_FULL_RESTORE = 19;
+var ITEM_MAX_POTION = 20;
+var ITEM_MAX_REVIVE = 25;
+var ITEM_CHOICE_BAND = 186;
+var ITEM_LEFTOVERS = 200;
+var GOLD = [
+  301,
+  302,
+  303,
+  310,
+  312,
+  313,
+  314,
+  317,
+  318,
+  323,
+  326,
+  // TM13 14 15 22 24 25 26 29 30 35 38
+  ITEM_MASTER_BALL,
+  ITEM_LEFTOVERS,
+  ITEM_CHOICE_BAND
+];
+var EVENT_GOLD = 3;
+var SUPPLIES = [
+  { id: ITEM_FULL_RESTORE, n: 2 },
+  { id: ITEM_MAX_REVIVE, n: 2 },
+  { id: ITEM_MAX_POTION, n: 3 }
+];
+var EVENT_PIECES = 1 + EVENT_RARES + EVENT_GOLD + 1;
+var EVENT_CELLS = EVENT_PIECES + 1;
+function draw(rng, pool, n) {
+  const left = [...pool];
+  const out = [];
+  while (out.length < n && left.length > 0) out.push(left.splice(pickIndex(rng, left.length), 1)[0]);
+  return out;
+}
 
 // web/src/bots/patches.ts
 var PATCH_KEY_BASE = 8192;
@@ -903,44 +1429,6 @@ function dealPatches(table, mapId, map, seed) {
   return patches;
 }
 
-// web/src/match/clock.ts
-function pickIndex(rng, length) {
-  return Math.min(length - 1, Math.floor(rng() * length));
-}
-
-// web/src/data/encounters.json
-var encounters_default = { maps: { MAP_ALTERING_CAVE: [41, 179, 190, 204, 213, 216, 228, 234, 235], MAP_ARTISAN_CAVE_1F: [235], MAP_ARTISAN_CAVE_B1F: [235], MAP_CAVE_OF_ORIGIN_1F: [41, 42, 322], MAP_CAVE_OF_ORIGIN_ENTRANCE: [41, 42], MAP_CAVE_OF_ORIGIN_UNUSED_RUBY_SAPPHIRE_MAP1: [41, 42, 322], MAP_CAVE_OF_ORIGIN_UNUSED_RUBY_SAPPHIRE_MAP2: [41, 42, 322], MAP_CAVE_OF_ORIGIN_UNUSED_RUBY_SAPPHIRE_MAP3: [41, 42, 322], MAP_DESERT_UNDERPASS: [132, 370, 371], MAP_FIERY_PATH: [321, 66, 88, 109, 339, 218], MAP_GRANITE_CAVE_1F: [335, 74, 41, 63], MAP_GRANITE_CAVE_B1F: [322, 382, 41, 335, 63], MAP_GRANITE_CAVE_B2F: [322, 382, 41, 63], MAP_GRANITE_CAVE_STEVENS_ROOM: [335, 382, 41, 63], MAP_JAGGED_PASS: [339, 351, 66], MAP_MAGMA_HIDEOUT_1F: [74, 75, 321], MAP_MAGMA_HIDEOUT_2F_1R: [74, 75, 321], MAP_MAGMA_HIDEOUT_2F_2R: [74, 75, 321], MAP_MAGMA_HIDEOUT_2F_3R: [74, 75, 321], MAP_MAGMA_HIDEOUT_3F_1R: [74, 75, 321], MAP_MAGMA_HIDEOUT_3F_2R: [74, 75, 321], MAP_MAGMA_HIDEOUT_3F_3R: [74, 75, 321], MAP_MAGMA_HIDEOUT_4F: [74, 75, 321], MAP_METEOR_FALLS_1F_1R: [41, 349], MAP_METEOR_FALLS_1F_2R: [42, 349], MAP_METEOR_FALLS_B1F_1R: [42, 349], MAP_METEOR_FALLS_B1F_2R: [42, 349, 395], MAP_METEOR_FALLS_STEVENS_CAVE: [42, 349], MAP_MIRAGE_TOWER_1F: [27, 332], MAP_MIRAGE_TOWER_2F: [27, 332], MAP_MIRAGE_TOWER_3F: [27, 332], MAP_MIRAGE_TOWER_4F: [27, 332], MAP_MT_PYRE_1F: [377], MAP_MT_PYRE_2F: [377], MAP_MT_PYRE_3F: [377], MAP_MT_PYRE_4F: [377, 361], MAP_MT_PYRE_5F: [377, 361], MAP_MT_PYRE_6F: [377, 361], MAP_MT_PYRE_EXTERIOR: [37, 309, 377], MAP_MT_PYRE_SUMMIT: [377, 361, 411], MAP_NEW_MAUVILLE_ENTRANCE: [81, 100], MAP_NEW_MAUVILLE_INSIDE: [81, 100, 82, 101], MAP_PETALBURG_WOODS: [286, 290, 304, 306, 364, 291, 293], MAP_ROUTE101: [286, 288, 290], MAP_ROUTE102: [288, 286, 290, 295, 298, 392], MAP_ROUTE103: [309, 286, 288], MAP_ROUTE104: [309, 286, 183, 304, 290], MAP_ROUTE110: [309, 337, 353, 354, 367, 43, 286], MAP_ROUTE111: [27, 318, 332, 344], MAP_ROUTE112: [339, 183], MAP_ROUTE113: [308, 218, 227], MAP_ROUTE114: [296, 358, 379, 295, 299], MAP_ROUTE115: [309, 304, 39, 358, 305], MAP_ROUTE116: [286, 304, 301, 315, 63, 370], MAP_ROUTE117: [387, 43, 286, 183, 298, 386], MAP_ROUTE118: [309, 288, 337, 289, 317, 338], MAP_ROUTE119: [43, 369, 288, 289, 317], MAP_ROUTE120: [43, 183, 287, 376, 286, 298, 317], MAP_ROUTE121: [309, 43, 287, 377, 44, 286, 317], MAP_ROUTE123: [309, 43, 287, 377, 44, 286, 317], MAP_ROUTE130: [360], MAP_RUSTURF_TUNNEL: [370], MAP_SAFARI_ZONE_NORTH: [43, 44, 177, 178, 214, 231], MAP_SAFARI_ZONE_NORTHEAST: [190, 216, 228, 241, 163, 165, 191, 204], MAP_SAFARI_ZONE_NORTHWEST: [43, 44, 84, 85, 111, 127], MAP_SAFARI_ZONE_SOUTH: [202, 25, 43, 203, 44, 84, 177], MAP_SAFARI_ZONE_SOUTHEAST: [179, 191, 207, 234, 163, 167, 190, 209], MAP_SAFARI_ZONE_SOUTHWEST: [202, 25, 43, 203, 44, 84, 177], MAP_SEAFLOOR_CAVERN_ROOM1: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM2: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM3: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM4: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM5: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM6: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM7: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM8: [41, 42], MAP_SHOAL_CAVE_LOW_TIDE_ENTRANCE_ROOM: [341, 41, 42], MAP_SHOAL_CAVE_LOW_TIDE_ICE_ROOM: [341, 41, 346, 42], MAP_SHOAL_CAVE_LOW_TIDE_INNER_ROOM: [341, 41, 42], MAP_SHOAL_CAVE_LOW_TIDE_LOWER_ROOM: [341, 41, 42], MAP_SHOAL_CAVE_LOW_TIDE_STAIRS_ROOM: [341, 41, 42], MAP_SKY_PILLAR_1F: [319, 42, 322, 378], MAP_SKY_PILLAR_3F: [319, 42, 322, 378], MAP_SKY_PILLAR_5F: [319, 359, 42, 322, 378], MAP_VICTORY_ROAD_1F: [42, 336, 370, 382, 41, 335, 371, 383], MAP_VICTORY_ROAD_B1F: [383, 42, 336, 355], MAP_VICTORY_ROAD_B2F: [383, 42, 322, 355] }, evolve: { "1": [16, 2], "2": [32, 3], "4": [16, 5], "5": [36, 6], "7": [16, 8], "8": [36, 9], "10": [7, 11], "11": [10, 12], "13": [7, 14], "14": [10, 15], "16": [18, 17], "17": [36, 18], "19": [20, 20], "21": [20, 22], "23": [22, 24], "27": [22, 28], "29": [16, 30], "32": [16, 33], "41": [22, 42], "43": [21, 44], "46": [24, 47], "48": [31, 49], "50": [26, 51], "52": [28, 53], "54": [33, 55], "56": [28, 57], "60": [25, 61], "63": [16, 64], "66": [28, 67], "69": [21, 70], "72": [30, 73], "74": [25, 75], "77": [40, 78], "79": [37, 80], "81": [30, 82], "84": [31, 85], "86": [34, 87], "88": [38, 89], "92": [25, 93], "96": [26, 97], "98": [28, 99], "100": [30, 101], "104": [28, 105], "109": [35, 110], "111": [42, 112], "116": [32, 117], "118": [33, 119], "129": [20, 130], "138": [40, 139], "140": [40, 141], "147": [30, 148], "148": [55, 149], "152": [16, 153], "153": [32, 154], "155": [14, 156], "156": [36, 157], "158": [18, 159], "159": [30, 160], "161": [15, 162], "163": [20, 164], "165": [18, 166], "167": [22, 168], "170": [27, 171], "177": [25, 178], "179": [15, 180], "180": [30, 181], "183": [18, 184], "187": [18, 188], "188": [27, 189], "194": [20, 195], "204": [31, 205], "209": [23, 210], "216": [30, 217], "218": [38, 219], "220": [33, 221], "223": [25, 224], "228": [24, 229], "231": [25, 232], "236": [20, 107], "238": [30, 124], "239": [30, 125], "240": [30, 126], "246": [30, 247], "247": [55, 248], "277": [16, 278], "278": [36, 279], "280": [16, 281], "281": [36, 282], "283": [16, 284], "284": [36, 285], "286": [18, 287], "288": [20, 289], "290": [7, 291], "291": [10, 292], "293": [10, 294], "295": [14, 296], "298": [14, 299], "301": [20, 302], "304": [22, 305], "306": [23, 307], "309": [25, 310], "311": [22, 312], "313": [40, 314], "318": [36, 319], "323": [30, 324], "326": [30, 327], "330": [30, 331], "332": [35, 333], "333": [45, 334], "335": [24, 336], "337": [26, 338], "339": [33, 340], "341": [32, 342], "342": [44, 343], "344": [32, 345], "346": [42, 347], "351": [32, 352], "356": [37, 357], "358": [35, 359], "360": [15, 202], "361": [37, 362], "364": [18, 365], "365": [36, 366], "367": [26, 368], "370": [20, 371], "371": [40, 372], "377": [37, 378], "382": [32, 383], "383": [42, 384], "388": [40, 389], "390": [40, 391], "392": [20, 393], "393": [30, 394], "395": [30, 396], "396": [50, 397], "398": [20, 399], "399": [45, 400] }, names: { "1": "BULBASAUR", "2": "IVYSAUR", "3": "VENUSAUR", "4": "CHARMANDER", "5": "CHARMELEON", "6": "CHARIZARD", "7": "SQUIRTLE", "8": "WARTORTLE", "9": "BLASTOISE", "10": "CATERPIE", "11": "METAPOD", "12": "BUTTERFREE", "13": "WEEDLE", "14": "KAKUNA", "15": "BEEDRILL", "16": "PIDGEY", "17": "PIDGEOTTO", "18": "PIDGEOT", "19": "RATTATA", "20": "RATICATE", "21": "SPEAROW", "22": "FEAROW", "23": "EKANS", "24": "ARBOK", "25": "PIKACHU", "26": "RAICHU", "27": "SANDSHREW", "28": "SANDSLASH", "29": "NIDORAN♀", "30": "NIDORINA", "31": "NIDOQUEEN", "32": "NIDORAN♂", "33": "NIDORINO", "34": "NIDOKING", "35": "CLEFAIRY", "36": "CLEFABLE", "37": "VULPIX", "38": "NINETALES", "39": "JIGGLYPUFF", "40": "WIGGLYTUFF", "41": "ZUBAT", "42": "GOLBAT", "43": "ODDISH", "44": "GLOOM", "45": "VILEPLUME", "46": "PARAS", "47": "PARASECT", "48": "VENONAT", "49": "VENOMOTH", "50": "DIGLETT", "51": "DUGTRIO", "52": "MEOWTH", "53": "PERSIAN", "54": "PSYDUCK", "55": "GOLDUCK", "56": "MANKEY", "57": "PRIMEAPE", "58": "GROWLITHE", "59": "ARCANINE", "60": "POLIWAG", "61": "POLIWHIRL", "62": "POLIWRATH", "63": "ABRA", "64": "KADABRA", "65": "ALAKAZAM", "66": "MACHOP", "67": "MACHOKE", "68": "MACHAMP", "69": "BELLSPROUT", "70": "WEEPINBELL", "71": "VICTREEBEL", "72": "TENTACOOL", "73": "TENTACRUEL", "74": "GEODUDE", "75": "GRAVELER", "76": "GOLEM", "77": "PONYTA", "78": "RAPIDASH", "79": "SLOWPOKE", "80": "SLOWBRO", "81": "MAGNEMITE", "82": "MAGNETON", "83": "FARFETCH'D", "84": "DODUO", "85": "DODRIO", "86": "SEEL", "87": "DEWGONG", "88": "GRIMER", "89": "MUK", "90": "SHELLDER", "91": "CLOYSTER", "92": "GASTLY", "93": "HAUNTER", "94": "GENGAR", "95": "ONIX", "96": "DROWZEE", "97": "HYPNO", "98": "KRABBY", "99": "KINGLER", "100": "VOLTORB", "101": "ELECTRODE", "102": "EXEGGCUTE", "103": "EXEGGUTOR", "104": "CUBONE", "105": "MAROWAK", "106": "HITMONLEE", "107": "HITMONCHAN", "108": "LICKITUNG", "109": "KOFFING", "110": "WEEZING", "111": "RHYHORN", "112": "RHYDON", "113": "CHANSEY", "114": "TANGELA", "115": "KANGASKHAN", "116": "HORSEA", "117": "SEADRA", "118": "GOLDEEN", "119": "SEAKING", "120": "STARYU", "121": "STARMIE", "122": "MR. MIME", "123": "SCYTHER", "124": "JYNX", "125": "ELECTABUZZ", "126": "MAGMAR", "127": "PINSIR", "128": "TAUROS", "129": "MAGIKARP", "130": "GYARADOS", "131": "LAPRAS", "132": "DITTO", "133": "EEVEE", "134": "VAPOREON", "135": "JOLTEON", "136": "FLAREON", "137": "PORYGON", "138": "OMANYTE", "139": "OMASTAR", "140": "KABUTO", "141": "KABUTOPS", "142": "AERODACTYL", "143": "SNORLAX", "144": "ARTICUNO", "145": "ZAPDOS", "146": "MOLTRES", "147": "DRATINI", "148": "DRAGONAIR", "149": "DRAGONITE", "150": "MEWTWO", "151": "MEW", "152": "CHIKORITA", "153": "BAYLEEF", "154": "MEGANIUM", "155": "CYNDAQUIL", "156": "QUILAVA", "157": "TYPHLOSION", "158": "TOTODILE", "159": "CROCONAW", "160": "FERALIGATR", "161": "SENTRET", "162": "FURRET", "163": "HOOTHOOT", "164": "NOCTOWL", "165": "LEDYBA", "166": "LEDIAN", "167": "SPINARAK", "168": "ARIADOS", "169": "CROBAT", "170": "CHINCHOU", "171": "LANTURN", "172": "PICHU", "173": "CLEFFA", "174": "IGGLYBUFF", "175": "TOGEPI", "176": "TOGETIC", "177": "NATU", "178": "XATU", "179": "MAREEP", "180": "FLAAFFY", "181": "AMPHAROS", "182": "BELLOSSOM", "183": "MARILL", "184": "AZUMARILL", "185": "SUDOWOODO", "186": "POLITOED", "187": "HOPPIP", "188": "SKIPLOOM", "189": "JUMPLUFF", "190": "AIPOM", "191": "SUNKERN", "192": "SUNFLORA", "193": "YANMA", "194": "WOOPER", "195": "QUAGSIRE", "196": "ESPEON", "197": "UMBREON", "198": "MURKROW", "199": "SLOWKING", "200": "MISDREAVUS", "201": "UNOWN", "202": "WOBBUFFET", "203": "GIRAFARIG", "204": "PINECO", "205": "FORRETRESS", "206": "DUNSPARCE", "207": "GLIGAR", "208": "STEELIX", "209": "SNUBBULL", "210": "GRANBULL", "211": "QWILFISH", "212": "SCIZOR", "213": "SHUCKLE", "214": "HERACROSS", "215": "SNEASEL", "216": "TEDDIURSA", "217": "URSARING", "218": "SLUGMA", "219": "MAGCARGO", "220": "SWINUB", "221": "PILOSWINE", "222": "CORSOLA", "223": "REMORAID", "224": "OCTILLERY", "225": "DELIBIRD", "226": "MANTINE", "227": "SKARMORY", "228": "HOUNDOUR", "229": "HOUNDOOM", "230": "KINGDRA", "231": "PHANPY", "232": "DONPHAN", "233": "PORYGON2", "234": "STANTLER", "235": "SMEARGLE", "236": "TYROGUE", "237": "HITMONTOP", "238": "SMOOCHUM", "239": "ELEKID", "240": "MAGBY", "241": "MILTANK", "242": "BLISSEY", "243": "RAIKOU", "244": "ENTEI", "245": "SUICUNE", "246": "LARVITAR", "247": "PUPITAR", "248": "TYRANITAR", "249": "LUGIA", "250": "HO-OH", "251": "CELEBI", "277": "TREECKO", "278": "GROVYLE", "279": "SCEPTILE", "280": "TORCHIC", "281": "COMBUSKEN", "282": "BLAZIKEN", "283": "MUDKIP", "284": "MARSHTOMP", "285": "SWAMPERT", "286": "POOCHYENA", "287": "MIGHTYENA", "288": "ZIGZAGOON", "289": "LINOONE", "290": "WURMPLE", "291": "SILCOON", "292": "BEAUTIFLY", "293": "CASCOON", "294": "DUSTOX", "295": "LOTAD", "296": "LOMBRE", "297": "LUDICOLO", "298": "SEEDOT", "299": "NUZLEAF", "300": "SHIFTRY", "301": "NINCADA", "302": "NINJASK", "303": "SHEDINJA", "304": "TAILLOW", "305": "SWELLOW", "306": "SHROOMISH", "307": "BRELOOM", "308": "SPINDA", "309": "WINGULL", "310": "PELIPPER", "311": "SURSKIT", "312": "MASQUERAIN", "313": "WAILMER", "314": "WAILORD", "315": "SKITTY", "316": "DELCATTY", "317": "KECLEON", "318": "BALTOY", "319": "CLAYDOL", "320": "NOSEPASS", "321": "TORKOAL", "322": "SABLEYE", "323": "BARBOACH", "324": "WHISCASH", "325": "LUVDISC", "326": "CORPHISH", "327": "CRAWDAUNT", "328": "FEEBAS", "329": "MILOTIC", "330": "CARVANHA", "331": "SHARPEDO", "332": "TRAPINCH", "333": "VIBRAVA", "334": "FLYGON", "335": "MAKUHITA", "336": "HARIYAMA", "337": "ELECTRIKE", "338": "MANECTRIC", "339": "NUMEL", "340": "CAMERUPT", "341": "SPHEAL", "342": "SEALEO", "343": "WALREIN", "344": "CACNEA", "345": "CACTURNE", "346": "SNORUNT", "347": "GLALIE", "348": "LUNATONE", "349": "SOLROCK", "350": "AZURILL", "351": "SPOINK", "352": "GRUMPIG", "353": "PLUSLE", "354": "MINUN", "355": "MAWILE", "356": "MEDITITE", "357": "MEDICHAM", "358": "SWABLU", "359": "ALTARIA", "360": "WYNAUT", "361": "DUSKULL", "362": "DUSCLOPS", "363": "ROSELIA", "364": "SLAKOTH", "365": "VIGOROTH", "366": "SLAKING", "367": "GULPIN", "368": "SWALOT", "369": "TROPIUS", "370": "WHISMUR", "371": "LOUDRED", "372": "EXPLOUD", "373": "CLAMPERL", "374": "HUNTAIL", "375": "GOREBYSS", "376": "ABSOL", "377": "SHUPPET", "378": "BANETTE", "379": "SEVIPER", "380": "ZANGOOSE", "381": "RELICANTH", "382": "ARON", "383": "LAIRON", "384": "AGGRON", "385": "CASTFORM", "386": "VOLBEAT", "387": "ILLUMISE", "388": "LILEEP", "389": "CRADILY", "390": "ANORITH", "391": "ARMALDO", "392": "RALTS", "393": "KIRLIA", "394": "GARDEVOIR", "395": "BAGON", "396": "SHELGON", "397": "SALAMENCE", "398": "BELDUM", "399": "METANG", "400": "METAGROSS", "401": "REGIROCK", "402": "REGICE", "403": "REGISTEEL", "404": "KYOGRE", "405": "GROUDON", "406": "RAYQUAZA", "407": "LATIAS", "408": "LATIOS", "409": "JIRACHI", "410": "DEOXYS", "411": "CHIMECHO" } };
-
-// web/src/bots/party.ts
-var EXPORTED = encounters_default;
-var ENCOUNTERS = EXPORTED.maps;
-
-// web/src/match/events.ts
-var EVENT_RARES = 2;
-var ITEM_MASTER_BALL = 1;
-var ITEM_CHOICE_BAND = 186;
-var ITEM_LEFTOVERS = 200;
-var GOLD = [
-  301,
-  302,
-  303,
-  310,
-  312,
-  313,
-  314,
-  317,
-  318,
-  323,
-  326,
-  // TM13 14 15 22 24 25 26 29 30 35 38
-  ITEM_MASTER_BALL,
-  ITEM_LEFTOVERS,
-  ITEM_CHOICE_BAND
-];
-var EVENT_GOLD = 3;
-var EVENT_PIECES = 1 + EVENT_RARES + EVENT_GOLD + 1;
-var EVENT_CELLS = EVENT_PIECES + 1;
-
 // web/src/match/scatter.ts
 var ITEM_POKE_BALL = 4;
 var ITEM_HYPER_POTION = 21;
@@ -983,6 +1471,28 @@ function scatterItem(rng) {
   }
   return ITEM_SUPER_POTION;
 }
+
+// web/src/match/gifts.ts
+var ITEM_BRIGHT_POWDER = 179;
+var ITEM_WHITE_HERB = 180;
+var ITEM_QUICK_CLAW = 183;
+var ITEM_CHOICE_BAND2 = 186;
+var ITEM_KINGS_ROCK = 187;
+var ITEM_FOCUS_BAND = 196;
+var ITEM_SCOPE_LENS = 198;
+var ITEM_LEFTOVERS2 = 200;
+var ITEM_SHELL_BELL = 219;
+var GIFTS = [
+  ITEM_BRIGHT_POWDER,
+  ITEM_WHITE_HERB,
+  ITEM_QUICK_CLAW,
+  ITEM_CHOICE_BAND2,
+  ITEM_KINGS_ROCK,
+  ITEM_FOCUS_BAND,
+  ITEM_SCOPE_LENS,
+  ITEM_LEFTOVERS2,
+  ITEM_SHELL_BELL
+];
 
 // web/spike-b/shared/items.ts
 var ITEM_TM012 = 289;
@@ -1064,6 +1574,8 @@ var JUMP_Y_HIGH = [-4, -6, -8, -10, -11, -12, -12, -12, -11, -10, -9, -8, -6, -4
 var NOT_MOVING = 0;
 var TURN_DIRECTION = 1;
 var MOVING = 2;
+var CLASS_WATER2 = 2;
+var WARP_FRAMES = 32;
 function newMover(spot, facing = DIR_SOUTH) {
   return { spot, prev: spot, facing, moveDir: facing, runningState: NOT_MOVING, action: null, px: 0, py: 0, lift: 0, run: true, strides: 0 };
 }
@@ -1125,27 +1637,38 @@ function begin(m, keys, step) {
   m.run = !keys.b;
   m.prev = m.spot;
   m.strides += 1;
-  if (to.hop) {
+  if (to.warp) {
+    m.spot = to.to;
+    m.action = { kind: "warp", t: 0, len: WARP_FRAMES, speed: 0, dir };
+    m.px = 0;
+    m.py = 0;
+  } else if (to.hop) {
     m.spot = { map: to.to.map, x: to.to.x - DXY[dir][0], y: to.to.y - DXY[dir][1] };
     m.action = { kind: "hop", t: 0, len: 32, speed: 1, dir, land: to.to };
     m.px = -DXY[dir][0] * 16;
     m.py = -DXY[dir][1] * 16;
   } else {
     m.spot = to.to;
-    const speed = m.run ? 2 : 1;
+    const speed = m.run || to.water ? 2 : 1;
     m.action = { kind: "step", t: 0, len: 16 / speed, speed, dir };
     m.px = -DXY[dir][0] * 16;
     m.py = -DXY[dir][1] * 16;
   }
 }
-function stepFn(world) {
+function stepFn(world, field = { surf: false, cut: 0 }) {
   return (from, dir) => {
-    const to = world.step(from, SEAM_OF[dir]);
-    if (!to) return null;
+    const to = world.step(from, SEAM_OF[dir], field.surf, field.cut);
+    if (!to) {
+      const mat = dir === DIR_SOUTH && !world.map(from.map)?.outdoor ? world.warpAt(from.map, from.x, from.y) : void 0;
+      return mat && mat.kind === "door" ? { to: { map: mat.to, x: mat.toX, y: mat.toY }, hop: false, warp: true } : null;
+    }
+    const [dx, dy] = DXY[dir];
+    const door = world.warpAt(from.map, from.x + dx, from.y + dy);
+    if (door && to.map === door.to && to.x === door.toX && to.y === door.toY) return { to, hop: false, warp: true };
     const hop = to.map === from.map && Math.abs(to.x - from.x) + Math.abs(to.y - from.y) === 2;
     const cls = world.cell(to.map, to.x, to.y);
     if (!hop && cls >= 3 && cls <= 6) return null;
-    return { to, hop };
+    return cls === CLASS_WATER2 ? { to, hop, water: true } : { to, hop };
   };
 }
 
@@ -1159,11 +1682,18 @@ var KEY_A = 32;
 function keysOf(bits) {
   return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A) };
 }
+var FIELD_SURF = 4;
+var EVENT_SPILL = 2 << 20;
+var eventPiece = (n, i) => EVENT_SPILL | n << 4 | i;
 var emptyBag = (b) => !b.items.length && !b.money && !b.mons?.length;
 var GRACE = 120;
 var LOCKOUT = 600;
 var JOIN_GRACE = 300;
 var BACK = { 1: 2, 2: 1, 3: 4, 4: 3 };
+var BOT_DUEL_GAP = 60 * 12;
+var BOT_DUEL_MAX = 60 * 120;
+var BOT_BITE = 600;
+var BOT_BITES = 3;
 var SPILL_KEY = 1 << 20;
 var GROUND_PER_MAP = 6;
 var REGROW = 60 * 90;
@@ -1173,13 +1703,15 @@ var DEALS = /* @__PURE__ */ new Map();
 var REACH = /* @__PURE__ */ new Map();
 var RING_PHASE = 60 * 120;
 var RING_STEPS = [Infinity, 15 / 28, 9 / 28, 7 / 28, 5 / 28, 3 / 28, 2 / 28, 0, -1];
+var SAFARI = "MAP_SAFARI_ZONE_";
 var Room = class {
-  constructor(world, maps, patches, seed, places) {
+  constructor(world, maps, patches, seed, places, anchors = /* @__PURE__ */ new Map()) {
     this.world = world;
     this.maps = maps;
     this.patches = patches;
     this.seed = seed;
     this.places = places;
+    this.anchors = anchors;
     this.base = stepFn(world);
   }
   world;
@@ -1187,6 +1719,7 @@ var Room = class {
   patches;
   seed;
   places;
+  anchors;
   tick = 0;
   actors = [];
   /** Taken spots by key, and the frame they were taken. */
@@ -1197,15 +1730,26 @@ var Room = class {
   spills = /* @__PURE__ */ new Map();
   bench = [];
   results = { round: 0, entrants: [], fallen: [], winner: 0 };
+  duelAfter = 0;
+  /** This round's events, in the order they dropped. */
+  events = [];
+  /** Who beat which gym leader this round, in the order they fell. */
+  gyms = [];
   base;
+  /** The StepFn for each FIELD_* combination a team has. */
+  fields = [];
   dealt = null;
   state() {
-    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}, ...this.epoch ? { epoch: this.epoch } : {} };
+    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}, ...this.epoch ? { epoch: this.epoch } : {}, ...this.opening ? { opening: this.opening } : {}, ...this.duelAfter ? { duelAfter: this.duelAfter } : {}, ...this.events.length ? { events: structuredClone(this.events) } : {}, ...this.gyms.length ? { gyms: structuredClone(this.gyms) } : {} };
   }
   load(s) {
     this.tick = s.tick;
     this.ringPhase = s.ringPhase ?? RING_PHASE;
     this.epoch = s.epoch ?? 0;
+    this.opening = s.opening ?? 0;
+    this.duelAfter = s.duelAfter ?? 0;
+    this.events = structuredClone(s.events ?? []);
+    this.gyms = structuredClone(s.gyms ?? []);
     this.actors = structuredClone(s.actors);
     this.taken = new Map(s.taken);
     this.picked = new Map(s.picked ?? []);
@@ -1217,7 +1761,39 @@ var Room = class {
     return this.actors.find((a) => a.id === id);
   }
   apply(cmd) {
-    if (cmd.c === "join") {
+    if (cmd.c === "field") {
+      const a = this.actor(cmd.id);
+      if (a && !a.bot) a.field = cmd.bits & 7;
+    } else if (cmd.c === "pick") {
+      const a = this.actor(cmd.id);
+      if (a && !a.bot && this.places.has(cmd.map) && !cmd.map.startsWith(SAFARI)) a.pick = cmd.map;
+    } else if (cmd.c === "away") {
+      const a = this.actor(cmd.id);
+      if (a && !a.bot) a.away = cmd.on || void 0;
+    } else if (cmd.c === "traded") {
+      const t = this.events.find((e) => e.n === cmd.n)?.trader;
+      if (!t || t.busy !== cmd.id) return;
+      t.busy = 0;
+      if (cmd.given > 0 && cmd.given < 412) t.species = cmd.given;
+      const a = this.actor(cmd.id);
+      if (a?.battling && !a.foe) {
+        a.battling = false;
+        a.calm = this.tick + GRACE;
+      }
+    } else if (cmd.c === "bots") {
+      const a = this.actor(cmd.a), b = this.actor(cmd.b);
+      if (!a || !b || !a.bot || !b.bot || a.foe !== b.id || b.foe !== a.id || a.judge !== cmd.id || !a.battling) return;
+      this.part(a);
+      this.part(b);
+      const won = cmd.winner === a.id ? a : cmd.winner === b.id ? b : void 0;
+      const lost = won === a ? b : won === b ? a : void 0;
+      if (won && lost && !lost.beaten) {
+        lost.beaten = true;
+        this.fall(lost, won.name);
+      }
+    } else if (cmd.c === "lock") {
+      this.results.entrants = this.actors.map((a) => [a.id, a.name]);
+    } else if (cmd.c === "join") {
       if (this.actor(cmd.id) || this.bench.some((b) => b.id === cmd.id)) return;
       if (this.results.entrants.length && !cmd.bot) {
         this.bench.push({ id: cmd.id, name: cmd.name, skin: cmd.skin });
@@ -1239,6 +1815,9 @@ var Room = class {
       }
       const foe = a?.foe ? this.actor(a.foe) : void 0;
       if (foe?.bot) foe.battling = false;
+      for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
+      for (const [key, by] of this.picked) if (by === cmd.id && this.spills.get(key)?.legend) this.picked.delete(key);
+      for (const e of this.events) if (e.trader?.busy === cmd.id) e.trader.busy = 0;
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
       if (cmd.c === "leave") this.bench = this.bench.filter((b) => b.id !== cmd.id);
       if (!a || a.bot) return;
@@ -1258,13 +1837,22 @@ var Room = class {
       const foe = a.foe ? this.actor(a.foe) : void 0;
       if (foe?.bot) {
         foe.battling = false;
+        foe.calm = this.tick + GRACE;
         if (cmd.won && !foe.beaten) {
           foe.beaten = true;
           this.fall(foe, a.name);
         }
       }
       a.foe = 0;
+      if (a.boss) {
+        if (cmd.won && !this.bossDown(a.boss - 1)) this.gyms.push([a.boss - 1, a.name]);
+        a.boss = void 0;
+      }
     }
+  }
+  /** Gym leader `n` has been beaten this round. */
+  bossDown(n) {
+    return this.gyms.some(([m]) => m === n);
   }
   isTaken(key) {
     const at = this.taken.get(key);
@@ -1305,6 +1893,14 @@ var Room = class {
         out.set(`${id2}:${c.x}:${c.y}`, { key: ++n, map: id2, x: c.x, y: c.y, item });
       }
     }
+    for (const id2 of [...land.keys()].sort()) {
+      if (!/^MAP_\w+_(TOWN|CITY)$/.test(id2)) continue;
+      const marked = new Set(this.patchesOn(id2).map((q) => `${q.x}:${q.y}`));
+      const cells = land.get(id2).filter((c2) => !marked.has(`${c2.x}:${c2.y}`) && !out.has(`${id2}:${c2.x}:${c2.y}`) && !(id2 === "MAP_LITTLEROOT_TOWN" && c2.x >= 7 && c2.x <= 13 && c2.y >= 9 && c2.y <= 13));
+      if (!cells.length) continue;
+      const c = cells[Math.floor(rng() * cells.length)];
+      out.set(`${id2}:${c.x}:${c.y}`, { key: ++n, map: id2, x: c.x, y: c.y, item: GIFTS[Math.floor(rng() * GIFTS.length)], gift: true });
+    }
     if (DEALS.size >= 8) DEALS.delete(DEALS.keys().next().value);
     DEALS.set(id, out);
     return this.dealt = out;
@@ -1324,7 +1920,7 @@ var Room = class {
       out.push(at);
       for (let dir = 1; dir <= 4; dir++) {
         const r = this.base(at, dir);
-        if (!r || !this.maps.has(r.to.map)) continue;
+        if (!r || !this.places.has(r.to.map)) continue;
         const k = `${r.to.map}:${r.to.x}:${r.to.y}`;
         if (seen.has(k)) continue;
         seen.add(k);
@@ -1337,12 +1933,14 @@ var Room = class {
   /** The ring this frame (or at `tick`). */
   ring(tick2 = this.tick) {
     const len = this.ringPhase;
-    const cycle = RING_STEPS.length * len;
+    const cycle = RING_STEPS.length * len + this.opening;
     const n = Math.floor((tick2 - this.epoch) / cycle);
     const round = this.results.round + n;
-    const t = tick2 - this.epoch - n * cycle;
-    const phase = Math.floor(t / len);
+    let t = tick2 - this.epoch - n * cycle;
     const { cx, cy, far } = this.centre(round);
+    if (t < this.opening) return { round, phase: 0, last: false, cx, cy, r: Infinity, next: Infinity, left: this.opening - t, safari: true };
+    t -= this.opening;
+    const phase = Math.floor(t / len);
     const at = (i) => RING_STEPS[i] === Infinity || RING_STEPS[i] < 0 ? RING_STEPS[i] : RING_STEPS[i] * far;
     const last = phase === RING_STEPS.length - 1;
     return { round, phase, last, cx, cy, r: at(phase), next: last ? void 0 : at(phase + 1), left: len - (t - phase * len) };
@@ -1351,6 +1949,8 @@ var Room = class {
   ringPhase = RING_PHASE;
   /** The frame this round started on. */
   epoch = 0;
+  /** Frames of Safari each round opens with (SAFARI); 0, none (a test's room). */
+  opening = 0;
   centres = /* @__PURE__ */ new Map();
   /** A round's centre: a cell a trainer can stand on, from the seed; and how far the
    *  farthest reachable cell is from it. */
@@ -1380,8 +1980,10 @@ var Room = class {
     if (ring.r === Infinity) return false;
     if (ring.r < 0) return true;
     const p = this.places.get(s.map);
-    if (!p) return true;
-    return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy) > ring.r;
+    const inside = p ? void 0 : this.anchors.get(s.map);
+    if (!p && !inside) return true;
+    const x = p ? p.gx + s.x + 0.5 : inside.gx, y = p ? p.gy + s.y + 0.5 : inside.gy;
+    return Math.hypot(x - ring.cx, y - ring.cy) > ring.r;
   }
   /** The item ball still lying on a cell, if any. */
   groundAt(map, x, y) {
@@ -1408,19 +2010,27 @@ var Room = class {
     const was = this.tick - 1 >= this.epoch ? this.ring(this.tick - 1) : { ...ring, phase: -1 };
     const r = this.results;
     if (ring.round !== was.round || r.wonAt !== void 0 && this.tick >= r.wonAt + AFTER_WIN) this.newRound(r.round + 1);
+    else if (was.safari && !ring.safari) this.drop(ring.round);
     else if (ring.phase !== was.phase) {
       if (ring.phase === 1 && !r.entrants.length) r.entrants = this.actors.map((a) => [a.id, a.name]);
-      for (const a of this.actors) {
-        if (!a.bot || a.beaten || a.battling || !this.inFog(a.m.spot, ring)) continue;
-        a.beaten = true;
-        this.fall(a, "");
-      }
+      const n = eventForRing(ring.phase);
+      if (n !== void 0) this.dropEvent(n, ring);
     }
     if (!r.winner && r.entrants.length >= 2) {
       const alive = r.entrants.filter(([id]) => !r.fallen.some((f) => f.id === id));
       if (alive.length === 1) {
         r.winner = alive[0][0];
         r.wonAt = this.tick;
+      }
+    }
+    if ((this.tick - this.epoch) % Math.max(1, Math.round(this.ringPhase / RING_PHASE * BOT_BITE)) === 0) {
+      for (const a of this.actors) {
+        if (!a.bot || a.beaten || a.battling || !this.inFog(a.m.spot, ring)) continue;
+        a.bites = (a.bites ?? 0) + 1;
+        if (a.bites >= BOT_BITES) {
+          a.beaten = true;
+          this.fall(a, "");
+        }
       }
     }
     for (const [key, at] of this.taken) if (this.tick - at >= REGROW) this.taken.delete(key);
@@ -1430,21 +2040,176 @@ var Room = class {
       else for (const bits of ins?.get(a.id) ?? []) this.move(a, bits, events);
     }
     this.engage(events);
+    for (const a of this.actors) if (a.judge && this.tick - (a.since ?? 0) > BOT_DUEL_MAX) this.part(a);
+    this.engageBots(events);
     return events;
+  }
+  /** Event `n` (every other ring from the first shrink, DESIGN §Events): its legendary,
+   *  two rares at the phase's rung, three gold balls and a bag of supplies, on the free
+   *  cells nearest a spot inside the ring -- the last one at the ring's centre, the one
+   *  place its final ring still holds. Whoever gets there takes it. */
+  dropEvent(n, ring) {
+    let state = (this.seed ^ Math.imul(ring.round + 1, 2654435761) ^ Math.imul(n + 1, 2246822507)) >>> 0 || 1;
+    const rng = () => {
+      state ^= state << 13;
+      state ^= state >>> 17;
+      state ^= state << 5;
+      return (state >>> 0) / 4294967296;
+    };
+    const free = (s) => this.world.cell(s.map, s.x, s.y) === 0 && !this.world.warpAt(s.map, s.x, s.y) && !this.groundAt(s.map, s.x, s.y) && !this.spillAt(s.map, s.x, s.y) && !this.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y);
+    const all = this.reachable().filter(free);
+    const plane = (s) => {
+      const p = this.places.get(s.map);
+      return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy);
+    };
+    let from;
+    if (n === EVENT_MAX - 1) for (const s of all) {
+      if (!from || plane(s) < plane(from)) from = s;
+    }
+    else {
+      const inside = all.filter((s) => !this.inFog(s, ring));
+      from = inside[Math.min(inside.length - 1, Math.floor(rng() * inside.length))];
+    }
+    if (!from) return;
+    const f = from;
+    const d = (s) => Math.abs(s.x - f.x) + Math.abs(s.y - f.y);
+    const cells = all.filter((s) => s.map === f.map && d(s) <= 8 && d(s) !== 1).sort((p, q) => d(p) - d(q) || p.y - q.y || p.x - q.x).slice(0, 1 + EVENT_RARES + EVENT_GOLD + 2);
+    const level = rungForPhase(ring.phase + 1);
+    const legends = LEGENDS[Math.min(n, LEGENDS.length - 1)];
+    const species = [legends[Math.min(legends.length - 1, Math.floor(rng() * legends.length))], ...draw(rng, RARES, EVENT_RARES)];
+    const bags = [...draw(rng, GOLD, EVENT_GOLD).map((id) => [{ id, n: 1 }]), SUPPLIES.map((r) => ({ ...r }))];
+    const spot = cells.length > species.length + bags.length ? cells.pop() : void 0;
+    const offers = RARES.filter((r) => !species.includes(r));
+    const trader = spot && offers.length ? { x: spot.x, y: spot.y, species: offers[Math.min(offers.length - 1, Math.floor(rng() * offers.length))], busy: 0 } : void 0;
+    cells.forEach((c, i) => {
+      const key = eventPiece(n, i);
+      const bag = i < species.length ? { items: [], money: 0, mons: [{ species: species[i], level }] } : { items: bags[i - species.length], money: 0 };
+      this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: "", bag, ...i === 0 ? { legend: true } : {} });
+    });
+    this.events.push({ n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0], ...trader ? { trader } : {} });
+  }
+  /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
+  part(a) {
+    a.battling = false;
+    a.foe = a.judge = a.since = 0;
+    a.calm = this.tick + GRACE;
+  }
+  /** Two bots on one map in each other's eyeline fight (POK-238), one pair at a time
+   *  room-wide (BOT_DUEL_GAP). A bot has no ROM, so a trainer's page fights it in a
+   *  hidden one: the trainers take turns at it, by the frame. Nobody on the map to do it,
+   *  nobody fights. */
+  engageBots(events) {
+    if (this.ring().safari) return;
+    if (this.tick < this.duelAfter || this.tick % 8) return;
+    const judges = this.actors.filter((a) => !a.bot && !a.away && !a.battling);
+    if (!judges.length) return;
+    const byMap = /* @__PURE__ */ new Map();
+    for (const a of this.actors) {
+      if (!a.bot || a.beaten || a.battling || a.m.action || this.tick < a.calm) continue;
+      const l = byMap.get(a.m.spot.map) ?? [];
+      l.push(a);
+      byMap.set(a.m.spot.map, l);
+    }
+    const look = (o) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing });
+    for (const id of [...byMap.keys()].sort()) {
+      const l = byMap.get(id);
+      for (let i = 0; i < l.length; i++) {
+        for (let j = i + 1; j < l.length; j++) {
+          const a = l[i], b = l[j];
+          if (!eitherSees(this.world, look(a), look(b))) continue;
+          const dx = b.m.spot.x - a.m.spot.x, dy = b.m.spot.y - a.m.spot.y;
+          const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+          a.m.facing = a.m.moveDir = toB;
+          b.m.facing = b.m.moveDir = BACK[toB];
+          const judge = judges[(this.tick >>> 3) % judges.length];
+          a.battling = b.battling = true;
+          a.foe = b.id;
+          b.foe = a.id;
+          a.judge = b.judge = judge.id;
+          a.since = b.since = this.tick;
+          a.keys = a.last = b.keys = b.last = 0;
+          this.duelAfter = this.tick + BOT_DUEL_GAP;
+          events.push({ type: "bots", tick: this.tick, id: judge.id, a: a.id, b: b.id });
+          return;
+        }
+      }
+    }
   }
   /** `a` is out of this round's match (once; nothing after the win). */
   fall(a, by, how = {}) {
     const r = this.results;
     if (r.winner || !r.entrants.some(([id]) => id === a.id) || r.fallen.some((f) => f.id === a.id)) return;
-    r.fallen.push({ id: a.id, name: a.name, by, ...how });
+    r.fallen.push({ id: a.id, name: a.name, by, ...how, ...a.bot ? { bot: true } : {} });
   }
   /** The cells by the truck that no bot stands on: along its row first, nearest first, so
    *  trainers stood side by side facing south do not see each other (and fight the moment
    *  their grace is up). */
   truck() {
+    if (this.ring().safari) return this.zone();
     const d = (s) => Math.abs(s.y - 10) * 64 + Math.abs(s.x - 10) * 2 + (s.x < 10 ? 1 : 0);
     const near = this.reachable().filter((s) => s.map === "MAP_LITTLEROOT_TOWN").sort((p, q) => d(p) - d(q)).slice(0, TRUCK);
     return near.filter((s) => !this.actors.some((a) => a.bot && a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y));
+  }
+  /** Where trainers stand when the Safari opens: spread over the Zone's areas, as far
+   *  as one walks from its gate (no bike, no SURF). */
+  zone() {
+    const all = this.safariCells();
+    const taken = (s) => this.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y);
+    return all.filter((s, i) => i % 7 === 0 && !taken(s));
+  }
+  safariCells() {
+    const id = "safari:" + [...this.maps.keys()].join();
+    const hit = REACH.get(id);
+    if (hit) return hit;
+    const start = { map: "MAP_SAFARI_ZONE_SOUTH", x: 32, y: 34 };
+    const seen = /* @__PURE__ */ new Set([`${start.map}:${start.x}:${start.y}`]);
+    const out = [];
+    const queue = this.maps.has(start.map) ? [start] : [];
+    while (queue.length) {
+      const at = queue.shift();
+      out.push(at);
+      for (let dir = 1; dir <= 4; dir++) {
+        const r = this.base(at, dir);
+        if (!r || !r.to.map.startsWith(SAFARI) || !this.maps.has(r.to.map) || this.world.cell(r.to.map, r.to.x, r.to.y) !== 0) continue;
+        const k = `${r.to.map}:${r.to.x}:${r.to.y}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        queue.push(r.to);
+      }
+    }
+    REACH.set(id, out);
+    return out;
+  }
+  /** The Safari is over: everybody still in the Zone drops where they asked (or, asking
+   *  nowhere, anywhere outdoors), on a free cell of that map dealt from the seed. */
+  drop(round) {
+    let state = (this.seed ^ Math.imul(round + 1, 625341585)) >>> 0 || 1;
+    const rng = () => {
+      state ^= state << 13;
+      state ^= state >>> 17;
+      state ^= state << 5;
+      return (state >>> 0) / 4294967296;
+    };
+    const maps = [...this.places.keys()].filter((m) => !m.startsWith(SAFARI)).sort();
+    const used = new Set(this.actors.map((a) => `${a.m.spot.map}:${a.m.spot.x}:${a.m.spot.y}`));
+    for (const a of this.actors) {
+      if (a.bot || !a.m.spot.map.startsWith(SAFARI)) continue;
+      const want = a.pick && this.places.has(a.pick) ? a.pick : maps[Math.floor(rng() * maps.length)];
+      a.pick = void 0;
+      const m = this.maps.get(want);
+      if (!m) continue;
+      const cells = [];
+      for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
+        if (this.world.cell(want, x, y) !== 0 || used.has(`${want}:${x}:${y}`) || this.groundAt(want, x, y) || this.spillAt(want, x, y)) continue;
+        if (this.patchesOn(want).some((q) => q.x === x && q.y === y)) continue;
+        cells.push({ map: want, x, y });
+      }
+      if (!cells.length) continue;
+      const to = cells[Math.floor(rng() * cells.length)];
+      used.add(`${to.map}:${to.x}:${to.y}`);
+      a.m = newMover(to, 1);
+      a.calm = this.tick + JOIN_GRACE;
+    }
   }
   /** The fog lifted: a new match. Every trainer, out or in, back at the truck with the
    *  join's grace; the balls, spots and bags back as dealt; the bots to be fought again. */
@@ -1456,6 +2221,8 @@ var Room = class {
     }
     humans.sort((p, q) => p.id - q.id);
     this.bench = [];
+    this.results = { round, entrants: [], fallen: [], winner: 0 };
+    this.epoch = this.tick;
     const spots = this.truck();
     humans.forEach((a, i) => {
       a.m = newMover(spots[i % spots.length], 1);
@@ -1465,19 +2232,25 @@ var Room = class {
     });
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
-    for (const a of this.actors) if (a.bot) a.beaten = false;
+    for (const a of this.actors) if (a.bot) {
+      a.beaten = false;
+      a.bites = 0;
+      if (a.judge) this.part(a);
+    }
+    this.duelAfter = 0;
+    this.events = [];
+    this.gyms = [];
     this.taken.clear();
     this.picked.clear();
     this.spills.clear();
-    this.results = { round, entrants: [], fallen: [], winner: 0 };
-    this.epoch = this.tick;
   }
   /** Two trainers on one map who see each other fight (br_engage.c's BrEngage_Tick): the
    *  eyeline both ways, BR_SIGHT_RANGE cells, stopped by collision (bots/sight.ts). Only
    *  trainers standing still, neither in a fight nor in its grace. They turn to face each
    *  other, and the lower id is the side that challenged. */
   engage(events) {
-    const free = this.actors.filter((a) => !a.bot && !a.battling && !a.m.action && this.tick >= a.calm);
+    if (this.ring().safari) return;
+    const free = this.actors.filter((a) => !a.bot && !a.away && !a.battling && !a.m.action && this.tick >= a.calm);
     for (let i = 0; i < free.length; i++) {
       const a = free[i];
       if (a.battling) continue;
@@ -1500,6 +2273,25 @@ var Room = class {
         break;
       }
     }
+    for (const h of free) {
+      if (h.battling) continue;
+      for (const b of this.actors) {
+        if (!b.bot || b.beaten || b.battling || b.m.action || this.tick < b.calm || b.m.spot.map !== h.m.spot.map) continue;
+        if (h.shun === b.id && this.tick < h.shunUntil) continue;
+        const look = (o) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing });
+        if (!eitherSees(this.world, look(h), look(b))) continue;
+        const dx = b.m.spot.x - h.m.spot.x, dy = b.m.spot.y - h.m.spot.y;
+        const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        h.m.facing = h.m.moveDir = toB;
+        b.m.facing = b.m.moveDir = BACK[toB];
+        h.battling = b.battling = true;
+        h.foe = b.id;
+        b.foe = h.id;
+        h.keys = h.last = b.keys = b.last = 0;
+        events.push({ type: "fight", tick: this.tick, id: h.id, foe: b.id });
+        break;
+      }
+    }
   }
   /** One move of one actor on `bits`: sim.ts's frame, then what it landed on or pressed. */
   move(a, bits, events) {
@@ -1513,7 +2305,7 @@ var Room = class {
       if (dir) {
         a.m.facing = a.m.moveDir = dir;
         const r = this.stepFor(a)(a.m.spot, dir);
-        if (!r || r.hop) {
+        if (!r || (r.hop || r.water && !this.onWater(a)) && !(bits & KEY_A)) {
           a.last = bits;
           return;
         }
@@ -1537,9 +2329,25 @@ var Room = class {
         const g = this.groundAt(a.m.spot.map, x, y);
         const b = g ? void 0 : this.spillAt(a.m.spot.map, x, y);
         const foe = g || b ? void 0 : this.facing(a);
-        if (g) {
+        const tr = foe ? void 0 : this.traderAt(a.m.spot.map, x, y);
+        const boss = foe || tr ? void 0 : leaderAt(a.m.spot.map, x, y);
+        if (boss && !this.bossDown(boss.n)) {
+          a.battling = true;
+          a.boss = boss.n + 1;
+          events.push({ type: "boss", tick: this.tick, id: a.id, n: boss.n });
+        } else if (tr && !tr.t.busy) {
+          tr.t.busy = a.id;
+          a.battling = true;
+          events.push({ type: "trade", tick: this.tick, id: a.id, n: tr.n, species: tr.t.species });
+        } else if (tr) {
+        } else if (g) {
           this.picked.set(g.key, a.id);
-          events.push({ type: "item", tick: this.tick, id: a.id, key: g.key, item: g.item });
+          events.push({ type: "item", tick: this.tick, id: a.id, key: g.key, item: g.item, ...g.gift ? { gift: true } : {} });
+        } else if (b?.legend) {
+          const mon = b.bag.mons[0];
+          this.picked.set(b.key, a.id);
+          a.battling = true;
+          events.push({ type: "legend", tick: this.tick, id: a.id, key: b.key, species: mon.species, level: mon.level });
         } else if (b) {
           this.picked.set(b.key, a.id);
           events.push({ type: "bag", tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name });
@@ -1548,10 +2356,29 @@ var Room = class {
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
           events.push({ type: "fight", tick: this.tick, id: a.id, foe: foe.id });
+        } else if (!foe && this.clerk(a)) {
+          events.push({ type: "mart", tick: this.tick, id: a.id, map: a.m.spot.map });
+        } else if (!foe && a.m.facing === DIR_NORTH) {
+          const c = this.maps.get(a.m.spot.map)?.centre;
+          if (c && a.m.spot.x === c.counterX && a.m.spot.y === c.counterY) events.push({ type: "nurse", tick: this.tick, id: a.id, map: a.m.spot.map });
         }
       }
     } else if (!a.m.action) a.arriving = false;
     a.last = bits;
+  }
+  /** An event's trader standing on a cell. */
+  traderAt(map, x, y) {
+    for (const e of this.events) if (e.trader && e.map === map && e.trader.x === x && e.trader.y === y) return { n: e.n, t: e.trader };
+    return void 0;
+  }
+  onWater(a) {
+    return this.world.cell(a.m.spot.map, a.m.spot.x, a.m.spot.y) === CLASS_WATER2;
+  }
+  /** The MART clerk `a` talks to: on the cell ahead, or across the counter there. */
+  clerk(a) {
+    const [x, y] = this.ahead(a);
+    const map = a.m.spot.map;
+    return clerkAt(map, x, y) ?? (this.world.cell(map, x, y) === 1 ? clerkAt(map, 2 * x - a.m.spot.x, 2 * y - a.m.spot.y) : void 0);
   }
   /** The cell `a` faces, on its own map. */
   ahead(a) {
@@ -1568,10 +2395,15 @@ var Room = class {
    *  two can't both walk into one cell). */
   stepFor(a) {
     return (from, dir) => {
-      const r = this.base(from, dir);
+      const bits = a.bot ? 7 : a.field ?? 0;
+      const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir) : this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
+      if (a.bot && !this.places.has(r.to.map)) return null;
       const t = r.to;
-      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y)) return null;
+      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y)) return null;
+      if (from.map.startsWith(SAFARI) !== t.map.startsWith(SAFARI) && this.ring().safari) return null;
+      const boss = leaderAt(t.map, t.x, t.y);
+      if (boss && !this.bossDown(boss.n)) return null;
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return null;
       return r;
     };
@@ -1604,13 +2436,19 @@ var Room = class {
       mix2(m.py + 1024);
       mix2(m.lift + 1024);
       mix2(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 65535);
-      mix2((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0));
+      mix2((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0) | (a.field ?? 0) << 3);
       mix2(a.foe);
       mix2(a.calm);
       mix2(a.shun);
       mix2(a.shunUntil);
       mix2(a.keys);
       mix2(a.last);
+      mix2(a.judge ?? 0);
+      mix2(a.since ?? 0);
+      mix2(a.bites ?? 0);
+      mix2(a.boss ?? 0);
+      mix2(a.pick?.length ?? 0);
+      mix2(a.away ? 1 : 0);
     }
     for (const [k, t] of this.taken) {
       mix2(k);
@@ -1630,6 +2468,24 @@ var Room = class {
     mix2(r.winner);
     mix2(r.wonAt ?? 0);
     mix2(this.epoch);
+    mix2(this.opening);
+    mix2(this.duelAfter);
+    for (const [n, w] of this.gyms) {
+      mix2(n);
+      mix2(w.length);
+    }
+    for (const e of this.events) {
+      mix2(e.key);
+      mix2(e.x);
+      mix2(e.y);
+      mix2(e.species);
+      if (e.trader) {
+        mix2(e.trader.x);
+        mix2(e.trader.y);
+        mix2(e.trader.species);
+        mix2(e.trader.busy);
+      }
+    }
     for (const [id] of r.entrants) mix2(id);
     for (const f of r.fallen) {
       mix2(f.id);
@@ -1686,11 +2542,44 @@ function layout(maps) {
   }
   return placed;
 }
+var CLOSED_DOORS = /* @__PURE__ */ new Set([
+  "MAP_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB",
+  "MAP_FALLARBOR_TOWN_BATTLE_TENT_LOBBY",
+  "MAP_VERDANTURF_TOWN_BATTLE_TENT_LOBBY",
+  "MAP_SLATEPORT_CITY_BATTLE_TENT_LOBBY",
+  "MAP_ROUTE110_TRICK_HOUSE_ENTRANCE",
+  "MAP_ROUTE121_SAFARI_ZONE_ENTRANCE",
+  "MAP_EVER_GRANDE_CITY_HALL5"
+]);
+function interiors(all, outside) {
+  const byId = new Map(all.map((m) => [m.id, m]));
+  const out = /* @__PURE__ */ new Map();
+  const queue = [...outside.keys()];
+  while (queue.length) {
+    const id = queue.shift();
+    const m = byId.get(id);
+    if (!m) continue;
+    const here = outside.get(id);
+    for (const w of m.warps ?? []) {
+      const to = byId.get(w.to);
+      if (!to || to.outdoor || CLOSED_DOORS.has(to.id) || out.has(to.id)) continue;
+      const at = here ? { gx: here.gx + w.x + 0.5, gy: here.gy + w.y + 0.5 } : out.get(id);
+      out.set(to.id, { m: to, gx: at.gx, gy: at.gy });
+      queue.push(to.id);
+    }
+  }
+  return out;
+}
 function makeRoom(all, patches, seed, world) {
   const placed = layout(all);
-  const maps = new Map([...placed].map(([id, p]) => [id, p.m]));
   const places = new Map([...placed].map(([id, p]) => [id, { gx: p.gx, gy: p.gy }]));
-  return new Room(world ?? new World(all), maps, patches, seed, places);
+  const inside = interiors(all, places);
+  const zone = all.filter((m) => m.id.startsWith(SAFARI));
+  const maps = new Map([...placed, ...inside].map(([id, p]) => [id, p.m]));
+  for (const m of zone) maps.set(m.id, m);
+  const anchors = new Map([...inside].map(([id, p]) => [id, { gx: p.gx, gy: p.gy }]));
+  for (const m of zone) anchors.set(m.id, { gx: -1e4, gy: -1e4 });
+  return new Room(world ?? new World(all), maps, patches, seed, places, anchors);
 }
 
 // web/spike-b/shared/bots.ts
@@ -1706,8 +2595,87 @@ function rand(b) {
   return b.rng / 4294967296;
 }
 var DELAYS = [32, 64, 96, 128];
-function botKeys(_room, a, b) {
+var DIR_OF = { south: 1, north: 2, west: 3, east: 4 };
+var GRIDS = /* @__PURE__ */ new WeakMap();
+var INSIDE = /* @__PURE__ */ new WeakMap();
+function insideNext(room) {
+  const ring = room.ring();
+  const at = `${ring.round}:${ring.phase}`;
+  const hit = INSIDE.get(room);
+  if (hit?.at === at) return hit.cells;
+  const r = ring.next;
+  const next = r === void 0 || r === Infinity || r < 0 ? null : { ...ring, r: Math.max(r, 1.5) };
+  const cells = [];
+  if (next) {
+    for (const id of room.places.keys()) {
+      const m = room.maps.get(id);
+      const grid = GRIDS.get(m) ?? GRIDS.set(m, decodeGrid(m.grid, m.w * m.h)).get(m);
+      for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
+        const c = grid[y * m.w + x];
+        if ((c === 0 || c === 7) && !room.inFog({ map: id, x, y }, next)) cells.push({ map: id, x, y });
+      }
+    }
+  }
+  INSIDE.set(room, { at, cells });
+  return cells;
+}
+function goal(room, a, b) {
+  const ev = room.events[room.events.length - 1];
+  if (ev && room.spills.has(ev.key) && !room.picked.has(ev.key) && rand(b) < 1 / 3 && !room.inFog({ map: ev.map, x: ev.x, y: ev.y })) {
+    const near = room.reachable().filter((s) => s.map === ev.map && Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
+    if (near.length) return near[Math.floor(rand(b) * near.length)];
+  }
+  const cells = insideNext(room);
+  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return null;
+  const p = room.places.get(a.m.spot.map);
+  if (!p) return null;
+  const x = p.gx + a.m.spot.x, y = p.gy + a.m.spot.y;
+  const hops = /* @__PURE__ */ new Map();
+  let best = null, bestH = Infinity, bestD = Infinity;
+  for (const s of cells) {
+    if (!hops.has(s.map)) hops.set(s.map, room.world.hops(a.m.spot.map, s.map, true, true));
+    const h = hops.get(s.map);
+    if (h === void 0 || h > bestH) continue;
+    const q = room.places.get(s.map);
+    const d = Math.abs(q.gx + s.x - x) + Math.abs(q.gy + s.y - y);
+    if (h < bestH || d < bestD) {
+      bestH = h;
+      bestD = d;
+      best = s;
+    }
+  }
+  return best;
+}
+function leg(room, from, to) {
+  if (from.map === to.map) return findPath(room.world, from, to, 6e3, true, true);
+  const hops = room.world.nextHops(from.map, to.map, true, true);
+  const hop = hops.find((m) => room.places.has(m));
+  return hop ? findPathToAny(room.world, from, room.world.entryCells(from.map, hop, true, true), 6e3, true, true) : null;
+}
+function botKeys(room, a, b) {
   if (a.m.action) return 0;
+  const ring = room.ring();
+  const at = `${ring.round}:${ring.phase}:${room.events.length}`;
+  if (b.plan !== at && (room.tick + a.id * 7) % 30 === 0) {
+    b.plan = at;
+    b.goal = goal(room, a, b);
+    b.steps = void 0;
+    b.legs = 0;
+  }
+  if (b.goal && !b.steps?.length && (room.tick + a.id * 7) % 30 === 0) {
+    const path = !sameSpot(a.m.spot, b.goal) && (b.legs = (b.legs ?? 0) + 1) <= 24 ? leg(room, a.m.spot, b.goal) : null;
+    b.steps = path?.found ? path.steps : void 0;
+    if (!b.steps) b.goal = null;
+    b.stuck = 0;
+  }
+  if (b.steps?.length) {
+    if (sameSpot(b.steps[0].to, a.m.spot)) {
+      b.steps.shift();
+      b.stuck = 0;
+    } else if ((b.stuck = (b.stuck ?? 0) + 1) > 90) b.steps = void 0;
+    const s = b.steps?.[0];
+    if (s) return (b.stuck ?? 0) % 30 === 1 || b.stuck === 0 ? KEY_OF[DIR_OF[s.dir]] | KEY_A : 0;
+  }
   if (b.wait > 0) {
     b.wait -= 1;
     return 0;
@@ -1724,7 +2692,7 @@ function botSpawns(room, maps, count) {
     rng ^= rng << 5;
     return (rng >>> 0) / 4294967296;
   };
-  const land = maps.filter((m) => room.maps.has(m.id) && !m.id.includes("SAFARI") && !m.id.includes("FRONTIER") && !m.id.includes("PROTOTYPE"));
+  const land = maps.filter((m) => room.places.has(m.id) && !m.id.includes("SAFARI") && !m.id.includes("FRONTIER") && !m.id.includes("PROTOTYPE"));
   const grids = new Map(land.map((m) => [m.id, decodeGrid(m.grid, m.w * m.h)]));
   const out = [];
   const taken = /* @__PURE__ */ new Set();
@@ -1763,14 +2731,16 @@ var Host = class {
   jitter;
   room;
   players = /* @__PURE__ */ new Map();
+  /** Each bot's mind, by id (the host's alone: the room only ever sees its keys). */
   brains = /* @__PURE__ */ new Map();
   pending = [];
   nextId = 1;
   /** A new trainer, in Littleroot by the truck (or at `spot`), standing on the next frame
    *  (or on the bench until the next round, when the fog has closed on this one). No name:
    *  TRAINER and their number. */
-  join(name, skin, spot) {
-    const id = this.nextId++;
+  join(name, skin, spot, given) {
+    const id = given ?? this.nextId++;
+    if (given !== void 0 && given >= this.nextId) this.nextId = given + 1;
     if (!spot) {
       const used = (s) => this.room.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y) || this.pending.some((c) => c.c === "join" && c.spot.map === s.map && c.spot.x === s.x && c.spot.y === s.y);
       const near = this.room.truck();
@@ -1779,6 +2749,10 @@ var Host = class {
     this.pending.push({ c: "join", id, bot: false, name: name || `TRAINER ${id}`.slice(0, 10), skin, spot, facing: 1 });
     this.players.set(id, { id, queue: [], seq: 0, started: false, waited: 0 });
     return id;
+  }
+  /** START: who is on the map once this frame's joins are in is the match. */
+  lock() {
+    this.pending.push({ c: "lock" });
   }
   leave(id) {
     this.players.delete(id);
@@ -1801,6 +2775,34 @@ var Host = class {
     }
   }
   /** The phone's battle is over: its trainer (and the bot) walk again. */
+  /** The page's team could now do these on the field. */
+  field(id, bits) {
+    if (this.players.has(id)) this.pending.push({ c: "field", id, bits: bits & 7 });
+  }
+  /** The page fought two bots for the room (a `bots` event): who won, 0 for nobody. */
+  bots(id, a, b, winner) {
+    if (this.players.has(id)) this.pending.push({ c: "bots", id, a, b, winner });
+  }
+  /** A page gone for now (`on`), or back. Back, it numbers its keys from 1 again. */
+  away(id, on) {
+    const p = this.players.get(id);
+    if (!p) return;
+    if (!on) {
+      p.queue = [];
+      p.seq = 0;
+      p.started = false;
+      p.waited = 0;
+    }
+    this.pending.push({ c: "away", id, on });
+  }
+  /** Drop the page's trainer on `map` when the Safari ends. */
+  pick(id, map) {
+    if (this.players.has(id) && typeof map === "string") this.pending.push({ c: "pick", id, map });
+  }
+  /** The page's trade with event `n`'s trader is done: it gave him `given` (0, none). */
+  traded(id, n, given) {
+    if (this.players.has(id)) this.pending.push({ c: "traded", id, n, given });
+  }
   end(id, fled = false, won = false) {
     if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: "end", id, ...fled ? { fled: true } : {}, ...won ? { won: true } : {} });
   }
@@ -1884,36 +2886,49 @@ var Host = class {
   }
 };
 
+// web/spike-b/shared/over.ts
+function over(room) {
+  const r = room.results;
+  if (r.winner) return true;
+  if (r.entrants.length && !r.entrants.some(([id]) => room.actor(id) && !room.actor(id).bot && !r.fallen.some((f) => f.id === id))) return true;
+  return room.ring().round > r.round;
+}
+
 // web/spike-b/shared/wire.ts
 var HASH_EVERY = 60;
 
 // web/spike-b/shared/service.ts
 var FRAME_MS = 1e3 / 60;
-var IDLE_MS = 6e4;
 var QUIET_MS = 12e4;
 var SYNC_MS = 1e3;
 var BT_MAX = 256;
+var BSTART_MAX = 1400;
+var TURN_MAX = 256;
+var STREAM_MAX = 64 * 1024;
+var ROOM_MAX = 30;
+var AUTO_START_MS = 6e4;
+var AWAY_MS = 6e4;
+var NOWHERE = { send: () => void 0, close: () => void 0 };
+var FIRST_ID = 1e3;
 var WorldService = class {
   constructor(opts) {
     this.opts = opts;
   }
   opts;
-  host = null;
-  links = /* @__PURE__ */ new Map();
+  rooms = /* @__PURE__ */ new Map();
+  where = /* @__PURE__ */ new Map();
   timer = null;
-  t0 = 0;
-  emptySince = 0;
+  nextId = FIRST_ID;
+  /** Trainers on this relay, in every room. */
   get players() {
-    return this.links.size;
+    return this.where.size;
   }
+  /** The first running match's frame (a test's clock). */
   get tick() {
-    return this.host?.room.tick ?? 0;
+    return [...this.rooms.values()].find((r) => r.host)?.host.room.tick ?? 0;
   }
   open(link) {
-    let id = 0;
-    let heard = this.opts.now();
-    let synced = -Infinity;
-    const send = (m) => link.send(JSON.stringify(m));
+    let phone = null;
     return {
       onText: (text) => {
         let m;
@@ -1923,91 +2938,291 @@ var WorldService = class {
           return;
         }
         if (!m || typeof m !== "object") return;
-        heard = this.opts.now();
-        if (m.t === "join" && !id) {
-          if (this.links.size >= this.opts.cap) {
-            send({ t: "full" });
+        if (phone) phone.heard = this.opts.now();
+        if (m.t === "join" && !phone && m.again && typeof m.again === "object") {
+          const back = this.back(m.again, link);
+          if (back) {
+            phone = back;
+            return;
+          }
+        }
+        if (m.t === "join" && !phone) {
+          if (this.where.size >= this.opts.cap) {
+            this.send(link, { t: "full" });
             link.close();
             return;
           }
-          const host = this.start();
+          const room2 = this.pick(m);
+          if (!room2) {
+            this.send(link, { t: "no_room", code: String(m.code ?? "") });
+            return;
+          }
           const name = String(m.name ?? "").toUpperCase().replace(/[^A-Z0-9 ]/g, "").trim().slice(0, 10);
           const skin = Number.isInteger(m.skin) && m.skin >= 0 && m.skin < 16 ? m.skin : 0;
-          id = host.join(name, skin);
-          this.links.set(id, { send: link.send, close: link.close, quiet: () => this.opts.now() - heard > QUIET_MS });
-          send({ t: "hello", id, state: host.room.state() });
-          this.opts.log(`world: ${name}#${id} in (${this.links.size} here, tick ${host.room.tick})`);
-        } else if (!id || !this.host) {
+          const id = this.nextId++;
+          phone = { id, name: name || `TRAINER ${id - FIRST_ID + 1}`.slice(0, 10), skin, link, heard: this.opts.now(), synced: -Infinity, key: Math.random().toString(36).slice(2, 12), away: 0, watching: 0 };
+          room2.members.set(id, phone);
+          this.where.set(id, room2);
+          if (!room2.owner) room2.owner = id;
+          this.opts.log(`world: ${phone.name}#${id} in room ${room2.code}${room2.quick ? " (quick)" : ""}, ${room2.members.size} there`);
+          this.roster(room2);
+          if (room2.host) {
+            room2.host.join(phone.name, phone.skin, void 0, id);
+            this.send(link, { t: "hello", id, state: room2.host.room.state(), key: phone.key });
+          }
+          this.run();
+          return;
+        }
+        const room = phone ? this.where.get(phone.id) : void 0;
+        if (!phone || !room) return;
+        const host = room.host;
+        if (m.t === "start") {
+          if (!host && phone.id === room.owner) this.start(room);
+        } else if (!host) {
           return;
         } else if (m.t === "in") {
           if (!Number.isInteger(m.s) || m.s < 1 || !Array.isArray(m.k) || m.k.length > 120) return;
-          this.host.input(id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
+          host.input(phone.id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
+        } else if (m.t === "field") {
+          if (Number.isInteger(m.bits)) host.field(phone.id, m.bits);
+        } else if (m.t === "pick") {
+          if (typeof m.map === "string") host.pick(phone.id, m.map.slice(0, 64));
+        } else if (m.t === "traded") {
+          if (Number.isInteger(m.n) && Number.isInteger(m.sp)) host.traded(phone.id, m.n, m.sp);
+        } else if (m.t === "bots") {
+          if ([m.a, m.b, m.w].every(Number.isInteger)) host.bots(phone.id, m.a, m.b, m.w);
         } else if (m.t === "end") {
-          this.host.end(id, m.fled === true, m.won === true);
+          room.streams.delete(phone.id);
+          host.end(phone.id, m.fled === true, m.won === true);
         } else if (m.t === "out") {
-          this.host.out(id, cleanBag(m.bag) ?? void 0, Number.isInteger(m.by) && m.by > 0 ? m.by : void 0, m.wild === true);
+          room.streams.delete(phone.id);
+          host.out(phone.id, cleanBag(m.bag) ?? void 0, Number.isInteger(m.by) && m.by > 0 ? m.by : void 0, m.wild === true);
         } else if (m.t === "drop") {
-          if (Number.isInteger(m.k)) this.host.drop(id, m.k, cleanBag(m.rest) ?? void 0);
+          if (Number.isInteger(m.k)) host.drop(phone.id, m.k, cleanBag(m.rest) ?? void 0);
         } else if (m.t === "bt") {
           if (!Number.isInteger(m.q) || !Array.isArray(m.d) || m.d.length > BT_MAX) return;
-          const me = this.host.room.actor(id);
-          const foe = me?.battling && me.foe ? this.host.room.actor(me.foe) : void 0;
-          if (!foe || foe.bot || !foe.battling || foe.foe !== id) return;
-          this.links.get(foe.id)?.send(JSON.stringify({ t: "bt", q: m.q & 65535, d: m.d.map((v) => (Number(v) | 0) & 255) }));
+          const me = host.room.actor(phone.id);
+          const foe = me?.battling && me.foe ? host.room.actor(me.foe) : void 0;
+          if (!foe || foe.bot || !foe.battling || foe.foe !== phone.id) return;
+          const to = room.members.get(foe.id);
+          if (to) this.send(to.link, { t: "bt", q: m.q & 65535, d: m.d.map((v) => (Number(v) | 0) & 255) });
+        } else if (m.t === "sp") {
+          this.publish(room, phone, m.m);
+        } else if (m.t === "watch") {
+          if (!Number.isInteger(m.id) || m.id < 0 || m.id === phone.id || m.id === phone.watching) return;
+          const was = phone.watching;
+          phone.watching = m.id;
+          this.eyes(room, was);
+          this.eyes(room, m.id);
+          const s = this.streamOf(room, m.id);
+          if (s) for (const text2 of s.sent) link.send(text2);
         } else if (m.t === "sync") {
           const now = this.opts.now();
-          if (now - synced < SYNC_MS) return;
-          synced = now;
-          send({ t: "state", state: this.host.room.state() });
+          if (now - phone.synced < SYNC_MS) return;
+          phone.synced = now;
+          this.send(link, { t: "state", state: host.room.state() });
         }
       },
       onClose: () => {
-        if (!id) return;
-        this.links.delete(id);
-        this.host?.leave(id);
-        if (!this.links.size) this.emptySince = this.opts.now();
-        this.opts.log(`world: #${id} out (${this.links.size} here)`);
-        id = 0;
+        if (!phone) return;
+        const p = phone;
+        phone = null;
+        const room = this.where.get(p.id);
+        const me = room?.host?.room.actor(p.id);
+        const was = p.watching;
+        p.watching = 0;
+        if (room) {
+          room.streams.delete(p.id);
+          this.eyes(room, was);
+        }
+        if (room?.host && me && !me.battling) {
+          p.away = this.opts.now();
+          p.link = NOWHERE;
+          room.host.away(p.id, true);
+          this.opts.log(`world: #${p.id} away from room ${room.code}`);
+          return;
+        }
+        this.drop(p);
       }
     };
   }
-  start() {
-    if (this.host) return this.host;
+  /** A phone gone for good: out of its room, and its trainer out of the match. */
+  drop(p) {
+    const room = this.where.get(p.id);
+    this.where.delete(p.id);
+    if (!room) return;
+    room.members.delete(p.id);
+    room.host?.leave(p.id);
+    room.streams.delete(p.id);
+    this.eyes(room, p.watching);
+    if (room.owner === p.id) room.owner = [...room.members.values()].find((q) => !q.away)?.id ?? 0;
+    this.opts.log(`world: #${p.id} out of room ${room.code} (${room.members.size} there)`);
+    if (!room.members.size) this.close(room);
+    else this.roster(room);
+  }
+  /** A reload's way back to the trainer it left, or null. */
+  back(again, link) {
+    const room = typeof again.code === "string" ? this.rooms.get(again.code.toUpperCase()) : void 0;
+    const p = room?.members.get(Number(again.id));
+    if (!room?.host || !p || !p.away || p.key !== again.key) return null;
+    p.link = link;
+    p.away = 0;
+    p.heard = this.opts.now();
+    p.synced = -Infinity;
+    room.host.away(p.id, false);
+    this.opts.log(`world: #${p.id} back in room ${room.code}`);
+    this.send(link, { t: "hello", id: p.id, state: room.host.room.state(), key: p.key });
+    this.roster(room);
+    return p;
+  }
+  /** The room a join asks for: its code, a new one of its own (HOST), or quick play's. */
+  pick(m) {
+    if (typeof m.code === "string" && m.code) {
+      const r = this.rooms.get(m.code.toUpperCase());
+      return r && r.members.size < ROOM_MAX ? r : null;
+    }
+    if (m.host === true) return this.make(false);
+    let best = null;
+    for (const r of this.rooms.values()) {
+      if (r.quick && !r.host && r.members.size < ROOM_MAX && (!best || r.members.size > best.members.size)) best = r;
+    }
+    return best ?? this.make(true);
+  }
+  make(quick) {
+    let code = "";
+    do {
+      code = "";
+      for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+    } while (this.rooms.has(code));
+    const room = { code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map() };
+    this.rooms.set(code, room);
+    return room;
+  }
+  /** START: the Room, everybody in it at the truck, and the match locked to them. */
+  start(room) {
     const seed = Math.floor(Math.random() * 4294967294) + 1 >>> 0;
-    const room = makeRoom(this.opts.maps, this.opts.patches, seed);
-    if (this.opts.ringSecs) room.ringPhase = Math.round(this.opts.ringSecs * 60);
-    this.host = new Host(room, this.opts.bots, this.opts.maps);
-    this.t0 = this.opts.now();
-    this.timer = setInterval(() => this.pump(), 4);
-    this.opts.log(`world: up, seed ${seed}, ${this.host.room.actors.length} bots`);
-    return this.host;
+    const r = makeRoom(this.opts.maps, this.opts.patches, seed);
+    if (this.opts.ringSecs) r.ringPhase = Math.round(this.opts.ringSecs * 60);
+    r.opening = this.opts.safariSecs !== void 0 ? Math.round(this.opts.safariSecs * 60) : r.ringPhase;
+    const host = new Host(r, this.opts.bots, this.opts.maps);
+    for (const p of room.members.values()) {
+      host.join(p.name, p.skin, void 0, p.id);
+      p.heard = room.t0 = this.opts.now();
+    }
+    host.lock();
+    room.host = host;
+    room.startsAt = null;
+    room.t0 = this.opts.now();
+    this.opts.log(`world: room ${room.code} starts, ${room.members.size} trainers, seed ${seed}`);
+    const state = r.state();
+    for (const p of room.members.values()) this.send(p.link, { t: "hello", id: p.id, state, key: p.key });
+    this.roster(room);
   }
-  /** Every frame that is due, sent; a host that fell far behind skips ahead instead. */
-  pump() {
-    try {
-      this.frames();
-    } catch (err) {
-      this.opts.log(`world: stopped on ${err instanceof Error ? err.stack : String(err)}`);
-      this.stop();
+  /** The match is over: the room waits for its next START (a quick one counts again). */
+  finish(room) {
+    const res = room.host?.room.results;
+    this.opts.log(`world: room ${room.code} over${res?.winner ? `, ${res.entrants.find(([id]) => id === res.winner)?.[1]} wins` : ""}`);
+    room.host = null;
+    room.streams.clear();
+    for (const p of room.members.values()) p.watching = 0;
+    if (room.quick) room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS);
+    this.roster(room);
+  }
+  close(room) {
+    for (const id of room.members.keys()) if (this.where.get(id) === room) this.where.delete(id);
+    this.rooms.delete(room.code);
+    if (!this.rooms.size) this.stop();
+  }
+  /** One of a fighter's published battle's messages: kept, and on to everybody watching
+   *  either side of it. Only from a trainer in a battle; a TURN only after its BSTART. */
+  publish(room, phone, raw) {
+    if (!raw || raw.t !== "bstart" && raw.t !== "turn" || !Number.isInteger(raw.battle) || !Array.isArray(raw.data)) return;
+    if (raw.data.length > (raw.t === "bstart" ? BSTART_MAX : TURN_MAX)) return;
+    const me = room.host?.room.actor(phone.id);
+    if (!me?.battling) return;
+    const m = { t: raw.t, battle: raw.battle & 65535, data: raw.data.map((v) => (Number(v) | 0) & 255) };
+    let s = room.streams.get(phone.id);
+    if (m.t === "bstart") room.streams.set(phone.id, s = { battle: m.battle, sent: [], bytes: 0 });
+    if (!s || s.battle !== m.battle) return;
+    const text = JSON.stringify({ t: "sp", from: phone.id, m });
+    if (s.bytes + text.length <= STREAM_MAX) {
+      s.sent.push(text);
+      s.bytes += text.length;
+    }
+    for (const w of room.members.values()) {
+      if (w !== phone && w.watching && (w.watching === phone.id || w.watching === me.foe)) w.link.send(text);
     }
   }
-  frames() {
-    const host = this.host;
-    if (!host) return;
+  /** The battle trainer `id` is in now, as published: by their ROM, or by the ROM of the
+   *  trainer they fight (a link battle is published by one side only). */
+  streamOf(room, id) {
+    const r = room.host?.room;
+    const a = r?.actor(id);
+    if (!r || !a?.battling) return void 0;
+    const own = room.streams.get(id);
+    if (own) return own;
+    const foe = a.foe ? r.actor(a.foe) : void 0;
+    return foe?.battling && foe.foe === id ? room.streams.get(foe.id) : void 0;
+  }
+  /** How many watch trainer `id`, to them. */
+  eyes(room, id) {
+    const to = id ? room.members.get(id) : void 0;
+    if (!to) return;
+    let n = 0;
+    for (const p of room.members.values()) if (p.watching === id) n++;
+    this.send(to.link, { t: "eyes", n });
+  }
+  roster(room) {
+    const members = [...room.members.values()].filter((p) => !p.away).map((p) => ({ id: p.id, name: p.name, skin: p.skin }));
     const now = this.opts.now();
-    for (const l of this.links.values()) if (l.quiet()) l.close();
-    if (!this.links.size && now - this.emptySince > IDLE_MS) {
-      this.stop();
-      return;
+    for (const p of room.members.values()) {
+      this.send(p.link, {
+        t: "room",
+        code: room.code,
+        quick: room.quick,
+        you: p.id,
+        owner: room.owner,
+        members,
+        playing: !!room.host,
+        ...room.startsAt !== null ? { startsIn: Math.max(0, room.startsAt - now) } : {}
+      });
     }
-    let due = Math.floor((now - this.t0) / FRAME_MS) - host.room.tick;
+  }
+  send(link, m) {
+    link.send(JSON.stringify(m));
+  }
+  run() {
+    if (!this.timer) this.timer = setInterval(() => this.pump(), 4);
+  }
+  /** Every room's frames that are due, sent; a quick room whose count ran out, started. */
+  pump() {
+    const now = this.opts.now();
+    for (const room of [...this.rooms.values()]) {
+      try {
+        if (room.host) {
+          for (const p of [...room.members.values()]) if (!p.away && now - p.heard > QUIET_MS) p.link.close();
+        }
+        for (const p of [...room.members.values()]) if (p.away && (now - p.away > AWAY_MS || !room.host)) this.drop(p);
+        if (!this.rooms.has(room.code)) continue;
+        if (!room.host && room.startsAt !== null && now >= room.startsAt) this.start(room);
+        if (room.host && [...room.members.values()].some((p) => !p.away)) this.frames(room, now);
+      } catch (err) {
+        this.opts.log(`world: room ${room.code} stopped on ${err instanceof Error ? err.stack : String(err)}`);
+        for (const p of room.members.values()) p.link.close();
+        this.close(room);
+      }
+    }
+  }
+  frames(room, now) {
+    const host = room.host;
+    let due = Math.floor((now - room.t0) / FRAME_MS) - host.room.tick;
     if (due > 30) {
-      this.t0 += (due - 2) * FRAME_MS;
+      room.t0 += (due - 2) * FRAME_MS;
       due = 2;
     }
     if (due <= 0) return;
     const out = /* @__PURE__ */ new Map();
-    for (const id of this.links.keys()) out.set(id, []);
+    for (const id of room.members.keys()) out.set(id, []);
     for (let i = 0; i < due; i++) {
       const { frame, acks } = host.advance();
       const h = frame.tick % HASH_EVERY === 0 ? host.room.hash() : void 0;
@@ -2018,15 +3233,17 @@ var WorldService = class {
         if (h !== void 0) f.h = h;
         list.push(f);
       }
+      if (over(host.room)) break;
     }
-    for (const [id, list] of out) this.links.get(id)?.send(JSON.stringify({ t: "f", f: list }));
+    for (const [id, list] of out) if (list.length) room.members.get(id)?.link.send(JSON.stringify({ t: "f", f: list }));
+    if (over(host.room)) this.finish(room);
   }
   stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-    this.host = null;
-    for (const l of this.links.values()) l.close();
-    this.links.clear();
+    for (const room of this.rooms.values()) for (const p of room.members.values()) p.link.close();
+    this.rooms.clear();
+    this.where.clear();
   }
 };
 

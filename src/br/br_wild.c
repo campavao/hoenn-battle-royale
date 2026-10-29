@@ -6,6 +6,7 @@
 #include "metatile_behavior.h"
 #include "overworld.h"
 #include "random.h"
+#include "script.h"
 #include "script_pokemon_util.h"
 #include "wild_encounter.h"
 #include "constants/battle.h"
@@ -16,13 +17,17 @@
 #include "constants/species.h"
 #include "constants/wild_encounter.h"
 #include "br/br_field.h"
+#include "br/br_gym.h"
 #include "br/br_levels.h"
+#include "br/br_moves.h"
 #include "br/br_wild.h"
 #include "br/br_zone.h"
 
 // In IWRAM, as gBrSides: EWRAM has no room left over its floor (ram-headroom.py).
 struct BrWildAsk gBrWildAsk;
 static MainCallback sEnd;
+// The ask came as BR_WILD_ASKED_SAFARI.
+static bool8 sSafari;
 
 // wild_encounter.c's ChooseWildMonIndex_Land and _WaterRock, which are static there.
 static u8 LandSlot(void)
@@ -98,7 +103,8 @@ static void Start(void)
     }
     species = info->wildPokemon[water ? WaterSlot() : LandSlot()].species;
     // The opening's any-first-stage, or the route's national stand-in: CreateWildMon's.
-    gBrWildAsk.species = BrZone_Pick();
+    gBrWildAsk.species = sSafari ? BrZone_PickAny() : BrZone_Pick();
+    sSafari = FALSE;
     if (gBrWildAsk.species == SPECIES_NONE)
         gBrWildAsk.species = BrZone_NationalOn(species, gBrWildAsk.mapGroup, gBrWildAsk.mapNum);
     gBrWildAsk.level = BrLevels_WildLevel();
@@ -109,10 +115,56 @@ static void Start(void)
     gMain.savedCallback = CB2_EndWild;
 }
 
+// A leader's battle is a script's (br_gym.c), so its end is the field running again with
+// the script done -- or the whiteout's field, after a loss.
+static bool8 sBossIn;
+
+static void StartBoss(void)
+{
+    gBattleOutcome = 0;
+    sBossIn = FALSE;
+    gBrWildAsk.species = SPECIES_NONE;
+    gBrWildAsk.level = 0;
+    if (!BrGym_StartBoss(gBrWildAsk.mapNum))
+    {
+        gBrWildAsk.outcome = 0;
+        gBrWildAsk.state = BR_WILD_DONE;
+        return;
+    }
+    gBrWildAsk.state = BR_WILD_FIGHTING;
+}
+
 void BrWild_Tick(void)
 {
+    if (gBrWildAsk.state == BR_WILD_ASKED_TEACH)
+    {
+        BrMoves_TeachSoon(gBrWildAsk.species);
+        gBrWildAsk.state = BR_WILD_DONE;
+        return;
+    }
+    if (gBrWildAsk.state == BR_WILD_ASKED_SAFARI)
+    {
+        sSafari = TRUE;
+        gBrWildAsk.state = BR_WILD_ASKED;
+    }
     if (gBrWildAsk.state == BR_WILD_ASKED && BrField_OverworldRunning() && !gMain.inBattle)
-        Start();
+    {
+        if (gBrWildAsk.mapGroup != BR_WILD_BOSS)
+            Start();
+        else if (!ScriptContext_IsEnabled())
+            StartBoss();
+    }
+    else if (gBrWildAsk.state == BR_WILD_FIGHTING && gBrWildAsk.mapGroup == BR_WILD_BOSS)
+    {
+        if (gMain.inBattle)
+            sBossIn = TRUE;
+        else if (sBossIn && BrField_OverworldRunning()
+              && (!ScriptContext_IsEnabled() || gBattleOutcome == B_OUTCOME_LOST || gBattleOutcome == B_OUTCOME_DREW))
+        {
+            gBrWildAsk.outcome = gBattleOutcome;
+            gBrWildAsk.state = BR_WILD_DONE;
+        }
+    }
 }
 
 // BattleSetup_GetEnvironmentId, for the spot the page's trainer stands on rather than the

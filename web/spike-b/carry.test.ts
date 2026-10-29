@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BAG_AT, BAG_LEN, arrived, rekey, spillOf, teamOf, withMoney } from './carry';
+import { BAG_AT, BAG_LEN, arrived, fieldOf, healed, rekey, spillOf, teamOf, withMoney } from './carry';
+import HMS from '../src/data/hms.json';
 
 describe('rekey', () => {
   it('carries money, coins and pocket counts from one key to another, and nothing else', () => {
@@ -92,5 +93,67 @@ describe('teamOf', () => {
     put(1, 7, 0xdeadbeef, 25, 12);
     expect(teamOf(party, 2)).toEqual([{ species: 277, level: 5 }, { species: 25, level: 12 }]);
     expect(teamOf(party, 1)).toHaveLength(1);
+  });
+});
+
+describe('healed', () => {
+  const ORDERS = ['GAEM', 'GAME', 'GEAM', 'GEMA', 'GMAE', 'GMEA', 'AGEM', 'AGME', 'AEGM', 'AEMG', 'AMGE', 'AMEG',
+    'EGAM', 'EGMA', 'EAGM', 'EAMG', 'EMGA', 'EMAG', 'MGAE', 'MGEA', 'MAGE', 'MAEG', 'MEGA', 'MEAG'];
+  /** One mon as the game keeps it: substructs in personality's order, summed, encrypted. */
+  function mon(personality: number, otId: number, moves: number[], pp: number[], bonuses: number): Uint8Array {
+    const b = new Uint8Array(100);
+    const v = new DataView(b.buffer);
+    v.setUint32(0, personality, true);
+    v.setUint32(4, otId, true);
+    const plain = new DataView(new ArrayBuffer(48));
+    const order = ORDERS[personality % 24];
+    const g = 12 * order.indexOf('G'), a = 12 * order.indexOf('A');
+    plain.setUint16(g, 25, true); // PIKACHU
+    plain.setUint8(g + 8, bonuses);
+    moves.forEach((m, i) => plain.setUint16(a + i * 2, m, true));
+    pp.forEach((p, i) => plain.setUint8(a + 8 + i, p));
+    let sum = 0;
+    for (let h = 0; h < 24; h++) sum = (sum + plain.getUint16(h * 2, true)) & 0xffff;
+    v.setUint16(28, sum, true);
+    const key = (personality ^ otId) >>> 0;
+    for (let w = 0; w < 12; w++) v.setUint32(32 + w * 4, (plain.getUint32(w * 4, true) ^ key) >>> 0, true);
+    v.setUint32(80, 8, true); // poisoned
+    b[84] = 30;
+    v.setUint16(86, 2, true);
+    v.setUint16(88, 40, true);
+    return b;
+  }
+  const PP: Record<number, number> = { 33: 35, 45: 40, 98: 30 };
+
+  it("puts back HP, status and every move's PP, PP UPs counted, and keeps the checksum", () => {
+    for (const personality of [0x12345678, 0x00000017, 0xfedcba98]) {
+      const party = new Uint8Array(600);
+      party.set(mon(personality, 0x0badf00d, [33, 45, 98, 0], [3, 0, 12, 0], 0b11_00_01), 0);
+      const want = mon(personality, 0x0badf00d, [33, 45, 98, 0], [35 + 7, 40, 30 + 18, 0], 0b11_00_01);
+      const out = healed(party, 1, (m) => PP[m]);
+      const v = new DataView(want.buffer);
+      v.setUint32(80, 0, true);
+      v.setUint16(86, 40, true);
+      expect([...out.slice(0, 100)]).toEqual([...want]);
+      expect(teamOf(out, 1)).toEqual([{ species: 25, level: 30 }]);
+    }
+  });
+
+  it("reads what the team could do on the field: a move it knows, or an HM its species could learn", () => {
+    const can = (hm: keyof typeof HMS) => ((parseInt(HMS[hm].substr((25 >> 3) * 2, 2), 16) >> (25 & 7)) & 1) === 1;
+    const party = new Uint8Array(600);
+    party.set(mon(0x12345678, 0x0badf00d, [33, 45, 98, 0], [1, 1, 1, 0], 0), 0);
+    const base = (can('cut') ? 1 : 0) | (can('strength') ? 2 : 0) | (can('surf') ? 4 : 0);
+    expect(fieldOf(party, 1)).toBe(base);
+    party.set(mon(0x12345678, 0x0badf00d, [33, 57, 15, 70], [1, 1, 1, 1], 0), 0); // SURF, CUT, STRENGTH
+    expect(fieldOf(party, 1)).toBe(7);
+    expect(fieldOf(party, 0)).toBe(0);
+  });
+
+  it('leaves an empty slot and the bytes past the count alone, and is a copy', () => {
+    const party = new Uint8Array(600).map((_, i) => (i >= 100 ? i & 0xff : 0));
+    const out = healed(party, 1, () => 10);
+    expect(out).not.toBe(party);
+    expect([...out]).toEqual([...party]);
   });
 });

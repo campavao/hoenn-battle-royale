@@ -13,6 +13,13 @@
       #stats { background: #000a; padding: 4px 8px; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-width: calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right)); font-variant-numeric: tabular-nums; }
       #hud button { pointer-events: auto; background: #26313aee; color: #e8eef2; border: 1px solid #4c7a99; border-radius: 6px; padding: 6px 10px; font: inherit; }
       #hud button.on { background: #4c7a99; }
+      /* WATCH (watch.ts): who the camera is on, and the way round. */
+      #watch { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; background: #000a; padding: 4px 6px 4px 10px; border-radius: 6px; pointer-events: auto; }
+      #watch[hidden] { display: none; }
+      #watch-who { font-weight: 700; letter-spacing: 0.04em; margin-right: 4px; }
+      #eyes { background: #000a; padding: 4px 8px; border-radius: 6px; font-weight: 700; }
+      #eyes[hidden] { display: none; }
+      #watch-label { position: fixed; left: 50%; top: 50%; pointer-events: none; background: #000b; color: #fff; font-weight: 700; font-size: 12px; letter-spacing: 0.05em; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
       #pad { z-index: 3; position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 10px); display: none; justify-content: space-between; padding: 0 calc(env(safe-area-inset-right) + 14px) 0 calc(env(safe-area-inset-left) + 14px); pointer-events: none; }
       @media (pointer: coarse) { #pad { display: flex; } }
       .dpad { display: grid; grid-template: repeat(3, 54px) / repeat(3, 54px); gap: 3px; pointer-events: auto; }
@@ -20,6 +27,13 @@
       .k { display: grid; place-items: center; background: #26313acc; border-radius: 10px; color: #cfe3ef; font-weight: 700; touch-action: none; user-select: none; -webkit-user-select: none; }
       .k.down { background: #4c7a99; }
       .ab .k { width: 62px; height: 62px; border-radius: 50%; }
+      #corner { position: fixed; z-index: 1; top: calc(env(safe-area-inset-top) + 6px); right: calc(env(safe-area-inset-right) + 8px); background: #f8f8f8; color: #303030; border: 3px solid #4c7a99; border-radius: 8px; padding: 4px 10px; white-space: pre; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; pointer-events: none; }
+      #corner:empty { display: none; }
+      #corner.fog { color: #c03028; }
+      #ticker { position: fixed; z-index: 1; left: 50%; top: calc(env(safe-area-inset-top) + 60px); transform: translateX(-50%); width: max-content; max-width: min(520px, calc(100vw - 32px)); background: #303030e8; color: #f8f8f8; border-radius: 6px; padding: 4px 12px; text-align: center; text-wrap: balance; display: none; pointer-events: none; }
+      #ticker.on { display: block; }
+      #ticker.alert { color: #ff9a8a; }
+      #stats:not(.debug) { display: none; }
       #found { z-index: 1; position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 200px); transform: translateX(-50%); background: #f8f8f8; color: #303030; border: 3px solid #4c7a99; border-radius: 8px; padding: 8px 14px; display: none; white-space: nowrap; }
       @media (pointer: fine) { #found { bottom: 32px; } }
       #found.on { display: block; }
@@ -31,7 +45,7 @@
       #win ol { text-align: left; margin: 6px 0 0; padding-left: 1.6em; max-height: 40vh; overflow-y: auto; }
       #win li.me { color: #ffb0b0; }
       #out button, #win button { margin-top: 10px; background: #4c7a99; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font: inherit; }
-      #ask { z-index: 1; position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 200px); transform: translateX(-50%); background: #f8f8f8; color: #303030; border: 3px solid #4c7a99; border-radius: 8px; padding: 8px 6px; display: none; min-width: 9em; }
+      #ask { z-index: 1; position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 200px); transform: translateX(-50%); background: #f8f8f8; color: #303030; border: 3px solid #4c7a99; border-radius: 8px; padding: 8px 6px; display: none; min-width: 9em; max-height: 60vh; overflow-y: auto; }
       @media (pointer: fine) { #ask { bottom: 32px; } }
       #ask.on { display: grid; gap: 2px; }
       #ask b { padding: 2px 10px 6px; font-weight: 700; }
@@ -46,10 +60,63 @@
       #intro ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
       #intro button { justify-self: start; background: #4c7a99; color: #fff; border: 0; border-radius: 6px; padding: 8px 16px; font: inherit; font-weight: 700; }
       #battle.on { display: grid; }
+      /* The page's fog lies on the ROM's MAP, pixel for pixel (ringmap.ts). */
+      #battle canvas { grid-area: 1 / 1; }
+      #ringfog { display: none; pointer-events: none; }
+      #ringfog.on { display: block; }
       #battle canvas { image-rendering: pixelated; width: min(100vw, 150vh); aspect-ratio: 240 / 160; height: auto; }
       /* A phone on its side: the battle between the pad's two halves, not under them. */
       @media (orientation: landscape) and (pointer: coarse) { #battle canvas { width: min(calc(100vw - 2 * (env(safe-area-inset-left) + 200px)), 150vh); } }
       #battle .note { position: absolute; top: 12px; left: 12px; right: 12px; text-align: center; color: #9fb3c0; }
+          /* The live game's stage (web/index.html, ui/stage.ts): the menu and the room. */
+      #stage {
+        position: fixed; inset: 0; z-index: 9;
+        background: #101418;
+        display: flex; justify-content: center; align-items: flex-start;
+        overflow: hidden;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+      #stage[hidden] { display: none; }
+      /* Over the game still running under it: the in-match sheet on a phone (POK-320). */
+      #stage[data-look='overlay'] { background: transparent; }
+      /* Beside the game: the sheet on a desktop, where the room panel always was, in view
+         all match. The game makes room for it (body.docked, set by the stage). At twice
+         the picture's size only when the window can spare that and still give the game
+         as much, and is tall enough for whole pixels; at its own size otherwise, so a
+         window snapped to half a laptop screen keeps most of itself for the game. */
+      :root { --dock: 240px; }
+      @media (min-width: 960px) and (min-height: 640px) { :root { --dock: 480px; } }
+      #stage[data-look='dock'] { right: auto; width: var(--dock); z-index: 3; }
+      body.docked #screen-playing { margin-left: var(--dock); }
+      #stage-box { position: relative; }
+      /* Emerald's fade from black over a cut (POK-320, Stage.cut): the room giving way to
+         the match, the match to its results. Four steps, as the game's palette fades go. */
+      #stage-fade { position: fixed; inset: 0; z-index: 10; background: #000; opacity: 0; pointer-events: none; }
+      #stage-fade.go { animation: stage-fade 320ms steps(4, end); }
+      #stage-fade.hold { opacity: 1; animation: none; }
+      @keyframes stage-fade { from { opacity: 1; } to { opacity: 0; } }
+      @media (prefers-reduced-motion: reduce) { #stage-fade.go { animation: none; } }
+      #ui { display: block; image-rendering: pixelated; }
+      #ui-hits { position: absolute; inset: 0; }
+      #ui-hits ul, #ui-hits li { list-style: none; margin: 0; padding: 0; }
+      /* The mirror: real, invisible, exactly where the drawing is. A container has no
+         place of its own -- it fills the stage and lets touches through to its children. */
+      #ui-hits div, #ui-hits ul, #ui-hits button {
+        position: absolute; margin: 0; padding: 0; border: 0; background: transparent;
+        color: transparent; font-size: 8px; line-height: 1; overflow: hidden; white-space: nowrap;
+        opacity: 0; user-select: none; -webkit-user-select: none;
+      }
+      /* FEEDBACK's box (POK-428): a real <textarea>, invisible like the rest -- the canvas
+         draws what it holds -- and 16px so a phone does not zoom in to type in it. */
+      #ui-hits textarea {
+        position: absolute; margin: 0; padding: 0; border: 0; background: transparent;
+        color: transparent; caret-color: transparent; font-size: 16px; resize: none;
+        opacity: 0; pointer-events: auto;
+      }
+      #ui-hits > div, #ui-hits > ul { inset: 0; pointer-events: none; }
+      #ui-hits li { position: static; pointer-events: none; }
+      #ui-hits button, #ui-hits li > *, #ui-hits > div > * { pointer-events: auto; }
+      #ui-hits button { cursor: pointer; touch-action: manipulation; }
     </style>
   </head>
   <body>
@@ -58,7 +125,12 @@
       <div id="stats">loading…</div>
       <button id="menu" type="button">Menu (M)</button>
       <button id="mode" type="button">Spectate (V)</button>
+      <div id="eyes" hidden title="Watching you"></div>
+      <div id="watch" hidden><span id="watch-who"></span><button id="watch-prev" type="button">◀ PREV</button><button id="watch-next" type="button">NEXT ▶</button><button id="watch-stop" type="button">STOP</button></div>
     </div>
+    <div id="watch-label" hidden></div>
+    <div id="corner"></div>
+    <div id="ticker"></div>
     <div id="pad">
       <div class="dpad">
         <span></span><div class="k" data-k="up">▲</div><span></span>
@@ -71,14 +143,21 @@
     <div id="ask"><b id="ask-title"></b></div>
     <div id="out"><b id="out-title">OUT</b><span id="out-why"></span><br><span id="out-next">You're back at the truck when the fog lifts.</span><br><button id="out-ok" type="button">Watch</button></div>
     <div id="win"><b id="win-title"></b><ol id="win-list"></ol><button id="win-ok" type="button">OK</button></div>
-    <div id="battle"><div class="note" id="battle-note"></div><canvas id="gba" width="240" height="160"></canvas></div>
+    <div id="battle"><div class="note" id="battle-note"></div><canvas id="gba" width="240" height="160"></canvas><canvas id="ringfog" width="240" height="160"></canvas></div>
+    <div id="stage" hidden>
+      <div id="stage-box">
+        <canvas id="ui" width="240" height="320"></canvas>
+        <div id="ui-hits"></div>
+      </div>
+    </div>
+    <div id="stage-fade" aria-hidden="true"></div>
     <div id="intro"><div>
       <b>Engine preview: our own overworld</b>
       <span>Not the game, a test of how it could work. The world here is drawn by the page, with the real game's battles.</span>
       <ul>
         <li>Walk and run like Emerald (hold B to walk).</li>
         <li>Face a trainer and press A to battle.</li>
-        <li>M, or the Menu button, opens your POKéMON, BAG and trainer card.</li>
+        <li>M, or the Menu button, opens your POKéMON, BAG, the MAP with the fog on it, and your trainer card.</li>
         <li>Step on a rustling patch of grass (or a dark ripple on water) for a wild Pokémon, as in the game.</li>
         <li>Spectate, then drag and pinch to see all of Hoenn and everyone in it.</li>
       </ul>

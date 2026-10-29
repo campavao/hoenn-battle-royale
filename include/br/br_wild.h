@@ -18,6 +18,17 @@
 #define BR_WILD_ASKED 1
 #define BR_WILD_FIGHTING 2
 #define BR_WILD_DONE 3
+// ASKED, in spike B's Safari opening: the roll is the opening's (BrZone_PickAny).
+#define BR_WILD_ASKED_SAFARI 4
+// Spike B's TM or held item off the ground: species is the item. The ROM arms its teach
+// (BrMoves_TeachSoon) and answers DONE; the GIVE that follows opens the party screen to
+// teach it, or the bag's GIVE screen to hold it, as a match's pickup does.
+#define BR_WILD_ASKED_TEACH 5
+
+// mapGroup BR_WILD_BOSS asks for a gym leader instead (spike B, br_gym.c): mapNum is the
+// leader, BrGym's order. A leader who will not fight (TATE&LIZA with one POKeMON standing)
+// answers DONE at once, outcome 0.
+#define BR_WILD_BOSS 0xFF
 
 struct BrWildAsk
 {

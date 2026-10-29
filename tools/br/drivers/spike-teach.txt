@@ -1,0 +1,32 @@
+# spike-teach: spike B's page hands a held item (or a TM) off the ground the way a
+# match's pickup does (br_wild.h's BR_WILD_ASKED_TEACH): the ask arms the teach and
+# answers DONE, and once the item reaches the bag the bag's GIVE screen opens on the
+# field ("Give to which POKeMON?"). A gives it to TREECKO: the bag is empty again.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 D3 C9 CF FF
+wait 400
+wait 2
+# ITEM_LEFTOVERS (200)
+poke u16 gBrWildAsk+4 200
+poke u8 gBrWildAsk 5
+wait 2
+expect u8 gBrWildAsk 3
+# the GIVE, as the page's: into the items pocket (key 0, so the count is plain)
+poke u32 *gSaveBlock2Ptr+0xAC 0
+poke u16 *gSaveBlock1Ptr+0x560 200
+poke u16 *gSaveBlock1Ptr+0x562 1
+wait 120
+shot give
+tap A
+wait 60
+tap A
+wait 60
+shot given
+tap A
+wait 120
+tap A
+wait 120
+shot back
+# TREECKO holds it: the items pocket's slot is empty again
+expect u16 *gSaveBlock1Ptr+0x560 0
+say spike teach ok

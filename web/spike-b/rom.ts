@@ -18,15 +18,23 @@ import { Mailbox, MAILBOX } from '../src/net/mailbox';
 import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from '../src/net/slots';
 import { PROTOCOL, type Dir, type Msg, type PackedMon } from '../src/net/wire';
 import { loadCheckedRelease } from '../src/release';
-import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, rekey, spillOf, teamOf, withMoney } from './carry';
+import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fieldOf, healed, rekey, spillOf, teamOf, withMoney } from './carry';
 import { startMenuTable } from '../src/touch';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
+import { CATCH_UP_SPEED, spectatePace } from '../src/match/spectate';
+import type { SpMsg } from './shared/wire';
 
 const BOOT_MAP_TESTMON = 0x81;
 const ME = 0;
 const FOE_SEAT = 31;
 /** Whose a dropped bag is on the hidden ROM: a seat nobody here sits in. */
 const DROP_SEAT = 30;
+/** An event's first piece (web/src/match/events.ts's eventKey(0, 0)). */
+const LEGEND_KEY = 0xb000;
+/** Event 0's trader (BR_EVENT_TRADER_KEY), and below it his claim key. */
+const TRADER_KEY = 0xb00f;
+/** Ours while a mirror runs: seat 0 is then the publisher's, a ghost with their look. */
+const MIRROR_SEAT = 29;
 /** global.h's ObjectEvent: 0x24 bytes, currentCoords at 0x10, facing in 0x18's low bits. */
 const OBJECT_EVENT_SIZE = 0x24;
 /** A facing (DIR_SOUTH..DIR_EAST) as a step. */
@@ -37,6 +45,9 @@ export interface TeamRow { species: number; level: number }
 const WILD_ASKED = 1;
 const WILD_FIGHTING = 2;
 const WILD_DONE = 3;
+const WILD_ASKED_SAFARI = 4;
+/** br_wild.h's BR_WILD_ASKED_TEACH: arm the teach for the item in `species`. */
+const WILD_ASKED_TEACH = 5;
 // gBattleOutcome.
 const LOST = 2;
 // include/br/br_ring.h: BR_FOG_TICK_FRAMES.
@@ -47,6 +58,7 @@ const FOG_TICK = 240;
  *  BrLevels_Tick): the party lifted to it on the field, a wild one rolled at it. */
 const ringBytes = (phase: number, fog: boolean) => [1, phase, 0, 0, fog ? 0xff : 0x7f, 0, 0, 0, FOG_TICK & 0xff, FOG_TICK >> 8];
 const DREW = 3;
+const ROM_BASE = 0x08000000;
 /** How long the last fight took to start: from the TRAINER card to the battle running. */
 export let lastStart: { ms: number; frames: number } | null = null;
 
@@ -61,6 +73,28 @@ export interface DuelLink {
   listen(take: ((seq: number, data: number[]) => void) | null): void;
 }
 
+/** What the MAP row (MENU_ACTION_BR_MAP) is opened on (ringmap.ts): where this world's
+ *  trainer stands, as a MAP section and a cell of it, and the ring as the ROM draws it --
+ *  r 127 for nothing fogged (the page fogs over it), -1 for fog everywhere -- and the
+ *  section the prompt names safe, in the ROM's own letters ([] names none). */
+export interface MapLook { mapsec: number; cellX: number; cellY: number; r: number; place: number[] }
+
+/** Somebody else's battle, as the page hands it to a mirror (watch.ts): what their ROM
+ *  published, in order, from its BSTART. */
+export interface MirrorFeed {
+  /** The next message not yet handed to the ROM, or null. */
+  peek(): SpMsg | null;
+  shift(): void;
+  /** The fight is over where it is fought: once the replay has what came before, it ends. */
+  over(): boolean;
+  /** Stop watching it, now. */
+  stopped(): boolean;
+  /** The trainer watched is the publisher's foe: the replay turned round, their back to us. */
+  turned: boolean;
+  /** Each side's look (the publisher's, their foe's), as their trainers walk. */
+  skins: [number, number];
+}
+
 export interface Given { items: { id: number; n: number }[]; money: number; used: boolean }
 
 export interface RomBattles {
@@ -69,6 +103,17 @@ export interface RomBattles {
   /** The wild battle a marked spot on map (group, num) starts; `behavior` is the spot's
    *  metatile behaviour (water or land, and the backdrop). */
   wild(group: number, num: number, behavior: number, onStart: () => void, fog?: boolean): Promise<Fought>;
+  /** Gym leader `n` (br_gym.c's order): their own battle, music and defeat text; won, the
+   *  gym's TM and purse. Not ok when they would not fight (TATE&LIZA want two POKeMON). */
+  boss(n: number, onStart: () => void, fog?: boolean): Promise<Fought>;
+  /** A legendary an event put down (br_legend.c): stood before the hidden trainer as its
+   *  own sprite, A on it, its cry, its legendary battle. The outcome says whether it was
+   *  caught (7); anything else and it goes back where it stood. */
+  legend(species: number, level: number, onStart: () => void, fog?: boolean): Promise<Fought>;
+  /** An event's trader (br_event.c), stood before the hidden trainer: A on him, through
+   *  his line, and the party menu on the page (`onStart`) to pick which one he gets for
+   *  `species` at the rung. The species he was given, or 0 for none. */
+  trade(species: number, onStart: () => void): Promise<number>;
   /** A link battle with another trainer (br_netlink.c): this ROM's side of it, the blocks
    *  out through `link.send` and theirs in through `link.recv`. `first` is the side that
    *  challenged (link id 0). Resolves when the ROM is back on the field. */
@@ -79,6 +124,11 @@ export interface RomBattles {
   /** The match's ring phase (1 the first, as the host numbers them): the level rung every
    *  battle from now on starts at. */
   setPhase(phase: number): void;
+  /** The Safari opening (br_zone.c): wild battles draw any first stage while it runs. */
+  setSafari(on: boolean): void;
+  /** I won: Emerald's Hall of Fame with my team, the live winner's parade (br_match.c's
+   *  RESULT for our own seat). Resolves when it is over (or never came up). */
+  fame(onStart: () => void): Promise<boolean>;
   /** The fog's bite between battles (br_ring.c Bleed): a tenth of each mon's max HP, at
    *  least 1, a fainted one's status cleared. How many are still standing. */
   bleed(): Promise<number>;
@@ -89,6 +139,10 @@ export interface RomBattles {
    *  is used and a nugget sold as in a match). What went in, as the ROM filed it; `used`
    *  when it went on the team; null when it did not fit. */
   give(item: number, n: number): Promise<Given | null>;
+  /** A TM or a held item off the ground, as a match's pickup takes it (br_loot.c): into
+   *  the bag, then the party screen to teach it (the bag's GIVE screen to hold it) on
+   *  the ROM's own field, from `onStart` until it is back. What it made of it, as give. */
+  teach(item: number, onStart: () => void): Promise<Given | null>;
   /** What the trainer carries, as a bag left on the ground when they are out (POK-232):
    *  read in turn, after whatever was already going in. */
   spill(): Promise<{ items: { id: number; n: number }[]; money: number; mons: TeamRow[] }>;
@@ -103,15 +157,38 @@ export interface RomBattles {
    *  the cursor walked to the row, A -- all on the hidden field, the page keeping the
    *  screen until the row's own screen is up (`onStart`). Resolves back on the field, with
    *  whatever was used or moved kept. False when the row would not open. */
-  menu(action: number, onStart: () => void, onEnd: () => void): Promise<boolean>;
+  menu(action: number, onStart: () => void, onEnd: () => void, look?: MapLook): Promise<boolean>;
+  /** Somebody else's battle, replayed on this ROM as the match's spectator replays it
+   *  (br_spectate.c: a BSTART, its TURNs, a RESULT to finish), the trainer watched near
+   *  the camera. `onStart` when the replay is on screen. Resolves back on the field (or
+   *  when `feed` says stop), the hidden ROM put back as it was parked. */
+  mirror(feed: MirrorFeed, onStart: () => void): Promise<void>;
+  /** Where what this ROM publishes of its own battles goes (a BSTART, then its TURNs):
+   *  to the relay, for whoever watches. */
+  publish(to: ((m: SpMsg) => void) | null): void;
   /** A screen the page put up (menu, team) closes now: B until it is back on the field
    *  (a challenge closes a menu in the match, br_netlink.c). */
   leave(): void;
   /** A new round: the team, bag and Pokédex the game booted with, after whatever is
    *  on the ROM now. */
   fresh(): Promise<void>;
+  /** A new match's seed (the national stand-ins on the routes are the match's). */
+  reseed(seed: number): void;
   /** Money out of somebody's bag (br_loot.c's Take pays it). */
   addMoney(n: number): Promise<void>;
+  /** The money the trainer has. */
+  money(): Promise<number>;
+  /** The trainer's own (party, bag, Pokédex), as text for a reload to bring back. */
+  save(): Promise<string>;
+  /** Back from save()'s text. False when it would not read. */
+  load(text: string): Promise<boolean>;
+  /** A MART's sale: `n` of `item` into the bag the ROM's own way, `each` paid for every
+   *  one that went in. How many did; 0 when they could not pay or nothing fitted. */
+  buy(item: number, n: number, each: number): Promise<number>;
+  /** The CENTER's heal (HealPlayerParty), on the team the next battle takes. */
+  heal(): Promise<void>;
+  /** What the team could do on the field now (room.ts FIELD_*). */
+  field(): Promise<number>;
   press(k: GbaKey): void;
   release(k: GbaKey): void;
   emu: Emulator;
@@ -205,7 +282,12 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   const catchAt = sym('gBrCatch');
   const ringAt = sym('gBrRing');
   const levelsAt = sym('gBrLevels');
+  const mapAt = sym('gBrMap');
+  const romView = new DataView(rom.buffer, rom.byteOffset, rom.byteLength);
+  const headerAt = sym('gMapHeader');
   const mainAt = sym('gMain');
+  const seatAt = sym('gBrMySeat');
+  const spectAt = sym('gBrSpectate');
   const overworldCb = sym('CB2_Overworld');
   const objectsAt = sym('gObjectEvents');
   const avatarAt = sym('gPlayerAvatar');
@@ -213,6 +295,13 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   const countAt = sym('gPlayerPartyCount');
   const save1 = sym('gSaveBlock1Ptr');
   const save2 = sym('gSaveBlock2Ptr');
+  // gBattleMoves[move].pp, a move's PP before PP UPs. Its stride is found from POUND,
+  // KARATE CHOP and DOUBLESLAP's 35, 25 and 10 rather than assumed.
+  const movesAt = sym('gBattleMoves');
+  const MOVE_PP = 4;
+  const romByte = (at: number) => rom[(at - 0x08000000) >>> 0] ?? 0; // the cartridge, not RAM
+  const moveSize = [12, 9].find((n) => [35, 25, 10].every((pp, i) => romByte(movesAt + (i + 1) * n + MOVE_PP) === pp)) ?? 12;
+  const basePp = (move: number) => romByte(movesAt + move * moveSize + MOVE_PP);
   /** The trainer's own: party, bag and Pokédex, copied out of the ROM, and back in. The
    *  save blocks move at every battle's start, so each is found through its pointer. */
   const kept = () => {
@@ -255,6 +344,41 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     }
   };
 
+  const moneyOf = (k: ReturnType<typeof kept>) => (new DataView(k.bag.buffer, k.bag.byteOffset).getUint32(0, true) ^ k.key) >>> 0;
+  const giveNow = async (item: number, n: number): Promise<Given | null> => {
+    if (broken) return null;
+    const before = kept();
+    // br_loot.c's HandleGive: straight into AddBagItem when no bag of ours is waiting.
+    lay();
+    emu.resume();
+    send({ t: 'give', items: [{ id: item, n }] });
+    await until(emu, () => box.pending() === 0, 60);
+    await frames(emu, 1);
+    emu.pause();
+    const after = kept();
+    // Back to parked with what it left, as after a battle: a refusal's NO ROOM box and
+    // the frames it ran are not where the next battle starts.
+    if (!emu.restore(parked!)) broken = true;
+    else keep(after);
+    carried = last = after;
+    const got = arrived(before, after);
+    const used = after.party.some((b, i) => b !== before.party[i]);
+    return got.items.length || got.money || used ? { ...got, used } : null;
+  };
+
+  // A battle of ours, as the ROM publishes it for a spectator (BrSpectate_Publishing).
+  let publishTo: ((m: SpMsg) => void) | null = null;
+  // ...and a duel's link blocks, to the trainer it is with: whichever drain hears them.
+  let blocksTo: ((seq: number, data: number[]) => void) | null = null;
+  // ...and a PICKUP the battle's own kick waits on (a legendary's claim): the drain above
+  // runs first, so it hands them on.
+  let pickupTo: ((m: Extract<Msg, { t: 'pickup' }>) => void) | null = null;
+  const published = (m: Msg) => {
+    if (m.t === 'bstart' || m.t === 'turn') publishTo?.({ t: m.t, battle: m.battle, data: m.data });
+    else if (m.t === 'bt') blocksTo?.(m.seq, m.data);
+    else if (m.t === 'pickup') pickupTo?.(m);
+  };
+
   /** One battle: `kick` asks for it, `going` says the ROM took it, `over` that it is back
    *  on the field. The page gets the screen at the battle's first frame (onStart) and
    *  never before, so the hidden field never shows through. */
@@ -262,7 +386,12 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   let fighting = false;
   let phase = 1;
   /** The ring as the ROM should see it on its field or in a battle. */
-  const lay = (fog = false, at = phase) => emu.bytes(ringAt, 10).set(ringBytes(at, fog));
+  let seedNow = seed >>> 0;
+  let safari = false;
+  const lay = (fog = false, at = phase) => {
+    emu.bytes(ringAt, 10).set(ringBytes(at, fog));
+    emu.write(match + 8, seedNow, 32);
+  };
   // The trainer a duel is with left before its turn on the ROM came.
   let foeLeft = false;
   let carried: ReturnType<typeof kept> | null = null;
@@ -282,6 +411,23 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       return onField();
     }, Infinity);
     emu.release('b');
+  };
+  /** The parked field made to stand where `look` says, for the MAP's player icon
+   *  (region_map.c InitMapBasedOnPlayerLocation): the section, and a spot on the parked
+   *  map's own layout that its sum lands on the cell. Undone by the restore after. */
+  const lookFrom = (look: MapLook) => {
+    const r = emu.bytes(ringAt, 36);
+    r[4] = look.r & 0xff;
+    const place = look.place.slice(0, 16);
+    r.set([...place, 0xff], 14);
+    r[33] = 0; // nothing to preview: the page blinks it
+    emu.write(headerAt + 0x14, look.mapsec, 8);
+    const entry = sym('gRegionMapEntries') + look.mapsec * 8 - ROM_BASE;
+    const layout = emu.read(headerAt, 32) - ROM_BASE;
+    const along = (dim: number, cells: number, cell: number) => Math.max(1, Math.floor(dim / cells)) * cell;
+    const s1 = emu.read(save1, 32);
+    emu.write(s1, along(romView.getInt32(layout, true), rom[entry + 2], look.cellX), 16);
+    emu.write(s1 + 2, along(romView.getInt32(layout + 4, true), rom[entry + 3], look.cellY), 16);
   };
   // One thing at a time on the ROM: a battle asked for while an item goes in waits for it.
   let queue: Promise<unknown> = Promise.resolve();
@@ -312,6 +458,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     const t0 = performance.now();
     let n = 0;
     const count = emu.onFrame(() => { n++; });
+    // Whatever else the ROM says meanwhile is nobody's here (a duel takes its blocks first).
+    const pub = emu.onFrame(() => drain(published));
     kick();
     const took = await until(emu, going, 600);
     count();
@@ -345,6 +493,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       if (result.outcome !== LOST && result.outcome !== DREW) carried = now;
     }
     fighting = false;
+    pub();
     emu.pause();
     // A ROM that could not be put back would start the next battle from whatever this
     // one left on its field: no more battles from it.
@@ -396,8 +545,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         const inbox: { seq: number; data: number[] }[] = [];
         let heard = 0;
         link.listen((seq, data) => { if (seq > heard) { heard = seq; inbox.push({ seq, data }); } });
+        blocksTo = (seq, data) => link.send(seq, data);
         const watch = emu.onFrame(() => {
-          drain((m) => { if (m.t === 'bt') link.send(m.seq, m.data); });
+          drain(published);
           while (inbox.length && emu.read(netAt, 8)) {
             const b = inbox[0];
             // The fight's first block carries their name (TakePeerName): RIVAL otherwise.
@@ -430,6 +580,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
           () => ({ outcome: emu.read(netAt + 11, 8), species: 0, level: 0 }));
         } finally {
           watch();
+          blocksTo = null;
           link.listen(null);
           foeLeft = false;
         }
@@ -442,6 +593,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       else foeLeft = true;
     },
     setPhase(p) { phase = Math.max(1, Math.min(255, p | 0)); },
+    setSafari(on) { safari = on; },
     fogNow() {
       if (fighting && !broken && emu.read(ringAt + 4, 8) !== 0xff) lay(true);
     },
@@ -449,6 +601,21 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       return inTurn(async () => {
         const k = last ?? kept();
         return { ...spillOf(k.bag, k.key), mons: teamOf(k.party, k.count) };
+      });
+    },
+    field() {
+      return inTurn(async () => {
+        const k = carried ?? kept();
+        return fieldOf(k.party, k.count);
+      });
+    },
+    heal() {
+      return inTurn(async () => {
+        if (broken) return;
+        const k = carried ?? kept();
+        const next = { ...k, party: healed(k.party, k.count, basePp) as typeof k.party };
+        keep(next);
+        carried = last = next;
       });
     },
     addMoney(n) {
@@ -515,14 +682,16 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         return [...mons.filter((_, i) => !taken.has(keys[i])), ...put];
       });
     },
-    menu(action, onStart, onEnd) {
+    menu(action, onStart, onEnd, look) {
       return inTurn(async () => {
         if (broken || !startMenu) return false;
         leaving = false;
         lay();
+        if (look) lookFrom(look);
         emu.resume();
         drain(() => undefined);
-        const watch = emu.onFrame(() => drain(() => undefined));
+        // The MAP is a look here: FLY off it would fly the hidden field, not this world.
+        const watch = emu.onFrame(() => { drain(() => undefined); if (look) emu.write(mapAt + 1, 0xff, 8); });
         const tap = async (k: GbaKey) => { emu.press(k); await frames(emu, 3); emu.release(k); await frames(emu, 3); };
         let up = false;
         let back = true;
@@ -571,7 +740,90 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         return up;
       });
     },
+    mirror(feed, onStart) {
+      return inTurn(async () => {
+        if (broken || !Number.isFinite(spectAt) || !Number.isFinite(seatAt)) return;
+        lay();
+        emu.resume();
+        drain(() => undefined);
+        // Both fighters as ghosts with their looks, for the replay's trainer pictures
+        // (BrSpectate_SideSkin): the publisher in seat 0, theirs in FOE_SEAT, as their
+        // ROM numbered them. The one we follow stands where the hidden trainer faces, so
+        // the field's own follow rides it there rather than warping off to find it.
+        emu.write(seatAt, MIRROR_SEAT, 8);
+        const s1 = emu.read(save1, 32);
+        const self = objectsAt + emu.read(avatarAt + 5, 8) * OBJECT_EVENT_SIZE;
+        const [dx, dy] = STEP[emu.read(self + 0x18, 8) & 15] ?? [0, 1];
+        const map = { group: emu.read(s1 + 4, 8), num: emu.read(s1 + 5, 8) };
+        const near = { x: emu.read(self + 0x10, 16) + dx, y: emu.read(self + 0x12, 16) + dy };
+        const far = { x: near.x + 6, y: near.y };
+        send({ t: 'place', v: PROTOCOL, seat: 0, map, ...(feed.turned ? far : near), f: 1, st: 'alive', sprite: String(feed.skins[0]) });
+        send({ t: 'place', v: PROTOCOL, seat: FOE_SEAT, map, ...(feed.turned ? near : far), f: 1, st: 'alive', sprite: String(feed.skins[1]) });
+        // Side 1 followed: the replay turned round (WatchingSideOne).
+        if (feed.turned) emu.write(spectAt + 8, FOE_SEAT, 8);
+        emu.write(mainFunc, 0, 32);
+        let shown = false, ended = false, speed = 1, waited = 0, battle = -1;
+        const pace = (to: number) => {
+          speed = to;
+          emu.setSpeed(to);
+          emu.setVolume(to === CATCH_UP_SPEED ? 0 : 100);
+        };
+        const tick = emu.onFrame(() => {
+          drain(() => undefined);
+          for (let m = feed.peek(); m; m = feed.peek()) {
+            const slots = packSlot(m);
+            if (MAILBOX.RING_SLOTS - box.pending() < slots.length) break;
+            for (const sl of slots) box.push(sl.type, sl.payload);
+            if (m.t === 'bstart') battle = m.battle;
+            feed.shift();
+          }
+          if (!shown && emu.read(spectAt + 5, 8) && emu.read(mainFunc, 32) !== 0) { shown = true; onStart(); }
+          if (!shown) waited++;
+          const want = shown ? spectatePace(emu.read(spectAt + 15, 8), () => false) : 1;
+          if (want !== speed) pace(want);
+          // The fight is over and everything of it is in: the replay finishes what it has.
+          if (shown && !ended && battle >= 0 && feed.over() && !feed.peek() && box.pending() === 0) {
+            ended = true;
+            send({ t: 'result', seat: battle & 0xff, outcome: 'lose' });
+          }
+        });
+        // Ten seconds and the replay never came up (a BSTART the ROM would not take, or
+        // none at all): nothing to watch.
+        await until(emu, () => feed.stopped() || (shown ? onField() && !emu.read(spectAt + 5, 8) : waited > 600 || (feed.over() && !feed.peek() && waited > 60)), Infinity);
+        tick();
+        if (speed !== 1) pace(1);
+        emu.pause();
+        if (!emu.restore(parked!)) broken = true;
+        else if (carried) keep(carried);
+      });
+    },
+    fame(onStart) {
+      return inTurn(async () => {
+        if (broken) return false;
+        if (carried) keep(carried);
+        lay();
+        emu.resume();
+        // br_match.h: BR_PHASE_PLAY, so the RESULT is a win and not an out's; DONE (5)
+        // once the parade has run.
+        emu.write(match, 2, 8);
+        leaving = false;
+        send({ t: 'result', seat: ME, outcome: 'win' });
+        const up = await until(emu, () => { drain(() => undefined); return leaving || !onField(); }, 600);
+        // leave(): cut short (the next round, or the next match, is starting).
+        if (up && !leaving) {
+          onStart();
+          await until(emu, () => { drain(() => undefined); return leaving || emu.read(match, 8) === 5 || onField(); }, 60 * 120);
+        }
+        leaving = false;
+        emu.pause();
+        if (!emu.restore(parked!)) broken = true;
+        else if (carried) keep(carried);
+        return up;
+      });
+    },
+    publish(to) { publishTo = to; },
     leave() { leaving = true; },
+    reseed(s) { seedNow = s >>> 0; },
     fresh() {
       return inTurn(async () => {
         if (broken) return;
@@ -581,19 +833,32 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       });
     },
     give(item, n) {
+      return inTurn(() => giveNow(item, n));
+    },
+    teach(item, onStart) {
       return inTurn(async () => {
         if (broken) return null;
         const before = kept();
-        // br_loot.c's HandleGive: straight into AddBagItem when no bag of ours is waiting.
+        leaving = false;
         lay();
         emu.resume();
-        send({ t: 'give', items: [{ id: item, n }] });
+        // Armed first: BrMoves_TeachSoon counts the bag, and opens when the GIVE adds one.
+        emu.write(askAt + 4, item, 16);
+        emu.write(askAt, WILD_ASKED_TEACH, 8);
+        await until(emu, () => emu.read(askAt, 8) === WILD_DONE, 30);
+        send({ t: 'give', items: [{ id: item, n: 1 }] });
         await until(emu, () => box.pending() === 0, 60);
-        await frames(emu, 1);
+        const up = await until(emu, () => { drain(() => undefined); return !onField(); }, 180);
+        if (up) {
+          onStart();
+          // leave() backs out of it with B, like a menu.
+          const quiet = emu.onFrame(() => drain(() => undefined));
+          await backOnField();
+          quiet();
+        }
+        leaving = false;
         emu.pause();
         const after = kept();
-        // Back to parked with what it left, as after a battle: a refusal's NO ROOM box and
-        // the frames it ran are not where the next battle starts.
         if (!emu.restore(parked!)) broken = true;
         else keep(after);
         carried = last = after;
@@ -602,14 +867,134 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         return got.items.length || got.money || used ? { ...got, used } : null;
       });
     },
+    money() {
+      return inTurn(async () => moneyOf(carried ?? kept()));
+    },
+    save() {
+      return inTurn(async () => {
+        const k = carried ?? kept();
+        const b64 = (u: Uint8Array) => btoa(String.fromCharCode(...u));
+        return JSON.stringify({ count: k.count, key: k.key, party: b64(k.party), bag: b64(k.bag), dex: b64(k.dex), seen1: b64(k.seen1), seen2: b64(k.seen2), levels: b64(k.levels) });
+      });
+    },
+    load(text) {
+      return inTurn(async () => {
+        if (broken) return false;
+        try {
+          const j = JSON.parse(text);
+          const un = (s: string, n: number) => {
+            const u = Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+            if (u.length !== n) throw new Error('size');
+            return u;
+          };
+          const k = {
+            count: j.count >>> 0, key: j.key >>> 0, party: un(j.party, PARTY_LEN), bag: un(j.bag, BAG_LEN),
+            dex: un(j.dex, DEX2_LEN), seen1: un(j.seen1, SEEN_LEN), seen2: un(j.seen2, SEEN_LEN), levels: un(j.levels, 8),
+          };
+          keep(k);
+          carried = last = k;
+          return true;
+        } catch { return false; }
+      });
+    },
+    buy(item, n, each) {
+      return inTurn(async () => {
+        if (broken || n <= 0 || moneyOf(carried ?? kept()) < n * each) return 0;
+        const got = await giveNow(item, n);
+        const took = got?.items.find((r) => r.id === item)?.n ?? 0;
+        if (!took || broken) return 0;
+        const k = carried ?? kept();
+        const next = { ...k, bag: withMoney(k.bag, k.key, -took * each) as typeof k.bag };
+        keep(next);
+        carried = last = next;
+        return took;
+      });
+    },
+    trade(species, onStart) {
+      return inTurn(async () => {
+        if (broken) return 0;
+        leaving = false;
+        lay();
+        emu.resume();
+        drain(() => undefined);
+        const s1 = emu.read(save1, 32);
+        const self = objectsAt + emu.read(avatarAt + 5, 8) * OBJECT_EVENT_SIZE;
+        const [dx, dy] = STEP[emu.read(self + 0x18, 8) & 15] ?? [0, 1];
+        const x = emu.read(self + 0x10, 16) + dx, y = emu.read(self + 0x12, 16) + dy;
+        send({ t: 'event', seat: DROP_SEAT, n: 0, mapsec: 0, key: LEGEND_KEY, trader: { map: { group: emu.read(s1 + 4, 8), num: emu.read(s1 + 5, 8) }, x, y, species } });
+        let given = 0;
+        // His claim (BR_EVENT_CLAIM_KEY): the room already said he is mine, so yes at once;
+        // the PICKUP of his key naming a species is the trade done (BrLoot_SendHolds).
+        const watch = emu.onFrame(() => drain((m) => {
+          if (m.t !== 'pickup') return;
+          if (m.key === TRADER_KEY - 1) send({ t: 'pickup', seat: emu.read(seatAt, 8), key: TRADER_KEY });
+          else if (m.key === TRADER_KEY && m.item) given = m.item;
+        }));
+        // A on him (a frame for his sprite to stand), then through his one line to the menu.
+        await frames(emu, 4);
+        let n = 0;
+        const up = await until(emu, () => {
+          const k = n++ % 20;
+          if (k === 0) emu.press('a'); else if (k === 4) emu.release('a');
+          return !onField();
+        }, 400);
+        emu.release('a');
+        if (up) {
+          onStart();
+          await backOnField();
+          // The claim, its answer and the swap, on the field after the menu.
+          await until(emu, () => given !== 0, 90);
+        } else console.warn('spike: the trader\'s menu did not open');
+        watch();
+        emu.pause();
+        const now = kept();
+        if (!emu.restore(parked!)) broken = true;
+        else keep(now);
+        carried = last = now;
+        return given;
+      });
+    },
+    legend(species, level, onStart, fog = false) {
+      let seen = false;
+      let stop: (() => void) | null = null;
+      return inTurn(() => battle(fog, () => {
+        drain(() => undefined);
+        // Its piece where the hidden trainer faces, under an event's key (BR_EVENT_KEY_BASE),
+        // which is what makes it stand as itself (BrLegend_Gfx) and A on it a challenge.
+        const s1 = emu.read(save1, 32);
+        const self = objectsAt + emu.read(avatarAt + 5, 8) * OBJECT_EVENT_SIZE;
+        const [dx, dy] = STEP[emu.read(self + 0x18, 8) & 15] ?? [0, 1];
+        const x = emu.read(self + 0x10, 16) + dx, y = emu.read(self + 0x12, 16) + dy;
+        send({ t: 'spill', seat: DROP_SEAT, map: { group: emu.read(s1 + 4, 8), num: emu.read(s1 + 5, 8) }, mons: [{ key: LEGEND_KEY, x, y, species, level }] });
+        // Its cry asks the room for it (BR_LEGEND_CLAIM_KEY): this page has already had the
+        // room's yes, so the answer is ours at once. Then the battle, and back on the field.
+        // battle()'s drain hears it (published): it runs before anything registered here.
+        pickupTo = (m) => { if (m.key === (LEGEND_KEY | 0x0800)) send({ t: 'pickup', seat: emu.read(seatAt, 8), key: LEGEND_KEY }); };
+        stop = emu.onFrame(() => { if (!onField()) seen = true; });
+        void frames(emu, 3).then(async () => { emu.press('a'); await frames(emu, 4); emu.release('a'); });
+      }, () => emu.read(mainFunc, 32) !== 0, () => {
+        return seen && onField();
+      }, onStart, () => ({ outcome: emu.read(outcomeAt, 8), species, level }))).finally(() => { stop?.(); pickupTo = null; });
+    },
+    boss(n, onStart, fog = false) {
+      // br_wild.h's BR_WILD_BOSS: the same ask, a leader for a map.
+      return inTurn(() => battle(fog, () => {
+        emu.write(askAt + 1, 0xff, 8);
+        emu.write(askAt + 2, n, 8);
+        emu.write(askAt + 3, 0, 8);
+        emu.write(askAt, WILD_ASKED, 8);
+      }, () => emu.read(askAt, 8) !== WILD_ASKED, () => emu.read(askAt, 8) === WILD_DONE, onStart,
+      () => ({ outcome: emu.read(askAt + 7, 8), species: 0, level: 0 })));
+    },
     wild(group, num, behavior, onStart, fog = false) {
       // br_wild.h: the map, then ASKED; FIGHTING once it is under way, DONE when it is over.
       return inTurn(() => battle(fog, () => {
         emu.write(askAt + 1, group, 8);
         emu.write(askAt + 2, num, 8);
         emu.write(askAt + 3, behavior, 8);
-        emu.write(askAt, WILD_ASKED, 8);
-      }, () => emu.read(askAt, 8) !== WILD_ASKED, () => emu.read(askAt, 8) === WILD_DONE, onStart,
+        // br_wild.h's ASKED_SAFARI: the opening's roll, any first stage.
+        emu.write(askAt, safari ? WILD_ASKED_SAFARI : WILD_ASKED, 8);
+      }, () => ![WILD_ASKED, WILD_ASKED_SAFARI].includes(emu.read(askAt, 8)), () => emu.read(askAt, 8) === WILD_DONE, onStart,
       () => ({ outcome: emu.read(askAt + 7, 8), species: emu.read(askAt + 4, 16), level: emu.read(askAt + 6, 8) })));
     },
   };

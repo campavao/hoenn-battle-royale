@@ -26,12 +26,17 @@
 // from the seed on cells a trainer can walk to from Littleroot. A ball is solid, as the
 // ROM's are; A at one takes it, for that trainer and off everybody's map.
 
+import { clerkAt, type Clerk } from './marts';
+import { leaderAt } from './gyms';
+import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, draw, eventForRing } from '../../src/match/events';
+import { rungForPhase } from '../../src/bots/party';
 import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
 import { scatterItem } from '../../src/match/scatter';
+import { GIFTS } from '../../src/match/gifts';
 import { isTm, type BagRows } from './items';
 import { eitherSees, type Facing } from '../../src/bots/sight';
-import { dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
+import { CLASS_WATER, DIR_NORTH, dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
 
 export const KEY_UP = 1, KEY_DOWN = 2, KEY_LEFT = 4, KEY_RIGHT = 8, KEY_B = 16, KEY_A = 32;
 
@@ -68,7 +73,26 @@ export interface Actor {
   shunUntil: number;
   /** A step finished whose arrival has not been looked at yet (the spots). */
   arriving: boolean;
+  /** What the team could do on the field (FIELD_*): SURF, CUT, STRENGTH, as the page
+   *  reads its party (br_hm.c asks the same: knows the move or could learn it). */
+  field?: number;
+  /** A bot fighting a bot: the trainer whose page fights it out (its hidden ROM, the
+   *  proxy duel), and the frame it began. 0 for none. */
+  judge?: number;
+  since?: number;
+  /** A trainer whose page is gone for now (a reload): they stand, and nobody engages
+   *  them, until it is back or the relay gives up on it. */
+  away?: boolean;
+  /** Where to drop at the Safari's end (an outdoor map), as asked. */
+  pick?: string;
+  /** Bites the fog has taken out of a bot (BOT_BITES and it is out). */
+  bites?: number;
+  /** Fighting gym leader n - 1 (gyms.ts). */
+  boss?: number;
 }
+
+/** A team with somebody who could SURF: water is walkable (and up a waterfall). */
+export const FIELD_SURF = 4;
 
 /** What a frame started: a phone starts the matching ROM battle for its own trainer. */
 export type RoomEvent =
@@ -77,15 +101,42 @@ export type RoomEvent =
   /** Two trainers saw each other: a link battle. `first` is the side that challenged
    *  (link id 0, the lower id, as the ROM's own engage has it). */
   | { type: 'duel'; tick: number; id: number; foe: number; first: boolean }
-  | { type: 'item'; tick: number; id: number; key: number; item: number }
-  | { type: 'bag'; tick: number; id: number; key: number; bag: Bag; name: string };
+  | { type: 'item'; tick: number; id: number; key: number; item: number; gift?: boolean }
+  | { type: 'bag'; tick: number; id: number; key: number; bag: Bag; name: string }
+  /** A at a CENTER's nurse, from the counter. */
+  | { type: 'nurse'; tick: number; id: number; map: string }
+  /** A at an event's legendary: its battle (the room took it off the ground). */
+  | { type: 'legend'; tick: number; id: number; key: number; species: number; level: number }
+  /** A at an event's trader: his offer, for one of mine (`traded` says which). */
+  | { type: 'trade'; tick: number; id: number; n: number; species: number }
+  /** A at a MART's clerk. */
+  | { type: 'mart'; tick: number; id: number; map: string }
+  /** A at a gym leader nobody has beaten yet: their own battle (gyms.ts). */
+  | { type: 'boss'; tick: number; id: number; n: number }
+  /** Two bots saw each other: `id`'s page fights `a` against `b` in a hidden ROM and
+   *  says who won (`bots`). Nobody's coin flip (CLAUDE.md: simulate every battle). */
+  | { type: 'bots'; tick: number; id: number; a: number; b: number };
 
 /** What a trainer who is out carried: the bag's items (not its key items or machines),
  *  money, and their team. */
 export type Bag = BagRows;
 
 /** A trainer's bag where they fell (POK-232). Its key is SPILL_KEY + their id. */
-export interface Spill { key: number; map: string; x: number; y: number; name: string; bag: Bag }
+/** `legend`: an event's legendary, its one mon in the bag: A on it is its battle. */
+export interface Spill { key: number; map: string; x: number; y: number; name: string; bag: Bag; legend?: boolean }
+
+/** An event this round (events.ts, DESIGN §Events): its number, where its legendary
+ *  stands (its key), and which one. */
+export interface EventMark { n: number; key: number; map: string; x: number; y: number; species: number; trader?: Trader }
+
+/** An event's trader (br_event.c): where he stands, the rare he offers for any one of
+ *  yours, and who is trading with him now (0 for nobody). He keeps what he is given and
+ *  offers that next (Cam's 2026-10-19 play-test, #9). */
+export interface Trader { x: number; y: number; species: number; busy: number }
+
+/** Event pieces' keys: clear of the dealt balls' and the trainers' (SPILL_KEY + id). */
+export const EVENT_SPILL = 2 << 20;
+export const eventPiece = (n: number, i: number): number => EVENT_SPILL | (n << 4) | i;
 
 /** Nothing in it: no items, no money, nobody. */
 export const emptyBag = (b: Bag): boolean => !b.items.length && !b.money && !b.mons?.length;
@@ -97,12 +148,22 @@ const LOCKOUT = 600;
 /** Everybody starts by the truck: five seconds to walk off before an engage. */
 const JOIN_GRACE = 300;
 const BACK: Record<number, number> = { 1: 2, 2: 1, 3: 4, 4: 3 };
+/** One bot-vs-bot fight starts at most this often, room-wide (POK-273's
+ *  DUEL_COOLDOWN_MS): every pair that could see each other fighting at once decided a
+ *  full room before the first ring moved. */
+export const BOT_DUEL_GAP = 60 * 12;
+/** A bot-vs-bot fight nobody has answered for this long lets them go (the proxy's own
+ *  wall-clock cap is 90 s). */
+export const BOT_DUEL_MAX = 60 * 120;
+/** The fog bites a bot every BOT_BITE frames, and the BOT_BITES-th takes it. */
+export const BOT_BITE = 600;
+export const BOT_BITES = 3;
 
 /** Spill keys, clear of the dealt balls' 1..n. */
 export const SPILL_KEY = 1 << 20;
 
 /** An item ball: its key, its cell and what is in it. */
-export interface Ground { key: number; map: string; x: number; y: number; item: number }
+export interface Ground { key: number; map: string; x: number; y: number; item: number; gift?: boolean }
 
 /** Item balls a map gets: the match deals two a section, and a spike map is two or three
  *  of them (Cam, POK-354: "more items all over the place"). */
@@ -122,7 +183,20 @@ export type Command =
   /** `id`'s team is down (the fog, or a lost battle): off the map, watching. What they
    *  carried lies where they stood (POK-232). `by` the trainer or bot that beat them,
    *  `wild` a wild POKeMON did; neither, the fog. */
-  | { c: 'out'; id: number; bag?: Bag; by?: number; wild?: boolean };
+  | { c: 'out'; id: number; bag?: Bag; by?: number; wild?: boolean }
+  /** START (a lobby's): the trainers on the map now are the match; anybody later watches. */
+  | { c: 'lock' }
+  /** `id`'s team could now do these on the field (FIELD_*). */
+  | { c: 'field'; id: number; bits: number }
+  /** `id`'s page fought bots `a` and `b` (a `bots` event): `winner` beat the other, or
+   *  0 for no answer (its ROM could not), and both walk on. */
+  | { c: 'bots'; id: number; a: number; b: number; winner: number }
+  /** `id` traded event `n`'s trader the species `given` (0: thought better of it). */
+  | { c: 'traded'; id: number; n: number; given: number }
+  /** `id`'s page went (a reload), or came back. */
+  | { c: 'away'; id: number; on: boolean }
+  /** Drop `id` on `map` when the Safari ends. */
+  | { c: 'pick'; id: number; map: string };
 
 /** The marked spots grow back: the ring's phase does it in the game; here, a while. */
 export const REGROW = 60 * 90;
@@ -143,6 +217,12 @@ export interface RoomState {
   ringPhase?: number;
   /** The frame this round started on (a win starts the next early). */
   epoch?: number;
+  opening?: number;
+  /** No bot-vs-bot fight starts before this frame (BOT_DUEL_GAP). */
+  duelAfter?: number;
+  events?: EventMark[];
+  /** The gym leaders beaten this round: leader n, by whom. */
+  gyms?: [number, string][];
 }
 
 /** A trainer in the world but not on the map: out this round, or come in after the fog
@@ -150,7 +230,7 @@ export interface RoomState {
 export interface Benched { id: number; name: string; skin: number }
 
 /** One who went out of a round: what beat them (a name; '' for the fog), or `left`. */
-export interface Fallen { id: number; name: string; by: string; wild?: boolean; left?: boolean }
+export interface Fallen { id: number; name: string; by: string; wild?: boolean; left?: boolean; bot?: boolean }
 
 /** A round as a match: who was in when the fog closed -- trainers and bots, as a match's
  *  seats are (director.ts aliveSeats) -- who went out in what order, and the last one
@@ -179,7 +259,12 @@ const RING_STEPS = [Infinity, 15 / 28, 9 / 28, 7 / 28, 5 / 28, 3 / 28, 2 / 28, 0
 
 /** The ring at a frame, in the plane layout() places the maps in (tiles). `r` is Infinity
  *  for no fog and -1 for fog everywhere; `left` the frames to the next phase. */
-export interface Ring { round: number; phase: number; last: boolean; cx: number; cy: number; r: number; next?: number; left: number }
+export interface Ring { round: number; phase: number; last: boolean; cx: number; cy: number; r: number; next?: number; left: number; safari?: boolean }
+
+/** The Safari opening (DESIGN §The drop): every round begins with every trainer in the
+ *  Safari Zone for one phase's length, catching, no fighting; then the drop puts each
+ *  where they asked (`pick`), or anywhere. */
+export const SAFARI = 'MAP_SAFARI_ZONE_';
 
 export class Room {
   tick = 0;
@@ -192,7 +277,14 @@ export class Room {
   spills = new Map<number, Spill>();
   bench: Benched[] = [];
   results: Results = { round: 0, entrants: [], fallen: [], winner: 0 };
+  duelAfter = 0;
+  /** This round's events, in the order they dropped. */
+  events: EventMark[] = [];
+  /** Who beat which gym leader this round, in the order they fell. */
+  gyms: [number, string][] = [];
   private readonly base: StepFn;
+  /** The StepFn for each FIELD_* combination a team has. */
+  private readonly fields: StepFn[] = [];
   private dealt: ReadonlyMap<string, Ground> | null = null;
 
   constructor(
@@ -201,20 +293,27 @@ export class Room {
     readonly maps: ReadonlyMap<string, WorldMap>,
     readonly patches: PatchTable,
     readonly seed: number,
-    /** Where each map sits in the plane (layout()): the ring is measured there. */
+    /** Where each outdoor map sits in the plane (layout()): the ring is measured there. */
     readonly places: ReadonlyMap<string, { gx: number; gy: number }>,
+    /** Where each building and cave counts as being: the outdoor cell its way in leaves
+     *  from (interiors()). The fog outside a door is the fog inside it. */
+    readonly anchors: ReadonlyMap<string, { gx: number; gy: number }> = new Map(),
   ) {
     this.base = stepFn(world);
   }
 
   state(): RoomState {
-    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...(this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}), ...(this.epoch ? { epoch: this.epoch } : {}) };
+    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...(this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}), ...(this.epoch ? { epoch: this.epoch } : {}), ...(this.opening ? { opening: this.opening } : {}), ...(this.duelAfter ? { duelAfter: this.duelAfter } : {}), ...(this.events.length ? { events: structuredClone(this.events) } : {}), ...(this.gyms.length ? { gyms: structuredClone(this.gyms) } : {}) };
   }
 
   load(s: RoomState): void {
     this.tick = s.tick;
     this.ringPhase = s.ringPhase ?? RING_PHASE;
     this.epoch = s.epoch ?? 0;
+    this.opening = s.opening ?? 0;
+    this.duelAfter = s.duelAfter ?? 0;
+    this.events = structuredClone(s.events ?? []);
+    this.gyms = structuredClone(s.gyms ?? []);
     this.actors = structuredClone(s.actors);
     this.taken = new Map(s.taken);
     this.picked = new Map(s.picked ?? []);
@@ -228,7 +327,33 @@ export class Room {
   }
 
   apply(cmd: Command): void {
-    if (cmd.c === 'join') {
+    if (cmd.c === 'field') {
+      const a = this.actor(cmd.id);
+      if (a && !a.bot) a.field = cmd.bits & 7;
+    } else if (cmd.c === 'pick') {
+      const a = this.actor(cmd.id);
+      if (a && !a.bot && this.places.has(cmd.map) && !cmd.map.startsWith(SAFARI)) a.pick = cmd.map;
+    } else if (cmd.c === 'away') {
+      const a = this.actor(cmd.id);
+      if (a && !a.bot) a.away = cmd.on || undefined;
+    } else if (cmd.c === 'traded') {
+      const t = this.events.find((e) => e.n === cmd.n)?.trader;
+      if (!t || t.busy !== cmd.id) return;
+      t.busy = 0;
+      if (cmd.given > 0 && cmd.given < 412) t.species = cmd.given;
+      const a = this.actor(cmd.id);
+      if (a?.battling && !a.foe) { a.battling = false; a.calm = this.tick + GRACE; }
+    } else if (cmd.c === 'bots') {
+      const a = this.actor(cmd.a), b = this.actor(cmd.b);
+      if (!a || !b || !a.bot || !b.bot || a.foe !== b.id || b.foe !== a.id || a.judge !== cmd.id || !a.battling) return;
+      this.part(a);
+      this.part(b);
+      const won = cmd.winner === a.id ? a : cmd.winner === b.id ? b : undefined;
+      const lost = won === a ? b : won === b ? a : undefined;
+      if (won && lost && !lost.beaten) { lost.beaten = true; this.fall(lost, won.name); }
+    } else if (cmd.c === 'lock') {
+      this.results.entrants = this.actors.map((a) => [a.id, a.name]);
+    } else if (cmd.c === 'join') {
       if (this.actor(cmd.id) || this.bench.some((b) => b.id === cmd.id)) return;
       // The fog has closed on this round: in from the next.
       if (this.results.entrants.length && !cmd.bot) { this.bench.push({ id: cmd.id, name: cmd.name, skin: cmd.skin }); return; }
@@ -253,6 +378,11 @@ export class Room {
       // ROM wins it, BrNetlink_PeerOut) and says so.
       const foe = a?.foe ? this.actor(a.foe) : undefined;
       if (foe?.bot) foe.battling = false;
+      // Bots whose fight their page was running: no answer is coming, they walk on.
+      for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
+      // A legendary they were fighting stands again (Cam: they go back for retries).
+      for (const [key, by] of this.picked) if (by === cmd.id && this.spills.get(key)?.legend) this.picked.delete(key);
+      for (const e of this.events) if (e.trader?.busy === cmd.id) e.trader.busy = 0;
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
       if (cmd.c === 'leave') this.bench = this.bench.filter((b) => b.id !== cmd.id);
       if (!a || a.bot) return;
@@ -269,12 +399,23 @@ export class Room {
       const foe = a.foe ? this.actor(a.foe) : undefined;
       if (foe?.bot) {
         foe.battling = false;
+        foe.calm = this.tick + GRACE;
         // Beaten, and out of the round (the page says nothing of a fight that ran over
         // into a new round: that was the old round's).
         if (cmd.won && !foe.beaten) { foe.beaten = true; this.fall(foe, a.name); }
       }
       a.foe = 0;
+      // A gym leader falls once: the first to beat them closes the gym.
+      if (a.boss) {
+        if (cmd.won && !this.bossDown(a.boss - 1)) this.gyms.push([a.boss - 1, a.name]);
+        a.boss = undefined;
+      }
     }
+  }
+
+  /** Gym leader `n` has been beaten this round. */
+  bossDown(n: number): boolean {
+    return this.gyms.some(([m]) => m === n);
   }
 
   isTaken(key: number): boolean {
@@ -317,6 +458,18 @@ export class Room {
         out.set(`${id}:${c.x}:${c.y}`, { key: ++n, map: id, x: c.x, y: c.y, item });
       }
     }
+    // A gift-giver in every town and city (gifts.ts, Cam 2026-10-13: "some gift giving
+    // NPCs"): a person holding one held item, standing on a free cell. A at him takes it,
+    // and the first trainer there takes it for everybody.
+    for (const id of [...land.keys()].sort()) {
+      if (!/^MAP_\w+_(TOWN|CITY)$/.test(id)) continue;
+      const marked = new Set(this.patchesOn(id).map((q) => `${q.x}:${q.y}`));
+      const cells = land.get(id)!.filter((c) => !marked.has(`${c.x}:${c.y}`) && !out.has(`${id}:${c.x}:${c.y}`) &&
+        !(id === 'MAP_LITTLEROOT_TOWN' && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
+      if (!cells.length) continue;
+      const c = cells[Math.floor(rng() * cells.length)];
+      out.set(`${id}:${c.x}:${c.y}`, { key: ++n, map: id, x: c.x, y: c.y, item: GIFTS[Math.floor(rng() * GIFTS.length)], gift: true });
+    }
     // A relay world makes one room a seed; keep the last few, not every one ever dealt.
     if (DEALS.size >= 8) DEALS.delete(DEALS.keys().next().value!);
     DEALS.set(id, out);
@@ -338,7 +491,8 @@ export class Room {
       out.push(at);
       for (let dir = 1; dir <= 4; dir++) {
         const r = this.base(at, dir);
-        if (!r || !this.maps.has(r.to.map)) continue;
+        // Outdoors: what the deals and the ring's centres are drawn from.
+        if (!r || !this.places.has(r.to.map)) continue;
         const k = `${r.to.map}:${r.to.x}:${r.to.y}`;
         if (seen.has(k)) continue;
         seen.add(k);
@@ -352,12 +506,15 @@ export class Room {
   /** The ring this frame (or at `tick`). */
   ring(tick = this.tick): Ring {
     const len = this.ringPhase;
-    const cycle = RING_STEPS.length * len;
+    const cycle = RING_STEPS.length * len + this.opening;
     const n = Math.floor((tick - this.epoch) / cycle);
     const round = this.results.round + n;
-    const t = tick - this.epoch - n * cycle;
-    const phase = Math.floor(t / len);
+    let t = tick - this.epoch - n * cycle;
     const { cx, cy, far } = this.centre(round);
+    // The Safari: phase 0's no-fog, before it.
+    if (t < this.opening) return { round, phase: 0, last: false, cx, cy, r: Infinity, next: Infinity, left: this.opening - t, safari: true };
+    t -= this.opening;
+    const phase = Math.floor(t / len);
     const at = (i: number) => (RING_STEPS[i] === Infinity || RING_STEPS[i] < 0 ? RING_STEPS[i] : RING_STEPS[i] * far);
     const last = phase === RING_STEPS.length - 1;
     return { round, phase, last, cx, cy, r: at(phase), next: last ? undefined : at(phase + 1), left: len - (t - phase * len) };
@@ -367,6 +524,8 @@ export class Room {
   ringPhase = RING_PHASE;
   /** The frame this round started on. */
   epoch = 0;
+  /** Frames of Safari each round opens with (SAFARI); 0, none (a test's room). */
+  opening = 0;
 
   private centres = new Map<number, { cx: number; cy: number; far: number }>();
   /** A round's centre: a cell a trainer can stand on, from the seed; and how far the
@@ -396,8 +555,10 @@ export class Room {
     if (ring.r === Infinity) return false;
     if (ring.r < 0) return true;
     const p = this.places.get(s.map);
-    if (!p) return true;
-    return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy) > ring.r;
+    const inside = p ? undefined : this.anchors.get(s.map);
+    if (!p && !inside) return true;
+    const x = p ? p.gx + s.x + 0.5 : inside!.gx, y = p ? p.gy + s.y + 0.5 : inside!.gy;
+    return Math.hypot(x - ring.cx, y - ring.cy) > ring.r;
   }
 
   /** The item ball still lying on a cell, if any. */
@@ -429,22 +590,27 @@ export class Room {
     const was = this.tick - 1 >= this.epoch ? this.ring(this.tick - 1) : { ...ring, phase: -1 };
     const r = this.results;
     if (ring.round !== was.round || (r.wonAt !== undefined && this.tick >= r.wonAt + AFTER_WIN)) this.newRound(r.round + 1);
+    else if (was.safari && !ring.safari) this.drop(ring.round);
     else if (ring.phase !== was.phase) {
       // The fog closes for the first time: who is on the map is the match.
       if (ring.phase === 1 && !r.entrants.length) r.entrants = this.actors.map((a) => [a.id, a.name]);
-      // Bots do not bleed here: one the ring closes on is out (in a match the fog takes
-      // them over a few bites; here, at once).
-      for (const a of this.actors) {
-        if (!a.bot || a.beaten || a.battling || !this.inFog(a.m.spot, ring)) continue;
-        a.beaten = true;
-        this.fall(a, '');
-      }
+      const n = eventForRing(ring.phase);
+      if (n !== undefined) this.dropEvent(n, ring);
     }
     // The last one standing, once the frame's goings are all in (the last two out on one
     // frame: neither).
     if (!r.winner && r.entrants.length >= 2) {
       const alive = r.entrants.filter(([id]) => !r.fallen.some((f) => f.id === id));
       if (alive.length === 1) { r.winner = alive[0][0]; r.wonAt = this.tick; }
+    }
+    // The fog bites a bot in it every ten seconds and takes it at the third (a match's
+    // bleed, in bites): time to walk out, which a bot on its way does (bots.ts).
+    if ((this.tick - this.epoch) % Math.max(1, Math.round(this.ringPhase / RING_PHASE * BOT_BITE)) === 0) {
+      for (const a of this.actors) {
+        if (!a.bot || a.beaten || a.battling || !this.inFog(a.m.spot, ring)) continue;
+        a.bites = (a.bites ?? 0) + 1;
+        if (a.bites >= BOT_BITES) { a.beaten = true; this.fall(a, ''); }
+      }
     }
     for (const [key, at] of this.taken) if (this.tick - at >= REGROW) this.taken.delete(key);
     const events: RoomEvent[] = [];
@@ -453,23 +619,176 @@ export class Room {
       else for (const bits of ins?.get(a.id) ?? []) this.move(a, bits, events);
     }
     this.engage(events);
+    for (const a of this.actors) if (a.judge && this.tick - (a.since ?? 0) > BOT_DUEL_MAX) this.part(a);
+    this.engageBots(events);
     return events;
+  }
+
+  /** Event `n` (every other ring from the first shrink, DESIGN §Events): its legendary,
+   *  two rares at the phase's rung, three gold balls and a bag of supplies, on the free
+   *  cells nearest a spot inside the ring -- the last one at the ring's centre, the one
+   *  place its final ring still holds. Whoever gets there takes it. */
+  private dropEvent(n: number, ring: Ring): void {
+    let state = (this.seed ^ Math.imul(ring.round + 1, 0x9e3779b1) ^ Math.imul(n + 1, 0x85ebca6b)) >>> 0 || 1;
+    const rng = () => { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return (state >>> 0) / 4294967296; };
+    const free = (s: Spot) => this.world.cell(s.map, s.x, s.y) === 0 && !this.world.warpAt(s.map, s.x, s.y)
+      && !this.groundAt(s.map, s.x, s.y) && !this.spillAt(s.map, s.x, s.y)
+      && !this.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y);
+    const all = this.reachable().filter(free);
+    const plane = (s: Spot) => { const p = this.places.get(s.map)!; return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy); };
+    let from: Spot | undefined;
+    if (n === EVENT_MAX - 1) for (const s of all) { if (!from || plane(s) < plane(from)) from = s; }
+    else {
+      const inside = all.filter((s) => !this.inFog(s, ring));
+      from = inside[Math.min(inside.length - 1, Math.floor(rng() * inside.length))];
+    }
+    if (!from) return;
+    const f = from;
+    const d = (s: Spot) => Math.abs(s.x - f.x) + Math.abs(s.y - f.y);
+    // Within eight, never on the legendary's four sides (events.ts's clusterCells).
+    const cells = all.filter((s) => s.map === f.map && d(s) <= 8 && d(s) !== 1)
+      .sort((p, q) => d(p) - d(q) || p.y - q.y || p.x - q.x).slice(0, 1 + EVENT_RARES + EVENT_GOLD + 2);
+    const level = rungForPhase(ring.phase + 1);
+    const legends = LEGENDS[Math.min(n, LEGENDS.length - 1)];
+    const species = [legends[Math.min(legends.length - 1, Math.floor(rng() * legends.length))], ...draw(rng, RARES, EVENT_RARES)];
+    const bags = [...draw(rng, GOLD, EVENT_GOLD).map((id) => [{ id, n: 1 }]), SUPPLIES.map((r) => ({ ...r }))];
+    // The cell past the pieces is the trader's, with a rare the event did not drop.
+    const spot = cells.length > species.length + bags.length ? cells.pop()! : undefined;
+    const offers = RARES.filter((r) => !species.includes(r));
+    const trader = spot && offers.length ? { x: spot.x, y: spot.y, species: offers[Math.min(offers.length - 1, Math.floor(rng() * offers.length))], busy: 0 } : undefined;
+    cells.forEach((c, i) => {
+      const key = eventPiece(n, i);
+      const bag: Bag = i < species.length ? { items: [], money: 0, mons: [{ species: species[i], level }] } : { items: bags[i - species.length], money: 0 };
+      this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: '', bag, ...(i === 0 ? { legend: true } : {}) });
+    });
+    this.events.push({ n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0], ...(trader ? { trader } : {}) });
+  }
+
+  /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
+  private part(a: Actor): void {
+    a.battling = false;
+    a.foe = a.judge = a.since = 0;
+    a.calm = this.tick + GRACE;
+  }
+
+  /** Two bots on one map in each other's eyeline fight (POK-238), one pair at a time
+   *  room-wide (BOT_DUEL_GAP). A bot has no ROM, so a trainer's page fights it in a
+   *  hidden one: the trainers take turns at it, by the frame. Nobody on the map to do it,
+   *  nobody fights. */
+  private engageBots(events: RoomEvent[]): void {
+    if (this.ring().safari) return;
+    if (this.tick < this.duelAfter || this.tick % 8) return;
+    // A page that can run it now: not reloading, not in a battle of its own (its ROM is busy).
+    const judges = this.actors.filter((a) => !a.bot && !a.away && !a.battling);
+    if (!judges.length) return;
+    const byMap = new Map<string, Actor[]>();
+    for (const a of this.actors) {
+      if (!a.bot || a.beaten || a.battling || a.m.action || this.tick < a.calm) continue;
+      const l = byMap.get(a.m.spot.map) ?? [];
+      l.push(a);
+      byMap.set(a.m.spot.map, l);
+    }
+    const look = (o: Actor) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing as Facing });
+    for (const id of [...byMap.keys()].sort()) {
+      const l = byMap.get(id)!;
+      for (let i = 0; i < l.length; i++) {
+        for (let j = i + 1; j < l.length; j++) {
+          const a = l[i], b = l[j];
+          if (!eitherSees(this.world, look(a), look(b))) continue;
+          const dx = b.m.spot.x - a.m.spot.x, dy = b.m.spot.y - a.m.spot.y;
+          const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+          a.m.facing = a.m.moveDir = toB;
+          b.m.facing = b.m.moveDir = BACK[toB];
+          const judge = judges[(this.tick >>> 3) % judges.length];
+          a.battling = b.battling = true;
+          a.foe = b.id;
+          b.foe = a.id;
+          a.judge = b.judge = judge.id;
+          a.since = b.since = this.tick;
+          a.keys = a.last = b.keys = b.last = 0;
+          this.duelAfter = this.tick + BOT_DUEL_GAP;
+          events.push({ type: 'bots', tick: this.tick, id: judge.id, a: a.id, b: b.id });
+          return;
+        }
+      }
+    }
   }
 
   /** `a` is out of this round's match (once; nothing after the win). */
   private fall(a: Actor, by: string, how: { wild?: boolean; left?: boolean } = {}): void {
     const r = this.results;
     if (r.winner || !r.entrants.some(([id]) => id === a.id) || r.fallen.some((f) => f.id === a.id)) return;
-    r.fallen.push({ id: a.id, name: a.name, by, ...how });
+    r.fallen.push({ id: a.id, name: a.name, by, ...how, ...(a.bot ? { bot: true } : {}) });
   }
 
   /** The cells by the truck that no bot stands on: along its row first, nearest first, so
    *  trainers stood side by side facing south do not see each other (and fight the moment
    *  their grace is up). */
   truck(): Spot[] {
+    if (this.ring().safari) return this.zone();
     const d = (s: Spot) => Math.abs(s.y - 10) * 64 + Math.abs(s.x - 10) * 2 + (s.x < 10 ? 1 : 0);
     const near = this.reachable().filter((s) => s.map === 'MAP_LITTLEROOT_TOWN').sort((p, q) => d(p) - d(q)).slice(0, TRUCK);
     return near.filter((s) => !this.actors.some((a) => a.bot && a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y));
+  }
+
+  /** Where trainers stand when the Safari opens: spread over the Zone's areas, as far
+   *  as one walks from its gate (no bike, no SURF). */
+  zone(): Spot[] {
+    const all = this.safariCells();
+    const taken = (s: Spot) => this.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y);
+    // Every seventh cell, so a crowd starts apart rather than in a line.
+    return all.filter((s, i) => i % 7 === 0 && !taken(s));
+  }
+
+  private safariCells(): readonly Spot[] {
+    const id = 'safari:' + [...this.maps.keys()].join();
+    const hit = REACH.get(id);
+    if (hit) return hit;
+    const start = { map: 'MAP_SAFARI_ZONE_SOUTH', x: 32, y: 34 };
+    const seen = new Set<string>([`${start.map}:${start.x}:${start.y}`]);
+    const out: Spot[] = [];
+    const queue: Spot[] = this.maps.has(start.map) ? [start] : [];
+    while (queue.length) {
+      const at = queue.shift()!;
+      out.push(at);
+      for (let dir = 1; dir <= 4; dir++) {
+        const r = this.base(at, dir as Facing);
+        if (!r || !r.to.map.startsWith(SAFARI) || !this.maps.has(r.to.map) || this.world.cell(r.to.map, r.to.x, r.to.y) !== 0) continue;
+        const k = `${r.to.map}:${r.to.x}:${r.to.y}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        queue.push(r.to);
+      }
+    }
+    REACH.set(id, out);
+    return out;
+  }
+
+  /** The Safari is over: everybody still in the Zone drops where they asked (or, asking
+   *  nowhere, anywhere outdoors), on a free cell of that map dealt from the seed. */
+  private drop(round: number): void {
+    let state = (this.seed ^ Math.imul(round + 1, 0x2545f491)) >>> 0 || 1;
+    const rng = () => { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return (state >>> 0) / 4294967296; };
+    const maps = [...this.places.keys()].filter((m) => !m.startsWith(SAFARI)).sort();
+    const used = new Set(this.actors.map((a) => `${a.m.spot.map}:${a.m.spot.x}:${a.m.spot.y}`));
+    for (const a of this.actors) {
+      if (a.bot || !a.m.spot.map.startsWith(SAFARI)) continue;
+      const want = a.pick && this.places.has(a.pick) ? a.pick : maps[Math.floor(rng() * maps.length)];
+      a.pick = undefined;
+      const m = this.maps.get(want);
+      if (!m) continue;
+      const cells: Spot[] = [];
+      for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
+        if (this.world.cell(want, x, y) !== 0 || used.has(`${want}:${x}:${y}`) || this.groundAt(want, x, y) || this.spillAt(want, x, y)) continue;
+        if (this.patchesOn(want).some((q) => q.x === x && q.y === y)) continue;
+        cells.push({ map: want, x, y });
+      }
+      if (!cells.length) continue;
+      const to = cells[Math.floor(rng() * cells.length)];
+      used.add(`${to.map}:${to.x}:${to.y}`);
+      a.m = newMover(to, 1);
+      a.calm = this.tick + JOIN_GRACE;
+    }
   }
 
   /** The fog lifted: a new match. Every trainer, out or in, back at the truck with the
@@ -482,6 +801,9 @@ export class Room {
     }
     humans.sort((p, q) => p.id - q.id);
     this.bench = [];
+    // The new round's clock first: it opens in the Safari (truck()).
+    this.results = { round, entrants: [], fallen: [], winner: 0 };
+    this.epoch = this.tick;
     const spots = this.truck();
     humans.forEach((a, i) => {
       // Somebody still in a battle of the round before ends it where they now stand.
@@ -492,12 +814,13 @@ export class Room {
     });
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
-    for (const a of this.actors) if (a.bot) a.beaten = false;
+    for (const a of this.actors) if (a.bot) { a.beaten = false; a.bites = 0; if (a.judge) this.part(a); }
+    this.duelAfter = 0;
+    this.events = [];
+    this.gyms = [];
     this.taken.clear();
     this.picked.clear();
     this.spills.clear();
-    this.results = { round, entrants: [], fallen: [], winner: 0 };
-    this.epoch = this.tick;
   }
 
   /** Two trainers on one map who see each other fight (br_engage.c's BrEngage_Tick): the
@@ -505,7 +828,8 @@ export class Room {
    *  trainers standing still, neither in a fight nor in its grace. They turn to face each
    *  other, and the lower id is the side that challenged. */
   private engage(events: RoomEvent[]): void {
-    const free = this.actors.filter((a) => !a.bot && !a.battling && !a.m.action && this.tick >= a.calm);
+    if (this.ring().safari) return; // the Safari is for catching
+    const free = this.actors.filter((a) => !a.bot && !a.away && !a.battling && !a.m.action && this.tick >= a.calm);
     for (let i = 0; i < free.length; i++) {
       const a = free[i];
       if (a.battling) continue;
@@ -528,6 +852,28 @@ export class Room {
         break;
       }
     }
+    // A bot that sees a trainer (or is seen) walks up to no one: it challenges there and
+    // then, as a route trainer does (Bots engage players, DESIGN §10). Not one already
+    // beaten, fighting, mid-step or in its grace; nor one the trainer fled.
+    for (const h of free) {
+      if (h.battling) continue;
+      for (const b of this.actors) {
+        if (!b.bot || b.beaten || b.battling || b.m.action || this.tick < b.calm || b.m.spot.map !== h.m.spot.map) continue;
+        if (h.shun === b.id && this.tick < h.shunUntil) continue;
+        const look = (o: Actor) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing as Facing });
+        if (!eitherSees(this.world, look(h), look(b))) continue;
+        const dx = b.m.spot.x - h.m.spot.x, dy = b.m.spot.y - h.m.spot.y;
+        const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        h.m.facing = h.m.moveDir = toB;
+        b.m.facing = b.m.moveDir = BACK[toB];
+        h.battling = b.battling = true;
+        h.foe = b.id;
+        b.foe = h.id;
+        h.keys = h.last = b.keys = b.last = 0;
+        events.push({ type: 'fight', tick: this.tick, id: h.id, foe: b.id });
+        break;
+      }
+    }
   }
 
   /** One move of one actor on `bits`: sim.ts's frame, then what it landed on or pressed. */
@@ -542,7 +888,8 @@ export class Room {
         // (wanderers never jump), it only faces.
         a.m.facing = a.m.moveDir = dir;
         const r = this.stepFor(a)(a.m.spot, dir);
-        if (!r || r.hop) { a.last = bits; return; }
+        // A, from a bot on its way somewhere (bots.ts): it may jump a ledge, or SURF.
+        if (!r || ((r.hop || (r.water && !this.onWater(a))) && !(bits & KEY_A))) { a.last = bits; return; }
       }
     }
     const before = a.m.strides;
@@ -563,9 +910,26 @@ export class Room {
         const g = this.groundAt(a.m.spot.map, x, y);
         const b = g ? undefined : this.spillAt(a.m.spot.map, x, y);
         const foe = g || b ? undefined : this.facing(a);
-        if (g) {
+        const tr = foe ? undefined : this.traderAt(a.m.spot.map, x, y);
+        const boss = foe || tr ? undefined : leaderAt(a.m.spot.map, x, y);
+        if (boss && !this.bossDown(boss.n)) {
+          a.battling = true;
+          a.boss = boss.n + 1;
+          events.push({ type: 'boss', tick: this.tick, id: a.id, n: boss.n });
+        } else if (tr && !tr.t.busy) {
+          tr.t.busy = a.id;
+          a.battling = true;
+          events.push({ type: 'trade', tick: this.tick, id: a.id, n: tr.n, species: tr.t.species });
+        } else if (tr) {
+          // Somebody is trading with him: nothing.
+        } else if (g) {
           this.picked.set(g.key, a.id);
-          events.push({ type: 'item', tick: this.tick, id: a.id, key: g.key, item: g.item });
+          events.push({ type: 'item', tick: this.tick, id: a.id, key: g.key, item: g.item, ...(g.gift ? { gift: true } : {}) });
+        } else if (b?.legend) {
+          const mon = b.bag.mons![0];
+          this.picked.set(b.key, a.id);
+          a.battling = true;
+          events.push({ type: 'legend', tick: this.tick, id: a.id, key: b.key, species: mon.species, level: mon.level });
         } else if (b) {
           this.picked.set(b.key, a.id);
           events.push({ type: 'bag', tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name });
@@ -574,10 +938,33 @@ export class Room {
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
           events.push({ type: 'fight', tick: this.tick, id: a.id, foe: foe.id });
+        } else if (!foe && this.clerk(a)) {
+          events.push({ type: 'mart', tick: this.tick, id: a.id, map: a.m.spot.map });
+        } else if (!foe && a.m.facing === DIR_NORTH) {
+          // The nurse, across the counter (pkmn_center_nurse.inc).
+          const c = this.maps.get(a.m.spot.map)?.centre;
+          if (c && a.m.spot.x === c.counterX && a.m.spot.y === c.counterY) events.push({ type: 'nurse', tick: this.tick, id: a.id, map: a.m.spot.map });
         }
       }
     } else if (!a.m.action) a.arriving = false;
     a.last = bits;
+  }
+
+  /** An event's trader standing on a cell. */
+  traderAt(map: string, x: number, y: number): { n: number; t: Trader } | undefined {
+    for (const e of this.events) if (e.trader && e.map === map && e.trader.x === x && e.trader.y === y) return { n: e.n, t: e.trader };
+    return undefined;
+  }
+
+  private onWater(a: Actor): boolean {
+    return this.world.cell(a.m.spot.map, a.m.spot.x, a.m.spot.y) === CLASS_WATER;
+  }
+
+  /** The MART clerk `a` talks to: on the cell ahead, or across the counter there. */
+  private clerk(a: Actor): Clerk | undefined {
+    const [x, y] = this.ahead(a);
+    const map = a.m.spot.map;
+    return clerkAt(map, x, y) ?? (this.world.cell(map, x, y) === 1 ? clerkAt(map, 2 * x - a.m.spot.x, 2 * y - a.m.spot.y) : undefined);
   }
 
   /** The cell `a` faces, on its own map. */
@@ -597,10 +984,19 @@ export class Room {
    *  two can't both walk into one cell). */
   stepFor(a: Actor): StepFn {
     return (from, dir) => {
-      const r = this.base(from, dir);
+      // A bot can go anywhere a team could (Kanto's bots cross water): a wanderer keeps
+      // to land and off ledges all the same (Room.move).
+      const bits = a.bot ? 7 : a.field ?? 0;
+      const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir) : this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
+      // A townsperson stays out in the street.
+      if (a.bot && !this.places.has(r.to.map)) return null;
       const t = r.to;
-      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y)) return null;
+      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y)) return null;
+      // The Zone's gate is shut until the drop, both ways.
+      if (from.map.startsWith(SAFARI) !== t.map.startsWith(SAFARI) && this.ring().safari) return null;
+      const boss = leaderAt(t.map, t.x, t.y);
+      if (boss && !this.bossDown(boss.n)) return null;
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return null;
       return r;
     };
@@ -617,13 +1013,14 @@ export class Room {
       mix(m.facing); mix(m.moveDir); mix(m.runningState); mix(m.run ? 1 : 0); mix(m.strides);
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
-      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last);
+      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.boss ?? 0); mix(a.pick?.length ?? 0); mix(a.away ? 1 : 0);
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
     for (const [k, by] of this.picked) { mix(k); mix(by); }
     for (const b of this.bench) { mix(b.id); mix(b.skin); str(b.name); }
     const r = this.results;
-    mix(r.round); mix(r.winner); mix(r.wonAt ?? 0); mix(this.epoch);
+    mix(r.round); mix(r.winner); mix(r.wonAt ?? 0); mix(this.epoch); mix(this.opening); mix(this.duelAfter); for (const [n, w] of this.gyms) { mix(n); mix(w.length); }
+    for (const e of this.events) { mix(e.key); mix(e.x); mix(e.y); mix(e.species); if (e.trader) { mix(e.trader.x); mix(e.trader.y); mix(e.trader.species); mix(e.trader.busy); } }
     for (const [id] of r.entrants) mix(id);
     for (const f of r.fallen) { mix(f.id); str(f.by); mix((f.wild ? 1 : 0) | (f.left ? 2 : 0)); }
     for (const b of this.spills.values()) {
@@ -661,10 +1058,49 @@ export function layout(maps: readonly WorldMap[]): Map<string, { m: WorldMap; gx
   return placed;
 }
 
-/** A room over world.json's maps: walking on every outdoor map joined to Littleroot. */
+/** Doors a match keeps shut (br_match.c's sClosedDoors): BIRCH's LAB, the BATTLE TENTs,
+ *  the TRICK HOUSE, the SAFARI ZONE and the ELITE FOUR. */
+export const CLOSED_DOORS: ReadonlySet<string> = new Set([
+  'MAP_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB',
+  'MAP_FALLARBOR_TOWN_BATTLE_TENT_LOBBY', 'MAP_VERDANTURF_TOWN_BATTLE_TENT_LOBBY', 'MAP_SLATEPORT_CITY_BATTLE_TENT_LOBBY',
+  'MAP_ROUTE110_TRICK_HOUSE_ENTRANCE', 'MAP_ROUTE121_SAFARI_ZONE_ENTRANCE', 'MAP_EVER_GRANDE_CITY_HALL5',
+]);
+
+/** Every building and cave a trainer can walk into from the outdoor maps -- through
+ *  doors, stairs and cave mouths, floor after floor -- with the plane point (tiles) of the
+ *  outdoor cell its way in leaves from: the centre of that door's cell. Closed doors, and
+ *  what only they lead to, are left out. */
+export function interiors(all: readonly WorldMap[], outside: ReadonlyMap<string, { gx: number; gy: number }>): Map<string, { m: WorldMap; gx: number; gy: number }> {
+  const byId = new Map(all.map((m) => [m.id, m]));
+  const out = new Map<string, { m: WorldMap; gx: number; gy: number }>();
+  const queue = [...outside.keys()];
+  while (queue.length) {
+    const id = queue.shift()!;
+    const m = byId.get(id);
+    if (!m) continue;
+    const here = outside.get(id);
+    for (const w of m.warps ?? []) {
+      const to = byId.get(w.to);
+      if (!to || to.outdoor || CLOSED_DOORS.has(to.id) || out.has(to.id)) continue;
+      const at = here ? { gx: here.gx + w.x + 0.5, gy: here.gy + w.y + 0.5 } : out.get(id)!;
+      out.set(to.id, { m: to, gx: at.gx, gy: at.gy });
+      queue.push(to.id);
+    }
+  }
+  return out;
+}
+
+/** A room over world.json's maps: walking on every outdoor map joined to Littleroot, and
+ *  in every building and cave they lead into. */
 export function makeRoom(all: readonly WorldMap[], patches: PatchTable, seed: number, world?: World): Room {
   const placed = layout(all);
-  const maps = new Map([...placed].map(([id, p]) => [id, p.m]));
   const places = new Map([...placed].map(([id, p]) => [id, { gx: p.gx, gy: p.gy }]));
-  return new Room(world ?? new World(all as WorldMap[]), maps, patches, seed, places);
+  const inside = interiors(all, places);
+  // The Safari Zone, its own cluster (its gate is a closed door): the opening's.
+  const zone = all.filter((m) => m.id.startsWith(SAFARI));
+  const maps = new Map([...placed, ...inside].map(([id, p]) => [id, p.m]));
+  for (const m of zone) maps.set(m.id, m);
+  const anchors = new Map([...inside].map(([id, p]) => [id, { gx: p.gx, gy: p.gy }]));
+  for (const m of zone) anchors.set(m.id, { gx: -10000, gy: -10000 });
+  return new Room(world ?? new World(all as WorldMap[]), maps, patches, seed, places, anchors);
 }
