@@ -66,7 +66,9 @@ def main():
         return 2
     print("replay-check: %d messages, %d turn sums" % (len(msgs), len(sums)))
     with tempfile.TemporaryDirectory() as tmp:
-        path = os.path.join(tmp, "replay-watcher.txt")
+        # Named after the driver it checks: drive.sh writes frames/<name>/, and drive-all.sh
+        # runs spectate-replay-bot and spectate-replay-wild side by side.
+        path = os.path.join(tmp, "replay-watcher-%s.txt" % os.environ.get("BR_DRIVER", os.getpid()))
         with open(path, "w") as f:
             f.write(watcher(msgs))
         cmd = ["bash", os.path.join(HERE, "drive.sh"), path]
