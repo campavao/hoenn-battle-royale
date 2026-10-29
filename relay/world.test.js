@@ -86,11 +86,11 @@ test("/world: a link block goes to the trainer you are fighting, and nobody else
     }
     // Not fighting anybody: dropped.
     a.send({ t: "bt", q: 1, d: [1, 2, 3] });
-    // By the truck alice (10,10) and bob (9,10) stand side by side; cara a step behind.
-    // Past the join grace, alice turns west and sees bob.
+    // By the truck alice (10,10), bob (11,10) and cara (9,10) stand in a row facing south.
+    // Past the join grace, alice turns east and sees bob.
     await new Promise((r) => setTimeout(r, 5200));
     // (a trainer moves on its phone's inputs, one a frame: the turn, then standing)
-    a.send({ t: "in", s: 1, k: [4, ...Array(30).fill(0)] });
+    a.send({ t: "in", s: 1, k: [8, ...Array(30).fill(0)] });
     // ...once the turn has played out and the relay's room has them fighting.
     for (let i = 0; ; i++) {
       await new Promise((r) => setTimeout(r, 1100));

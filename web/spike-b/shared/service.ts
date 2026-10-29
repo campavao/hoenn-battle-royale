@@ -21,6 +21,8 @@ export interface ServiceOptions {
   cap: number;
   now: () => number;
   log: (line: string) => void;
+  /** Seconds a ring phase lasts, for a local test (the match's 120 otherwise). */
+  ringSecs?: number;
 }
 
 const FRAME_MS = 1000 / 60;
@@ -59,7 +61,7 @@ export class WorldService {
         if (m.t === 'join' && !id) {
           if (this.links.size >= this.opts.cap) { send({ t: 'full' }); link.close(); return; }
           const host = this.start();
-          const name = String(m.name ?? '').toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 10) || 'TRAINER';
+          const name = String(m.name ?? '').toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim().slice(0, 10);
           const skin = Number.isInteger(m.skin) && m.skin >= 0 && m.skin < 16 ? m.skin : 0;
           id = host.join(name, skin);
           this.links.set(id, { send: link.send, close: link.close, quiet: () => this.opts.now() - heard > QUIET_MS });
@@ -71,9 +73,9 @@ export class WorldService {
           if (!Number.isInteger(m.s) || m.s < 1 || !Array.isArray(m.k) || m.k.length > 120) return;
           this.host.input(id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
         } else if (m.t === 'end') {
-          this.host.end(id, m.fled === true);
+          this.host.end(id, m.fled === true, m.won === true);
         } else if (m.t === 'out') {
-          this.host.out(id, cleanBag(m.bag) ?? undefined);
+          this.host.out(id, cleanBag(m.bag) ?? undefined, Number.isInteger(m.by) && m.by! > 0 ? m.by : undefined, m.wild === true);
         } else if (m.t === 'drop') {
           if (Number.isInteger(m.k)) this.host.drop(id, m.k, cleanBag(m.rest) ?? undefined);
         } else if (m.t === 'bt') {
@@ -105,7 +107,9 @@ export class WorldService {
   private start(): Host {
     if (this.host) return this.host;
     const seed = (Math.floor(Math.random() * 0xfffffffe) + 1) >>> 0;
-    this.host = new Host(makeRoom(this.opts.maps, this.opts.patches, seed), this.opts.bots, this.opts.maps);
+    const room = makeRoom(this.opts.maps, this.opts.patches, seed);
+    if (this.opts.ringSecs) room.ringPhase = Math.round(this.opts.ringSecs * 60);
+    this.host = new Host(room, this.opts.bots, this.opts.maps);
     this.t0 = this.opts.now();
     this.timer = setInterval(() => this.pump(), 4);
     this.opts.log(`world: up, seed ${seed}, ${this.host.room.actors.length} bots`);

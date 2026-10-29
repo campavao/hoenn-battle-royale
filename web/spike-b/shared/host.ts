@@ -60,19 +60,20 @@ export class Host {
     }
   }
 
-  /** A new trainer, in Littleroot by the truck (or at `spot`), standing on the next frame. */
+  /** A new trainer, in Littleroot by the truck (or at `spot`), standing on the next frame
+   *  (or on the bench until the next round, when the fog has closed on this one). No name:
+   *  TRAINER and their number. */
   join(name: string, skin: number, spot?: Spot): number {
     const id = this.nextId++;
     if (!spot) {
-      const free = [[10, 10], [9, 10], [11, 10], [10, 11], [9, 11], [11, 11], [10, 12], [8, 10], [12, 10]];
       // Not where somebody stands, nor where a join this frame will put them.
-      const used = (x: number, y: number) =>
-        this.room.actors.some((a) => a.m.spot.map === 'MAP_LITTLEROOT_TOWN' && a.m.spot.x === x && a.m.spot.y === y) ||
-        this.pending.some((c) => c.c === 'join' && c.spot.map === 'MAP_LITTLEROOT_TOWN' && c.spot.x === x && c.spot.y === y);
-      const at = free.find(([x, y]) => !used(x, y)) ?? [10, 10];
-      spot = { map: 'MAP_LITTLEROOT_TOWN', x: at[0], y: at[1] };
+      const used = (s: Spot) =>
+        this.room.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y) ||
+        this.pending.some((c) => c.c === 'join' && c.spot.map === s.map && c.spot.x === s.x && c.spot.y === s.y);
+      const near = this.room.truck();
+      spot = near.find((s) => !used(s)) ?? near[0];
     }
-    this.pending.push({ c: 'join', id, bot: false, name, skin, spot, facing: 1 });
+    this.pending.push({ c: 'join', id, bot: false, name: name || `TRAINER ${id}`.slice(0, 10), skin, spot, facing: 1 });
     this.players.set(id, { id, queue: [], seq: 0, started: false, waited: 0 });
     return id;
   }
@@ -99,8 +100,8 @@ export class Host {
   }
 
   /** The phone's battle is over: its trainer (and the bot) walk again. */
-  end(id: number, fled = false): void {
-    if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: 'end', id, ...(fled ? { fled: true } : {}) });
+  end(id: number, fled = false, won = false): void {
+    if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: 'end', id, ...(fled ? { fled: true } : {}), ...(won ? { won: true } : {}) });
   }
 
   /** The ball `key` would not go in the phone's bag: back on the ground. A bag goes back
@@ -112,9 +113,15 @@ export class Host {
   }
 
   /** The phone's team is down: its trainer leaves the map, what they carried where they
-   *  stood, and the phone watches. */
-  out(id: number, bag?: Bag): void {
-    if (this.players.has(id) && this.room.actor(id)) this.pending.push(bag ? { c: 'out', id, bag } : { c: 'out', id });
+   *  stood, and the phone watches. `by` the trainer or bot that beat them, `wild` a wild
+   *  POKeMON did. */
+  out(id: number, bag?: Bag, by?: number, wild?: boolean): void {
+    if (!this.players.has(id) || !this.room.actor(id)) return;
+    const c: Extract<Command, { c: 'out' }> = { c: 'out', id };
+    if (bag) c.bag = bag;
+    if (by) c.by = by;
+    if (wild) c.wild = true;
+    this.pending.push(c);
   }
 
   /** One frame. The record goes to every mirror; `acks` is each phone's last input used. */
@@ -156,6 +163,16 @@ export class Host {
       if (!take) stall.push(a.id);
       else if (take.length !== 1 || take[0] !== a.keys) ins.push([a.id, ...take]);
       acks.set(a.id, p.seq);
+    }
+    // A phone on the bench walks nobody: its keys are spent as they come, so it comes
+    // back at the next round with nothing old to replay.
+    for (const p of this.players.values()) {
+      if (acks.has(p.id)) continue;
+      p.seq += p.queue.length;
+      p.queue.length = 0;
+      p.started = false;
+      p.waited = 0;
+      acks.set(p.id, p.seq);
     }
     const events = room.step(used);
     const frame: Frame = { tick: room.tick };

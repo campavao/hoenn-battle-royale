@@ -1167,6 +1167,8 @@ var BACK = { 1: 2, 2: 1, 3: 4, 4: 3 };
 var SPILL_KEY = 1 << 20;
 var GROUND_PER_MAP = 6;
 var REGROW = 60 * 90;
+var AFTER_WIN = 60 * 15;
+var TRUCK = 40;
 var DEALS = /* @__PURE__ */ new Map();
 var REACH = /* @__PURE__ */ new Map();
 var RING_PHASE = 60 * 120;
@@ -1193,24 +1195,34 @@ var Room = class {
   picked = /* @__PURE__ */ new Map();
   /** Bags trainers who went out left, by key; one is lying while `picked` has not got it. */
   spills = /* @__PURE__ */ new Map();
+  bench = [];
+  results = { round: 0, entrants: [], fallen: [], winner: 0 };
   base;
   dealt = null;
   state() {
-    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]) };
+    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}, ...this.epoch ? { epoch: this.epoch } : {} };
   }
   load(s) {
     this.tick = s.tick;
+    this.ringPhase = s.ringPhase ?? RING_PHASE;
+    this.epoch = s.epoch ?? 0;
     this.actors = structuredClone(s.actors);
     this.taken = new Map(s.taken);
     this.picked = new Map(s.picked ?? []);
     this.spills = new Map(structuredClone(s.spills ?? []).map((b) => [b.key, b]));
+    this.bench = structuredClone(s.bench ?? []);
+    this.results = structuredClone(s.results ?? { round: 0, entrants: [], fallen: [], winner: 0 });
   }
   actor(id) {
     return this.actors.find((a) => a.id === id);
   }
   apply(cmd) {
     if (cmd.c === "join") {
-      if (this.actor(cmd.id)) return;
+      if (this.actor(cmd.id) || this.bench.some((b) => b.id === cmd.id)) return;
+      if (this.results.entrants.length && !cmd.bot) {
+        this.bench.push({ id: cmd.id, name: cmd.name, skin: cmd.skin });
+        return;
+      }
       const a = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: this.tick + JOIN_GRACE, shun: 0, shunUntil: 0, arriving: false };
       this.actors.push(a);
       this.actors.sort((p, q) => p.id - q.id);
@@ -1228,6 +1240,11 @@ var Room = class {
       const foe = a?.foe ? this.actor(a.foe) : void 0;
       if (foe?.bot) foe.battling = false;
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
+      if (cmd.c === "leave") this.bench = this.bench.filter((b) => b.id !== cmd.id);
+      if (!a || a.bot) return;
+      if (cmd.c === "out") this.bench.push({ id: a.id, name: a.name, skin: a.skin });
+      if (cmd.c === "leave") this.fall(a, "", { left: true });
+      else this.fall(a, cmd.by ? this.actor(cmd.by)?.name ?? this.bench.find((b) => b.id === cmd.by)?.name ?? "" : "", cmd.wild ? { wild: true } : {});
     } else {
       const a = this.actor(cmd.id);
       if (!a || !a.battling) return;
@@ -1239,7 +1256,13 @@ var Room = class {
         a.shunUntil = this.tick + LOCKOUT;
       }
       const foe = a.foe ? this.actor(a.foe) : void 0;
-      if (foe?.bot) foe.battling = false;
+      if (foe?.bot) {
+        foe.battling = false;
+        if (cmd.won && !foe.beaten) {
+          foe.beaten = true;
+          this.fall(foe, a.name);
+        }
+      }
       a.foe = 0;
     }
   }
@@ -1314,8 +1337,10 @@ var Room = class {
   /** The ring this frame (or at `tick`). */
   ring(tick2 = this.tick) {
     const len = this.ringPhase;
-    const round = Math.floor(tick2 / (RING_STEPS.length * len));
-    const t = tick2 - round * RING_STEPS.length * len;
+    const cycle = RING_STEPS.length * len;
+    const n = Math.floor((tick2 - this.epoch) / cycle);
+    const round = this.results.round + n;
+    const t = tick2 - this.epoch - n * cycle;
     const phase = Math.floor(t / len);
     const { cx, cy, far } = this.centre(round);
     const at = (i) => RING_STEPS[i] === Infinity || RING_STEPS[i] < 0 ? RING_STEPS[i] : RING_STEPS[i] * far;
@@ -1324,6 +1349,8 @@ var Room = class {
   }
   /** Frames a phase lasts: RING_PHASE, or shorter for a solo test (`?ring=` seconds). */
   ringPhase = RING_PHASE;
+  /** The frame this round started on. */
+  epoch = 0;
   centres = /* @__PURE__ */ new Map();
   /** A round's centre: a cell a trainer can stand on, from the seed; and how far the
    *  farthest reachable cell is from it. */
@@ -1377,6 +1404,25 @@ var Room = class {
    *  on the same tile (net.ts). */
   step(ins) {
     this.tick += 1;
+    const ring = this.ring();
+    const was = this.tick - 1 >= this.epoch ? this.ring(this.tick - 1) : { ...ring, phase: -1 };
+    const r = this.results;
+    if (ring.round !== was.round || r.wonAt !== void 0 && this.tick >= r.wonAt + AFTER_WIN) this.newRound(r.round + 1);
+    else if (ring.phase !== was.phase) {
+      if (ring.phase === 1 && !r.entrants.length) r.entrants = this.actors.map((a) => [a.id, a.name]);
+      for (const a of this.actors) {
+        if (!a.bot || a.beaten || a.battling || !this.inFog(a.m.spot, ring)) continue;
+        a.beaten = true;
+        this.fall(a, "");
+      }
+    }
+    if (!r.winner && r.entrants.length >= 2) {
+      const alive = r.entrants.filter(([id]) => !r.fallen.some((f) => f.id === id));
+      if (alive.length === 1) {
+        r.winner = alive[0][0];
+        r.wonAt = this.tick;
+      }
+    }
     for (const [key, at] of this.taken) if (this.tick - at >= REGROW) this.taken.delete(key);
     const events = [];
     for (const a of this.actors) {
@@ -1385,6 +1431,46 @@ var Room = class {
     }
     this.engage(events);
     return events;
+  }
+  /** `a` is out of this round's match (once; nothing after the win). */
+  fall(a, by, how = {}) {
+    const r = this.results;
+    if (r.winner || !r.entrants.some(([id]) => id === a.id) || r.fallen.some((f) => f.id === a.id)) return;
+    r.fallen.push({ id: a.id, name: a.name, by, ...how });
+  }
+  /** The cells by the truck that no bot stands on: along its row first, nearest first, so
+   *  trainers stood side by side facing south do not see each other (and fight the moment
+   *  their grace is up). */
+  truck() {
+    const d = (s) => Math.abs(s.y - 10) * 64 + Math.abs(s.x - 10) * 2 + (s.x < 10 ? 1 : 0);
+    const near = this.reachable().filter((s) => s.map === "MAP_LITTLEROOT_TOWN").sort((p, q) => d(p) - d(q)).slice(0, TRUCK);
+    return near.filter((s) => !this.actors.some((a) => a.bot && a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y));
+  }
+  /** The fog lifted: a new match. Every trainer, out or in, back at the truck with the
+   *  join's grace; the balls, spots and bags back as dealt; the bots to be fought again. */
+  newRound(round) {
+    const humans = [];
+    for (const a of this.actors) if (!a.bot) humans.push(a);
+    for (const b of this.bench) {
+      humans.push({ id: b.id, bot: false, name: b.name, skin: b.skin, m: newMover({ map: "MAP_LITTLEROOT_TOWN", x: 10, y: 10 }, 1), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: 0, shun: 0, shunUntil: 0, arriving: false });
+    }
+    humans.sort((p, q) => p.id - q.id);
+    this.bench = [];
+    const spots = this.truck();
+    humans.forEach((a, i) => {
+      a.m = newMover(spots[i % spots.length], 1);
+      a.calm = this.tick + JOIN_GRACE;
+      a.shun = a.shunUntil = 0;
+      a.arriving = false;
+    });
+    this.actors = [...this.actors.filter((a) => a.bot), ...humans];
+    this.actors.sort((p, q) => p.id - q.id);
+    for (const a of this.actors) if (a.bot) a.beaten = false;
+    this.taken.clear();
+    this.picked.clear();
+    this.spills.clear();
+    this.results = { round, entrants: [], fallen: [], winner: 0 };
+    this.epoch = this.tick;
   }
   /** Two trainers on one map who see each other fight (br_engage.c's BrEngage_Tick): the
    *  eyeline both ways, BR_SIGHT_RANGE cells, stopped by collision (bots/sight.ts). Only
@@ -1458,7 +1544,7 @@ var Room = class {
           this.picked.set(b.key, a.id);
           events.push({ type: "bag", tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name });
         } else if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
-          a.battling = foe.battling = foe.beaten = true;
+          a.battling = foe.battling = true;
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
           events.push({ type: "fight", tick: this.tick, id: a.id, foe: foe.id });
@@ -1534,15 +1620,31 @@ var Room = class {
       mix2(k);
       mix2(by);
     }
+    for (const b of this.bench) {
+      mix2(b.id);
+      mix2(b.skin);
+      str(b.name);
+    }
+    const r = this.results;
+    mix2(r.round);
+    mix2(r.winner);
+    mix2(r.wonAt ?? 0);
+    mix2(this.epoch);
+    for (const [id] of r.entrants) mix2(id);
+    for (const f of r.fallen) {
+      mix2(f.id);
+      str(f.by);
+      mix2((f.wild ? 1 : 0) | (f.left ? 2 : 0));
+    }
     for (const b of this.spills.values()) {
       mix2(b.key);
       str(b.map);
       mix2(b.x);
       mix2(b.y);
       mix2(b.bag.money);
-      for (const r of b.bag.items) {
-        mix2(r.id);
-        mix2(r.n);
+      for (const r2 of b.bag.items) {
+        mix2(r2.id);
+        mix2(r2.n);
       }
       for (const m of b.bag.mons ?? []) {
         mix2(m.species);
@@ -1664,16 +1766,17 @@ var Host = class {
   brains = /* @__PURE__ */ new Map();
   pending = [];
   nextId = 1;
-  /** A new trainer, in Littleroot by the truck (or at `spot`), standing on the next frame. */
+  /** A new trainer, in Littleroot by the truck (or at `spot`), standing on the next frame
+   *  (or on the bench until the next round, when the fog has closed on this one). No name:
+   *  TRAINER and their number. */
   join(name, skin, spot) {
     const id = this.nextId++;
     if (!spot) {
-      const free = [[10, 10], [9, 10], [11, 10], [10, 11], [9, 11], [11, 11], [10, 12], [8, 10], [12, 10]];
-      const used = (x, y) => this.room.actors.some((a) => a.m.spot.map === "MAP_LITTLEROOT_TOWN" && a.m.spot.x === x && a.m.spot.y === y) || this.pending.some((c) => c.c === "join" && c.spot.map === "MAP_LITTLEROOT_TOWN" && c.spot.x === x && c.spot.y === y);
-      const at = free.find(([x, y]) => !used(x, y)) ?? [10, 10];
-      spot = { map: "MAP_LITTLEROOT_TOWN", x: at[0], y: at[1] };
+      const used = (s) => this.room.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y) || this.pending.some((c) => c.c === "join" && c.spot.map === s.map && c.spot.x === s.x && c.spot.y === s.y);
+      const near = this.room.truck();
+      spot = near.find((s) => !used(s)) ?? near[0];
     }
-    this.pending.push({ c: "join", id, bot: false, name, skin, spot, facing: 1 });
+    this.pending.push({ c: "join", id, bot: false, name: name || `TRAINER ${id}`.slice(0, 10), skin, spot, facing: 1 });
     this.players.set(id, { id, queue: [], seq: 0, started: false, waited: 0 });
     return id;
   }
@@ -1698,8 +1801,8 @@ var Host = class {
     }
   }
   /** The phone's battle is over: its trainer (and the bot) walk again. */
-  end(id, fled = false) {
-    if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: "end", id, ...fled ? { fled: true } : {} });
+  end(id, fled = false, won = false) {
+    if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: "end", id, ...fled ? { fled: true } : {}, ...won ? { won: true } : {} });
   }
   /** The ball `key` would not go in the phone's bag: back on the ground. A bag goes back
    *  with what did not fit, never more than it held. */
@@ -1709,9 +1812,15 @@ var Host = class {
     this.pending.push(was && rest ? { c: "drop", id, key, rest: within(rest, was) } : { c: "drop", id, key });
   }
   /** The phone's team is down: its trainer leaves the map, what they carried where they
-   *  stood, and the phone watches. */
-  out(id, bag) {
-    if (this.players.has(id) && this.room.actor(id)) this.pending.push(bag ? { c: "out", id, bag } : { c: "out", id });
+   *  stood, and the phone watches. `by` the trainer or bot that beat them, `wild` a wild
+   *  POKeMON did. */
+  out(id, bag, by, wild) {
+    if (!this.players.has(id) || !this.room.actor(id)) return;
+    const c = { c: "out", id };
+    if (bag) c.bag = bag;
+    if (by) c.by = by;
+    if (wild) c.wild = true;
+    this.pending.push(c);
   }
   /** One frame. The record goes to every mirror; `acks` is each phone's last input used. */
   advance() {
@@ -1756,6 +1865,14 @@ var Host = class {
       if (!take) stall.push(a.id);
       else if (take.length !== 1 || take[0] !== a.keys) ins.push([a.id, ...take]);
       acks.set(a.id, p.seq);
+    }
+    for (const p of this.players.values()) {
+      if (acks.has(p.id)) continue;
+      p.seq += p.queue.length;
+      p.queue.length = 0;
+      p.started = false;
+      p.waited = 0;
+      acks.set(p.id, p.seq);
     }
     const events = room.step(used);
     const frame = { tick: room.tick };
@@ -1814,7 +1931,7 @@ var WorldService = class {
             return;
           }
           const host = this.start();
-          const name = String(m.name ?? "").toUpperCase().replace(/[^A-Z0-9 ]/g, "").slice(0, 10) || "TRAINER";
+          const name = String(m.name ?? "").toUpperCase().replace(/[^A-Z0-9 ]/g, "").trim().slice(0, 10);
           const skin = Number.isInteger(m.skin) && m.skin >= 0 && m.skin < 16 ? m.skin : 0;
           id = host.join(name, skin);
           this.links.set(id, { send: link.send, close: link.close, quiet: () => this.opts.now() - heard > QUIET_MS });
@@ -1826,9 +1943,9 @@ var WorldService = class {
           if (!Number.isInteger(m.s) || m.s < 1 || !Array.isArray(m.k) || m.k.length > 120) return;
           this.host.input(id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
         } else if (m.t === "end") {
-          this.host.end(id, m.fled === true);
+          this.host.end(id, m.fled === true, m.won === true);
         } else if (m.t === "out") {
-          this.host.out(id, cleanBag(m.bag) ?? void 0);
+          this.host.out(id, cleanBag(m.bag) ?? void 0, Number.isInteger(m.by) && m.by > 0 ? m.by : void 0, m.wild === true);
         } else if (m.t === "drop") {
           if (Number.isInteger(m.k)) this.host.drop(id, m.k, cleanBag(m.rest) ?? void 0);
         } else if (m.t === "bt") {
@@ -1857,7 +1974,9 @@ var WorldService = class {
   start() {
     if (this.host) return this.host;
     const seed = Math.floor(Math.random() * 4294967294) + 1 >>> 0;
-    this.host = new Host(makeRoom(this.opts.maps, this.opts.patches, seed), this.opts.bots, this.opts.maps);
+    const room = makeRoom(this.opts.maps, this.opts.patches, seed);
+    if (this.opts.ringSecs) room.ringPhase = Math.round(this.opts.ringSecs * 60);
+    this.host = new Host(room, this.opts.bots, this.opts.maps);
     this.t0 = this.opts.now();
     this.timer = setInterval(() => this.pump(), 4);
     this.opts.log(`world: up, seed ${seed}, ${this.host.room.actors.length} bots`);

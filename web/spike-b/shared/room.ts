@@ -18,6 +18,10 @@
 // centre. It is the room's tick and seed and nothing else, so every phone has the same
 // ring without a word on the wire. Outside it the page bleeds the team (main.ts).
 //
+// Each fog cycle is a match (Cam, 10-29). Whoever is on the map when the fog first closes
+// is in it; a trainer who comes in later, or goes out, waits on the bench and watches.
+// The last one standing wins. When the fog lifts, everybody starts again at the truck.
+//
 // Items lie about as item balls (match/scatter.ts's table, a few on every map), dealt
 // from the seed on cells a trainer can walk to from Littleroot. A ball is solid, as the
 // ROM's are; A at one takes it, for that trainer and off everybody's map.
@@ -109,14 +113,16 @@ export type Command =
   | { c: 'join'; id: number; bot: boolean; name: string; skin: number; spot: Spot; facing: number }
   | { c: 'leave'; id: number }
   /** `fled`: the fight never got going or was run from (a link that never answered,
-   *  a forfeit): that pair keeps apart a while (BrEngage_NoAnswer). */
-  | { c: 'end'; id: number; fled?: boolean }
+   *  a forfeit): that pair keeps apart a while (BrEngage_NoAnswer). `won`: a bot was
+   *  beaten, and is out of the round. */
+  | { c: 'end'; id: number; fled?: boolean; won?: boolean }
   /** The ball `key` would not go in `id`'s bag: it lies where it was (POK-294, nothing
    *  leaves the match). A bag goes back down holding `rest`, what did not fit. */
   | { c: 'drop'; id: number; key: number; rest?: Bag }
   /** `id`'s team is down (the fog, or a lost battle): off the map, watching. What they
-   *  carried lies where they stood (POK-232). */
-  | { c: 'out'; id: number; bag?: Bag };
+   *  carried lies where they stood (POK-232). `by` the trainer or bot that beat them,
+   *  `wild` a wild POKeMON did; neither, the fog. */
+  | { c: 'out'; id: number; bag?: Bag; by?: number; wild?: boolean };
 
 /** The marked spots grow back: the ring's phase does it in the game; here, a while. */
 export const REGROW = 60 * 90;
@@ -131,7 +137,32 @@ export interface RoomState {
   picked?: [number, number][];
   /** Bags dropped by trainers who are out, taken or not (`picked` says). */
   spills?: Spill[];
+  bench?: Benched[];
+  results?: Results;
+  /** Frames a ring phase lasts, when not RING_PHASE (a test's quicker fog). */
+  ringPhase?: number;
+  /** The frame this round started on (a win starts the next early). */
+  epoch?: number;
 }
+
+/** A trainer in the world but not on the map: out this round, or come in after the fog
+ *  closed. Back at the truck when it lifts. */
+export interface Benched { id: number; name: string; skin: number }
+
+/** One who went out of a round: what beat them (a name; '' for the fog), or `left`. */
+export interface Fallen { id: number; name: string; by: string; wild?: boolean; left?: boolean }
+
+/** A round as a match: who was in when the fog closed -- trainers and bots, as a match's
+ *  seats are (director.ts aliveSeats) -- who went out in what order, and the last one
+ *  standing (0 until there is one), and when. Nobody on the map when the fog closes: no
+ *  entrants, the round is nobody's, and joins go straight in until the next. */
+export interface Results { round: number; entrants: [number, string][]; fallen: Fallen[]; winner: number; wonAt?: number }
+
+/** After a win the next round starts this soon (Cam: the next match promptly). */
+export const AFTER_WIN = 60 * 15;
+
+/** The cells by the truck new trainers stand on, nearest first. */
+const TRUCK = 40;
 
 const DEALS = new Map<string, ReadonlyMap<string, Ground>>();
 /** Every cell a trainer can walk to from Littleroot, per set of maps. */
@@ -159,6 +190,8 @@ export class Room {
   picked = new Map<number, number>();
   /** Bags trainers who went out left, by key; one is lying while `picked` has not got it. */
   spills = new Map<number, Spill>();
+  bench: Benched[] = [];
+  results: Results = { round: 0, entrants: [], fallen: [], winner: 0 };
   private readonly base: StepFn;
   private dealt: ReadonlyMap<string, Ground> | null = null;
 
@@ -175,15 +208,19 @@ export class Room {
   }
 
   state(): RoomState {
-    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]) };
+    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...(this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}), ...(this.epoch ? { epoch: this.epoch } : {}) };
   }
 
   load(s: RoomState): void {
     this.tick = s.tick;
+    this.ringPhase = s.ringPhase ?? RING_PHASE;
+    this.epoch = s.epoch ?? 0;
     this.actors = structuredClone(s.actors);
     this.taken = new Map(s.taken);
     this.picked = new Map(s.picked ?? []);
     this.spills = new Map(structuredClone(s.spills ?? []).map((b) => [b.key, b]));
+    this.bench = structuredClone(s.bench ?? []);
+    this.results = structuredClone(s.results ?? { round: 0, entrants: [], fallen: [], winner: 0 });
   }
 
   actor(id: number): Actor | undefined {
@@ -192,7 +229,9 @@ export class Room {
 
   apply(cmd: Command): void {
     if (cmd.c === 'join') {
-      if (this.actor(cmd.id)) return;
+      if (this.actor(cmd.id) || this.bench.some((b) => b.id === cmd.id)) return;
+      // The fog has closed on this round: in from the next.
+      if (this.results.entrants.length && !cmd.bot) { this.bench.push({ id: cmd.id, name: cmd.name, skin: cmd.skin }); return; }
       const a: Actor = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: this.tick + JOIN_GRACE, shun: 0, shunUntil: 0, arriving: false };
       // Ordered by id, on every machine: who moves first decides who gets a contested cell.
       this.actors.push(a);
@@ -215,6 +254,11 @@ export class Room {
       const foe = a?.foe ? this.actor(a.foe) : undefined;
       if (foe?.bot) foe.battling = false;
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
+      if (cmd.c === 'leave') this.bench = this.bench.filter((b) => b.id !== cmd.id);
+      if (!a || a.bot) return;
+      if (cmd.c === 'out') this.bench.push({ id: a.id, name: a.name, skin: a.skin });
+      if (cmd.c === 'leave') this.fall(a, '', { left: true });
+      else this.fall(a, cmd.by ? this.actor(cmd.by)?.name ?? this.bench.find((b) => b.id === cmd.by)?.name ?? '' : '', cmd.wild ? { wild: true } : {});
     } else {
       const a = this.actor(cmd.id);
       if (!a || !a.battling) return;
@@ -223,7 +267,12 @@ export class Room {
       a.calm = this.tick + GRACE;
       if (cmd.fled && a.foe) { a.shun = a.foe; a.shunUntil = this.tick + LOCKOUT; }
       const foe = a.foe ? this.actor(a.foe) : undefined;
-      if (foe?.bot) foe.battling = false;
+      if (foe?.bot) {
+        foe.battling = false;
+        // Beaten, and out of the round (the page says nothing of a fight that ran over
+        // into a new round: that was the old round's).
+        if (cmd.won && !foe.beaten) { foe.beaten = true; this.fall(foe, a.name); }
+      }
       a.foe = 0;
     }
   }
@@ -303,8 +352,10 @@ export class Room {
   /** The ring this frame (or at `tick`). */
   ring(tick = this.tick): Ring {
     const len = this.ringPhase;
-    const round = Math.floor(tick / (RING_STEPS.length * len));
-    const t = tick - round * RING_STEPS.length * len;
+    const cycle = RING_STEPS.length * len;
+    const n = Math.floor((tick - this.epoch) / cycle);
+    const round = this.results.round + n;
+    const t = tick - this.epoch - n * cycle;
     const phase = Math.floor(t / len);
     const { cx, cy, far } = this.centre(round);
     const at = (i: number) => (RING_STEPS[i] === Infinity || RING_STEPS[i] < 0 ? RING_STEPS[i] : RING_STEPS[i] * far);
@@ -314,6 +365,8 @@ export class Room {
 
   /** Frames a phase lasts: RING_PHASE, or shorter for a solo test (`?ring=` seconds). */
   ringPhase = RING_PHASE;
+  /** The frame this round started on. */
+  epoch = 0;
 
   private centres = new Map<number, { cx: number; cy: number; far: number }>();
   /** A round's centre: a cell a trainer can stand on, from the seed; and how far the
@@ -371,6 +424,28 @@ export class Room {
    *  on the same tile (net.ts). */
   step(ins?: ReadonlyMap<number, readonly number[]>): RoomEvent[] {
     this.tick += 1;
+    const ring = this.ring();
+    // The round's first frame has no frame before it in the round.
+    const was = this.tick - 1 >= this.epoch ? this.ring(this.tick - 1) : { ...ring, phase: -1 };
+    const r = this.results;
+    if (ring.round !== was.round || (r.wonAt !== undefined && this.tick >= r.wonAt + AFTER_WIN)) this.newRound(r.round + 1);
+    else if (ring.phase !== was.phase) {
+      // The fog closes for the first time: who is on the map is the match.
+      if (ring.phase === 1 && !r.entrants.length) r.entrants = this.actors.map((a) => [a.id, a.name]);
+      // Bots do not bleed here: one the ring closes on is out (in a match the fog takes
+      // them over a few bites; here, at once).
+      for (const a of this.actors) {
+        if (!a.bot || a.beaten || a.battling || !this.inFog(a.m.spot, ring)) continue;
+        a.beaten = true;
+        this.fall(a, '');
+      }
+    }
+    // The last one standing, once the frame's goings are all in (the last two out on one
+    // frame: neither).
+    if (!r.winner && r.entrants.length >= 2) {
+      const alive = r.entrants.filter(([id]) => !r.fallen.some((f) => f.id === id));
+      if (alive.length === 1) { r.winner = alive[0][0]; r.wonAt = this.tick; }
+    }
     for (const [key, at] of this.taken) if (this.tick - at >= REGROW) this.taken.delete(key);
     const events: RoomEvent[] = [];
     for (const a of this.actors) {
@@ -379,6 +454,50 @@ export class Room {
     }
     this.engage(events);
     return events;
+  }
+
+  /** `a` is out of this round's match (once; nothing after the win). */
+  private fall(a: Actor, by: string, how: { wild?: boolean; left?: boolean } = {}): void {
+    const r = this.results;
+    if (r.winner || !r.entrants.some(([id]) => id === a.id) || r.fallen.some((f) => f.id === a.id)) return;
+    r.fallen.push({ id: a.id, name: a.name, by, ...how });
+  }
+
+  /** The cells by the truck that no bot stands on: along its row first, nearest first, so
+   *  trainers stood side by side facing south do not see each other (and fight the moment
+   *  their grace is up). */
+  truck(): Spot[] {
+    const d = (s: Spot) => Math.abs(s.y - 10) * 64 + Math.abs(s.x - 10) * 2 + (s.x < 10 ? 1 : 0);
+    const near = this.reachable().filter((s) => s.map === 'MAP_LITTLEROOT_TOWN').sort((p, q) => d(p) - d(q)).slice(0, TRUCK);
+    return near.filter((s) => !this.actors.some((a) => a.bot && a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y));
+  }
+
+  /** The fog lifted: a new match. Every trainer, out or in, back at the truck with the
+   *  join's grace; the balls, spots and bags back as dealt; the bots to be fought again. */
+  private newRound(round: number): void {
+    const humans: Actor[] = [];
+    for (const a of this.actors) if (!a.bot) humans.push(a);
+    for (const b of this.bench) {
+      humans.push({ id: b.id, bot: false, name: b.name, skin: b.skin, m: newMover({ map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 }, 1), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: 0, shun: 0, shunUntil: 0, arriving: false });
+    }
+    humans.sort((p, q) => p.id - q.id);
+    this.bench = [];
+    const spots = this.truck();
+    humans.forEach((a, i) => {
+      // Somebody still in a battle of the round before ends it where they now stand.
+      a.m = newMover(spots[i % spots.length], 1);
+      a.calm = this.tick + JOIN_GRACE;
+      a.shun = a.shunUntil = 0;
+      a.arriving = false;
+    });
+    this.actors = [...this.actors.filter((a) => a.bot), ...humans];
+    this.actors.sort((p, q) => p.id - q.id);
+    for (const a of this.actors) if (a.bot) a.beaten = false;
+    this.taken.clear();
+    this.picked.clear();
+    this.spills.clear();
+    this.results = { round, entrants: [], fallen: [], winner: 0 };
+    this.epoch = this.tick;
   }
 
   /** Two trainers on one map who see each other fight (br_engage.c's BrEngage_Tick): the
@@ -451,7 +570,7 @@ export class Room {
           this.picked.set(b.key, a.id);
           events.push({ type: 'bag', tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name });
         } else if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
-          a.battling = foe.battling = foe.beaten = true;
+          a.battling = foe.battling = true;
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
           events.push({ type: 'fight', tick: this.tick, id: a.id, foe: foe.id });
@@ -502,6 +621,11 @@ export class Room {
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
     for (const [k, by] of this.picked) { mix(k); mix(by); }
+    for (const b of this.bench) { mix(b.id); mix(b.skin); str(b.name); }
+    const r = this.results;
+    mix(r.round); mix(r.winner); mix(r.wonAt ?? 0); mix(this.epoch);
+    for (const [id] of r.entrants) mix(id);
+    for (const f of r.fallen) { mix(f.id); str(f.by); mix((f.wild ? 1 : 0) | (f.left ? 2 : 0)); }
     for (const b of this.spills.values()) {
       mix(b.key); str(b.map); mix(b.x); mix(b.y); mix(b.bag.money);
       for (const r of b.bag.items) { mix(r.id); mix(r.n); }

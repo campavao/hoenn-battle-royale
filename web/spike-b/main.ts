@@ -185,7 +185,7 @@ const battleNote = document.getElementById('battle-note')!;
 const gbaCanvas = document.getElementById('gba') as HTMLCanvasElement;
 let rom: RomBattles | null = null;
 let artMs = 0;
-let battle: { foe: Actor | null; shownAt: number; foeGone?: boolean; heardAt?: number } | null = null;
+let battle: { foe: Actor | null; shownAt: number; foeGone?: boolean; heardAt?: number; round: number } | null = null;
 /** The ROM has the screen for a dropped bag's team (rom.team). */
 let swapping = false;
 let calmUntil = 0;
@@ -196,7 +196,7 @@ const handoff: number[] = []; // ms from the trigger to the ROM's first battle f
  *  screen back when it is over. */
 function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>): void {
   held.clear();
-  battle = { foe, shownAt: performance.now() };
+  battle = { foe, shownAt: performance.now(), round: link.room.results.round };
   if (!rom) {
     battleEl.classList.add('on');
     battleNote.textContent = 'The game is still loading. Try again in a moment.';
@@ -417,8 +417,12 @@ function endBattle(r: Fought | null): void {
   // A fight with a trainer that never got going, or was run from (a forfeit): we keep
   // apart a while, as the match's fleer does, or the two would engage again at once.
   const duel = !!battle?.foe && !battle.foe.bot;
-  link.end(duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f)));
+  // A fight that ran over into a new round was the old round's: it neither beats a bot
+  // nor puts anybody out of this one (the new round's fresh team is already on its way).
+  const stale = !!battle && battle.round !== link.room.results.round;
+  link.end(duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f)), !stale && !!battle?.foe?.bot && !!r?.ok && r.outcome === 1);
   const wild = battle && !battle.foe;
+  const by = battle?.foe?.id;
   battle = null;
   held.clear();
   pressed.clear();
@@ -427,7 +431,7 @@ function endBattle(r: Fought | null): void {
   if (r && !r.ok) lastResult = 'last battle: the ROM did not start it';
   else if (r) lastResult = `last battle: ${wild ? `wild #${r.species} Lv${r.level}, ` : ''}${OUTCOME[r.outcome] ?? r.outcome}`;
   // A whiteout is the end of a trainer's match (Kanto's rules, DESIGN.md §10).
-  if (r?.ok && (r.outcome === 2 || r.outcome === 3)) goOut(r.outcome === 2 ? 'Your team lost the battle.' : 'Your team went down with theirs.');
+  if (!stale && r?.ok && (r.outcome === 2 || r.outcome === 3)) goOut(r.outcome === 2 ? 'Your team lost the battle.' : 'Your team went down with theirs.', by, !!wild);
 }
 
 /** How long a trainer the room says is no longer fighting me may go quiet before the
@@ -462,19 +466,83 @@ function inFogNow(): boolean {
 }
 
 /** Out of the match: off the map, watching, and a way back in. */
-function goOut(why: string): void {
-  if (isOut) return;
+function goOut(why: string, by?: number, wild?: boolean): void {
+  if (isOut || !link.room.actor(link.me)) return;
   isOut = true;
   // Nothing more goes into a trainer who is out: what was on its way stays on the ground.
   for (const g of toGive.splice(0)) link.drop(g.key);
   // What I carried lies where I fell (POK-232), once what was already going in is in.
-  if (rom) rom.spill().then((bag) => link.out(bag), () => link.out());
-  else link.out();
+  if (rom) rom.spill().then((bag) => link.out(bag, by, wild), () => link.out(undefined, by, wild));
+  else link.out(undefined, by, wild);
+  showOut('OUT', why);
+}
+
+function showOut(title: string, why: string): void {
+  document.getElementById('out-title')!.textContent = title;
   document.getElementById('out-why')!.textContent = why;
-  outEl.classList.add('on');
+  // The winner's own panel says it all: no OUT over it.
+  if (!winEl.classList.contains('on')) outEl.classList.add('on');
   if (!spectating) toggleSpectate();
 }
-document.getElementById('rejoin')!.addEventListener('click', () => location.reload());
+document.getElementById('out-ok')!.addEventListener('click', () => outEl.classList.remove('on'));
+
+// ---- rounds (room.ts's results) --------------------------------------------------------
+
+const winEl = document.getElementById('win')!;
+document.getElementById('win-ok')!.addEventListener('click', () => winEl.classList.remove('on'));
+/** On the bench: came in after the fog closed on this round. */
+let waiting = false;
+let seenRound = -1;
+let shownWin = false;
+
+/** Once a frame: a new round puts me back at the truck with a fresh team; the bench says
+ *  so; the last one standing is announced, with how everybody else went out. */
+function roundFrame(): void {
+  const res = link.room.results;
+  const here = !!link.room.actor(link.me);
+  if (res.round !== seenRound) {
+    const first = seenRound < 0;
+    seenRound = res.round;
+    shownWin = false;
+    winEl.classList.remove('on');
+    if (!first && here) {
+      if (isOut || waiting) {
+        isOut = waiting = false;
+        outEl.classList.remove('on');
+        if (spectating) toggleSpectate();
+      }
+      follow = link.me;
+      wasInFog = false;
+      // Everybody starts again: the team the game began with (after any battle still
+      // finishing from the round before).
+      void rom?.fresh();
+      say('A new round! Back at the truck.');
+    }
+  }
+  if (!here && !isOut && !waiting && link.room.bench.some((b) => b.id === link.me)) {
+    waiting = true;
+    showOut('WATCHING', 'The fog had already closed on this round.');
+  }
+  if (res.winner && !shownWin) {
+    shownWin = true;
+    const name = res.entrants.find(([id]) => id === res.winner)?.[1] ?? 'TRAINER';
+    document.getElementById('win-title')!.textContent = res.winner === link.me ? 'YOU WIN!' : `${name} WINS`;
+    const list = document.getElementById('win-list')!;
+    list.replaceChildren();
+    const row = (id: number, text: string) => {
+      const li = document.createElement('li');
+      li.textContent = text;
+      if (id === link.me) li.className = 'me';
+      list.append(li);
+    };
+    row(res.winner, `${name}, last one standing`);
+    for (const f of [...res.fallen].reverse()) {
+      row(f.id, `${f.name}, ${f.left ? 'left' : f.wild ? 'beaten by a wild POKéMON' : f.by ? `beaten by ${f.by}` : 'out in the fog'}`);
+    }
+    outEl.classList.remove('on');
+    winEl.classList.add('on');
+  }
+}
 document.getElementById('menu')!.addEventListener('click', () => { void openMenu(); });
 
 /** Once a frame: the ring's news, and the fog's bite while I stand in it. */
@@ -577,7 +645,7 @@ function resize(): void {
 addEventListener('resize', resize);
 
 function toggleSpectate(): void {
-  if (isOut && spectating) return; // out: watching is all there is
+  if ((isOut || waiting) && spectating) return; // out: watching is all there is
   spectating = !spectating;
   modeBtn.classList.toggle('on', spectating);
   modeBtn.textContent = spectating ? 'Back to my trainer (V)' : 'Spectate (V)';
@@ -894,6 +962,7 @@ function loop(now: number): void {
     steps += 1;
     frame += 1;
     for (const e of link.frame(myBits())) startFor(e);
+    roundFrame();
     fogFrame();
     foeFrame();
     pressed.clear();
@@ -946,7 +1015,7 @@ async function boot(): Promise<void> {
   const q = new URLSearchParams(location.search);
   const url = q.get('world') ?? `${(import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL}/world`;
   statsEl.textContent = 'joining the shared world...';
-  const online = q.has('solo') ? null : await onlineLink(url, 'TRAINER', Math.random() < 0.5 ? 0 : 1, (seed) => makeRoom(hoenn.maps, patches, seed, hoenn.world));
+  const online = q.has('solo') ? null : await onlineLink(url, q.get('name') ?? '', Math.random() < 0.5 ? 0 : 1, (seed) => makeRoom(hoenn.maps, patches, seed, hoenn.world));
   link = online ?? soloLink(hoenn.maps, patches, hoenn.world, (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0);
   // A quicker fog to try it alone: ?ring=<seconds a phase> (solo only: the relay's ring is
   // everybody's).
@@ -960,7 +1029,7 @@ async function boot(): Promise<void> {
   const next = () => { const p = rest.find((r) => !r.mips); if (p) { paint(p); mipFor(p, 0); setTimeout(next, 16); } };
   setTimeout(next, 500);
   bootRom(files, link.room.seed).then((r) => { rom = r; giveNext(); }, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { link, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; } };
+  (window as unknown as { __spike: unknown }).__spike = { link, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; } };
 }
 
 void boot();

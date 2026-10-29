@@ -107,6 +107,9 @@ export interface RomBattles {
   /** A screen the page put up (menu, team) closes now: B until it is back on the field
    *  (a challenge closes a menu in the match, br_netlink.c). */
   leave(): void;
+  /** A new round: the team, bag and Pokédex the game booted with, after whatever is
+   *  on the ROM now. */
+  fresh(): Promise<void>;
   /** Money out of somebody's bag (br_loot.c's Take pays it). */
   addMoney(n: number): Promise<void>;
   press(k: GbaKey): void;
@@ -350,6 +353,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     return result;
   }
 
+  // What a new round starts from: the parked game's own.
+  const start = kept();
+
   return {
     emu,
     press: (k) => emu.press(k),
@@ -566,6 +572,14 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       });
     },
     leave() { leaving = true; },
+    fresh() {
+      return inTurn(async () => {
+        if (broken) return;
+        keep(start);
+        carried = start;
+        last = null;
+      });
+    },
     give(item, n) {
       return inTurn(async () => {
         if (broken) return null;
