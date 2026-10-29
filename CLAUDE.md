@@ -84,14 +84,12 @@ Node 22. A PR only needs the specs its change touches.
 
 ## How work ships (Cam, 2026-10-29)
 
-- Stack PRs: each branch builds on the last open one, and work goes on without waiting
-  for CI or review. Merge oldest first once CI is green.
-- One review per stack, by a fresh-context review subagent the building session starts
-  itself (the one standing exception to "do the work yourself"). Small fixes it asks for
-  go into the next PR in the stack, with no re-review round. A separate reviewer thread
-  only for risky areas: relay and netcode, ROM memory (EWRAM, ROM size), save data, CI
-  and releases.
-- Small, low-risk PRs merge on green and get reviewed later with their stack.
+- No PR or review per change. Each workstream commits straight to its own work branch
+  once the local tests and drivers it touches pass, and keeps going.
+- Every few hours an audit agent reviews the whole diff the branch has piled up since
+  the last audit. Its fixes are ordinary commits on that branch.
+- One batch PR per audited branch merges into `hoenn-battle-royale` on green CI. No
+  separate review round is needed.
 - Screenshots only when pixels change. Drivers and tests are the check for logic.
 - Releases go out on a timer whenever the relay shows no live match (docs/DEPLOY.md).
   Until that job exists, the release-owner thread keeps batching them.
