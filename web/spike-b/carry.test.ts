@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAG_AT, BAG_LEN, arrived, rekey, spillOf, withMoney } from './carry';
+import { BAG_AT, BAG_LEN, arrived, rekey, spillOf, teamOf, withMoney } from './carry';
 
 describe('rekey', () => {
   it('carries money, coins and pocket counts from one key to another, and nothing else', () => {
@@ -71,5 +71,26 @@ describe('spillOf', () => {
     expect(spillOf(bag, key)).toEqual({ items: [{ id: 13, n: 2 }, { id: 4, n: 6 }, { id: 133, n: 3 }], money: 5000 });
     expect(spillOf(withMoney(bag, key, 1200), key).money).toBe(6200);
     expect(spillOf(withMoney(bag, key, 2e6), key).money).toBe(999999);
+  });
+});
+
+describe('teamOf', () => {
+  it('reads each mon\'s species out of its encrypted growth substruct, and its level', () => {
+    // two mons: personality 0 (growth first) and 7 (AGME: growth second), species 277 and 25
+    const party = new Uint8Array(600);
+    const v = new DataView(party.buffer);
+    const put = (i: number, personality: number, otId: number, species: number, level: number) => {
+      const at = i * 100, key = (personality ^ otId) >>> 0;
+      v.setUint32(at, personality, true);
+      v.setUint32(at + 4, otId, true);
+      const g = at + 32 + 12 * (personality % 24 === 7 ? 1 : 0);
+      for (let w = 0; w < 12; w += 4) v.setUint32(g + w, key, true); // all zero under the key
+      v.setUint32(g, (species ^ key) >>> 0, true);
+      party[at + 84] = level;
+    };
+    put(0, 0, 0x12345678, 277, 5);
+    put(1, 7, 0xdeadbeef, 25, 12);
+    expect(teamOf(party, 2)).toEqual([{ species: 277, level: 5 }, { species: 25, level: 12 }]);
+    expect(teamOf(party, 1)).toHaveLength(1);
   });
 });

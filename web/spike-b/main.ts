@@ -19,7 +19,7 @@ import { WorldIndex } from '../src/bots/hoenn';
 import { isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
 import { loadPatches } from '../src/bots/patches';
 import { DIR_EAST } from './sim';
-import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, makeRoom, type Actor, type Bag, type RoomEvent } from './shared/room';
+import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, emptyBag, makeRoom, type Actor, type Bag, type RoomEvent } from './shared/room';
 import { SKIN_GFX } from './shared/bots';
 import { onlineLink, soloLink, type WorldLink } from './net';
 import { bootRom, loadRom, lastStart, type Fought, type RomBattles } from './rom';
@@ -164,7 +164,7 @@ function actors(): Actor[] {
  *  room's business (a bot you face, a marked spot you land on); the page only keeps a
  *  held A from the last battle's text out of the next one. */
 function myBits(): number {
-  if (spectating || battle || intro()) return 0;
+  if (spectating || battle || swapping || asking || intro()) return 0;
   const bits = (held.has('up') ? KEY_UP : 0) | (held.has('down') ? KEY_DOWN : 0) | (held.has('left') ? KEY_LEFT : 0) |
     (held.has('right') ? KEY_RIGHT : 0) | (held.has('b') ? KEY_B : 0) | (held.has('a') && frame >= calmUntil ? KEY_A : 0);
   return bits;
@@ -184,6 +184,8 @@ const gbaCanvas = document.getElementById('gba') as HTMLCanvasElement;
 let rom: RomBattles | null = null;
 let artMs = 0;
 let battle: { foe: Actor | null; shownAt: number } | null = null;
+/** The ROM has the screen for a dropped bag's team (rom.team). */
+let swapping = false;
 let calmUntil = 0;
 const handoff: number[] = []; // ms from the trigger to the ROM's first battle frame, and back
 
@@ -241,7 +243,7 @@ function giveNext(): void {
   const next = toGive.shift()!;
   const name = (id: number) => art?.itemName(id) || `item ${id}`;
   if ('bag' in next) {
-    takeBag(next.key, next.bag, next.name).catch((e) => console.warn('spike bag failed', e)).finally(() => { giving = false; giveNext(); });
+    openBag(next.key, next.bag, next.name).catch((e) => console.warn('spike bag failed', e)).finally(() => { giving = false; giveNext(); });
     return;
   }
   const { key, item } = next;
@@ -256,11 +258,66 @@ function giveNext(): void {
   }, (e) => console.warn('spike give failed', e)).finally(() => { giving = false; giveNext(); });
 }
 
+// A dropped bag asks what to take (HBR-82): POKéMON, its team on the ROM's BAG screen, or
+// BAG, its items. B or CANCEL leaves it lying. The pad drives the question.
+const askEl = document.getElementById('ask')!;
+const askButtons = [...askEl.querySelectorAll<HTMLButtonElement>('button')];
+let asking: { pick: number; done: (c: string) => void } | null = null;
+
+function askPaint(): void {
+  askButtons.forEach((b, i) => b.classList.toggle('on', i === asking?.pick));
+}
+
+function askKey(k: string): void {
+  if (!asking) return;
+  const n = askButtons.length;
+  if (k === 'up') asking.pick = (asking.pick + n - 1) % n;
+  else if (k === 'down') asking.pick = (asking.pick + 1) % n;
+  else if (k === 'a') return asking.done(askButtons[asking.pick].dataset.c!);
+  else if (k === 'b') return asking.done('');
+  askPaint();
+}
+
+askButtons.forEach((b, i) => b.addEventListener('click', () => { if (asking) { asking.pick = i; asking.done(b.dataset.c!); } }));
+
+function ask(title: string): Promise<string> {
+  document.getElementById('ask-title')!.textContent = title;
+  askEl.classList.add('on');
+  return new Promise((resolve) => {
+    asking = { pick: 0, done: (c) => { asking = null; askEl.classList.remove('on'); calmUntil = frame + 30; resolve(c); } };
+    askPaint();
+  });
+}
+
+/** A at a dropped bag: what it holds, the way the match asks (br_loot.c's TryTake). What
+ *  is left goes back down as the bag, for somebody else (POK-294: nothing leaves). */
+async function openBag(key: number, bag: Bag, who: string): Promise<void> {
+  const mons = bag.mons ?? [];
+  const things = bag.items.length > 0 || bag.money > 0;
+  const c = mons.length && things ? await ask(`${who}'s BAG`) : mons.length ? 'mons' : 'items';
+  if (c === 'items') return takeBag(key, bag, who);
+  if (c !== 'mons' || isOut || !rom) { link.drop(key, bag); return; }
+  swapping = true;
+  held.clear();
+  let left = mons;
+  try {
+    left = await rom.team(mons, who, () => battleEl.classList.add('on'));
+  } finally {
+    swapping = false;
+    battleEl.classList.remove('on');
+    held.clear();
+    pressed.clear();
+    calmUntil = frame + 30;
+  }
+  const rest: Bag = { items: bag.items, money: bag.money, mons: left };
+  if (!emptyBag(rest)) link.drop(key, rest);
+}
+
 /** A fallen trainer's bag, row by row into mine the ROM's way, and its money. What did
- *  not fit goes back down as the bag, for somebody else (POK-294: nothing leaves). */
+ *  not fit, and the team, go back down as the bag. */
 async function takeBag(key: number, bag: Bag, who: string): Promise<void> {
   const r = rom!;
-  const rest: Bag = { items: [], money: 0 };
+  const rest: Bag = { items: [], money: 0, mons: bag.mons };
   let took = 0;
   for (const row of bag.items) {
     // A GIVE's count is a byte: a berry stack (up to 999) goes in pieces, and what did not
@@ -279,7 +336,7 @@ async function takeBag(key: number, bag: Bag, who: string): Promise<void> {
   else await r.addMoney(bag.money);
   const money = bag.money && !isOut ? ` and ¥${bag.money}` : '';
   say(`Took ${who}'s bag: ${took} item${took === 1 ? '' : 's'}${money}.${rest.items.length ? ' Some would not fit.' : ''}`);
-  if (rest.items.length || rest.money) link.drop(key, rest);
+  if (!emptyBag(rest)) link.drop(key, rest);
 }
 
 /** What the room started for me: A at a bot, or a marked spot I landed on (the room took
@@ -364,6 +421,8 @@ function fogFrame(): void {
     lastPhase = ring.phase;
   }
   if (isOut || !rom) return;
+  // The BAG screen is a menu: the fog bites on the field and in battle (BrRing_Tick).
+  if (swapping) return;
   if (battle) {
     // A ring that closes on a trainer mid-battle reaches the battle at its next turn.
     if (inFogNow()) rom.fogNow();
@@ -400,11 +459,18 @@ function fogLine(): string {
 
 // While the ROM has the screen, the pad is the ROM's.
 const GBA_KEY: Record<string, GbaKey> = { up: 'up', down: 'down', left: 'left', right: 'right', a: 'a', b: 'b' };
-addEventListener('keydown', (e) => { const k = KEYMAP[e.key]; if (battle && rom && k) rom.press(GBA_KEY[k]); });
+addEventListener('keydown', (e) => {
+  const k = KEYMAP[e.key];
+  if (k && asking) { if (!e.repeat) askKey(k); }
+  else if ((battle || swapping) && rom && k) rom.press(GBA_KEY[k]);
+});
 addEventListener('keyup', (e) => { const k = KEYMAP[e.key]; if (rom && k) rom.release(GBA_KEY[k]); });
 for (const el of document.querySelectorAll<HTMLElement>('.k')) {
   const k = el.dataset.k!;
-  el.addEventListener('pointerdown', () => { if (battle && rom) rom.press(GBA_KEY[k]); });
+  el.addEventListener('pointerdown', () => {
+    if (asking) askKey(k);
+    else if ((battle || swapping) && rom) rom.press(GBA_KEY[k]);
+  });
   el.addEventListener('pointerup', () => rom?.release(GBA_KEY[k]));
 }
 

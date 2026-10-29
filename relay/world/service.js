@@ -992,15 +992,23 @@ var isKeyItem = (item) => item >= 259 && item <= 288 || item >= 349;
 var ITEMS_COUNT = 377;
 var MAX_MONEY = 999999;
 var BAG_ROWS = 30 + 16 + 46;
+var NUM_SPECIES2 = 412;
+var MAX_LEVEL2 = 100;
+var isMon = (m) => {
+  const { species, level } = m ?? {};
+  return Number.isInteger(species) && species > 0 && species < NUM_SPECIES2 && Number.isInteger(level) && level >= 1 && level <= MAX_LEVEL2;
+};
 function cleanBag(raw) {
   if (!raw || typeof raw !== "object") return null;
-  const { items, money } = raw;
+  const { items, money, mons } = raw;
   if (!Array.isArray(items) || items.length > BAG_ROWS) return null;
+  if (mons !== void 0 && (!Array.isArray(mons) || mons.length > 6 || !mons.every(isMon))) return null;
   const out = { items: [], money: Number.isInteger(money) ? Math.min(Math.max(money, 0), MAX_MONEY) : 0 };
   for (const r of items) {
     const id = Number(r?.id), n = Number(r?.n);
     if (Number.isInteger(id) && id > 0 && id < ITEMS_COUNT && Number.isInteger(n) && n > 0 && !isTm(id) && !isKeyItem(id)) out.items.push({ id, n: Math.min(n, 999) });
   }
+  if (Array.isArray(mons) && mons.length) out.mons = mons.map(({ species, level }) => ({ species, level }));
   return out;
 }
 function within(rest, was) {
@@ -1014,7 +1022,9 @@ function within(rest, was) {
       left.set(r.id, left.get(r.id) - n);
     }
   }
-  return { items, money: Math.min(rest.money, was.money) };
+  const out = { items, money: Math.min(rest.money, was.money) };
+  if (rest.mons?.length) out.mons = rest.mons.slice(0, 6).map(({ species, level }) => ({ species, level }));
+  return out;
 }
 
 // web/spike-b/sim.ts
@@ -1123,6 +1133,7 @@ var KEY_A = 32;
 function keysOf(bits) {
   return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A) };
 }
+var emptyBag = (b) => !b.items.length && !b.money && !b.mons?.length;
 var SPILL_KEY = 1 << 20;
 var GROUND_PER_MAP = 6;
 var REGROW = 60 * 90;
@@ -1180,7 +1191,7 @@ var Room = class {
       if (b && cmd.rest) b.bag = structuredClone(cmd.rest);
     } else if (cmd.c === "leave" || cmd.c === "out") {
       const a = this.actor(cmd.id);
-      if (a && cmd.c === "out" && cmd.bag && (cmd.bag.items.length || cmd.bag.money)) {
+      if (a && cmd.c === "out" && cmd.bag && !emptyBag(cmd.bag)) {
         const key = SPILL_KEY + a.id;
         this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag: structuredClone(cmd.bag) });
       }
@@ -1464,6 +1475,10 @@ var Room = class {
       for (const r of b.bag.items) {
         mix2(r.id);
         mix2(r.n);
+      }
+      for (const m of b.bag.mons ?? []) {
+        mix2(m.species);
+        mix2(m.level);
       }
     }
     return h;

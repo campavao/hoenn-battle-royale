@@ -66,12 +66,15 @@ export type RoomEvent =
   | { type: 'item'; tick: number; id: number; key: number; item: number }
   | { type: 'bag'; tick: number; id: number; key: number; bag: Bag; name: string };
 
-/** What a trainer who is out carried: the bag's items (not its key items or machines)
- *  and money. */
+/** What a trainer who is out carried: the bag's items (not its key items or machines),
+ *  money, and their team. */
 export type Bag = BagRows;
 
 /** A trainer's bag where they fell (POK-232). Its key is SPILL_KEY + their id. */
 export interface Spill { key: number; map: string; x: number; y: number; name: string; bag: Bag }
+
+/** Nothing in it: no items, no money, nobody. */
+export const emptyBag = (b: Bag): boolean => !b.items.length && !b.money && !b.mons?.length;
 
 /** Spill keys, clear of the dealt balls' 1..n. */
 export const SPILL_KEY = 1 << 20;
@@ -183,7 +186,7 @@ export class Room {
       // A bot fought by somebody who left walks again.
       const a = this.actor(cmd.id);
       // Where they stood: nobody else can be on that cell, nor a ball (both are solid).
-      if (a && cmd.c === 'out' && cmd.bag && (cmd.bag.items.length || cmd.bag.money)) {
+      if (a && cmd.c === 'out' && cmd.bag && !emptyBag(cmd.bag)) {
         const key = SPILL_KEY + a.id;
         this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag: structuredClone(cmd.bag) });
       }
@@ -447,6 +450,7 @@ export class Room {
     for (const b of this.spills.values()) {
       mix(b.key); str(b.map); mix(b.x); mix(b.y); mix(b.bag.money);
       for (const r of b.bag.items) { mix(r.id); mix(r.n); }
+      for (const m of b.bag.mons ?? []) { mix(m.species); mix(m.level); }
     }
     return h;
   }

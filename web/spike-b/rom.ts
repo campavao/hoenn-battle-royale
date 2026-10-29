@@ -15,15 +15,23 @@
 
 import { Emulator, type GbaKey } from '../src/emu';
 import { Mailbox, MAILBOX } from '../src/net/mailbox';
-import { packSlot } from '../src/net/slots';
-import { PROTOCOL, type PackedMon } from '../src/net/wire';
+import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from '../src/net/slots';
+import { PROTOCOL, type Msg, type PackedMon } from '../src/net/wire';
 import { loadCheckedRelease } from '../src/release';
-import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, rekey, spillOf, withMoney } from './carry';
+import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, rekey, spillOf, teamOf, withMoney } from './carry';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 
 const BOOT_MAP_TESTMON = 0x81;
 const ME = 0;
 const FOE_SEAT = 31;
+/** Whose a dropped bag is on the hidden ROM: a seat nobody here sits in. */
+const DROP_SEAT = 30;
+/** global.h's ObjectEvent: 0x24 bytes, currentCoords at 0x10, facing in 0x18's low bits. */
+const OBJECT_EVENT_SIZE = 0x24;
+/** A facing (DIR_SOUTH..DIR_EAST) as a step. */
+const STEP: Record<number, [number, number]> = { 1: [0, 1], 2: [0, -1], 3: [-1, 0], 4: [1, 0] };
+
+export interface TeamRow { species: number; level: number }
 // include/br/br_wild.h.
 const WILD_ASKED = 1;
 const WILD_FIGHTING = 2;
@@ -64,7 +72,13 @@ export interface RomBattles {
   give(item: number, n: number): Promise<Given | null>;
   /** What the trainer carries, as a bag left on the ground when they are out (POK-232):
    *  read in turn, after whatever was already going in. */
-  spill(): Promise<{ items: { id: number; n: number }[]; money: number }>;
+  spill(): Promise<{ items: { id: number; n: number }[]; money: number; mons: TeamRow[] }>;
+  /** A fallen trainer's team, as the match opens it (br_loot.c): the bag set down before
+   *  the hidden trainer, POKeMON chosen, and the ROM's own BAG screen (br_swap.h) with
+   *  each of theirs made fresh at its species and level (MakeTaken, BrLevels_Settle).
+   *  Ours on the left, theirs on the right, picks moved across. Resolves, back on the
+   *  field, with the team left in the bag. `onStart` is when the screen is up. */
+  team(mons: TeamRow[], name: string, onStart: () => void): Promise<TeamRow[]>;
   /** Money out of somebody's bag (br_loot.c's Take pays it). */
   addMoney(n: number): Promise<void>;
   press(k: GbaKey): void;
@@ -156,6 +170,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   const outcomeAt = sym('gBattleOutcome');
   const catchAt = sym('gBrCatch');
   const ringAt = sym('gBrRing');
+  const mainAt = sym('gMain');
+  const overworldCb = sym('CB2_Overworld');
+  const objectsAt = sym('gObjectEvents');
+  const avatarAt = sym('gPlayerAvatar');
   const partyAt = sym('gPlayerParty');
   const countAt = sym('gPlayerPartyCount');
   const save1 = sym('gSaveBlock1Ptr');
@@ -186,6 +204,18 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   const send = (msg: Parameters<typeof packSlot>[0]) => {
     for (const s of packSlot(msg)) box.push(s.type, s.payload);
   };
+  /** What the ROM said since the last call, whole (romport.ts's drain): a base slot and
+   *  its continuations, unframed. One that will not read is skipped. */
+  const drain = (handle: (m: Msg) => void) => {
+    const raw = box.poll();
+    for (let i = 0; i < raw.length;) {
+      const group: BinarySlot[] = [raw[i++]];
+      while (i < raw.length && (raw[i].type & BR_CONT_FLAG) !== 0) group.push(raw[i++]);
+      let m: Msg;
+      try { const w = reassembleSlots(group); m = unpackSlot(w.type, w.payload); } catch { continue; }
+      handle(m);
+    }
+  };
 
   /** One battle: `kick` asks for it, `going` says the ROM took it, `over` that it is back
    *  on the field. The page gets the screen at the battle's first frame (onStart) and
@@ -196,7 +226,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   // The bag as it last stood, a lost battle's included: what a trainer who is out leaves
   // is what they had at the end, not the bag a loss puts the team back to (as BrMatch_Out
   // reads it, after the battle).
-  let last: { bag: Uint8Array; key: number } | null = null;
+  let last: ReturnType<typeof kept> | null = null;
   // One thing at a time on the ROM: a battle asked for while an item goes in waits for it.
   let queue: Promise<unknown> = Promise.resolve();
   const inTurn = <T>(f: () => Promise<T>): Promise<T> => {
@@ -299,7 +329,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     spill() {
       return inTurn(async () => {
         const k = last ?? kept();
-        return spillOf(k.bag, k.key);
+        return { ...spillOf(k.bag, k.key), mons: teamOf(k.party, k.count) };
       });
     },
     addMoney(n) {
@@ -309,6 +339,59 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         const next = { ...k, bag: withMoney(k.bag, k.key, n) as typeof k.bag };
         keep(next);
         carried = last = next;
+      });
+    },
+    team(mons, name, onStart) {
+      return inTurn(async () => {
+        if (broken || !mons.length) return mons;
+        emu.resume();
+        drain(() => undefined); // anything older is not this bag's
+        // The bag where the hidden trainer faces, the team in it: the match's own SPILL,
+        // under a seat that is nobody here.
+        const s1 = emu.read(save1, 32);
+        const self = objectsAt + emu.read(avatarAt + 5, 8) * OBJECT_EVENT_SIZE;
+        const [dx, dy] = STEP[emu.read(self + 0x18, 8) & 15] ?? [0, 1];
+        const x = emu.read(self + 0x10, 16) + dx, y = emu.read(self + 0x12, 16) + dy;
+        const keys = mons.map((_, i) => (DROP_SEAT << 8) | i);
+        send({
+          t: 'spill', seat: DROP_SEAT, map: { group: emu.read(s1 + 4, 8), num: emu.read(s1 + 5, 8) },
+          mons: mons.map((m, i) => ({ key: keys[i], x, y, species: m.species, level: m.level })),
+          bag: { key: (DROP_SEAT << 8) | 0xff, x, y, items: [], money: 0, name: name.slice(0, 7) },
+        });
+        let menu = false, map = false;
+        const taken = new Set<number>();
+        const put: { species: number; level: number }[] = [];
+        const watch = emu.onFrame(() => drain((m) => {
+          if (m.t === 'busy') { if (m.kind === 'menu') menu = true; else if (!m.kind) map = true; }
+          else if (m.t === 'pickup' && keys.includes(m.key)) taken.add(m.key);
+          // One of ours put down for theirs (SwapInOurs): it stays with the bag.
+          else if (m.t === 'spill' && m.seat !== DROP_SEAT) for (const r of m.mons) put.push({ species: r.species, level: r.level });
+        }));
+        const tap = async () => { emu.press('a'); await frames(emu, 4); emu.release('a'); };
+        // A at the bag asks POKeMON or BAG (BrBagMenu_Choose), and the page has asked that
+        // already: POKeMON, its first line. The screen is the page's until the box is up.
+        await frames(emu, 3);
+        await tap();
+        const asked = await until(emu, () => menu, 120);
+        if (asked) await tap();
+        const up = asked && await until(emu, () => ((emu.read(mainAt + 4, 32) & ~1) >>> 0) !== overworldCb, 120);
+        if (!up) console.warn('spike: the team\'s screen did not open', { asked, callback2: emu.read(mainAt + 4, 32).toString(16) });
+        else {
+          onStart();
+          // B closes it; back on the field the box settles (SettleBoxes): a PICKUP for
+          // each of theirs taken, a SPILL for any of ours put down.
+          map = false;
+          await until(emu, () => ((emu.read(mainAt + 4, 32) & ~1) >>> 0) === overworldCb, Infinity);
+          await until(emu, () => map, 600);
+          await frames(emu, 10);
+        }
+        watch();
+        emu.pause();
+        const now = kept();
+        if (!emu.restore(parked!)) broken = true;
+        else keep(now);
+        carried = last = now;
+        return [...mons.filter((_, i) => !taken.has(keys[i])), ...put];
       });
     },
     give(item, n) {

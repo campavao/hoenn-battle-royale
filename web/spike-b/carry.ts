@@ -82,3 +82,24 @@ export function withMoney(bag: Uint8Array, key: number, more: number): Uint8Arra
   v.setUint32(0, (Math.min(now + more, 999999) ^ key) >>> 0, true);
   return out;
 }
+
+// Where each of a mon's four substructs sits, by personality % 24 (pokemon.c's
+// GetSubstruct): the growth one, which holds the species, is G.
+const ORDERS = ['GAEM', 'GAME', 'GEAM', 'GEMA', 'GMAE', 'GMEA', 'AGEM', 'AGME', 'AEGM', 'AEMG', 'AMGE', 'AMEG',
+  'EGAM', 'EGMA', 'EAGM', 'EAMG', 'EMGA', 'EMAG', 'MGAE', 'MGEA', 'MAGE', 'MAEG', 'MEGA', 'MEAG'];
+
+/** The team, as a dropped bag carries it: species and level, the way BrLoot_SpillOwn
+ *  writes each row. Whoever takes one gets it made fresh at that species and level
+ *  (br_loot.c's MakeTaken), as in the match (HBR-82). */
+export function teamOf(party: Uint8Array, count: number): { species: number; level: number }[] {
+  const v = new DataView(party.buffer, party.byteOffset, party.byteLength);
+  const out: { species: number; level: number }[] = [];
+  for (let i = 0; i < Math.min(count, 6); i++) {
+    const at = i * 100;
+    const personality = v.getUint32(at, true), key = (personality ^ v.getUint32(at + 4, true)) >>> 0;
+    const growth = at + 32 + 12 * ORDERS[personality % 24].indexOf('G');
+    const species = ((v.getUint32(growth, true) ^ key) >>> 0) & 0xffff;
+    if (species) out.push({ species, level: party[at + 84] });
+  }
+  return out;
+}
