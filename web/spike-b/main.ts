@@ -1363,7 +1363,7 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
     remapping: remap.on,
     remapLine: remap.line,
     help: ['Arrows move  Z: A  X: B  M: MENU', 'R: this sheet  V: spectate  pads too'],
-    version: 'spike B',
+    version: versionLine,
     onSeat: (seat) => { sheetCard = seat; lobby?.stage.redraw(); },
     onKick: () => undefined,
     onCloseCard: () => { sheetCard = null; lobby?.stage.redraw(); },
@@ -1439,6 +1439,8 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
 
 /** FORGET ROM, asked first as the live sheet asks it: the ROM this browser keeps goes,
  *  and the page starts over (the game page asks for it again). */
+/** Which ROM is in the tab (the sheet's last line, as live). */
+let versionLine = 'spike B';
 let romEmu: { forgetRom(): Promise<void>; stop(): void } | null = null;
 function forgetRom(): void {
   const st = lobby!.stage;
@@ -2420,6 +2422,7 @@ async function boot(): Promise<void> {
   try {
     files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; });
     romEmu = files.emu;
+    versionLine = files.version;
     if (touchPad) wireBattleMenu(files);
   } catch (e) {
     console.warn('spike ROM not loaded', e);

@@ -18,6 +18,7 @@ import { Mailbox, MAILBOX } from '../src/net/mailbox';
 import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from '../src/net/slots';
 import { PROTOCOL, type Dir, type Msg, type PackedMon } from '../src/net/wire';
 import { loadCheckedRelease } from '../src/release';
+import { sha1Hex } from '../src/rom/emerald';
 import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fameTeam, fieldOf, healed, rekey, spillOf, teamOf, withMoney, withoutItem } from './carry';
 import { startMenuTable } from '../src/touch';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
@@ -231,7 +232,14 @@ function gen3(text: string): number[] {
   return out;
 }
 
-export interface RomFiles { emu: Emulator; rom: Uint8Array; sym: (name: string) => number }
+export interface RomFiles {
+  emu: Emulator;
+  rom: Uint8Array;
+  sym: (name: string) => number;
+  /** The live game's version line: which ROM is in the tab, in seven characters, and
+   *  STALE when br-version.json names another (app.ts buildLine). */
+  version: string;
+}
 
 /** The player's ROM, patched, and its build's symbols. Dev: web/public/spike-rom/ when it
  *  is there. Otherwise the game's own way: the ROM the player picked on the main page
@@ -241,7 +249,7 @@ export async function loadRom(canvas: HTMLCanvasElement, say: (text: string) => 
   const dev = !import.meta.env.DEV ? null : await fetch('/spike-rom/br-symbols.json').then((r) => (r.ok && !r.headers.get('content-type')?.includes('html') ? r.json() : null), () => null) as Record<string, string> | null;
   if (dev) {
     const rom = new Uint8Array(await (await fetch('/spike-rom/rom.gba')).arrayBuffer());
-    return { emu, rom, sym: (n) => Number(dev[n]) };
+    return { emu, rom, sym: (n) => Number(dev[n]), version: `spike B · local build · rom ${(await sha1Hex(rom)).slice(0, 7)}` };
   }
   if (!emu.hasRom()) {
     say('Pick your ROM on the game page first (it stays in this browser), then come back here.');
@@ -254,7 +262,10 @@ export async function loadRom(canvas: HTMLCanvasElement, say: (text: string) => 
     throw new Error(release.reason);
   }
   const symbols = release.symbols;
-  return { emu, rom: release.rom, sym: (n) => symbols.get(n) ?? NaN };
+  const mine = (await sha1Hex(release.rom)).slice(0, 7);
+  const want = (release.info.romSha1 ?? '').slice(0, 7);
+  const build = !want || mine === want ? `rom ${mine}` : `rom ${mine} — STALE, build is ${want}`;
+  return { emu, rom: release.rom, sym: (n) => symbols.get(n) ?? NaN, version: `spike B · patch ${release.info.patch} · shell ${release.info.shell.slice(0, 7)} · ${build}` };
 }
 
 function applyPatch(source: Uint8Array, patch: Uint8Array): Promise<Uint8Array> {
