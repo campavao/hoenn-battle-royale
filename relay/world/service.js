@@ -1500,6 +1500,7 @@ var Room = class {
       const foe = a.foe ? this.actor(a.foe) : void 0;
       if (foe?.bot) {
         foe.battling = false;
+        foe.calm = this.tick + GRACE;
         if (cmd.won && !foe.beaten) {
           foe.beaten = true;
           this.fall(foe, a.name);
@@ -1741,6 +1742,25 @@ var Room = class {
         a.keys = a.last = b.keys = b.last = 0;
         events.push({ type: "duel", tick: this.tick, id: a.id, foe: b.id, first: true });
         events.push({ type: "duel", tick: this.tick, id: b.id, foe: a.id, first: false });
+        break;
+      }
+    }
+    for (const h of free) {
+      if (h.battling) continue;
+      for (const b of this.actors) {
+        if (!b.bot || b.beaten || b.battling || b.m.action || this.tick < b.calm || b.m.spot.map !== h.m.spot.map) continue;
+        if (h.shun === b.id && this.tick < h.shunUntil) continue;
+        const look = (o) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing });
+        if (!eitherSees(this.world, look(h), look(b))) continue;
+        const dx = b.m.spot.x - h.m.spot.x, dy = b.m.spot.y - h.m.spot.y;
+        const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        h.m.facing = h.m.moveDir = toB;
+        b.m.facing = b.m.moveDir = BACK[toB];
+        h.battling = b.battling = true;
+        h.foe = b.id;
+        b.foe = h.id;
+        h.keys = h.last = b.keys = b.last = 0;
+        events.push({ type: "fight", tick: this.tick, id: h.id, foe: b.id });
         break;
       }
     }

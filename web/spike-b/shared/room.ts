@@ -291,6 +291,7 @@ export class Room {
       const foe = a.foe ? this.actor(a.foe) : undefined;
       if (foe?.bot) {
         foe.battling = false;
+        foe.calm = this.tick + GRACE;
         // Beaten, and out of the round (the page says nothing of a fight that ran over
         // into a new round: that was the old round's).
         if (cmd.won && !foe.beaten) { foe.beaten = true; this.fall(foe, a.name); }
@@ -550,6 +551,28 @@ export class Room {
         a.keys = a.last = b.keys = b.last = 0;
         events.push({ type: 'duel', tick: this.tick, id: a.id, foe: b.id, first: true });
         events.push({ type: 'duel', tick: this.tick, id: b.id, foe: a.id, first: false });
+        break;
+      }
+    }
+    // A bot that sees a trainer (or is seen) walks up to no one: it challenges there and
+    // then, as a route trainer does (Bots engage players, DESIGN §10). Not one already
+    // beaten, fighting, mid-step or in its grace; nor one the trainer fled.
+    for (const h of free) {
+      if (h.battling) continue;
+      for (const b of this.actors) {
+        if (!b.bot || b.beaten || b.battling || b.m.action || this.tick < b.calm || b.m.spot.map !== h.m.spot.map) continue;
+        if (h.shun === b.id && this.tick < h.shunUntil) continue;
+        const look = (o: Actor) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing as Facing });
+        if (!eitherSees(this.world, look(h), look(b))) continue;
+        const dx = b.m.spot.x - h.m.spot.x, dy = b.m.spot.y - h.m.spot.y;
+        const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        h.m.facing = h.m.moveDir = toB;
+        b.m.facing = b.m.moveDir = BACK[toB];
+        h.battling = b.battling = true;
+        h.foe = b.id;
+        b.foe = h.id;
+        h.keys = h.last = b.keys = b.last = 0;
+        events.push({ type: 'fight', tick: this.tick, id: h.id, foe: b.id });
         break;
       }
     }

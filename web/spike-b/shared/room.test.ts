@@ -248,7 +248,7 @@ describe('trainer against trainer', () => {
     expect(room.step(new Map())).toMatchObject([{ type: 'duel' }, { type: 'duel' }]);
   });
 
-  it('sees five cells along the look and no further, and never fights a bot this way', () => {
+  it('sees five cells along the look and no further; a beaten bot beside them stays out of it', () => {
     const room0 = makeRoom(MAPS, PATCHES, 99);
     // A row of Littleroot with nothing in the way for seven cells.
     let x0 = -1, y0 = -1;
@@ -259,6 +259,7 @@ describe('trainer against trainer', () => {
     const at = (dx: number) => {
       const room = makeRoom(MAPS, PATCHES, 99);
       room.apply({ c: 'join', id: 1, bot: true, name: 'BOT', skin: 4, spot: { map: L, x: x0, y: y0 + 1 }, facing: 2 });
+      room.actor(1)!.beaten = true;
       room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: L, x: x0, y: y0 }, facing: 4 });
       room.apply({ c: 'join', id: 3, bot: false, name: 'B', skin: 1, spot: { map: L, x: x0 + dx, y: y0 }, facing: 2 });
       for (let i = 0; i < 299; i++) room.step(new Map());
@@ -266,6 +267,20 @@ describe('trainer against trainer', () => {
     };
     expect(at(6)).toBe(0); // six cells
     expect(at(5)).toBe(2); // five
+  });
+
+  it('a bot that sees a trainer challenges them, once its grace is over; not one the trainer fled', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 1, bot: true, name: 'BOT', skin: 4, spot: { map: L, x: 10, y: 12 }, facing: 3 });
+    room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: L, x: 7, y: 12 }, facing: 1 });
+    const bot = room.actor(1)!, me = room.actor(2)!;
+    const events: ReturnType<typeof room.step> = [];
+    for (let i = 0; i < 400 && !me.battling; i++) events.push(...room.step(new Map()));
+    expect(events).toMatchObject([{ type: 'fight', id: 2, foe: 1 }]);
+    expect(me.m.facing).toBe(4); // turned to the bot
+    expect(bot.m.facing).toBe(3);
+    room.apply({ c: 'end', id: 2, fled: true });
+    for (let i = 0; i < 300; i++) expect(room.step(new Map())).toEqual([]); // fled: apart a while
   });
 
   it('a fight that never got going, or was fled, keeps that pair apart ten seconds', () => {

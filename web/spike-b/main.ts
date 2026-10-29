@@ -416,6 +416,9 @@ function startFor(e: RoomEvent): void {
     return;
   }
   if (e.type === 'fight') {
+    // A bot can come at me now (it saw me): a menu is no hiding place here either.
+    if (swapping) rom?.leave();
+    asking?.done('');
     const foe = link.room.actor(e.foe);
     if (!foe) { link.end(); return; }
     // A bot's team as the match deals it (bots/party.ts): from the seed and its seat, the
