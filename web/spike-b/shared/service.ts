@@ -126,7 +126,7 @@ interface Phone {
 
 /** The battle a phone's ROM is publishing, as sent: for a watcher who comes in after it
  *  started (the replay must start from its BSTART). */
-interface Stream { battle: number; sent: string[]; bytes: number }
+interface Stream { battle: number; sent: string[]; bytes: number; foe: number }
 
 interface Lobby {
   code: string;
@@ -169,6 +169,7 @@ export class WorldService {
         if (!m || typeof m !== 'object') return;
         if (phone?.kicked) phone = null;
         if (phone) phone.heard = this.opts.now();
+        if (m.t === 'here') return;
         if (m.t === 'list') { this.send(link, { t: 'rooms', rooms: this.listed() }); return; }
         if (m.t === 'join' && !phone && m.again && typeof m.again === 'object') {
           const back = this.back(m.again, link);
@@ -264,7 +265,7 @@ export class WorldService {
           const to = room.members.get(foe.id);
           if (to) this.send(to.link, { t: 'bt', q: m.q & 0xffff, d: m.d.map((v) => (Number(v) | 0) & 0xff) });
         } else if (m.t === 'sp') {
-          this.publish(room, phone, m.m);
+          this.publish(room, phone, m.m, m.as);
 
         } else if (m.t === 'watch') {
           if (!Number.isInteger(m.id) || m.id < 0 || m.id === phone.id || m.id === phone.watching) return;
@@ -294,9 +295,11 @@ export class WorldService {
         const was = p.watching;
         p.watching = 0;
         if (room) { room.streams.delete(p.id); this.eyes(room, was); }
-        // Mid-match, a reload comes back within the minute to the trainer it left; a
-        // reload mid-battle is a forfeit (Cam), and a page waiting on the bench just goes.
-        if (room?.host && me && !me.battling) {
+        // Mid-match, a reload comes back within the minute to the trainer it left, or to
+        // watching (out, or in for the next match): it went back to the menu, a match it
+        // was still in (Cam 10-29, "the game reset"). A reload mid-battle is a forfeit (Cam).
+        const benched = !me && room?.host?.room.bench.some((x) => x.id === p.id);
+        if (room?.host && ((me && !me.battling) || benched)) {
           p.away = this.opts.now();
           p.link = NOWHERE;
           room.host.away(p.id, true);
@@ -445,20 +448,24 @@ export class WorldService {
   }
 
   /** One of a fighter's published battle's messages: kept, and on to everybody watching
-   *  either side of it. Only from a trainer in a battle; a TURN only after its BSTART. */
-  private publish(room: Lobby, phone: Phone, raw: SpMsg): void {
+   *  either side of it. Only from a trainer in a battle, or from the judge of a bots'
+   *  fight (`as`, the bot it is published as: its judge watching gets it too); a TURN only
+   *  after its BSTART. */
+  private publish(room: Lobby, phone: Phone, raw: SpMsg, as?: number): void {
     if (!raw || (raw.t !== 'bstart' && raw.t !== 'turn') || !Number.isInteger(raw.battle) || !Array.isArray(raw.data)) return;
     if (raw.data.length > (raw.t === 'bstart' ? BSTART_MAX : TURN_MAX)) return;
-    const me = room.host?.room.actor(phone.id);
+    const bot = as === undefined ? undefined : room.host?.room.actor(as);
+    if (as !== undefined && (!bot?.bot || bot.judge !== phone.id)) return;
+    const me = bot ?? room.host?.room.actor(phone.id);
     if (!me?.battling) return;
     const m: SpMsg = { t: raw.t, battle: raw.battle & 0xffff, data: raw.data.map((v) => (Number(v) | 0) & 0xff) };
-    let s = room.streams.get(phone.id);
-    if (m.t === 'bstart') room.streams.set(phone.id, (s = { battle: m.battle, sent: [], bytes: 0 }));
+    let s = room.streams.get(me.id);
+    if (m.t === 'bstart') room.streams.set(me.id, (s = { battle: m.battle, sent: [], bytes: 0, foe: me.foe }));
     if (!s || s.battle !== m.battle) return;
-    const text = JSON.stringify({ t: 'sp', from: phone.id, m } satisfies WorldDown);
+    const text = JSON.stringify({ t: 'sp', from: me.id, m } satisfies WorldDown);
     if (s.bytes + text.length <= STREAM_MAX) { s.sent.push(text); s.bytes += text.length; }
     for (const w of room.members.values()) {
-      if (w !== phone && w.watching && (w.watching === phone.id || w.watching === me.foe)) w.link.send(text);
+      if ((w !== phone || bot) && w.watching && (w.watching === me.id || w.watching === me.foe)) w.link.send(text);
     }
   }
 
@@ -468,10 +475,13 @@ export class WorldService {
     const r = room.host?.room;
     const a = r?.actor(id);
     if (!r || !a?.battling) return undefined;
+    // A stream is the fight it began with: a bot's is never dropped (no end of its own
+    // comes), so one against somebody else is an old fight, not this one.
     const own = room.streams.get(id);
-    if (own) return own;
+    if (own && own.foe === a.foe) return own;
     const foe = a.foe ? r.actor(a.foe) : undefined;
-    return foe?.battling && foe.foe === id ? room.streams.get(foe.id) : undefined;
+    const theirs = foe?.battling && foe.foe === id ? room.streams.get(foe.id) : undefined;
+    return theirs && theirs.foe === id ? theirs : undefined;
   }
 
   /** Every team the room's trainers have told, to one phone just in (the legendary's

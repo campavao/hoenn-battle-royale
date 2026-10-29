@@ -225,6 +225,34 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it("a hidden tab's 'here' keeps it in; out and watching, a dropped socket comes back to watching", () => {
+    let t = 0;
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 3, cap: 30, now: () => t, log: () => undefined });
+    try {
+      const a = phone(), b = phone();
+      const sa = svc.open(a.link), sb = svc.open(b.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, code }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      const hello = a.got.find((m) => m.t === 'hello') as unknown as { id: number; key: string };
+      // Walked away: no frames for three minutes, only the hidden tab's 'here'.
+      for (let i = 0; i < 9; i++) { t += 20_000; sa.onText(JSON.stringify({ t: 'here' })); sb.onText(JSON.stringify({ t: 'here' })); svc.pump(); }
+      expect(a.closed).toBe(false);
+      // Out, watching: the socket drops (a reload, the wifi) and comes back inside the minute.
+      sa.onText(JSON.stringify({ t: 'out' }));
+      t += 1000; svc.pump();
+      sa.onClose();
+      t += 20_000; svc.pump();
+      const a2 = phone();
+      svc.open(a2.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, code, again: { code, id: hello.id, key: hello.key } }));
+      const back = a2.got.find((m) => m.t === 'hello') as unknown as { id: number; state: { bench: { id: number }[] } };
+      expect(back.id).toBe(hello.id);
+      expect(back.state.bench.map((x) => x.id)).toContain(hello.id);
+    } finally {
+      svc.stop();
+    }
+  });
   it('a new socket with the key takes the trainer over before the old one is seen to close', () => {
     let t = 0;
     const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 3, cap: 30, now: () => t, log: () => undefined });
@@ -405,6 +433,58 @@ describe('world rooms', () => {
       expect(sp(b)).toHaveLength(2);
       sc.onClose();
       expect(eyes()).toBe(1);
+    } finally {
+      svc.stop();
+    }
+  });
+  it("hands on a bots' fight from its judge's page, to its watchers and the judge watching too", () => {
+    let t = 0;
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 2, cap: 30, now: () => t, log: () => undefined });
+    try {
+      const a = phone(), b = phone();
+      const sa = svc.open(a.link), sb = svc.open(b.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 1, code }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      const alice = (a.got.find((m) => m.t === 'hello') as unknown as { id: number }).id;
+      t += 200;
+      svc.pump();
+      type Bot = { id: number; bot: boolean; battling: boolean; foe: number; judge?: number };
+      const room = [...(svc as unknown as { rooms: Map<string, { host: { room: { actors: Bot[] } } }> }).rooms.values()][0];
+      const [x, y] = room.host.room.actors.filter((o) => o.bot);
+      Object.assign(x, { battling: true, foe: y.id, judge: alice });
+      Object.assign(y, { battling: true, foe: x.id, judge: alice });
+      const sp = (p: ReturnType<typeof phone>) => p.got.filter((m) => m.t === 'sp') as unknown as { from: number; m: { t: string } }[];
+      sa.onText(JSON.stringify({ t: 'watch', id: y.id }));
+      sb.onText(JSON.stringify({ t: 'watch', id: x.id }));
+      // Not its judge: bob publishes nothing as a bot.
+      sb.onText(JSON.stringify({ t: 'sp', as: x.id, m: { t: 'bstart', battle: x.id | (y.id << 8), data: [1] } }));
+      expect(sp(a)).toHaveLength(0);
+      sa.onText(JSON.stringify({ t: 'sp', as: x.id, m: { t: 'bstart', battle: x.id | (y.id << 8), data: [1] } }));
+      sa.onText(JSON.stringify({ t: 'sp', as: x.id, m: { t: 'turn', battle: x.id | (y.id << 8), data: [0, 1, 4] } }));
+      expect(sp(b).map((m) => [m.from, m.m.t])).toEqual([[x.id, 'bstart'], [x.id, 'turn']]);
+      expect(sp(a).map((m) => [m.from, m.m.t]), 'the judge watching the other bot').toEqual([[x.id, 'bstart'], [x.id, 'turn']]);
+
+      // The fight over, x fights bob: a new watcher of x is not handed x's fight with y.
+      const bob = (b.got.find((m) => m.t === 'hello') as unknown as { id: number }).id;
+      const xb = room.host.room.actors.find((o) => o.id === bob)!;
+      Object.assign(y, { battling: false, foe: 0, judge: 0 });
+      Object.assign(x, { battling: true, foe: bob, judge: 0 });
+      Object.assign(xb, { battling: true, foe: x.id });
+      const c = phone();
+      const sc = svc.open(c.link);
+      sc.onText(JSON.stringify({ t: 'join', name: 'carol', skin: 2, code }));
+      sc.onText(JSON.stringify({ t: 'watch', id: x.id }));
+      expect(sp(c), 'no old fight').toHaveLength(0);
+      // ...and once bob publishes theirs, that is the one.
+      sb.onText(JSON.stringify({ t: 'sp', m: { t: 'bstart', battle: x.id | (bob << 8), data: [2] } }));
+      expect(sp(c).map((m) => m.from)).toEqual([bob]);
+      const d = phone();
+      const sd = svc.open(d.link);
+      sd.onText(JSON.stringify({ t: 'join', name: 'dan', skin: 3, code }));
+      sd.onText(JSON.stringify({ t: 'watch', id: x.id }));
+      expect(sp(d).map((m) => m.from), 'a late watcher of x gets the fight with bob').toEqual([bob]);
     } finally {
       svc.stop();
     }

@@ -57,6 +57,7 @@ function mulberry32(seed, state) {
 function pickIndex(rng, length) {
   return Math.min(length - 1, Math.floor(rng() * length));
 }
+var RING_RADII = [28, 15, 9, 7, 5, 3, 2, 0, -1];
 
 // web/src/data/lines.json
 var lines_default = [
@@ -2351,8 +2352,12 @@ var AFTER_WIN = 60 * 15;
 var TRUCK = 40;
 var DEALS = /* @__PURE__ */ new Map();
 var REACH = /* @__PURE__ */ new Map();
+var LANDS = /* @__PURE__ */ new Map();
+var LANDED = /* @__PURE__ */ new WeakMap();
+var LANDING = 200;
 var RING_PHASE = 60 * 120;
-var RING_STEPS = [Infinity, 15 / 28, 9 / 28, 7 / 28, 5 / 28, 3 / 28, 2 / 28, 0, -1];
+var SECTION_TILES = 27;
+var RING_STEPS = RING_RADII.map((r, i) => i === 0 ? Infinity : r < 0 ? r : Math.max(r, 0.5) * SECTION_TILES);
 var FINAL_REACH = 24;
 var SAFARI = "MAP_SAFARI_ZONE_";
 var PICK_WAIT = 35 * 60;
@@ -2443,8 +2448,8 @@ var Room = class {
       const a = this.actor(cmd.id);
       if (a && !a.bot && a.m.spot.map.startsWith(SAFARI) && this.places.has(cmd.map) && !cmd.map.startsWith(SAFARI)) this.dropOne(a, cmd.map);
     } else if (cmd.c === "away") {
-      const a = this.actor(cmd.id);
-      if (a && !a.bot) a.away = cmd.on || void 0;
+      const a = this.actor(cmd.id) ?? this.bench.find((b) => b.id === cmd.id);
+      if (a && !("bot" in a && a.bot)) a.away = cmd.on || void 0;
     } else if (cmd.c === "sail") {
       const a = this.actor(cmd.id);
       if (!a || a.bot || a.battling || a.m.action) return;
@@ -2643,11 +2648,11 @@ var Room = class {
     const len = this.ringPhase;
     const round = this.results.round;
     let t = tick2 - this.epoch;
-    const { cx, cy, far } = this.centre(round);
+    const { cx, cy } = this.centre(round);
     if (t < this.opening) return { round, phase: 0, last: false, cx, cy, r: Infinity, next: Infinity, left: this.opening - t, safari: true };
     t -= this.opening;
     const phase = Math.min(RING_STEPS.length - 1, Math.floor(t / len));
-    const at = (i) => RING_STEPS[i] === Infinity || RING_STEPS[i] < 0 ? RING_STEPS[i] : RING_STEPS[i] * far;
+    const at = (i) => RING_STEPS[i];
     const last = phase === RING_STEPS.length - 1;
     return { round, phase, last, cx, cy, r: at(phase), next: last ? void 0 : at(phase + 1), left: last ? 0 : len - (t - phase * len) };
   }
@@ -2742,7 +2747,6 @@ var Room = class {
     const r = this.results;
     const end = this.roundEnd();
     if (end !== void 0 && this.tick >= end + AFTER_WIN) this.newRound(r.round + 1);
-    else if (this.tick - PICK_WAIT >= this.epoch && this.ring(this.tick - PICK_WAIT).safari && !this.ring(this.tick - PICK_WAIT + 1).safari) this.drop();
     else if (was.safari && !ring.safari) {
       for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) this.dropOne(a);
     } else if (ring.phase !== was.phase) {
@@ -2751,6 +2755,7 @@ var Room = class {
       const n = eventForRing(ring.phase);
       if (n !== void 0) this.dropEvent(n, ring);
     }
+    if (!ring.safari && this.opening) this.waitPicks();
     if (!r.winner && r.entrants.length >= 2) {
       const alive = r.entrants.filter(([id]) => !r.fallen.some((f) => f.id === id));
       if (alive.length === 1) {
@@ -2888,7 +2893,7 @@ var Room = class {
   engageBots(events) {
     if (this.ring().safari) return;
     if (this.tick < this.duelAfter || this.tick % 8) return;
-    const judges = [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench];
+    const judges = [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b) => !b.away)];
     if (!judges.length) return;
     const byMap = /* @__PURE__ */ new Map();
     for (const a of this.actors) {
@@ -2944,7 +2949,20 @@ var Room = class {
     const phase = this.ring().phase + 1;
     const grade = gradeOf(this.seed, a.id);
     const party = dealParty(this.seed, a.id, phase, a.m.spot.map, grade);
-    const bag = { items: carried(party, []), money: purse(phase, grade), mons: party.map((m) => ({ species: m.species, level: m.level })) };
+    const loot = [];
+    let money = purse(phase, grade);
+    const mine = /* @__PURE__ */ new Set();
+    for (const [k, who] of this.picked) if (who === a.id) mine.add(k);
+    if (mine.size) {
+      for (const g of this.ground().values()) if (mine.has(g.key)) add(loot, g.item);
+      for (const k of mine) {
+        const b = this.spills.get(k);
+        if (!b) continue;
+        for (const st of b.bag.items) add(loot, st.id, st.n);
+        money += b.bag.money;
+      }
+    }
+    const bag = { items: carried(party, loot), money, mons: party.map((m) => ({ species: m.species, level: m.level })) };
     const key = SPILL_KEY + a.id;
     if (!emptyBag(bag)) this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag });
     this.fall(a, by);
@@ -3000,10 +3018,105 @@ var Room = class {
     REACH.set(id, out);
     return out;
   }
-  /** The fly map is over for everybody (PICK_WAIT after the Safari): whoever is still
-   *  in the Zone, having chosen nowhere, drops anywhere outdoors (br_pick.c's timeout). */
-  drop() {
-    for (const a of this.actors) if (!a.bot && a.m.spot.map.startsWith(SAFARI)) this.dropOne(a);
+  /** Cells a drop may land on: outdoors, from which one can walk to a stretch of ground
+   *  where every cell reaches every other, LANDING cells or more (a strongly connected
+   *  component of the step graph: ledges go one way). A pocket walled in by water or rock
+   *  (the bank behind the ABANDONED SHIP), or one a ledge drops into with no way back to
+   *  open ground, is no place to be dropped without SURF. */
+  landing() {
+    const id = "landing:" + [...this.maps.keys()].join();
+    const hit = LANDS.get(id);
+    if (hit) return hit;
+    const index = /* @__PURE__ */ new Map(), spots = [], next = [];
+    const node = (s) => {
+      const k = `${s.map}:${s.x}:${s.y}:${s.z ?? ""}`;
+      let n = index.get(k);
+      if (n === void 0) {
+        n = spots.length;
+        index.set(k, n);
+        spots.push(s);
+        next.push([]);
+      }
+      return n;
+    };
+    for (const map of this.places.keys()) {
+      if (map.startsWith(SAFARI)) continue;
+      const m = this.maps.get(map);
+      for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (this.world.cell(map, x, y) === 0) node({ map, x, y });
+    }
+    for (let n = 0; n < spots.length; n++) {
+      for (let dir = 1; dir <= 4; dir++) {
+        const r = this.base(spots[n], dir);
+        if (r && this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) next[n].push(node(r.to));
+      }
+    }
+    const N = spots.length, order = new Int32Array(N).fill(-1), low = new Int32Array(N), comp = new Int32Array(N).fill(-1);
+    const stack = [], onStack = new Uint8Array(N), sizes = [];
+    let time = 0;
+    for (let root = 0; root < N; root++) {
+      if (order[root] >= 0) continue;
+      const work = [[root, 0]];
+      order[root] = low[root] = time++;
+      stack.push(root);
+      onStack[root] = 1;
+      while (work.length) {
+        const top = work[work.length - 1], v = top[0];
+        if (top[1] < next[v].length) {
+          const w = next[v][top[1]++];
+          if (order[w] < 0) {
+            order[w] = low[w] = time++;
+            stack.push(w);
+            onStack[w] = 1;
+            work.push([w, 0]);
+          } else if (onStack[w]) low[v] = Math.min(low[v], order[w]);
+          continue;
+        }
+        work.pop();
+        if (work.length) {
+          const u = work[work.length - 1][0];
+          low[u] = Math.min(low[u], low[v]);
+        }
+        if (low[v] === order[v]) {
+          const c = sizes.length;
+          let size = 0, w;
+          do {
+            w = stack.pop();
+            onStack[w] = 0;
+            comp[w] = c;
+            size++;
+          } while (w !== v);
+          sizes.push(size);
+        }
+      }
+    }
+    const prev = spots.map(() => []);
+    for (let v = 0; v < N; v++) for (const w of next[v]) prev[w].push(v);
+    const ok = new Uint8Array(N), queue = [];
+    for (let v = 0; v < N; v++) if (sizes[comp[v]] >= LANDING) {
+      ok[v] = 1;
+      queue.push(v);
+    }
+    while (queue.length) for (const u of prev[queue.pop()]) if (!ok[u]) {
+      ok[u] = 1;
+      queue.push(u);
+    }
+    const out = /* @__PURE__ */ new Set();
+    for (let v = 0; v < N; v++) {
+      const s = spots[v];
+      if (ok[v] && s.z === void 0 && this.world.cell(s.map, s.x, s.y) === 0) out.add(`${s.map}:${s.x}:${s.y}`);
+    }
+    LANDS.set(id, out);
+    return out;
+  }
+  /** The fly map's time (PICK_WAIT after the Safari, or after a battle fought in the
+   *  Zone since): whoever is still there, having chosen nowhere, drops anywhere outdoors
+   *  (br_pick.c's timeout). */
+  waitPicks() {
+    for (const a of this.actors) {
+      if (a.bot || !a.m.spot.map.startsWith(SAFARI)) continue;
+      if (a.battling) a.pickBy = this.tick + PICK_WAIT;
+      else if (this.tick >= (a.pickBy ?? this.epoch + this.opening + PICK_WAIT)) this.dropOne(a);
+    }
   }
   /** `a` out of the Zone onto a free cell of `want` (or of any outdoor map), dealt from
    *  the seed, the round and who it is, as the host deals the live drop's cell. */
@@ -3017,14 +3130,17 @@ var Room = class {
     };
     const used = new Set(this.actors.map((o) => `${o.m.spot.map}:${o.m.spot.x}:${o.m.spot.y}`));
     const reach = a.bot ? new Set(this.reachable().map((s) => `${s.map}:${s.x}:${s.y}`)) : null;
-    const maps = [...new Set(reach ? this.reachable().map((s) => s.map) : this.places.keys())].filter((m) => !m.startsWith(SAFARI)).sort();
+    const land = this.landing();
+    let landed = LANDED.get(land);
+    if (!landed) LANDED.set(land, landed = new Set([...land].map((k) => k.slice(0, k.indexOf(":")))));
+    const maps = [...new Set(reach ? this.reachable().map((s) => s.map) : this.places.keys())].filter((m) => !m.startsWith(SAFARI) && landed.has(m)).sort();
     for (let tries = 0; tries < 4; tries++) {
       const map = tries === 0 && want ? want : maps[Math.floor(rng() * maps.length)];
       const m = this.maps.get(map);
       if (!m) continue;
       const cells = [];
       for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
-        if (this.world.cell(map, x, y) !== 0 || used.has(`${map}:${x}:${y}`) || this.groundAt(map, x, y) || this.spillAt(map, x, y)) continue;
+        if (this.world.cell(map, x, y) !== 0 || !land.has(`${map}:${x}:${y}`) || used.has(`${map}:${x}:${y}`) || this.groundAt(map, x, y) || this.spillAt(map, x, y)) continue;
         if (reach && !reach.has(`${map}:${x}:${y}`)) continue;
         if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
         cells.push({ map, x, y });
@@ -3032,6 +3148,7 @@ var Room = class {
       if (!cells.length) continue;
       a.m = newMover(cells[Math.floor(rng() * cells.length)], 1);
       a.calm = this.tick + JOIN_GRACE;
+      a.pickBy = void 0;
       return;
     }
   }
@@ -3054,6 +3171,7 @@ var Room = class {
       a.calm = this.tick + JOIN_GRACE;
       a.shun = a.shunUntil = 0;
       a.arriving = false;
+      a.pickBy = void 0;
     });
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
@@ -3181,6 +3299,13 @@ var Room = class {
       if (dir) {
         a.m.facing = a.m.moveDir = dir;
         const r = this.stepFor(a)(a.m.spot, dir);
+        if (!r && bits & KEY_A) {
+          const [x, y] = this.ahead(a);
+          const g = this.groundAt(a.m.spot.map, x, y);
+          const b = g ? void 0 : this.spillAt(a.m.spot.map, x, y);
+          if (g && !g.gift) this.picked.set(g.key, a.id);
+          if (b && !b.legend && !b.person && b.guard === void 0) this.picked.set(b.key, a.id);
+        }
         if (!r || (r.hop || r.water && !this.onWater(a)) && !(bits & KEY_A)) {
           a.last = bits;
           return;
@@ -3344,6 +3469,7 @@ var Room = class {
       mix2(a.bleedAt ?? 0);
       mix2(a.boss ?? 0);
       mix2(a.away ? 1 : 0);
+      mix2(a.pickBy ?? 0);
       if (a.meet) {
         mix2(a.meet.foe);
         mix2(a.meet.since);
@@ -3361,6 +3487,7 @@ var Room = class {
     for (const b of this.bench) {
       mix2(b.id);
       mix2(b.skin);
+      mix2(b.away ? 1 : 0);
       str(b.name);
     }
     const r = this.results;
@@ -3492,7 +3619,9 @@ function makeRoom(all, patches, seed, world) {
     maps.set(m.id, m);
     anchors.set(m.id, harbor);
   }
-  return new Room(world ?? new World(all), maps, patches, seed, places, anchors);
+  const room = new Room(world ?? new World(all), maps, patches, seed, places, anchors);
+  room.landing();
+  return room;
 }
 
 // web/spike-b/shared/bots.ts
@@ -3534,6 +3663,20 @@ function insideNext(room) {
   return cells;
 }
 function goal(room, a, b) {
+  if (hunting(room)) {
+    const p2 = room.places.get(a.m.spot.map);
+    let best2, bestD2 = Infinity;
+    for (const o of room.actors) {
+      const q = room.places.get(o.m.spot.map);
+      if (o === a || o.away || !p2 || !q || room.inFog(o.m.spot)) continue;
+      const d = Math.abs(q.gx + o.m.spot.x - p2.gx - a.m.spot.x) + Math.abs(q.gy + o.m.spot.y - p2.gy - a.m.spot.y);
+      if (d < bestD2) {
+        bestD2 = d;
+        best2 = o;
+      }
+    }
+    if (best2) return { ...best2.m.spot };
+  }
   const ev = room.events[room.events.length - 1];
   if (ev && room.spills.has(ev.key) && !room.picked.has(ev.key) && rand(b) < 1 / 3 && !room.inFog({ map: ev.map, x: ev.x, y: ev.y })) {
     const near = room.reachable().filter((s) => s.map === ev.map && Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
@@ -3566,11 +3709,17 @@ function leg(room, from, to) {
   const hop = hops.find((m) => room.places.has(m));
   return hop ? findPathToAny(room.world, from, room.world.entryCells(from.map, hop, true, true), 6e3, true, true) : null;
 }
+var HUNT_AT = 3;
+function hunting(room) {
+  const r = room.results;
+  return !room.ring().safari && r.entrants.length > 0 && r.entrants.length - r.fallen.length <= HUNT_AT;
+}
 function botKeys(room, a, b) {
   if (a.m.action) return 0;
   const ring = room.ring();
   const at = `${ring.round}:${ring.phase}:${room.events.length}`;
-  if ((b.plan !== at || !b.goal && room.inFog(a.m.spot, ring)) && (room.tick + a.id * 7) % 30 === 0) {
+  const hunt = hunting(room) && (!b.steps?.length || (room.tick + a.id * 7) % 240 === 0);
+  if ((b.plan !== at || hunt || !b.goal && room.inFog(a.m.spot, ring)) && (room.tick + a.id * 7) % 30 === 0) {
     b.plan = at;
     b.goal = goal(room, a, b);
     b.steps = void 0;
@@ -3579,7 +3728,12 @@ function botKeys(room, a, b) {
   if (b.goal && !b.steps?.length && (room.tick + a.id * 7) % 30 === 0) {
     const path = !sameSpot(a.m.spot, b.goal) && (b.legs = (b.legs ?? 0) + 1) <= 24 ? leg(room, a.m.spot, b.goal) : null;
     b.steps = path?.found ? path.steps : void 0;
-    if (!b.steps) b.goal = null;
+    const end = b.steps?.[b.steps.length - 1]?.to;
+    if (end && room.actors.some((o) => o !== a && sameSpot(o.m.spot, end))) b.steps = b.steps.slice(0, -1);
+    if (!b.steps?.length) {
+      b.steps = void 0;
+      b.goal = null;
+    }
     b.stuck = 0;
   }
   if (!b.steps?.length && (room.tick + a.id * 7) % 30 === 0 && room.tick >= a.calm && !ring.safari && !room.inFog(a.m.spot, ring)) {
@@ -3918,6 +4072,7 @@ var WorldService = class {
         if (!m || typeof m !== "object") return;
         if (phone?.kicked) phone = null;
         if (phone) phone.heard = this.opts.now();
+        if (m.t === "here") return;
         if (m.t === "list") {
           this.send(link, { t: "rooms", rooms: this.listed() });
           return;
@@ -4029,7 +4184,7 @@ var WorldService = class {
           const to = room.members.get(foe.id);
           if (to) this.send(to.link, { t: "bt", q: m.q & 65535, d: m.d.map((v) => (Number(v) | 0) & 255) });
         } else if (m.t === "sp") {
-          this.publish(room, phone, m.m);
+          this.publish(room, phone, m.m, m.as);
         } else if (m.t === "watch") {
           if (!Number.isInteger(m.id) || m.id < 0 || m.id === phone.id || m.id === phone.watching) return;
           const was = phone.watching;
@@ -4058,7 +4213,8 @@ var WorldService = class {
           room.streams.delete(p.id);
           this.eyes(room, was);
         }
-        if (room?.host && me && !me.battling) {
+        const benched = !me && room?.host?.room.bench.some((x) => x.id === p.id);
+        if (room?.host && (me && !me.battling || benched)) {
           p.away = this.opts.now();
           p.link = NOWHERE;
           room.host.away(p.id, true);
@@ -4198,23 +4354,27 @@ var WorldService = class {
     if (!this.rooms.size) this.stop();
   }
   /** One of a fighter's published battle's messages: kept, and on to everybody watching
-   *  either side of it. Only from a trainer in a battle; a TURN only after its BSTART. */
-  publish(room, phone, raw) {
+   *  either side of it. Only from a trainer in a battle, or from the judge of a bots'
+   *  fight (`as`, the bot it is published as: its judge watching gets it too); a TURN only
+   *  after its BSTART. */
+  publish(room, phone, raw, as) {
     if (!raw || raw.t !== "bstart" && raw.t !== "turn" || !Number.isInteger(raw.battle) || !Array.isArray(raw.data)) return;
     if (raw.data.length > (raw.t === "bstart" ? BSTART_MAX : TURN_MAX)) return;
-    const me = room.host?.room.actor(phone.id);
+    const bot = as === void 0 ? void 0 : room.host?.room.actor(as);
+    if (as !== void 0 && (!bot?.bot || bot.judge !== phone.id)) return;
+    const me = bot ?? room.host?.room.actor(phone.id);
     if (!me?.battling) return;
     const m = { t: raw.t, battle: raw.battle & 65535, data: raw.data.map((v) => (Number(v) | 0) & 255) };
-    let s = room.streams.get(phone.id);
-    if (m.t === "bstart") room.streams.set(phone.id, s = { battle: m.battle, sent: [], bytes: 0 });
+    let s = room.streams.get(me.id);
+    if (m.t === "bstart") room.streams.set(me.id, s = { battle: m.battle, sent: [], bytes: 0, foe: me.foe });
     if (!s || s.battle !== m.battle) return;
-    const text = JSON.stringify({ t: "sp", from: phone.id, m });
+    const text = JSON.stringify({ t: "sp", from: me.id, m });
     if (s.bytes + text.length <= STREAM_MAX) {
       s.sent.push(text);
       s.bytes += text.length;
     }
     for (const w of room.members.values()) {
-      if (w !== phone && w.watching && (w.watching === phone.id || w.watching === me.foe)) w.link.send(text);
+      if ((w !== phone || bot) && w.watching && (w.watching === me.id || w.watching === me.foe)) w.link.send(text);
     }
   }
   /** The battle trainer `id` is in now, as published: by their ROM, or by the ROM of the
@@ -4224,9 +4384,10 @@ var WorldService = class {
     const a = r?.actor(id);
     if (!r || !a?.battling) return void 0;
     const own = room.streams.get(id);
-    if (own) return own;
+    if (own && own.foe === a.foe) return own;
     const foe = a.foe ? r.actor(a.foe) : void 0;
-    return foe?.battling && foe.foe === id ? room.streams.get(foe.id) : void 0;
+    const theirs = foe?.battling && foe.foe === id ? room.streams.get(foe.id) : void 0;
+    return theirs && theirs.foe === id ? theirs : void 0;
   }
   /** Every team the room's trainers have told, to one phone just in (the legendary's
    *  chip and the champion's hall of fame read them). */

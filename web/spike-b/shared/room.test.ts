@@ -10,12 +10,13 @@ import { describe, expect, it } from 'vitest';
 import type { WorldMap } from '../../src/bots/world';
 import type { PatchTable } from '../../src/bots/patches';
 import worldJson from '../data/world.json';
+import sectionsJson from '../../../src/data/region_map/region_map_sections.json';
 import { STORIES } from '../../src/match/story';
 import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
 import { over } from './over';
 import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, isTm, within } from './items';
-import { AFTER_WIN, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_PER_MAP, RING_PHASE, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, WALKUP_BANG, eventPiece, makeRoom } from './room';
+import { AFTER_WIN, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, WALKUP_BANG, eventPiece, makeRoom } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -140,15 +141,19 @@ describe('bots with somewhere to be', () => {
     // A legendary's event, not a story's (STORY_CHANCE), and not the final ring's sea.
     (room as unknown as { storyFor(): undefined }).storyFor = () => undefined;
     expect(room.centre(room.ring().round).final).toBeUndefined();
+    // Phase 5 (2 sections next): the first shrinks, live's 15 and 9 sections, leave the
+    // walk out of Littleroot that the bots are dealt on alone.
+    room.epoch = room.tick - 5 * RING_PHASE;
     const r0 = room.ring();
-    // How many bots the first fog would catch, were it to close now.
+    // How many bots the next fog would catch, were it to close now.
     const r1 = { ...r0, r: r0.next! };
     const outside = () => room.actors.filter((a) => a.bot && room.inFog(a.m.spot, r1)).length;
     const before = outside();
     expect(before).toBeGreaterThan(8);
     for (let f = 0; f < RING_PHASE - 60; f++) host.advance();
     expect(outside()).toBeLessThanOrEqual(before / 2);
-    // A legendary on the ground draws some of them.
+    // A legendary on the ground draws some of them (an early phase's event).
+    room.epoch = room.tick - RING_PHASE + 60;
     room.ringPhase = RING_PHASE;
     for (let f = 0; f < 120; f++) host.advance();
     const e = room.events[0];
@@ -655,7 +660,7 @@ describe('the fog', () => {
     const radii = [1, 2, 3, 4, 5, 6, 7].map((p) => at(p).r);
     for (let i = 1; i < radii.length; i++) expect(radii[i]).toBeLessThan(radii[i - 1]);
     expect(radii[5]).toBeGreaterThan(0);
-    expect(radii[6]).toBe(0); // the centre cell alone, as the match's 0
+    expect(radii[6]).toBe(SECTION_TILES / 2); // the centre's own section, as the match's 0
     expect(at(8)).toMatchObject({ phase: 8, r: -1, last: true });
     // The fog everywhere holds (director.ts stops its ring there): no lifting on a timer.
     expect(at(40)).toMatchObject({ round: 0, phase: 8, r: -1, last: true, left: 0 });
@@ -670,7 +675,8 @@ describe('the fog', () => {
     // every reachable cell is clear in the announcement; most are fogged by the seventh phase
     const cells = room.reachable();
     expect(cells.filter((s) => room.inFog(s, at(0))).length).toBe(0);
-    expect(cells.filter((s) => room.inFog(s, at(7))).length / cells.length).toBeGreaterThan(0.9);
+    // ...and all but the centre's section by the seventh (Littleroot's walk is a few sections)
+    expect(cells.filter((s) => room.inFog(s, at(7))).length / cells.length).toBeGreaterThan(0.8);
   });
 
   it('a trainer who is out leaves the map, and its bot walks again', () => {
@@ -911,6 +917,60 @@ describe('a match from a room', () => {
   });
 });
 
+describe("the ring's size", () => {
+  it("is the live match's, in sections of SECTION_TILES: the fit of the maps to region_map_sections.json", () => {
+    const room = makeRoom(MAPS, PATCHES, 11);
+    const S = new Map(sectionsJson.map_sections.flatMap((s) => (s.x === undefined ? [] : [[s.id, { x: s.x, y: s.y!, width: s.width!, height: s.height! }] as const])));
+    const fit = (pick: (m: WorldMap, p: { gx: number; gy: number }, s: { x: number; y: number; width: number; height: number }) => [number, number]) => {
+      let n = 0, su = 0, sv = 0, suu = 0, suv = 0;
+      for (const [id, p] of room.places) {
+        const m = room.maps.get(id)!, s = S.get(m.section);
+        if (!s || !m.outdoor) continue;
+        const [u, v] = pick(m, p, s);
+        n++; su += u; sv += v; suu += u * u; suv += u * v;
+      }
+      return (n * suv - su * sv) / (n * suu - su * su);
+    };
+    const kx = fit((m, p, s) => [s.x + s.width / 2, p.gx + m.w / 2]), ky = fit((m, p, s) => [s.y + s.height / 2, p.gy + m.h / 2]);
+    expect(Math.abs(kx - SECTION_TILES)).toBeLessThan(1);
+    expect(Math.abs(ky - SECTION_TILES)).toBeLessThan(1);
+    // Each phase's radius, as live's RING_RADII after the announcement.
+    room.ringPhase = 60;
+    const r = (phase: number) => room.ring(phase * 60).r;
+    expect([0, 1, 2, 3, 4, 5, 6, 7, 8].map(r)).toEqual([Infinity, 15 * 27, 9 * 27, 7 * 27, 5 * 27, 3 * 27, 2 * 27, 13.5, -1]);
+  });
+});
+
+describe('the last three', () => {
+  it('hunt each other, picking up the bags and balls in their way, to a champion', () => {
+    // Seed 99 left its last two standing apart behind an item ball until the fog took one.
+    for (const seed of [99, 4242]) {
+      const host = new Host(makeRoom(MAPS, PATCHES, seed), 7, MAPS, 0);
+      host.room.ringPhase = 120 * 60;
+      const me = host.join('ME', 0, undefined, 1000);
+      host.lock();
+      let pend: [number, number, number][] = [];
+      let three = 0;
+      for (let f = 0; f < 60 * 60 * 20 && !over(host.room); f++) {
+        if (f === 3600) host.out(me);
+        host.input(me, f + 1, [0]);
+        for (const [a, b] of pend.filter(([, , at]) => f >= at)) host.bots(me, a, b, a);
+        pend = pend.filter(([, , at]) => f < at);
+        for (const e of host.advance().events) if (e.type === 'bots') pend.push([e.a, e.b, f + 600]);
+        const r = host.room.results;
+        if (!three && r.entrants.length - r.fallen.length <= 3) three = f;
+      }
+      const r = host.room.results;
+      expect(over(host.room)).toBe(true);
+      expect(r.winner).toBeGreaterThan(0);
+      const last = r.fallen.filter((x) => (x.at ?? 0) > three);
+      expect(last.length).toBe(2);
+      expect(last.every((x) => x.by)).toBe(true);
+      expect(last[1].at! - three).toBeLessThan(60 * 90);
+    }
+  });
+});
+
 describe('doors', () => {
   const O = 'MAP_OLDALE_TOWN', PC = 'MAP_OLDALE_TOWN_POKEMON_CENTER_1F';
   const walk = (room: ReturnType<typeof makeRoom>, id: number, bits: number, n: number) => {
@@ -1112,6 +1172,50 @@ describe('where the Safari opens (HBR-109)', () => {
     // The buzzer: the bots are out over Hoenn at once; I wait on my fly map.
     expect(bots.every((a) => !a.m.spot.map.startsWith(SAFARI))).toBe(true);
     expect(room.actor(me)!.m.spot.map.startsWith(SAFARI)).toBe(true);
+  });
+});
+
+describe('the drop after the Safari (Cam 2026-10-29)', () => {
+  it('waits out a battle fought in the Zone before dropping anywhere, and never onto a walled-in pocket', () => {
+    const room = makeRoom(MAPS, PATCHES, 21);
+    room.ringPhase = 6000;
+    room.opening = 300;
+    room.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: room.truck(1)[0], facing: 1 });
+    const a = room.actor(1)!;
+    while (room.ring().safari) room.step(new Map());
+    // A battle that runs past the fly map's time: still in the Zone after it.
+    a.battling = true;
+    for (let i = 0; i < PICK_WAIT + 600; i++) room.step(new Map());
+    expect(a.m.spot.map.startsWith(SAFARI)).toBe(true);
+    a.battling = false;
+    // Then the fly map's whole time again, and the drop.
+    for (let i = 0; i < PICK_WAIT - 10; i++) room.step(new Map());
+    expect(a.m.spot.map.startsWith(SAFARI)).toBe(true);
+    for (let i = 0; i < 20; i++) room.step(new Map());
+    expect(a.m.spot.map.startsWith(SAFARI)).toBe(false);
+    expect(room.landing().has(`${a.m.spot.map}:${a.m.spot.x}:${a.m.spot.y}`)).toBe(true);
+    // The bank behind the ABANDONED SHIP (ROUTE 108) is no landing; the mainland is.
+    const land = room.landing();
+    expect([...land].some((k) => k.startsWith('MAP_ROUTE108:'))).toBe(false);
+    expect(land.has('MAP_LITTLEROOT_TOWN:10:10')).toBe(true);
+    // Exact under one-way ledges: from every landing cell (a sample) the walk reaches at
+    // least 200 cells; from every outdoor cell left out, it never does and comes back.
+    const walk = (k: string) => {
+      const [map, x, y] = k.split(':');
+      const seen = new Set([k]), queue: { map: string; x: number; y: number; z?: number }[] = [{ map, x: +x, y: +y }];
+      while (queue.length && seen.size < 400) {
+        const at = queue.pop()!;
+        for (let dir = 1; dir <= 4; dir++) {
+          const r = (room as unknown as { base: (s: typeof at, d: number) => { to: typeof at } | null }).base(at, dir);
+          if (!r || !room.places.has(r.to.map) || r.to.map.startsWith(SAFARI)) continue;
+          const kk = `${r.to.map}:${r.to.x}:${r.to.y}:${r.to.z ?? ''}`;
+          if (!seen.has(kk)) { seen.add(kk); queue.push(r.to); }
+        }
+      }
+      return seen.size;
+    };
+    const cells = [...land];
+    for (let i = 0; i < cells.length; i += 97) expect(walk(cells[i])).toBeGreaterThanOrEqual(200);
   });
 });
 
