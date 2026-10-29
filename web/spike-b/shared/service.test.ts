@@ -18,7 +18,7 @@ function phone() {
 describe('world rooms', () => {
   it('a room waits as long as it likes; a match lets a silent phone go', () => {
     let t = 0;
-    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => t, log: () => undefined });
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 3, cap: 30, now: () => t, log: () => undefined });
     try {
       const a = phone();
       const s = svc.open(a.link);
@@ -79,6 +79,38 @@ describe('world rooms', () => {
       expect(hello.state.ringPhase).toBe(3600);
       expect(hello.state.opening).toBeUndefined();
       expect(hello.state.actors.filter((x) => x.bot)).toHaveLength(0);
+    } finally {
+      svc.stop();
+    }
+  });
+  it('MAX is the seats and FILL deals bots into the ones nobody has; START needs somebody to play', () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 29, cap: 30, now: () => 0, log: () => undefined });
+    const hello = (p: ReturnType<typeof phone>) => (p.got.find((m) => m.t === 'hello') as unknown as { state: { actors: { bot: boolean }[] } }).state.actors;
+    try {
+      // The live room's to start with: MAX 8, FILL on, so alone you play seven bots.
+      const a = phone();
+      const sa = svc.open(a.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      expect(a.got.at(-1)).toMatchObject({ t: 'room', set: { max: 8, bots: true } });
+      sa.onText(JSON.stringify({ t: 'start' }));
+      expect(hello(a).filter((x) => x.bot)).toHaveLength(7);
+      // MAX 30 is thirty in it, two trainers and 28 bots, not 1 + 64 (HBR-92).
+      const b = phone(), c = phone();
+      const sb = svc.open(b.link);
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, host: true }));
+      const code = (b.got.at(-1) as unknown as { code: string }).code;
+      svc.open(c.link).onText(JSON.stringify({ t: 'join', name: 'cy', skin: 0, code }));
+      sb.onText(JSON.stringify({ t: 'set', set: { max: 30 } }));
+      sb.onText(JSON.stringify({ t: 'start' }));
+      expect(hello(b).filter((x) => x.bot)).toHaveLength(28);
+      // FILL off and nobody else: no START (match/room.ts dealable).
+      const d = phone();
+      const sd = svc.open(d.link);
+      sd.onText(JSON.stringify({ t: 'join', name: 'dee', skin: 0, host: true }));
+      sd.onText(JSON.stringify({ t: 'set', set: { bots: false } }));
+      sd.onText(JSON.stringify({ t: 'start' }));
+      expect(d.got.some((m) => m.t === 'hello')).toBe(false);
+      expect(d.got.at(-1)).toMatchObject({ t: 'room', playing: false });
     } finally {
       svc.stop();
     }
@@ -262,7 +294,7 @@ describe('world rooms', () => {
 
   it('a room with a phone reloading stays open when everybody else leaves', () => {
     let t = 0;
-    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => t, log: () => undefined });
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 3, cap: 30, now: () => t, log: () => undefined });
     try {
       const a = phone(), b = phone();
       const sa = svc.open(a.link);
@@ -280,6 +312,40 @@ describe('world rooms', () => {
       const a2 = phone();
       svc.open(a2.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, code, again: { code, id: hello.id, key: hello.key } }));
       expect((a2.got.find((m) => m.t === 'hello') as unknown as { id: number }).id).toBe(hello.id);
+    } finally {
+      svc.stop();
+    }
+  });
+
+  it('a link block goes to the trainer you are fighting, and nobody else', () => {
+    let t = 0;
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => t, log: () => undefined });
+    try {
+      const [a, b, c] = [phone(), phone(), phone()];
+      const [sa, sb, sc] = [a, b, c].map((p) => svc.open(p.link));
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, code }));
+      sc.onText(JSON.stringify({ t: 'join', name: 'cara', skin: 0, code }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      t += 200;
+      svc.pump();
+      const [alice, bob] = [a, b].map((p) => (p.got.find((m) => m.t === 'hello') as unknown as { id: number }).id);
+      const bt = (p: ReturnType<typeof phone>) => p.got.filter((m) => m.t === 'bt');
+      // Not fighting anybody: dropped.
+      sa.onText(JSON.stringify({ t: 'bt', q: 1, d: [1, 2, 3] }));
+      expect(bt(b)).toEqual([]);
+      const room = [...(svc as unknown as { rooms: Map<string, { host: { room: { actor(id: number): { battling: boolean; foe: number } } } }> }).rooms.values()][0].host.room;
+      Object.assign(room.actor(alice), { battling: true, foe: bob });
+      Object.assign(room.actor(bob), { battling: true, foe: alice });
+      sa.onText(JSON.stringify({ t: 'bt', q: 1, d: [9, 8, 7, 300] }));
+      expect(bt(b)).toEqual([{ t: 'bt', q: 1, d: [9, 8, 7, 300 & 0xff] }]);
+      sb.onText(JSON.stringify({ t: 'bt', q: 1, d: [5] }));
+      expect(bt(a)).toEqual([{ t: 'bt', q: 1, d: [5] }]);
+      expect(bt(c)).toEqual([]);
+      // A block too big is refused.
+      sa.onText(JSON.stringify({ t: 'bt', q: 2, d: Array(2000).fill(0) }));
+      expect(bt(b)).toHaveLength(1);
     } finally {
       svc.stop();
     }

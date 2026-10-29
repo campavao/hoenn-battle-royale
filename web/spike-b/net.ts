@@ -16,6 +16,7 @@ import type { World, WorldMap } from '../src/bots/world';
 import type { PatchTable } from '../src/bots/patches';
 import { tick } from './sim';
 import { Host, play } from './shared/host';
+import { BOT_FILL } from '../src/match/room';
 import { keysOf, makeRoom, type Actor, type Bag, type Room, type RoomEvent } from './shared/room';
 import type { FameMon } from '../src/ui/results';
 import type { Again, CardRecord, Listed, Settings, SpMsg, WireFrame, WorldDown, WorldUp } from './shared/wire';
@@ -68,12 +69,12 @@ export interface WorldLink {
   status(): string;
 }
 
-const BOTS = 64;
 
 export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, seed: number): WorldLink {
   const room = makeRoom(maps, patches, seed, world);
   room.opening = room.ringPhase; // the Safari opening, as a match has it
-  const host = new Host(room, BOTS, maps, 0);
+  // The live game's offline QUICK PLAY: you and BOT_FILL bots.
+  const host = new Host(room, BOT_FILL, maps, 0);
   const me = host.join('YOU', 0);
   host.advance();
   let seq = 0;

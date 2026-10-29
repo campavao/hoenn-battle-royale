@@ -71,11 +71,12 @@ export interface Member { id: number; name: string; skin: number; rec?: CardReco
 /** A trainer's career as their device keeps it (career.ts), for the card on their seat. */
 export interface CardRecord { wins: number; played: number; best?: number }
 
-/** What the host sets for a match (the live room's options): bots in it or none, how
- *  long a ring phase lasts (FOG), and the Safari it opens with (0: none). */
+/** What the host sets for a match (the live room's options): FILL (bots in the seats
+ *  nobody has) or none, how long a ring phase lasts (FOG), and the Safari it opens with
+ *  (0: none). */
 export interface Settings {
   bots: boolean; fogSecs: number; safariSecs: number;
-  /** Trainers the room lets in (match/room.ts MAX_STEPS). */
+  /** The match's seats, trainers and bots (the live MAX, match/room.ts MAX_STEPS). */
   max: number;
   /** On LOBBIES (open), off it (private), or on it behind a passcode (pass). */
   door: 'open' | 'private' | 'pass';
@@ -114,3 +115,8 @@ export type WorldDown =
   | { t: 'full' };
 
 export const HASH_EVERY = 60;
+
+/** The bots START deals: the seats nobody has, with FILL on (match/room.ts botFillFor). */
+export function fillFor(set: Pick<Settings, 'bots' | 'max'>, trainers: number): number {
+  return set.bots ? Math.max(0, set.max - trainers) : 0;
+}
