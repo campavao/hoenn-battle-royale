@@ -76,6 +76,9 @@ export interface Actor {
   shunUntil: number;
   /** A step finished whose arrival has not been looked at yet (the spots). */
   arriving: boolean;
+  /** In the Zone after the Safari: the frame the fly map's answer is due by, then the drop
+   *  is anywhere. A battle there pushes it on, so the fly map always gets its time. */
+  pickBy?: number;
   /** What the team could do on the field (FIELD_*): SURF, CUT, STRENGTH, as the page
    *  reads its party (br_hm.c asks the same: knows the move or could learn it). */
   field?: number;
@@ -346,6 +349,11 @@ const TRUCK = 40;
 const DEALS = new Map<string, ReadonlyMap<string, Ground>>();
 /** Every cell a trainer can walk to from Littleroot, per set of maps. */
 const REACH = new Map<string, Spot[]>();
+const LANDS = new Map<string, Set<string>>();
+/** The maps with a landing cell, by landing(). */
+const LANDED = new WeakMap<ReadonlySet<string>, Set<string>>();
+/** The least ground a drop's cell must be joined to on foot (Room.landing). */
+const LANDING = 200;
 
 /** A ring phase, in frames: the match's 120 s (DEFAULT_FOG_SECS, web/src/match/director.ts). */
 export const RING_PHASE = 60 * 120;
@@ -773,7 +781,6 @@ export class Room {
     const was = this.tick - 1 >= this.epoch ? this.ring(this.tick - 1) : { ...ring, phase: -1 };
     const r = this.results;
     if (ring.round !== was.round || (r.wonAt !== undefined && this.tick >= r.wonAt + AFTER_WIN)) this.newRound(r.round + 1);
-    else if (this.tick - PICK_WAIT >= this.epoch && this.ring(this.tick - PICK_WAIT).safari && !this.ring(this.tick - PICK_WAIT + 1).safari) this.drop();
     // The Safari is over: the bots drop at once, anywhere (they have no fly map).
     else if (was.safari && !ring.safari) {
       for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) this.dropOne(a);
@@ -786,6 +793,7 @@ export class Room {
       const n = eventForRing(ring.phase);
       if (n !== undefined) this.dropEvent(n, ring);
     }
+    if (!ring.safari && this.opening) this.waitPicks();
     // The last one standing, once the frame's goings are all in (the last two out on one
     // frame: neither).
     if (!r.winner && r.entrants.length >= 2) {
@@ -1013,10 +1021,50 @@ export class Room {
     return out;
   }
 
-  /** The fly map is over for everybody (PICK_WAIT after the Safari): whoever is still
-   *  in the Zone, having chosen nowhere, drops anywhere outdoors (br_pick.c's timeout). */
-  private drop(): void {
-    for (const a of this.actors) if (!a.bot && a.m.spot.map.startsWith(SAFARI)) this.dropOne(a);
+  /** Cells a drop may land on: outdoors, in a stretch of ground one can walk at least
+   *  LANDING cells of. A pocket walled in by water or rock (the bank behind the ABANDONED
+   *  SHIP, a ledge's island) is no place to be dropped without SURF. */
+  landing(): ReadonlySet<string> {
+    const id = 'landing:' + [...this.maps.keys()].join();
+    const hit = LANDS.get(id);
+    if (hit) return hit;
+    const seen = new Set<string>(), out = new Set<string>();
+    for (const map of this.places.keys()) {
+      if (map.startsWith(SAFARI)) continue;
+      const m = this.maps.get(map)!;
+      for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
+        const k = `${map}:${x}:${y}`;
+        if (seen.has(k) || this.world.cell(map, x, y) !== 0) continue;
+        seen.add(k);
+        const part = [k], queue: Spot[] = [{ map, x, y }];
+        while (queue.length) {
+          const at = queue.pop()!;
+          for (let dir = 1; dir <= 4; dir++) {
+            const r = this.base(at, dir as Facing);
+            if (!r || !this.places.has(r.to.map)) continue;
+            const kk = `${r.to.map}:${r.to.x}:${r.to.y}`;
+            if (seen.has(kk)) continue;
+            seen.add(kk);
+            part.push(kk);
+            queue.push(r.to);
+          }
+        }
+        if (part.length >= LANDING) for (const c of part) out.add(c);
+      }
+    }
+    LANDS.set(id, out);
+    return out;
+  }
+
+  /** The fly map's time (PICK_WAIT after the Safari, or after a battle fought in the
+   *  Zone since): whoever is still there, having chosen nowhere, drops anywhere outdoors
+   *  (br_pick.c's timeout). */
+  private waitPicks(): void {
+    for (const a of this.actors) {
+      if (a.bot || !a.m.spot.map.startsWith(SAFARI)) continue;
+      if (a.battling) a.pickBy = this.tick + PICK_WAIT;
+      else if (this.tick >= (a.pickBy ?? this.epoch + this.opening + PICK_WAIT)) this.dropOne(a);
+    }
   }
 
   /** `a` out of the Zone onto a free cell of `want` (or of any outdoor map), dealt from
@@ -1024,7 +1072,10 @@ export class Room {
   private dropOne(a: Actor, want?: string): void {
     let state = (this.seed ^ Math.imul(this.results.round + 1, 0x2545f491) ^ Math.imul(a.id + 1, 0x9e3779b1) ^ this.tick) >>> 0 || 1;
     const rng = () => { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return (state >>> 0) / 4294967296; };
-    const maps = [...this.places.keys()].filter((m) => !m.startsWith(SAFARI)).sort();
+    const land = this.landing();
+    let landed = LANDED.get(land);
+    if (!landed) LANDED.set(land, landed = new Set([...land].map((k) => k.slice(0, k.indexOf(':')))));
+    const maps = [...this.places.keys()].filter((m) => !m.startsWith(SAFARI) && landed.has(m)).sort();
     const used = new Set(this.actors.map((o) => `${o.m.spot.map}:${o.m.spot.x}:${o.m.spot.y}`));
     for (let tries = 0; tries < 4; tries++) {
       const map = tries === 0 && want ? want : maps[Math.floor(rng() * maps.length)];
@@ -1032,13 +1083,14 @@ export class Room {
       if (!m) continue;
       const cells: Spot[] = [];
       for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
-        if (this.world.cell(map, x, y) !== 0 || used.has(`${map}:${x}:${y}`) || this.groundAt(map, x, y) || this.spillAt(map, x, y)) continue;
+        if (this.world.cell(map, x, y) !== 0 || !land.has(`${map}:${x}:${y}`) || used.has(`${map}:${x}:${y}`) || this.groundAt(map, x, y) || this.spillAt(map, x, y)) continue;
         if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
         cells.push({ map, x, y });
       }
       if (!cells.length) continue;
       a.m = newMover(cells[Math.floor(rng() * cells.length)], 1);
       a.calm = this.tick + JOIN_GRACE;
+      a.pickBy = undefined;
       return;
     }
   }
@@ -1064,6 +1116,7 @@ export class Room {
       a.calm = this.tick + JOIN_GRACE;
       a.shun = a.shunUntil = 0;
       a.arriving = false;
+      a.pickBy = undefined;
     });
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
@@ -1329,7 +1382,7 @@ export class Room {
       mix(m.facing); mix(m.moveDir); mix(m.runningState); mix(m.run ? 1 : 0); mix(m.strides);
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
-      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.boss ?? 0); mix(a.away ? 1 : 0);
+      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.boss ?? 0); mix(a.away ? 1 : 0); mix(a.pickBy ?? 0);
       if (a.meet) { mix(a.meet.foe); mix(a.meet.since); mix((a.meet.walk ? 1 : 0) | (a.meet.duel ? 2 : 0)); }
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
