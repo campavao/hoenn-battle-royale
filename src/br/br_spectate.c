@@ -1647,6 +1647,14 @@ static void CutToSeat(const struct BrSeat *them)
     SetMainCallback2(CB2_LoadMap);
 }
 
+// The cut, latched (FollowTick): one warp at a time.
+static void CutToFollowed(const struct BrSeat *them)
+{
+    gBrSpectate.followed = 0;
+    CutToSeat(them);
+    gBrSpectate.warpWait = BR_FOLLOW_WARP_FRAMES;
+}
+
 // Each frame while following: get onto their map, then ride their ghost. The camera
 // object tracks a sprite's movement rather than jumping to it, so the warp is what
 // puts us beside them and the camera is what keeps us there as they walk.
@@ -1723,7 +1731,10 @@ static void FollowTick(void)
         if (gFieldCamera.x == 0 && gFieldCamera.y == 0)
         {
             BrSpectate_LetGo();
-            BrField_MoveCamera(x - (gSaveBlock1Ptr->pos.x + MAP_OFFSET), y - (gSaveBlock1Ptr->pos.y + MAP_OFFSET));
+            // ...unless the view cannot walk there (a seam the next map does not reach
+            // on the way): then it is the warp after all.
+            if (!BrField_MoveCamera(x - (gSaveBlock1Ptr->pos.x + MAP_OFFSET), y - (gSaveBlock1Ptr->pos.y + MAP_OFFSET)))
+                CutToFollowed(them);
         }
         return;
     }
@@ -1749,9 +1760,7 @@ static void FollowTick(void)
             return;
         }
         // They are somewhere else: go there.
-        gBrSpectate.followed = 0;
-        CutToSeat(them);
-        gBrSpectate.warpWait = BR_FOLLOW_WARP_FRAMES;
+        CutToFollowed(them);
         return;
     }
     gBrSpectate.warpWait = 0;
@@ -1820,8 +1829,11 @@ static void FollowTick(void)
         return;
     x = ghost->currentCoords.x - (gSaveBlock1Ptr->pos.x + MAP_OFFSET);
     y = ghost->currentCoords.y - (gSaveBlock1Ptr->pos.y + MAP_OFFSET);
-    if (x != 0 || y != 0)
-        BrField_MoveCamera(x, y);
+    if ((x != 0 || y != 0) && !BrField_MoveCamera(x, y))
+    {
+        CutToFollowed(them);
+        return;
+    }
     if (!gBrSpectate.followed)
     {
         CameraObjectSetFollowedSpriteId(ghost->spriteId);

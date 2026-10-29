@@ -1,0 +1,39 @@
+# spectate-follow-jump-seam: the camera's jump onto a watched trainer (spectate-follow-jump)
+# when they are one map over and the straight walk there crosses the seam where the next
+# map does not reach. Petalburg (0:0) is 30x30 and Route 102 (0:17) joins its east side at
+# offset 10, so it only borders Petalburg's rows 10..29. From Petalburg's (15,2) to Route
+# 102's (0,0) -- Petalburg's (30,10) -- across first walked the view off the map at row 2,
+# through the void, then south onto the seam at row 9: GetIncomingConnection found no
+# connection, CameraMove loaded the map off a NULL one, and the ROM spun in InitMap for
+# good (the play-again e2e's "the game stopped" over PLAY AGAIN). The walk now goes down
+# Petalburg's own edge to row 10 and over the seam there.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 00 0F 00 02 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 0
+expect u16 *gSaveBlock1Ptr+0 15
+expect u16 *gSaveBlock1Ptr+2 2
+# seat 1 on Route 102 at (0,0) -- 7, 7 with MAP_OFFSET -- facing south
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 11 07 00 07 00 01 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 10
+expect u8 gBrSeats+16 1
+shot before
+# FOLLOW seat 1
+pokebytes gBrMailbox+0x1058 14 04 01 00 00 01
+poke u16 gBrMailbox+0x0C 2
+wait 4
+# the view walked onto Route 102 and their cell, no warp latched
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 17
+expect u8 gBrSpectate+14 0
+expect u16 *gSaveBlock1Ptr+0 0
+expect u16 *gSaveBlock1Ptr+2 0
+shot jumped
+# ...and the ROM is still running: their ghost spawns on Route 102 and the camera rides it
+wait 30
+expectge u8 gBrSpectate+9 1
+expect u32 gMain+4 CB2_Overworld+1
+shot following
+say spectate follow jump seam ok
