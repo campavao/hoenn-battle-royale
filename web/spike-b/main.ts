@@ -976,7 +976,7 @@ function roundFrame(): void {
   if (lobby && !link.online && matchOn && !endingAt && (isOut || over(link.room))) matchOver();
   // The relay said the match is over: once the frames that ended it have played here (or
   // a moment has passed), the standings and PLAY AGAIN.
-  if (endingAt && (over(link.room) || isOut || performance.now() - endingAt > 1500)) {
+  if (endingAt && (over(link.room) || (isOut && !link.online) || performance.now() - endingAt > 1500)) {
     endingAt = 0;
     record(res.round);
     endingShown = true;
@@ -989,8 +989,9 @@ function roundFrame(): void {
 let recordedRound = -1;
 function record(round: number): void {
   const res = link.room.results;
-  // ?solo is practice, not a match: it stays out of the career.
-  if (!link.online || recordedRound === round || !res.entrants.some(([id]) => id === link.me)) return;
+  // ?solo is practice, not a match: it stays out of the career. Offline QUICK PLAY (in
+  // the lobby) is a match, and counts, as live (session.ts).
+  if ((!link.online && !lobby) || recordedRound === round || !res.entrants.some(([id]) => id === link.me)) return;
   recordedRound = round;
   const i = res.fallen.findIndex((f) => f.id === link.me);
   // Placed by when I went out: the last out is second; never out, and nobody won, a tie for first.
