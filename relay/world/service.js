@@ -4210,7 +4210,7 @@ var WorldService = class {
     if (!me?.battling) return;
     const m = { t: raw.t, battle: raw.battle & 65535, data: raw.data.map((v) => (Number(v) | 0) & 255) };
     let s = room.streams.get(me.id);
-    if (m.t === "bstart") room.streams.set(me.id, s = { battle: m.battle, sent: [], bytes: 0 });
+    if (m.t === "bstart") room.streams.set(me.id, s = { battle: m.battle, sent: [], bytes: 0, foe: me.foe });
     if (!s || s.battle !== m.battle) return;
     const text = JSON.stringify({ t: "sp", from: me.id, m });
     if (s.bytes + text.length <= STREAM_MAX) {
@@ -4228,9 +4228,10 @@ var WorldService = class {
     const a = r?.actor(id);
     if (!r || !a?.battling) return void 0;
     const own = room.streams.get(id);
-    if (own) return own;
+    if (own && own.foe === a.foe) return own;
     const foe = a.foe ? r.actor(a.foe) : void 0;
-    return foe?.battling && foe.foe === id ? room.streams.get(foe.id) : void 0;
+    const theirs = foe?.battling && foe.foe === id ? room.streams.get(foe.id) : void 0;
+    return theirs && theirs.foe === id ? theirs : void 0;
   }
   /** Every team the room's trainers have told, to one phone just in (the legendary's
    *  chip and the champion's hall of fame read them). */

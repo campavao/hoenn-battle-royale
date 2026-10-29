@@ -82,12 +82,14 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
   const teams = new Map<number, FameMon[]>();
   // The bots' fights this page judges, as the relay keeps them (service.ts publish), for
   // watching one: from its BSTART, however late the watch begins.
-  const streams = new Map<number, SpMsg[]>();
+  const streams = new Map<number, { foe: number; sent: SpMsg[] }>();
   let watching = 0;
+  // Only the fight a bot is in now: its stream from an earlier one is never dropped.
   const fightOf = (id: number) => {
     const a = host.room.actor(id);
     if (!a?.battling) return undefined;
-    return streams.has(id) ? id : a.foe && streams.has(a.foe) ? a.foe : undefined;
+    if (streams.get(id)?.foe === a.foe) return id;
+    return a.foe && streams.get(a.foe)?.foe === id ? a.foe : undefined;
   };
   const link: WorldLink = {
     room: host.room,
@@ -112,12 +114,12 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     watch: (id) => {
       watching = id;
       const from = fightOf(id);
-      if (from !== undefined) for (const m of streams.get(from)!) link.onSp?.(from, m);
+      if (from !== undefined) for (const m of streams.get(from)!.sent) link.onSp?.(from, m);
     },
     sp: (m, as) => {
       if (as === undefined) return;
-      if (m.t === 'bstart') streams.set(as, []);
-      streams.get(as)?.push(m);
+      if (m.t === 'bstart') streams.set(as, { foe: host.room.actor(as)?.foe ?? 0, sent: [] });
+      streams.get(as)?.sent.push(m);
       if (watching && fightOf(watching) === as) link.onSp?.(as, m);
     },
     onSp: null,

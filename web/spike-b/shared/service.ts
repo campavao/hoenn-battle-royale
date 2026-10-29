@@ -126,7 +126,7 @@ interface Phone {
 
 /** The battle a phone's ROM is publishing, as sent: for a watcher who comes in after it
  *  started (the replay must start from its BSTART). */
-interface Stream { battle: number; sent: string[]; bytes: number }
+interface Stream { battle: number; sent: string[]; bytes: number; foe: number }
 
 interface Lobby {
   code: string;
@@ -457,7 +457,7 @@ export class WorldService {
     if (!me?.battling) return;
     const m: SpMsg = { t: raw.t, battle: raw.battle & 0xffff, data: raw.data.map((v) => (Number(v) | 0) & 0xff) };
     let s = room.streams.get(me.id);
-    if (m.t === 'bstart') room.streams.set(me.id, (s = { battle: m.battle, sent: [], bytes: 0 }));
+    if (m.t === 'bstart') room.streams.set(me.id, (s = { battle: m.battle, sent: [], bytes: 0, foe: me.foe }));
     if (!s || s.battle !== m.battle) return;
     const text = JSON.stringify({ t: 'sp', from: me.id, m } satisfies WorldDown);
     if (s.bytes + text.length <= STREAM_MAX) { s.sent.push(text); s.bytes += text.length; }
@@ -472,10 +472,13 @@ export class WorldService {
     const r = room.host?.room;
     const a = r?.actor(id);
     if (!r || !a?.battling) return undefined;
+    // A stream is the fight it began with: a bot's is never dropped (no end of its own
+    // comes), so one against somebody else is an old fight, not this one.
     const own = room.streams.get(id);
-    if (own) return own;
+    if (own && own.foe === a.foe) return own;
     const foe = a.foe ? r.actor(a.foe) : undefined;
-    return foe?.battling && foe.foe === id ? room.streams.get(foe.id) : undefined;
+    const theirs = foe?.battling && foe.foe === id ? room.streams.get(foe.id) : undefined;
+    return theirs && theirs.foe === id ? theirs : undefined;
   }
 
   /** Every team the room's trainers have told, to one phone just in (the legendary's

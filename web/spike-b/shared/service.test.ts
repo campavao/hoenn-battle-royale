@@ -437,6 +437,26 @@ describe('world rooms', () => {
       sa.onText(JSON.stringify({ t: 'sp', as: x.id, m: { t: 'turn', battle: x.id | (y.id << 8), data: [0, 1, 4] } }));
       expect(sp(b).map((m) => [m.from, m.m.t])).toEqual([[x.id, 'bstart'], [x.id, 'turn']]);
       expect(sp(a).map((m) => [m.from, m.m.t]), 'the judge watching the other bot').toEqual([[x.id, 'bstart'], [x.id, 'turn']]);
+
+      // The fight over, x fights bob: a new watcher of x is not handed x's fight with y.
+      const bob = (b.got.find((m) => m.t === 'hello') as unknown as { id: number }).id;
+      const xb = room.host.room.actors.find((o) => o.id === bob)!;
+      Object.assign(y, { battling: false, foe: 0, judge: 0 });
+      Object.assign(x, { battling: true, foe: bob, judge: 0 });
+      Object.assign(xb, { battling: true, foe: x.id });
+      const c = phone();
+      const sc = svc.open(c.link);
+      sc.onText(JSON.stringify({ t: 'join', name: 'carol', skin: 2, code }));
+      sc.onText(JSON.stringify({ t: 'watch', id: x.id }));
+      expect(sp(c), 'no old fight').toHaveLength(0);
+      // ...and once bob publishes theirs, that is the one.
+      sb.onText(JSON.stringify({ t: 'sp', m: { t: 'bstart', battle: x.id | (bob << 8), data: [2] } }));
+      expect(sp(c).map((m) => m.from)).toEqual([bob]);
+      const d = phone();
+      const sd = svc.open(d.link);
+      sd.onText(JSON.stringify({ t: 'join', name: 'dan', skin: 3, code }));
+      sd.onText(JSON.stringify({ t: 'watch', id: x.id }));
+      expect(sp(d).map((m) => m.from), 'a late watcher of x gets the fight with bob').toEqual([bob]);
     } finally {
       svc.stop();
     }
