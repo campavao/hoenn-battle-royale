@@ -1283,6 +1283,7 @@ var JUMP_Y_HIGH = [-4, -6, -8, -10, -11, -12, -12, -12, -11, -10, -9, -8, -6, -4
 var NOT_MOVING = 0;
 var TURN_DIRECTION = 1;
 var MOVING = 2;
+var WARP_FRAMES = 32;
 function newMover(spot, facing = DIR_SOUTH) {
   return { spot, prev: spot, facing, moveDir: facing, runningState: NOT_MOVING, action: null, px: 0, py: 0, lift: 0, run: true, strides: 0 };
 }
@@ -1344,7 +1345,12 @@ function begin(m, keys, step) {
   m.run = !keys.b;
   m.prev = m.spot;
   m.strides += 1;
-  if (to.hop) {
+  if (to.warp) {
+    m.spot = to.to;
+    m.action = { kind: "warp", t: 0, len: WARP_FRAMES, speed: 0, dir };
+    m.px = 0;
+    m.py = 0;
+  } else if (to.hop) {
     m.spot = { map: to.to.map, x: to.to.x - DXY[dir][0], y: to.to.y - DXY[dir][1] };
     m.action = { kind: "hop", t: 0, len: 32, speed: 1, dir, land: to.to };
     m.px = -DXY[dir][0] * 16;
@@ -1360,7 +1366,13 @@ function begin(m, keys, step) {
 function stepFn(world) {
   return (from, dir) => {
     const to = world.step(from, SEAM_OF[dir]);
-    if (!to) return null;
+    if (!to) {
+      const mat = dir === DIR_SOUTH && !world.map(from.map)?.outdoor ? world.warpAt(from.map, from.x, from.y) : void 0;
+      return mat && mat.kind === "door" ? { to: { map: mat.to, x: mat.toX, y: mat.toY }, hop: false, warp: true } : null;
+    }
+    const [dx, dy] = DXY[dir];
+    const door = world.warpAt(from.map, from.x + dx, from.y + dy);
+    if (door && to.map === door.to && to.x === door.toX && to.y === door.toY) return { to, hop: false, warp: true };
     const hop = to.map === from.map && Math.abs(to.x - from.x) + Math.abs(to.y - from.y) === 2;
     const cls = world.cell(to.map, to.x, to.y);
     if (!hop && cls >= 3 && cls <= 6) return null;
@@ -1393,12 +1405,13 @@ var REACH = /* @__PURE__ */ new Map();
 var RING_PHASE = 60 * 120;
 var RING_STEPS = [Infinity, 15 / 28, 9 / 28, 7 / 28, 5 / 28, 3 / 28, 2 / 28, 0, -1];
 var Room = class {
-  constructor(world, maps, patches, seed, places) {
+  constructor(world, maps, patches, seed, places, anchors = /* @__PURE__ */ new Map()) {
     this.world = world;
     this.maps = maps;
     this.patches = patches;
     this.seed = seed;
     this.places = places;
+    this.anchors = anchors;
     this.base = stepFn(world);
   }
   world;
@@ -1406,6 +1419,7 @@ var Room = class {
   patches;
   seed;
   places;
+  anchors;
   tick = 0;
   actors = [];
   /** Taken spots by key, and the frame they were taken. */
@@ -1545,7 +1559,7 @@ var Room = class {
       out.push(at);
       for (let dir = 1; dir <= 4; dir++) {
         const r = this.base(at, dir);
-        if (!r || !this.maps.has(r.to.map)) continue;
+        if (!r || !this.places.has(r.to.map)) continue;
         const k = `${r.to.map}:${r.to.x}:${r.to.y}`;
         if (seen.has(k)) continue;
         seen.add(k);
@@ -1601,8 +1615,10 @@ var Room = class {
     if (ring.r === Infinity) return false;
     if (ring.r < 0) return true;
     const p = this.places.get(s.map);
-    if (!p) return true;
-    return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy) > ring.r;
+    const inside = p ? void 0 : this.anchors.get(s.map);
+    if (!p && !inside) return true;
+    const x = p ? p.gx + s.x + 0.5 : inside.gx, y = p ? p.gy + s.y + 0.5 : inside.gy;
+    return Math.hypot(x - ring.cx, y - ring.cy) > ring.r;
   }
   /** The item ball still lying on a cell, if any. */
   groundAt(map, x, y) {
@@ -1769,6 +1785,9 @@ var Room = class {
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
           events.push({ type: "fight", tick: this.tick, id: a.id, foe: foe.id });
+        } else if (!foe && a.m.facing === DIR_NORTH) {
+          const c = this.maps.get(a.m.spot.map)?.centre;
+          if (c && a.m.spot.x === c.counterX && a.m.spot.y === c.counterY) events.push({ type: "nurse", tick: this.tick, id: a.id, map: a.m.spot.map });
         }
       }
     } else if (!a.m.action) a.arriving = false;
@@ -1791,6 +1810,7 @@ var Room = class {
     return (from, dir) => {
       const r = this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
+      if (a.bot && !this.places.has(r.to.map)) return null;
       const t = r.to;
       if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y)) return null;
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return null;
@@ -1907,11 +1927,41 @@ function layout(maps) {
   }
   return placed;
 }
+var CLOSED_DOORS = /* @__PURE__ */ new Set([
+  "MAP_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB",
+  "MAP_FALLARBOR_TOWN_BATTLE_TENT_LOBBY",
+  "MAP_VERDANTURF_TOWN_BATTLE_TENT_LOBBY",
+  "MAP_SLATEPORT_CITY_BATTLE_TENT_LOBBY",
+  "MAP_ROUTE110_TRICK_HOUSE_ENTRANCE",
+  "MAP_ROUTE121_SAFARI_ZONE_ENTRANCE",
+  "MAP_EVER_GRANDE_CITY_HALL5"
+]);
+function interiors(all, outside) {
+  const byId = new Map(all.map((m) => [m.id, m]));
+  const out = /* @__PURE__ */ new Map();
+  const queue = [...outside.keys()];
+  while (queue.length) {
+    const id = queue.shift();
+    const m = byId.get(id);
+    if (!m) continue;
+    const here = outside.get(id);
+    for (const w of m.warps ?? []) {
+      const to = byId.get(w.to);
+      if (!to || to.outdoor || CLOSED_DOORS.has(to.id) || out.has(to.id)) continue;
+      const at = here ? { gx: here.gx + w.x + 0.5, gy: here.gy + w.y + 0.5 } : out.get(id);
+      out.set(to.id, { m: to, gx: at.gx, gy: at.gy });
+      queue.push(to.id);
+    }
+  }
+  return out;
+}
 function makeRoom(all, patches, seed, world) {
   const placed = layout(all);
-  const maps = new Map([...placed].map(([id, p]) => [id, p.m]));
   const places = new Map([...placed].map(([id, p]) => [id, { gx: p.gx, gy: p.gy }]));
-  return new Room(world ?? new World(all), maps, patches, seed, places);
+  const inside = interiors(all, places);
+  const maps = new Map([...placed, ...inside].map(([id, p]) => [id, p.m]));
+  const anchors = new Map([...inside].map(([id, p]) => [id, { gx: p.gx, gy: p.gy }]));
+  return new Room(world ?? new World(all), maps, patches, seed, places, anchors);
 }
 
 // web/spike-b/shared/bots.ts
@@ -1945,7 +1995,7 @@ function botSpawns(room, maps, count) {
     rng ^= rng << 5;
     return (rng >>> 0) / 4294967296;
   };
-  const land = maps.filter((m) => room.maps.has(m.id) && !m.id.includes("SAFARI") && !m.id.includes("FRONTIER") && !m.id.includes("PROTOTYPE"));
+  const land = maps.filter((m) => room.places.has(m.id) && !m.id.includes("SAFARI") && !m.id.includes("FRONTIER") && !m.id.includes("PROTOTYPE"));
   const grids = new Map(land.map((m) => [m.id, decodeGrid(m.grid, m.w * m.h)]));
   const out = [];
   const taken = /* @__PURE__ */ new Set();

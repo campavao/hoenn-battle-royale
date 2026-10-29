@@ -44,7 +44,7 @@ export function botKeys(_room: Room, a: Actor, b: Brain): number {
 export function botSpawns(room: Room, maps: readonly WorldMap[], count: number): { name: string; skin: number; spot: Spot; facing: number; brain: Brain }[] {
   let rng = 0x9e3779b9 ^ room.seed;
   const r = () => { rng ^= rng << 13; rng ^= rng >>> 17; rng ^= rng << 5; return (rng >>> 0) / 4294967296; };
-  const land = maps.filter((m) => room.maps.has(m.id) && !m.id.includes('SAFARI') && !m.id.includes('FRONTIER') && !m.id.includes('PROTOTYPE'));
+  const land = maps.filter((m) => room.places.has(m.id) && !m.id.includes('SAFARI') && !m.id.includes('FRONTIER') && !m.id.includes('PROTOTYPE'));
   const grids = new Map(land.map((m) => [m.id, decodeGrid(m.grid, m.w * m.h)]));
   const out: { name: string; skin: number; spot: Spot; facing: number; brain: Brain }[] = [];
   const taken = new Set<string>();

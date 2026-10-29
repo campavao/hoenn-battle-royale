@@ -21,7 +21,7 @@ import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { DIR_EAST } from './sim';
-import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, emptyBag, makeRoom, type Actor, type Bag, type RoomEvent } from './shared/room';
+import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent } from './shared/room';
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink } from './net';
 import { over } from './shared/over';
@@ -35,6 +35,7 @@ import spritesData from '../src/data/sprites.json';
 const TILE = 16;
 // include/constants/event_objects.h.
 const OBJ_EVENT_GFX_ITEM_BALL = 59;
+const OBJ_EVENT_GFX_NURSE = 58;
 const OBJ_EVENT_GFX_BIRCHS_BAG = 97;
 const SHEETS = spritesData as Record<string, { name: string; w: number; h: number; frames: number }>;
 
@@ -86,6 +87,18 @@ function layout(maps: WorldMap[]): Map<string, Placed> {
       placed.set(to.id, { m: to, gx, gy, classes: decode(to.grid, to.w * to.h) });
       queue.push(to.id);
     }
+  }
+  // The buildings and caves, each on its own, in rows well east of Hoenn: drawn where the
+  // camera follows a trainer in, and never in sight of the outdoors.
+  let right = 0, top = Infinity;
+  for (const p of placed.values()) { right = Math.max(right, p.gx + p.m.w); top = Math.min(top, p.gy); }
+  const GAP = 48, ROW = 640;
+  let x = right + 200, y = top, rowH = 0;
+  for (const [id, { m }] of interiors(maps, placed)) {
+    if (x + m.w > right + 200 + ROW) { x = right + 200; y += rowH + GAP; rowH = 0; }
+    placed.set(id, { m, gx: x, gy: y, classes: decode(m.grid, m.w * m.h) });
+    x += m.w + GAP;
+    rowH = Math.max(rowH, m.h);
   }
   return placed;
 }
@@ -378,6 +391,7 @@ async function takeBag(key: number, bag: Bag, who: string): Promise<void> {
 /** What the room started for me: A at a bot, or a marked spot I landed on (the room took
  *  it as the battle started, as BrPatch_Take does), or A at an item ball. */
 function startFor(e: RoomEvent): void {
+  if (e.type === 'nurse') { void nurse(); return; }
   if (e.type === 'item' || e.type === 'bag') {
     toGive.push(e.type === 'item' ? { key: e.key, item: e.item } : { key: e.key, bag: e.bag, name: e.name });
     giveNext();
@@ -419,6 +433,17 @@ function startFor(e: RoomEvent): void {
     const fog = inFogNow();
     handOff(null, (r, onStart) => r.wild(m.group, m.num, art!.behavior(m.group, m.num, e.x, e.y), onStart, fog));
   }
+}
+
+/** The CENTER's nurse, as the match has her (pkmn_center_nurse.inc): one question, and
+ *  closed once the fog is on the town. */
+async function nurse(): Promise<void> {
+  if (!rom || isOut || battle || swapping || asking) return;
+  if (inFogNow()) { say('The fog is here. This CENTER is closed.'); return; }
+  const c = await ask('HEAL your party?', [['YES', 'yes'], ['NO', '']]);
+  if (c !== 'yes' || isOut || !rom) { say('Good luck.'); return; }
+  await rom.heal();
+  say('Done. Your POKéMON are fully healed.');
 }
 
 const OUTCOME = ['', 'won', 'lost', 'drew', 'ran', 'teleported', 'it fled', 'caught it', 'out of balls', 'forfeited'];
@@ -667,10 +692,15 @@ function fogFrame(): void {
 }
 
 /** The fog over everything outside the ring, the inside left clear. */
-function drawFog(x0: number, y0: number, x1: number, y1: number): void {
+function drawFog(x0: number, y0: number, x1: number, y1: number, home: Placed): void {
   const ring = link.room.ring();
   if (ring.r === Infinity) return;
   ctx.fillStyle = 'rgba(176, 160, 196, 0.5)';
+  // Inside, the fog is the fog at the door: all of it or none.
+  if (!home.m.outdoor) {
+    if (link.room.inFog({ map: home.m.id, x: 0, y: 0 }, ring)) ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    return;
+  }
   ctx.beginPath();
   ctx.rect(x0, y0, x1 - x0, y1 - y0);
   if (ring.r >= 0) ctx.arc(ring.cx * TILE, ring.cy * TILE, Math.max(ring.r, 0.5) * TILE, 0, Math.PI * 2, true);
@@ -821,7 +851,7 @@ function frameOf(a: Actor): number {
   // A turn is a walk in place, one foot like a step: sAnim_GoFastSouth's 4+4. A bump into
   // a wall plays the whole of sAnim_GoSouth over its 32 frames.
   if (act?.kind === 'turn') return GO[a.m.facing][(a.m.strides & 1) * 2 + (act.t / act.len >= 1 / 2 ? 1 : 0)];
-  if (act && act.kind !== 'hop') return GO[a.m.facing][Math.min(3, Math.floor((act.t / act.len) * 4))];
+  if (act && act.kind !== 'hop' && act.kind !== 'warp') return GO[a.m.facing][Math.min(3, Math.floor((act.t / act.len) * 4))];
   return FACE[a.m.facing];
 }
 
@@ -894,6 +924,18 @@ function drawPatches(p: Placed): void {
 
 let ballArt: HTMLCanvasElement | null = null;
 let bagArt: HTMLCanvasElement | null = null;
+let nurseArt: HTMLCanvasElement | null = null;
+/** Each CENTER's nurse behind her counter (two cells up from where you talk to her),
+ *  facing out: the one person a match leaves in a CENTER (br_strip.c). */
+function drawNurses(visible: Placed[]): void {
+  if (!nurseArt && art) nurseArt = art.sprite(OBJ_EVENT_GFX_NURSE, 1);
+  if (!nurseArt) return;
+  for (const p of visible) {
+    const c = p.m.centre;
+    if (!c) continue;
+    ctx.drawImage(nurseArt, (p.gx + c.counterX) * TILE + (TILE - nurseArt.width) / 2, (p.gy + c.counterY - 2) * TILE + TILE - nurseArt.height);
+  }
+}
 /** The item balls and bags nobody has taken, as the ROM draws them (br_loot.c: a
  *  fallen trainer's bag is BIRCH's BAG). */
 function drawGround(x0: number, y0: number, x1: number, y1: number): void {
@@ -1014,7 +1056,14 @@ function draw(): void {
   for (const p of visible) {
     if (p.cover && !far) ctx.drawImage(p.cover, p.gx * TILE, p.gy * TILE);
   }
-  drawFog(vx0, vy0, vx1, vy1);
+  drawNurses(visible);
+  drawFog(vx0, vy0, vx1, vy1, home);
+  // A door: the screen fades out and back in over the followed trainer's warp.
+  const going = followed?.m.action?.kind === 'warp' ? followed.m.action : null;
+  if (going) {
+    ctx.fillStyle = `rgba(0, 0, 0, ${1 - Math.abs((going.t / going.len) * 2 - 1)})`;
+    ctx.fillRect(vx0, vy0, vx1 - vx0, vy1 - vy0);
+  }
   // Zoomed far out, the sprites are specks: mark every trainer with a dot.
   if (z < 0.6) {
     // in canvas pixels, whole ones, so the squares stay sharp

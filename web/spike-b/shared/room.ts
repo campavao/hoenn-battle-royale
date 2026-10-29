@@ -31,7 +31,7 @@ import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches
 import { scatterItem } from '../../src/match/scatter';
 import { isTm, type BagRows } from './items';
 import { eitherSees, type Facing } from '../../src/bots/sight';
-import { dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
+import { DIR_NORTH, dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
 
 export const KEY_UP = 1, KEY_DOWN = 2, KEY_LEFT = 4, KEY_RIGHT = 8, KEY_B = 16, KEY_A = 32;
 
@@ -78,7 +78,9 @@ export type RoomEvent =
    *  (link id 0, the lower id, as the ROM's own engage has it). */
   | { type: 'duel'; tick: number; id: number; foe: number; first: boolean }
   | { type: 'item'; tick: number; id: number; key: number; item: number }
-  | { type: 'bag'; tick: number; id: number; key: number; bag: Bag; name: string };
+  | { type: 'bag'; tick: number; id: number; key: number; bag: Bag; name: string }
+  /** A at a CENTER's nurse, from the counter. */
+  | { type: 'nurse'; tick: number; id: number; map: string };
 
 /** What a trainer who is out carried: the bag's items (not its key items or machines),
  *  money, and their team. */
@@ -203,8 +205,11 @@ export class Room {
     readonly maps: ReadonlyMap<string, WorldMap>,
     readonly patches: PatchTable,
     readonly seed: number,
-    /** Where each map sits in the plane (layout()): the ring is measured there. */
+    /** Where each outdoor map sits in the plane (layout()): the ring is measured there. */
     readonly places: ReadonlyMap<string, { gx: number; gy: number }>,
+    /** Where each building and cave counts as being: the outdoor cell its way in leaves
+     *  from (interiors()). The fog outside a door is the fog inside it. */
+    readonly anchors: ReadonlyMap<string, { gx: number; gy: number }> = new Map(),
   ) {
     this.base = stepFn(world);
   }
@@ -342,7 +347,8 @@ export class Room {
       out.push(at);
       for (let dir = 1; dir <= 4; dir++) {
         const r = this.base(at, dir);
-        if (!r || !this.maps.has(r.to.map)) continue;
+        // Outdoors: what the deals and the ring's centres are drawn from.
+        if (!r || !this.places.has(r.to.map)) continue;
         const k = `${r.to.map}:${r.to.x}:${r.to.y}`;
         if (seen.has(k)) continue;
         seen.add(k);
@@ -400,8 +406,10 @@ export class Room {
     if (ring.r === Infinity) return false;
     if (ring.r < 0) return true;
     const p = this.places.get(s.map);
-    if (!p) return true;
-    return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy) > ring.r;
+    const inside = p ? undefined : this.anchors.get(s.map);
+    if (!p && !inside) return true;
+    const x = p ? p.gx + s.x + 0.5 : inside!.gx, y = p ? p.gy + s.y + 0.5 : inside!.gy;
+    return Math.hypot(x - ring.cx, y - ring.cy) > ring.r;
   }
 
   /** The item ball still lying on a cell, if any. */
@@ -578,6 +586,10 @@ export class Room {
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
           events.push({ type: 'fight', tick: this.tick, id: a.id, foe: foe.id });
+        } else if (!foe && a.m.facing === DIR_NORTH) {
+          // The nurse, across the counter (pkmn_center_nurse.inc).
+          const c = this.maps.get(a.m.spot.map)?.centre;
+          if (c && a.m.spot.x === c.counterX && a.m.spot.y === c.counterY) events.push({ type: 'nurse', tick: this.tick, id: a.id, map: a.m.spot.map });
         }
       }
     } else if (!a.m.action) a.arriving = false;
@@ -603,6 +615,8 @@ export class Room {
     return (from, dir) => {
       const r = this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
+      // A townsperson stays out in the street.
+      if (a.bot && !this.places.has(r.to.map)) return null;
       const t = r.to;
       if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y)) return null;
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return null;
@@ -665,10 +679,45 @@ export function layout(maps: readonly WorldMap[]): Map<string, { m: WorldMap; gx
   return placed;
 }
 
-/** A room over world.json's maps: walking on every outdoor map joined to Littleroot. */
+/** Doors a match keeps shut (br_match.c's sClosedDoors): BIRCH's LAB, the BATTLE TENTs,
+ *  the TRICK HOUSE, the SAFARI ZONE and the ELITE FOUR. */
+export const CLOSED_DOORS: ReadonlySet<string> = new Set([
+  'MAP_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB',
+  'MAP_FALLARBOR_TOWN_BATTLE_TENT_LOBBY', 'MAP_VERDANTURF_TOWN_BATTLE_TENT_LOBBY', 'MAP_SLATEPORT_CITY_BATTLE_TENT_LOBBY',
+  'MAP_ROUTE110_TRICK_HOUSE_ENTRANCE', 'MAP_ROUTE121_SAFARI_ZONE_ENTRANCE', 'MAP_EVER_GRANDE_CITY_HALL5',
+]);
+
+/** Every building and cave a trainer can walk into from the outdoor maps -- through
+ *  doors, stairs and cave mouths, floor after floor -- with the plane point (tiles) of the
+ *  outdoor cell its way in leaves from: the centre of that door's cell. Closed doors, and
+ *  what only they lead to, are left out. */
+export function interiors(all: readonly WorldMap[], outside: ReadonlyMap<string, { gx: number; gy: number }>): Map<string, { m: WorldMap; gx: number; gy: number }> {
+  const byId = new Map(all.map((m) => [m.id, m]));
+  const out = new Map<string, { m: WorldMap; gx: number; gy: number }>();
+  const queue = [...outside.keys()];
+  while (queue.length) {
+    const id = queue.shift()!;
+    const m = byId.get(id);
+    if (!m) continue;
+    const here = outside.get(id);
+    for (const w of m.warps ?? []) {
+      const to = byId.get(w.to);
+      if (!to || to.outdoor || CLOSED_DOORS.has(to.id) || out.has(to.id)) continue;
+      const at = here ? { gx: here.gx + w.x + 0.5, gy: here.gy + w.y + 0.5 } : out.get(id)!;
+      out.set(to.id, { m: to, gx: at.gx, gy: at.gy });
+      queue.push(to.id);
+    }
+  }
+  return out;
+}
+
+/** A room over world.json's maps: walking on every outdoor map joined to Littleroot, and
+ *  in every building and cave they lead into. */
 export function makeRoom(all: readonly WorldMap[], patches: PatchTable, seed: number, world?: World): Room {
   const placed = layout(all);
-  const maps = new Map([...placed].map(([id, p]) => [id, p.m]));
   const places = new Map([...placed].map(([id, p]) => [id, { gx: p.gx, gy: p.gy }]));
-  return new Room(world ?? new World(all as WorldMap[]), maps, patches, seed, places);
+  const inside = interiors(all, places);
+  const maps = new Map([...placed, ...inside].map(([id, p]) => [id, p.m]));
+  const anchors = new Map([...inside].map(([id, p]) => [id, { gx: p.gx, gy: p.gy }]));
+  return new Room(world ?? new World(all as WorldMap[]), maps, patches, seed, places, anchors);
 }

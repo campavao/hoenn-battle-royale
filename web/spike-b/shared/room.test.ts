@@ -588,3 +588,48 @@ describe('a match from a room', () => {
     expect(over(room)).toBe(true);
   });
 });
+
+describe('doors', () => {
+  const O = 'MAP_OLDALE_TOWN', PC = 'MAP_OLDALE_TOWN_POKEMON_CENTER_1F';
+  const walk = (room: ReturnType<typeof makeRoom>, id: number, bits: number, n: number) => {
+    const out: ReturnType<typeof room.step> = [];
+    for (let i = 0; i < n; i++) out.push(...room.step(new Map([[id, [bits]]])));
+    return out;
+  };
+
+  it('in at the door, through a fade, out by the mat; the nurse across the counter', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: { map: O, x: 6, y: 17 }, facing: 2 });
+    const a = room.actor(1)!;
+    room.step(new Map([[1, [KEY_UP]]]));
+    expect(a.m.spot).toEqual({ map: PC, x: 7, y: 8 });
+    expect(a.m.action?.kind).toBe('warp');
+    walk(room, 1, 0, 40);
+    // up to the counter, and A: the nurse
+    walk(room, 1, KEY_UP, 80);
+    expect(a.m.spot).toEqual({ map: PC, x: 7, y: 4 });
+    walk(room, 1, 0, 40); // the bump into the counter plays out
+    expect(room.step(new Map([[1, [KEY_A]]]))).toMatchObject([{ type: 'nurse', id: 1, map: PC }]);
+    walk(room, 1, 0, 2);
+    // down to the mat, and down once more: out, on the door
+    for (let i = 0; i < 200 && a.m.spot.map === PC; i++) walk(room, 1, KEY_DOWN, 1);
+    expect(a.m.spot).toEqual({ map: O, x: 6, y: 16 });
+    expect(a.m.action?.kind).toBe('warp');
+  });
+
+  it('the fog inside is the fog at the door; a closed door stays shut; bots stay outside', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    expect(room.anchors.get(PC)).toEqual({ gx: room.places.get(O)!.gx + 6.5, gy: room.places.get(O)!.gy + 16.5 });
+    expect(room.anchors.has('MAP_OLDALE_TOWN_POKEMON_CENTER_2F')).toBe(true); // up the stairs, the same door
+    expect(room.anchors.has('MAP_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB')).toBe(false);
+    for (let phase = 1; phase < 8; phase++) {
+      room.tick = phase * room.ringPhase + 1;
+      expect(room.inFog({ map: PC, x: 3, y: 3 })).toBe(room.inFog({ map: O, x: 6, y: 16 }));
+    }
+    room.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_LITTLEROOT_TOWN', x: 7, y: 17 }, facing: 2 });
+    walk(room, 1, KEY_UP, 40);
+    expect(room.actor(1)!.m.spot).toEqual({ map: 'MAP_LITTLEROOT_TOWN', x: 7, y: 17 });
+    room.apply({ c: 'join', id: 2, bot: true, name: 'BOT', skin: 4, spot: { map: O, x: 6, y: 17 }, facing: 2 });
+    expect(room.stepFor(room.actor(2)!)({ map: O, x: 6, y: 17 }, 2)).toBeNull();
+  });
+});

@@ -18,7 +18,7 @@ import { Mailbox, MAILBOX } from '../src/net/mailbox';
 import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from '../src/net/slots';
 import { PROTOCOL, type Dir, type Msg, type PackedMon } from '../src/net/wire';
 import { loadCheckedRelease } from '../src/release';
-import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, rekey, spillOf, teamOf, withMoney } from './carry';
+import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, healed, rekey, spillOf, teamOf, withMoney } from './carry';
 import { startMenuTable } from '../src/touch';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 
@@ -114,6 +114,8 @@ export interface RomBattles {
   reseed(seed: number): void;
   /** Money out of somebody's bag (br_loot.c's Take pays it). */
   addMoney(n: number): Promise<void>;
+  /** The CENTER's heal (HealPlayerParty), on the team the next battle takes. */
+  heal(): Promise<void>;
   press(k: GbaKey): void;
   release(k: GbaKey): void;
   emu: Emulator;
@@ -215,6 +217,13 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   const countAt = sym('gPlayerPartyCount');
   const save1 = sym('gSaveBlock1Ptr');
   const save2 = sym('gSaveBlock2Ptr');
+  // gBattleMoves[move].pp, a move's PP before PP UPs. Its stride is found from POUND,
+  // KARATE CHOP and DOUBLESLAP's 35, 25 and 10 rather than assumed.
+  const movesAt = sym('gBattleMoves');
+  const MOVE_PP = 4;
+  const romByte = (at: number) => rom[(at - 0x08000000) >>> 0] ?? 0; // the cartridge, not RAM
+  const moveSize = [12, 9].find((n) => [35, 25, 10].every((pp, i) => romByte(movesAt + (i + 1) * n + MOVE_PP) === pp)) ?? 12;
+  const basePp = (move: number) => romByte(movesAt + move * moveSize + MOVE_PP);
   /** The trainer's own: party, bag and Pokédex, copied out of the ROM, and back in. The
    *  save blocks move at every battle's start, so each is found through its pointer. */
   const kept = () => {
@@ -455,6 +464,15 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       return inTurn(async () => {
         const k = last ?? kept();
         return { ...spillOf(k.bag, k.key), mons: teamOf(k.party, k.count) };
+      });
+    },
+    heal() {
+      return inTurn(async () => {
+        if (broken) return;
+        const k = carried ?? kept();
+        const next = { ...k, party: healed(k.party, k.count, basePp) as typeof k.party };
+        keep(next);
+        carried = last = next;
       });
     },
     addMoney(n) {
