@@ -577,14 +577,20 @@ function pixelOf(a: Actor): { x: number; y: number; lift: number } {
   return { x: g.gx * TILE + a.m.px, y: g.gy * TILE + a.m.py, lift: -a.m.lift };
 }
 
-/** The walk anim's frame: a stride's four frames over the action, feet alternating. */
+/** The walk anim's frame. A step plays half the anim, one foot (SetStepAnimHandleAlternation
+ *  starts it at command 0 or 2 by turns): the stride frame then standing, 8+8 of a walk's 16
+ *  frames, and sAnim_RunSouth's 5+3 of a run's 8. Playing the whole anim each step was
+ *  twice Emerald's cadence. */
 function frameOf(a: Actor): number {
   const act = a.m.action;
-  const tab = a.m.run && act?.kind === 'step' && SHEETS[String(SKIN_GFX[a.skin])].frames >= 18 ? RUN : GO;
-  if (act && act.kind !== 'hop') {
-    const q = Math.min(3, Math.floor((act.t / act.len) * 4));
-    return tab[a.m.facing][(q + (a.m.strides & 1) * 2) % 4];
+  const run = a.m.run && act?.kind === 'step' && SHEETS[String(SKIN_GFX[a.skin])].frames >= 18;
+  if (act?.kind === 'step') {
+    const late = act.t / act.len >= (run ? 5 / 8 : 1 / 2) ? 1 : 0;
+    return (run ? RUN : GO)[a.m.facing][(a.m.strides & 1) * 2 + late];
   }
+  // A bump or a turn walks in place: the whole anim over the action (sAnim_GoSouth's 32
+  // frames into a wall, sAnim_GoFasterSouth's 8 to turn).
+  if (act && act.kind !== 'hop') return GO[a.m.facing][Math.min(3, Math.floor((act.t / act.len) * 4))];
   return FACE[a.m.facing];
 }
 
