@@ -783,7 +783,7 @@ describe('rounds', () => {
     // A goes out to B; D leaves.
     host.out(a, undefined, b);
     run(1);
-    expect(host.room.results.fallen.find((f) => f.id === a)).toEqual({ id: a, name: 'A', by: 'B' });
+    expect(host.room.results.fallen.find((f) => f.id === a)).toEqual({ id: a, name: 'A', by: 'B', at: expect.any(Number) });
     expect(host.room.bench.map((x) => x.id).sort()).toEqual([a, c].sort());
     host.leave(d);
     run(1);
@@ -798,7 +798,7 @@ describe('rounds', () => {
       mirror.actor(b)!.battling = mirror.actor(bot.id)!.battling = true; mirror.actor(b)!.foe = bot.id;
       host.end(b, false, true);
       run(1);
-      expect(host.room.results.fallen.find((f) => f.id === bot.id)).toEqual({ id: bot.id, name: bot.name, by: 'B', bot: true });
+      expect(host.room.results.fallen.find((f) => f.id === bot.id)).toMatchObject({ id: bot.id, name: bot.name, by: 'B', bot: true });
       expect(bot.beaten).toBe(true);
     }
     while (!host.room.results.winner) run(PHASE);
@@ -838,7 +838,7 @@ describe('rounds', () => {
     for (let i = 0; i < 11; i++) room.step();
     room.apply({ c: 'out', id: 1, wild: true });
     room.step();
-    expect(room.results.fallen[0]).toEqual({ id: 1, name: 'P1', by: '', wild: true });
+    expect(room.results.fallen[0]).toMatchObject({ id: 1, name: 'P1', by: '', wild: true });
     expect(room.results.winner).toBe(0);
     room.apply({ c: 'out', id: 2 });
     room.apply({ c: 'out', id: 3 });

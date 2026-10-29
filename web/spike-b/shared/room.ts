@@ -330,7 +330,7 @@ export interface RoomState {
 export interface Benched { id: number; name: string; skin: number }
 
 /** One who went out of a round: what beat them (a name; '' for the fog), or `left`. */
-export interface Fallen { id: number; name: string; by: string; wild?: boolean; left?: boolean; bot?: boolean }
+export interface Fallen { id: number; name: string; by: string; wild?: boolean; left?: boolean; bot?: boolean; at?: number }
 
 /** A round as a match: who was in when the fog closed -- trainers and bots, as a match's
  *  seats are (director.ts aliveSeats) -- who went out in what order, and the last one
@@ -954,7 +954,7 @@ export class Room {
   private fall(a: Actor, by: string, how: { wild?: boolean; left?: boolean } = {}): void {
     const r = this.results;
     if (r.winner || !r.entrants.some(([id]) => id === a.id) || r.fallen.some((f) => f.id === a.id)) return;
-    r.fallen.push({ id: a.id, name: a.name, by, ...how, ...(a.bot ? { bot: true } : {}) });
+    r.fallen.push({ id: a.id, name: a.name, by, ...how, ...(a.bot ? { bot: true } : {}), at: this.tick });
   }
 
   /** The cells by the truck that no bot stands on: along its row first, nearest first, so

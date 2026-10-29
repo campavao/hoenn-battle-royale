@@ -21,15 +21,18 @@ import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { DIR_EAST } from './sim';
-import { ATTENDANT, DOCKS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Ring, type Spill } from './shared/room';
+import { ATTENDANT, DOCKS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
-import { connectWorld, soloLink, type WorldLink } from './net';
+import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
 import { over } from './shared/over';
-import { Lobby, me, type RoomInfo } from './lobby';
-import { recordMatch } from '../src/match/career';
+import { Lobby, me, seeThrough, type RoomInfo } from './lobby';
+import { loadCareer, ordinal, recordMatch } from '../src/match/career';
 import type { MatchTally } from '../src/match/tally';
 import { tallySince } from './carry';
+import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, startStickLearn, stickKeys, stickLearnStep, type AxisSense, type StickMap } from '../src/pad';
+import { fameOf, resultsView, standingsOf, tallyLines, type FameMon } from '../src/ui/results';
+import { favourite } from '../src/match/tally';
 import { moveInfo, type Rom as MoveTables } from '../src/battle/movebook';
 import { OUT_BATCH_MS, outs, won } from '../src/match/ticker';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
@@ -41,6 +44,9 @@ import hiddenJson from './data/hidden.json';
 import { RomArt } from './romart';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
+import { keyPicture } from '../src/field';
+import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
+import { cardFields } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
 import { LEADERS } from './shared/gyms';
 import { CLERKS, priceOf, shelf } from './shared/marts';
@@ -211,8 +217,9 @@ const KEYMAP: Record<string, string> = {
 const intro = () => document.getElementById('intro') !== null;
 // The menu and the room (lobby.ts) have the keys while they are up: Emerald's, as the
 // live game's stage takes them, and a keyboard's letters for an entry.
-const STAGE_KEY: Record<string, GbaKey> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', z: 'a', x: 'b', Enter: 'start' };
+const STAGE_KEY: Record<string, GbaKey> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', z: 'a', x: 'b', Enter: 'start', Escape: 'b' };
 addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && remap.cancel) { remap.cancel(); e.stopImmediatePropagation(); return; }
   if (!lobby?.shown) return;
   e.stopImmediatePropagation();
   if (!e.ctrlKey && !e.metaKey && !e.altKey && lobby.stage.char(e.key)) { e.preventDefault(); return; }
@@ -224,6 +231,7 @@ addEventListener('keydown', (e) => {
   if (e.key === 'v' || e.key === 'V') { toggleSpectate(); return; }
   if ((e.key === 'm' || e.key === 'M' || e.key === 'Escape') && !e.repeat) { void openMenu(); return; }
   if ((e.key === 'f' || e.key === 'F') && !e.repeat) { itemfinder(); return; }
+  if ((e.key === 'r' || e.key === 'R') && !e.repeat) { openSheet(); return; }
   const k = KEYMAP[e.key];
   if (!k) return;
   e.preventDefault();
@@ -443,7 +451,8 @@ async function openBag(key: number, bag: Bag, who: string): Promise<void> {
  *  I stand, with this world's fog laid over it (ringmap.ts). */
 async function openMenu(): Promise<void> {
   if (!rom || isOut || battle || swapping || asking || spectating) return;
-  const c = await ask('MENU', [['POKéMON', '1'], ['BAG', '2'], ...(ringMap ? [['MAP', '13'] as [string, string]] : []), ['CARD', '4'], ['EXIT', '']]);
+  const c = await ask('MENU', [['POKéMON', '1'], ['BAG', '2'], ...(ringMap ? [['MAP', '13'] as [string, string]] : []), ['CARD', '4'], ...(lobby ? [['ROOM', 'room'] as [string, string]] : []), ['EXIT', '']]);
+  if (c === 'room') { openSheet(); return; }
   if (!c || !rom || isOut || battle || swapping) return;
   const me = link.room.actor(link.me);
   const look = c === '13' && me && ringMap ? ringMap.look(me.m.spot) : undefined;
@@ -653,6 +662,46 @@ function fieldFrame(): void {
   void rom.field().then((bits) => { if (l === link && bits !== (link.room.actor(link.me)?.field ?? 0)) link.field(bits); }).finally(() => { fieldAsking = false; });
 }
 
+/** BATTLE BACKDROP (the live trainer card's row, the same browser setting): OVER MAP,
+ *  the default, has the ROM paint the battle's backdrop in the key blue and the page key
+ *  it out (field.ts keyPicture), so the world shows under the fight; CLASSIC is black. */
+const keyCanvas = document.getElementById('gba-key') as HTMLCanvasElement;
+const keyImage = new ImageData(240, 160);
+let seeing = false;
+function seeFrame(): void {
+  const up = !!rom && battleEl.classList.contains('on');
+  const keyed = up && rom!.seeThrough(seeThrough()) && rom!.picture(keyImage.data);
+  if (keyed) {
+    keyPicture(keyImage.data);
+    keyCanvas.getContext('2d')?.putImageData(keyImage, 0, 0);
+  } else if (rom && !up) rom.seeThrough(false);
+  if (keyed !== seeing) { seeing = keyed; battleEl.classList.toggle('see', keyed); }
+}
+
+/** Every few seconds, between battles: my team as it stands, told to the room when it
+ *  changes, so the results screen can show the champion's (the live game's PARTY). */
+let teamAsking = false;
+let teamSent = '';
+function teamFrame(): void {
+  if (frame % 300 !== 150 || battle || swapping || isOut) return;
+  tellTeam();
+}
+
+function sendTeam(mons: FameMon[]): void {
+  const text = JSON.stringify(mons);
+  if (text === teamSent) return;
+  teamSent = text;
+  link.team(mons);
+}
+
+/** My team to the room now, if it changed since I last told it. */
+function tellTeam(): void {
+  if (teamAsking || !rom) return;
+  teamAsking = true;
+  const l = link;
+  void rom.fameTeam().then((mons) => { if (l === link) sendTeam(mons); }).catch(() => undefined).finally(() => { teamAsking = false; });
+}
+
 /** The CENTER's nurse, as the match has her (pkmn_center_nurse.inc): one question, and
  *  closed once the fog is on the town. */
 async function nurse(): Promise<void> {
@@ -770,11 +819,16 @@ function endBattle(r: Fought | null): void {
   // Another round, or another match altogether (each one's rounds count from 0).
   const stale = !!battle && (battle.link !== link || battle.round !== link.room.results.round);
   const boss = battle?.boss;
+  // My team as the fight left it, to the room before the fight's end: a last battle that
+  // wins the match shows on everybody's results as it ended (review of batch 3).
+  const after = rom?.teamNow();
+  if (after && !stale) sendTeam(after);
   (battle?.link ?? link).end(duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f)), !stale && (!!battle?.foe?.bot || boss !== undefined) && !!r?.ok && r.outcome === 1);
   if (!stale && boss !== undefined && r?.ok && r.outcome === 1) say(`You beat ${LEADERS[boss].name}! Took their TM and ¥1000.`);
   const wild = battle && !battle.foe && boss === undefined;
   const by = battle?.foe?.id;
   battle = null;
+  tellTeam();
   held.clear();
   pressed.clear();
   // A held A from the battle's last text must not walk straight into another one.
@@ -927,13 +981,17 @@ function record(round: number): void {
   // Placed by when I went out: the last out is second; never out, and nobody won, a tie for first.
   const placement = res.winner === link.me ? 1 : i >= 0 ? res.entrants.length - i : res.winner ? 2 : 1;
   const now = rom?.tally() ?? null;
-  recordMatch(placement, localStorage, tallySince(tallyFrom, now, myStepsN));
+  lastRound = tallySince(tallyFrom, now, myStepsN);
+  recordMatch(placement, localStorage, lastRound);
   tallyFrom = now;
   myStepsN = 0;
 }
 
 /** The ROM's move table, for MY STATS' favourite move. */
 let romTables: MoveTables = { bytes: new Uint8Array(0), sym: () => undefined };
+
+/** What the last round I played added to MY STATS, for its results. */
+let lastRound: ReturnType<typeof tallySince> | null = null;
 
 /** MY STATS for the round I am in: the hidden ROM's tally as it began, and my steps. */
 let tallyFrom: MatchTally | null = null;
@@ -963,7 +1021,43 @@ async function parade(): Promise<void> {
 /** The last one standing (or MATCH OVER, with nobody), and how everybody else went out,
  *  the last out first. `over`: the match has ended, and the button is PLAY AGAIN. */
 const botIds = () => new Set(link.room.actors.filter((a) => a.bot).map((a) => a.id));
+/** The match's end on the live game's results screen (ui/results.ts): my place of how
+ *  many, how long I lasted, everybody's place, and what this round added to MY STATS. */
+function results(res: Results, waited = 0): void {
+  // The champion's team comes from their phone a moment after their last battle (a
+  // bot's never does): a second or two for it, as the live game's PARTY.
+  const coming = res.winner === link.me ? teamAsking : !!res.winner && !link.teams.has(res.winner) && !botIds().has(res.winner);
+  if (coming && waited < 10) {
+    setTimeout(() => results(res, waited + 1), 200);
+    return;
+  }
+  const n = res.entrants.length;
+  const place = new Map<number, number>();
+  if (res.winner) place.set(res.winner, 1);
+  // Still standing with nobody crowned (a draw): first, together.
+  for (const [id] of res.entrants) if (!res.winner && !res.fallen.some((f) => f.id === id)) place.set(id, 1);
+  res.fallen.forEach((f, i) => place.set(f.id, n - i));
+  const nameOf = (id: number) => res.entrants.find(([e]) => e === id)?.[1] ?? 'TRAINER';
+  const mine = res.fallen.find((f) => f.id === link.me);
+  const end = mine?.at ?? res.wonAt ?? link.room.tick;
+  const survived = Math.max(0, Math.round((end - link.room.epoch) / 60));
+  const placed = [...place].map(([seat, placement]) => ({ seat, placement })).sort((p, q) => p.placement - q.placement);
+  const t = lastRound;
+  const beaten = res.fallen.filter((f) => f.by && f.by === nameOf(link.me)).length;
+  lobby!.results({
+    view: resultsView({ placement: place.get(link.me), survived, winner: res.winner || undefined, ended: true }, n, link.me, nameOf),
+    fame: fameOf(res.winner || undefined, link.me, res.winner ? link.teams.get(res.winner) : undefined, nameOf, speciesName, (id) => moveInfo(romTables, id)?.name),
+    standings: standingsOf(placed, link.me, nameOf),
+    record: [
+      { label: 'BEATEN', value: String(beaten) },
+      ...(t ? tallyLines({ won: t.won, caught: t.caught, steps: t.steps, items: t.items, mon: favourite(t.mons), move: favourite(t.moves) }, { species: speciesName, move: (id) => moveInfo(romTables, id)?.name }) : []),
+    ],
+  }, () => { worldSock?.leave(); room = null; lobby!.menu(); });
+}
+
 function standings(done: boolean, res = link.room.results, bots = botIds()): void {
+  // A room's match is over: the live game's results, over the world.
+  if (done && lobby && res.entrants.some(([id]) => id === link.me)) { results(res); return; }
   const name = res.entrants.find(([id]) => id === res.winner)?.[1] ?? 'TRAINER';
   document.getElementById('win-title')!.textContent = !res.winner ? 'MATCH OVER' : res.winner === link.me ? 'YOU WIN!' : `${name} WINS`;
   const list = document.getElementById('win-list')!;
@@ -1024,6 +1118,13 @@ function token(): Token | null {
   try {
     const t = JSON.parse(localStorage.getItem(AGAIN) ?? 'null') as Token | null;
     return t && Date.now() - t.at < AGAIN_MS ? t : null;
+  } catch { return null; }
+}
+/** A match a reload left more than AGAIN_MS ago, still recent enough to be on: its room. */
+function lateCode(): string | null {
+  try {
+    const t = JSON.parse(localStorage.getItem(AGAIN) ?? 'null') as Token | null;
+    return t && Date.now() - t.at < 30 * 60_000 ? t.code : null;
   } catch { return null; }
 }
 function forget(): void {
@@ -1096,8 +1197,31 @@ let looping = false;
 
 /** A match starts for me (or I come into one under way): its link, and the page as a
  *  match begins it -- a fresh team, nobody out, the camera on my trainer. */
-function startMatch(l: WorldLink): void {
+/** The socket dropped and is being tried again; `resuming`: back with the match's own
+ *  trainer, so the next `hello` is the same match carrying on, not a new one. */
+let reconnecting = false;
+let resuming = false;
+function resumeMatch(l: WorldLink): void {
+  const was = link;
   link = l;
+  resuming = reconnecting = false;
+  ringMap = art && RingMap.SYMBOLS.every((n) => Number.isFinite(art!.sym(n))) ? new RingMap(l.room, art) : null;
+  // A battle fought through the drop ends on the new link (not as a stale one).
+  if (battle && battle.link === was) battle.link = l;
+  l.onBt = was.onBt;
+  if (follow === was.me) follow = l.me;
+  tick('Back in the match.');
+  if (lobby?.sheetUp) lobby.stage.redraw();
+}
+
+function startMatch(l: WorldLink): void {
+  // The relay took the same trainer back (its id): the match carries on. Anything else
+  // (the hold gone, in again as a watcher) is a match come into afresh.
+  if (resuming && matchOn && l.me === link.me) { resumeMatch(l); return; }
+  resuming = reconnecting = false;
+  link = l;
+  // The room's battle pace (the host's TEXT and ANIM); ?solo keeps the parked FAST, none.
+  if (room) rom?.pace(room.set.textSpeed, room.set.animations);
   // A patch whose symbols predate the MAP's (gRegionMapEntries, gPlttBufferFaded) has none.
   ringMap = art && RingMap.SYMBOLS.every((n) => Number.isFinite(art!.sym(n))) ? new RingMap(l.room, art) : null;
   matchOn = true;
@@ -1108,6 +1232,7 @@ function startMatch(l: WorldLink): void {
   isOut = waiting = shownWin = false;
   // Every match's rounds count from 0: what was told or recorded of the last one is not.
   seenRound = lastPhase = recordedRound = safariRound = pickAsked = hudRound = dugRound = -1;
+  teamSent = '';
   tallyFrom = rom?.tally() ?? null;
   myStepsN = 0;
   mySpotWas = '';
@@ -1141,6 +1266,129 @@ async function takeBack(r: RomBattles): Promise<void> {
   comingBack = null;
   if (!t || !(await r.load(t))) await r.fresh();
   else say('Welcome back!');
+}
+
+/** The relay's socket, from the menu on (null in ?solo). */
+let worldSock: WorldSocket | null = null;
+
+/** LEAVE: the relay takes me out (the standings say "left"), and the menu is back. */
+function leaveMatch(): void {
+  if (!lobby) return;
+  worldSock?.leave();
+  // Not matchOver: no standings for a match I walked out of.
+  forget();
+  matchOn = false;
+  room = null;
+  isOut = waiting = false;
+  if (spectating) toggleSpectate();
+  outEl.classList.remove('on');
+  winEl.classList.remove('on');
+  lobby.menu('You left the match.');
+}
+
+/** The live match's sheet (ui/screens.ts sheetScreen) over the game: the room's line,
+ *  the strip, the legendary's chip, everybody in it as their sprite (a tap opens their
+ *  card: SPECTATE for somebody out), who I watch once out, LEAVE, the settings. */
+let sheetCard: number | null = null;
+let sheetLeave = false;
+const skinOf = new Map<number, number>();
+const sheetBtn = document.getElementById('sheet')!;
+sheetBtn.addEventListener('click', () => openSheet());
+function openSheet(): void {
+  if (!lobby || !matchOn || lobby.shown) return;
+  held.clear();
+  sheetCard = null;
+  sheetLeave = false;
+  lobby.sheetOver(sheetModel, () => { held.clear(); pressed.clear(); calmUntil = frame + 30; });
+  // The sheet's line and seats move with the match: redrawn while it is up.
+  const tick = setInterval(() => { if (lobby?.sheetUp) lobby.stage.redraw(); else clearInterval(tick); }, 500);
+}
+function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
+  const res = link.room.results;
+  for (const a of link.room.actors) skinOf.set(a.id, a.skin);
+  const nameOf = (id: number) => res.entrants.find(([e]) => e === id)?.[1] ?? link.room.actor(id)?.name ?? 'TRAINER';
+  const ids = res.entrants.length ? res.entrants.map(([id]) => id) : link.room.actors.map((a) => a.id);
+  const fell = new Set(res.fallen.map((f) => f.id));
+  const out = isOut || waiting;
+  const seats: RoomSeat[] = ids.map((id) => ({ seat: id, name: nameOf(id), skin: skinOf.get(id) ?? 0, isMe: id === link.me, spectating: false, alive: !fell.has(id) && !!link.room.actor(id) }));
+  const ring = link.room.ring();
+  const secs = Math.ceil(ring.left / 60);
+  const left = seats.filter((p) => p.alive).length;
+  const strip = `${ring.safari ? 'SAFARI' : (ringMap?.place(ring) || 'HOENN').toUpperCase()}${left ? ` · ${left} left` : ''} · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  const card = sheetCard === null ? null : (() => {
+    const seat = seats.find((p) => p.seat === sheetCard);
+    if (!seat) return null;
+    const m = room?.members.find((x) => x.id === seat.seat);
+    const placed = ids.length - res.fallen.findIndex((f) => f.id === seat.seat);
+    return {
+      seat: seat.seat,
+      skin: seat.skin,
+      lines: [
+        { label: 'NAME', value: seat.name },
+        ...(m?.rec ? cardFields({ name: m.name, skin: m.skin, wins: m.rec.wins, played: m.rec.played, best: m.rec.best }) : []),
+        { label: 'NOW', value: seat.alive ? 'IN' : fell.has(seat.seat) ? `OUT (${ordinal(placed)})` : 'OUT' },
+      ],
+      canKick: false,
+      canWatch: out && seat.alive && !seat.isMe,
+    };
+  })();
+  return {
+    look: 'overlay',
+    status: reconnecting ? 'Reconnecting…' : room ? `Room ${room.code}` : 'SOLO VS BOTS',
+    strip,
+    chips: [legendChip()].filter((c): c is string => c !== null),
+    match: res.round,
+    note: '',
+    seats,
+    card,
+    watch: out ? { name: follow && follow !== link.me ? nameOf(follow) : null } : null,
+    canLeave: true,
+    leaveAsk: sheetLeave,
+    muted,
+    remapping: remap.on,
+    remapLine: remap.line,
+    help: ['Arrows move  Z: A  X: B  M: MENU', 'R: this sheet  V: spectate  pads too'],
+    version: 'spike B',
+    onSeat: (seat) => { sheetCard = seat; lobby?.stage.redraw(); },
+    onKick: () => undefined,
+    onCloseCard: () => { sheetCard = null; lobby?.stage.redraw(); },
+    onWatch: (dir) => { watch.step(dir); lobby?.stage.redraw(); },
+    onWatchSeat: (seat) => { follow = seat; if (zoom < 1) zoom = fitZoom(); sheetCard = null; lobby?.closeSheet(); },
+    onStopWatch: () => { follow = 0; lobby?.stage.redraw(); },
+    onLeave: () => { sheetLeave = true; lobby?.stage.redraw(); },
+    onStay: () => { sheetLeave = false; lobby?.stage.redraw(); },
+    onLeaveSure: () => { sheetLeave = false; leaveMatch(); },
+    onMute: () => { soundBtn.click(); lobby?.stage.redraw(); },
+    onRemap: () => { remapPad(); lobby?.stage.redraw(); },
+    onResetPad: () => { resetPad(); lobby?.stage.redraw(); },
+    onForget: () => { forgetRom(); },
+  };
+}
+/** FORGET ROM, asked first as the live sheet asks it: the ROM this browser keeps goes,
+ *  and the page starts over (the game page asks for it again). */
+let romEmu: { forgetRom(): Promise<void>; stop(): void } | null = null;
+function forgetRom(): void {
+  const st = lobby!.stage;
+  st.push(noticeScreen(() => ({
+    title: 'FORGET ROM',
+    lines: [{ text: 'Forget the ROM stored in this browser? You will pick it again to play.' }],
+    buttons: [
+      { label: 'FORGET', id: 'forget-yes', onPress: () => { void (async () => { await romEmu?.forgetRom(); romEmu?.stop(); location.reload(); })(); } },
+      { label: 'BACK', id: 'forget-no', onPress: () => st.pop() },
+    ],
+    onBack: () => st.pop(),
+  })));
+}
+
+/** The legendary's chip (match/legends.ts's words): where it stands, or whose team has
+ *  it by the teams the phones told. */
+function legendChip(): string | null {
+  for (const e of [...link.room.events].reverse()) {
+    if (!e.species) continue;
+    if (link.room.spills.has(e.key)) return e.place ? `Legendary at ${e.place.toUpperCase()}` : 'Legendary on the map';
+    for (const [id, mons] of link.teams) if (mons.some((m) => m.species === e.species)) return `${link.room.actor(id)?.name ?? 'Somebody'} has the legendary`;
+  }
+  return null;
 }
 
 function matchOver(): void {
@@ -1362,6 +1610,125 @@ for (const el of document.querySelectorAll<HTMLElement>('.k')) {
     else if (k === 'start') void openMenu();
   });
   el.addEventListener('pointerup', () => rom?.release(GBA_KEY[k]));
+}
+
+// ---- a controller (the live game's wireGamepad, the parts the world uses) -------------
+// The live game's map for this device (hbr.padmap, its remap wizard's) and stick
+// (hbr.padstick), else the standard layout: face bottom/left A, right/top B, START, the
+// D-pad, the stick and a DirectInput hat. Polled on a timer, as the Gamepad API has no
+// button events: a press is a change since the last poll, sent where a key would go.
+const PAD_DEFAULT: Record<number, string> = { 0: 'a', 1: 'b', 2: 'b', 3: 'a', 9: 'start', 12: 'up', 13: 'down', 14: 'left', 15: 'right' };
+const PAD_HAT: string[][] = [['up'], ['up', 'right'], ['right'], ['down', 'right'], ['down'], ['down', 'left'], ['left'], ['up', 'left']];
+function padMap(): Record<number, string> {
+  try {
+    const saved = JSON.parse(localStorage.getItem('hbr.padmap') ?? 'null') as Record<string, string> | null;
+    const out: Record<number, string> = {};
+    for (const [i, k] of Object.entries(saved ?? {})) if (GBA_KEY[k]) out[Number(i)] = k;
+    return Object.keys(out).length ? { ...out, 12: 'up', 13: 'down', 14: 'left', 15: 'right' } : PAD_DEFAULT;
+  } catch { return PAD_DEFAULT; }
+}
+function padDown(k: string): void {
+  if (intro()) return;
+  if (lobby?.shown) { lobby.stage.key(GBA_KEY[k]); return; }
+  if (!held.has(k)) pressed.add(k);
+  held.add(k);
+  if (asking) askKey(k);
+  else if ((battle || swapping || romUp) && rom) rom.press(GBA_KEY[k]);
+  else if (k === 'start') void openMenu();
+}
+function padUp(k: string): void {
+  held.delete(k);
+  rom?.release(GBA_KEY[k]);
+}
+let padKeys = padMap();
+let padStick = loadStickMap();
+/** The remap wizard (the live game's wireRemap): the next button pressed, or where the
+ *  stick moved (null at rest, 'skip' for a button), goes here instead of the game. */
+let padCapture: ((index: number) => void) | null = null;
+let axisCapture: ((input: AxisSense | null | 'skip') => void) | null = null;
+const REMAP_ORDER = ['a', 'b', 'start', 'select', 'l', 'r'];
+const remap = { on: false, line: '', cancel: null as (() => void) | null };
+function remapSay(text: string): void { remap.line = text; lobby?.stage.redraw(); }
+function remapStop(note: string): void {
+  padCapture = axisCapture = null;
+  remap.cancel = null;
+  remap.on = false;
+  remapSay(note);
+}
+/** REMAP PAD: A, B, START, SELECT, L and R by turns, then the stick UP and RIGHT; saved
+ *  where the live game keeps them (hbr.padmap, hbr.padstick). Pressed again: cancel. */
+function remapPad(): void {
+  if (remap.cancel) { remap.cancel(); return; }
+  const taken: Record<number, string> = {};
+  let i = 0;
+  const finish = (stick: StickMap | null) => {
+    try {
+      localStorage.setItem('hbr.padmap', JSON.stringify(taken));
+      if (stick) localStorage.setItem(STICK_KEY, JSON.stringify(stick));
+      else localStorage.removeItem(STICK_KEY);
+    } catch { /* this session only */ }
+    padKeys = { ...taken, 12: 'up', 13: 'down', 14: 'left', 15: 'right' };
+    padStick = stick;
+    remapStop(stick ? 'Pad remapped, stick learned.' : 'Pad remapped.');
+  };
+  const askStick = () => {
+    let learn = startStickLearn();
+    remapSay('Push the LEFT STICK UP, then let go. Any button skips.');
+    axisCapture = (input) => {
+      const was = learn.phase;
+      learn = stickLearnStep(learn, input);
+      if (learn.phase === 'done') { axisCapture = null; finish(learn.result ?? null); }
+      else if (learn.phase !== was) remapSay('Now push the LEFT STICK RIGHT.');
+    };
+  };
+  const ask = () => {
+    if (i >= REMAP_ORDER.length) { askStick(); return; }
+    remapSay(`Press the button for ${REMAP_ORDER[i].toUpperCase()}. Esc cancels.`);
+    padCapture = (index) => { taken[index] = REMAP_ORDER[i]; i++; ask(); };
+  };
+  remap.on = true;
+  remap.cancel = () => remapStop('Remap cancelled.');
+  ask();
+}
+function resetPad(): void {
+  try { localStorage.removeItem('hbr.padmap'); localStorage.removeItem(STICK_KEY); } catch { /* nothing kept */ }
+  padKeys = PAD_DEFAULT;
+  padStick = null;
+  remapStop('Pad mapping reset.');
+}
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && remap.cancel) remap.cancel(); });
+if (typeof navigator.getGamepads === 'function') {
+  const rest = new Map<number, readonly number[]>();
+  let padHeld = new Set<string>();
+  let buttonsHeld = new Set<number>();
+  setInterval(() => {
+    const now = new Set<string>();
+    const pressedNow = new Set<number>();
+    for (const pad of navigator.getGamepads()) {
+      if (!pad) continue;
+      if (!rest.has(pad.index)) rest.set(pad.index, [...pad.axes]);
+      const base = rest.get(pad.index)!;
+      pad.buttons.forEach((b, i) => { if (b.pressed) pressedNow.add(i); });
+      if (axisCapture) {
+        const fresh = [...pressedNow].some((i) => !buttonsHeld.has(i));
+        axisCapture(fresh ? 'skip' : learnAxis(pad.axes, base));
+        continue;
+      }
+      if (padCapture) {
+        const fresh = [...pressedNow].find((i) => !buttonsHeld.has(i));
+        if (fresh !== undefined) padCapture(fresh);
+        continue;
+      }
+      for (const i of pressedNow) if (padKeys[i]) now.add(padKeys[i]);
+      for (const k of padStick ? stickKeys(pad.axes, base, padStick) : guessedStickKeys(pad.axes, base).keys) if (GBA_KEY[k]) now.add(k);
+      const hat = pad.axes.length >= 10 ? pad.axes[9] : 9;
+      if (hat >= -1.1 && hat <= 1.1) for (const k of PAD_HAT[Math.round((hat + 1) * 3.5) % 8]) now.add(k);
+    }
+    buttonsHeld = pressedNow;
+    for (const k of now) if (!padHeld.has(k)) padDown(k);
+    for (const k of padHeld) if (!now.has(k)) padUp(k);
+    padHeld = now;
+  }, 16);
 }
 
 // ---- camera + drawing -----------------------------------------------------------------
@@ -1929,6 +2296,8 @@ function loop(now: number): void {
     for (const e of link.frame(myBits())) startFor(e);
     roundFrame();
     fieldFrame();
+    teamFrame();
+    seeFrame();
     soundFrame();
     stepsFrame();
     doorsFrame();
@@ -1977,6 +2346,7 @@ async function boot(): Promise<void> {
   let files: Awaited<ReturnType<typeof loadRom>>;
   try {
     files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; });
+    romEmu = files.emu;
   } catch (e) {
     console.warn('spike ROM not loaded', e);
     return;
@@ -2010,24 +2380,54 @@ async function boot(): Promise<void> {
     const sock = connectWorld(url, make, {
       onRoom: (r) => {
         room = r;
+        rom?.pace(r.set.textSpeed, r.set.animations);
         if (matchOn && !r.playing) matchOver();
         // The standings stay up until PLAY AGAIN; then the room as it is by then.
         else if (!matchOn && !winEl.classList.contains('on')) lobby!.roomIs(r);
       },
-      onNoRoom: (code) => { forget(); lobby!.menu(code ? `There is no room ${code}.` : 'Every place in the world is taken.'); },
+      onNoRoom: (code, pass) => { forget(); lobby!.menu(pass ? `That is not room ${code}'s passcode.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.'); },
+      onKicked: () => { room = null; forget(); lobby!.menu('The host took you out of the room.'); },
+      onRooms: (rooms) => lobby?.listed(rooms),
       onMatch: (l) => startMatch(l),
-      onClosed: () => { matchOn = false; lobby!.menu('Lost the relay. Reload to play again.'); },
+      onClosed: () => { reconnecting = false; matchOn = false; lobby!.menu('Lost the relay. Reload to play again.'); },
+      onDropped: () => {
+        if (!reconnecting) { reconnecting = true; tick('Reconnecting…', true); }
+        if (lobby?.sheetUp) lobby.stage.redraw();
+      },
+      onReconnected: () => {
+        // Back in as the same trainer (the relay held it, AWAY_MS); in a room between
+        // matches, back into the room.
+        const who = me();
+        if (matchOn && room && link?.online && link.key) {
+          resuming = true;
+          return { t: 'join', name: who.name, skin: who.skin, code: room.code, again: { code: room.code, id: link.me, key: link.key } };
+        }
+        reconnecting = false;
+        // In the room before a match: the same seat (the key takes it over), not a second.
+        return room ? { t: 'join', name: who.name, skin: who.skin, code: room.code, ...(room.key ? { again: { code: room.code, id: room.you, key: room.key } } : {}) } : undefined;
+      },
     });
+    worldSock = sock;
+    sheetBtn.hidden = false;
     lobby = new Lobby({
-      join: (how) => sock.join(me().name, me().skin, how),
+      join: (how) => { const c = loadCareer(); sock.join(me().name, me().skin, { ...how, rec: { wins: c.wins, played: c.matches, ...(c.best ? { best: c.best } : {}) } }); },
       start: () => sock.start(),
+      set: (set) => sock.set(set),
+      kick: (id) => sock.kick(id),
+      list: () => sock.list(),
+      relayUrl: url.replace(/\/world$/, ''),
       leave: () => location.reload(),
       names: { species: speciesName, move: (id) => moveInfo(romTables, id)?.name },
     });
     // Reloaded within a minute of a match: straight back in (or, too late, in to watch).
     const back = token();
     if (back) { lobby.hide(); sock.join(me().name, me().skin, { code: back.code, again: { code: back.code, id: back.id, key: back.key } }); }
-    else lobby.menu();
+    else {
+      // Too late to be the same trainer: the menu's WATCH goes back in to look (HBR-20).
+      lobby.rewatch = lateCode();
+      forget();
+      lobby.menu(lobby.rewatch ? 'Too late to rejoin the match. WATCH it from here.' : '');
+    }
   }
   bootRom(files, link?.room.seed ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
   (window as unknown as { __spike: unknown }).__spike = { get link() { return link; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; } };

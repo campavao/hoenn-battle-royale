@@ -17,7 +17,8 @@ import type { PatchTable } from '../src/bots/patches';
 import { tick } from './sim';
 import { Host, play } from './shared/host';
 import { keysOf, makeRoom, type Actor, type Bag, type Room, type RoomEvent } from './shared/room';
-import type { Again, SpMsg, WireFrame, WorldDown, WorldUp } from './shared/wire';
+import type { FameMon } from '../src/ui/results';
+import type { Again, CardRecord, Listed, Settings, SpMsg, WireFrame, WorldDown, WorldUp } from './shared/wire';
 
 export interface WorldLink {
   readonly room: Room;
@@ -59,6 +60,10 @@ export interface WorldLink {
   onSp: ((from: number, m: SpMsg) => void) | null;
   /** How many are watching me. */
   onEyes: ((n: number) => void) | null;
+  /** My team as it stands, for the hall of fame if I win. */
+  team(mons: FameMon[]): void;
+  /** Every trainer's team as they last told it. */
+  readonly teams: Map<number, FameMon[]>;
   /** For the stats line. */
   status(): string;
 }
@@ -72,6 +77,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
   const me = host.join('YOU', 0);
   host.advance();
   let seq = 0;
+  const teams = new Map<number, FameMon[]>();
   return {
     room: host.room,
     me,
@@ -96,6 +102,8 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     sp: () => undefined,
     onSp: null,
     onEyes: null,
+    teams,
+    team: (mons) => { teams.set(me, mons); },
     status: () => 'solo: you and the bots (no relay)',
   };
 }
@@ -126,6 +134,7 @@ class Online implements WorldLink {
   onBt: ((q: number, d: number[]) => void) | null = null;
   onSp: ((from: number, m: SpMsg) => void) | null = null;
   onEyes: ((n: number) => void) | null = null;
+  readonly teams = new Map<number, FameMon[]>();
 
   constructor(private readonly ws: WebSocket, private readonly make: (seed: number) => Room) {
     ws.addEventListener('close', () => { this.closed = true; });
@@ -138,6 +147,7 @@ class Online implements WorldLink {
       this.room.load(m.state);
       this.me = m.id;
       this.key = m.key;
+      this.teams.clear();
       ready();
     } else if (m.t === 'state') {
       this.room.load(m.state);
@@ -151,6 +161,8 @@ class Online implements WorldLink {
       this.onSp?.(m.from, m.m);
     } else if (m.t === 'eyes') {
       this.onEyes?.(m.n);
+    } else if (m.t === 'team') {
+      this.teams.set(m.id, m.mons);
     }
   }
 
@@ -226,6 +238,8 @@ class Online implements WorldLink {
   end(fled = false, won = false): void { this.send({ t: 'end', ...(fled ? { fled } : {}), ...(won ? { won } : {}) }); }
   field(bits: number): void { this.send({ t: 'field', bits }); }
 
+  team(mons: FameMon[]): void { this.teams.set(this.me, mons); this.send({ t: 'team', mons }); }
+
   bots(a: number, b: number, winner: number): void { this.send({ t: 'bots', a, b, w: winner }); }
 
   traded(n: number, given: number): void { this.send({ t: 'traded', n, sp: given }); }
@@ -255,48 +269,104 @@ class Online implements WorldLink {
  *  in them. `onMatch` hands over the match's link each time one starts for me (or I come
  *  into one under way, to watch). */
 export interface WorldSocket {
-  join(name: string, skin: number, how: { code?: string; host?: boolean; again?: Again }): void;
+  join(name: string, skin: number, how: { code?: string; host?: boolean; again?: Again; pass?: string; rec?: CardRecord }): void;
   start(): void;
+  /** LEAVE: out of the room and its match; the socket stays for the menu. */
+  leave(): void;
+  /** LOBBIES: ask for the hosted rooms (`onRooms`). */
+  list(): void;
+  /** The host's settings for the room's next match (with the passcode, for a `pass` door). */
+  set(set: Partial<Settings> & { pass?: string }): void;
+  /** The host takes trainer `id` out of the room. */
+  kick(id: number): void;
   close(): void;
 }
 
 export interface WorldHandlers {
   onRoom(r: Extract<WorldDown, { t: 'room' }>): void;
-  onNoRoom(code: string): void;
+  /** No room by that code; `pass`: there is, and the passcode was wrong. */
+  onNoRoom(code: string, pass?: boolean): void;
+  /** The host took me out of the room. */
+  onKicked(): void;
+  onRooms(rooms: Listed[]): void;
   onMatch(link: WorldLink): void;
-  /** The socket closed (or never opened). */
+  /** The socket closed (or never opened) for good. */
   onClosed(): void;
+  /** The socket dropped and is being tried again (Reconnecting…). Without it, a drop
+   *  is onClosed. */
+  onDropped?(): void;
+  /** Open again after a drop: what to send first to come back in (a join with `again`),
+   *  if anything. */
+  onReconnected?(): WorldUp | undefined;
 }
+
+/** How long a dropped socket is tried again: the relay's hold on an away trainer. */
+export const RECONNECT_MS = 55_000;
 
 export function connectWorld(url: string, make: (seed: number) => Room, h: WorldHandlers): WorldSocket {
   let ws: WebSocket | null = null;
   let match: Online | null = null;
   let closed = false;
+  /** Tries since the socket last dropped, and when it dropped (0: it is up). */
+  let tries = 0;
+  let droppedAt = 0;
   const queue: WorldUp[] = [];
   const send = (m: WorldUp) => {
     if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
     else queue.push(m);
   };
-  try { ws = new WebSocket(url); } catch { ws = null; }
-  if (!ws) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, close: () => undefined }; }
-  const sock = ws;
-  sock.addEventListener('open', () => { for (const m of queue.splice(0)) sock.send(JSON.stringify(m)); });
-  sock.addEventListener('close', () => { if (!closed) { closed = true; h.onClosed(); } });
-  sock.addEventListener('message', (ev) => {
-    const m = JSON.parse(String(ev.data)) as WorldDown;
-    if (m.t === 'room') h.onRoom(m);
-    else if (m.t === 'no_room') h.onNoRoom(m.code);
-    else if (m.t === 'full') h.onNoRoom('');
-    else if (m.t === 'hello') {
-      const next = new Online(sock, make);
-      next.receive(m, () => undefined);
-      match = next;
-      h.onMatch(next);
-    } else match?.receive(m, () => undefined);
-  });
+  const open = (): boolean => {
+    let sock: WebSocket;
+    try { sock = new WebSocket(url); } catch { return false; }
+    ws = sock;
+    sock.addEventListener('open', () => {
+      const back = droppedAt > 0;
+      droppedAt = 0;
+      tries = 0;
+      // Back after a drop: the page says how to come back in (the room, my id and key)
+      // before anything queued while it was down.
+      const again = back ? h.onReconnected?.() : undefined;
+      if (again) sock.send(JSON.stringify(again));
+      for (const m of queue.splice(0)) sock.send(JSON.stringify(m));
+    });
+    sock.addEventListener('close', () => {
+      if (closed || ws !== sock) return;
+      // A dropped socket (a phone's network blinking) comes back by itself for as long
+      // as the relay holds the trainer (AWAY_MS); the page shows Reconnecting meanwhile.
+      const now = Date.now();
+      if (!droppedAt) droppedAt = now;
+      if (h.onDropped && now - droppedAt < RECONNECT_MS) {
+        h.onDropped();
+        setTimeout(() => { if (!closed && !open()) { closed = true; h.onClosed(); } }, Math.min(8000, 500 * 2 ** tries++));
+        return;
+      }
+      closed = true;
+      h.onClosed();
+    });
+    sock.addEventListener('message', (ev) => {
+      const m = JSON.parse(String(ev.data)) as WorldDown;
+      if (m.t === 'room') h.onRoom(m);
+      else if (m.t === 'no_room') h.onNoRoom(m.code, m.pass);
+      else if (m.t === 'kicked') h.onKicked();
+      else if (m.t === 'rooms') h.onRooms(m.rooms);
+      else if (m.t === 'full') h.onNoRoom('');
+      else if (m.t === 'hello') {
+        const next = new Online(sock, make);
+        next.receive(m, () => undefined);
+        match = next;
+        h.onMatch(next);
+      } else match?.receive(m, () => undefined);
+    });
+    return true;
+  };
+  if (!open()) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, list: () => undefined, set: () => undefined, kick: () => undefined, leave: () => undefined, close: () => undefined }; }
   return {
     join: (name, skin, how) => send({ t: 'join', name, skin, ...how }),
     start: () => send({ t: 'start' }),
-    close: () => { closed = true; sock.close(); },
+    list: () => send({ t: 'list' }),
+    set: (set) => send({ t: 'set', set }),
+    kick: (id) => send({ t: 'kick', id }),
+    leave: () => send({ t: 'leave' }),
+    close: () => { closed = true; ws?.close(); },
   };
 }

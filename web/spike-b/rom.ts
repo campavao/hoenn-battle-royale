@@ -18,13 +18,16 @@ import { Mailbox, MAILBOX } from '../src/net/mailbox';
 import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from '../src/net/slots';
 import { PROTOCOL, type Dir, type Msg, type PackedMon } from '../src/net/wire';
 import { loadCheckedRelease } from '../src/release';
-import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fieldOf, healed, rekey, spillOf, teamOf, withMoney, withoutItem } from './carry';
+import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fameTeam, fieldOf, healed, rekey, spillOf, teamOf, withMoney, withoutItem } from './carry';
 import { startMenuTable } from '../src/touch';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 import { CATCH_UP_SPEED, spectatePace } from '../src/match/spectate';
 import type { SpMsg } from './shared/wire';
 import { readTally, type MatchTally } from '../src/match/tally';
+import type { FameMon } from '../src/ui/results';
 
+/** SaveBlock2's options halfword (include/global.h). */
+const OPTIONS_AT = 0x14;
 /** sizeof(struct BrTally) (include/br/br_tally.h). */
 const TALLY_LEN = 52;
 
@@ -139,6 +142,14 @@ export interface RomBattles {
   /** gBrTally (POK-416): what the hidden battles have counted since boot, for MY STATS;
    *  null for a build without it. */
   tally(): MatchTally | null;
+  /** The host's TEXT speed and ANIM (the live room's pace, br_match.c): set on the save
+   *  before each battle, since every battle starts from the parked boot (FAST, none). */
+  pace(textSpeed: 1 | 3 | 5, animations: boolean): void;
+  /** BATTLE BACKDROP's OVER MAP (gBrSeeThrough, br_battle.h): `on` asks the ROM to paint
+   *  the battle's backdrop in the key blue; true while it does (its count of frames). */
+  seeThrough(on: boolean): boolean;
+  /** This frame's picture, RGBA, into `out`; false when the core cannot hand it over. */
+  picture(out: Uint8ClampedArray): boolean;
   /** The ring closed on the trainer in the middle of a battle: from the next turn's end
    *  that battle is fought in the fog. Nothing between battles. */
   fogNow(): void;
@@ -198,6 +209,11 @@ export interface RomBattles {
   heal(): Promise<void>;
   /** What the team could do on the field now (room.ts FIELD_*). */
   field(): Promise<number>;
+  /** The team as the results screen's hall of fame shows it. */
+  fameTeam(): Promise<FameMon[]>;
+  /** The same, now, from the team the last battle left (null before any): for the end of
+   *  a battle, told before the battle's end is. */
+  teamNow(): FameMon[] | null;
   press(k: GbaKey): void;
   release(k: GbaKey): void;
   emu: Emulator;
@@ -446,6 +462,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   };
   // One thing at a time on the ROM: a battle asked for while an item goes in waits for it.
   let queue: Promise<unknown> = Promise.resolve();
+  // FAST text and no battle scene, as br_boot.c parks the ROM.
+  let paceBits = 2 | 0x400;
   const inTurn = <T>(f: () => Promise<T>): Promise<T> => {
     const run = queue.then(f, f);
     queue = run.catch(() => undefined);
@@ -456,6 +474,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     // Every battle from one state would roll the same: a fresh draw each time.
     emu.write(sym('gRngValue'), (Math.random() * 2 ** 32) >>> 0, 32);
     emu.write(mainFunc, 0, 32);
+    // The room's pace on SaveBlock2's options (0x14: text speed bits 0-2, battle scene
+    // off bit 10), as BrMatch's start writes the live match's.
+    const opts = emu.read(save2, 32) + OPTIONS_AT;
+    emu.write(opts, (emu.read(opts, 16) & ~0x407) | paceBits, 16);
     // Fought in the fog (br_ring.h): a ring with fog everywhere, so the hidden ROM's own
     // map is outside it. The fog hurts each mon on the field a tenth at every turn's end
     // and can knock it out, as in every fog battle (BrRing_FogEndTurn, HBR-11). None: no
@@ -536,6 +558,18 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         send({ t: 'challenge', seat: FOE_SEAT, opponent: ME, nonce: 0 });
       }, () => emu.read(fightAt + 2, 8) === 1, () => emu.read(fightAt + 2, 8) === 0, onStart,
       () => ({ outcome: emu.read(outcomeAt, 8), species: 0, level: 0 })));
+    },
+    seeThrough(on) {
+      const at = sym('gBrSeeThrough');
+      if (Number.isNaN(at)) return false;
+      emu.write(at, on ? 1 : 0, 8);
+      return on && emu.read(at + 1, 8) > 0;
+    },
+    picture(out) {
+      return emu.lcdPixels(out);
+    },
+    pace(textSpeed, animations) {
+      paceBits = Math.max(0, [1, 3, 5].indexOf(textSpeed)) | (animations ? 0 : 0x400);
     },
     tally() {
       // The trainer's own counts, as the last battle left them (the ROM sits in the boot
@@ -629,6 +663,15 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       return inTurn(async () => {
         const k = carried ?? kept();
         return fieldOf(k.party, k.count);
+      });
+    },
+    teamNow() {
+      return carried ? fameTeam(carried.party, carried.count) : null;
+    },
+    fameTeam() {
+      return inTurn(async () => {
+        const k = carried ?? kept();
+        return fameTeam(k.party, k.count);
       });
     },
     heal() {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAG_AT, BAG_LEN, arrived, fieldOf, healed, rekey, spillOf, tallySince, teamOf, withMoney } from './carry';
+import { BAG_AT, BAG_LEN, arrived, fameTeam, fieldOf, healed, rekey, spillOf, tallySince, teamOf, withMoney } from './carry';
 import HMS from '../src/data/hms.json';
 
 describe('rekey', () => {
@@ -93,6 +93,26 @@ describe('teamOf', () => {
     put(1, 7, 0xdeadbeef, 25, 12);
     expect(teamOf(party, 2)).toEqual([{ species: 277, level: 5 }, { species: 25, level: 12 }]);
     expect(teamOf(party, 1)).toHaveLength(1);
+  });
+});
+
+describe('fameTeam', () => {
+  it('reads the nickname, moves, HP and shininess the hall of fame shows', () => {
+    const party = new Uint8Array(600);
+    const v = new DataView(party.buffer);
+    // personality 0: GAEM, growth then attacks; 0x0102 ^ 0x0304 is not under 8, not shiny
+    const key = 0x01020304;
+    v.setUint32(0, 0, true);
+    v.setUint32(4, key, true);
+    for (let w = 0; w < 48; w += 4) v.setUint32(32 + w, key, true);
+    v.setUint32(32, (252 ^ key) >>> 0, true); // Treecko
+    v.setUint32(44, ((1 | (43 << 16)) ^ key) >>> 0, true); // POUND, LEER
+    party.set([0xce, 0xbb, 0xc7, 0xd3, 0xff], 8); // TAMY
+    party[84] = 9;
+    v.setUint16(86, 20, true);
+    v.setUint16(88, 27, true);
+    expect(fameTeam(party, 1)).toEqual([{ species: 252, nickname: 'TAMY', level: 9, hp: 20, maxHp: 27, shiny: false, moves: [{ id: 1 }, { id: 43 }] }]);
+    expect(fameTeam(party, 0)).toEqual([]);
   });
 });
 

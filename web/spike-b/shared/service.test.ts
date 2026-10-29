@@ -39,6 +39,186 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it('LOBBIES lists the hosted rooms, not quick play\'s, to anybody who asks', () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
+    try {
+      const a = phone(), q = phone(), c = phone();
+      svc.open(a.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 3, host: true }));
+      svc.open(q.link).onText(JSON.stringify({ t: 'join', name: 'quinn', skin: 0 }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      const s = svc.open(c.link);
+      s.onText(JSON.stringify({ t: 'list' }));
+      expect(c.got.at(-1)).toEqual({ t: 'rooms', rooms: [{ code, host: 'ALICE', skin: 3, players: 1, seats: expect.any(Number), playing: false, pass: false }] });
+      // And in by its code.
+      s.onText(JSON.stringify({ t: 'join', name: 'carl', skin: 0, code }));
+      expect(c.got.at(-1)).toMatchObject({ t: 'room', code, members: [{ name: 'ALICE' }, { name: 'CARL' }] });
+    } finally {
+      svc.stop();
+    }
+  });
+  it("the host's BOTS, FOG and SAFARI make the match; nobody else's", () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 3, cap: 30, now: () => 0, log: () => undefined });
+    try {
+      const a = phone(), g = phone();
+      const sa = svc.open(a.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      const sg = svc.open(g.link);
+      sg.onText(JSON.stringify({ t: 'join', name: 'gus', skin: 0, code }));
+      expect(g.got.at(-1)).toMatchObject({ t: 'room', set: { bots: true, fogSecs: 120, safariSecs: 120, textSpeed: 5, animations: false } });
+      sa.onText(JSON.stringify({ t: 'set', set: { textSpeed: 3, animations: true } }));
+      sa.onText(JSON.stringify({ t: 'set', set: { textSpeed: 4 } }));
+      expect(g.got.at(-1)).toMatchObject({ set: { textSpeed: 3, animations: true } });
+      sg.onText(JSON.stringify({ t: 'set', set: { bots: false } }));
+      expect(g.got.at(-1)).toMatchObject({ set: { bots: true } });
+      sa.onText(JSON.stringify({ t: 'set', set: { bots: false, fogSecs: 60, safariSecs: 0 } }));
+      sa.onText(JSON.stringify({ t: 'set', set: { fogSecs: 7 } })); // not a step: ignored
+      expect(g.got.at(-1)).toMatchObject({ set: { bots: false, fogSecs: 60, safariSecs: 0 } });
+      sa.onText(JSON.stringify({ t: 'start' }));
+      const hello = g.got.find((m) => m.t === 'hello') as unknown as { state: { ringPhase?: number; opening?: number; actors: { bot: boolean }[] } };
+      expect(hello.state.ringPhase).toBe(3600);
+      expect(hello.state.opening).toBeUndefined();
+      expect(hello.state.actors.filter((x) => x.bot)).toHaveLength(0);
+    } finally {
+      svc.stop();
+    }
+  });
+  it('the host sets MAX and the door (unlisted, a passcode), and takes a guest out', () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
+    try {
+      const a = phone(), g = phone(), h = phone(), w = phone();
+      const sa = svc.open(a.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      const sw = svc.open(w.link);
+      const list = () => { sw.onText(JSON.stringify({ t: 'list' })); return (w.got.at(-1) as unknown as { rooms: { pass: boolean; seats: number }[] }).rooms; };
+      sa.onText(JSON.stringify({ t: 'set', set: { max: 2 } }));
+      expect(list()[0].seats).toBe(2);
+      sa.onText(JSON.stringify({ t: 'set', set: { door: 'private' } }));
+      expect(list()).toEqual([]);
+      sa.onText(JSON.stringify({ t: 'set', set: { door: 'pass', pass: 'abcd' } }));
+      expect(list()[0].pass).toBe(true);
+      expect(a.got.at(-1)).toMatchObject({ pass: 'ABCD', set: { door: 'pass' } });
+      // A wrong passcode is turned away; the right one comes in; MAX 2 turns the third away.
+      const sg = svc.open(g.link);
+      sg.onText(JSON.stringify({ t: 'join', name: 'gus', skin: 0, code, pass: 'ZZZZ' }));
+      expect(g.got.at(-1)).toEqual({ t: 'no_room', code, pass: true });
+      sg.onText(JSON.stringify({ t: 'join', name: 'gus', skin: 0, code, pass: 'abcd' }));
+      expect(g.got.at(-1)).toMatchObject({ t: 'room', code });
+      expect((g.got.at(-1) as unknown as { pass?: string }).pass).toBeUndefined();
+      svc.open(h.link).onText(JSON.stringify({ t: 'join', name: 'hal', skin: 0, code, pass: 'ABCD' }));
+      expect(h.got.at(-1)).toMatchObject({ t: 'no_room' });
+      // KICK: only the host's, and the guest's socket can join again.
+      const gus = (g.got.at(-1) as unknown as { you: number }).you;
+      sg.onText(JSON.stringify({ t: 'kick', id: (a.got.at(-1) as unknown as { you: number }).you }));
+      expect(a.got.at(-1)).toMatchObject({ t: 'room' });
+      sa.onText(JSON.stringify({ t: 'kick', id: gus }));
+      expect(g.got.at(-1)).toEqual({ t: 'kicked' });
+      expect(a.got.at(-1)).toMatchObject({ members: [{ name: 'ALICE' }] });
+      sg.onText(JSON.stringify({ t: 'join', name: 'gus', skin: 0, host: true }));
+      expect(g.got.at(-1)).toMatchObject({ t: 'room', members: [{ name: 'GUS' }] });
+    } finally {
+      svc.stop();
+    }
+  });
+  it("a trainer's career rides their seat, whole numbers or nothing", () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
+    try {
+      const a = phone(), g = phone();
+      svc.open(a.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true, rec: { wins: 3, played: 9, best: 1 } }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      svc.open(g.link).onText(JSON.stringify({ t: 'join', name: 'gus', skin: 0, code, rec: { wins: 'lots', played: 2 } }));
+      expect(g.got.at(-1)).toMatchObject({ members: [{ name: 'ALICE', rec: { wins: 3, played: 9, best: 1 } }, { name: 'GUS' }] });
+      expect((g.got.at(-1) as unknown as { members: { rec?: unknown }[] }).members[1].rec).toBeUndefined();
+    } finally {
+      svc.stop();
+    }
+  });
+  it('LEAVE mid-match: out of the room and the match (left), and the socket can come back in', () => {
+    let t = 0;
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => t, log: () => undefined });
+    try {
+      const a = phone(), g = phone();
+      const sa = svc.open(a.link), sg = svc.open(g.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sg.onText(JSON.stringify({ t: 'join', name: 'gus', skin: 0, code }));
+      svc.open(phone().link).onText(JSON.stringify({ t: 'join', name: 'hal', skin: 0, code }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      sg.onText(JSON.stringify({ t: 'leave' }));
+      expect(a.got.at(-1)).toMatchObject({ t: 'room', members: [{ name: 'ALICE' }, { name: 'HAL' }] });
+      svc.pump();
+      const fell = () => (svc as unknown as { rooms: Map<string, { host: { room: { results: { fallen: { left?: boolean }[] } } } }> }).rooms.get(code)!.host.room.results.fallen;
+      for (let i = 0; i < 30 && !fell().length; i++) { t += 100; svc.pump(); }
+      expect(fell()).toMatchObject([{ left: true }]);
+      sg.onText(JSON.stringify({ t: 'join', name: 'gus', skin: 0, host: true }));
+      expect(g.got.at(-1)).toMatchObject({ t: 'room', members: [{ name: 'GUS' }] });
+    } finally {
+      svc.stop();
+    }
+  });
+  it("a trainer's team goes to the room, sane or not at all", () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
+    try {
+      const a = phone(), b = phone();
+      const sa = svc.open(a.link), sb = svc.open(b.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, code }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      const id = (a.got.find((m) => m.t === 'hello') as unknown as { id: number }).id;
+      const mons = [{ species: 252, nickname: 'TAMY', level: 9, hp: 20, maxHp: 27, moves: [{ id: 1 }, { id: 43 }, { id: 'x' }] }];
+      sa.onText(JSON.stringify({ t: 'team', mons }));
+      expect(b.got.at(-1)).toEqual({ t: 'team', id, mons: [{ ...mons[0], moves: [{ id: 1 }, { id: 43 }] }] });
+      const n = b.got.length;
+      sa.onText(JSON.stringify({ t: 'team', mons: [{ species: 0, level: 5 }] }));
+      sa.onText(JSON.stringify({ t: 'team', mons: Array(7).fill({ species: 1, level: 5 }) }));
+      sa.onText(JSON.stringify({ t: 'team', mons: [{ species: 1, level: 101 }] }));
+      expect(b.got.length).toBe(n);
+      const teams = () => [...(svc as unknown as { rooms: Map<string, { members: Map<number, { team?: unknown }> }> }).rooms.get(code)!.members.values()].map((p) => p.team);
+      expect(teams().filter(Boolean)).toHaveLength(1);
+      // In mid-match, to watch: the teams told so far come with the hello.
+      const c = phone();
+      svc.open(c.link).onText(JSON.stringify({ t: 'join', name: 'cy', skin: 0, code }));
+      expect(c.got.find((m) => m.t === 'team')).toEqual({ t: 'team', id, mons: [{ ...mons[0], moves: [{ id: 1 }, { id: 43 }] }] });
+    } finally {
+      svc.stop();
+    }
+  });
+  it('a new socket with the key takes the trainer over before the old one is seen to close', () => {
+    let t = 0;
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 3, cap: 30, now: () => t, log: () => undefined });
+    try {
+      const a = phone(), b = phone();
+      const sa = svc.open(a.link), sb = svc.open(b.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const room = a.got.at(-1) as unknown as { code: string; you: number; key: string };
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, code: room.code }));
+      // In the room: the seat itself, not a second ALICE.
+      const a2 = phone();
+      const sa2 = svc.open(a2.link);
+      sa2.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, code: room.code, again: { code: room.code, id: room.you, key: room.key } }));
+      expect(b.got.at(-1)).toMatchObject({ t: 'room', members: [{ name: 'ALICE' }, { name: 'BOB' }], owner: room.you });
+      expect(a.closed).toBe(true);
+      sa.onClose();
+      expect(b.got.at(-1)).toMatchObject({ t: 'room', members: [{ name: 'ALICE' }, { name: 'BOB' }] });
+      sa2.onText(JSON.stringify({ t: 'start' }));
+      const hello = a2.got.find((m) => m.t === 'hello') as unknown as { id: number; key: string };
+      expect(hello.id).toBe(room.you);
+      t += 1000; svc.pump();
+      // Mid-match, the old socket still open: the new one is the same trainer, at once.
+      const a3 = phone();
+      svc.open(a3.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, code: room.code, again: { code: room.code, id: hello.id, key: hello.key } }));
+      expect(a3.got.find((m) => m.t === 'hello')).toMatchObject({ id: hello.id });
+      sa2.onClose();
+      t += 1000; svc.pump();
+      const rooms = (svc as unknown as { rooms: Map<string, { members: Map<number, { away: number }>; host: { room: { actor(id: number): unknown } } }> }).rooms;
+      expect(rooms.get(room.code)!.members.get(hello.id)!.away).toBe(0);
+      expect(rooms.get(room.code)!.host.room.actor(hello.id)).toBeTruthy();
+    } finally {
+      svc.stop();
+    }
+  });
   it('a reload within a minute is the same trainer; later, it watches', () => {
     // Bots on the map keep the match going after bob is the last trainer left.
     let t = 0;
