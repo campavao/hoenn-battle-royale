@@ -38,6 +38,35 @@ permissions:
   contents: read
 
 jobs:
+  # What this run has to cover. A push, a tag or a release: everything. A pull request: what
+  # the files it changes can reach (web/scripts/ci-scope.mjs, which says why), so a spike B
+  # or docs change does not wait on the ROM and the whole e2e suite (Cam, 2026-10-29). The
+  # merge commit's first parent is the base as it stands, so the diff is what merging adds.
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      rom: ${{ steps.scope.outputs.rom }}
+      e2e: ${{ steps.scope.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - id: scope
+        run: |
+          set -o pipefail
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            # --no-renames: a file moved out of src/ must count where it came from too.
+            git diff -z --no-renames --name-only HEAD^1 HEAD > changed
+            node web/scripts/ci-scope.mjs < changed > scope.txt
+          else
+            printf 'rom=true\ne2e=all\n' > scope.txt
+          fi
+          cat scope.txt
+          grep -q '^rom=' scope.txt && grep -q '^e2e=' scope.txt
+          cat scope.txt >> "$GITHUB_OUTPUT"
+
   # Every BR touch in a pret file sits under `#if BR` / `.if BR` (docs/C-STYLE.md), so a
   # pret merge only ever meets our lines in guarded blocks. Seconds, no toolchain.
   guards:
@@ -67,6 +96,10 @@ jobs:
   # ROM sitting right there, the drivers too (see the comment on that step for why
   # they aren't a job of their own). The Playwright suite is the e2e job's.
   rom:
+    # On a pull request only when it can change the ROM or a driver (scripts/ci-scope.mjs);
+    # every push, tag and release builds and drives it.
+    needs: scope
+    if: needs.scope.outputs.rom == 'true'
     runs-on: ubuntu-latest
     # Two clean agbcc builds (~9 min each uncached), then 412 drivers. Without a ceiling
     # a hung ROM holds a runner for the platform's six hours.
@@ -189,10 +222,11 @@ jobs:
   # (2026-10-29): the tests run serially by design (one ROM file, fixed ports;
   # playwright.config.ts), so the only way to go faster is more runners. Four shards ran
   # 14 to 26 minutes each; eight are about eight minutes of tests apiece.
-  # web/scripts/e2e-shard.mjs deals the tests out by their measured time. No `needs`:
-  # each shard builds its own ROM (the ROM is never an artifact) and boots the tracked
-  # core in web/public/emu -- the one Vercel ships -- not one the wasm job builds.
+  # web/scripts/e2e-shard.mjs deals the tests out by their measured time. It needs only
+  # `scope`: each shard builds its own ROM (the ROM is never an artifact) and boots the
+  # tracked core in web/public/emu -- the one Vercel ships -- not one the wasm job builds.
   e2e:
+    needs: scope
     runs-on: ubuntu-latest
     # A shard is about eight minutes of tests after a minute's build. On a cold cache
     # every shard builds agbcc and the baseline too (~9 min each), so the ceiling leaves
@@ -205,24 +239,36 @@ jobs:
         # The ruleset requires `e2e done` (below), not a shard by name, so this list can
         # change without touching it.
         shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    env:
+      # On a pull request that reaches no spec (scripts/ci-scope.mjs) every step is skipped
+      # and the shard passes, instead of the job being skipped: until the ruleset requires
+      # `e2e done`, it requires e2e (1) to (4) by name, and a skipped matrix reports none.
+      RUN_E2E: ${{ needs.scope.outputs.e2e != 'none' }}
+      # Unset (the whole suite) unless the PR reaches only some specs.
+      E2E_SPECS: ${{ needs.scope.outputs.e2e != 'all' && needs.scope.outputs.e2e || '' }}
     steps:
       - uses: actions/checkout@v7
+        if: env.RUN_E2E == 'true'
 
       - name: Build the ROMs
+        if: env.RUN_E2E == 'true'
         uses: ./.github/actions/build-rom
 
       # dev-patch.sh's BPS goes through make-patch.sh, which checks it with the page's
       # own decoder under vite-node.
       - uses: actions/setup-node@v7
+        if: env.RUN_E2E == 'true'
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
 
       - working-directory: web
+        if: env.RUN_E2E == 'true'
         run: npm ci
 
       - name: Sidecars for the web shell's local-build path (POK-220)
+        if: env.RUN_E2E == 'true'
         # web/e2e drives the shell the same way `npm run dev` does: a pre-patched ROM
         # plus the two sidecars (see tools/br/dev-patch.sh and app.ts's isPrePatched()
         # branch). Same pokeemerald.gba/.map the build step just made. With the baseline
@@ -234,6 +280,7 @@ jobs:
       # cold ROM build ran a shard into its cap. The browser is cached on Playwright's
       # version and the runner image (Playwright builds per distro); on a hit apt is skipped.
       - name: Playwright version
+        if: env.RUN_E2E == 'true'
         id: pw
         working-directory: web
         run: |
@@ -241,6 +288,7 @@ jobs:
           echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright's Chromium
+        if: env.RUN_E2E == 'true'
         id: pw-cache
         uses: actions/cache@v6
         with:
@@ -248,6 +296,7 @@ jobs:
           key: playwright-chromium-${{ runner.os }}-${{ steps.pw.outputs.image }}-${{ steps.pw.outputs.version }}
 
       - working-directory: web
+        if: env.RUN_E2E == 'true'
         run: |
           # A hit still checks the image has every library the binaries link against,
           # and pays for apt only when one is missing.
@@ -261,12 +310,14 @@ jobs:
 
       # Playwright's first webServer is `node ../relay/server.js`, which imports `ws`.
       - working-directory: relay
+        if: env.RUN_E2E == 'true'
         run: npm ci --ignore-scripts
 
       # Every spec in Chromium across the shards, play.spec.ts's whole match among
       # them (POK-327: a shot a step under e2e/out/play/chromium). Its Firefox project is
       # the play-firefox job's.
       - name: e2e, shard ${{ matrix.shard }} of ${{ strategy.job-total }}
+        if: env.RUN_E2E == 'true'
         working-directory: web
         env:
           HBR_ROM: ${{ github.workspace }}/pokeemerald.gba
@@ -275,10 +326,12 @@ jobs:
           SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
         run: |
           filters="$(node scripts/e2e-shard.mjs "$SHARD")"
+          # Only on a PR's few specs: this shard was dealt none of them.
+          if [ -z "$filters" ]; then echo "no tests in shard $SHARD"; exit 0; fi
           npm run e2e -- $filters
 
       - uses: actions/upload-artifact@v7
-        if: always()
+        if: always() && env.RUN_E2E == 'true'
         with:
           name: e2e-shots-${{ matrix.shard }}
           # Screenshots only, never the ROM (see the rom job's artifact upload).
@@ -292,15 +345,16 @@ jobs:
   e2e-done:
     name: e2e done
     if: always()
-    needs: e2e
+    needs: [scope, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Every shard passed
         env:
           RESULT: ${{ needs.e2e.result }}
+          SPECS: ${{ needs.scope.outputs.e2e }}
         run: |
-          echo "e2e shards: $RESULT"
+          echo "e2e shards: $RESULT (specs: $SPECS)"
           [ "$RESULT" = success ]
 
   # A release only (a tag or a dispatch): the match played in Firefox (POK-327). The e2e job plays it in Chromium
