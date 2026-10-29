@@ -102,14 +102,14 @@
       @media (pointer: fine) { #msg { bottom: 32px; } }
       #msg.on { display: block; }
       #msg canvas { display: block; image-rendering: pixelated; }
-      #out, #win { z-index: 1; position: fixed; left: 50%; top: 18%; transform: translateX(-50%); background: #26313aee; color: #e8eef2; border: 2px solid #b48ad6; border-radius: 10px; padding: 14px 18px; text-align: center; display: none; }
-      #out.on, #win.on { display: block; }
-      #out b, #win b { display: block; font-size: 1.4em; color: #d9b8f2; margin-bottom: 6px; }
+      #win { z-index: 1; position: fixed; left: 50%; top: 18%; transform: translateX(-50%); background: #26313aee; color: #e8eef2; border: 2px solid #b48ad6; border-radius: 10px; padding: 14px 18px; text-align: center; display: none; }
+      #win.on { display: block; }
+      #win b { display: block; font-size: 1.4em; color: #d9b8f2; margin-bottom: 6px; }
       #win { border-color: #f2d36b; max-width: 86vw; }
       #win b { color: #f2d36b; }
       #win ol { text-align: left; margin: 6px 0 0; padding-left: 1.6em; max-height: 40vh; overflow-y: auto; }
       #win li.me { color: #ffb0b0; }
-      #out button, #win button { margin-top: 10px; background: #4c7a99; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font: inherit; }
+      #win button { margin-top: 10px; background: #4c7a99; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font: inherit; }
       #ask { z-index: 1; position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 300px); transform: translateX(-50%); background: #f8f8f8; color: #303030; border: 3px solid #4c7a99; border-radius: 8px; padding: 8px 6px; display: none; min-width: 9em; max-height: 60vh; overflow-y: auto; }
       @media (pointer: fine) { #ask { bottom: 32px; } }
       #ask.on { display: grid; gap: 2px; }
@@ -232,7 +232,6 @@
     <div id="msg" role="status"></div>
     <div id="ask"><b id="ask-title"></b></div>
     <canvas id="startmenu" class="startmenu" hidden></canvas><canvas id="stock" class="startmenu" hidden></canvas>
-    <div id="out"><b id="out-title">OUT</b><span id="out-why"></span><br><span id="out-next">You're back at the truck when the fog lifts.</span><br><button id="out-ok" type="button">Watch</button></div>
     <div id="win"><b id="win-title"></b><ol id="win-list"></ol><button id="win-ok" type="button">OK</button></div>
     <div id="battle"><div class="note" id="battle-note"></div><canvas id="gba" width="240" height="160"></canvas><canvas id="gba-key" width="240" height="160"></canvas><canvas id="ringfog" width="240" height="160"></canvas><div id="battle-menu" class="battle-menu" hidden></div></div>
     <div id="sides" hidden></div>
