@@ -27,6 +27,16 @@
       .k { display: grid; place-items: center; background: #26313acc; border-radius: 10px; color: #cfe3ef; font-weight: 700; touch-action: none; user-select: none; -webkit-user-select: none; }
       .k.down { background: #4c7a99; }
       .ab .k { width: 62px; height: 62px; border-radius: 50%; }
+      /* The live game's MOVE PAD / HIDE PAD (ui/padprefs.ts): moved, faded, hidden. */
+      .dpad { transform: translate(var(--dpad-dx, 0px), var(--dpad-dy, 0px)); opacity: var(--pad-alpha, 1); }
+      .ab { transform: translate(var(--ab-dx, 0px), var(--ab-dy, 0px)); opacity: var(--pad-alpha, 1); }
+      body.pad-hidden #pad .dpad, body.pad-hidden #pad .ab { visibility: hidden; }
+      body.pad-editing #pad .dpad, body.pad-editing #pad .ab { outline: 2px dashed #f8d070; outline-offset: 4px; cursor: grab; visibility: visible; }
+      .pad-edit { position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 110px); transform: translateX(-50%); z-index: 5; background: #fff; border: 3px solid #4c7a99; border-radius: 8px; padding: 8px 10px; }
+      .pad-edit[hidden] { display: none; }
+      .pad-edit canvas { display: block; image-rendering: pixelated; }
+      .pad-edit-row { display: flex; align-items: center; gap: 9px; }
+      .pad-edit button { background: none; border: 0; padding: 4px; }
       .k.st { align-self: flex-end; width: 58px; height: 24px; border-radius: 12px; font-size: 10px; letter-spacing: 0.08em; pointer-events: auto; }
       #corner { position: fixed; z-index: 1; top: calc(env(safe-area-inset-top) + 6px); right: calc(env(safe-area-inset-right) + 8px); background: #f8f8f8; color: #303030; border: 3px solid #4c7a99; border-radius: 8px; padding: 4px 10px; white-space: pre; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; pointer-events: none; }
       #corner:empty { display: none; }
@@ -152,6 +162,7 @@
       <div class="k st" data-k="start">START</div>
       <div class="ab"><div class="k" data-k="b">B</div><div class="k" data-k="a" style="margin-bottom:34px">A</div></div>
     </div>
+    <div id="pad-edit" class="pad-edit" hidden></div>
     <div id="found"></div>
     <div id="ask"><b id="ask-title"></b></div>
     <div id="out"><b id="out-title">OUT</b><span id="out-why"></span><br><span id="out-next">You're back at the truck when the fog lifts.</span><br><button id="out-ok" type="button">Watch</button></div>

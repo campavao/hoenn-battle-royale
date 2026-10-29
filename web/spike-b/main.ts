@@ -45,6 +45,7 @@ import { RomArt } from './romart';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
 import { keyPicture } from '../src/field';
+import { PadPrefsControl } from '../src/ui/padprefs';
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
 import { cardFields } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
@@ -1292,6 +1293,16 @@ function leaveMatch(): void {
 let sheetCard: number | null = null;
 let sheetLeave = false;
 const skinOf = new Map<number, number>();
+/** A phone's D-pad and A/B, moved, faded or hidden from the sheet (the live game's). */
+const padPrefs = new PadPrefsControl({
+  root: document.documentElement,
+  body: document.body,
+  dpad: document.querySelector<HTMLElement>('#pad .dpad')!,
+  ab: document.querySelector<HTMLElement>('#pad .ab')!,
+  bar: document.getElementById('pad-edit')!,
+  scale: () => 2,
+});
+const touchPad = matchMedia('(pointer: coarse)').matches;
 const sheetBtn = document.getElementById('sheet')!;
 sheetBtn.addEventListener('click', () => openSheet());
 function openSheet(): void {
@@ -1362,6 +1373,11 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
     onRemap: () => { remapPad(); lobby?.stage.redraw(); },
     onResetPad: () => { resetPad(); lobby?.stage.redraw(); },
     onForget: () => { forgetRom(); },
+    pad: touchPad ? {
+      hidden: padPrefs.hidden,
+      onMove: () => { lobby?.closeSheet(); padPrefs.edit(); },
+      onToggle: () => { padPrefs.toggleHidden(); lobby?.stage.redraw(); },
+    } : undefined,
   };
 }
 /** FORGET ROM, asked first as the live sheet asks it: the ROM this browser keeps goes,
