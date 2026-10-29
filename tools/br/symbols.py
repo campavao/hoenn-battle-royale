@@ -88,6 +88,8 @@ ENGINE_SYMBOLS = [
     # (web/src/battle/movebook.ts): its stats, name, description, type name, and how
     # well each type lands on each.
     "gBattleMoves", "gMoveNames", "gMoveDescriptionPointers", "gTypeNames", "gTypeEffectiveness",
+    # Spike B draws SURF's blob under a surfing trainer (web/spike-b/romart.ts surfBlob).
+    "gFieldEffectObjectTemplate_SurfBlob",
     # The fog map's prompt, "FOG: <place>", is built here (br_map.c, ring-map.txt).
     "gStringVar4",
     # What a bot's AI was handed out of its bag, and what it chose to do with its turn

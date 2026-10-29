@@ -45,7 +45,10 @@ export interface Mover {
 
 /** Where a step toward `dir` lands, or null for a wall. 2 cells away is a ledge hop; `warp`
  *  is a door, stairs or a cave mouth, which lands on the other side's own cell. */
-export type StepFn = (from: Spot, dir: number) => { to: Spot; hop: boolean; warp?: boolean } | null;
+export type StepFn = (from: Spot, dir: number) => { to: Spot; hop: boolean; warp?: boolean; water?: boolean } | null;
+
+/** export-world.py's water class: SURF's ground. */
+export const CLASS_WATER = 2;
 
 /** Frames a door takes: the screen fades out and back in (the field's 16-frame fades). */
 export const WARP_FRAMES = 32;
@@ -134,7 +137,8 @@ function begin(m: Mover, keys: Keys, step: StepFn): void {
     m.py = -DXY[dir][1] * 16;
   } else {
     m.spot = to.to;
-    const speed = m.run ? 2 : 1;
+    // On the water it is SURF's pace, two pixels a frame, B or no B (PLAYER_SPEED_FAST).
+    const speed = m.run || to.water ? 2 : 1;
     m.action = { kind: 'step', t: 0, len: 16 / speed, speed, dir };
     m.px = -DXY[dir][0] * 16;
     m.py = -DXY[dir][1] * 16;
@@ -145,13 +149,13 @@ function begin(m: Mover, keys: Keys, step: StepFn): void {
  *  so its cell is a wall to anything but the hop it faces (World lets a trainer stand on
  *  one, which never mattered while export-world.py classed every ledge as a wall). */
 export function stepFn(world: {
-  step(s: Spot, d: SeamDir): Spot | null;
+  step(s: Spot, d: SeamDir, surf?: boolean, cut?: number): Spot | null;
   cell(id: string, x: number, y: number): number;
   warpAt(id: string, x: number, y: number): { to: string; toX: number; toY: number; kind: string } | undefined;
   map(id: string): { outdoor: boolean } | undefined;
-}): StepFn {
+}, field: { surf: boolean; cut: number } = { surf: false, cut: 0 }): StepFn {
   return (from, dir) => {
-    const to = world.step(from, SEAM_OF[dir]);
+    const to = world.step(from, SEAM_OF[dir], field.surf, field.cut);
     if (!to) {
       // A building's doormat is an arrow: down on it goes out (MetatileBehavior's
       // south-arrow warp), though the step itself runs into the map's edge.
@@ -164,6 +168,6 @@ export function stepFn(world: {
     const hop = to.map === from.map && Math.abs(to.x - from.x) + Math.abs(to.y - from.y) === 2;
     const cls = world.cell(to.map, to.x, to.y);
     if (!hop && cls >= 3 && cls <= 6) return null;
-    return { to, hop };
+    return cls === CLASS_WATER ? { to, hop, water: true } : { to, hop };
   };
 }

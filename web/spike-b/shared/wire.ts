@@ -14,6 +14,7 @@ export type WorldUp =
   | { t: 'in'; s: number; k: number[] }
   /** My battle is over (`fled`: it never got going, or was run from). */
   | { t: 'end'; fled?: boolean; won?: boolean }
+  | { t: 'field'; bits: number }
   /** The ball or bag `k` would not go in my bag: put it back (a bag holding `rest`). */
   | { t: 'drop'; k: number; rest?: Bag }
   /** My team is down: take my trainer off the map, my bag where I stood; I keep watching.

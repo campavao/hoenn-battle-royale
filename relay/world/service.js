@@ -1283,6 +1283,7 @@ var JUMP_Y_HIGH = [-4, -6, -8, -10, -11, -12, -12, -12, -11, -10, -9, -8, -6, -4
 var NOT_MOVING = 0;
 var TURN_DIRECTION = 1;
 var MOVING = 2;
+var CLASS_WATER2 = 2;
 var WARP_FRAMES = 32;
 function newMover(spot, facing = DIR_SOUTH) {
   return { spot, prev: spot, facing, moveDir: facing, runningState: NOT_MOVING, action: null, px: 0, py: 0, lift: 0, run: true, strides: 0 };
@@ -1357,15 +1358,15 @@ function begin(m, keys, step) {
     m.py = -DXY[dir][1] * 16;
   } else {
     m.spot = to.to;
-    const speed = m.run ? 2 : 1;
+    const speed = m.run || to.water ? 2 : 1;
     m.action = { kind: "step", t: 0, len: 16 / speed, speed, dir };
     m.px = -DXY[dir][0] * 16;
     m.py = -DXY[dir][1] * 16;
   }
 }
-function stepFn(world) {
+function stepFn(world, field = { surf: false, cut: 0 }) {
   return (from, dir) => {
-    const to = world.step(from, SEAM_OF[dir]);
+    const to = world.step(from, SEAM_OF[dir], field.surf, field.cut);
     if (!to) {
       const mat = dir === DIR_SOUTH && !world.map(from.map)?.outdoor ? world.warpAt(from.map, from.x, from.y) : void 0;
       return mat && mat.kind === "door" ? { to: { map: mat.to, x: mat.toX, y: mat.toY }, hop: false, warp: true } : null;
@@ -1376,7 +1377,7 @@ function stepFn(world) {
     const hop = to.map === from.map && Math.abs(to.x - from.x) + Math.abs(to.y - from.y) === 2;
     const cls = world.cell(to.map, to.x, to.y);
     if (!hop && cls >= 3 && cls <= 6) return null;
-    return { to, hop };
+    return cls === CLASS_WATER2 ? { to, hop, water: true } : { to, hop };
   };
 }
 
@@ -1390,6 +1391,7 @@ var KEY_A = 32;
 function keysOf(bits) {
   return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A) };
 }
+var FIELD_SURF = 4;
 var emptyBag = (b) => !b.items.length && !b.money && !b.mons?.length;
 var GRACE = 120;
 var LOCKOUT = 600;
@@ -1431,6 +1433,8 @@ var Room = class {
   bench = [];
   results = { round: 0, entrants: [], fallen: [], winner: 0 };
   base;
+  /** The StepFn for each FIELD_* combination a team has. */
+  fields = [];
   dealt = null;
   state() {
     return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}, ...this.epoch ? { epoch: this.epoch } : {} };
@@ -1450,7 +1454,10 @@ var Room = class {
     return this.actors.find((a) => a.id === id);
   }
   apply(cmd) {
-    if (cmd.c === "lock") {
+    if (cmd.c === "field") {
+      const a = this.actor(cmd.id);
+      if (a && !a.bot) a.field = cmd.bits & 7;
+    } else if (cmd.c === "lock") {
       this.results.entrants = this.actors.map((a) => [a.id, a.name]);
     } else if (cmd.c === "join") {
       if (this.actor(cmd.id) || this.bench.some((b) => b.id === cmd.id)) return;
@@ -1808,7 +1815,8 @@ var Room = class {
    *  two can't both walk into one cell). */
   stepFor(a) {
     return (from, dir) => {
-      const r = this.base(from, dir);
+      const bits = a.field ?? 0;
+      const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir) : this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
       if (a.bot && !this.places.has(r.to.map)) return null;
       const t = r.to;
@@ -1845,7 +1853,7 @@ var Room = class {
       mix2(m.py + 1024);
       mix2(m.lift + 1024);
       mix2(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 65535);
-      mix2((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0));
+      mix2((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0) | (a.field ?? 0) << 3);
       mix2(a.foe);
       mix2(a.calm);
       mix2(a.shun);
@@ -2077,6 +2085,10 @@ var Host = class {
     }
   }
   /** The phone's battle is over: its trainer (and the bot) walk again. */
+  /** The page's team could now do these on the field. */
+  field(id, bits) {
+    if (this.players.has(id)) this.pending.push({ c: "field", id, bits: bits & 7 });
+  }
   end(id, fled = false, won = false) {
     if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: "end", id, ...fled ? { fled: true } : {}, ...won ? { won: true } : {} });
   }
@@ -2245,6 +2257,8 @@ var WorldService = class {
         } else if (m.t === "in") {
           if (!Number.isInteger(m.s) || m.s < 1 || !Array.isArray(m.k) || m.k.length > 120) return;
           host.input(phone.id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
+        } else if (m.t === "field") {
+          if (Number.isInteger(m.bits)) host.field(phone.id, m.bits);
         } else if (m.t === "end") {
           host.end(phone.id, m.fled === true, m.won === true);
         } else if (m.t === "out") {

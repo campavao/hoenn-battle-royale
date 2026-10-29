@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BAG_AT, BAG_LEN, arrived, healed, rekey, spillOf, teamOf, withMoney } from './carry';
+import { BAG_AT, BAG_LEN, arrived, fieldOf, healed, rekey, spillOf, teamOf, withMoney } from './carry';
+import HMS from '../src/data/hms.json';
 
 describe('rekey', () => {
   it('carries money, coins and pocket counts from one key to another, and nothing else', () => {
@@ -136,6 +137,17 @@ describe('healed', () => {
       expect([...out.slice(0, 100)]).toEqual([...want]);
       expect(teamOf(out, 1)).toEqual([{ species: 25, level: 30 }]);
     }
+  });
+
+  it("reads what the team could do on the field: a move it knows, or an HM its species could learn", () => {
+    const can = (hm: keyof typeof HMS) => ((parseInt(HMS[hm].substr((25 >> 3) * 2, 2), 16) >> (25 & 7)) & 1) === 1;
+    const party = new Uint8Array(600);
+    party.set(mon(0x12345678, 0x0badf00d, [33, 45, 98, 0], [1, 1, 1, 0], 0), 0);
+    const base = (can('cut') ? 1 : 0) | (can('strength') ? 2 : 0) | (can('surf') ? 4 : 0);
+    expect(fieldOf(party, 1)).toBe(base);
+    party.set(mon(0x12345678, 0x0badf00d, [33, 57, 15, 70], [1, 1, 1, 1], 0), 0); // SURF, CUT, STRENGTH
+    expect(fieldOf(party, 1)).toBe(7);
+    expect(fieldOf(party, 0)).toBe(0);
   });
 
   it('leaves an empty slot and the bytes past the count alone, and is a copy', () => {

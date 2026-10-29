@@ -106,6 +106,11 @@ export class Host {
   }
 
   /** The phone's battle is over: its trainer (and the bot) walk again. */
+  /** The page's team could now do these on the field. */
+  field(id: number, bits: number): void {
+    if (this.players.has(id)) this.pending.push({ c: 'field', id, bits: bits & 7 });
+  }
+
   end(id: number, fled = false, won = false): void {
     if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: 'end', id, ...(fled ? { fled: true } : {}), ...(won ? { won: true } : {}) });
   }

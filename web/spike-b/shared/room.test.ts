@@ -9,7 +9,7 @@ import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
 import { over } from './over';
 import { cleanBag, isTm, within } from './items';
-import { AFTER_WIN, GROUND_PER_MAP, RING_PHASE, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, makeRoom } from './room';
+import { AFTER_WIN, FIELD_SURF, GROUND_PER_MAP, RING_PHASE, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, makeRoom } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -631,5 +631,31 @@ describe('doors', () => {
     expect(room.actor(1)!.m.spot).toEqual({ map: 'MAP_LITTLEROOT_TOWN', x: 7, y: 17 });
     room.apply({ c: 'join', id: 2, bot: true, name: 'BOT', skin: 4, spot: { map: O, x: 6, y: 17 }, facing: 2 });
     expect(room.stepFor(room.actor(2)!)({ map: O, x: 6, y: 17 }, 2)).toBeNull();
+  });
+});
+
+describe('field moves', () => {
+  it('a team that could SURF walks onto water, at SURF pace; one that could not stays on the shore', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    const R = 'MAP_ROUTE103';
+    const m = MAPS.find((x) => x.id === R)!;
+    let shore: { x: number; y: number } | null = null;
+    for (let y = 0; y < m.h - 1 && !shore; y++) for (let x = 0; x < m.w && !shore; x++) {
+      if (room.world.cell(R, x, y) === 0 && room.world.cell(R, x, y + 1) === 2 && room.world.cell(R, x, y + 2) === 2) shore = { x, y };
+    }
+    expect(shore).toBeTruthy();
+    room.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: { map: R, ...shore! }, facing: 1 });
+    const a = room.actor(1)!;
+    const down = (n: number) => { for (let i = 0; i < n; i++) room.step(new Map([[1, [KEY_DOWN | KEY_B]]])); };
+    down(40);
+    expect(a.m.spot).toEqual({ map: R, ...shore! });
+    room.apply({ c: 'field', id: 1, bits: FIELD_SURF });
+    room.step(new Map([[1, [KEY_DOWN | KEY_B]]])); // B held: a walk on land, but SURF's pace on water
+    expect(a.m.spot).toEqual({ map: R, x: shore!.x, y: shore!.y + 1 });
+    expect(a.m.action).toMatchObject({ kind: 'step', speed: 2 });
+    // a bot's field is its own business: it is not told
+    room.apply({ c: 'join', id: 2, bot: true, name: 'B', skin: 4, spot: { map: R, x: 0, y: 0 }, facing: 1 });
+    room.apply({ c: 'field', id: 2, bits: 7 });
+    expect(room.actor(2)!.field).toBeUndefined();
   });
 });

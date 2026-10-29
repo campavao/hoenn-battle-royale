@@ -1,3 +1,6 @@
+import HMS from '../src/data/hms.json';
+import { MOVE_CUT, MOVE_STRENGTH, MOVE_SURF } from '../src/bots/party';
+
 // What a battle in spike B keeps (rom.ts): the ROM goes back to its parked state after
 // every battle, and these are the trainer's own bytes carried across it.
 
@@ -134,4 +137,28 @@ export function healed(party: Uint8Array, count: number, basePp: (move: number) 
     v.setUint16(at + 86, v.getUint16(at + 88, true), true);
   }
   return out;
+}
+
+/** What a team could do on the field, as the room asks it (room.ts FIELD_*): CUT 1,
+ *  STRENGTH 2, SURF 4, for a team with somebody who knows the move or whose species could
+ *  learn the HM (br_hm.c BrHm_Slot; bots/brain.ts couldUse). */
+export function fieldOf(party: Uint8Array, count: number): number {
+  const v = new DataView(party.buffer, party.byteOffset, party.byteLength);
+  const has = (hex: string, species: number) => {
+    const byte = parseInt(hex.substr((species >> 3) * 2, 2), 16);
+    return !Number.isNaN(byte) && ((byte >> (species & 7)) & 1) === 1;
+  };
+  let bits = 0;
+  for (let i = 0; i < Math.min(count, 6); i++) {
+    const at = i * 100;
+    const personality = v.getUint32(at, true), key = (personality ^ v.getUint32(at + 4, true)) >>> 0;
+    const word = (sub: string, off: number) => (v.getUint32(at + 32 + 12 * ORDERS[personality % 24].indexOf(sub) + off, true) ^ key) >>> 0;
+    const species = word('G', 0) & 0xffff;
+    if (!species) continue;
+    const moves = [word('A', 0) & 0xffff, word('A', 0) >>> 16, word('A', 4) & 0xffff, word('A', 4) >>> 16];
+    if (moves.includes(MOVE_CUT) || has(HMS.cut, species)) bits |= 1;
+    if (moves.includes(MOVE_STRENGTH) || has(HMS.strength, species)) bits |= 2;
+    if (moves.includes(MOVE_SURF) || has(HMS.surf, species)) bits |= 4;
+  }
+  return bits;
 }

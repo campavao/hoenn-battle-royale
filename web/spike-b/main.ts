@@ -37,6 +37,10 @@ const TILE = 16;
 // include/constants/event_objects.h.
 const OBJ_EVENT_GFX_ITEM_BALL = 59;
 const OBJ_EVENT_GFX_NURSE = 58;
+const OBJ_EVENT_GFX_BRENDAN_SURFING = 2, OBJ_EVENT_GFX_MAY_SURFING = 92;
+const OBJ_EVENT_GFX_CUTTABLE_TREE = 82, OBJ_EVENT_GFX_PUSHABLE_BOULDER = 87;
+// export-world.py's classes for them.
+const CLASS_WATER = 2, CLASS_CUT = 9, CLASS_BOULDER = 10;
 const OBJ_EVENT_GFX_BIRCHS_BAG = 97;
 const SHEETS = spritesData as Record<string, { name: string; w: number; h: number; frames: number }>;
 
@@ -52,6 +56,8 @@ interface Placed {
   borderTint?: string;
   mips?: HTMLCanvasElement[]; // 1/4, 1/8, 1/16, each averaged from the one before
   classes: Uint8Array;
+  /** The cut trees and Strength boulders standing on it: [x, y, gfx]. */
+  props?: [number, number, number][];
 }
 
 function decode(grid: string, cells: number): Uint8Array {
@@ -444,6 +450,18 @@ function startFor(e: RoomEvent): void {
     const fog = inFogNow();
     handOff(null, (r, onStart) => r.wild(m.group, m.num, art!.behavior(m.group, m.num, e.x, e.y), onStart, fog));
   }
+}
+
+/** Once a second, between battles: what my team could do on the field (SURF, CUT,
+ *  STRENGTH), told to the room when it changes -- a catch, a swap or a trade can. */
+let fieldAsking = false;
+function fieldFrame(): void {
+  if (frame % 60 || fieldAsking || !rom || battle || swapping || isOut) return;
+  const me = link.room.actor(link.me);
+  if (!me) return;
+  fieldAsking = true;
+  const l = link;
+  void rom.field().then((bits) => { if (l === link && bits !== (link.room.actor(link.me)?.field ?? 0)) link.field(bits); }).finally(() => { fieldAsking = false; });
 }
 
 /** The CENTER's nurse, as the match has her (pkmn_center_nurse.inc): one question, and
@@ -945,6 +963,43 @@ function drawPatches(p: Placed): void {
 let ballArt: HTMLCanvasElement | null = null;
 let bagArt: HTMLCanvasElement | null = null;
 let nurseArt: HTMLCanvasElement | null = null;
+const blobArt = new Map<number, HTMLCanvasElement | null>();
+/** SURF's blob under a surfer, facing as they do (frame 2 flipped for east). */
+function drawBlob(surferGfx: number, facing: number, dx: number, dy: number): void {
+  if (!blobArt.has(surferGfx) && art) blobArt.set(surferGfx, art.surfBlob(surferGfx));
+  const img = blobArt.get(surferGfx);
+  if (!img) return;
+  const f = FACE[facing];
+  if (facing === DIR_EAST) {
+    ctx.save();
+    ctx.translate(dx + 32, dy);
+    ctx.scale(-1, 1);
+    ctx.drawImage(img, f * 32, 0, 32, 32, 0, 0, 32, 32);
+    ctx.restore();
+  } else ctx.drawImage(img, f * 32, 0, 32, 32, dx, dy, 32, 32);
+}
+const propArt = new Map<number, HTMLCanvasElement>();
+/** The trees CUT fells and the boulders STRENGTH moves, where nobody stands on them: a
+ *  team that could CUT or push walks the cell (bots/world.ts canStand), and in Emerald
+ *  the tree is down or the boulder moved by then. */
+function drawProps(visible: Placed[], all: Actor[]): void {
+  if (!art) return;
+  for (const p of visible) {
+    if (!p.props) {
+      p.props = [];
+      for (let i = 0; i < p.classes.length; i++) {
+        const c = p.classes[i];
+        if (c === CLASS_CUT || c === CLASS_BOULDER) p.props.push([i % p.m.w, Math.floor(i / p.m.w), c === CLASS_CUT ? OBJ_EVENT_GFX_CUTTABLE_TREE : OBJ_EVENT_GFX_PUSHABLE_BOULDER]);
+      }
+    }
+    for (const [x, y, gfx] of p.props) {
+      if (all.some((a) => a.m.spot.map === p.m.id && ((a.m.spot.x === x && a.m.spot.y === y) || (a.m.prev.map === p.m.id && a.m.prev.x === x && a.m.prev.y === y && a.m.action)))) continue;
+      let img = propArt.get(gfx);
+      if (!img) { img = art.sprite(gfx, 1); propArt.set(gfx, img); }
+      ctx.drawImage(img, (p.gx + x) * TILE, (p.gy + y) * TILE + TILE - img.height);
+    }
+  }
+}
 /** Each CENTER's nurse behind her counter (two cells up from where you talk to her),
  *  facing out: the one person a match leaves in a CENTER (br_strip.c). */
 function drawNurses(visible: Placed[]): void {
@@ -1043,18 +1098,22 @@ function draw(): void {
   }
   if (!far) for (const p of visible) drawPatches(p);
   if (!far) drawGround(vx0, vy0, vx1, vy1);
+  if (!far) drawProps(visible, all);
   const people = all
     .map((a) => ({ a, p: pixelOf(a) }))
     .filter(({ p }) => p.x > vx0 - 32 && p.x < vx1 + 32 && p.y > vy0 - 48 && p.y < vy1 + 32)
     .sort((u, v) => u.p.y - v.p.y);
   for (const { a, p } of people) {
-    const gfx = SKIN_GFX[a.skin];
+    // On the water: sitting on the blob, bobbing (SURF's pose, FLDEFF_SURF_BLOB's bob).
+    const surf = classAt(a.m.spot) === CLASS_WATER;
+    const gfx = surf ? (a.skin === 1 ? OBJ_EVENT_GFX_MAY_SURFING : OBJ_EVENT_GFX_BRENDAN_SURFING) : SKIN_GFX[a.skin];
     const info = SHEETS[String(gfx)];
     const s = sheet(gfx);
     if (!s) continue;
-    const fr = frameOf(a);
+    const fr = surf ? FACE[a.m.facing] : frameOf(a);
     const dx = p.x + TILE / 2 - info.w / 2;
-    const dy = p.y + TILE - info.h - p.lift;
+    const dy = p.y + TILE - info.h - p.lift + (surf ? ((frame >> 4) & 1) - 2 : 0);
+    if (surf) drawBlob(gfx, a.m.facing, dx, dy + 4);
     if (a.m.facing === DIR_EAST) {
       ctx.save();
       ctx.translate(dx + info.w, dy);
@@ -1122,6 +1181,7 @@ function loop(now: number): void {
     frame += 1;
     for (const e of link.frame(myBits())) startFor(e);
     roundFrame();
+    fieldFrame();
     fogFrame();
     foeFrame();
     pressed.clear();

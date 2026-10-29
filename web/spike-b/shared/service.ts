@@ -125,6 +125,8 @@ export class WorldService {
         } else if (m.t === 'in') {
           if (!Number.isInteger(m.s) || m.s < 1 || !Array.isArray(m.k) || m.k.length > 120) return;
           host.input(phone.id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
+        } else if (m.t === 'field') {
+          if (Number.isInteger(m.bits)) host.field(phone.id, m.bits);
         } else if (m.t === 'end') {
           host.end(phone.id, m.fled === true, m.won === true);
         } else if (m.t === 'out') {

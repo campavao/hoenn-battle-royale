@@ -250,11 +250,19 @@ export class RomArt {
   }
 
   /** gfx's frames left to right, colour 0 clear, as export-sprites.py lays them out. */
-  sprite(gfx: number, frames: number): HTMLCanvasElement {
-    const info = this.u32(this.sym('gObjectEventGraphicsInfoPointers') + gfx * 4);
+  /** SURF's blob (field_effect_objects.h sPicTable_SurfBlob): south, north, west, 32x32,
+   *  in the surfer's own palette (its template's paletteTag is TAG_NONE: the field effect
+   *  takes the player's). Null on a release whose symbols do not name it yet. */
+  surfBlob(surferGfx: number): HTMLCanvasElement | null {
+    const tpl = this.sym('gFieldEffectObjectTemplate_SurfBlob');
+    if (!Number.isFinite(tpl)) return null;
+    const info = this.u32(this.sym('gObjectEventGraphicsInfoPointers') + surferGfx * 4);
     const pal = this.objectPalettes().get(this.u16(info + 2)) ?? new Array(16).fill(0xffff00ff);
-    const w = this.s16(info + 8), h = this.s16(info + 10);
-    const images = this.u32(info + 28);
+    return this.pics(this.u32(tpl + 12), 32, 32, 3, pal);
+  }
+
+  /** `frames` of an object's SpriteFrameImage table (8 bytes each: its data, its size). */
+  private pics(images: number, w: number, h: number, frames: number, pal: number[]): HTMLCanvasElement {
     const cv = document.createElement('canvas');
     cv.width = w * frames;
     cv.height = h;
@@ -275,5 +283,11 @@ export class RomArt {
     }
     ctx.putImageData(id, 0, 0);
     return cv;
+  }
+
+  sprite(gfx: number, frames: number): HTMLCanvasElement {
+    const info = this.u32(this.sym('gObjectEventGraphicsInfoPointers') + gfx * 4);
+    const pal = this.objectPalettes().get(this.u16(info + 2)) ?? new Array(16).fill(0xffff00ff);
+    return this.pics(this.u32(info + 28), this.s16(info + 8), this.s16(info + 10), frames, pal);
   }
 }

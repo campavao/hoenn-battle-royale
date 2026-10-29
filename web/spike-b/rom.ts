@@ -18,7 +18,7 @@ import { Mailbox, MAILBOX } from '../src/net/mailbox';
 import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from '../src/net/slots';
 import { PROTOCOL, type Dir, type Msg, type PackedMon } from '../src/net/wire';
 import { loadCheckedRelease } from '../src/release';
-import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, healed, rekey, spillOf, teamOf, withMoney } from './carry';
+import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fieldOf, healed, rekey, spillOf, teamOf, withMoney } from './carry';
 import { startMenuTable } from '../src/touch';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 
@@ -123,6 +123,8 @@ export interface RomBattles {
   addMoney(n: number): Promise<void>;
   /** The CENTER's heal (HealPlayerParty), on the team the next battle takes. */
   heal(): Promise<void>;
+  /** What the team could do on the field now (room.ts FIELD_*). */
+  field(): Promise<number>;
   press(k: GbaKey): void;
   release(k: GbaKey): void;
   emu: Emulator;
@@ -491,6 +493,12 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       return inTurn(async () => {
         const k = last ?? kept();
         return { ...spillOf(k.bag, k.key), mons: teamOf(k.party, k.count) };
+      });
+    },
+    field() {
+      return inTurn(async () => {
+        const k = carried ?? kept();
+        return fieldOf(k.party, k.count);
       });
     },
     heal() {

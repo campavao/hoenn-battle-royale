@@ -68,7 +68,13 @@ export interface Actor {
   shunUntil: number;
   /** A step finished whose arrival has not been looked at yet (the spots). */
   arriving: boolean;
+  /** What the team could do on the field (FIELD_*): SURF, CUT, STRENGTH, as the page
+   *  reads its party (br_hm.c asks the same: knows the move or could learn it). */
+  field?: number;
 }
+
+/** A team with somebody who could SURF: water is walkable (and up a waterfall). */
+export const FIELD_SURF = 4;
 
 /** What a frame started: a phone starts the matching ROM battle for its own trainer. */
 export type RoomEvent =
@@ -126,7 +132,9 @@ export type Command =
    *  `wild` a wild POKeMON did; neither, the fog. */
   | { c: 'out'; id: number; bag?: Bag; by?: number; wild?: boolean }
   /** START (a lobby's): the trainers on the map now are the match; anybody later watches. */
-  | { c: 'lock' };
+  | { c: 'lock' }
+  /** `id`'s team could now do these on the field (FIELD_*). */
+  | { c: 'field'; id: number; bits: number };
 
 /** The marked spots grow back: the ring's phase does it in the game; here, a while. */
 export const REGROW = 60 * 90;
@@ -197,6 +205,8 @@ export class Room {
   bench: Benched[] = [];
   results: Results = { round: 0, entrants: [], fallen: [], winner: 0 };
   private readonly base: StepFn;
+  /** The StepFn for each FIELD_* combination a team has. */
+  private readonly fields: StepFn[] = [];
   private dealt: ReadonlyMap<string, Ground> | null = null;
 
   constructor(
@@ -235,7 +245,10 @@ export class Room {
   }
 
   apply(cmd: Command): void {
-    if (cmd.c === 'lock') {
+    if (cmd.c === 'field') {
+      const a = this.actor(cmd.id);
+      if (a && !a.bot) a.field = cmd.bits & 7;
+    } else if (cmd.c === 'lock') {
       this.results.entrants = this.actors.map((a) => [a.id, a.name]);
     } else if (cmd.c === 'join') {
       if (this.actor(cmd.id) || this.bench.some((b) => b.id === cmd.id)) return;
@@ -613,7 +626,8 @@ export class Room {
    *  two can't both walk into one cell). */
   stepFor(a: Actor): StepFn {
     return (from, dir) => {
-      const r = this.base(from, dir);
+      const bits = a.field ?? 0;
+      const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir) : this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
       // A townsperson stays out in the street.
       if (a.bot && !this.places.has(r.to.map)) return null;
@@ -635,7 +649,7 @@ export class Room {
       mix(m.facing); mix(m.moveDir); mix(m.runningState); mix(m.run ? 1 : 0); mix(m.strides);
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
-      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last);
+      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last);
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
     for (const [k, by] of this.picked) { mix(k); mix(by); }
