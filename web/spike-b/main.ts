@@ -1107,7 +1107,7 @@ function startMatch(l: WorldLink): void {
   lobby?.hide();
   isOut = waiting = shownWin = false;
   // Every match's rounds count from 0: what was told or recorded of the last one is not.
-  seenRound = lastPhase = recordedRound = safariRound = pickAsked = hudRound = -1;
+  seenRound = lastPhase = recordedRound = safariRound = pickAsked = hudRound = dugRound = -1;
   tallyFrom = rom?.tally() ?? null;
   myStepsN = 0;
   mySpotWas = '';

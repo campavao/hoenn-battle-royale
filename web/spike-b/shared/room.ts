@@ -515,10 +515,16 @@ export class Room {
       // ROM wins it, BrNetlink_PeerOut) and says so.
       const foe = a?.foe ? this.actor(a.foe) : undefined;
       if (foe?.bot) foe.battling = false;
+      // Whoever they were meeting (the "!" or the walk-up): no battle is coming, so free.
+      for (const o of this.actors) if (o.meet?.foe === cmd.id) this.unmeet(o);
       // Bots whose fight their page was running: no answer is coming, they walk on.
       for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
       // A legendary they were fighting stands again (Cam: they go back for retries).
-      for (const [key, by] of this.picked) if (by === cmd.id && this.spills.get(key)?.legend) this.picked.delete(key);
+      // So does a gate's boss whose fight they left: his pieces wait for the next.
+      for (const [key, by] of this.picked) {
+        const b = this.spills.get(key);
+        if (by === cmd.id && (b?.legend || b?.person?.gate !== undefined)) this.picked.delete(key);
+      }
       for (const e of this.events) if (e.trader?.busy === cmd.id) e.trader.busy = 0;
       for (const h of this.homes) if (h.busy === cmd.id) h.busy = 0;
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
@@ -886,6 +892,14 @@ export class Room {
     this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: legend ? species[0] : 0, story: story.id, place: story.name, ...(trader ? { trader } : {}), ...(story.door ? { phase: ring.phase, opened: false } : {}) });
   }
 
+  /** Out of a walk-up whose battle never started: walking again after the grace. */
+  private unmeet(a: Actor): void {
+    a.meet = undefined;
+    a.battling = false;
+    a.foe = 0;
+    a.calm = this.tick + GRACE;
+  }
+
   /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
   private part(a: Actor): void {
     a.battling = false;
@@ -1037,6 +1051,8 @@ export class Room {
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
     for (const a of this.actors) if (a.bot) { a.beaten = false; a.bites = 0; if (a.judge) this.part(a); }
+    // A walk-up the old round left half done starts no battle in this one.
+    for (const a of this.actors) if (a.meet) { a.meet = undefined; a.battling = false; a.foe = 0; }
     this.duelAfter = 0;
     this.events = [];
     this.gyms = [];

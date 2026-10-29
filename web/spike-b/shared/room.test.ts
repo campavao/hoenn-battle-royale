@@ -268,6 +268,20 @@ describe('trainer against trainer', () => {
     }
     return { e: [], i: max };
   };
+  it('the one who walks up leaving, or a new round, frees the other: no battle is coming', () => {
+    for (const how of ['leave', 'out', 'round'] as const) {
+      const room = makeRoom(MAPS, PATCHES, 99);
+      room.apply({ c: 'join', id: 3, bot: false, name: 'A', skin: 0, spot: { map: L, x: 9, y: 12 }, facing: 1 });
+      room.apply({ c: 'join', id: 5, bot: false, name: 'B', skin: 1, spot: { map: L, x: 12, y: 12 }, facing: 3 });
+      const a = room.actor(3)!;
+      for (let i = 0; i < 300; i++) room.step(new Map());
+      expect(a.meet?.walk).toBe(false);
+      if (how === 'round') (room as unknown as { newRound(n: number): void }).newRound(1);
+      else room.apply({ c: how, id: 5 });
+      expect([a.battling, a.meet, a.foe]).toEqual([false, undefined, 0]);
+    }
+  });
+
   it('two trainers who see each other fight once, and stand until each one ends it', () => {
     const room = makeRoom(MAPS, PATCHES, 99);
     room.apply({ c: 'join', id: 3, bot: false, name: 'A', skin: 0, spot: { map: L, x: 9, y: 12 }, facing: 1 });
@@ -500,6 +514,9 @@ describe('item balls', () => {
     expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'gate', gate: 2, key: shelly.key }));
     expect(room.picked.get(shelly.key)).toBe(1000);
     expect(a.battling).toBe(true);
+    // Left mid-fight: SHELLY stands for the next one.
+    room.apply({ c: 'leave', id: 1000 });
+    expect(room.picked.has(shelly.key)).toBe(false);
   });
 
   it("door-only outdoor places are anchored; SKY PILLAR's final ring waits for land near it", () => {

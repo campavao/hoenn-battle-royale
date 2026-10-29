@@ -2199,8 +2199,12 @@ var Room = class {
       }
       const foe = a?.foe ? this.actor(a.foe) : void 0;
       if (foe?.bot) foe.battling = false;
+      for (const o of this.actors) if (o.meet?.foe === cmd.id) this.unmeet(o);
       for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
-      for (const [key, by] of this.picked) if (by === cmd.id && this.spills.get(key)?.legend) this.picked.delete(key);
+      for (const [key, by] of this.picked) {
+        const b = this.spills.get(key);
+        if (by === cmd.id && (b?.legend || b?.person?.gate !== void 0)) this.picked.delete(key);
+      }
       for (const e of this.events) if (e.trader?.busy === cmd.id) e.trader.busy = 0;
       for (const h of this.homes) if (h.busy === cmd.id) h.busy = 0;
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
@@ -2557,6 +2561,13 @@ var Room = class {
     }
     this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: legend ? species[0] : 0, story: story.id, place: story.name, ...trader ? { trader } : {}, ...story.door ? { phase: ring.phase, opened: false } : {} });
   }
+  /** Out of a walk-up whose battle never started: walking again after the grace. */
+  unmeet(a) {
+    a.meet = void 0;
+    a.battling = false;
+    a.foe = 0;
+    a.calm = this.tick + GRACE;
+  }
   /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
   part(a) {
     a.battling = false;
@@ -2705,6 +2716,11 @@ var Room = class {
       a.beaten = false;
       a.bites = 0;
       if (a.judge) this.part(a);
+    }
+    for (const a of this.actors) if (a.meet) {
+      a.meet = void 0;
+      a.battling = false;
+      a.foe = 0;
     }
     this.duelAfter = 0;
     this.events = [];
