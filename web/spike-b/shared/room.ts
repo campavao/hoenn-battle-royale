@@ -33,6 +33,7 @@ import { rungForPhase } from '../../src/bots/party';
 import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
 import { scatterItem } from '../../src/match/scatter';
+import { GIFTS } from '../../src/match/gifts';
 import { isTm, type BagRows } from './items';
 import { eitherSees, type Facing } from '../../src/bots/sight';
 import { CLASS_WATER, DIR_NORTH, dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
@@ -100,7 +101,7 @@ export type RoomEvent =
   /** Two trainers saw each other: a link battle. `first` is the side that challenged
    *  (link id 0, the lower id, as the ROM's own engage has it). */
   | { type: 'duel'; tick: number; id: number; foe: number; first: boolean }
-  | { type: 'item'; tick: number; id: number; key: number; item: number }
+  | { type: 'item'; tick: number; id: number; key: number; item: number; gift?: boolean }
   | { type: 'bag'; tick: number; id: number; key: number; bag: Bag; name: string }
   /** A at a CENTER's nurse, from the counter. */
   | { type: 'nurse'; tick: number; id: number; map: string }
@@ -162,7 +163,7 @@ export const BOT_BITES = 3;
 export const SPILL_KEY = 1 << 20;
 
 /** An item ball: its key, its cell and what is in it. */
-export interface Ground { key: number; map: string; x: number; y: number; item: number }
+export interface Ground { key: number; map: string; x: number; y: number; item: number; gift?: boolean }
 
 /** Item balls a map gets: the match deals two a section, and a spike map is two or three
  *  of them (Cam, POK-354: "more items all over the place"). */
@@ -456,6 +457,18 @@ export class Room {
         while (isTm(item)) item = scatterItem(rng);
         out.set(`${id}:${c.x}:${c.y}`, { key: ++n, map: id, x: c.x, y: c.y, item });
       }
+    }
+    // A gift-giver in every town and city (gifts.ts, Cam 2026-10-13: "some gift giving
+    // NPCs"): a person holding one held item, standing on a free cell. A at him takes it,
+    // and the first trainer there takes it for everybody.
+    for (const id of [...land.keys()].sort()) {
+      if (!/^MAP_\w+_(TOWN|CITY)$/.test(id)) continue;
+      const marked = new Set(this.patchesOn(id).map((q) => `${q.x}:${q.y}`));
+      const cells = land.get(id)!.filter((c) => !marked.has(`${c.x}:${c.y}`) && !out.has(`${id}:${c.x}:${c.y}`) &&
+        !(id === 'MAP_LITTLEROOT_TOWN' && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
+      if (!cells.length) continue;
+      const c = cells[Math.floor(rng() * cells.length)];
+      out.set(`${id}:${c.x}:${c.y}`, { key: ++n, map: id, x: c.x, y: c.y, item: GIFTS[Math.floor(rng() * GIFTS.length)], gift: true });
     }
     // A relay world makes one room a seed; keep the last few, not every one ever dealt.
     if (DEALS.size >= 8) DEALS.delete(DEALS.keys().next().value!);
@@ -910,7 +923,7 @@ export class Room {
           // Somebody is trading with him: nothing.
         } else if (g) {
           this.picked.set(g.key, a.id);
-          events.push({ type: 'item', tick: this.tick, id: a.id, key: g.key, item: g.item });
+          events.push({ type: 'item', tick: this.tick, id: a.id, key: g.key, item: g.item, ...(g.gift ? { gift: true } : {}) });
         } else if (b?.legend) {
           const mon = b.bag.mons![0];
           this.picked.set(b.key, a.id);

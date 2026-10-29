@@ -289,7 +289,7 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
 // and waits for the ROM if it is still booting.
 const foundEl = document.getElementById('found')!;
 let foundUntil = 0;
-const toGive: ({ key: number; item: number } | { key: number; bag: Bag; name: string })[] = [];
+const toGive: ({ key: number; item: number; gift?: boolean } | { key: number; bag: Bag; name: string })[] = [];
 let giving = false;
 
 function say(text: string): void {
@@ -307,13 +307,14 @@ function giveNext(): void {
     openBag(next.key, next.bag, next.name).catch((e) => console.warn('spike bag failed', e)).finally(() => { giving = false; giveNext(); });
     return;
   }
-  const { key, item } = next;
+  const { key, item, gift } = next;
   rom.give(item, groundCount(item)).then((got) => {
     // What the ROM made of it (br_items.c's Apply), not what was on the ground.
     if (!got) {
       say(`No room in the bag for ${name(item)}.`);
       link.drop(key); // it stays where it lay
-    } else if (got.items.length) say(`Found ${got.items.map((g) => `${g.n > 1 ? `${g.n} ` : ''}${name(g.id)}`).join(', ')}!`);
+    } else if (gift) say(`A gift: ${name(item)}!`);
+    else if (got.items.length) say(`Found ${got.items.map((g) => `${g.n > 1 ? `${g.n} ` : ''}${name(g.id)}`).join(', ')}!`);
     else if (got.money) say(`Sold ${name(item)} for ¥${got.money}.`);
     else say(`${name(item)}! Your team got stronger.`);
   }, (e) => console.warn('spike give failed', e)).finally(() => { giving = false; giveNext(); });
@@ -470,7 +471,7 @@ function startFor(e: RoomEvent): void {
     return;
   }
   if (e.type === 'item' || e.type === 'bag') {
-    toGive.push(e.type === 'item' ? { key: e.key, item: e.item } : { key: e.key, bag: e.bag, name: e.name });
+    toGive.push(e.type === 'item' ? { key: e.key, item: e.item, gift: e.gift } : { key: e.key, bag: e.bag, name: e.name });
     giveNext();
     return;
   }
@@ -1419,7 +1420,7 @@ function drawGround(x0: number, y0: number, x1: number, y1: number): void {
     if (x < x0 - TILE || x > x1 || y < y0 - TILE || y > y1) return;
     ctx.drawImage(img, x + (TILE - img.width) / 2, y + TILE - img.height);
   };
-  for (const g of link.room.ground().values()) if (!link.room.picked.has(g.key)) put(ballArt, g.map, g.x, g.y);
+  for (const g of link.room.ground().values()) if (!link.room.picked.has(g.key)) put(g.gift ? giftArt(g.key) : ballArt, g.map, g.x, g.y);
   for (const b of link.room.spills.values()) {
     if (link.room.picked.has(b.key)) continue;
     // An event's legendary stands as itself (br_legend.c's sLegends); a piece with one mon
@@ -1428,6 +1429,18 @@ function drawGround(x0: number, y0: number, x1: number, y1: number): void {
     const one = (b.bag.mons?.length ?? 0) + b.bag.items.length === 1 && !b.bag.money;
     put(legend ?? (one ? ballArt : bagArt), b.map, b.x, b.y);
   }
+}
+
+/** Who stands for a gift, by its key (br_loot.c's sGiftGfx): OLD_MAN, OLD_WOMAN,
+ *  EXPERT_M, POKEFAN_F, facing down. */
+const GIFT_GFX = [29, 30, 21, 18];
+const giftArts = new Map<number, HTMLCanvasElement>();
+function giftArt(key: number): HTMLCanvasElement | null {
+  const gfx = GIFT_GFX[key % GIFT_GFX.length];
+  if (!art) return null;
+  let img = giftArts.get(gfx);
+  if (!img) giftArts.set(gfx, (img = art.sprite(gfx, 1)));
+  return img;
 }
 
 const LEGEND_GFX: Record<number, number> = { 401: 200, 402: 201, 403: 202, 404: 197, 405: 198, 406: 41, 407: 187, 408: 188 };

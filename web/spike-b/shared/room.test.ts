@@ -1,6 +1,7 @@
 // The shared world's one promise: a Room mirrored from the host's frame records is the
 // host's Room, frame for frame -- with bots wandering, trainers' keys arriving late and
 // bunched, a battle started and ended, and a phone that joins halfway from a snapshot.
+import { GIFTS } from '../../src/match/gifts';
 import { describe, expect, it } from 'vitest';
 import type { WorldMap } from '../../src/bots/world';
 import type { PatchTable } from '../../src/bots/patches';
@@ -380,7 +381,7 @@ describe('item balls', () => {
     expect(g).toEqual([...two.ground().values()]);
     expect(g).not.toEqual([...other.ground().values()]);
     const perMap = new Map<string, number>();
-    for (const b of g) perMap.set(b.map, (perMap.get(b.map) ?? 0) + 1);
+    for (const b of g) if (!b.gift) perMap.set(b.map, (perMap.get(b.map) ?? 0) + 1);
     expect(perMap.size).toBeGreaterThanOrEqual(5); // every map you can walk to
     expect(Math.max(...perMap.values())).toBeLessThanOrEqual(GROUND_PER_MAP);
     for (const b of g) {
@@ -390,6 +391,15 @@ describe('item balls', () => {
       expect(isTm(b.item)).toBe(false); // no machines until one is taught off the ground
     }
     expect(new Set(g.map((b) => b.key)).size).toBe(g.length);
+  });
+
+  it('a gift-giver stands in every town and city, holding one held item', () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const gifts = [...room.ground().values()].filter((b) => b.gift);
+    const towns = [...new Set([...room.ground().values()].map((b) => b.map))].filter((m) => /_(TOWN|CITY)$/.test(m));
+    expect(towns.length).toBeGreaterThan(0);
+    expect(gifts.map((b) => b.map).sort()).toEqual(towns.sort());
+    for (const b of gifts) expect(GIFTS).toContain(b.item);
   });
 
   it('a ball is solid; A at it takes it once, off the map for everybody', () => {

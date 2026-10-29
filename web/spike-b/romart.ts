@@ -49,14 +49,14 @@ function rgba(c: number): number {
   return (0xff << 24) | (b << 16) | (g << 8) | r;
 }
 
-/** The ROM's letters as text: capitals, small letters, digits; anything else a space. */
+/** The ROM's letters as text: capitals, small letters, digits, the few marks names use; anything else a space. */
 export function text(letters: readonly number[]): string {
   let out = '';
   for (const c of letters) {
     out += c >= 0xbb && c <= 0xd4 ? String.fromCharCode(65 + c - 0xbb)
       : c >= 0xd5 && c <= 0xee ? String.fromCharCode(97 + c - 0xd5)
       : c >= 0xa1 && c <= 0xaa ? String.fromCharCode(48 + c - 0xa1)
-      : c === 0x1b ? 'é' : c === 0xae ? '-' : c === 0xad ? '.' : ' ';
+      : c === 0x1b ? 'é' : c === 0xae ? '-' : c === 0xad ? '.' : c === 0xb4 ? "'" : c === 0xab ? '!' : c === 0xac ? '?' : ' ';
   }
   return out;
 }

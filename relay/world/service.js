@@ -1472,6 +1472,28 @@ function scatterItem(rng) {
   return ITEM_SUPER_POTION;
 }
 
+// web/src/match/gifts.ts
+var ITEM_BRIGHT_POWDER = 179;
+var ITEM_WHITE_HERB = 180;
+var ITEM_QUICK_CLAW = 183;
+var ITEM_CHOICE_BAND2 = 186;
+var ITEM_KINGS_ROCK = 187;
+var ITEM_FOCUS_BAND = 196;
+var ITEM_SCOPE_LENS = 198;
+var ITEM_LEFTOVERS2 = 200;
+var ITEM_SHELL_BELL = 219;
+var GIFTS = [
+  ITEM_BRIGHT_POWDER,
+  ITEM_WHITE_HERB,
+  ITEM_QUICK_CLAW,
+  ITEM_CHOICE_BAND2,
+  ITEM_KINGS_ROCK,
+  ITEM_FOCUS_BAND,
+  ITEM_SCOPE_LENS,
+  ITEM_LEFTOVERS2,
+  ITEM_SHELL_BELL
+];
+
 // web/spike-b/shared/items.ts
 var ITEM_TM012 = 289;
 var ITEM_HM08 = 346;
@@ -1870,6 +1892,14 @@ var Room = class {
         while (isTm(item)) item = scatterItem(rng);
         out.set(`${id2}:${c.x}:${c.y}`, { key: ++n, map: id2, x: c.x, y: c.y, item });
       }
+    }
+    for (const id2 of [...land.keys()].sort()) {
+      if (!/^MAP_\w+_(TOWN|CITY)$/.test(id2)) continue;
+      const marked = new Set(this.patchesOn(id2).map((q) => `${q.x}:${q.y}`));
+      const cells = land.get(id2).filter((c2) => !marked.has(`${c2.x}:${c2.y}`) && !out.has(`${id2}:${c2.x}:${c2.y}`) && !(id2 === "MAP_LITTLEROOT_TOWN" && c2.x >= 7 && c2.x <= 13 && c2.y >= 9 && c2.y <= 13));
+      if (!cells.length) continue;
+      const c = cells[Math.floor(rng() * cells.length)];
+      out.set(`${id2}:${c.x}:${c.y}`, { key: ++n, map: id2, x: c.x, y: c.y, item: GIFTS[Math.floor(rng() * GIFTS.length)], gift: true });
     }
     if (DEALS.size >= 8) DEALS.delete(DEALS.keys().next().value);
     DEALS.set(id, out);
@@ -2312,7 +2342,7 @@ var Room = class {
         } else if (tr) {
         } else if (g) {
           this.picked.set(g.key, a.id);
-          events.push({ type: "item", tick: this.tick, id: a.id, key: g.key, item: g.item });
+          events.push({ type: "item", tick: this.tick, id: a.id, key: g.key, item: g.item, ...g.gift ? { gift: true } : {} });
         } else if (b?.legend) {
           const mon = b.bag.mons[0];
           this.picked.set(b.key, a.id);
