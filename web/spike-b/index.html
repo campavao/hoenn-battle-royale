@@ -87,13 +87,11 @@
       #corner { position: fixed; z-index: 1; top: calc(env(safe-area-inset-top) + 6px); right: calc(env(safe-area-inset-right) + 8px); background: #f8f8f8; color: #303030; border: 3px solid #4c7a99; border-radius: 8px; padding: 4px 10px; white-space: pre; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; pointer-events: none; }
       #corner:empty { display: none; }
       #corner.fog { color: #c03028; }
-      #ticker { position: fixed; z-index: 1; left: 50%; top: calc(env(safe-area-inset-top) + 60px); transform: translateX(-50%); width: max-content; max-width: min(520px, calc(100vw - 32px)); background: #303030e8; color: #f8f8f8; border-radius: 6px; padding: 4px 12px; text-align: center; text-wrap: balance; display: none; pointer-events: none; }
-      #ticker.on { display: block; }
-      #ticker.alert { color: #ff9a8a; }
       #stats:not(.debug) { display: none; }
-      #found { z-index: 1; position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 200px); transform: translateX(-50%); background: #f8f8f8; color: #303030; border: 3px solid #4c7a99; border-radius: 8px; padding: 8px 14px; display: none; width: max-content; max-width: min(480px, calc(100vw - 40px)); text-align: center; text-wrap: balance; }
-      @media (pointer: fine) { #found { bottom: 32px; } }
-      #found.on { display: block; }
+      #msg { z-index: 2; position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 200px); transform: translateX(-50%); display: none; pointer-events: none; }
+      @media (pointer: fine) { #msg { bottom: 32px; } }
+      #msg.on { display: block; }
+      #msg canvas { display: block; image-rendering: pixelated; }
       #out, #win { z-index: 1; position: fixed; left: 50%; top: 18%; transform: translateX(-50%); background: #26313aee; color: #e8eef2; border: 2px solid #b48ad6; border-radius: 10px; padding: 14px 18px; text-align: center; display: none; }
       #out.on, #win.on { display: block; }
       #out b, #win b { display: block; font-size: 1.4em; color: #d9b8f2; margin-bottom: 6px; }
@@ -143,7 +141,7 @@
       /* Over the game still running under it: the in-match sheet on a phone (POK-320). */
       #stage[data-look='overlay'] { background: transparent; }
       /* The sheet over the match: the world's own buttons and corner go under it. */
-      body:has(#stage:not([hidden])) :is(#hud, #corner, #ticker, #watch-label) { visibility: hidden; }
+      body:has(#stage:not([hidden])) :is(#hud, #corner, #msg, #watch-label) { visibility: hidden; }
       /* Beside the game: the sheet on a desktop, where the room panel always was, in view
          all match. The game makes room for it (body.docked, set by the stage). At twice
          the picture's size only when the window can spare that and still give the game
@@ -198,7 +196,6 @@
     </div>
     <div id="watch-label" hidden></div>
     <div id="corner"></div>
-    <div id="ticker"></div>
     <div id="pad">
       <div class="dpad">
         <span></span><div class="k" data-k="up">▲</div><span></span>
@@ -211,7 +208,7 @@
     <div id="phud" hidden></div>
     <div id="pdock" hidden><button id="hud-menu" class="hud-menu" type="button" aria-label="Room">☰</button></div>
     <div id="pad-edit" class="pad-edit" hidden></div>
-    <div id="found"></div>
+    <div id="msg" role="status"></div>
     <div id="ask"><b id="ask-title"></b></div>
     <div id="out"><b id="out-title">OUT</b><span id="out-why"></span><br><span id="out-next">You're back at the truck when the fog lifts.</span><br><button id="out-ok" type="button">Watch</button></div>
     <div id="win"><b id="win-title"></b><ol id="win-list"></ol><button id="win-ok" type="button">OK</button></div>
@@ -233,7 +230,6 @@
         <li>Step on a rustling patch of grass (or a dark ripple on water) for a wild Pokémon, as in the game.</li>
         <li>Spectate, then drag and pinch to see all of Hoenn and everyone in it.</li>
       </ul>
-      <span>Not here yet: items, the ring, other players, keeping what you catch.</span>
       <button id="intro-go" type="button">Start</button>
     </div></div>
     <script type="module" src="./main.ts"></script>
