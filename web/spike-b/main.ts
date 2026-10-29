@@ -19,6 +19,7 @@ import { WorldIndex } from '../src/bots/hoenn';
 import { isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
 import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
+import { gradeOf } from '../src/bots/roster';
 import { DIR_EAST } from './sim';
 import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, emptyBag, makeRoom, type Actor, type Bag, type RoomEvent } from './shared/room';
 import { SKIN_GFX } from './shared/bots';
@@ -375,7 +376,9 @@ function startFor(e: RoomEvent): void {
     if (!foe) { link.end(); return; }
     // A bot's team as the match deals it (bots/party.ts): from the seed and its seat, the
     // map it stands on, at the rung, one more mon every two phases.
-    const party = dealParty(link.room.seed, foe.id, link.room.ring().phase + 1, foe.m.spot.map);
+    // Its grade too (roster.ts). No Zone pool: the ROM deals one at the Safari opening,
+    // which this world has not got yet.
+    const party = dealParty(link.room.seed, foe.id, link.room.ring().phase + 1, foe.m.spot.map, gradeOf(link.room.seed, foe.id));
     const fog = inFogNow();
     handOff(foe, (r, onStart) => r.fight(foe.name, party, foe.skin, onStart, fog));
   } else if (e.type === 'duel') {

@@ -303,6 +303,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     lay(fog, at);
     fighting = true;
     emu.resume();
+    // A frame on the new ring before the ask: br_main.c runs BrWild_Tick before
+    // BrLevels_Tick, so a wild asked on the frame the rung moves rolls at the old one.
+    await frames(emu, 2);
     const t0 = performance.now();
     let n = 0;
     const count = emu.onFrame(() => { n++; });
@@ -516,6 +519,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         const watch = emu.onFrame(() => drain(() => undefined));
         const tap = async (k: GbaKey) => { emu.press(k); await frames(emu, 3); emu.release(k); await frames(emu, 3); };
         let up = false;
+        let back = true;
+        const before = kept();
         await tap('start');
         // Taking keys once its handler is in gMenuCallback and its text is drawn.
         if (await until(emu, () => emu.read(menuCbAt, 32) === startMenu.input, 90)) {
@@ -544,12 +549,15 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
           if (await until(emu, () => emu.read(menuCbAt, 32) === startMenu.input, 60)) {
             await frames(emu, 12);
             await tap('b');
-          }
+          } else back = false;
         }
         await frames(emu, 10);
         watch();
         emu.pause();
-        const now = kept();
+        // A row that acted on the field instead of coming back to the menu (an ESCAPE
+        // ROPE, a rod, FLY or DIG off the team) did it on the hidden ROM's field, which
+        // is not this world: none of it happened, nothing of it is spent.
+        const now = back ? kept() : before;
         if (!emu.restore(parked!)) broken = true;
         else keep(now);
         carried = last = now;
