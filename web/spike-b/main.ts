@@ -2014,7 +2014,8 @@ async function boot(): Promise<void> {
         // The standings stay up until PLAY AGAIN; then the room as it is by then.
         else if (!matchOn && !winEl.classList.contains('on')) lobby!.roomIs(r);
       },
-      onNoRoom: (code) => { forget(); lobby!.menu(code ? `There is no room ${code}.` : 'Every place in the world is taken.'); },
+      onNoRoom: (code, pass) => { forget(); lobby!.menu(pass ? `That is not room ${code}'s passcode.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.'); },
+      onKicked: () => { room = null; forget(); lobby!.menu('The host took you out of the room.'); },
       onRooms: (rooms) => lobby?.listed(rooms),
       onMatch: (l) => startMatch(l),
       onClosed: () => { matchOn = false; lobby!.menu('Lost the relay. Reload to play again.'); },
@@ -2023,6 +2024,7 @@ async function boot(): Promise<void> {
       join: (how) => sock.join(me().name, me().skin, how),
       start: () => sock.start(),
       set: (set) => sock.set(set),
+      kick: (id) => sock.kick(id),
       list: () => sock.list(),
       relayUrl: url.replace(/\/world$/, ''),
       leave: () => location.reload(),

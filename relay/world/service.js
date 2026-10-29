@@ -3457,6 +3457,7 @@ var Host = class {
 };
 
 // web/src/match/room.ts
+var MAX_STEPS = [2, 4, 6, 8, 12, 16, 20, 26, 30];
 var FOG_STEPS = [30, 60, 90, 120, 180];
 var SAFARI_STEPS = [0, 60, 120, 180];
 
@@ -3472,6 +3473,7 @@ function over(room) {
 var HASH_EVERY = 60;
 
 // web/spike-b/shared/service.ts
+var isPass = (s) => s.length === 4 && [...s.toUpperCase()].every((c) => CODE_ALPHABET.includes(c));
 var FRAME_MS = 1e3 / 60;
 var QUIET_MS = 12e4;
 var SYNC_MS = 1e3;
@@ -3512,6 +3514,7 @@ var WorldService = class {
           return;
         }
         if (!m || typeof m !== "object") return;
+        if (phone?.kicked) phone = null;
         if (phone) phone.heard = this.opts.now();
         if (m.t === "list") {
           this.send(link, { t: "rooms", rooms: this.listed() });
@@ -3533,6 +3536,10 @@ var WorldService = class {
           const room2 = this.pick(m);
           if (!room2) {
             this.send(link, { t: "no_room", code: String(m.code ?? "") });
+            return;
+          }
+          if (room2.set.door === "pass" && String(m.pass ?? "").toUpperCase() !== room2.pass) {
+            this.send(link, { t: "no_room", code: room2.code, pass: true });
             return;
           }
           const name = String(m.name ?? "").toUpperCase().replace(/[^A-Z0-9 ]/g, "").trim().slice(0, 10);
@@ -3562,8 +3569,20 @@ var WorldService = class {
             if (typeof s.bots === "boolean") room.set.bots = s.bots;
             if (FOG_STEPS.includes(s.fogSecs)) room.set.fogSecs = s.fogSecs;
             if (SAFARI_STEPS.includes(s.safariSecs)) room.set.safariSecs = s.safariSecs;
+            if (MAX_STEPS.includes(s.max)) room.set.max = s.max;
+            if (s.door === "open" || s.door === "private") room.set.door = s.door;
+            else if (s.door === "pass" && typeof s.pass === "string" && isPass(s.pass)) {
+              room.set.door = "pass";
+              room.pass = s.pass.toUpperCase();
+            }
             this.roster(room);
           }
+        } else if (m.t === "kick") {
+          const p = room.members.get(Number(m.id));
+          if (host || phone.id !== room.owner || !p || p === phone) return;
+          this.drop(p);
+          p.kicked = true;
+          this.send(p.link, { t: "kicked" });
         } else if (!host) {
           return;
         } else if (m.t === "in") {
@@ -3671,15 +3690,15 @@ var WorldService = class {
     const out = [];
     for (const r of this.rooms.values()) {
       const owner = r.members.get(r.owner);
-      if (r.quick || !owner) continue;
-      out.push({ code: r.code, host: owner.name, skin: owner.skin, players: r.members.size, seats: ROOM_MAX, playing: !!r.host });
+      if (r.quick || !owner || r.set.door === "private") continue;
+      out.push({ code: r.code, host: owner.name, skin: owner.skin, players: r.members.size, seats: r.set.max, playing: !!r.host, pass: r.set.door === "pass" });
     }
     return out;
   }
   pick(m) {
     if (typeof m.code === "string" && m.code) {
       const r = this.rooms.get(m.code.toUpperCase());
-      return r && r.members.size < ROOM_MAX ? r : null;
+      return r && r.members.size < (r.quick ? ROOM_MAX : r.set.max) ? r : null;
     }
     if (m.host === true) return this.make(false);
     let best = null;
@@ -3695,8 +3714,8 @@ var WorldService = class {
       for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
     } while (this.rooms.has(code));
     const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
-    const set = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs };
-    const room = { code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map(), set };
+    const set = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: ROOM_MAX, door: "open" };
+    const room = { pass: "", code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map(), set };
     this.rooms.set(code, room);
     return room;
   }
@@ -3787,7 +3806,8 @@ var WorldService = class {
         members,
         playing: !!room.host,
         ...room.startsAt !== null ? { startsIn: Math.max(0, room.startsAt - now) } : {},
-        set: room.set
+        set: room.set,
+        ...p.id === room.owner && room.set.door === "pass" ? { pass: room.pass } : {}
       });
     }
   }

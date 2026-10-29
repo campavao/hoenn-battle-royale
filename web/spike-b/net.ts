@@ -255,18 +255,23 @@ class Online implements WorldLink {
  *  in them. `onMatch` hands over the match's link each time one starts for me (or I come
  *  into one under way, to watch). */
 export interface WorldSocket {
-  join(name: string, skin: number, how: { code?: string; host?: boolean; again?: Again }): void;
+  join(name: string, skin: number, how: { code?: string; host?: boolean; again?: Again; pass?: string }): void;
   start(): void;
   /** LOBBIES: ask for the hosted rooms (`onRooms`). */
   list(): void;
-  /** The host's settings for the room's next match. */
-  set(set: Partial<Settings>): void;
+  /** The host's settings for the room's next match (with the passcode, for a `pass` door). */
+  set(set: Partial<Settings> & { pass?: string }): void;
+  /** The host takes trainer `id` out of the room. */
+  kick(id: number): void;
   close(): void;
 }
 
 export interface WorldHandlers {
   onRoom(r: Extract<WorldDown, { t: 'room' }>): void;
-  onNoRoom(code: string): void;
+  /** No room by that code; `pass`: there is, and the passcode was wrong. */
+  onNoRoom(code: string, pass?: boolean): void;
+  /** The host took me out of the room. */
+  onKicked(): void;
   onRooms(rooms: Listed[]): void;
   onMatch(link: WorldLink): void;
   /** The socket closed (or never opened). */
@@ -283,14 +288,15 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
     else queue.push(m);
   };
   try { ws = new WebSocket(url); } catch { ws = null; }
-  if (!ws) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, list: () => undefined, set: () => undefined, close: () => undefined }; }
+  if (!ws) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, list: () => undefined, set: () => undefined, kick: () => undefined, close: () => undefined }; }
   const sock = ws;
   sock.addEventListener('open', () => { for (const m of queue.splice(0)) sock.send(JSON.stringify(m)); });
   sock.addEventListener('close', () => { if (!closed) { closed = true; h.onClosed(); } });
   sock.addEventListener('message', (ev) => {
     const m = JSON.parse(String(ev.data)) as WorldDown;
     if (m.t === 'room') h.onRoom(m);
-    else if (m.t === 'no_room') h.onNoRoom(m.code);
+    else if (m.t === 'no_room') h.onNoRoom(m.code, m.pass);
+    else if (m.t === 'kicked') h.onKicked();
     else if (m.t === 'rooms') h.onRooms(m.rooms);
     else if (m.t === 'full') h.onNoRoom('');
     else if (m.t === 'hello') {
@@ -305,6 +311,7 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
     start: () => send({ t: 'start' }),
     list: () => send({ t: 'list' }),
     set: (set) => send({ t: 'set', set }),
+    kick: (id) => send({ t: 'kick', id }),
     close: () => { closed = true; sock.close(); },
   };
 }

@@ -6,7 +6,7 @@
 // now (?solo).
 import { Stage, type DrawnScreen } from '../src/ui/stage';
 import { menuScreen, roomScreen, type RoomModel, type RowSpec } from '../src/ui/screens';
-import { CODE_ENTRY, NAME_ENTRY, entryScreen, newEntry } from '../src/ui/entry';
+import { CODE_ENTRY, NAME_ENTRY, PASS_ENTRY, entryScreen, newEntry } from '../src/ui/entry';
 import { FEEDBACK_ROW, HOWTO_ROW, countdown, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction } from '../src/match/lobby';
 import { howToScreen } from '../src/ui/howto';
 import { howToRead, markHowToRead } from '../src/ui/howto-due';
@@ -17,17 +17,18 @@ import type { TallyNames } from '../src/match/tally';
 import { feedbackScreen, type FeedbackState } from '../src/ui/feedback';
 import { cleanNote, sendFeedback } from '../src/net/feedback';
 import type { Listed, Member, Settings } from './shared/wire';
-import { FOG_STEPS, SAFARI_STEPS, levelOf, nextFog, nextSafari, safariLabel } from '../src/match/room';
+import { FOG_STEPS, SAFARI_STEPS, doorLabel, levelOf, nextDoor, nextFog, nextMax, nextSafari, safariLabel } from '../src/match/room';
 
 /** The room as the relay last said it is (wire.ts's `room`). */
-export interface RoomInfo { code: string; quick: boolean; you: number; owner: number; members: Member[]; playing: boolean; startsIn?: number; set: Settings }
+export interface RoomInfo { code: string; quick: boolean; you: number; owner: number; members: Member[]; playing: boolean; startsIn?: number; set: Settings; pass?: string }
 
 export interface LobbyHooks {
   /** Into a room: by code, a new one of my own, or quick play's. */
-  join(how: { code?: string; host?: boolean }): void;
+  join(how: { code?: string; host?: boolean; pass?: string }): void;
   start(): void;
   /** The host changed a setting for the room's next match. */
-  set(set: Partial<Settings>): void;
+  set(set: Partial<Settings> & { pass?: string }): void;
+  kick(id: number): void;
   /** Out of the room, back to the menu. */
   leave(): void;
   /** LOBBIES: ask the relay for its hosted rooms (answered through `listed`). */
@@ -116,7 +117,10 @@ export class Lobby {
     else if (a.kind === 'name') this.stage.push(this.nameEntry());
     else if (a.kind === 'howto') this.stage.push(this.howTo);
     else if (a.kind === 'lobbies') { this.hooks.list(); this.stage.push(this.lobbies); }
-    else if (a.kind === 'join') this.hooks.join({ code: a.code });
+    else if (a.kind === 'join') {
+      if (a.pass) this.stage.push(this.passEntry('PASSCODE', 'Ask the host for it.', (pass) => this.hooks.join({ code: a.code, pass })));
+      else this.hooks.join({ code: a.code });
+    }
     else if (a.kind === 'feedback') { if (this.said !== 'sending') this.said = 'typing'; this.stage.push(this.feedback); }
     else if (a.kind === 'skin' || a.kind === 'look') { this.browsed = null; this.stage.push(this.look); }
     else if (a.kind === 'mystats') this.stage.push(this.myStats);
@@ -143,10 +147,10 @@ export class Lobby {
    *  way is joined to watch it until the next. HOST makes one of my own. */
   private readonly lobbies: DrawnScreen = menuScreen(() => ({
     title: 'LOBBIES',
-    rows: roomRows(this.rooms.map((r) => ({ code: r.code, host: r.host, skin: String(r.skin), players: r.players, seats: r.seats, pass: false, full: r.players >= r.seats })))
+    rows: roomRows(this.rooms.map((r) => ({ code: r.code, host: r.host, skin: String(r.skin), players: r.players, seats: r.seats, pass: r.pass, full: r.players >= r.seats })))
       .map((row, i): RowSpec => ({
         label: row.label,
-        detail: `${row.detail ?? ''}${this.rooms[i].playing ? ' · PLAYING' : ''}`,
+        detail: `${row.detail?.replace('🔒', 'PASS') ?? ''}${this.rooms[i].playing ? ' · PLAYING' : ''}`,
         disabled: row.disabled,
         id: `lobbies-${this.rooms[i].code}`,
         onPress: () => this.press(row.action),
@@ -227,6 +231,21 @@ export class Lobby {
     trainer: { name: me().name || 'TRAINER', skin: me().skin, onPress: () => this.stage.push(this.trainer) },
   }));
 
+  /** Four letters: a locked room's passcode, typed to come in or set by its host. */
+  private passEntry(title: string, note: string, done: (pass: string) => void): DrawnScreen {
+    const state = newEntry(PASS_ENTRY);
+    return entryScreen(() => ({
+      title,
+      state,
+      note,
+      onDone: (pass) => { this.stage.pop(); done(pass); },
+      onBack: () => this.stage.pop(),
+    }));
+  }
+
+  /** The seat whose card is open on the room screen (KICK on it, for the host). */
+  private card: number | null = null;
+
   private codeEntry(): DrawnScreen {
     const state = newEntry(CODE_ENTRY);
     let wrong = '';
@@ -270,7 +289,7 @@ export class Lobby {
       status: r.quick ? 'QUICK PLAY' : `Room ${r.code}`,
       note,
       seats: r.members.map((m) => ({ seat: m.id, name: m.name, skin: m.skin, isMe: m.id === r.you, spectating: false, alive: true })),
-      max: Math.max(8, r.members.length),
+      max: r.quick ? Math.max(8, r.members.length) : r.set.max,
       fill: 0,
       isHost,
       started: r.playing,
@@ -280,16 +299,29 @@ export class Lobby {
       // The host's, in a room of their own (a quick room's are the relay's): the live
       // room's BOTS, FOG and SAFARI.
       options: isHost && !r.quick ? [
+        { id: 'room-max', label: `MAX ${r.set.max}`, onPress: () => this.hooks.set({ max: nextMax(r.set.max) }) },
+        {
+          id: 'room-door',
+          label: doorLabel(r.set.door, r.pass ?? null),
+          onPress: () => {
+            const next = nextDoor(r.set.door);
+            if (next !== 'pass') this.hooks.set({ door: next });
+            else this.stage.push(this.passEntry('PASSCODE', 'Guests type this to come in.', (pass) => this.hooks.set({ door: 'pass', pass })));
+          },
+        },
         { id: 'room-fill', label: r.set.bots ? 'BOTS ON' : 'BOTS OFF', visual: { kind: 'toggle', on: r.set.bots }, onPress: () => this.hooks.set({ bots: !r.set.bots }) },
         { id: 'room-fog', label: `FOG ${r.set.fogSecs}s`, visual: { kind: 'level', ...levelOf(FOG_STEPS, r.set.fogSecs), clock: true }, onPress: () => this.hooks.set({ fogSecs: nextFog(r.set.fogSecs) }) },
         { id: 'room-safari', label: safariLabel(r.set.safariSecs), visual: { kind: 'level', ...levelOf(SAFARI_STEPS, r.set.safariSecs, true), clock: true }, onPress: () => this.hooks.set({ safariSecs: nextSafari(r.set.safariSecs) }) },
       ] : null,
-      card: null,
+      card: (() => {
+        const m = this.card === null ? undefined : r.members.find((x) => x.id === this.card);
+        return m ? { seat: m.id, skin: m.skin, lines: [{ label: 'NAME', value: m.name }], canKick: isHost && !r.playing && m.id !== r.you } : null;
+      })(),
       onStart: () => this.hooks.start(),
       onLeave: () => this.hooks.leave(),
-      onSeat: () => undefined,
-      onKick: () => undefined,
-      onCloseCard: () => undefined,
+      onSeat: (seat) => { this.card = this.card === seat ? null : seat; this.stage.redraw(); },
+      onKick: (seat) => { this.hooks.kick(seat); this.card = null; this.stage.redraw(); },
+      onCloseCard: () => { this.card = null; this.stage.redraw(); },
     };
   });
 }

@@ -14,9 +14,12 @@
 import type { WorldMap } from '../../src/bots/world';
 import type { PatchTable } from '../../src/bots/patches';
 import { CODE_ALPHABET, CODE_LENGTH } from '../../src/match/lobby';
+
+/** A passcode: four of the room codes' letters (ui/entry.ts PASS_ENTRY). */
+const isPass = (s: string) => s.length === 4 && [...s.toUpperCase()].every((c) => CODE_ALPHABET.includes(c));
 import { Host } from './host';
 import { RING_PHASE, makeRoom } from './room';
-import { FOG_STEPS, SAFARI_STEPS } from '../../src/match/room';
+import { FOG_STEPS, MAX_STEPS, SAFARI_STEPS } from '../../src/match/room';
 import { cleanBag } from './items';
 import { over } from './over';
 import { HASH_EVERY, type Again, type Listed, type Member, type Settings, type SpMsg, type WireFrame, type WorldDown, type WorldUp } from './wire';
@@ -76,6 +79,8 @@ interface Phone {
   away: number;
   /** The trainer this one watches, 0 for nobody. */
   watching: number;
+  /** The host took them out: the socket's next join starts afresh. */
+  kicked?: boolean;
 }
 
 /** The battle a phone's ROM is publishing, as sent: for a watcher who comes in after it
@@ -97,6 +102,8 @@ interface Lobby {
   streams: Map<number, Stream>;
   /** The host's settings for its next match. */
   set: Settings;
+  /** The passcode, when the door is `pass`: the host's to read out, nobody else's. */
+  pass: string;
 }
 
 export class WorldService {
@@ -119,6 +126,7 @@ export class WorldService {
         let m: WorldUp;
         try { m = JSON.parse(text) as WorldUp; } catch { return; }
         if (!m || typeof m !== 'object') return;
+        if (phone?.kicked) phone = null;
         if (phone) phone.heard = this.opts.now();
         if (m.t === 'list') { this.send(link, { t: 'rooms', rooms: this.listed() }); return; }
         if (m.t === 'join' && !phone && m.again && typeof m.again === 'object') {
@@ -129,6 +137,7 @@ export class WorldService {
           if (this.where.size >= this.opts.cap) { this.send(link, { t: 'full' }); link.close(); return; }
           const room = this.pick(m);
           if (!room) { this.send(link, { t: 'no_room', code: String(m.code ?? '') }); return; }
+          if (room.set.door === 'pass' && String(m.pass ?? '').toUpperCase() !== room.pass) { this.send(link, { t: 'no_room', code: room.code, pass: true }); return; }
           const name = String(m.name ?? '').toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim().slice(0, 10);
           const skin = Number.isInteger(m.skin) && m.skin >= 0 && m.skin < 16 ? m.skin : 0;
           const id = this.nextId++;
@@ -157,8 +166,17 @@ export class WorldService {
             if (typeof s.bots === 'boolean') room.set.bots = s.bots;
             if (FOG_STEPS.includes(s.fogSecs as number)) room.set.fogSecs = s.fogSecs as number;
             if (SAFARI_STEPS.includes(s.safariSecs as number)) room.set.safariSecs = s.safariSecs as number;
+            if (MAX_STEPS.includes(s.max as number)) room.set.max = s.max as number;
+            if (s.door === 'open' || s.door === 'private') room.set.door = s.door;
+            else if (s.door === 'pass' && typeof s.pass === 'string' && isPass(s.pass)) { room.set.door = 'pass'; room.pass = s.pass.toUpperCase(); }
             this.roster(room);
           }
+        } else if (m.t === 'kick') {
+          const p = room.members.get(Number(m.id));
+          if (host || phone.id !== room.owner || !p || p === phone) return;
+          this.drop(p);
+          p.kicked = true;
+          this.send(p.link, { t: 'kicked' });
         } else if (!host) {
           return;
         } else if (m.t === 'in') {
@@ -275,8 +293,8 @@ export class WorldService {
     const out: Listed[] = [];
     for (const r of this.rooms.values()) {
       const owner = r.members.get(r.owner);
-      if (r.quick || !owner) continue;
-      out.push({ code: r.code, host: owner.name, skin: owner.skin, players: r.members.size, seats: ROOM_MAX, playing: !!r.host });
+      if (r.quick || !owner || r.set.door === 'private') continue;
+      out.push({ code: r.code, host: owner.name, skin: owner.skin, players: r.members.size, seats: r.set.max, playing: !!r.host, pass: r.set.door === 'pass' });
     }
     return out;
   }
@@ -284,7 +302,7 @@ export class WorldService {
   private pick(m: Extract<WorldUp, { t: 'join' }>): Lobby | null {
     if (typeof m.code === 'string' && m.code) {
       const r = this.rooms.get(m.code.toUpperCase());
-      return r && r.members.size < ROOM_MAX ? r : null;
+      return r && r.members.size < (r.quick ? ROOM_MAX : r.set.max) ? r : null;
     }
     if (m.host === true) return this.make(false);
     // The fullest quick room still waiting for its start; or a new one.
@@ -302,8 +320,8 @@ export class WorldService {
       for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
     } while (this.rooms.has(code));
     const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
-    const set: Settings = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs };
-    const room: Lobby = { code, quick, owner: 0, members: new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: new Map(), set };
+    const set: Settings = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: ROOM_MAX, door: 'open' };
+    const room: Lobby = { pass: '', code, quick, owner: 0, members: new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: new Map(), set };
     this.rooms.set(code, room);
     return room;
   }
@@ -391,6 +409,7 @@ export class WorldService {
         t: 'room', code: room.code, quick: room.quick, you: p.id, owner: room.owner, members, playing: !!room.host,
         ...(room.startsAt !== null ? { startsIn: Math.max(0, room.startsAt - now) } : {}),
         set: room.set,
+        ...(p.id === room.owner && room.set.door === 'pass' ? { pass: room.pass } : {}),
       });
     }
   }

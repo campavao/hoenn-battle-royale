@@ -7,11 +7,13 @@ import type { Bag, RoomState } from './room';
 export type WorldUp =
   /** In: who I am, and which room -- a code, a new one of my own (`host`), or, with
    *  neither, quick play. Answered by `room` (or `no_room`, `full`). */
-  | { t: 'join'; name: string; skin: number; code?: string; host?: boolean; again?: Again }
+  | { t: 'join'; name: string; skin: number; code?: string; host?: boolean; again?: Again; pass?: string }
   /** START (the room's host): the match begins for everybody in the room. */
   | { t: 'start' }
   /** The host's settings for the room's next match (the live room's options). */
-  | { t: 'set'; set: Partial<Settings> }
+  | { t: 'set'; set: Partial<Settings> & { pass?: string } }
+  /** The host takes a trainer out of the room, before its match. */
+  | { t: 'kick'; id: number }
   /** LOBBIES: the rooms somebody hosted, answered by `rooms` (before a join, or in one). */
   | { t: 'list' }
   /** My keys for frames `s`, `s`+1, ... (numbered from 1, never reset). */
@@ -61,21 +63,29 @@ export interface Member { id: number; name: string; skin: number }
 
 /** What the host sets for a match (the live room's options): bots in it or none, how
  *  long a ring phase lasts (FOG), and the Safari it opens with (0: none). */
-export interface Settings { bots: boolean; fogSecs: number; safariSecs: number }
+export interface Settings {
+  bots: boolean; fogSecs: number; safariSecs: number;
+  /** Trainers the room lets in (match/room.ts MAX_STEPS). */
+  max: number;
+  /** On LOBBIES (open), off it (private), or on it behind a passcode (pass). */
+  door: 'open' | 'private' | 'pass';
+}
 
 /** A room on LOBBIES' list. */
-export interface Listed { code: string; host: string; skin: number; players: number; seats: number; playing: boolean }
+export interface Listed { code: string; host: string; skin: number; players: number; seats: number; playing: boolean; pass: boolean }
 
 /** Relay to phone. */
 export type WorldDown =
   /** The room as it is now, whenever anything in it changes: its code, who is in it, who
    *  has START (`owner`), whether a match is on, and a quick room's count to its start. */
-  | { t: 'room'; code: string; quick: boolean; you: number; owner: number; members: Member[]; playing: boolean; startsIn?: number; set: Settings }
+  | { t: 'room'; code: string; quick: boolean; you: number; owner: number; members: Member[]; playing: boolean; startsIn?: number; set: Settings; pass?: string }
   /** The hosted rooms (LOBBIES): whose, how many in it of ROOM_MAX, and whether its
    *  match is on (joining one under way watches it until the next). */
   | { t: 'rooms'; rooms: Listed[] }
-  /** No room by that code (or it is full). */
-  | { t: 'no_room'; code: string }
+  /** The host took me out of the room: back to the menu, the socket still open. */
+  | { t: 'kicked' }
+  /** No room by that code (or it is full, or its passcode was wrong: `pass`). */
+  | { t: 'no_room'; code: string; pass?: boolean }
   /** A match: my trainer's id in it and the Room as it starts (or as it is, joining late). */
   | { t: 'hello'; id: number; state: RoomState; key?: string }
   | { t: 'state'; state: RoomState }
