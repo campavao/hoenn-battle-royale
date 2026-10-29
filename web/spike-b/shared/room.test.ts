@@ -266,6 +266,18 @@ describe('trainer against trainer', () => {
     expect(at(5)).toBe(2); // five
   });
 
+  it('a fight that never got going, or was fled, keeps that pair apart ten seconds', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 3, bot: false, name: 'A', skin: 0, spot: { map: L, x: 9, y: 12 }, facing: 4 });
+    room.apply({ c: 'join', id: 5, bot: false, name: 'B', skin: 1, spot: { map: L, x: 11, y: 12 }, facing: 3 });
+    for (let i = 0; i < 300; i++) room.step(new Map());
+    expect(room.actor(3)!.battling).toBe(true);
+    room.apply({ c: 'end', id: 3, fled: true });
+    room.apply({ c: 'end', id: 5 });
+    for (let i = 0; i < 599; i++) expect(room.step(new Map())).toEqual([]);
+    expect(room.step(new Map())).toHaveLength(2);
+  });
+
   it('a trainer whose foe left is still in the fight until their page ends it', () => {
     const room = makeRoom(MAPS, PATCHES, 99);
     room.apply({ c: 'join', id: 3, bot: false, name: 'A', skin: 0, spot: { map: L, x: 9, y: 12 }, facing: 4 });

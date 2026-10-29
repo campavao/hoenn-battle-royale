@@ -58,6 +58,10 @@ export interface Actor {
   foe: number;
   /** No engage before this frame: the grace after a fight (BR_ENGAGE_GRACE). */
   calm: number;
+  /** The trainer this one fled (or could not fight), and until when they keep apart
+   *  (br_engage.c's fledFrom, BR_ENGAGE_LOCKOUT). */
+  shun: number;
+  shunUntil: number;
   /** A step finished whose arrival has not been looked at yet (the spots). */
   arriving: boolean;
 }
@@ -84,6 +88,8 @@ export const emptyBag = (b: Bag): boolean => !b.items.length && !b.money && !b.m
 
 /** BR_ENGAGE_GRACE: after a fight, two seconds before the next engage. */
 const GRACE = 120;
+/** BR_ENGAGE_LOCKOUT: a pair whose fight never got going, or was fled, keeps apart 10 s. */
+const LOCKOUT = 600;
 /** Everybody starts by the truck: five seconds to walk off before an engage. */
 const JOIN_GRACE = 300;
 const BACK: Record<number, number> = { 1: 2, 2: 1, 3: 4, 4: 3 };
@@ -102,7 +108,9 @@ export const GROUND_PER_MAP = 6;
 export type Command =
   | { c: 'join'; id: number; bot: boolean; name: string; skin: number; spot: Spot; facing: number }
   | { c: 'leave'; id: number }
-  | { c: 'end'; id: number }
+  /** `fled`: the fight never got going or was run from (a link that never answered,
+   *  a forfeit): that pair keeps apart a while (BrEngage_NoAnswer). */
+  | { c: 'end'; id: number; fled?: boolean }
   /** The ball `key` would not go in `id`'s bag: it lies where it was (POK-294, nothing
    *  leaves the match). A bag goes back down holding `rest`, what did not fit. */
   | { c: 'drop'; id: number; key: number; rest?: Bag }
@@ -185,7 +193,7 @@ export class Room {
   apply(cmd: Command): void {
     if (cmd.c === 'join') {
       if (this.actor(cmd.id)) return;
-      const a: Actor = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: this.tick + JOIN_GRACE, arriving: false };
+      const a: Actor = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: this.tick + JOIN_GRACE, shun: 0, shunUntil: 0, arriving: false };
       // Ordered by id, on every machine: who moves first decides who gets a contested cell.
       this.actors.push(a);
       this.actors.sort((p, q) => p.id - q.id);
@@ -213,6 +221,7 @@ export class Room {
       a.battling = false;
       a.keys = a.last = 0;
       a.calm = this.tick + GRACE;
+      if (cmd.fled && a.foe) { a.shun = a.foe; a.shunUntil = this.tick + LOCKOUT; }
       const foe = a.foe ? this.actor(a.foe) : undefined;
       if (foe?.bot) foe.battling = false;
       a.foe = 0;
@@ -384,6 +393,7 @@ export class Room {
       for (let j = i + 1; j < free.length; j++) {
         const b = free[j];
         if (b.battling || a.m.spot.map !== b.m.spot.map) continue;
+        if ((a.shun === b.id && this.tick < a.shunUntil) || (b.shun === a.id && this.tick < b.shunUntil)) continue;
         const look = (o: Actor) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing as Facing });
         if (!eitherSees(this.world, look(a), look(b))) continue;
         const dx = b.m.spot.x - a.m.spot.x, dy = b.m.spot.y - a.m.spot.y;
@@ -488,7 +498,7 @@ export class Room {
       mix(m.facing); mix(m.moveDir); mix(m.runningState); mix(m.run ? 1 : 0); mix(m.strides);
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
-      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0)); mix(a.foe); mix(a.calm); mix(a.keys); mix(a.last);
+      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last);
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
     for (const [k, by] of this.picked) { mix(k); mix(by); }

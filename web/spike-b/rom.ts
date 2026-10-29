@@ -237,6 +237,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
    *  never before, so the hidden field never shows through. */
   let broken = false;
   let fighting = false;
+  // The trainer a duel is with left before its turn on the ROM came.
+  let foeLeft = false;
   let carried: ReturnType<typeof kept> | null = null;
   // The bag as it last stood, a lost battle's included: what a trainer who is out leaves
   // is what they had at the end, not the bag a loss puts the team back to (as BrMatch_Out
@@ -373,17 +375,22 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
             send({ t: 'place', v: PROTOCOL, seat: FOE_SEAT, map: { group: emu.read(s1 + 4, 8), num: emu.read(s1 + 5, 8) },
               x: emu.read(self + 0x10, 16) + dx, y: emu.read(self + 0x12, 16) + dy, f: back, st: 'alive', sprite: String(skin) });
             send(first ? { t: 'challenge', seat: ME, opponent: FOE_SEAT, nonce: 0 } : { t: 'challenge', seat: FOE_SEAT, opponent: ME, nonce: 0 });
+            if (foeLeft) send({ t: 'out', seat: FOE_SEAT });
           }, () => emu.read(netAt, 8) === 1,
           () => emu.read(netAt, 8) === 0 && ((emu.read(mainAt + 4, 32) & ~1) >>> 0) === overworldCb, onStart,
           () => ({ outcome: emu.read(netAt + 11, 8), species: 0, level: 0 }));
         } finally {
           watch();
           link.listen(null);
+          foeLeft = false;
         }
       });
     },
     foeOut() {
+      // Before the duel's turn on the ROM has come (it waits behind whatever was going
+      // in), it is said as the fight starts.
       if (fighting && !broken) send({ t: 'out', seat: FOE_SEAT });
+      else foeLeft = true;
     },
     fogNow() {
       if (fighting && !broken && emu.read(ringAt, 8) === 0) emu.bytes(ringAt, 10).set(FOGGED);

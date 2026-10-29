@@ -1161,6 +1161,7 @@ function keysOf(bits) {
 }
 var emptyBag = (b) => !b.items.length && !b.money && !b.mons?.length;
 var GRACE = 120;
+var LOCKOUT = 600;
 var JOIN_GRACE = 300;
 var BACK = { 1: 2, 2: 1, 3: 4, 4: 3 };
 var SPILL_KEY = 1 << 20;
@@ -1210,7 +1211,7 @@ var Room = class {
   apply(cmd) {
     if (cmd.c === "join") {
       if (this.actor(cmd.id)) return;
-      const a = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: this.tick + JOIN_GRACE, arriving: false };
+      const a = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: this.tick + JOIN_GRACE, shun: 0, shunUntil: 0, arriving: false };
       this.actors.push(a);
       this.actors.sort((p, q) => p.id - q.id);
     } else if (cmd.c === "drop") {
@@ -1233,6 +1234,10 @@ var Room = class {
       a.battling = false;
       a.keys = a.last = 0;
       a.calm = this.tick + GRACE;
+      if (cmd.fled && a.foe) {
+        a.shun = a.foe;
+        a.shunUntil = this.tick + LOCKOUT;
+      }
       const foe = a.foe ? this.actor(a.foe) : void 0;
       if (foe?.bot) foe.battling = false;
       a.foe = 0;
@@ -1393,6 +1398,7 @@ var Room = class {
       for (let j = i + 1; j < free.length; j++) {
         const b = free[j];
         if (b.battling || a.m.spot.map !== b.m.spot.map) continue;
+        if (a.shun === b.id && this.tick < a.shunUntil || b.shun === a.id && this.tick < b.shunUntil) continue;
         const look = (o) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing });
         if (!eitherSees(this.world, look(a), look(b))) continue;
         const dx = b.m.spot.x - a.m.spot.x, dy = b.m.spot.y - a.m.spot.y;
@@ -1515,6 +1521,8 @@ var Room = class {
       mix2((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0));
       mix2(a.foe);
       mix2(a.calm);
+      mix2(a.shun);
+      mix2(a.shunUntil);
       mix2(a.keys);
       mix2(a.last);
     }
@@ -1690,8 +1698,8 @@ var Host = class {
     }
   }
   /** The phone's battle is over: its trainer (and the bot) walk again. */
-  end(id) {
-    if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: "end", id });
+  end(id, fled = false) {
+    if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: "end", id, ...fled ? { fled: true } : {} });
   }
   /** The ball `key` would not go in the phone's bag: back on the ground. A bag goes back
    *  with what did not fit, never more than it held. */
@@ -1767,7 +1775,7 @@ var FRAME_MS = 1e3 / 60;
 var IDLE_MS = 6e4;
 var QUIET_MS = 12e4;
 var SYNC_MS = 1e3;
-var BT_MAX = 1024;
+var BT_MAX = 256;
 var WorldService = class {
   constructor(opts) {
     this.opts = opts;
@@ -1818,7 +1826,7 @@ var WorldService = class {
           if (!Number.isInteger(m.s) || m.s < 1 || !Array.isArray(m.k) || m.k.length > 120) return;
           this.host.input(id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
         } else if (m.t === "end") {
-          this.host.end(id);
+          this.host.end(id, m.fled === true);
         } else if (m.t === "out") {
           this.host.out(id, cleanBag(m.bag) ?? void 0);
         } else if (m.t === "drop") {

@@ -30,8 +30,8 @@ const IDLE_MS = 60_000;
 const QUIET_MS = 120_000;
 /** The whole room, at most this often a phone (it is ~20 KB against a 13 B ask). */
 const SYNC_MS = 1000;
-/** A link block's bytes, at most (a battle's biggest is the party exchange's ~600). */
-const BT_MAX = 1024;
+/** A link block's bytes, at most: Emerald's BLOCK_BUFFER_SIZE (link.h). */
+const BT_MAX = 256;
 
 export class WorldService {
   private host: Host | null = null;
@@ -71,7 +71,7 @@ export class WorldService {
           if (!Number.isInteger(m.s) || m.s < 1 || !Array.isArray(m.k) || m.k.length > 120) return;
           this.host.input(id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
         } else if (m.t === 'end') {
-          this.host.end(id);
+          this.host.end(id, m.fled === true);
         } else if (m.t === 'out') {
           this.host.out(id, cleanBag(m.bag) ?? undefined);
         } else if (m.t === 'drop') {

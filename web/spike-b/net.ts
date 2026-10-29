@@ -27,8 +27,8 @@ export interface WorldLink {
   frame(bits: number): RoomEvent[];
   /** My trainer as it is drawn (none for the frame before the room has me). */
   mine(): Actor | undefined;
-  /** My battle is over. */
-  end(): void;
+  /** My battle is over (`fled`: it never got going, or was run from). */
+  end(fled?: boolean): void;
   /** The ball `key` would not go in my bag: put it back. */
   drop(key: number, rest?: Bag): void;
   /** My team is down: off the map. */
@@ -57,7 +57,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
       return host.advance().events.filter((e) => e.id === me);
     },
     mine: () => host.room.actor(me),
-    end: () => host.end(me),
+    end: (fled) => host.end(me, fled),
     drop: (key, rest) => host.drop(me, key, rest),
     out: (bag) => host.out(me, bag),
     bt: () => undefined,
@@ -181,7 +181,7 @@ class Online implements WorldLink {
     return (this.predicted = a);
   }
 
-  end(): void { this.send({ t: 'end' }); }
+  end(fled = false): void { this.send(fled ? { t: 'end', fled } : { t: 'end' }); }
 
   drop(key: number, rest?: Bag): void { this.send({ t: 'drop', k: key, rest }); }
 

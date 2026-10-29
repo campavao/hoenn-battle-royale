@@ -183,7 +183,7 @@ const battleNote = document.getElementById('battle-note')!;
 const gbaCanvas = document.getElementById('gba') as HTMLCanvasElement;
 let rom: RomBattles | null = null;
 let artMs = 0;
-let battle: { foe: Actor | null; shownAt: number; foeGone?: boolean } | null = null;
+let battle: { foe: Actor | null; shownAt: number; foeGone?: boolean; heardAt?: number } | null = null;
 /** The ROM has the screen for a dropped bag's team (rom.team). */
 let swapping = false;
 let calmUntil = 0;
@@ -362,11 +362,12 @@ function startFor(e: RoomEvent): void {
     const fog = inFogNow();
     // Their blocks can come before our ROM is free to take them: held from now.
     const early: [number, number[]][] = [];
-    link.onBt = (q, d) => early.push([q, d]);
+    const heard = () => { if (battle) battle.heardAt = performance.now(); };
+    link.onBt = (q, d) => { heard(); early.push([q, d]); };
     const wire: DuelLink = {
       send: (q, d) => link.bt(q, d),
       listen: (take) => {
-        link.onBt = take;
+        link.onBt = take && ((q, d) => { heard(); take(q, d); });
         if (take) for (const [q, d] of early.splice(0)) take(q, d);
       },
     };
@@ -383,7 +384,10 @@ let lastResult = '';
 
 function endBattle(r: Fought | null): void {
   battleEl.classList.remove('on');
-  link.end();
+  // A fight with a trainer that never got going, or was run from (a forfeit): we keep
+  // apart a while, as the match's fleer does, or the two would engage again at once.
+  const duel = !!battle?.foe && !battle.foe.bot;
+  link.end(duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f)));
   const wild = battle && !battle.foe;
   battle = null;
   held.clear();
@@ -396,11 +400,18 @@ function endBattle(r: Fought | null): void {
   if (r?.ok && (r.outcome === 2 || r.outcome === 3)) goOut(r.outcome === 2 ? 'Your team lost the battle.' : 'Your team went down with theirs.');
 }
 
-/** The trainer I am fighting left the room (closed the tab, or went out elsewhere): the
- *  fight is mine, as in a match (BrNetlink_PeerOut). */
+/** How long a trainer the room says is no longer fighting me may go quiet before the
+ *  fight is mine: their page lost the battle engine, or ended it some other way. */
+const FOE_QUIET_MS = 10_000;
+
+/** The trainer I am fighting left the room (closed the tab, or went out elsewhere), or
+ *  stopped fighting me and went quiet: the fight is mine, as in a match (BrNetlink_PeerOut). */
 function foeFrame(): void {
   const foe = battle?.foe;
-  if (!foe || foe.bot || battle!.foeGone || link.room.actor(foe.id)) return;
+  if (!foe || foe.bot || battle!.foeGone) return;
+  const now = link.room.actor(foe.id);
+  const quiet = performance.now() - (battle!.heardAt ?? battle!.shownAt) > FOE_QUIET_MS;
+  if (now && ((now.battling && now.foe === link.me) || !quiet)) return;
   battle!.foeGone = true;
   rom?.foeOut();
 }
@@ -614,8 +625,9 @@ function frameOf(a: Actor): number {
     const late = act.t / act.len >= (run ? 5 / 8 : 1 / 2) ? 1 : 0;
     return (run ? RUN : GO)[a.m.facing][(a.m.strides & 1) * 2 + late];
   }
-  // A bump or a turn walks in place: the whole anim over the action (sAnim_GoSouth's 32
-  // frames into a wall, sAnim_GoFasterSouth's 8 to turn).
+  // A turn is a walk in place, one foot like a step: sAnim_GoFastSouth's 4+4. A bump into
+  // a wall plays the whole of sAnim_GoSouth over its 32 frames.
+  if (act?.kind === 'turn') return GO[a.m.facing][(a.m.strides & 1) * 2 + (act.t / act.len >= 1 / 2 ? 1 : 0)];
   if (act && act.kind !== 'hop') return GO[a.m.facing][Math.min(3, Math.floor((act.t / act.len) * 4))];
   return FACE[a.m.facing];
 }
