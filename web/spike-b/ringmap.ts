@@ -131,6 +131,12 @@ export class RingMap {
     return m ? this.sections.get(m.id)!.letters : [];
   }
 
+  /** Map `id`'s place, as the page says it: '' for one it has not got. */
+  placeOf(id: string): string {
+    const s = this.sections.get(id);
+    return s ? text(s.letters) : '';
+  }
+
   /** The place, as the page says it: '' for none. */
   place(ring = this.room.ring()): string {
     return text(this.placeLetters(ring));

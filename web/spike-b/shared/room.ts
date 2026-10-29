@@ -27,6 +27,8 @@
 // ROM's are; A at one takes it, for that trainer and off everybody's map.
 
 import { clerkAt, type Clerk } from './marts';
+import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, draw, eventForRing } from '../../src/match/events';
+import { rungForPhase } from '../../src/bots/party';
 import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
 import { scatterItem } from '../../src/match/scatter';
@@ -92,6 +94,8 @@ export type RoomEvent =
   | { type: 'bag'; tick: number; id: number; key: number; bag: Bag; name: string }
   /** A at a CENTER's nurse, from the counter. */
   | { type: 'nurse'; tick: number; id: number; map: string }
+  /** A at an event's legendary: its battle (the room took it off the ground). */
+  | { type: 'legend'; tick: number; id: number; key: number; species: number; level: number }
   /** A at a MART's clerk. */
   | { type: 'mart'; tick: number; id: number; map: string }
   /** Two bots saw each other: `id`'s page fights `a` against `b` in a hidden ROM and
@@ -103,7 +107,16 @@ export type RoomEvent =
 export type Bag = BagRows;
 
 /** A trainer's bag where they fell (POK-232). Its key is SPILL_KEY + their id. */
-export interface Spill { key: number; map: string; x: number; y: number; name: string; bag: Bag }
+/** `legend`: an event's legendary, its one mon in the bag: A on it is its battle. */
+export interface Spill { key: number; map: string; x: number; y: number; name: string; bag: Bag; legend?: boolean }
+
+/** An event this round (events.ts, DESIGN §Events): its number, where its legendary
+ *  stands (its key), and which one. */
+export interface EventMark { n: number; key: number; map: string; x: number; y: number; species: number }
+
+/** Event pieces' keys: clear of the dealt balls' and the trainers' (SPILL_KEY + id). */
+export const EVENT_SPILL = 2 << 20;
+export const eventPiece = (n: number, i: number): number => EVENT_SPILL | (n << 4) | i;
 
 /** Nothing in it: no items, no money, nobody. */
 export const emptyBag = (b: Bag): boolean => !b.items.length && !b.money && !b.mons?.length;
@@ -177,6 +190,7 @@ export interface RoomState {
   epoch?: number;
   /** No bot-vs-bot fight starts before this frame (BOT_DUEL_GAP). */
   duelAfter?: number;
+  events?: EventMark[];
 }
 
 /** A trainer in the world but not on the map: out this round, or come in after the fog
@@ -227,6 +241,8 @@ export class Room {
   bench: Benched[] = [];
   results: Results = { round: 0, entrants: [], fallen: [], winner: 0 };
   duelAfter = 0;
+  /** This round's events, in the order they dropped. */
+  events: EventMark[] = [];
   private readonly base: StepFn;
   /** The StepFn for each FIELD_* combination a team has. */
   private readonly fields: StepFn[] = [];
@@ -248,7 +264,7 @@ export class Room {
   }
 
   state(): RoomState {
-    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...(this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}), ...(this.epoch ? { epoch: this.epoch } : {}), ...(this.duelAfter ? { duelAfter: this.duelAfter } : {}) };
+    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...(this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}), ...(this.epoch ? { epoch: this.epoch } : {}), ...(this.duelAfter ? { duelAfter: this.duelAfter } : {}), ...(this.events.length ? { events: structuredClone(this.events) } : {}) };
   }
 
   load(s: RoomState): void {
@@ -256,6 +272,7 @@ export class Room {
     this.ringPhase = s.ringPhase ?? RING_PHASE;
     this.epoch = s.epoch ?? 0;
     this.duelAfter = s.duelAfter ?? 0;
+    this.events = structuredClone(s.events ?? []);
     this.actors = structuredClone(s.actors);
     this.taken = new Map(s.taken);
     this.picked = new Map(s.picked ?? []);
@@ -309,6 +326,8 @@ export class Room {
       if (foe?.bot) foe.battling = false;
       // Bots whose fight their page was running: no answer is coming, they walk on.
       for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
+      // A legendary they were fighting stands again (Cam: they go back for retries).
+      for (const [key, by] of this.picked) if (by === cmd.id && this.spills.get(key)?.legend) this.picked.delete(key);
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
       if (cmd.c === 'leave') this.bench = this.bench.filter((b) => b.id !== cmd.id);
       if (!a || a.bot) return;
@@ -492,6 +511,8 @@ export class Room {
     else if (ring.phase !== was.phase) {
       // The fog closes for the first time: who is on the map is the match.
       if (ring.phase === 1 && !r.entrants.length) r.entrants = this.actors.map((a) => [a.id, a.name]);
+      const n = eventForRing(ring.phase);
+      if (n !== undefined) this.dropEvent(n, ring);
       // Bots do not bleed here: one the ring closes on is out (in a match the fog takes
       // them over a few bites; here, at once).
       for (const a of this.actors) {
@@ -516,6 +537,42 @@ export class Room {
     for (const a of this.actors) if (a.judge && this.tick - (a.since ?? 0) > BOT_DUEL_MAX) this.part(a);
     this.engageBots(events);
     return events;
+  }
+
+  /** Event `n` (every other ring from the first shrink, DESIGN §Events): its legendary,
+   *  two rares at the phase's rung, three gold balls and a bag of supplies, on the free
+   *  cells nearest a spot inside the ring -- the last one at the ring's centre, the one
+   *  place its final ring still holds. Whoever gets there takes it. */
+  private dropEvent(n: number, ring: Ring): void {
+    let state = (this.seed ^ Math.imul(ring.round + 1, 0x9e3779b1) ^ Math.imul(n + 1, 0x85ebca6b)) >>> 0 || 1;
+    const rng = () => { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return (state >>> 0) / 4294967296; };
+    const free = (s: Spot) => this.world.cell(s.map, s.x, s.y) === 0 && !this.world.warpAt(s.map, s.x, s.y)
+      && !this.groundAt(s.map, s.x, s.y) && !this.spillAt(s.map, s.x, s.y)
+      && !this.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y);
+    const all = this.reachable().filter(free);
+    const plane = (s: Spot) => { const p = this.places.get(s.map)!; return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy); };
+    let from: Spot | undefined;
+    if (n === EVENT_MAX - 1) for (const s of all) { if (!from || plane(s) < plane(from)) from = s; }
+    else {
+      const inside = all.filter((s) => !this.inFog(s, ring));
+      from = inside[Math.min(inside.length - 1, Math.floor(rng() * inside.length))];
+    }
+    if (!from) return;
+    const f = from;
+    const d = (s: Spot) => Math.abs(s.x - f.x) + Math.abs(s.y - f.y);
+    // Within eight, never on the legendary's four sides (events.ts's clusterCells).
+    const cells = all.filter((s) => s.map === f.map && d(s) <= 8 && d(s) !== 1)
+      .sort((p, q) => d(p) - d(q) || p.y - q.y || p.x - q.x).slice(0, 1 + EVENT_RARES + EVENT_GOLD + 1);
+    const level = rungForPhase(ring.phase + 1);
+    const legends = LEGENDS[Math.min(n, LEGENDS.length - 1)];
+    const species = [legends[Math.min(legends.length - 1, Math.floor(rng() * legends.length))], ...draw(rng, RARES, EVENT_RARES)];
+    const bags = [...draw(rng, GOLD, EVENT_GOLD).map((id) => [{ id, n: 1 }]), SUPPLIES.map((r) => ({ ...r }))];
+    cells.forEach((c, i) => {
+      const key = eventPiece(n, i);
+      const bag: Bag = i < species.length ? { items: [], money: 0, mons: [{ species: species[i], level }] } : { items: bags[i - species.length], money: 0 };
+      this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: '', bag, ...(i === 0 ? { legend: true } : {}) });
+    });
+    this.events.push({ n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0] });
   }
 
   /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
@@ -604,6 +661,7 @@ export class Room {
     this.actors.sort((p, q) => p.id - q.id);
     for (const a of this.actors) if (a.bot) { a.beaten = false; if (a.judge) this.part(a); }
     this.duelAfter = 0;
+    this.events = [];
     this.taken.clear();
     this.picked.clear();
     this.spills.clear();
@@ -699,6 +757,11 @@ export class Room {
         if (g) {
           this.picked.set(g.key, a.id);
           events.push({ type: 'item', tick: this.tick, id: a.id, key: g.key, item: g.item });
+        } else if (b?.legend) {
+          const mon = b.bag.mons![0];
+          this.picked.set(b.key, a.id);
+          a.battling = true;
+          events.push({ type: 'legend', tick: this.tick, id: a.id, key: b.key, species: mon.species, level: mon.level });
         } else if (b) {
           this.picked.set(b.key, a.id);
           events.push({ type: 'bag', tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name });
@@ -773,6 +836,7 @@ export class Room {
     for (const b of this.bench) { mix(b.id); mix(b.skin); str(b.name); }
     const r = this.results;
     mix(r.round); mix(r.winner); mix(r.wonAt ?? 0); mix(this.epoch); mix(this.duelAfter);
+    for (const e of this.events) { mix(e.key); mix(e.x); mix(e.y); mix(e.species); }
     for (const [id] of r.entrants) mix(id);
     for (const f of r.fallen) { mix(f.id); str(f.by); mix((f.wild ? 1 : 0) | (f.left ? 2 : 0)); }
     for (const b of this.spills.values()) {

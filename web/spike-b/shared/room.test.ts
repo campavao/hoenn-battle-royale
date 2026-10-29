@@ -9,7 +9,7 @@ import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
 import { over } from './over';
 import { cleanBag, isTm, within } from './items';
-import { AFTER_WIN, FIELD_SURF, GROUND_PER_MAP, RING_PHASE, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, makeRoom } from './room';
+import { AFTER_WIN, FIELD_SURF, GROUND_PER_MAP, RING_PHASE, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, eventPiece, makeRoom } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -682,6 +682,43 @@ describe('doors', () => {
     expect(room.actor(1)!.m.spot).toEqual({ map: 'MAP_LITTLEROOT_TOWN', x: 7, y: 17 });
     room.apply({ c: 'join', id: 2, bot: true, name: 'BOT', skin: 4, spot: { map: O, x: 6, y: 17 }, facing: 2 });
     expect(room.stepFor(room.actor(2)!)({ map: O, x: 6, y: 17 }, 2)).toBeNull();
+  });
+});
+
+describe('events', () => {
+  it('every other ring from the first shrink drops a legendary, two rares, three gold balls and supplies; A on the legendary is its battle', () => {
+    const room = makeRoom(MAPS, PATCHES, 5);
+    room.ringPhase = 60;
+    room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 }, facing: 1 });
+    for (let i = 0; i < 60; i++) room.step(new Map());
+    expect(room.events).toHaveLength(1);
+    const e = room.events[0];
+    expect([401, 402, 403]).toContain(e.species);
+    const pieces = [...room.spills.values()].filter((b) => b.key >= eventPiece(0, 0) && b.key < eventPiece(1, 0));
+    expect(pieces).toHaveLength(7);
+    expect(pieces[0]).toMatchObject({ legend: true, map: e.map, x: e.x, y: e.y, bag: { mons: [{ species: e.species, level: 15 }] } });
+    expect(pieces.slice(3, 6).every((b) => b.bag.items.length === 1)).toBe(true);
+    expect(room.inFog({ map: e.map, x: e.x, y: e.y })).toBe(false);
+    // Phase 2 drops none; phase 3 the second, a LATI.
+    for (let i = 0; i < 120; i++) room.step(new Map());
+    expect(room.events.map((v) => v.n)).toEqual([0, 1]);
+    expect([407, 408]).toContain(room.events[1].species);
+    // A at it: its battle, and it is off the ground until it goes back.
+    const me = room.actor(2)!;
+    me.calm = 1e9;
+    me.m = { ...me.m, spot: { map: e.map, x: e.x, y: e.y + 1 }, prev: { map: e.map, x: e.x, y: e.y + 1 }, facing: 2, moveDir: 2, action: null };
+    expect(room.step(new Map([[2, [KEY_A]]]))).toMatchObject([{ type: 'legend', id: 2, key: e.key, species: e.species }]);
+    expect(room.spillAt(e.map, e.x, e.y)).toBeUndefined();
+    room.apply({ c: 'drop', id: 2, key: e.key });
+    expect(room.spillAt(e.map, e.x, e.y)?.legend).toBe(true);
+    room.apply({ c: 'end', id: 2 });
+    // Taken again, and the trainer leaves mid-battle: back on the ground.
+    for (let i = 0; i < 3; i++) room.step(new Map());
+    me.calm = 1e9;
+    room.step(new Map([[2, [0]]]));
+    expect(room.step(new Map([[2, [KEY_A]]]))).toMatchObject([{ type: 'legend' }]);
+    room.apply({ c: 'leave', id: 2 });
+    expect(room.spillAt(e.map, e.x, e.y)?.legend).toBe(true);
   });
 });
 

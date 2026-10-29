@@ -418,6 +418,18 @@ async function takeBag(key: number, bag: Bag, who: string): Promise<void> {
 function startFor(e: RoomEvent): void {
   if (e.type === 'nurse') { void nurse(); return; }
   if (e.type === 'mart') { void mart(e.map); return; }
+  if (e.type === 'legend') {
+    // Its own battle; caught, it is mine, and anything else puts it back where it stood
+    // for the next trainer (Cam: losing to one puts you out, and it goes back for retries).
+    if (swapping) rom?.leave();
+    asking?.done('');
+    const l = link, key = e.key, fog = inFogNow();
+    handOff(null, (r, onStart) => r.legend(e.species, e.level, onStart, fog).then((f) => {
+      if (!(f.ok && f.outcome === CAUGHT)) l.drop(key);
+      return f;
+    }, (err) => { l.drop(key); throw err; }));
+    return;
+  }
   if (e.type === 'bots') { void judgeBots(e.a, e.b); return; }
   if (e.type === 'item' || e.type === 'bag') {
     toGive.push(e.type === 'item' ? { key: e.key, item: e.item } : { key: e.key, bag: e.bag, name: e.name });
@@ -532,6 +544,7 @@ async function mart(map: string): Promise<void> {
   }
 }
 
+const CAUGHT = 7;
 const OUTCOME = ['', 'won', 'lost', 'drew', 'ran', 'teleported', 'it fled', 'caught it', 'out of balls', 'forfeited'];
 let lastResult = '';
 
@@ -580,6 +593,9 @@ const outEl = document.getElementById('out')!;
 let isOut = false;
 let fogTimer = 0;
 let lastPhase = -1;
+/** The room's events I have told of. */
+let toldEvents = 0;
+const LEGEND_NAMES: Record<number, string> = { 401: 'REGIROCK', 402: 'REGICE', 403: 'REGISTEEL', 404: 'KYOGRE', 405: 'GROUDON', 406: 'RAYQUAZA', 407: 'LATIAS', 408: 'LATIOS' };
 let wasInFog = false;
 /** br_ring.h: BR_FOG_TICK_FRAMES, a bite every four seconds. */
 const FOG_TICK = 240;
@@ -734,6 +750,7 @@ function startMatch(l: WorldLink): void {
   lobby?.hide();
   isOut = waiting = shownWin = false;
   seenRound = lastPhase = -1;
+  toldEvents = 0;
   wasInFog = false;
   toGive.length = 0;
   outEl.classList.remove('on');
@@ -766,6 +783,12 @@ function fogFrame(): void {
       else if (ring.last) say(`THE FOG COVERS ALL OF HOENN!${grew}`);
       else say(`The fog closes in on ${ringMap?.place(ring) || 'Hoenn'}!${grew}`);
     }
+    // An event dropped with the ring (DESIGN §Events): the ticker says what and where.
+    const evs = link.room.events;
+    if (toldEvents > evs.length) toldEvents = 0;
+    for (const e of evs.slice(toldEvents)) foundEl.textContent += ` A LEGENDARY ${LEGEND_NAMES[e.species] ?? 'POKéMON'} appeared ${ringMap?.placeOf(e.map) ? `at ${ringMap.placeOf(e.map)}` : 'nearby'}!`;
+    if (evs.length > toldEvents) { foundEl.classList.add('on'); foundUntil = performance.now() + 5000; }
+    toldEvents = evs.length;
     lastPhase = ring.phase;
   }
   rom?.setPhase(ring.phase + 1);
@@ -1110,7 +1133,24 @@ function drawGround(x0: number, y0: number, x1: number, y1: number): void {
     ctx.drawImage(img, x + (TILE - img.width) / 2, y + TILE - img.height);
   };
   for (const g of link.room.ground().values()) if (!link.room.picked.has(g.key)) put(ballArt, g.map, g.x, g.y);
-  for (const b of link.room.spills.values()) if (!link.room.picked.has(b.key)) put(bagArt, b.map, b.x, b.y);
+  for (const b of link.room.spills.values()) {
+    if (link.room.picked.has(b.key)) continue;
+    // An event's legendary stands as itself (br_legend.c's sLegends); a piece with one mon
+    // or one item in it is a ball (br_loot.c), anything more a bag.
+    const legend = b.legend && art ? legendArt(b.bag.mons![0].species) : null;
+    const one = (b.bag.mons?.length ?? 0) + b.bag.items.length === 1 && !b.bag.money;
+    put(legend ?? (one ? ballArt : bagArt), b.map, b.x, b.y);
+  }
+}
+
+const LEGEND_GFX: Record<number, number> = { 401: 200, 402: 201, 403: 202, 404: 197, 405: 198, 406: 41, 407: 187, 408: 188 };
+const legendArts = new Map<number, HTMLCanvasElement>();
+function legendArt(species: number): HTMLCanvasElement | null {
+  const gfx = LEGEND_GFX[species];
+  if (!gfx || !art) return null;
+  let img = legendArts.get(gfx);
+  if (!img) legendArts.set(gfx, (img = art.sprite(gfx, 1)));
+  return img;
 }
 
 /** The map at world pixel (x, y), or the nearest one to it: whose border fills the space

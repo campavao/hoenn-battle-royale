@@ -27,6 +27,8 @@ const ME = 0;
 const FOE_SEAT = 31;
 /** Whose a dropped bag is on the hidden ROM: a seat nobody here sits in. */
 const DROP_SEAT = 30;
+/** An event's first piece (web/src/match/events.ts's eventKey(0, 0)). */
+const LEGEND_KEY = 0xb000;
 /** global.h's ObjectEvent: 0x24 bytes, currentCoords at 0x10, facing in 0x18's low bits. */
 const OBJECT_EVENT_SIZE = 0x24;
 /** A facing (DIR_SOUTH..DIR_EAST) as a step. */
@@ -76,6 +78,10 @@ export interface RomBattles {
   /** The wild battle a marked spot on map (group, num) starts; `behavior` is the spot's
    *  metatile behaviour (water or land, and the backdrop). */
   wild(group: number, num: number, behavior: number, onStart: () => void, fog?: boolean): Promise<Fought>;
+  /** A legendary an event put down (br_legend.c): stood before the hidden trainer as its
+   *  own sprite, A on it, its cry, its legendary battle. The outcome says whether it was
+   *  caught (7); anything else and it goes back where it stood. */
+  legend(species: number, level: number, onStart: () => void, fog?: boolean): Promise<Fought>;
   /** A link battle with another trainer (br_netlink.c): this ROM's side of it, the blocks
    *  out through `link.send` and theirs in through `link.recv`. `first` is the side that
    *  challenged (link id 0). Resolves when the ROM is back on the field. */
@@ -227,6 +233,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   const romView = new DataView(rom.buffer, rom.byteOffset, rom.byteLength);
   const headerAt = sym('gMapHeader');
   const mainAt = sym('gMain');
+  const seatAt = sym('gBrMySeat');
   const overworldCb = sym('CB2_Overworld');
   const objectsAt = sym('gObjectEvents');
   const avatarAt = sym('gPlayerAvatar');
@@ -687,6 +694,30 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         carried = last = next;
         return took;
       });
+    },
+    legend(species, level, onStart, fog = false) {
+      let seen = false;
+      let stop: (() => void) | null = null;
+      const onField = () => ((emu.read(mainAt + 4, 32) & ~1) >>> 0) === overworldCb;
+      return inTurn(() => battle(fog, () => {
+        drain(() => undefined);
+        // Its piece where the hidden trainer faces, under an event's key (BR_EVENT_KEY_BASE),
+        // which is what makes it stand as itself (BrLegend_Gfx) and A on it a challenge.
+        const s1 = emu.read(save1, 32);
+        const self = objectsAt + emu.read(avatarAt + 5, 8) * OBJECT_EVENT_SIZE;
+        const [dx, dy] = STEP[emu.read(self + 0x18, 8) & 15] ?? [0, 1];
+        const x = emu.read(self + 0x10, 16) + dx, y = emu.read(self + 0x12, 16) + dy;
+        send({ t: 'spill', seat: DROP_SEAT, map: { group: emu.read(s1 + 4, 8), num: emu.read(s1 + 5, 8) }, mons: [{ key: LEGEND_KEY, x, y, species, level }] });
+        // Its cry asks the room for it (BR_LEGEND_CLAIM_KEY): this page has already had the
+        // room's yes, so the answer is ours at once. Then the battle, and back on the field.
+        stop = emu.onFrame(() => {
+          drain((m) => { if (m.t === 'pickup' && m.key === (LEGEND_KEY | 0x0800)) send({ t: 'pickup', seat: emu.read(seatAt, 8), key: LEGEND_KEY }); });
+          if (!onField()) seen = true;
+        });
+        void frames(emu, 3).then(async () => { emu.press('a'); await frames(emu, 4); emu.release('a'); });
+      }, () => emu.read(mainFunc, 32) !== 0, () => {
+        return seen && onField();
+      }, onStart, () => ({ outcome: emu.read(outcomeAt, 8), species, level }))).finally(() => stop?.());
     },
     wild(group, num, behavior, onStart, fog = false) {
       // br_wild.h: the map, then ASKED; FIGHTING once it is under way, DONE when it is over.
