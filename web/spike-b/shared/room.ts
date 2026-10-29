@@ -43,14 +43,14 @@ import { SIGHT_RANGE, eitherSees, type Facing } from '../../src/bots/sight';
 import { SAFARI_CELLS } from '../../src/match/safari';
 import { CLASS_WATER, DIR_NORTH, dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
 
-export const KEY_UP = 1, KEY_DOWN = 2, KEY_LEFT = 4, KEY_RIGHT = 8, KEY_B = 16, KEY_A = 32;
+export const KEY_UP = 1, KEY_DOWN = 2, KEY_LEFT = 4, KEY_RIGHT = 8, KEY_B = 16, KEY_A = 32, KEY_SELECT = 64;
 
 export function keysOf(bits: number): Keys {
-  return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A) };
+  return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A), select: !!(bits & KEY_SELECT) };
 }
 
 export function bitsOf(k: Keys): number {
-  return (k.up ? KEY_UP : 0) | (k.down ? KEY_DOWN : 0) | (k.left ? KEY_LEFT : 0) | (k.right ? KEY_RIGHT : 0) | (k.b ? KEY_B : 0) | (k.a ? KEY_A : 0);
+  return (k.up ? KEY_UP : 0) | (k.down ? KEY_DOWN : 0) | (k.left ? KEY_LEFT : 0) | (k.right ? KEY_RIGHT : 0) | (k.b ? KEY_B : 0) | (k.a ? KEY_A : 0) | (k.select ? KEY_SELECT : 0);
 }
 
 export interface Actor {
@@ -1351,7 +1351,7 @@ export class Room {
    *  standing there (a step's destination is the trainer's spot from its first frame, so
    *  two can't both walk into one cell). */
   stepFor(a: Actor): StepFn {
-    return (from, dir) => {
+    const fn: StepFn = (from, dir) => {
       // A bot can go anywhere a team could (Kanto's bots cross water): a wanderer keeps
       // to land and off ledges all the same (Room.move).
       const bits = a.bot ? 7 : a.field ?? 0;
@@ -1370,6 +1370,8 @@ export class Room {
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return null;
       return r;
     };
+    fn.cycling = !a.bot && !this.ring().safari ? this.base.cycling : undefined;
+    return fn;
   }
 
   /** A short fingerprint of the room: two machines that disagree find out within a second. */
@@ -1380,7 +1382,7 @@ export class Room {
     for (const a of this.actors) {
       const m = a.m;
       mix(a.id); str(m.spot.map); mix(m.spot.x); mix(m.spot.y); str(m.prev.map); mix(m.prev.x); mix(m.prev.y);
-      mix(m.facing); mix(m.moveDir); mix(m.runningState); mix(m.run ? 1 : 0); mix(m.strides);
+      mix(m.facing); mix(m.moveDir); mix(m.runningState); mix(m.run ? 1 : 0); mix(m.strides); mix(m.bike ? 1 + m.bikeSpeed * 4 + m.bikeCount * 16 : 0);
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
       mix((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.bleedAt ?? 0); mix(a.boss ?? 0); mix(a.away ? 1 : 0);

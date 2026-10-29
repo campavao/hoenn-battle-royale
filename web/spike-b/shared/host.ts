@@ -104,7 +104,7 @@ export class Host {
     const known = p.seq + p.queue.length;
     // Resent or overlapping: only the frames not seen yet.
     const skip = Math.max(0, known + 1 - first);
-    for (let i = skip; i < k.length; i++) p.queue.push(k[i] & 63);
+    for (let i = skip; i < k.length; i++) p.queue.push(k[i] & 127);
     while (p.queue.length > MAX_QUEUE) { p.queue.shift(); p.seq += 1; }
   }
 

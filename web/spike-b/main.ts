@@ -21,7 +21,7 @@ import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { DIR_EAST } from './sim';
-import { ATTENDANT, DOCKS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
+import { ATTENDANT, DOCKS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
@@ -72,6 +72,7 @@ const OBJ_EVENT_GFX_WOMAN_3 = 24;
 const OBJ_EVENT_GFX_MART_EMPLOYEE = 83;
 const OBJ_EVENT_GFX_GENTLEMAN = 48;
 const OBJ_EVENT_GFX_BRENDAN_SURFING = 2, OBJ_EVENT_GFX_MAY_SURFING = 92;
+const BIKE_GFX = [1, 90]; // OBJ_EVENT_GFX_BRENDAN_MACH_BIKE, _MAY_MACH_BIKE
 const OBJ_EVENT_GFX_CUTTABLE_TREE = 82, OBJ_EVENT_GFX_PUSHABLE_BOULDER = 87;
 // export-world.py's classes for them.
 const CLASS_WATER = 2, CLASS_CUT = 9, CLASS_BOULDER = 10;
@@ -221,7 +222,7 @@ const held = new Set<string>();
 const pressed = new Set<string>();
 const KEYMAP: Record<string, string> = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
-  w: 'up', s: 'down', a: 'left', d: 'right', x: 'b', X: 'b', z: 'a', Z: 'a', Shift: 'b', Enter: 'a', ' ': 'a',
+  w: 'up', s: 'down', a: 'left', d: 'right', x: 'b', X: 'b', z: 'a', Z: 'a', Shift: 'select', Enter: 'a', ' ': 'a',
 };
 // A long press is a held button, never a page's selection, callout or drag (HBR-98).
 const typing = (t: EventTarget | null) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
@@ -279,10 +280,14 @@ function actors(): Actor[] {
 /** My keys this frame, as the room takes them. Pressing A to talk and walking are the
  *  room's business (a bot you face, a marked spot you land on); the page only keeps a
  *  held A from the last battle's text out of the next one. */
+/** The dock's BIKE / WALK, a tap: SELECT held long enough for the step under way to end
+ *  and the bike to be got on or off (sim.ts reads it as the next action is chosen). */
+let selectUntil = 0;
 function myBits(): number {
   if (spectating || battle || swapping || romUp || asking || intro()) return 0;
   const bits = (held.has('up') ? KEY_UP : 0) | (held.has('down') ? KEY_DOWN : 0) | (held.has('left') ? KEY_LEFT : 0) |
-    (held.has('right') ? KEY_RIGHT : 0) | (held.has('b') ? KEY_B : 0) | (held.has('a') && frame >= calmUntil ? KEY_A : 0);
+    (held.has('right') ? KEY_RIGHT : 0) | (held.has('b') ? KEY_B : 0) | (held.has('a') && frame >= calmUntil ? KEY_A : 0) |
+    (held.has('select') || frame < selectUntil ? KEY_SELECT : 0);
   return bits;
 }
 
@@ -1469,7 +1474,7 @@ function wirePhoneHud(): void {
     onParty: () => void runMenu('1'),
     onMap: () => void runMenu('13'),
     onStart: () => void openMenu(),
-    onUse: () => undefined,
+    onUse: () => { selectUntil = frame + 40; },
   });
   document.getElementById('hud-menu')!.addEventListener('click', () => openSheet());
   const scale = () => {
@@ -1506,7 +1511,7 @@ function wirePhoneHud(): void {
       ring: ring.safari ? null : ring.last ? 'Fog everywhere' : ringMap?.place(ring) ?? '',
       fogEverywhere: !!ring.last,
       safe: way ? `Safe ${way}` : null,
-      ctx: { label: 'BIKE', item: ITEM_MACH_BIKE, enabled: false },
+      ctx: { label: me.m.bike ? 'WALK' : 'BIKE', item: ITEM_MACH_BIKE, enabled: me.m.bike || !!link.room.stepFor(me).cycling?.(me.m.spot) },
       party: rom?.partyCount() ?? 0,
       moves: [],
     });
@@ -1863,7 +1868,7 @@ function fogLine(): string {
 }
 
 // While the ROM has the screen, the pad is the ROM's.
-const GBA_KEY: Record<string, GbaKey> = { up: 'up', down: 'down', left: 'left', right: 'right', a: 'a', b: 'b', start: 'start' };
+const GBA_KEY: Record<string, GbaKey> = { up: 'up', down: 'down', left: 'left', right: 'right', a: 'a', b: 'b', start: 'start', select: 'select' };
 // Enter is A on the field and START on the ROM's own screens (the swap's MOVE).
 const romKey = (key: string): string | undefined => key === 'Enter' && (swapping || romUp) ? 'start' : KEYMAP[key];
 addEventListener('keydown', (e) => {
@@ -1877,7 +1882,7 @@ addEventListener('keyup', (e) => { const k = romKey(e.key); if (rom && k) rom.re
 // (hbr.padstick), else the standard layout: face bottom/left A, right/top B, START, the
 // D-pad, the stick and a DirectInput hat. Polled on a timer, as the Gamepad API has no
 // button events: a press is a change since the last poll, sent where a key would go.
-const PAD_DEFAULT: Record<number, string> = { 0: 'a', 1: 'b', 2: 'b', 3: 'a', 9: 'start', 12: 'up', 13: 'down', 14: 'left', 15: 'right' };
+const PAD_DEFAULT: Record<number, string> = { 0: 'a', 1: 'b', 2: 'b', 3: 'a', 8: 'select', 9: 'start', 12: 'up', 13: 'down', 14: 'left', 15: 'right' };
 const PAD_HAT: string[][] = [['up'], ['up', 'right'], ['right'], ['down', 'right'], ['down'], ['down', 'left'], ['left'], ['up', 'left']];
 function padMap(): Record<number, string> {
   try {
@@ -2120,7 +2125,7 @@ function pixelOf(a: Actor): { x: number; y: number; lift: number } {
  *  twice Emerald's cadence. */
 function frameOf(a: Actor): number {
   const act = a.m.action;
-  const run = a.m.run && act?.kind === 'step' && SHEETS[String(SKIN_GFX[a.skin])].frames >= 18;
+  const run = !a.m.bike && a.m.run && act?.kind === 'step' && SHEETS[String(SKIN_GFX[a.skin])].frames >= 18;
   if (act?.kind === 'step') {
     const late = act.t / act.len >= (run ? 5 / 8 : 1 / 2) ? 1 : 0;
     return (run ? RUN : GO)[a.m.facing][(a.m.strides & 1) * 2 + late];
@@ -2484,7 +2489,8 @@ function draw(): void {
   for (const { a, p } of people) {
     // On the water: sitting on the blob, bobbing (SURF's pose, FLDEFF_SURF_BLOB's bob).
     const surf = classAt(a.m.spot) === CLASS_WATER;
-    const gfx = surf ? (a.skin === 1 ? OBJ_EVENT_GFX_MAY_SURFING : OBJ_EVENT_GFX_BRENDAN_SURFING) : SKIN_GFX[a.skin];
+    // On the MACH BIKE: Brendan's and May's own; any other look rides on foot (br_skin.c).
+    const gfx = surf ? (a.skin === 1 ? OBJ_EVENT_GFX_MAY_SURFING : OBJ_EVENT_GFX_BRENDAN_SURFING) : a.m.bike && a.skin < 2 ? BIKE_GFX[a.skin] : SKIN_GFX[a.skin];
     const info = SHEETS[String(gfx)];
     const s = sheet(gfx);
     if (!s) continue;
