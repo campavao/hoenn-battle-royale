@@ -88,6 +88,11 @@ export function me(): { name: string; skin: number } {
   return { name: c.name || cleanName(old) || 'CAM', skin: c.skin ?? 0 };
 }
 
+/** The main menu's backdrop (ui/menubg.ts), its own chunk; black until it lands. */
+let menuBg: typeof import('../src/ui/menubg') | undefined;
+const PAN_MS = 50;
+const menuBgLoaded = import('../src/ui/menubg').then((m) => { menuBg = m; }, (err: unknown) => console.warn('the menu backdrop did not load', err));
+
 export class Lobby {
   readonly stage: Stage;
   private room: RoomInfo | null = null;
@@ -101,6 +106,7 @@ export class Lobby {
   constructor(private readonly hooks: LobbyHooks) {
     const $ = (id: string) => document.getElementById(id) as HTMLElement;
     this.stage = new Stage($('stage'), $('ui') as HTMLCanvasElement, $('ui-hits'), $('stage-fade'));
+    void menuBgLoaded.then(() => { if (this.stage.current === this.main) this.stage.redraw(); });
   }
 
   /** The main menu (with a line under it: a code nobody has, say). */
@@ -343,6 +349,7 @@ export class Lobby {
     redraw: () => { if (this.stage.current === this.howTo) this.stage.redraw(); },
   }));
 
+  private panPending = false;
   private readonly main: DrawnScreen = menuScreen(() => ({
     title: 'HOENN BATTLE ROYALE',
     // The ways in the world has: no LOBBIES list or daily game here yet.
@@ -353,6 +360,19 @@ export class Lobby {
       .map((r): RowSpec => ({ label: r.label, id: r.id, art: r.art, onPress: () => this.press(r.action), ...(r.id === HOWTO_ROW.id && !howToRead(localStorage) ? { badge: true } : {}) })),
     rowsId: 'lobby-rows',
     tiles: true,
+    // The live menu's backdrop (HBR-30, ui/menubg.ts): a slow, soft pan over Hoenn, drawn
+    // again every PAN_MS while the menu is up; still for somebody who asked for less motion.
+    backdrop: (c, h) => {
+      if (!menuBg) return;
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return menuBg.paintPan(c, 0, h);
+      menuBg.paintPan(c, performance.now(), h);
+      if (this.panPending) return;
+      this.panPending = true;
+      setTimeout(() => {
+        this.panPending = false;
+        if (this.stage.current === this.main) this.stage.redraw();
+      }, PAN_MS);
+    },
     note: this.note,
     noteId: 'lobby-note',
     trainer: { name: me().name, skin: me().skin, onPress: () => this.stage.push(this.trainer) },

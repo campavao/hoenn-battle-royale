@@ -45,15 +45,16 @@ import hiddenJson from './data/hidden.json';
 import { RomArt } from './romart';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
-import { keyPicture } from '../src/field';
+import { FADE_COLOR_WORD, FADE_Y_WORD, FOG_EVA, FOG_EVB, fadeOf, keyPicture } from '../src/field';
 import { PadPrefsControl } from '../src/ui/padprefs';
 import { wireDpad } from './dpad';
 import { StartMenu } from './startmenu';
-import { BattleMenu, battleWantsNoPad, readBattleView } from '../src/ui/battlemenu';
+import { BACK_H, BATTLE_TYPE_RECORDED, BattleMenu, CELL_H, battleWantsNoPad, readBattleView } from '../src/ui/battlemenu';
+import { BATTLE_TYPE_TRAINER, CARD_H, SidesView } from '../src/ui/sides';
 import { BAG_POSITION_POCKET, readBattleBag } from '../src/ui/bag';
 import { MENU_ACTION, TouchLayer } from '../src/touch';
 import { HUD } from '../src/net/hud';
-import { ITEM_MACH_BIKE, PhoneHud, signFor } from '../src/ui/phonehud';
+import { ITEM_MACH_BIKE, PhoneHud, fogPhase, signFor } from '../src/ui/phonehud';
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
 import { cardFields } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
@@ -701,9 +702,39 @@ function fieldFrame(): void {
 const keyCanvas = document.getElementById('gba-key') as HTMLCanvasElement;
 const keyImage = new ImageData(240, 160);
 let seeing = false;
+/** The ROM's BAG under a battle, emulator frame by emulator frame: opening (the page's
+ *  pick not taken yet) or up; then, for a ball, the battle's redraw after it (the reshow,
+ *  until the battle is back and done fading in). A bag that closes onto anything else (a
+ *  POTION's party screen) is not held, nor one up longer than BAG_HOLD: the player's. */
+let romBag: 'bag' | 'reshow' | 'free' | null = null;
+let bagFrames = 0;
+const BAG_HOLD = 150;
+function trackBag(): void {
+  const sym = romTables.sym;
+  const main = sym('gMain'), run = sym('CB2_BagMenuRun'), pick = sym('gBrBag'), battleCb = sym('BattleMainCB2');
+  if (!rom || main === undefined || run === undefined || pick === undefined || battleCb === undefined) return;
+  const cb2 = rom.emu.read(main + 4, 32);
+  const is = (n: string | number | undefined) => { const a = typeof n === 'string' ? sym(n) : n; return a !== undefined && ((cb2 ^ a) & ~1) === 0; };
+  const bag = rom.emu.read(pick, 16) !== 0 || is(run);
+  if (!bag && !romBag) return;
+  if (romBag === 'free') { if (!bag) romBag = null; return; }
+  if (bag) romBag = 'bag';
+  else if (romBag === 'bag') romBag = is('CB2_SetUpReshowBattleScreenAfterMenu2') || is('ReshowBattleScreenAfterMenu') || is(battleCb) ? 'reshow' : null;
+  else if (is(battleCb) && !romFading()) romBag = null;
+  bagFrames = romBag ? bagFrames + 1 : 0;
+  if (bagFrames > BAG_HOLD) romBag = 'free';
+}
+function romFading(): boolean {
+  const at = romTables.sym('gPaletteFade');
+  return !!rom && at !== undefined && fadeOf(rom.emu.read(at + FADE_Y_WORD, 16), rom.emu.read(at + FADE_COLOR_WORD, 16)).active;
+}
 function seeFrame(): void {
   const up = !!rom && battleEl.classList.contains('on');
   const keyed = up && rom!.seeThrough(seeThrough()) && rom!.picture(keyImage.data);
+  // USE in the page's bag is the ROM's own BAG doing it (br_bag.h): its screen, and the
+  // battle's redraw after it, have no key and showed bare -- black, the bag, a blue fade
+  // (HBR-110). The battle's last picture stays up over them (trackBag).
+  if (up && seeing && (romBag === 'bag' || romBag === 'reshow')) return;
   if (keyed) {
     keyPicture(keyImage.data);
     keyCanvas.getContext('2d')?.putImageData(keyImage, 0, 0);
@@ -1425,6 +1456,10 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
 /** A phone's HUD and dock (the live game's ui/phonehud.ts) in place of the corner and the
  *  buttons: the sign of the place I stand in, the fog window (Safari or Fog, the clock,
  *  how many are left, which way is safe), and PARTY, MAP, START and the room under it. */
+/** br_hud.h BR_HUD_FOG_FRAMES: how long the fog window flashes FOG! on going outside. */
+const BR_HUD_FOG_FRAMES = 60;
+let hudFogged = false;
+let fogFlashTo = 0;
 function wirePhoneHud(): void {
   const top = document.getElementById('phud')!;
   const dock = document.getElementById('pdock')!;
@@ -1454,6 +1489,8 @@ function wirePhoneHud(): void {
     const ring = link.room.ring();
     const res = link.room.results;
     const fogged = link.room.inFog(me.m.spot);
+    if (fogged && !hudFogged) fogFlashTo = frame + BR_HUD_FOG_FRAMES;
+    hudFogged = fogged;
     const way = ringMap?.way(me.m.spot, ring) ?? '';
     const section = link.room.maps.get(me.m.spot.map)?.section ?? '';
     const sign = signFor(section);
@@ -1464,7 +1501,8 @@ function wirePhoneHud(): void {
       clock: Math.ceil(ring.left / 60),
       left: res.entrants.length ? res.entrants.length - res.fallen.length : link.room.actors.length,
       eyes: watch.eyes,
-      flash: fogged ? (frame % 60 < 30 ? 2 : 1) : 0,
+      // FOG! for a second on stepping into it, then the clock again (br_hud.c FogPhase).
+      flash: fogPhase(fogged ? Math.max(0, fogFlashTo - frame) : 0),
       ring: ring.safari ? null : ring.last ? 'Fog everywhere' : ringMap?.place(ring) ?? '',
       fogEverywhere: !!ring.last,
       safe: way ? `Safe ${way}` : null,
@@ -1478,6 +1516,10 @@ function wirePhoneHud(): void {
 /** A phone's battle menu (the live game's ui/battlemenu.ts): FIGHT, BAG, POKeMON, RUN
  *  and the moves as windows under the hidden ROM's picture, tapped rather than walked to
  *  with the D-pad; the live TouchLayer walks the ROM's cursor to what was tapped. */
+/** The trainers' cards over the picture, GBA pixels: a card and a gap either side. */
+const CARDS_ROOM = CARD_H + 8;
+/** What the battle menu wants under the picture at its tallest (four moves, BACK, the hint). */
+const MENU_ROOM = 2 * CELL_H + BACK_H + 48;
 function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
   const { emu } = files;
   const symbols = new (class extends Map<string, number> {
@@ -1511,12 +1553,31 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     menu.setRoom((innerHeight - box.bottom - 8) / s);
   };
   addEventListener('resize', resize);
+  // Both trainers' cards in a trainer battle, above the picture on a phone held upright
+  // (the live game's ui/sides.ts: the picture, the name, the party's balls). The picture
+  // moves down for them only when the glass has the room for them and the menu too.
+  const flagsAt = sym('gBattleTypeFlags');
+  const trainerFight = () => flagsAt !== undefined && (emu.read(flagsAt, 32) & (BATTLE_TYPE_TRAINER | BATTLE_TYPE_RECORDED)) === BATTLE_TYPE_TRAINER;
+  const cards = () => {
+    const s = gbaCanvas.getBoundingClientRect().width / 240;
+    const fits = s > 0 && innerHeight / s >= CARDS_ROOM + 160 + MENU_ROOM;
+    battleEl.classList.toggle('cards', fits && innerHeight > innerWidth && trainerFight());
+  };
+  const sidesEl = document.getElementById('sides')!;
+  new SidesView(sidesEl, emu, sym, () => {
+    const box = gbaCanvas.getBoundingClientRect();
+    const s = box.width / 240;
+    return s > 0 && battleEl.classList.contains('on')
+      ? { scale: s, cols: innerWidth / s, rows: innerHeight / s, lcdCol: box.left / s, lcdRow: box.top / s }
+      : { scale: 0, cols: 0, rows: 0, lcdCol: 0, lcdRow: 0 };
+  }).attach();
   let noPad = false;
   let wasUp = false;
   const hudBase = sym('gBrHud');
   emu.onFrame(() => {
     const up = battleEl.classList.contains('on');
-    if (up && !wasUp) resize();
+    if (up && !wasUp) { resize(); cards(); resize(); }
+    else if (!up && wasUp) battleEl.classList.remove('cards');
     wasUp = up;
     // The battle's own FIGHT/BAG box comes off under the windows (br_battle.c
     // BrBattle_MenuBoxOff), as on a phone live; written each frame, as every battle
@@ -1677,7 +1738,11 @@ function hudFrame(): void {
   }
   // One line at a time, in the box my own messages use, and not over one of them.
   const now = performance.now();
-  if (!sayUntil && now >= tickUntil) {
+  // A battle's picture has the top of the screen: the news waits for the field, as the
+  // live match's ticker does (br_hud.c drops its windows off the overworld).
+  if (battleEl.classList.contains('on')) {
+    if (tickUntil) { tickUntil = 0; msgBox.hide(); }
+  } else if (!sayUntil && now >= tickUntil) {
     const next = ticks.shift();
     if (next) {
       msgBox.show(next.text, next.alert);
@@ -1745,20 +1810,44 @@ function fogFrame(): void {
   void rom.bleed().then((alive) => { if (!alive) goOut('Your team fainted in the fog.'); });
 }
 
-/** The fog over everything outside the ring, the inside left clear. */
+/** The fog over everything outside the ring, the inside left clear: the ROM's own
+ *  (WEATHER_FOG_HORIZONTAL, the live match's field) -- its 64x64 picture tiled with the
+ *  world, drifting left a pixel every four frames (FogHorizontal_Main), blended as the
+ *  GBA does at the coefficients it settles at, fog*12/16 + ground*8/16 (field.ts drawFog).
+ *  A patch whose symbols do not name the picture yet gets a flat veil. */
+let fogTile: HTMLCanvasElement | null | undefined;
+const FOG_SIZE = 64;
 function drawFog(x0: number, y0: number, x1: number, y1: number, home: Placed): void {
   const ring = link.room.ring();
   if (ring.r === Infinity) return;
-  ctx.fillStyle = 'rgba(176, 160, 196, 0.5)';
+  ctx.save();
+  ctx.beginPath();
   // Inside, the fog is the fog at the door: all of it or none.
   if (!home.m.outdoor) {
-    if (link.room.inFog({ map: home.m.id, x: 0, y: 0 }, ring)) ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    if (!link.room.inFog({ map: home.m.id, x: 0, y: 0 }, ring)) { ctx.restore(); return; }
+    ctx.rect(x0, y0, x1 - x0, y1 - y0);
+  } else {
+    ctx.rect(x0, y0, x1 - x0, y1 - y0);
+    if (ring.r >= 0) ctx.arc(ring.cx * TILE, ring.cy * TILE, Math.max(ring.r, 0.5) * TILE, 0, Math.PI * 2, true);
+  }
+  ctx.clip('evenodd');
+  if (fogTile === undefined && art) fogTile = art.fog();
+  if (!fogTile) {
+    ctx.fillStyle = 'rgba(176, 160, 196, 0.5)';
+    ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    ctx.restore();
     return;
   }
-  ctx.beginPath();
-  ctx.rect(x0, y0, x1 - x0, y1 - y0);
-  if (ring.r >= 0) ctx.arc(ring.cx * TILE, ring.cy * TILE, Math.max(ring.r, 0.5) * TILE, 0, Math.PI * 2, true);
-  ctx.fill('evenodd');
+  ctx.globalAlpha = 1 - FOG_EVB / 16;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = FOG_EVA / 16;
+  const drift = Math.floor(frame / 4) % FOG_SIZE;
+  const fx0 = Math.floor((x0 + drift) / FOG_SIZE) * FOG_SIZE - drift;
+  const fy0 = Math.floor(y0 / FOG_SIZE) * FOG_SIZE;
+  for (let y = fy0; y < y1; y += FOG_SIZE) for (let x = fx0; x < x1; x += FOG_SIZE) ctx.drawImage(fogTile, x, y);
+  ctx.restore();
 }
 
 function fogLine(): string {
@@ -2548,7 +2637,7 @@ async function boot(): Promise<void> {
   const rest = [...placed.values()];
   const next = () => { const p = rest.find((r) => !r.mips); if (p) { paint(p); mipFor(p, 0); setTimeout(next, 16); } };
   setTimeout(next, 500);
-  const booted = (r: RomBattles) => { rom = r; if (link) r.reseed(link.room.seed); if (comingBack) void takeBack(r); giveNext(); };
+  const booted = (r: RomBattles) => { rom = r; r.emu.onFrame(trackBag); if (link) r.reseed(link.room.seed); if (comingBack) void takeBack(r); giveNext(); };
   if (q.has('solo')) {
     // The debug path (Cam, 2026-10-29): straight into a world of the page's own, the bots
     // and nobody else. A quicker fog to try it: ?ring=<seconds a phase>.

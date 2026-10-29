@@ -62,6 +62,8 @@ ENGINE_SYMBOLS = [
     "gObjectEventGraphicsInfoPointers", "gInitialMovementTypeFacingDirections",
     # ...and the fog over it, drawn past the picture at the ROM's own scroll (POK-318).
     "gWeather",
+    # ...and its picture and colours, which spike B cuts its fog from (web/spike-b/romart.ts fog).
+    "gWeatherFogHorizontalTiles", "gFogPalette",
     # The overworld's main callback: the page shows the picture past the LCD only while
     # gMain.callback2 is this (POK-319, web/src/field.ts).
     "CB2_Overworld",
@@ -115,6 +117,10 @@ ENGINE_SYMBOLS = [
     # The phone's bag (web/src/ui/bagsheet.ts): which pocket the ROM's BAG opens on, and
     # what each item is -- its name, description, pocket and whether a battle can use it.
     "gBagPosition", "gItems",
+    # ...and the ROM's own BAG running: spike B holds the battle's picture over it while it
+    # USEs what the page's bag picked, and the battle's redraw after it (web/spike-b/main.ts
+    # trackBag, HBR-110).
+    "CB2_BagMenuRun", "CB2_SetUpReshowBattleScreenAfterMenu2", "ReshowBattleScreenAfterMenu",
     # The party screen: a tap on a POKeMON walks its cursor (gPartyMenu.slotId) there and
     # presses A, while the choose-a-POKeMON task is the one running (web/src/touch.ts).
     "gPartyMenu", "Task_HandleChooseMonInput",

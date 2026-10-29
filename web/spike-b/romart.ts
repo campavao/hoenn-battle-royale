@@ -268,17 +268,32 @@ export class RomArt {
     return this.pics(this.u32(tpl + 12), 32, 32, 3, pal);
   }
 
+  /** The fog (WEATHER_FOG_HORIZONTAL): the one 64x64 picture the ROM tiles over the
+   *  screen, in gFogPalette (graphics/weather/br_fog.pal, the match's purple). Null on a
+   *  release whose symbols do not name them yet. */
+  fog(): HTMLCanvasElement | null {
+    const tiles = this.sym('gWeatherFogHorizontalTiles'), pal = this.sym('gFogPalette');
+    if (!Number.isFinite(tiles) || !Number.isFinite(pal)) return null;
+    return this.sheet([tiles - ROM], 64, 64, this.palette(pal));
+  }
+
   /** `frames` of an object's SpriteFrameImage table (8 bytes each: its data, its size). */
   private pics(images: number, w: number, h: number, frames: number, pal: number[]): HTMLCanvasElement {
+    const data: number[] = [];
+    for (let f = 0; f < frames; f++) data.push(this.u32(images + f * 8) - ROM);
+    return this.sheet(data, w, h, pal);
+  }
+
+  /** 4bpp sprite frames, each at its offset in the ROM, side by side; colour 0 clear. */
+  private sheet(frames: readonly number[], w: number, h: number, pal: number[]): HTMLCanvasElement {
     const cv = document.createElement('canvas');
-    cv.width = w * frames;
+    cv.width = w * frames.length;
     cv.height = h;
     const ctx = cv.getContext('2d')!;
     const id = ctx.createImageData(cv.width, h);
     const px = new Uint32Array(id.data.buffer);
     const tw = w / TILE;
-    for (let f = 0; f < frames; f++) {
-      const data = this.u32(images + f * 8) - ROM;
+    frames.forEach((data, f) => {
       for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
           const tile = (y >> 3) * tw + (x >> 3);
@@ -287,7 +302,7 @@ export class RomArt {
           if (c) px[y * cv.width + f * w + x] = pal[c];
         }
       }
-    }
+    });
     ctx.putImageData(id, 0, 0);
     return cv;
   }

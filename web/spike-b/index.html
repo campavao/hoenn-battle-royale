@@ -130,6 +130,13 @@
       /* The ROM's own screens out of a battle (party, bag, MAP, a trade): the picture in the
          middle of the field, which goes on round it, as live (HBR-97). */
       #battle.screen { background: transparent; place-items: center; align-content: center; padding-top: 0; }
+      /* A trainer battle's two cards above the picture (ui/sides.ts): CARD_H + 8. */
+      @media (orientation: portrait) { #battle.cards { padding-top: calc(env(safe-area-inset-top) + var(--s, 1.5) * 101px); } }
+      #sides { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
+      #sides[hidden] { display: none; }
+      #sides .side { position: absolute; display: flex; flex-direction: column; align-items: center; }
+      #sides .side-pic, #sides .side-balls { image-rendering: pixelated; }
+      #sides .side-name { display: flex; justify-content: center; background: rgba(16, 20, 24, 0.6); border-radius: 2px; width: 100%; }
       /* The page's fog lies on the ROM's MAP, pixel for pixel (ringmap.ts). */
       #battle canvas { grid-area: 1 / 1; }
       #ringfog { display: none; pointer-events: none; }
@@ -228,6 +235,7 @@
     <div id="out"><b id="out-title">OUT</b><span id="out-why"></span><br><span id="out-next">You're back at the truck when the fog lifts.</span><br><button id="out-ok" type="button">Watch</button></div>
     <div id="win"><b id="win-title"></b><ol id="win-list"></ol><button id="win-ok" type="button">OK</button></div>
     <div id="battle"><div class="note" id="battle-note"></div><canvas id="gba" width="240" height="160"></canvas><canvas id="gba-key" width="240" height="160"></canvas><canvas id="ringfog" width="240" height="160"></canvas><div id="battle-menu" class="battle-menu" hidden></div></div>
+    <div id="sides" hidden></div>
     <div id="stage" hidden>
       <div id="stage-box">
         <canvas id="ui" width="240" height="320"></canvas>

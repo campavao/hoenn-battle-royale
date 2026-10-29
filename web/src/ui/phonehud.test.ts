@@ -4,6 +4,8 @@ import {
   AVATAR_MACH_BIKE,
   AVATAR_SURFING,
   FOG_W,
+  SIGN_PAD,
+  SIGN_W,
   ITEM_ACRO_BIKE,
   ITEM_MACH_BIKE,
   LEVELS_ROD,
@@ -67,6 +69,11 @@ describe('the sign and the fog window', () => {
     expect(signFor('MAPSEC_RUSTBORO_CITY')).toEqual({ name: 'RUSTBORO CITY', theme: 'marble' });
     expect(signFor('MAPSEC_ROUTE_105').theme).toBe('underwater');
     expect(signFor('MAPSEC_NOWHERE')).toEqual({ name: '', theme: 'wood' });
+  });
+
+  it('a town\'s name fits its sign whole, inside the plate\'s border (HBR-111)', () => {
+    for (const s of ['MAPSEC_LITTLEROOT_TOWN', 'MAPSEC_PACIFIDLOG_TOWN', 'MAPSEC_SOOTOPOLIS_CITY', 'MAPSEC_EVER_GRANDE_CITY'])
+      expect(measure(signFor(s).name), s).toBeLessThanOrEqual(SIGN_W - SIGN_PAD);
   });
 
   it('the clock is m:ss, and FOG! blinks in its place the way the corner did', () => {
