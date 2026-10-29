@@ -52,6 +52,8 @@ ENGINE_SYMBOLS = [
     # The field camera and the palette fade: the page draws the map past the picture
     # in lockstep with the ROM's own scroll (POK-317, web/src/field.ts).
     "gFieldCamera", "gPaletteFade",
+    # ...and the colours it leaves, which spike B's ring map blends its fog from (ringmap.ts).
+    "gPlttBufferFaded",
     # ...and the people on it: where a sprite is on screen (POK-318).
     "gSpriteCoordOffsetX", "gSpriteCoordOffsetY",
     # ...and the ones past the object box, drawn standing from the ROM's own tables: a
@@ -67,6 +69,8 @@ ENGINE_SYMBOLS = [
     # ROM names in gBrWorld (world-grid.txt), and the table of every map, which the core
     # walks for the neighbours past the grid's edge.
     "gBackupMapLayout", "gMapHeader", "gMapGroups",
+    # ...and every MAP section's place and name: spike B's ring map (web/spike-b/ringmap.ts).
+    "gRegionMapEntries",
     # ...and the battle's: the phone's stick and A/B stand down while it runs and no
     # battle script waits on a press (web/src/ui/battlemenu.ts battleWantsNoPad).
     "BattleMainCB2",

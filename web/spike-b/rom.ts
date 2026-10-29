@@ -47,6 +47,7 @@ const FOG_TICK = 240;
  *  BrLevels_Tick): the party lifted to it on the field, a wild one rolled at it. */
 const ringBytes = (phase: number, fog: boolean) => [1, phase, 0, 0, fog ? 0xff : 0x7f, 0, 0, 0, FOG_TICK & 0xff, FOG_TICK >> 8];
 const DREW = 3;
+const ROM_BASE = 0x08000000;
 /** How long the last fight took to start: from the TRAINER card to the battle running. */
 export let lastStart: { ms: number; frames: number } | null = null;
 
@@ -60,6 +61,12 @@ export interface DuelLink {
   /** Called with a function the page hands each block from the other side to. */
   listen(take: ((seq: number, data: number[]) => void) | null): void;
 }
+
+/** What the MAP row (MENU_ACTION_BR_MAP) is opened on (ringmap.ts): where this world's
+ *  trainer stands, as a MAP section and a cell of it, and the ring as the ROM draws it --
+ *  r 127 for nothing fogged (the page fogs over it), -1 for fog everywhere -- and the
+ *  section the prompt names safe, in the ROM's own letters ([] names none). */
+export interface MapLook { mapsec: number; cellX: number; cellY: number; r: number; place: number[] }
 
 export interface Given { items: { id: number; n: number }[]; money: number; used: boolean }
 
@@ -103,7 +110,7 @@ export interface RomBattles {
    *  the cursor walked to the row, A -- all on the hidden field, the page keeping the
    *  screen until the row's own screen is up (`onStart`). Resolves back on the field, with
    *  whatever was used or moved kept. False when the row would not open. */
-  menu(action: number, onStart: () => void, onEnd: () => void): Promise<boolean>;
+  menu(action: number, onStart: () => void, onEnd: () => void, look?: MapLook): Promise<boolean>;
   /** A screen the page put up (menu, team) closes now: B until it is back on the field
    *  (a challenge closes a menu in the match, br_netlink.c). */
   leave(): void;
@@ -209,6 +216,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   const catchAt = sym('gBrCatch');
   const ringAt = sym('gBrRing');
   const levelsAt = sym('gBrLevels');
+  const mapAt = sym('gBrMap');
+  const romView = new DataView(rom.buffer, rom.byteOffset, rom.byteLength);
+  const headerAt = sym('gMapHeader');
   const mainAt = sym('gMain');
   const overworldCb = sym('CB2_Overworld');
   const objectsAt = sym('gObjectEvents');
@@ -297,6 +307,23 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       return onField();
     }, Infinity);
     emu.release('b');
+  };
+  /** The parked field made to stand where `look` says, for the MAP's player icon
+   *  (region_map.c InitMapBasedOnPlayerLocation): the section, and a spot on the parked
+   *  map's own layout that its sum lands on the cell. Undone by the restore after. */
+  const lookFrom = (look: MapLook) => {
+    const r = emu.bytes(ringAt, 36);
+    r[4] = look.r & 0xff;
+    const place = look.place.slice(0, 16);
+    r.set([...place, 0xff], 14);
+    r[33] = 0; // nothing to preview: the page blinks it
+    emu.write(headerAt + 0x14, look.mapsec, 8);
+    const entry = sym('gRegionMapEntries') + look.mapsec * 8 - ROM_BASE;
+    const layout = emu.read(headerAt, 32) - ROM_BASE;
+    const along = (dim: number, cells: number, cell: number) => Math.max(1, Math.floor(dim / cells)) * cell;
+    const s1 = emu.read(save1, 32);
+    emu.write(s1, along(romView.getInt32(layout, true), rom[entry + 2], look.cellX), 16);
+    emu.write(s1 + 2, along(romView.getInt32(layout + 4, true), rom[entry + 3], look.cellY), 16);
   };
   // One thing at a time on the ROM: a battle asked for while an item goes in waits for it.
   let queue: Promise<unknown> = Promise.resolve();
@@ -539,14 +566,16 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         return [...mons.filter((_, i) => !taken.has(keys[i])), ...put];
       });
     },
-    menu(action, onStart, onEnd) {
+    menu(action, onStart, onEnd, look) {
       return inTurn(async () => {
         if (broken || !startMenu) return false;
         leaving = false;
         lay();
+        if (look) lookFrom(look);
         emu.resume();
         drain(() => undefined);
-        const watch = emu.onFrame(() => drain(() => undefined));
+        // The MAP is a look here: FLY off it would fly the hidden field, not this world.
+        const watch = emu.onFrame(() => { drain(() => undefined); if (look) emu.write(mapAt + 1, 0xff, 8); });
         const tap = async (k: GbaKey) => { emu.press(k); await frames(emu, 3); emu.release(k); await frames(emu, 3); };
         let up = false;
         let back = true;

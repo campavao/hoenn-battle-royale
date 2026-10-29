@@ -49,6 +49,18 @@ function rgba(c: number): number {
   return (0xff << 24) | (b << 16) | (g << 8) | r;
 }
 
+/** The ROM's letters as text: capitals, small letters, digits; anything else a space. */
+export function text(letters: readonly number[]): string {
+  let out = '';
+  for (const c of letters) {
+    out += c >= 0xbb && c <= 0xd4 ? String.fromCharCode(65 + c - 0xbb)
+      : c >= 0xd5 && c <= 0xee ? String.fromCharCode(97 + c - 0xd5)
+      : c >= 0xa1 && c <= 0xaa ? String.fromCharCode(48 + c - 0xa1)
+      : c === 0x1b ? 'é' : c === 0xae ? '-' : c === 0xad ? '.' : ' ';
+  }
+  return out;
+}
+
 interface Tileset { tiles: Uint8Array; palettes: number[][]; metatiles: number; attrs: number }
 
 export class RomArt {
@@ -56,7 +68,7 @@ export class RomArt {
   private tilesets = new Map<number, Tileset>();
   private objPals: Map<number, number[]> | null = null;
 
-  constructor(private rom: Uint8Array, private sym: (name: string) => number) {
+  constructor(private rom: Uint8Array, readonly sym: (name: string) => number) {
     this.dv = new DataView(rom.buffer, rom.byteOffset, rom.byteLength);
   }
 
@@ -215,15 +227,25 @@ export class RomArt {
   itemName(id: number): string {
     const row = this.sym('gItems') + id * 44;
     if (this.u16(row + 14) !== id) return '';
-    let out = '';
-    for (let i = 0; i < 14; i++) {
-      const c = this.rom[row - ROM + i];
-      if (c === 0xff) break;
-      out += c >= 0xbb && c <= 0xd4 ? String.fromCharCode(65 + c - 0xbb)
-        : c >= 0xd5 && c <= 0xee ? String.fromCharCode(97 + c - 0xd5)
-        : c >= 0xa1 && c <= 0xaa ? String.fromCharCode(48 + c - 0xa1)
-        : c === 0x1b ? 'é' : c === 0xae ? '-' : c === 0xad ? '.' : ' ';
-    }
+    return text(this.letters(row, 14));
+  }
+
+  /** Map (group, num)'s MAP section (MapHeader.regionMapSectionId). */
+  mapsec(group: number, num: number): number {
+    return this.u8(this.u32(this.u32(this.sym('gMapGroups') + group * 4) + num * 4) + 0x14);
+  }
+
+  /** A MAP section's cells on the MAP's grid (gRegionMapEntries, struct RegionMapLocation:
+   *  x, y, width, height, then the name), and the name in the ROM's own letters. */
+  section(id: number): { x: number; y: number; w: number; h: number; letters: number[] } {
+    const at = this.sym('gRegionMapEntries') + id * 8;
+    return { x: this.u8(at), y: this.u8(at + 1), w: this.u8(at + 2), h: this.u8(at + 3), letters: this.letters(this.u32(at + 4), 16) };
+  }
+
+  /** Up to `max` of the ROM's letters from `at`, to the end mark. */
+  private letters(at: number, max: number): number[] {
+    const out: number[] = [];
+    for (let i = 0; i < max && this.u8(at + i) !== 0xff; i++) out.push(this.u8(at + i));
     return out;
   }
 

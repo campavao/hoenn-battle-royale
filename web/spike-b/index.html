@@ -46,6 +46,10 @@
       #intro ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
       #intro button { justify-self: start; background: #4c7a99; color: #fff; border: 0; border-radius: 6px; padding: 8px 16px; font: inherit; font-weight: 700; }
       #battle.on { display: grid; }
+      /* The page's fog lies on the ROM's MAP, pixel for pixel (ringmap.ts). */
+      #battle canvas { grid-area: 1 / 1; }
+      #ringfog { display: none; pointer-events: none; }
+      #ringfog.on { display: block; }
       #battle canvas { image-rendering: pixelated; width: min(100vw, 150vh); aspect-ratio: 240 / 160; height: auto; }
       /* A phone on its side: the battle between the pad's two halves, not under them. */
       @media (orientation: landscape) and (pointer: coarse) { #battle canvas { width: min(calc(100vw - 2 * (env(safe-area-inset-left) + 200px)), 150vh); } }
@@ -120,7 +124,7 @@
     <div id="ask"><b id="ask-title"></b></div>
     <div id="out"><b id="out-title">OUT</b><span id="out-why"></span><br><span id="out-next">You're back at the truck when the fog lifts.</span><br><button id="out-ok" type="button">Watch</button></div>
     <div id="win"><b id="win-title"></b><ol id="win-list"></ol><button id="win-ok" type="button">OK</button></div>
-    <div id="battle"><div class="note" id="battle-note"></div><canvas id="gba" width="240" height="160"></canvas></div>
+    <div id="battle"><div class="note" id="battle-note"></div><canvas id="gba" width="240" height="160"></canvas><canvas id="ringfog" width="240" height="160"></canvas></div>
     <div id="stage" hidden>
       <div id="stage-box">
         <canvas id="ui" width="240" height="320"></canvas>
@@ -134,7 +138,7 @@
       <ul>
         <li>Walk and run like Emerald (hold B to walk).</li>
         <li>Face a trainer and press A to battle.</li>
-        <li>M, or the Menu button, opens your POKéMON, BAG and trainer card.</li>
+        <li>M, or the Menu button, opens your POKéMON, BAG, the MAP with the fog on it, and your trainer card.</li>
         <li>Step on a rustling patch of grass (or a dark ripple on water) for a wild Pokémon, as in the game.</li>
         <li>Spectate, then drag and pinch to see all of Hoenn and everyone in it.</li>
       </ul>

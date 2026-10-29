@@ -29,6 +29,7 @@ import { Lobby, me, type RoomInfo } from './lobby';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { groundCount } from './shared/items';
 import { RomArt } from './romart';
+import { RingMap } from './ringmap';
 import type { GbaKey } from '../src/emu';
 import spritesData from '../src/data/sprites.json';
 
@@ -104,6 +105,7 @@ function layout(maps: WorldMap[]): Map<string, Placed> {
 }
 
 let art: RomArt | null = null;
+let ringMap: RingMap | null = null;
 /** A map's pictures, cut from the ROM the first time it is seen (~20 ms a map); the rest
  *  are cut in the background after boot so a zoom-out never waits on them. */
 function paint(p: Placed): boolean {
@@ -205,6 +207,7 @@ function myBits(): number {
 // ---- the battle handoff: the real ROM fights, the page waits ---------------------------
 
 const battleEl = document.getElementById('battle')!;
+const fogEl = document.getElementById('ringfog') as HTMLCanvasElement;
 document.getElementById('intro-go')!.addEventListener('click', () => document.getElementById('intro')!.remove());
 const battleNote = document.getElementById('battle-note')!;
 const gbaCanvas = document.getElementById('gba') as HTMLCanvasElement;
@@ -343,17 +346,25 @@ async function openBag(key: number, bag: Bag, who: string): Promise<void> {
 }
 
 /** START: the match's own menu rows on the ROM's screens (start_menu.c's MENU_ACTION_*),
- *  asked here first so the hidden field never shows. MAP is left out: the hidden ROM's
- *  ring is not this world's. */
+ *  asked here first so the hidden field never shows. MAP (13) is the ROM's, standing where
+ *  I stand, with this world's fog laid over it (ringmap.ts). */
 async function openMenu(): Promise<void> {
   if (!rom || isOut || battle || swapping || asking || spectating) return;
-  const c = await ask('MENU', [['POKéMON', '1'], ['BAG', '2'], ['CARD', '4'], ['EXIT', '']]);
+  const c = await ask('MENU', [['POKéMON', '1'], ['BAG', '2'], ['MAP', '13'], ['CARD', '4'], ['EXIT', '']]);
   if (!c || !rom || isOut || battle || swapping) return;
+  const me = link.room.actor(link.me);
+  const look = c === '13' && me && ringMap ? ringMap.look(me.m.spot) : undefined;
+  let uncover = () => {};
   swapping = true;
   held.clear();
   try {
-    await rom.menu(Number(c), () => { if (swapping) battleEl.classList.add('on'); }, () => battleEl.classList.remove('on'));
+    await rom.menu(Number(c), () => {
+      if (!swapping) return;
+      battleEl.classList.add('on');
+      if (look) uncover = ringMap!.cover(fogEl, rom!.emu);
+    }, () => { uncover(); battleEl.classList.remove('on'); }, look);
   } finally {
+    uncover();
     swapping = false;
     battleEl.classList.remove('on');
     held.clear();
@@ -498,6 +509,12 @@ let wasInFog = false;
 /** br_ring.h: BR_FOG_TICK_FRAMES, a bite every four seconds. */
 const FOG_TICK = 240;
 
+/** Which way is out of the fog, as arrows ('' inside, or with nowhere to go). */
+function safeWay(): string {
+  const me = link.room.actor(link.me);
+  return me && ringMap ? ringMap.way(me.m.spot) : '';
+}
+
 function inFogNow(): boolean {
   const me = link.room.actor(link.me);
   return !!me && link.room.inFog(me.m.spot);
@@ -635,6 +652,7 @@ let looping = false;
  *  match begins it -- a fresh team, nobody out, the camera on my trainer. */
 function startMatch(l: WorldLink): void {
   link = l;
+  ringMap = art ? new RingMap(l.room, art) : null;
   matchOn = true;
   endingAt = 0;
   lobby?.hide();
@@ -670,7 +688,7 @@ function fogFrame(): void {
     if (lastPhase >= 0) {
       if (ring.phase === 0) say('The fog lifts. A new round!');
       else if (ring.last) say(`THE FOG COVERS ALL OF HOENN!${grew}`);
-      else say(`${ring.phase === 1 ? 'The fog is rolling in!' : 'The fog is closing in!'}${grew}`);
+      else say(`The fog closes in on ${ringMap?.place(ring) || 'Hoenn'}!${grew}`);
     }
     lastPhase = ring.phase;
   }
@@ -684,7 +702,7 @@ function fogFrame(): void {
     return;
   }
   const fog = inFogNow();
-  if (fog && !wasInFog) { say('You are in the fog!'); fogTimer = FOG_TICK; }
+  if (fog && !wasInFog) { const way = safeWay(); say(`You are in the fog!${way ? ` Safe ${way}` : ''}`); fogTimer = FOG_TICK; }
   wasInFog = fog;
   if (!fog || --fogTimer > 0) return;
   fogTimer = FOG_TICK;
@@ -711,7 +729,8 @@ function fogLine(): string {
   const ring = link.room.ring();
   const s = Math.ceil(ring.left / 60);
   const clock = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  const where = inFogNow() ? ' · YOU ARE IN THE FOG' : '';
+  const way = safeWay();
+  const where = inFogNow() ? ` · YOU ARE IN THE FOG${way ? ` · Safe ${way}` : ''}` : '';
   if (ring.r === Infinity) return `fog in ${clock}${where}`;
   if (ring.last) return `FOG EVERYWHERE · new round in ${clock}${where}`;
   return `fog phase ${ring.phase}, closes again in ${clock}${where}`;
