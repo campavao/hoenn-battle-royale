@@ -1027,6 +1027,32 @@ function within(rest, was) {
   return out;
 }
 
+// web/src/bots/sight.ts
+var SIGHT_RANGE = 5;
+var DELTA = {
+  1: { dx: 0, dy: 1 },
+  2: { dx: 0, dy: -1 },
+  3: { dx: -1, dy: 0 },
+  4: { dx: 1, dy: 0 }
+};
+function sees(world, from, tx, ty) {
+  const d = DELTA[from.dir];
+  if (!d) return false;
+  let x = from.x;
+  let y = from.y;
+  for (let i = 1; i <= SIGHT_RANGE; i++) {
+    x += d.dx;
+    y += d.dy;
+    if (x === tx && y === ty) return true;
+    if (!world.clear(from.map, x, y)) return false;
+  }
+  return false;
+}
+function eitherSees(world, a, b) {
+  if (a.map !== b.map) return false;
+  return sees(world, a, b.x, b.y) || sees(world, b, a.x, a.y);
+}
+
 // web/spike-b/sim.ts
 var DIR_SOUTH = 1;
 var DIR_NORTH = 2;
@@ -1134,6 +1160,9 @@ function keysOf(bits) {
   return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A) };
 }
 var emptyBag = (b) => !b.items.length && !b.money && !b.mons?.length;
+var GRACE = 120;
+var JOIN_GRACE = 300;
+var BACK = { 1: 2, 2: 1, 3: 4, 4: 3 };
 var SPILL_KEY = 1 << 20;
 var GROUND_PER_MAP = 6;
 var REGROW = 60 * 90;
@@ -1181,7 +1210,7 @@ var Room = class {
   apply(cmd) {
     if (cmd.c === "join") {
       if (this.actor(cmd.id)) return;
-      const a = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, beaten: false, foe: 0, arriving: false };
+      const a = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: this.tick + JOIN_GRACE, arriving: false };
       this.actors.push(a);
       this.actors.sort((p, q) => p.id - q.id);
     } else if (cmd.c === "drop") {
@@ -1196,15 +1225,16 @@ var Room = class {
         this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag: structuredClone(cmd.bag) });
       }
       const foe = a?.foe ? this.actor(a.foe) : void 0;
-      if (foe) foe.battling = false;
+      if (foe?.bot) foe.battling = false;
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
     } else {
       const a = this.actor(cmd.id);
       if (!a || !a.battling) return;
       a.battling = false;
       a.keys = a.last = 0;
+      a.calm = this.tick + GRACE;
       const foe = a.foe ? this.actor(a.foe) : void 0;
-      if (foe) foe.battling = false;
+      if (foe?.bot) foe.battling = false;
       a.foe = 0;
     }
   }
@@ -1348,7 +1378,36 @@ var Room = class {
       if (a.bot) this.move(a, a.keys, events);
       else for (const bits of ins?.get(a.id) ?? []) this.move(a, bits, events);
     }
+    this.engage(events);
     return events;
+  }
+  /** Two trainers on one map who see each other fight (br_engage.c's BrEngage_Tick): the
+   *  eyeline both ways, BR_SIGHT_RANGE cells, stopped by collision (bots/sight.ts). Only
+   *  trainers standing still, neither in a fight nor in its grace. They turn to face each
+   *  other, and the lower id is the side that challenged. */
+  engage(events) {
+    const free = this.actors.filter((a) => !a.bot && !a.battling && !a.m.action && this.tick >= a.calm);
+    for (let i = 0; i < free.length; i++) {
+      const a = free[i];
+      if (a.battling) continue;
+      for (let j = i + 1; j < free.length; j++) {
+        const b = free[j];
+        if (b.battling || a.m.spot.map !== b.m.spot.map) continue;
+        const look = (o) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing });
+        if (!eitherSees(this.world, look(a), look(b))) continue;
+        const dx = b.m.spot.x - a.m.spot.x, dy = b.m.spot.y - a.m.spot.y;
+        const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        a.m.facing = a.m.moveDir = toB;
+        b.m.facing = b.m.moveDir = BACK[toB];
+        a.battling = b.battling = true;
+        a.foe = b.id;
+        b.foe = a.id;
+        a.keys = a.last = b.keys = b.last = 0;
+        events.push({ type: "duel", tick: this.tick, id: a.id, foe: b.id, first: true });
+        events.push({ type: "duel", tick: this.tick, id: b.id, foe: a.id, first: false });
+        break;
+      }
+    }
   }
   /** One move of one actor on `bits`: sim.ts's frame, then what it landed on or pressed. */
   move(a, bits, events) {
@@ -1394,7 +1453,7 @@ var Room = class {
           events.push({ type: "bag", tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name });
         } else if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
           a.battling = foe.battling = foe.beaten = true;
-          foe.m.facing = foe.m.moveDir = { 1: 2, 2: 1, 3: 4, 4: 3 }[a.m.facing];
+          foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
           events.push({ type: "fight", tick: this.tick, id: a.id, foe: foe.id });
         }
@@ -1455,6 +1514,7 @@ var Room = class {
       mix2(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 65535);
       mix2((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0));
       mix2(a.foe);
+      mix2(a.calm);
       mix2(a.keys);
       mix2(a.last);
     }
@@ -1707,6 +1767,7 @@ var FRAME_MS = 1e3 / 60;
 var IDLE_MS = 6e4;
 var QUIET_MS = 12e4;
 var SYNC_MS = 1e3;
+var BT_MAX = 1024;
 var WorldService = class {
   constructor(opts) {
     this.opts = opts;
@@ -1762,6 +1823,12 @@ var WorldService = class {
           this.host.out(id, cleanBag(m.bag) ?? void 0);
         } else if (m.t === "drop") {
           if (Number.isInteger(m.k)) this.host.drop(id, m.k, cleanBag(m.rest) ?? void 0);
+        } else if (m.t === "bt") {
+          if (!Number.isInteger(m.q) || !Array.isArray(m.d) || m.d.length > BT_MAX) return;
+          const me = this.host.room.actor(id);
+          const foe = me?.battling && me.foe ? this.host.room.actor(me.foe) : void 0;
+          if (!foe || foe.bot || !foe.battling || foe.foe !== id) return;
+          this.links.get(foe.id)?.send(JSON.stringify({ t: "bt", q: m.q & 65535, d: m.d.map((v) => (Number(v) | 0) & 255) }));
         } else if (m.t === "sync") {
           const now = this.opts.now();
           if (now - synced < SYNC_MS) return;

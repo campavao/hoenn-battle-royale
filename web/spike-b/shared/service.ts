@@ -30,6 +30,8 @@ const IDLE_MS = 60_000;
 const QUIET_MS = 120_000;
 /** The whole room, at most this often a phone (it is ~20 KB against a 13 B ask). */
 const SYNC_MS = 1000;
+/** A link block's bytes, at most (a battle's biggest is the party exchange's ~600). */
+const BT_MAX = 1024;
 
 export class WorldService {
   private host: Host | null = null;
@@ -74,6 +76,14 @@ export class WorldService {
           this.host.out(id, cleanBag(m.bag) ?? undefined);
         } else if (m.t === 'drop') {
           if (Number.isInteger(m.k)) this.host.drop(id, m.k, cleanBag(m.rest) ?? undefined);
+        } else if (m.t === 'bt') {
+          // Only to the one trainer this one is fighting, and only while they fight each
+          // other: a block that reached any other battle would desync it (POK-330 #20).
+          if (!Number.isInteger(m.q) || !Array.isArray(m.d) || m.d.length > BT_MAX) return;
+          const me = this.host.room.actor(id);
+          const foe = me?.battling && me.foe ? this.host.room.actor(me.foe) : undefined;
+          if (!foe || foe.bot || !foe.battling || foe.foe !== id) return;
+          this.links.get(foe.id)?.send(JSON.stringify({ t: 'bt', q: m.q & 0xffff, d: m.d.map((v) => (Number(v) | 0) & 0xff) } satisfies WorldDown));
         } else if (m.t === 'sync') {
           const now = this.opts.now();
           if (now - synced < SYNC_MS) return;

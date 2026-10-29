@@ -16,7 +16,7 @@
 import { Emulator, type GbaKey } from '../src/emu';
 import { Mailbox, MAILBOX } from '../src/net/mailbox';
 import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from '../src/net/slots';
-import { PROTOCOL, type Msg, type PackedMon } from '../src/net/wire';
+import { PROTOCOL, type Dir, type Msg, type PackedMon } from '../src/net/wire';
 import { loadCheckedRelease } from '../src/release';
 import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, rekey, spillOf, teamOf, withMoney } from './carry';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
@@ -52,6 +52,13 @@ export let lastStart: { ms: number; frames: number } | null = null;
  *  keeps the screen, and nothing showed). */
 export interface Fought { ok: boolean; outcome: number; species: number; level: number }
 
+/** A link battle's wire: our blocks out; theirs handed in by the page as they come. */
+export interface DuelLink {
+  send(seq: number, data: number[]): void;
+  /** Called with a function the page hands each block from the other side to. */
+  listen(take: ((seq: number, data: number[]) => void) | null): void;
+}
+
 export interface Given { items: { id: number; n: number }[]; money: number; used: boolean }
 
 export interface RomBattles {
@@ -60,6 +67,13 @@ export interface RomBattles {
   /** The wild battle a marked spot on map (group, num) starts; `behavior` is the spot's
    *  metatile behaviour (water or land, and the backdrop). */
   wild(group: number, num: number, behavior: number, onStart: () => void, fog?: boolean): Promise<Fought>;
+  /** A link battle with another trainer (br_netlink.c): this ROM's side of it, the blocks
+   *  out through `link.send` and theirs in through `link.recv`. `first` is the side that
+   *  challenged (link id 0). Resolves when the ROM is back on the field. */
+  duel(me: string, foe: string, skin: number, first: boolean, link: DuelLink, onStart: () => void, fog?: boolean): Promise<Fought>;
+  /** The trainer we are fighting went out (left, or the fog took them): the fight is ours
+   *  (BrNetlink_PeerOut). */
+  foeOut(): void;
   /** The fog's bite between battles (br_ring.c Bleed): a tenth of each mon's max HP, at
    *  least 1, a fainted one's status cleared. How many are still standing. */
   bleed(): Promise<number>;
@@ -165,6 +179,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   if (!parked) throw new Error('the core would not save a state');
 
   const fightAt = sym('gBrBotFight');
+  const netAt = sym('gBrNetlink');
   const askAt = sym('gBrWildAsk');
   const mainFunc = sym('gBattleMainFunc');
   const outcomeAt = sym('gBattleOutcome');
@@ -322,6 +337,53 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         carried = last = kept();
         return alive;
       });
+    },
+    duel(me, foe, skin, first, link, onStart, fog = false) {
+      return inTurn(async () => {
+        // Their blocks, held until our side of the link is open (HandleBt drops any that
+        // land before), each said to the ROM once, from their seat.
+        const inbox: { seq: number; data: number[] }[] = [];
+        let heard = 0;
+        link.listen((seq, data) => { if (seq > heard) { heard = seq; inbox.push({ seq, data }); } });
+        const watch = emu.onFrame(() => {
+          drain((m) => { if (m.t === 'bt') link.send(m.seq, m.data); });
+          while (inbox.length && emu.read(netAt, 8)) {
+            const b = inbox[0];
+            // The fight's first block carries their name (TakePeerName): RIVAL otherwise.
+            const slots = packSlot({ t: 'bt', seat: FOE_SEAT, seq: b.seq, data: b.data, ...(b.seq === 1 ? { name: foe } : {}) });
+            if (MAILBOX.RING_SLOTS - box.pending() < slots.length) break;
+            for (const sl of slots) box.push(sl.type, sl.payload);
+            inbox.shift();
+          }
+        });
+        try {
+          return await battle(fog, () => {
+            // Our name, as our link player says it (FillLinkPlayers reads the save).
+            const s2 = emu.read(save2, 32);
+            const name = [...gen3(me).slice(0, 7), 0xff];
+            emu.bytes(s2, name.length).set(name);
+            drain(() => undefined);
+            // Their ghost on the cell the hidden trainer faces, then the challenge: ours
+            // handed back to us when we challenged (link id 0), theirs to us when not.
+            const s1 = emu.read(save1, 32);
+            const self = objectsAt + emu.read(avatarAt + 5, 8) * OBJECT_EVENT_SIZE;
+            const f = emu.read(self + 0x18, 8) & 15;
+            const [dx, dy] = STEP[f] ?? [0, 1];
+            const back = (({ 1: 2, 2: 1, 3: 4, 4: 3 } as Record<number, number>)[f] ?? 2) as Dir;
+            send({ t: 'place', v: PROTOCOL, seat: FOE_SEAT, map: { group: emu.read(s1 + 4, 8), num: emu.read(s1 + 5, 8) },
+              x: emu.read(self + 0x10, 16) + dx, y: emu.read(self + 0x12, 16) + dy, f: back, st: 'alive', sprite: String(skin) });
+            send(first ? { t: 'challenge', seat: ME, opponent: FOE_SEAT, nonce: 0 } : { t: 'challenge', seat: FOE_SEAT, opponent: ME, nonce: 0 });
+          }, () => emu.read(netAt, 8) === 1,
+          () => emu.read(netAt, 8) === 0 && ((emu.read(mainAt + 4, 32) & ~1) >>> 0) === overworldCb, onStart,
+          () => ({ outcome: emu.read(netAt + 11, 8), species: 0, level: 0 }));
+        } finally {
+          watch();
+          link.listen(null);
+        }
+      });
+    },
+    foeOut() {
+      if (fighting && !broken) send({ t: 'out', seat: FOE_SEAT });
     },
     fogNow() {
       if (fighting && !broken && emu.read(ringAt, 8) === 0) emu.bytes(ringAt, 10).set(FOGGED);

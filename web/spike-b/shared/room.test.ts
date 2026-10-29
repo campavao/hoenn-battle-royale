@@ -219,6 +219,66 @@ describe('room battles', () => {
   });
 });
 
+describe('trainer against trainer', () => {
+  const L = 'MAP_LITTLEROOT_TOWN';
+  it('two trainers who see each other fight once, and stand until each one ends it', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 3, bot: false, name: 'A', skin: 0, spot: { map: L, x: 9, y: 12 }, facing: 1 });
+    room.apply({ c: 'join', id: 5, bot: false, name: 'B', skin: 1, spot: { map: L, x: 12, y: 12 }, facing: 3 });
+    const a = room.actor(3)!, b = room.actor(5)!;
+    // New by the truck: a grace first.
+    for (let i = 0; i < 299; i++) expect(room.step(new Map())).toEqual([]);
+    // B looks west along the row at A, three cells off: an engage, whoever looks.
+    expect(room.step(new Map())).toMatchObject([
+      { type: 'duel', id: 3, foe: 5, first: true },
+      { type: 'duel', id: 5, foe: 3, first: false },
+    ]);
+    expect(a.battling && b.battling).toBe(true);
+    expect([a.m.facing, b.m.facing]).toEqual([4, 3]); // face to face
+    expect(room.step(new Map([[3, [KEY_DOWN]], [5, [KEY_A]]]))).toEqual([]);
+    expect([a.m.spot.y, b.m.spot.y]).toEqual([12, 12]);
+    // One side's battle over first: the other is still in theirs.
+    room.apply({ c: 'end', id: 3 });
+    expect([a.battling, b.battling]).toEqual([false, true]);
+    room.apply({ c: 'end', id: 5 });
+    // The grace: no second fight straight away.
+    for (let i = 0; i < 119; i++) expect(room.step(new Map())).toEqual([]);
+    expect(room.step(new Map())).toMatchObject([{ type: 'duel' }, { type: 'duel' }]);
+  });
+
+  it('sees five cells along the look and no further, and never fights a bot this way', () => {
+    const room0 = makeRoom(MAPS, PATCHES, 99);
+    // A row of Littleroot with nothing in the way for seven cells.
+    let x0 = -1, y0 = -1;
+    for (let y = 0; y < 20 && x0 < 0; y++) for (let x = 0; x < 14 && x0 < 0; x++) {
+      if ([0, 1, 2, 3, 4, 5, 6].every((d) => room0.world.clear(L, x + d, y) && room0.world.standable(L, x + d, y))) { x0 = x; y0 = y; }
+    }
+    expect(x0).toBeGreaterThanOrEqual(0);
+    const at = (dx: number) => {
+      const room = makeRoom(MAPS, PATCHES, 99);
+      room.apply({ c: 'join', id: 1, bot: true, name: 'BOT', skin: 4, spot: { map: L, x: x0, y: y0 + 1 }, facing: 2 });
+      room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: L, x: x0, y: y0 }, facing: 4 });
+      room.apply({ c: 'join', id: 3, bot: false, name: 'B', skin: 1, spot: { map: L, x: x0 + dx, y: y0 }, facing: 2 });
+      for (let i = 0; i < 299; i++) room.step(new Map());
+      return room.step(new Map()).length;
+    };
+    expect(at(6)).toBe(0); // six cells
+    expect(at(5)).toBe(2); // five
+  });
+
+  it('a trainer whose foe left is still in the fight until their page ends it', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 3, bot: false, name: 'A', skin: 0, spot: { map: L, x: 9, y: 12 }, facing: 4 });
+    room.apply({ c: 'join', id: 5, bot: false, name: 'B', skin: 1, spot: { map: L, x: 11, y: 12 }, facing: 1 });
+    for (let i = 0; i < 299; i++) room.step(new Map());
+    expect(room.step(new Map())).toHaveLength(2);
+    room.apply({ c: 'leave', id: 5 });
+    expect(room.actor(3)!.battling).toBe(true);
+    room.apply({ c: 'end', id: 3 });
+    expect(room.actor(3)!.battling).toBe(false);
+  });
+});
+
 describe('item balls', () => {
   it('are dealt from the seed on plain ground a trainer can reach, a few a map', () => {
     const one = makeRoom(MAPS, PATCHES, 4242), two = makeRoom(MAPS, PATCHES, 4242), other = makeRoom(MAPS, PATCHES, 7);

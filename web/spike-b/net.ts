@@ -33,6 +33,10 @@ export interface WorldLink {
   drop(key: number, rest?: Bag): void;
   /** My team is down: off the map. */
   out(bag?: Bag): void;
+  /** A link block for the trainer I am fighting (online only). */
+  bt(q: number, d: number[]): void;
+  /** Where the blocks from the trainer I am fighting go. */
+  onBt: ((q: number, d: number[]) => void) | null;
   /** For the stats line. */
   status(): string;
 }
@@ -56,6 +60,8 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     end: () => host.end(me),
     drop: (key, rest) => host.drop(me, key, rest),
     out: (bag) => host.out(me, bag),
+    bt: () => undefined,
+    onBt: null,
     status: () => 'solo: you and the bots (no relay)',
   };
 }
@@ -82,6 +88,7 @@ class Online implements WorldLink {
   private lastSend = new Map<number, number>();
   private predicted: Actor | null = null;
   private closed = false;
+  onBt: ((q: number, d: number[]) => void) | null = null;
 
   constructor(private readonly ws: WebSocket, private readonly make: (seed: number) => Room) {
     ws.addEventListener('close', () => { this.closed = true; });
@@ -100,6 +107,8 @@ class Online implements WorldLink {
       this.syncing = false;
     } else if (m.t === 'f' && this.room && !this.syncing) {
       this.queue.push(...m.f);
+    } else if (m.t === 'bt') {
+      this.onBt?.(m.q, m.d);
     }
   }
 
@@ -177,6 +186,8 @@ class Online implements WorldLink {
   drop(key: number, rest?: Bag): void { this.send({ t: 'drop', k: key, rest }); }
 
   out(bag?: Bag): void { this.send({ t: 'out', bag }); }
+
+  bt(q: number, d: number[]): void { this.send({ t: 'bt', q, d }); }
 
   status(): string {
     if (this.closed) return 'the relay closed the connection: reload to rejoin';

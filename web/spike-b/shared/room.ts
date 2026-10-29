@@ -26,6 +26,7 @@ import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
 import { scatterItem } from '../../src/match/scatter';
 import { isTm, type BagRows } from './items';
+import { eitherSees, type Facing } from '../../src/bots/sight';
 import { dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
 
 export const KEY_UP = 1, KEY_DOWN = 2, KEY_LEFT = 4, KEY_RIGHT = 8, KEY_B = 16, KEY_A = 32;
@@ -53,8 +54,10 @@ export interface Actor {
   battling: boolean;
   /** A bot somebody has fought: it does not ask again. */
   beaten: boolean;
-  /** The bot this trainer is fighting, 0 for none (ids start at 1). */
+  /** Who this trainer is fighting, a bot or a trainer, 0 for none (ids start at 1). */
   foe: number;
+  /** No engage before this frame: the grace after a fight (BR_ENGAGE_GRACE). */
+  calm: number;
   /** A step finished whose arrival has not been looked at yet (the spots). */
   arriving: boolean;
 }
@@ -63,6 +66,9 @@ export interface Actor {
 export type RoomEvent =
   | { type: 'wild'; tick: number; id: number; map: string; x: number; y: number; key: number }
   | { type: 'fight'; tick: number; id: number; foe: number }
+  /** Two trainers saw each other: a link battle. `first` is the side that challenged
+   *  (link id 0, the lower id, as the ROM's own engage has it). */
+  | { type: 'duel'; tick: number; id: number; foe: number; first: boolean }
   | { type: 'item'; tick: number; id: number; key: number; item: number }
   | { type: 'bag'; tick: number; id: number; key: number; bag: Bag; name: string };
 
@@ -75,6 +81,12 @@ export interface Spill { key: number; map: string; x: number; y: number; name: s
 
 /** Nothing in it: no items, no money, nobody. */
 export const emptyBag = (b: Bag): boolean => !b.items.length && !b.money && !b.mons?.length;
+
+/** BR_ENGAGE_GRACE: after a fight, two seconds before the next engage. */
+const GRACE = 120;
+/** Everybody starts by the truck: five seconds to walk off before an engage. */
+const JOIN_GRACE = 300;
+const BACK: Record<number, number> = { 1: 2, 2: 1, 3: 4, 4: 3 };
 
 /** Spill keys, clear of the dealt balls' 1..n. */
 export const SPILL_KEY = 1 << 20;
@@ -173,7 +185,7 @@ export class Room {
   apply(cmd: Command): void {
     if (cmd.c === 'join') {
       if (this.actor(cmd.id)) return;
-      const a: Actor = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, beaten: false, foe: 0, arriving: false };
+      const a: Actor = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: this.tick + JOIN_GRACE, arriving: false };
       // Ordered by id, on every machine: who moves first decides who gets a contested cell.
       this.actors.push(a);
       this.actors.sort((p, q) => p.id - q.id);
@@ -190,16 +202,19 @@ export class Room {
         const key = SPILL_KEY + a.id;
         this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag: structuredClone(cmd.bag) });
       }
+      // A trainer they were fighting is still in that battle: their page ends it (their
+      // ROM wins it, BrNetlink_PeerOut) and says so.
       const foe = a?.foe ? this.actor(a.foe) : undefined;
-      if (foe) foe.battling = false;
+      if (foe?.bot) foe.battling = false;
       this.actors = this.actors.filter((o) => o.id !== cmd.id);
     } else {
       const a = this.actor(cmd.id);
       if (!a || !a.battling) return;
       a.battling = false;
       a.keys = a.last = 0;
+      a.calm = this.tick + GRACE;
       const foe = a.foe ? this.actor(a.foe) : undefined;
-      if (foe) foe.battling = false;
+      if (foe?.bot) foe.battling = false;
       a.foe = 0;
     }
   }
@@ -353,7 +368,37 @@ export class Room {
       if (a.bot) this.move(a, a.keys, events);
       else for (const bits of ins?.get(a.id) ?? []) this.move(a, bits, events);
     }
+    this.engage(events);
     return events;
+  }
+
+  /** Two trainers on one map who see each other fight (br_engage.c's BrEngage_Tick): the
+   *  eyeline both ways, BR_SIGHT_RANGE cells, stopped by collision (bots/sight.ts). Only
+   *  trainers standing still, neither in a fight nor in its grace. They turn to face each
+   *  other, and the lower id is the side that challenged. */
+  private engage(events: RoomEvent[]): void {
+    const free = this.actors.filter((a) => !a.bot && !a.battling && !a.m.action && this.tick >= a.calm);
+    for (let i = 0; i < free.length; i++) {
+      const a = free[i];
+      if (a.battling) continue;
+      for (let j = i + 1; j < free.length; j++) {
+        const b = free[j];
+        if (b.battling || a.m.spot.map !== b.m.spot.map) continue;
+        const look = (o: Actor) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing as Facing });
+        if (!eitherSees(this.world, look(a), look(b))) continue;
+        const dx = b.m.spot.x - a.m.spot.x, dy = b.m.spot.y - a.m.spot.y;
+        const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        a.m.facing = a.m.moveDir = toB;
+        b.m.facing = b.m.moveDir = BACK[toB];
+        a.battling = b.battling = true;
+        a.foe = b.id;
+        b.foe = a.id;
+        a.keys = a.last = b.keys = b.last = 0;
+        events.push({ type: 'duel', tick: this.tick, id: a.id, foe: b.id, first: true });
+        events.push({ type: 'duel', tick: this.tick, id: b.id, foe: a.id, first: false });
+        break;
+      }
+    }
   }
 
   /** One move of one actor on `bits`: sim.ts's frame, then what it landed on or pressed. */
@@ -397,7 +442,7 @@ export class Room {
           events.push({ type: 'bag', tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name });
         } else if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
           a.battling = foe.battling = foe.beaten = true;
-          foe.m.facing = foe.m.moveDir = ({ 1: 2, 2: 1, 3: 4, 4: 3 } as Record<number, number>)[a.m.facing];
+          foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
           events.push({ type: 'fight', tick: this.tick, id: a.id, foe: foe.id });
         }
@@ -443,7 +488,7 @@ export class Room {
       mix(m.facing); mix(m.moveDir); mix(m.runningState); mix(m.run ? 1 : 0); mix(m.strides);
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
-      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0)); mix(a.foe); mix(a.keys); mix(a.last);
+      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0)); mix(a.foe); mix(a.calm); mix(a.keys); mix(a.last);
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
     for (const [k, by] of this.picked) { mix(k); mix(by); }

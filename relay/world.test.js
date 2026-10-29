@@ -72,3 +72,49 @@ test("/world: two phones share one room at 60 Hz", async () => {
     await relay.close();
   }
 });
+
+test("/world: a link block goes to the trainer you are fighting, and nobody else", async () => {
+  const relay = createRelay({});
+  const { port } = await relay.listen(0, "127.0.0.1");
+  try {
+    const [a, b, c] = [phone(port), phone(port), phone(port)];
+    await Promise.all([a.open(), b.open(), c.open()]);
+    const ids = [];
+    for (const [p, name] of [[a, "alice"], [b, "bob"], [c, "cara"]]) {
+      p.send({ t: "join", name, skin: 0 });
+      ids.push((await p.until((m) => m.t === "hello")).id);
+    }
+    // Not fighting anybody: dropped.
+    a.send({ t: "bt", q: 1, d: [1, 2, 3] });
+    // By the truck alice (10,10) and bob (9,10) stand side by side; cara a step behind.
+    // Past the join grace, alice turns west and sees bob.
+    await new Promise((r) => setTimeout(r, 5200));
+    // (a trainer moves on its phone's inputs, one a frame: the turn, then standing)
+    a.send({ t: "in", s: 1, k: [4, ...Array(30).fill(0)] });
+    // ...once the turn has played out and the relay's room has them fighting.
+    for (let i = 0; ; i++) {
+      await new Promise((r) => setTimeout(r, 1100));
+      a.send({ t: "sync" });
+      const st = (await a.until((m) => m.t === "state")).state;
+      const me = st.actors.find((x) => x.id === ids[0]);
+      if (me.battling) { assert.equal(me.foe, ids[1]); break; }
+      assert.ok(i < 5, "alice never engaged");
+    }
+    a.send({ t: "bt", q: 1, d: [9, 8, 7, 300] });
+    const got = await b.until((m) => m.t === "bt");
+    assert.deepEqual(got, { t: "bt", q: 1, d: [9, 8, 7, 300 & 0xff] });
+    // bob's answer reaches alice; nothing reached cara, and the early block went nowhere
+    b.send({ t: "bt", q: 1, d: [5] });
+    assert.deepEqual(await a.until((m) => m.t === "bt"), { t: "bt", q: 1, d: [5] });
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(c.inbox.filter((m) => m.t === "bt").length, 0);
+    assert.equal(b.inbox.filter((m) => m.t === "bt").length, 0);
+    // A block too big is refused.
+    a.send({ t: "bt", q: 2, d: Array(2000).fill(0) });
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(b.inbox.filter((m) => m.t === "bt").length, 0);
+    for (const p of [a, b, c]) p.ws.close();
+  } finally {
+    await relay.close();
+  }
+});

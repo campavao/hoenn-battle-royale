@@ -22,7 +22,7 @@ import { DIR_EAST } from './sim';
 import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, emptyBag, makeRoom, type Actor, type Bag, type RoomEvent } from './shared/room';
 import { SKIN_GFX } from './shared/bots';
 import { onlineLink, soloLink, type WorldLink } from './net';
-import { bootRom, loadRom, lastStart, type Fought, type RomBattles } from './rom';
+import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { groundCount } from './shared/items';
 import { RomArt } from './romart';
 import type { GbaKey } from '../src/emu';
@@ -183,7 +183,7 @@ const battleNote = document.getElementById('battle-note')!;
 const gbaCanvas = document.getElementById('gba') as HTMLCanvasElement;
 let rom: RomBattles | null = null;
 let artMs = 0;
-let battle: { foe: Actor | null; shownAt: number } | null = null;
+let battle: { foe: Actor | null; shownAt: number; foeGone?: boolean } | null = null;
 /** The ROM has the screen for a dropped bag's team (rom.team). */
 let swapping = false;
 let calmUntil = 0;
@@ -354,6 +354,23 @@ function startFor(e: RoomEvent): void {
     const party = [mon(286, 5), mon(288, 5)];
     const fog = inFogNow();
     handOff(foe, (r, onStart) => r.fight(foe.name, party, foe.skin, onStart, fog));
+  } else if (e.type === 'duel') {
+    // Another trainer: both ROMs fight it out as a link battle, the blocks through the relay.
+    const foe = link.room.actor(e.foe);
+    const me = link.room.actor(link.me);
+    if (!foe || !me) { link.end(); return; }
+    const fog = inFogNow();
+    // Their blocks can come before our ROM is free to take them: held from now.
+    const early: [number, number[]][] = [];
+    link.onBt = (q, d) => early.push([q, d]);
+    const wire: DuelLink = {
+      send: (q, d) => link.bt(q, d),
+      listen: (take) => {
+        link.onBt = take;
+        if (take) for (const [q, d] of early.splice(0)) take(q, d);
+      },
+    };
+    handOff(foe, (r, onStart) => r.duel(me.name, foe.name, foe.skin, e.first, wire, onStart, fog));
   } else {
     const m = placed.get(e.map)!.m;
     const fog = inFogNow();
@@ -377,6 +394,15 @@ function endBattle(r: Fought | null): void {
   else if (r) lastResult = `last battle: ${wild ? `wild #${r.species} Lv${r.level}, ` : ''}${OUTCOME[r.outcome] ?? r.outcome}`;
   // A whiteout is the end of a trainer's match (Kanto's rules, DESIGN.md §10).
   if (r?.ok && (r.outcome === 2 || r.outcome === 3)) goOut(r.outcome === 2 ? 'Your team lost the battle.' : 'Your team went down with theirs.');
+}
+
+/** The trainer I am fighting left the room (closed the tab, or went out elsewhere): the
+ *  fight is mine, as in a match (BrNetlink_PeerOut). */
+function foeFrame(): void {
+  const foe = battle?.foe;
+  if (!foe || foe.bot || battle!.foeGone || link.room.actor(foe.id)) return;
+  battle!.foeGone = true;
+  rom?.foeOut();
 }
 
 // ---- the fog (room.ts's ring) ----------------------------------------------------------
@@ -822,6 +848,7 @@ function loop(now: number): void {
     frame += 1;
     for (const e of link.frame(myBits())) startFor(e);
     fogFrame();
+    foeFrame();
     pressed.clear();
   }
   const t1 = performance.now();
@@ -886,7 +913,7 @@ async function boot(): Promise<void> {
   const next = () => { const p = rest.find((r) => !r.mips); if (p) { paint(p); mipFor(p, 0); setTimeout(next, 16); } };
   setTimeout(next, 500);
   bootRom(files, link.room.seed).then((r) => { rom = r; giveNext(); }, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { link, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; } };
+  (window as unknown as { __spike: unknown }).__spike = { link, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; } };
 }
 
 void boot();
