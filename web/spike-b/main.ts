@@ -46,6 +46,8 @@ import { RingMap } from './ringmap';
 import { Watch } from './watch';
 import { keyPicture } from '../src/field';
 import { PadPrefsControl } from '../src/ui/padprefs';
+import { wireDpad } from './dpad';
+import { StartMenu } from './startmenu';
 import { BattleMenu, battleWantsNoPad, readBattleView } from '../src/ui/battlemenu';
 import { BAG_POSITION_POCKET, readBattleBag } from '../src/ui/bag';
 import { MENU_ACTION, TouchLayer } from '../src/touch';
@@ -219,6 +221,9 @@ const KEYMAP: Record<string, string> = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
   w: 'up', s: 'down', a: 'left', d: 'right', x: 'b', X: 'b', z: 'a', Z: 'a', Shift: 'b', Enter: 'a', ' ': 'a',
 };
+// A long press is a held button, never a page's selection, callout or drag (HBR-98).
+const typing = (t: EventTarget | null) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
+for (const type of ['contextmenu', 'selectstart', 'dragstart']) document.addEventListener(type, (e) => { if (!typing(e.target)) e.preventDefault(); });
 /** The start card is up: nothing behind it moves (review of #157). */
 const intro = () => document.getElementById('intro') !== null;
 // The menu and the room (lobby.ts) have the keys while they are up: Emerald's, as the
@@ -246,15 +251,6 @@ addEventListener('keydown', (e) => {
 });
 addEventListener('keyup', (e) => { const k = KEYMAP[e.key]; if (k) held.delete(k); });
 addEventListener('blur', () => held.clear());
-for (const el of document.querySelectorAll<HTMLElement>('.k')) {
-  const k = el.dataset.k!;
-  const down = (e: PointerEvent) => { e.preventDefault(); if (intro()) return; el.setPointerCapture(e.pointerId); el.classList.add('down'); if (!held.has(k)) pressed.add(k); held.add(k); };
-  const up = () => { el.classList.remove('down'); held.delete(k); };
-  el.addEventListener('pointerdown', down);
-  el.addEventListener('pointerup', up);
-  el.addEventListener('pointercancel', up);
-}
-
 // ---- the room ------------------------------------------------------------------------
 
 let placed: Map<string, Placed>;
@@ -391,9 +387,19 @@ function giveNext(): void {
 // BAG, its items. B or CANCEL leaves it lying. The pad drives the question.
 const askEl = document.getElementById('ask')!;
 let askButtons: HTMLButtonElement[] = [];
-let asking: { pick: number; done: (c: string) => void } | null = null;
+let asking: { pick: number; start: boolean; done: (c: string) => void } | null = null;
+const startMenu = new StartMenu(document.getElementById('startmenu') as HTMLCanvasElement, document.getElementById('stock') as HTMLCanvasElement);
+document.getElementById('startmenu')!.addEventListener('pointerdown', (e) => {
+  const i = startMenu.rowFor(e.clientX, e.clientY);
+  if (asking && i >= 0) { asking.pick = i; asking.done(askButtons[i].dataset.c!); }
+});
 
 function askPaint(): void {
+  if (asking?.start) {
+    const balls = link.room.ring().safari && rom ? rom.safariBalls() : null;
+    startMenu.show(askButtons.map((b) => b.textContent ?? ''), asking.pick, balls, zoom / (devicePixelRatio || 1));
+    return;
+  }
   askButtons.forEach((b, i) => b.classList.toggle('on', i === asking?.pick));
   askButtons[asking?.pick ?? -1]?.scrollIntoView({ block: 'nearest' });
 }
@@ -404,12 +410,13 @@ function askKey(k: string): void {
   if (k === 'up') asking.pick = (asking.pick + n - 1) % n;
   else if (k === 'down') asking.pick = (asking.pick + 1) % n;
   else if (k === 'a') return asking.done(askButtons[asking.pick].dataset.c!);
-  else if (k === 'b') return asking.done('');
+  else if (k === 'b' || (k === 'start' && asking.start)) return asking.done('');
   askPaint();
 }
 
-/** A question on the page, its rows `[label, answer]`; '' is no (B answers it too). */
-function ask(title: string, rows: [string, string][]): Promise<string> {
+/** A question on the page, its rows `[label, answer]`; '' is no (B answers it too). The
+ *  START menu (`start`) is Emerald's window on the field instead. */
+function ask(title: string, rows: [string, string][], start = false): Promise<string> {
   document.getElementById('ask-title')!.textContent = title;
   for (const b of askButtons) b.remove();
   askButtons = rows.map(([label, c], i) => {
@@ -421,9 +428,9 @@ function ask(title: string, rows: [string, string][]): Promise<string> {
     askEl.append(b);
     return b;
   });
-  askEl.classList.add('on');
+  if (!start) askEl.classList.add('on');
   return new Promise((resolve) => {
-    asking = { pick: 0, done: (c) => { asking = null; askEl.classList.remove('on'); calmUntil = frame + 30; resolve(c); } };
+    asking = { pick: 0, start, done: (c) => { asking = null; askEl.classList.remove('on'); startMenu.hide(); calmUntil = frame + 30; resolve(c); } };
     askPaint();
   });
 }
@@ -457,7 +464,18 @@ async function openBag(key: number, bag: Bag, who: string): Promise<void> {
  *  I stand, with this world's fog laid over it (ringmap.ts). */
 async function openMenu(): Promise<void> {
   if (!rom || isOut || battle || swapping || asking || spectating) return;
-  const c = await ask('MENU', [['POKéMON', '1'], ['BAG', '2'], ...(ringMap ? [['MAP', '13'] as [string, string]] : []), ['CARD', '4'], ...(lobby ? [['ROOM', 'room'] as [string, string]] : []), ['EXIT', '']]);
+  // The ROM's rows (start_menu.c): POKéMON once I have one, no MAP in the Safari, my
+  // name for the trainer card. A phone has the room on its dock, as live.
+  const name = link.room.actor(link.me)?.name || 'YOU';
+  const rows: [string, string][] = [
+    ...(rom.partyCount() > 0 ? [['POKéMON', '1'] as [string, string]] : []),
+    ['BAG', '2'],
+    ...(ringMap && !link.room.ring().safari ? [['MAP', '13'] as [string, string]] : []),
+    [name, '4'],
+    ...(lobby && !touchPad ? [['ROOM', 'room'] as [string, string]] : []),
+    ['EXIT', ''],
+  ];
+  const c = await ask('MENU', rows, true);
   if (c === 'room') { openSheet(); return; }
   await runMenu(c);
 }
@@ -688,6 +706,7 @@ function seeFrame(): void {
     keyCanvas.getContext('2d')?.putImageData(keyImage, 0, 0);
   } else if (rom && !up) rom.seeThrough(false);
   if (keyed !== seeing) { seeing = keyed; battleEl.classList.toggle('see', keyed); }
+  battleEl.classList.toggle('screen', up && !battle);
 }
 
 /** Every few seconds, between battles: my team as it stands, told to the room when it
@@ -1312,7 +1331,7 @@ const skinOf = new Map<number, number>();
 const padPrefs = new PadPrefsControl({
   root: document.documentElement,
   body: document.body,
-  dpad: document.querySelector<HTMLElement>('#pad .dpad')!,
+  dpad: document.getElementById('dpad-surface')!,
   ab: document.querySelector<HTMLElement>('#pad .ab')!,
   bar: document.getElementById('pad-edit')!,
   scale: () => 2,
@@ -1441,7 +1460,7 @@ function wirePhoneHud(): void {
       fogEverywhere: !!ring.last,
       safe: way ? `Safe ${way}` : null,
       ctx: { label: 'BIKE', item: ITEM_MACH_BIKE, enabled: false },
-      party: 1,
+      party: rom?.partyCount() ?? 0,
       moves: [],
     });
   }, 100);
@@ -1740,16 +1759,6 @@ addEventListener('keydown', (e) => {
   else if ((battle || swapping || romUp) && rom && k) rom.press(GBA_KEY[k]);
 });
 addEventListener('keyup', (e) => { const k = romKey(e.key); if (rom && k) rom.release(GBA_KEY[k]); });
-for (const el of document.querySelectorAll<HTMLElement>('.k')) {
-  const k = el.dataset.k!;
-  el.addEventListener('pointerdown', () => {
-    if (asking) askKey(k);
-    else if ((battle || swapping || romUp) && rom) rom.press(GBA_KEY[k]);
-    else if (k === 'start') void openMenu();
-  });
-  el.addEventListener('pointerup', () => rom?.release(GBA_KEY[k]));
-}
-
 // ---- a controller (the live game's wireGamepad, the parts the world uses) -------------
 // The live game's map for this device (hbr.padmap, its remap wizard's) and stick
 // (hbr.padstick), else the standard layout: face bottom/left A, right/top B, START, the
@@ -1777,6 +1786,15 @@ function padDown(k: string): void {
 function padUp(k: string): void {
   held.delete(k);
   rom?.release(GBA_KEY[k]);
+}
+// The touch pad: the live game's D-pad, A, B and START, the same as a controller's.
+wireDpad(document.getElementById('dpad-surface')!, padDown, padUp);
+for (const el of document.querySelectorAll<HTMLElement>('#pad .k')) {
+  const k = el.dataset.k!;
+  const up = () => { el.classList.remove('down'); padUp(k); };
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); el.classList.add('down'); padDown(k); });
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
 }
 let padKeys = padMap();
 let padStick = loadStickMap();
