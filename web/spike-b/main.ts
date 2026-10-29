@@ -964,9 +964,12 @@ function roundFrame(): void {
     }
     else standings(false);
   }
+  // A match of the page's own, in a lobby (QUICK PLAY with no relay): over when one is
+  // left or I am out, with nobody to say so but the room itself.
+  if (lobby && !link.online && matchOn && !endingAt && (isOut || over(link.room))) matchOver();
   // The relay said the match is over: once the frames that ended it have played here (or
   // a moment has passed), the standings and PLAY AGAIN.
-  if (endingAt && (over(link.room) || performance.now() - endingAt > 1500)) {
+  if (endingAt && (over(link.room) || isOut || performance.now() - endingAt > 1500)) {
     endingAt = 0;
     record(res.round);
     endingShown = true;
@@ -2466,7 +2469,15 @@ async function boot(): Promise<void> {
       onKicked: () => { room = null; forget(); lobby!.menu('The host took you out of the room.'); },
       onRooms: (rooms) => lobby?.listed(rooms),
       onMatch: (l) => startMatch(l),
-      onClosed: () => { reconnecting = false; matchOn = false; lobby!.menu('Lost the relay. Reload to play again.'); },
+      onOpen: () => lobby?.linkIs('up'),
+      onClosed: () => {
+        reconnecting = false;
+        lobby!.linkIs('down');
+        // A match of the page's own (QUICK PLAY with no relay) has no socket to lose.
+        if (matchOn && link?.online === false) return;
+        matchOn = false;
+        lobby!.menu('No relay. QUICK PLAY is you and the bots.');
+      },
       onDropped: () => {
         if (!reconnecting) { reconnecting = true; tick('Reconnecting…', true); }
         if (lobby?.sheetUp) lobby.stage.redraw();
@@ -2495,6 +2506,7 @@ async function boot(): Promise<void> {
       relayUrl: url.replace(/\/world$/, ''),
       leave: () => location.reload(),
       names: { species: speciesName, move: (id) => moveInfo(romTables, id)?.name },
+      solo: () => { room = null; startMatch(soloLink(hoenn.maps, patches, hoenn.world, (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0)); },
     });
     // Reloaded within a minute of a match: straight back in (or, too late, in to watch).
     const back = token();

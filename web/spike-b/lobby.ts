@@ -36,6 +36,9 @@ export interface LobbyHooks {
   list(): void;
   /** The relay SEND FEEDBACK's note goes to (its own socket, net/feedback.ts). */
   relayUrl: string;
+  /** QUICK PLAY with no relay: the bots and nobody else, in the page (the live game's
+   *  offline QUICK PLAY). */
+  solo(): void;
   /** Species and move names for MY STATS: the player's ROM's. */
   names: TallyNames;
 }
@@ -158,6 +161,7 @@ export class Lobby {
 
   private press(a: LobbyAction): void {
     if (a.kind === 'quick') this.hooks.join({});
+    else if (a.kind === 'solo') this.hooks.solo();
     else if (a.kind === 'host') this.hooks.join({ host: true });
     else if (a.kind === 'code') this.stage.push(this.codeEntry());
     else if (a.kind === 'name') this.stage.push(this.nameEntry());
@@ -176,6 +180,13 @@ export class Lobby {
   /** The room of a match a reload left too late to come back in as its trainer: the main
    *  menu's WATCH row goes back into it to look. */
   rewatch: string | null = null;
+
+  /** The relay: there ('up'), gone ('down', QUICK PLAY is the bots alone), or not yet. */
+  link: 'up' | 'down' | 'connecting' = 'connecting';
+  linkIs(state: 'up' | 'down'): void {
+    this.link = state;
+    if (this.stage.current === this.main) this.stage.redraw();
+  }
 
   /** The TRAINER CARD (the live game's, POK-335): name, sprite and record, and the two
    *  rows the world has a use for, MY LOOK and MY STATS. */
@@ -332,8 +343,8 @@ export class Lobby {
   private readonly main: DrawnScreen = menuScreen(() => ({
     title: 'HOENN BATTLE ROYALE',
     // The ways in the world has: no LOBBIES list or daily game here yet.
-    rows: playRows('up')
-      .filter((r) => r.action.kind === 'quick' || r.action.kind === 'host' || r.action.kind === 'lobbies' || r.action.kind === 'code')
+    rows: playRows(this.link)
+      .filter((r) => r.action.kind === 'quick' || r.action.kind === 'solo' || r.action.kind === 'host' || r.action.kind === 'lobbies' || r.action.kind === 'code')
       // The match a reload left too late to come back into (HBR-20): WATCH it.
       .concat(this.rewatch ? [rewatchRow(this.rewatch)] : [], HOWTO_ROW, FEEDBACK_ROW)
       .map((r): RowSpec => ({ label: r.label, id: r.id, art: r.art, onPress: () => this.press(r.action), ...(r.id === HOWTO_ROW.id && !howToRead(localStorage) ? { badge: true } : {}) })),
