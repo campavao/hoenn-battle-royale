@@ -75,6 +75,9 @@ export interface Settings {
   max: number;
   /** On LOBBIES (open), off it (private), or on it behind a passcode (pass). */
   door: 'open' | 'private' | 'pass';
+  /** The battles' pace (the live room's TEXT and ANIM): SLOW 1, MID 3, FAST 5. */
+  textSpeed: 1 | 3 | 5;
+  animations: boolean;
 }
 
 /** A room on LOBBIES' list. */

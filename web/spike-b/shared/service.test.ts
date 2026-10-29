@@ -65,7 +65,10 @@ describe('world rooms', () => {
       const code = (a.got.at(-1) as unknown as { code: string }).code;
       const sg = svc.open(g.link);
       sg.onText(JSON.stringify({ t: 'join', name: 'gus', skin: 0, code }));
-      expect(g.got.at(-1)).toMatchObject({ t: 'room', set: { bots: true, fogSecs: 120, safariSecs: 120 } });
+      expect(g.got.at(-1)).toMatchObject({ t: 'room', set: { bots: true, fogSecs: 120, safariSecs: 120, textSpeed: 5, animations: false } });
+      sa.onText(JSON.stringify({ t: 'set', set: { textSpeed: 3, animations: true } }));
+      sa.onText(JSON.stringify({ t: 'set', set: { textSpeed: 4 } }));
+      expect(g.got.at(-1)).toMatchObject({ set: { textSpeed: 3, animations: true } });
       sg.onText(JSON.stringify({ t: 'set', set: { bots: false } }));
       expect(g.got.at(-1)).toMatchObject({ set: { bots: true } });
       sa.onText(JSON.stringify({ t: 'set', set: { bots: false, fogSecs: 60, safariSecs: 0 } }));

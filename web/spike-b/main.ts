@@ -1110,6 +1110,8 @@ let looping = false;
  *  match begins it -- a fresh team, nobody out, the camera on my trainer. */
 function startMatch(l: WorldLink): void {
   link = l;
+  // The room's battle pace (the host's TEXT and ANIM); ?solo keeps the parked FAST, none.
+  if (room) rom?.pace(room.set.textSpeed, room.set.animations);
   // A patch whose symbols predate the MAP's (gRegionMapEntries, gPlttBufferFaded) has none.
   ringMap = art && RingMap.SYMBOLS.every((n) => Number.isFinite(art!.sym(n))) ? new RingMap(l.room, art) : null;
   matchOn = true;
@@ -2040,6 +2042,7 @@ async function boot(): Promise<void> {
     const sock = connectWorld(url, make, {
       onRoom: (r) => {
         room = r;
+        rom?.pace(r.set.textSpeed, r.set.animations);
         if (matchOn && !r.playing) matchOver();
         // The standings stay up until PLAY AGAIN; then the room as it is by then.
         else if (!matchOn && !winEl.classList.contains('on')) lobby!.roomIs(r);

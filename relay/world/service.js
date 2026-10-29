@@ -3577,6 +3577,8 @@ var WorldService = class {
             if (FOG_STEPS.includes(s.fogSecs)) room.set.fogSecs = s.fogSecs;
             if (SAFARI_STEPS.includes(s.safariSecs)) room.set.safariSecs = s.safariSecs;
             if (MAX_STEPS.includes(s.max)) room.set.max = s.max;
+            if (s.textSpeed === 1 || s.textSpeed === 3 || s.textSpeed === 5) room.set.textSpeed = s.textSpeed;
+            if (typeof s.animations === "boolean") room.set.animations = s.animations;
             if (s.door === "open" || s.door === "private") room.set.door = s.door;
             else if (s.door === "pass" && typeof s.pass === "string" && isPass(s.pass)) {
               room.set.door = "pass";
@@ -3724,7 +3726,7 @@ var WorldService = class {
       for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
     } while (this.rooms.has(code));
     const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
-    const set = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: ROOM_MAX, door: "open" };
+    const set = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: ROOM_MAX, door: "open", textSpeed: 5, animations: false };
     const room = { pass: "", code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map(), set };
     this.rooms.set(code, room);
     return room;
