@@ -34,6 +34,30 @@
       body.pad-editing #pad .dpad, body.pad-editing #pad .ab { outline: 2px dashed #f8d070; outline-offset: 4px; cursor: grab; visibility: visible; }
       .pad-edit { position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 110px); transform: translateX(-50%); z-index: 5; background: #fff; border: 3px solid #4c7a99; border-radius: 8px; padding: 8px 10px; }
       .pad-edit[hidden] { display: none; }
+      /* A phone's HUD and dock (the live game's ui/phonehud.ts): the place's sign and the
+         fog window over the field, PARTY / MAP / the room / START / BIKE over the pad. They
+         stand in for the corner and the buttons on a touch screen. */
+      #phud:not([hidden]) { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+      #phud canvas, #pdock canvas { display: block; image-rendering: pixelated; }
+      #phud.off-field > * { visibility: hidden; }
+      .hud-sign { position: absolute; left: calc(var(--s, 1.5) * 4px); top: calc(env(safe-area-inset-top) + var(--s, 1.5) * 4px); transition: opacity 300ms, visibility 300ms; }
+      .hud-sign.gone { opacity: 0; visibility: hidden; }
+      .hud-fog { position: absolute; right: calc(var(--s, 1.5) * 4px); top: calc(env(safe-area-inset-top) + var(--s, 1.5) * 4px); }
+      .hud-moves { position: absolute; right: calc(var(--s, 1.5) * 4px); top: calc(var(--s, 1.5) * 80px); }
+      .hud-moves.gone { display: none; }
+      #pdock:not([hidden]) { position: fixed; z-index: 3; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 186px); display: grid; grid-template-columns: auto auto auto; grid-template-rows: auto auto; gap: calc(var(--s, 1.5) * 4px); }
+      #pdock.off-field > .hud-btn { visibility: hidden; }
+      .hud-btn { padding: 0; margin: 0; border: 0; background: none; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+      .hud-btn:active:not([aria-disabled="true"]) { filter: brightness(0.86); }
+      .hud-btn[aria-disabled="true"] { cursor: not-allowed; }
+      #hud-party { grid-area: 1 / 1; }
+      #hud-map { grid-area: 2 / 1; }
+      #hud-start { grid-area: 1 / 3; }
+      #hud-ctx { grid-area: 2 / 3; }
+      .hud-menu { grid-area: 1 / 2 / 3 / 3; align-self: center; width: calc(var(--s, 1.5) * 32px); height: calc(var(--s, 1.5) * 32px); border-radius: 50%; border: calc(var(--s, 1.5) * 2px) solid rgba(255, 255, 255, 0.55); background: rgba(74, 74, 106, 0.75); color: #fff; font: calc(var(--s, 1.5) * 14px) / 1 system-ui, sans-serif; cursor: pointer; }
+      body.phone-hud #hud > button, body.phone-hud #corner { display: none; }
+      body.phone-hud #pad .st { visibility: hidden; }
+      body:has(#stage:not([hidden])) :is(#phud, #pdock), body:has(#battle.on) #pdock { visibility: hidden; }
       /* The phone's battle menu (ui/battlemenu.ts, the live game's): FIGHT/BAG/POKeMON/RUN
          and the moves as windows under the picture, --s CSS pixels to a GBA pixel. */
       #battle-menu:not([hidden]) { grid-area: 2 / 1; margin-top: calc(var(--s, 1.5) * 4px); display: grid; grid-template-columns: auto auto; justify-content: center; gap: calc(var(--s, 1.5) * 8px); align-content: start; }
@@ -184,6 +208,8 @@
       <div class="k st" data-k="start">START</div>
       <div class="ab"><div class="k" data-k="b">B</div><div class="k" data-k="a" style="margin-bottom:34px">A</div></div>
     </div>
+    <div id="phud" hidden></div>
+    <div id="pdock" hidden><button id="hud-menu" class="hud-menu" type="button" aria-label="Room">☰</button></div>
     <div id="pad-edit" class="pad-edit" hidden></div>
     <div id="found"></div>
     <div id="ask"><b id="ask-title"></b></div>

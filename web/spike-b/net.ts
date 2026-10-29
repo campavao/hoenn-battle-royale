@@ -292,6 +292,8 @@ export interface WorldHandlers {
   onMatch(link: WorldLink): void;
   /** The socket closed (or never opened) for good. */
   onClosed(): void;
+  /** The socket opened the first time: the relay is there. */
+  onOpen?(): void;
   /** The socket dropped and is being tried again (Reconnecting…). Without it, a drop
    *  is onClosed. */
   onDropped?(): void;
@@ -310,6 +312,7 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
   /** Tries since the socket last dropped, and when it dropped (0: it is up). */
   let tries = 0;
   let droppedAt = 0;
+  let opened = false;
   const queue: WorldUp[] = [];
   const send = (m: WorldUp) => {
     if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
@@ -321,6 +324,7 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
     ws = sock;
     sock.addEventListener('open', () => {
       const back = droppedAt > 0;
+      if (!opened) { opened = true; h.onOpen?.(); }
       droppedAt = 0;
       tries = 0;
       // Back after a drop: the page says how to come back in (the room, my id and key)
@@ -335,7 +339,7 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
       // as the relay holds the trainer (AWAY_MS); the page shows Reconnecting meanwhile.
       const now = Date.now();
       if (!droppedAt) droppedAt = now;
-      if (h.onDropped && now - droppedAt < RECONNECT_MS) {
+      if (h.onDropped && opened && now - droppedAt < RECONNECT_MS) {
         h.onDropped();
         setTimeout(() => { if (!closed && !open()) { closed = true; h.onClosed(); } }, Math.min(8000, 500 * 2 ** tries++));
         return;

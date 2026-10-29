@@ -58,7 +58,8 @@ export class Watch {
   /** The link the relay's callbacks are on, and who it was last told I watch. */
   private wired: WorldLink | null = null;
   private told = 0;
-  private eyes = 0;
+  /** How many watch me, as the relay last said. */
+  eyes = 0;
   /** What has come of the watched trainer's battles, not yet replayed. */
   private queue: { from: number; m: SpMsg }[] = [];
   private mirroring = false;

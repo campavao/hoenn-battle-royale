@@ -50,6 +50,7 @@ import { BattleMenu, battleWantsNoPad, readBattleView } from '../src/ui/battleme
 import { BAG_POSITION_POCKET, readBattleBag } from '../src/ui/bag';
 import { MENU_ACTION, TouchLayer } from '../src/touch';
 import { HUD } from '../src/net/hud';
+import { ITEM_MACH_BIKE, PhoneHud, signFor } from '../src/ui/phonehud';
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
 import { cardFields } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
@@ -458,7 +459,13 @@ async function openMenu(): Promise<void> {
   if (!rom || isOut || battle || swapping || asking || spectating) return;
   const c = await ask('MENU', [['POKéMON', '1'], ['BAG', '2'], ...(ringMap ? [['MAP', '13'] as [string, string]] : []), ['CARD', '4'], ...(lobby ? [['ROOM', 'room'] as [string, string]] : []), ['EXIT', '']]);
   if (c === 'room') { openSheet(); return; }
-  if (!c || !rom || isOut || battle || swapping) return;
+  await runMenu(c);
+}
+
+/** A row of the START menu (start_menu.c's MENU_ACTION_*) on the ROM's own screen: what
+ *  MENU picked, or the phone dock's PARTY and MAP straight away. */
+async function runMenu(c: string): Promise<void> {
+  if (!c || !rom || isOut || battle || swapping || asking || spectating) return;
   const me = link.room.actor(link.me);
   const look = c === '13' && me && ringMap ? ringMap.look(me.m.spot) : undefined;
   let uncover = () => {};
@@ -964,9 +971,12 @@ function roundFrame(): void {
     }
     else standings(false);
   }
+  // A match of the page's own, in a lobby (QUICK PLAY with no relay): over when one is
+  // left or I am out, with nobody to say so but the room itself.
+  if (lobby && !link.online && matchOn && !endingAt && (isOut || over(link.room))) matchOver();
   // The relay said the match is over: once the frames that ended it have played here (or
   // a moment has passed), the standings and PLAY AGAIN.
-  if (endingAt && (over(link.room) || performance.now() - endingAt > 1500)) {
+  if (endingAt && (over(link.room) || (isOut && !link.online) || performance.now() - endingAt > 1500)) {
     endingAt = 0;
     record(res.round);
     endingShown = true;
@@ -979,8 +989,9 @@ function roundFrame(): void {
 let recordedRound = -1;
 function record(round: number): void {
   const res = link.room.results;
-  // ?solo is practice, not a match: it stays out of the career.
-  if (!link.online || recordedRound === round || !res.entrants.some(([id]) => id === link.me)) return;
+  // ?solo is practice, not a match: it stays out of the career. Offline QUICK PLAY (in
+  // the lobby) is a match, and counts, as live (session.ts).
+  if ((!link.online && !lobby) || recordedRound === round || !res.entrants.some(([id]) => id === link.me)) return;
   recordedRound = round;
   const i = res.fallen.findIndex((f) => f.id === link.me);
   // Placed by when I went out: the last out is second; never out, and nobody won, a tie for first.
@@ -1384,6 +1395,58 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
     } : undefined,
   };
 }
+/** A phone's HUD and dock (the live game's ui/phonehud.ts) in place of the corner and the
+ *  buttons: the sign of the place I stand in, the fog window (Safari or Fog, the clock,
+ *  how many are left, which way is safe), and PARTY, MAP, START and the room under it. */
+function wirePhoneHud(): void {
+  const top = document.getElementById('phud')!;
+  const dock = document.getElementById('pdock')!;
+  const hud = new PhoneHud({
+    top,
+    dock,
+    onParty: () => void runMenu('1'),
+    onMap: () => void runMenu('13'),
+    onStart: () => void openMenu(),
+    onUse: () => undefined,
+  });
+  document.getElementById('hud-menu')!.addEventListener('click', () => openSheet());
+  const scale = () => {
+    const s = Math.min(2, Math.max(1, innerWidth / 250));
+    document.documentElement.style.setProperty('--s', String(s));
+    hud.setScale(s);
+  };
+  addEventListener('resize', scale);
+  scale();
+  document.body.classList.add('phone-hud');
+  setInterval(() => {
+    // On the map: a trainer out, or watching, has neither (the watch strip is theirs).
+    const me = link?.room.actor(link.me);
+    top.hidden = dock.hidden = !me;
+    if (!me) { hud.hide(); return; }
+    const ring = link.room.ring();
+    const res = link.room.results;
+    const fogged = link.room.inFog(me.m.spot);
+    const way = ringMap?.way(me.m.spot, ring) ?? '';
+    const section = link.room.maps.get(me.m.spot.map)?.section ?? '';
+    const sign = signFor(section);
+    hud.update({
+      onField: !battle && !swapping && !romUp && !asking && !spectating,
+      place: sign.name,
+      theme: sign.theme,
+      clock: Math.ceil(ring.left / 60),
+      left: res.entrants.length ? res.entrants.length - res.fallen.length : link.room.actors.length,
+      eyes: watch.eyes,
+      flash: fogged ? (frame % 60 < 30 ? 2 : 1) : 0,
+      ring: ring.safari ? null : ring.last ? 'Fog everywhere' : ringMap?.place(ring) ?? '',
+      fogEverywhere: !!ring.last,
+      safe: way ? `Safe ${way}` : null,
+      ctx: { label: 'BIKE', item: ITEM_MACH_BIKE, enabled: false },
+      party: 1,
+      moves: [],
+    });
+  }, 100);
+}
+
 /** A phone's battle menu (the live game's ui/battlemenu.ts): FIGHT, BAG, POKeMON, RUN
  *  and the moves as windows under the hidden ROM's picture, tapped rather than walked to
  *  with the D-pad; the live TouchLayer walks the ROM's cursor to what was tapped. */
@@ -2423,7 +2486,7 @@ async function boot(): Promise<void> {
     files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; });
     romEmu = files.emu;
     versionLine = files.version;
-    if (touchPad) wireBattleMenu(files);
+    if (touchPad) { wireBattleMenu(files); wirePhoneHud(); }
   } catch (e) {
     console.warn('spike ROM not loaded', e);
     return;
@@ -2466,7 +2529,15 @@ async function boot(): Promise<void> {
       onKicked: () => { room = null; forget(); lobby!.menu('The host took you out of the room.'); },
       onRooms: (rooms) => lobby?.listed(rooms),
       onMatch: (l) => startMatch(l),
-      onClosed: () => { reconnecting = false; matchOn = false; lobby!.menu('Lost the relay. Reload to play again.'); },
+      onOpen: () => lobby?.linkIs('up'),
+      onClosed: () => {
+        reconnecting = false;
+        lobby!.linkIs('down');
+        // A match of the page's own (QUICK PLAY with no relay) has no socket to lose.
+        if (matchOn && link?.online === false) return;
+        matchOn = false;
+        lobby!.menu('No relay. QUICK PLAY is you and the bots.');
+      },
       onDropped: () => {
         if (!reconnecting) { reconnecting = true; tick('Reconnecting…', true); }
         if (lobby?.sheetUp) lobby.stage.redraw();
@@ -2495,6 +2566,7 @@ async function boot(): Promise<void> {
       relayUrl: url.replace(/\/world$/, ''),
       leave: () => location.reload(),
       names: { species: speciesName, move: (id) => moveInfo(romTables, id)?.name },
+      solo: () => { room = null; startMatch(soloLink(hoenn.maps, patches, hoenn.world, (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0)); },
     });
     // Reloaded within a minute of a match: straight back in (or, too late, in to watch).
     const back = token();
