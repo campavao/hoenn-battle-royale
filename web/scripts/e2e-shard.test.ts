@@ -1,4 +1,5 @@
 // CI's e2e shards (scripts/e2e-shard.mjs): every test in exactly one, cut by time.
+import { readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { cut, FILE_SECONDS, UNKNOWN_SECONDS } from './e2e-shard.mjs';
 
@@ -33,5 +34,10 @@ describe('e2e-shard', () => {
   it('names the path from web/, so watch.spec.ts cannot also pick out-watch.spec.ts', () => {
     const [s] = cut(at('watch.spec.ts', 19), 1);
     expect(s.filters).toEqual(['e2e/watch.spec.ts:19']);
+  });
+
+  it('has a time for every spec in e2e/, so a new one is not dealt blind', () => {
+    const specs = readdirSync(new URL('../e2e', import.meta.url)).filter((f) => f.endsWith('.spec.ts'));
+    expect(specs.filter((f) => !(f in FILE_SECONDS))).toEqual([]);
   });
 });
