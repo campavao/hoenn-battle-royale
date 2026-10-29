@@ -7,12 +7,13 @@
 
 import { decodeGrid, sameSpot, type SeamDir, type Spot, type WorldMap } from '../../src/bots/world';
 import { findPath, findPathToAny, type Path } from '../../src/bots/path';
+import { NAMES } from '../../src/bots/roster';
+import { mulberry32, pickIndex } from '../../src/match/clock';
 import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, type Actor, type Room } from './room';
 
 // The wardrobe (br_ghosts.c sSkinGraphics, career.ts SKINS): a bot wears a skin so the
 // trainer you walk up to is the trainer the ROM puts in the battle.
 export const SKIN_GFX = [0, 89, 100, 105, 55, 45, 31, 32, 42, 43, 21, 22, 25, 18, 35, 47];
-export const SKIN_NAME = ['BRENDAN', 'MAY', 'BRENDAN', 'MAY', 'HIKER', 'BEAUTY', 'CAMPER', 'PICNIC', 'SWIMMER', 'SWIMMER', 'EXPERT', 'EXPERT', 'POKEFAN', 'POKEFAN', 'JOEY', 'LASS'];
 export const botSkin = (n: number) => 4 + (n % 12);
 
 /** `wait`: frames left to stand; `dir`: the way it went last. A bot with somewhere to be
@@ -147,10 +148,15 @@ export function botSpawns(room: Room, maps: readonly WorldMap[], count: number):
   const grids = new Map(land.map((m) => [m.id, decodeGrid(m.grid, m.w * m.h)]));
   const out: { name: string; skin: number; spot: Spot; facing: number; brain: Brain }[] = [];
   const taken = new Set<string>();
+  // Named as the live match names its bots (bots/roster.ts), so no two rows of the
+  // standings read the same (HBR-96): Hoenn's names, dealt from the seed, then BOTn.
+  const deal = mulberry32(room.seed ^ 0x8b07);
+  const names = [...NAMES];
   const add = (spot: Spot, facing: number, skin: number) => {
     taken.add(`${spot.map}:${spot.x}:${spot.y}`);
     const n = out.length + 1;
-    out.push({ name: SKIN_NAME[skin], skin, spot, facing, brain: { rng: (n * 2654435761) >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
+    const name = names.length > 0 ? names.splice(pickIndex(deal, names.length), 1)[0] : `BOT${n}`;
+    out.push({ name, skin, spot, facing, brain: { rng: (n * 2654435761) >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
   };
   for (const [x, y] of [[7, 12], [13, 13], [11, 16]].slice(0, count)) add({ map: 'MAP_LITTLEROOT_TOWN', x, y }, 1, botSkin(out.length * 7 + 1));
   for (let tries = 0; out.length < count && tries < 50000; tries++) {

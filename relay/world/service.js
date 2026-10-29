@@ -43,6 +43,17 @@ var world_default = { maps: [{ id: "MAP_PETALBURG_CITY", group: 0, num: 0, w: 30
 var import_patches2 = __toESM(require_patches(), 1);
 
 // web/src/match/clock.ts
+function mulberry32(seed, state) {
+  let a = (state ?? seed) | 0;
+  const rng = () => {
+    a = a + 1831565813 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+  rng.state = () => a;
+  return rng;
+}
 function pickIndex(rng, length) {
   return Math.min(length - 1, Math.floor(rng() * length));
 }
@@ -1218,6 +1229,42 @@ function findPathToAny(world, from, goals, maxVisited = DEFAULT_BUDGET, surf = f
   if (start < 0) return nowhere(maxVisited);
   return search(world, start, { cell: -1, any: wanted, map: -1, x: 0, y: 0, stayOn: world.mapOf(start) }, maxVisited, surf, cut, solid);
 }
+
+// web/src/bots/roster.ts
+var NAMES = [
+  "BRENDAN",
+  "MAY",
+  "WALLY",
+  "ROXANNE",
+  "BRAWLY",
+  "WATTSON",
+  "FLANNERY",
+  "NORMAN",
+  "WINONA",
+  "TATE",
+  "LIZA",
+  "JUAN",
+  "SIDNEY",
+  "PHOEBE",
+  "GLACIA",
+  "DRAKE",
+  "STEVEN",
+  "WALLACE",
+  "ARCHIE",
+  "MAXIE",
+  "COURTNEY",
+  "TABITHA",
+  "SHELLY",
+  "MATT",
+  "RILEY",
+  "CAMERON",
+  "DEVON",
+  "BIRCH",
+  "LANETTE",
+  "BILL",
+  "SCOTT",
+  "GABBY"
+];
 
 // web/spike-b/shared/marts.ts
 var MARTS = [
@@ -3186,7 +3233,6 @@ function makeRoom(all, patches, seed, world) {
 }
 
 // web/spike-b/shared/bots.ts
-var SKIN_NAME = ["BRENDAN", "MAY", "BRENDAN", "MAY", "HIKER", "BEAUTY", "CAMPER", "PICNIC", "SWIMMER", "SWIMMER", "EXPERT", "EXPERT", "POKEFAN", "POKEFAN", "JOEY", "LASS"];
 var botSkin = (n) => 4 + n % 12;
 var KEY_OF = { 1: KEY_DOWN | KEY_B, 2: KEY_UP | KEY_B, 3: KEY_LEFT | KEY_B, 4: KEY_RIGHT | KEY_B };
 function rand(b) {
@@ -3299,10 +3345,13 @@ function botSpawns(room, maps, count) {
   const grids = new Map(land.map((m) => [m.id, decodeGrid(m.grid, m.w * m.h)]));
   const out = [];
   const taken = /* @__PURE__ */ new Set();
+  const deal = mulberry32(room.seed ^ 35591);
+  const names = [...NAMES];
   const add = (spot, facing, skin) => {
     taken.add(`${spot.map}:${spot.x}:${spot.y}`);
     const n = out.length + 1;
-    out.push({ name: SKIN_NAME[skin], skin, spot, facing, brain: { rng: n * 2654435761 >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
+    const name = names.length > 0 ? names.splice(pickIndex(deal, names.length), 1)[0] : `BOT${n}`;
+    out.push({ name, skin, spot, facing, brain: { rng: n * 2654435761 >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
   };
   for (const [x, y] of [[7, 12], [13, 13], [11, 16]].slice(0, count)) add({ map: "MAP_LITTLEROOT_TOWN", x, y }, 1, botSkin(out.length * 7 + 1));
   for (let tries = 0; out.length < count && tries < 5e4; tries++) {
@@ -3505,10 +3554,8 @@ var SAFARI_STEPS = [0, 60, 120, 180];
 
 // web/spike-b/shared/over.ts
 function over(room) {
-  const r = room.results;
-  if (r.winner) return true;
-  if (r.entrants.length && !r.entrants.some(([id]) => room.actor(id) && !room.actor(id).bot && !r.fallen.some((f) => f.id === id))) return true;
-  return room.ring().round > r.round;
+  if (room.results.winner) return true;
+  return room.ring().round > room.results.round;
 }
 
 // web/spike-b/shared/wire.ts

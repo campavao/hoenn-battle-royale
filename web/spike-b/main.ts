@@ -975,11 +975,11 @@ function roundFrame(): void {
     else standings(false);
   }
   // A match of the page's own, in a lobby (QUICK PLAY with no relay): over when one is
-  // left or I am out, with nobody to say so but the room itself.
-  if (lobby && !link.online && matchOn && !endingAt && (isOut || over(link.room))) matchOver();
+  // left, with nobody to say so but the room itself. Out, I watch the rest, as live (HBR-96).
+  if (lobby && !link.online && matchOn && !endingAt && over(link.room)) matchOver();
   // The relay said the match is over: once the frames that ended it have played here (or
   // a moment has passed), the standings and PLAY AGAIN.
-  if (endingAt && (over(link.room) || (isOut && !link.online) || performance.now() - endingAt > 1500)) {
+  if (endingAt && (over(link.room) || performance.now() - endingAt > 1500)) {
     endingAt = 0;
     record(res.round);
     endingShown = true;
@@ -1062,15 +1062,17 @@ function results(res: Results, waited = 0): void {
   const survived = Math.max(0, Math.round((end - link.room.epoch) / 60));
   const placed = [...place].map(([seat, placement]) => ({ seat, placement })).sort((p, q) => p.placement - q.placement);
   const t = lastRound;
-  const beaten = res.fallen.filter((f) => f.by && f.by === nameOf(link.me)).length;
+  const beaten = (id: number) => res.fallen.filter((f) => f.by && f.by === nameOf(id)).length;
   lobby!.results({
     view: resultsView({ placement: place.get(link.me), survived, winner: res.winner || undefined, ended: true }, n, link.me, nameOf),
     fame: fameOf(res.winner || undefined, link.me, res.winner ? link.teams.get(res.winner) : undefined, nameOf, speciesName, (id) => moveInfo(romTables, id)?.name),
     standings: standingsOf(placed, link.me, nameOf),
     record: [
-      { label: 'BEATEN', value: String(beaten) },
+      { label: 'BEATEN', value: String(beaten(link.me)) },
       ...(t ? tallyLines({ won: t.won, caught: t.caught, steps: t.steps, items: t.items, mon: favourite(t.mons), move: favourite(t.moves) }, { species: speciesName, move: (id) => moveInfo(romTables, id)?.name }) : []),
     ],
+    // The CHAMPION page, a bot's too, as live (HBR-96).
+    champion: res.winner && res.winner !== link.me ? { name: nameOf(res.winner), lines: [{ label: 'BEATEN', value: String(beaten(res.winner)) }] } : undefined,
   }, () => { worldSock?.leave(); room = null; lobby!.menu(); });
 }
 

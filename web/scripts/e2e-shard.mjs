@@ -49,6 +49,7 @@ export const FILE_SECONDS = {
   'pwa.spec.ts': 4,
   'refresh-rate.spec.ts': 24,
   'reload-rejoin.spec.ts': 77,
+  'results-scroll.spec.ts': 5,
   'solo.spec.ts': 243,
   'speaker.spec.ts': 21,
   'spectate-dpad.spec.ts': 14,

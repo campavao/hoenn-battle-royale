@@ -79,10 +79,13 @@ function loadCareerFile(then: (note: string) => void): void {
   input.click();
 }
 
-/** Who I am, as the live game keeps it (career.ts): the name and sprite on the trainer card. */
+/** Who I am, as the live game keeps it (career.ts): the name and sprite on the trainer card.
+ *  No name saved is the live game's fallback too (app.ts careerName), never TRAINER (HBR-107). */
 export function me(): { name: string; skin: number } {
   const c = loadCareer();
-  return { name: c.name ?? '', skin: c.skin ?? 0 };
+  let old = '';
+  try { old = localStorage.getItem('hbr:name') ?? ''; } catch { /* a blocked store: no old name */ }
+  return { name: c.name || cleanName(old) || 'CAM', skin: c.skin ?? 0 };
 }
 
 export class Lobby {
@@ -193,7 +196,7 @@ export class Lobby {
   private readonly trainer: DrawnScreen = trainerScreen(() => {
     const c = loadCareer();
     return {
-      face: { name: me().name || 'TRAINER', skin: me().skin, wins: c.wins, played: c.matches, best: c.best },
+      face: { name: me().name, skin: me().skin, wins: c.wins, played: c.matches, best: c.best },
       rows: [
         { label: 'MY LOOK', detail: 'sprite and lines', id: 'trainer-look', onPress: () => this.press({ kind: 'look' }) },
         { label: 'MY STATS', detail: 'every match so far', id: 'trainer-mystats', onPress: () => this.press({ kind: 'mystats' }) },
@@ -352,7 +355,7 @@ export class Lobby {
     tiles: true,
     note: this.note,
     noteId: 'lobby-note',
-    trainer: { name: me().name || 'TRAINER', skin: me().skin, onPress: () => this.stage.push(this.trainer) },
+    trainer: { name: me().name, skin: me().skin, onPress: () => this.stage.push(this.trainer) },
   }));
 
   /** Four letters: a locked room's passcode, typed to come in or set by its host. */

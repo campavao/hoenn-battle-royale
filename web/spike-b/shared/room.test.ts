@@ -859,7 +859,7 @@ describe('rounds', () => {
 });
 
 describe('a match from a room', () => {
-  it('START locks it to everybody at the truck, and it is over when the trainers are', () => {
+  it('START locks it to everybody at the truck, and it is over when one is left', () => {
     const host = new Host(makeRoom(MAPS, PATCHES, 11), 3, MAPS);
     const a = host.join('ALICE', 0, undefined, 1000);
     const b = host.join('BOB', 0, undefined, 1001);
@@ -877,11 +877,17 @@ describe('a match from a room', () => {
     host.out(a);
     host.advance();
     expect(over(room)).toBe(false);
-    // The last trainer out: over, whoever of the bots is left.
+    // The last trainer out: the bots play it out, and the trainers watch (HBR-96).
     host.out(b);
     host.advance();
     expect(room.results.winner).toBe(0);
-    expect(over(room)).toBe(true);
+    expect(over(room)).toBe(false);
+    // ...to the end of the round, when the fog lifts.
+    const round = room.results.round;
+    let frames = 1;
+    while (!over(room) && frames < 200_000) { host.advance(); frames++; }
+    expect(frames).toBeGreaterThan(60);
+    expect(room.results.winner || room.ring().round > round).toBeTruthy();
   });
 });
 

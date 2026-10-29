@@ -136,6 +136,9 @@
         display: flex; justify-content: center; align-items: flex-start;
         overflow: hidden;
         padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        /* A quick second tap (an arrow that did nothing, HBR-91) is not a zoom that pushes
+           the buttons off a phone: iOS ignores the viewport's user-scalable=no. */
+        touch-action: manipulation;
       }
       #stage[hidden] { display: none; }
       /* Over the game still running under it: the in-match sheet on a phone (POK-320). */
