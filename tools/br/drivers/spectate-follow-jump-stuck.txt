@@ -1,0 +1,35 @@
+# spectate-follow-jump-stuck: the camera's jump onto a watched trainer one map over, when
+# no walk of the view gets there (spectate-follow-jump-seam's other half). Route 113 (0:28)
+# borders Route 111 (0:26) on the west at rows 0..19 only. From Route 111's (0,60), across
+# first goes over Route 111's west seam into Route 112 (0:27), which borders Route 113 as
+# well, and the walks from there run out of steps CameraMove can take. That is a warp
+# after all, and it lands on their cell; before, a walk went on over a seam with no
+# connection behind it and the ROM never came back.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 1A 00 00 3C 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 26
+expect u16 *gSaveBlock1Ptr+2 60
+# seat 1 on Route 113 at (0,0) -- 7, 7 with MAP_OFFSET -- facing south
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 1C 07 00 07 00 01 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 10
+expect u8 gBrSeats+16 1
+# FOLLOW seat 1
+pokebytes gBrMailbox+0x1058 14 04 01 00 00 01
+poke u16 gBrMailbox+0x0C 2
+wait 1
+# the walk went into Route 112, not straight there
+expect u8 *gSaveBlock1Ptr+5 27
+shot cut
+# ...and the warp takes the view onto their cell on Route 113
+waitfor u8 *gSaveBlock1Ptr+5 28 240
+wait 60
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 28
+expect u16 *gSaveBlock1Ptr+0 0
+expect u16 *gSaveBlock1Ptr+2 0
+expect u32 gMain+4 CB2_Overworld+1
+expectge u8 gBrSpectate+9 1
+shot following
+say spectate follow jump stuck ok
