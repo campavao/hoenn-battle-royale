@@ -45,6 +45,11 @@ import { RomArt } from './romart';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
 import { keyPicture } from '../src/field';
+import { PadPrefsControl } from '../src/ui/padprefs';
+import { BattleMenu, battleWantsNoPad, readBattleView } from '../src/ui/battlemenu';
+import { BAG_POSITION_POCKET, readBattleBag } from '../src/ui/bag';
+import { MENU_ACTION, TouchLayer } from '../src/touch';
+import { HUD } from '../src/net/hud';
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
 import { cardFields } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
@@ -1292,6 +1297,16 @@ function leaveMatch(): void {
 let sheetCard: number | null = null;
 let sheetLeave = false;
 const skinOf = new Map<number, number>();
+/** A phone's D-pad and A/B, moved, faded or hidden from the sheet (the live game's). */
+const padPrefs = new PadPrefsControl({
+  root: document.documentElement,
+  body: document.body,
+  dpad: document.querySelector<HTMLElement>('#pad .dpad')!,
+  ab: document.querySelector<HTMLElement>('#pad .ab')!,
+  bar: document.getElementById('pad-edit')!,
+  scale: () => 2,
+});
+const touchPad = matchMedia('(pointer: coarse)').matches;
 const sheetBtn = document.getElementById('sheet')!;
 sheetBtn.addEventListener('click', () => openSheet());
 function openSheet(): void {
@@ -1348,7 +1363,7 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
     remapping: remap.on,
     remapLine: remap.line,
     help: ['Arrows move  Z: A  X: B  M: MENU', 'R: this sheet  V: spectate  pads too'],
-    version: 'spike B',
+    version: versionLine,
     onSeat: (seat) => { sheetCard = seat; lobby?.stage.redraw(); },
     onKick: () => undefined,
     onCloseCard: () => { sheetCard = null; lobby?.stage.redraw(); },
@@ -1362,10 +1377,70 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
     onRemap: () => { remapPad(); lobby?.stage.redraw(); },
     onResetPad: () => { resetPad(); lobby?.stage.redraw(); },
     onForget: () => { forgetRom(); },
+    pad: touchPad ? {
+      hidden: padPrefs.hidden,
+      onMove: () => { lobby?.closeSheet(); padPrefs.edit(); },
+      onToggle: () => { padPrefs.toggleHidden(); lobby?.stage.redraw(); },
+    } : undefined,
   };
 }
+/** A phone's battle menu (the live game's ui/battlemenu.ts): FIGHT, BAG, POKeMON, RUN
+ *  and the moves as windows under the hidden ROM's picture, tapped rather than walked to
+ *  with the D-pad; the live TouchLayer walks the ROM's cursor to what was tapped. */
+function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
+  const { emu } = files;
+  const symbols = new (class extends Map<string, number> {
+    get(n: string): number | undefined { const a = files.sym(n); return Number.isNaN(a) ? undefined : a; }
+  })();
+  const sym = (n: string) => symbols.get(n);
+  const tables = { bytes: files.rom, sym };
+  const touch = new TouchLayer({ emu, canvas: gbaCanvas, surface: gbaCanvas, symbols, rom: files.rom });
+  touch.attach();
+  const root = document.getElementById('battle-menu')!;
+  const menu = new BattleMenu({
+    root,
+    rom: tables,
+    choose: (which, slot, move) => touch.chooseBattle(which, slot, move),
+    back: () => touch.tapKey('b'),
+    onShown: (on) => document.body.classList.toggle('battle-menu', on),
+    readBag: () => readBattleBag(emu, sym, tables),
+    useItem: sym('gBrBag') !== undefined && sym('gBagPosition') !== undefined
+      ? (pocket, item) => touch.chooseBattle(MENU_ACTION, 1, undefined, () => {
+        emu.write(sym('gBagPosition')! + BAG_POSITION_POCKET, pocket, 8);
+        emu.write(sym('gBrBag')!, item, 16);
+      })
+      : undefined,
+  });
+  const resize = () => {
+    const box = gbaCanvas.getBoundingClientRect();
+    if (!box.width) return;
+    const s = box.width / 240;
+    battleEl.style.setProperty('--s', String(s));
+    menu.setScale(s);
+    menu.setRoom((innerHeight - box.bottom - 8) / s);
+  };
+  addEventListener('resize', resize);
+  let noPad = false;
+  let wasUp = false;
+  const hudBase = sym('gBrHud');
+  emu.onFrame(() => {
+    const up = battleEl.classList.contains('on');
+    if (up && !wasUp) resize();
+    wasUp = up;
+    // The battle's own FIGHT/BAG box comes off under the windows (br_battle.c
+    // BrBattle_MenuBoxOff), as on a phone live; written each frame, as every battle
+    // starts from the parked boot.
+    if (hudBase !== undefined) emu.write(hudBase + HUD.OFF_NO_BATTLE_BOX, up ? 1 : 0, 8);
+    menu.update(up ? readBattleView(emu, sym, tables, menu.wantsBag) : null);
+    const off = up && battleWantsNoPad(emu, sym, tables);
+    if (off !== noPad) document.body.classList.toggle('battle-no-pad', (noPad = off));
+  });
+}
+
 /** FORGET ROM, asked first as the live sheet asks it: the ROM this browser keeps goes,
  *  and the page starts over (the game page asks for it again). */
+/** Which ROM is in the tab (the sheet's last line, as live). */
+let versionLine = 'spike B';
 let romEmu: { forgetRom(): Promise<void>; stop(): void } | null = null;
 function forgetRom(): void {
   const st = lobby!.stage;
@@ -2347,6 +2422,8 @@ async function boot(): Promise<void> {
   try {
     files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; });
     romEmu = files.emu;
+    versionLine = files.version;
+    if (touchPad) wireBattleMenu(files);
   } catch (e) {
     console.warn('spike ROM not loaded', e);
     return;
