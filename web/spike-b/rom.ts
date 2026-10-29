@@ -21,6 +21,8 @@ import { loadCheckedRelease } from '../src/release';
 import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fieldOf, healed, rekey, spillOf, teamOf, withMoney } from './carry';
 import { startMenuTable } from '../src/touch';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
+import { CATCH_UP_SPEED, spectatePace } from '../src/match/spectate';
+import type { SpMsg } from './shared/wire';
 
 const BOOT_MAP_TESTMON = 0x81;
 const ME = 0;
@@ -31,6 +33,8 @@ const DROP_SEAT = 30;
 const LEGEND_KEY = 0xb000;
 /** Event 0's trader (BR_EVENT_TRADER_KEY), and below it his claim key. */
 const TRADER_KEY = 0xb00f;
+/** Ours while a mirror runs: seat 0 is then the publisher's, a ghost with their look. */
+const MIRROR_SEAT = 29;
 /** global.h's ObjectEvent: 0x24 bytes, currentCoords at 0x10, facing in 0x18's low bits. */
 const OBJECT_EVENT_SIZE = 0x24;
 /** A facing (DIR_SOUTH..DIR_EAST) as a step. */
@@ -71,6 +75,22 @@ export interface DuelLink {
  *  r 127 for nothing fogged (the page fogs over it), -1 for fog everywhere -- and the
  *  section the prompt names safe, in the ROM's own letters ([] names none). */
 export interface MapLook { mapsec: number; cellX: number; cellY: number; r: number; place: number[] }
+
+/** Somebody else's battle, as the page hands it to a mirror (watch.ts): what their ROM
+ *  published, in order, from its BSTART. */
+export interface MirrorFeed {
+  /** The next message not yet handed to the ROM, or null. */
+  peek(): SpMsg | null;
+  shift(): void;
+  /** The fight is over where it is fought: once the replay has what came before, it ends. */
+  over(): boolean;
+  /** Stop watching it, now. */
+  stopped(): boolean;
+  /** The trainer watched is the publisher's foe: the replay turned round, their back to us. */
+  turned: boolean;
+  /** Each side's look (the publisher's, their foe's), as their trainers walk. */
+  skins: [number, number];
+}
 
 export interface Given { items: { id: number; n: number }[]; money: number; used: boolean }
 
@@ -123,6 +143,14 @@ export interface RomBattles {
    *  screen until the row's own screen is up (`onStart`). Resolves back on the field, with
    *  whatever was used or moved kept. False when the row would not open. */
   menu(action: number, onStart: () => void, onEnd: () => void, look?: MapLook): Promise<boolean>;
+  /** Somebody else's battle, replayed on this ROM as the match's spectator replays it
+   *  (br_spectate.c: a BSTART, its TURNs, a RESULT to finish), the trainer watched near
+   *  the camera. `onStart` when the replay is on screen. Resolves back on the field (or
+   *  when `feed` says stop), the hidden ROM put back as it was parked. */
+  mirror(feed: MirrorFeed, onStart: () => void): Promise<void>;
+  /** Where what this ROM publishes of its own battles goes (a BSTART, then its TURNs):
+   *  to the relay, for whoever watches. */
+  publish(to: ((m: SpMsg) => void) | null): void;
   /** A screen the page put up (menu, team) closes now: B until it is back on the field
    *  (a challenge closes a menu in the match, br_netlink.c). */
   leave(): void;
@@ -244,6 +272,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   const headerAt = sym('gMapHeader');
   const mainAt = sym('gMain');
   const seatAt = sym('gBrMySeat');
+  const spectAt = sym('gBrSpectate');
   const overworldCb = sym('CB2_Overworld');
   const objectsAt = sym('gObjectEvents');
   const avatarAt = sym('gPlayerAvatar');
@@ -320,6 +349,15 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     const got = arrived(before, after);
     const used = after.party.some((b, i) => b !== before.party[i]);
     return got.items.length || got.money || used ? { ...got, used } : null;
+  };
+
+  // A battle of ours, as the ROM publishes it for a spectator (BrSpectate_Publishing).
+  let publishTo: ((m: SpMsg) => void) | null = null;
+  // ...and a duel's link blocks, to the trainer it is with: whichever drain hears them.
+  let blocksTo: ((seq: number, data: number[]) => void) | null = null;
+  const published = (m: Msg) => {
+    if (m.t === 'bstart' || m.t === 'turn') publishTo?.({ t: m.t, battle: m.battle, data: m.data });
+    else if (m.t === 'bt') blocksTo?.(m.seq, m.data);
   };
 
   /** One battle: `kick` asks for it, `going` says the ROM took it, `over` that it is back
@@ -400,6 +438,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     const t0 = performance.now();
     let n = 0;
     const count = emu.onFrame(() => { n++; });
+    // Whatever else the ROM says meanwhile is nobody's here (a duel takes its blocks first).
+    const pub = emu.onFrame(() => drain(published));
     kick();
     const took = await until(emu, going, 600);
     count();
@@ -433,6 +473,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       if (result.outcome !== LOST && result.outcome !== DREW) carried = now;
     }
     fighting = false;
+    pub();
     emu.pause();
     // A ROM that could not be put back would start the next battle from whatever this
     // one left on its field: no more battles from it.
@@ -484,8 +525,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         const inbox: { seq: number; data: number[] }[] = [];
         let heard = 0;
         link.listen((seq, data) => { if (seq > heard) { heard = seq; inbox.push({ seq, data }); } });
+        blocksTo = (seq, data) => link.send(seq, data);
         const watch = emu.onFrame(() => {
-          drain((m) => { if (m.t === 'bt') link.send(m.seq, m.data); });
+          drain(published);
           while (inbox.length && emu.read(netAt, 8)) {
             const b = inbox[0];
             // The fight's first block carries their name (TakePeerName): RIVAL otherwise.
@@ -518,6 +560,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
           () => ({ outcome: emu.read(netAt + 11, 8), species: 0, level: 0 }));
         } finally {
           watch();
+          blocksTo = null;
           link.listen(null);
           foeLeft = false;
         }
@@ -676,6 +719,64 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         return up;
       });
     },
+    mirror(feed, onStart) {
+      return inTurn(async () => {
+        if (broken || !Number.isFinite(spectAt) || !Number.isFinite(seatAt)) return;
+        lay();
+        emu.resume();
+        drain(() => undefined);
+        // Both fighters as ghosts with their looks, for the replay's trainer pictures
+        // (BrSpectate_SideSkin): the publisher in seat 0, theirs in FOE_SEAT, as their
+        // ROM numbered them. The one we follow stands where the hidden trainer faces, so
+        // the field's own follow rides it there rather than warping off to find it.
+        emu.write(seatAt, MIRROR_SEAT, 8);
+        const s1 = emu.read(save1, 32);
+        const self = objectsAt + emu.read(avatarAt + 5, 8) * OBJECT_EVENT_SIZE;
+        const [dx, dy] = STEP[emu.read(self + 0x18, 8) & 15] ?? [0, 1];
+        const map = { group: emu.read(s1 + 4, 8), num: emu.read(s1 + 5, 8) };
+        const near = { x: emu.read(self + 0x10, 16) + dx, y: emu.read(self + 0x12, 16) + dy };
+        const far = { x: near.x + 6, y: near.y };
+        send({ t: 'place', v: PROTOCOL, seat: 0, map, ...(feed.turned ? far : near), f: 1, st: 'alive', sprite: String(feed.skins[0]) });
+        send({ t: 'place', v: PROTOCOL, seat: FOE_SEAT, map, ...(feed.turned ? near : far), f: 1, st: 'alive', sprite: String(feed.skins[1]) });
+        // Side 1 followed: the replay turned round (WatchingSideOne).
+        if (feed.turned) emu.write(spectAt + 8, FOE_SEAT, 8);
+        emu.write(mainFunc, 0, 32);
+        let shown = false, ended = false, speed = 1, waited = 0, battle = -1;
+        const pace = (to: number) => {
+          speed = to;
+          emu.setSpeed(to);
+          emu.setVolume(to === CATCH_UP_SPEED ? 0 : 100);
+        };
+        const tick = emu.onFrame(() => {
+          drain(() => undefined);
+          for (let m = feed.peek(); m; m = feed.peek()) {
+            const slots = packSlot(m);
+            if (MAILBOX.RING_SLOTS - box.pending() < slots.length) break;
+            for (const sl of slots) box.push(sl.type, sl.payload);
+            if (m.t === 'bstart') battle = m.battle;
+            feed.shift();
+          }
+          if (!shown && emu.read(spectAt + 5, 8) && emu.read(mainFunc, 32) !== 0) { shown = true; onStart(); }
+          if (!shown) waited++;
+          const want = shown ? spectatePace(emu.read(spectAt + 15, 8), () => false) : 1;
+          if (want !== speed) pace(want);
+          // The fight is over and everything of it is in: the replay finishes what it has.
+          if (shown && !ended && battle >= 0 && feed.over() && !feed.peek() && box.pending() === 0) {
+            ended = true;
+            send({ t: 'result', seat: battle & 0xff, outcome: 'lose' });
+          }
+        });
+        // Ten seconds and the replay never came up (a BSTART the ROM would not take, or
+        // none at all): nothing to watch.
+        await until(emu, () => feed.stopped() || (shown ? onField() && !emu.read(spectAt + 5, 8) : waited > 600 || (feed.over() && !feed.peek() && waited > 60)), Infinity);
+        tick();
+        if (speed !== 1) pace(1);
+        emu.pause();
+        if (!emu.restore(parked!)) broken = true;
+        else if (carried) keep(carried);
+      });
+    },
+    publish(to) { publishTo = to; },
     leave() { leaving = true; },
     reseed(s) { seedNow = s >>> 0; },
     fresh() {

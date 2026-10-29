@@ -28,7 +28,17 @@ export type WorldUp =
   | { t: 'sync' }
   /** A link block from my ROM's battle, for the trainer I am fighting (br_netlink.c's BT:
    *  its counter and bytes). */
-  | { t: 'bt'; q: number; d: number[] };
+  | { t: 'bt'; q: number; d: number[] }
+  /** I am watching trainer `id` now (0: nobody): their battles come to me as they are
+   *  fought, and they see one more eye. */
+  | { t: 'watch'; id: number }
+  /** What my ROM published of the battle I am in (a BSTART, then its TURNs), for whoever
+   *  watches me or the one I fight. */
+  | { t: 'sp'; m: SpMsg };
+
+/** A published battle's message as it left the fighter's ROM (web/src/net/wire.ts's
+ *  BstartMsg and TurnMsg): opaque bytes, for the watcher's ROM to replay. */
+export type SpMsg = { t: 'bstart' | 'turn'; battle: number; data: number[] };
 
 /** A frame as one phone gets it: `a` is that phone's last input the frame used; `h` the
  *  room's hash after it, every HASH_EVERY frames. */
@@ -54,6 +64,10 @@ export type WorldDown =
   | { t: 'f'; f: WireFrame[] }
   /** A link block from the trainer I am fighting. */
   | { t: 'bt'; q: number; d: number[] }
+  /** The battle the trainer I watch is in, from its start (`from`: whose ROM it is). */
+  | { t: 'sp'; from: number; m: SpMsg }
+  /** How many are watching me now. */
+  | { t: 'eyes'; n: number }
   | { t: 'full' };
 
 export const HASH_EVERY = 60;

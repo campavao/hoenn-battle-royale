@@ -17,7 +17,7 @@ import type { PatchTable } from '../src/bots/patches';
 import { tick } from './sim';
 import { Host, play } from './shared/host';
 import { keysOf, makeRoom, type Actor, type Bag, type Room, type RoomEvent } from './shared/room';
-import type { Again, WireFrame, WorldDown, WorldUp } from './shared/wire';
+import type { Again, SpMsg, WireFrame, WorldDown, WorldUp } from './shared/wire';
 
 export interface WorldLink {
   readonly room: Room;
@@ -45,6 +45,14 @@ export interface WorldLink {
   bt(q: number, d: number[]): void;
   /** Where the blocks from the trainer I am fighting go. */
   onBt: ((q: number, d: number[]) => void) | null;
+  /** Whose battles come to me (0: nobody's), and the eye they see. */
+  watch(id: number): void;
+  /** What my ROM published of the battle I am in, for whoever watches it. */
+  sp(m: SpMsg): void;
+  /** The battle the trainer I watch is in, message by message from its start. */
+  onSp: ((from: number, m: SpMsg) => void) | null;
+  /** How many are watching me. */
+  onEyes: ((n: number) => void) | null;
   /** For the stats line. */
   status(): string;
 }
@@ -73,6 +81,10 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     out: (bag, by, wild) => host.out(me, bag, by, wild),
     bt: () => undefined,
     onBt: null,
+    watch: () => undefined,
+    sp: () => undefined,
+    onSp: null,
+    onEyes: null,
     status: () => 'solo: you and the bots (no relay)',
   };
 }
@@ -101,6 +113,8 @@ class Online implements WorldLink {
   private predicted: Actor | null = null;
   private closed = false;
   onBt: ((q: number, d: number[]) => void) | null = null;
+  onSp: ((from: number, m: SpMsg) => void) | null = null;
+  onEyes: ((n: number) => void) | null = null;
 
   constructor(private readonly ws: WebSocket, private readonly make: (seed: number) => Room) {
     ws.addEventListener('close', () => { this.closed = true; });
@@ -122,6 +136,10 @@ class Online implements WorldLink {
       this.queue.push(...m.f);
     } else if (m.t === 'bt') {
       this.onBt?.(m.q, m.d);
+    } else if (m.t === 'sp') {
+      this.onSp?.(m.from, m.m);
+    } else if (m.t === 'eyes') {
+      this.onEyes?.(m.n);
     }
   }
 
@@ -206,6 +224,10 @@ class Online implements WorldLink {
   out(bag?: Bag, by?: number, wild?: boolean): void { this.send({ t: 'out', bag, by, wild }); }
 
   bt(q: number, d: number[]): void { this.send({ t: 'bt', q, d }); }
+
+  watch(id: number): void { this.send({ t: 'watch', id }); }
+
+  sp(m: SpMsg): void { this.send({ t: 'sp', m }); }
 
   status(): string {
     if (this.closed) return 'the relay closed the connection: reload to rejoin';

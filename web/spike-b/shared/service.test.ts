@@ -78,4 +78,55 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+
+  it('counts who watches a trainer and hands them that trainer\'s battle, from its start', () => {
+    let t = 0;
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => t, log: () => undefined });
+    try {
+      const a = phone(), b = phone(), c = phone();
+      const sa = svc.open(a.link), sb = svc.open(b.link), sc = svc.open(c.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 1, code }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      const hello = a.got.find((m) => m.t === 'hello') as unknown as { id: number };
+      const alice = hello.id;
+      t += 200;
+      svc.pump();
+      const eyes = () => (a.got.filter((m) => m.t === 'eyes').at(-1) as unknown as { n: number } | undefined)?.n;
+      const sp = (p: ReturnType<typeof phone>) => p.got.filter((m) => m.t === 'sp') as unknown as { from: number; m: { t: string } }[];
+
+      sb.onText(JSON.stringify({ t: 'watch', id: alice }));
+      expect(eyes()).toBe(1);
+      // Not in a battle: nothing of hers goes anywhere.
+      sa.onText(JSON.stringify({ t: 'sp', m: { t: 'bstart', battle: 31 << 8, data: [1, 2, 3] } }));
+      expect(sp(b)).toHaveLength(0);
+
+      const room = [...(svc as unknown as { rooms: Map<string, { host: { room: { actor(id: number): { battling: boolean } } } }> }).rooms.values()][0];
+      room.host.room.actor(alice).battling = true;
+      sa.onText(JSON.stringify({ t: 'sp', m: { t: 'bstart', battle: 31 << 8, data: [1, 2, 3] } }));
+      sa.onText(JSON.stringify({ t: 'sp', m: { t: 'turn', battle: 31 << 8, data: [0, 1, 4] } }));
+      expect(sp(b).map((m) => [m.from, m.m.t])).toEqual([[alice, 'bstart'], [alice, 'turn']]);
+
+      // Somebody who comes in late and watches her gets the fight from its BSTART.
+      sc.onText(JSON.stringify({ t: 'join', name: 'carol', skin: 2, code }));
+      sc.onText(JSON.stringify({ t: 'watch', id: alice }));
+      expect(eyes()).toBe(2);
+      expect(sp(c).map((m) => m.m.t)).toEqual(['bstart', 'turn']);
+
+      sb.onText(JSON.stringify({ t: 'watch', id: 0 }));
+      expect(eyes()).toBe(1);
+      sa.onText(JSON.stringify({ t: 'sp', m: { t: 'turn', battle: 31 << 8, data: [0, 1, 5] } }));
+      expect(sp(b)).toHaveLength(2);
+      expect(sp(c)).toHaveLength(3);
+      // Her battle over, the next watcher has nothing to start from.
+      sa.onText(JSON.stringify({ t: 'end' }));
+      sb.onText(JSON.stringify({ t: 'watch', id: alice }));
+      expect(sp(b)).toHaveLength(2);
+      sc.onClose();
+      expect(eyes()).toBe(1);
+    } finally {
+      svc.stop();
+    }
+  });
 });

@@ -979,6 +979,9 @@ const watch = new Watch({
   follow: () => follow,
   setFollow: (id) => { follow = id; if (id && zoom < 1) zoom = fitZoom(); },
   zoom: () => zoom,
+  link: () => link ?? null,
+  rom: () => rom,
+  idle: () => (isOut || waiting) && !battle && !swapping && !asking,
 });
 
 // Drag and pinch / wheel, spectating only. A tap on a trainer follows them.

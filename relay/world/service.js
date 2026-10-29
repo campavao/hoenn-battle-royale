@@ -2748,6 +2748,9 @@ var FRAME_MS = 1e3 / 60;
 var QUIET_MS = 12e4;
 var SYNC_MS = 1e3;
 var BT_MAX = 256;
+var BSTART_MAX = 1400;
+var TURN_MAX = 256;
+var STREAM_MAX = 64 * 1024;
 var ROOM_MAX = 30;
 var AUTO_START_MS = 6e4;
 var AWAY_MS = 6e4;
@@ -2803,7 +2806,7 @@ var WorldService = class {
           const name = String(m.name ?? "").toUpperCase().replace(/[^A-Z0-9 ]/g, "").trim().slice(0, 10);
           const skin = Number.isInteger(m.skin) && m.skin >= 0 && m.skin < 16 ? m.skin : 0;
           const id = this.nextId++;
-          phone = { id, name: name || `TRAINER ${id - FIRST_ID + 1}`.slice(0, 10), skin, link, heard: this.opts.now(), synced: -Infinity, key: Math.random().toString(36).slice(2, 12), away: 0 };
+          phone = { id, name: name || `TRAINER ${id - FIRST_ID + 1}`.slice(0, 10), skin, link, heard: this.opts.now(), synced: -Infinity, key: Math.random().toString(36).slice(2, 12), away: 0, watching: 0 };
           room2.members.set(id, phone);
           this.where.set(id, room2);
           if (!room2.owner) room2.owner = id;
@@ -2833,8 +2836,10 @@ var WorldService = class {
         } else if (m.t === "bots") {
           if ([m.a, m.b, m.w].every(Number.isInteger)) host.bots(phone.id, m.a, m.b, m.w);
         } else if (m.t === "end") {
+          room.streams.delete(phone.id);
           host.end(phone.id, m.fled === true, m.won === true);
         } else if (m.t === "out") {
+          room.streams.delete(phone.id);
           host.out(phone.id, cleanBag(m.bag) ?? void 0, Number.isInteger(m.by) && m.by > 0 ? m.by : void 0, m.wild === true);
         } else if (m.t === "drop") {
           if (Number.isInteger(m.k)) host.drop(phone.id, m.k, cleanBag(m.rest) ?? void 0);
@@ -2845,6 +2850,16 @@ var WorldService = class {
           if (!foe || foe.bot || !foe.battling || foe.foe !== phone.id) return;
           const to = room.members.get(foe.id);
           if (to) this.send(to.link, { t: "bt", q: m.q & 65535, d: m.d.map((v) => (Number(v) | 0) & 255) });
+        } else if (m.t === "sp") {
+          this.publish(room, phone, m.m);
+        } else if (m.t === "watch") {
+          if (!Number.isInteger(m.id) || m.id < 0 || m.id === phone.id || m.id === phone.watching) return;
+          const was = phone.watching;
+          phone.watching = m.id;
+          this.eyes(room, was);
+          this.eyes(room, m.id);
+          const s = this.streamOf(room, m.id);
+          if (s) for (const text2 of s.sent) link.send(text2);
         } else if (m.t === "sync") {
           const now = this.opts.now();
           if (now - phone.synced < SYNC_MS) return;
@@ -2858,6 +2873,12 @@ var WorldService = class {
         phone = null;
         const room = this.where.get(p.id);
         const me = room?.host?.room.actor(p.id);
+        const was = p.watching;
+        p.watching = 0;
+        if (room) {
+          room.streams.delete(p.id);
+          this.eyes(room, was);
+        }
         if (room?.host && me && !me.battling) {
           p.away = this.opts.now();
           p.link = NOWHERE;
@@ -2876,6 +2897,8 @@ var WorldService = class {
     if (!room) return;
     room.members.delete(p.id);
     room.host?.leave(p.id);
+    room.streams.delete(p.id);
+    this.eyes(room, p.watching);
     if (room.owner === p.id) room.owner = [...room.members.values()].find((q) => !q.away)?.id ?? 0;
     this.opts.log(`world: #${p.id} out of room ${room.code} (${room.members.size} there)`);
     if (![...room.members.values()].some((q) => !q.away)) this.close(room);
@@ -2915,7 +2938,7 @@ var WorldService = class {
       code = "";
       for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
     } while (this.rooms.has(code));
-    const room = { code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0 };
+    const room = { code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map() };
     this.rooms.set(code, room);
     return room;
   }
@@ -2943,12 +2966,53 @@ var WorldService = class {
     const res = room.host?.room.results;
     this.opts.log(`world: room ${room.code} over${res?.winner ? `, ${res.entrants.find(([id]) => id === res.winner)?.[1]} wins` : ""}`);
     room.host = null;
+    room.streams.clear();
+    for (const p of room.members.values()) p.watching = 0;
     if (room.quick) room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS);
     this.roster(room);
   }
   close(room) {
     this.rooms.delete(room.code);
     if (!this.rooms.size) this.stop();
+  }
+  /** One of a fighter's published battle's messages: kept, and on to everybody watching
+   *  either side of it. Only from a trainer in a battle; a TURN only after its BSTART. */
+  publish(room, phone, raw) {
+    if (!raw || raw.t !== "bstart" && raw.t !== "turn" || !Number.isInteger(raw.battle) || !Array.isArray(raw.data)) return;
+    if (raw.data.length > (raw.t === "bstart" ? BSTART_MAX : TURN_MAX)) return;
+    const me = room.host?.room.actor(phone.id);
+    if (!me?.battling) return;
+    const m = { t: raw.t, battle: raw.battle & 65535, data: raw.data.map((v) => (Number(v) | 0) & 255) };
+    let s = room.streams.get(phone.id);
+    if (m.t === "bstart") room.streams.set(phone.id, s = { battle: m.battle, sent: [], bytes: 0 });
+    if (!s || s.battle !== m.battle) return;
+    const text = JSON.stringify({ t: "sp", from: phone.id, m });
+    if (s.bytes + text.length <= STREAM_MAX) {
+      s.sent.push(text);
+      s.bytes += text.length;
+    }
+    for (const w of room.members.values()) {
+      if (w !== phone && w.watching && (w.watching === phone.id || w.watching === me.foe)) w.link.send(text);
+    }
+  }
+  /** The battle trainer `id` is in now, as published: by their ROM, or by the ROM of the
+   *  trainer they fight (a link battle is published by one side only). */
+  streamOf(room, id) {
+    const r = room.host?.room;
+    const a = r?.actor(id);
+    if (!r || !a?.battling) return void 0;
+    const own = room.streams.get(id);
+    if (own) return own;
+    const foe = a.foe ? r.actor(a.foe) : void 0;
+    return foe?.battling && foe.foe === id ? room.streams.get(foe.id) : void 0;
+  }
+  /** How many watch trainer `id`, to them. */
+  eyes(room, id) {
+    const to = id ? room.members.get(id) : void 0;
+    if (!to) return;
+    let n = 0;
+    for (const p of room.members.values()) if (p.watching === id) n++;
+    this.send(to.link, { t: "eyes", n });
   }
   roster(room) {
     const members = [...room.members.values()].filter((p) => !p.away).map((p) => ({ id: p.id, name: p.name, skin: p.skin }));
