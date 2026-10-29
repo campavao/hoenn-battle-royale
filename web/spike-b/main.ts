@@ -21,7 +21,7 @@ import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { DIR_EAST } from './sim';
-import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Ring } from './shared/room';
+import { HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Ring } from './shared/room';
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink } from './net';
 import { over } from './shared/over';
@@ -29,7 +29,7 @@ import { Lobby, me, type RoomInfo } from './lobby';
 import { recordMatch } from '../src/match/career';
 import { OUT_BATCH_MS, outs, won } from '../src/match/ticker';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
-import { groundCount, isTm } from './shared/items';
+import { groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
 import { GOLD } from '../src/match/events';
 import hiddenJson from './data/hidden.json';
@@ -582,11 +582,14 @@ async function trade(n: number, species: number): Promise<void> {
     asking?.done('');
     const name = speciesName(species);
     const c = await ask(`I'll trade you my ${name} for one of yours. Which one?`, [['CHOOSE', 'y'], ['NO, THANKS', '']]);
+    // Somebody at home's goes through a trade's evolution on the way over (br_loot.c's
+    // BrLoot_HomeTrade); an event's trader's does not (br_event.c's Swap).
+    const got = n >= HOME_N ? tradedInto(species) : species;
     if (c !== 'y' || !rom || isOut) return;
     swapping = true;
     held.clear();
     try {
-      given = await rom.trade(species, () => battleEl.classList.add('on'));
+      given = await rom.trade(got, () => battleEl.classList.add('on'));
     } finally {
       swapping = false;
       battleEl.classList.remove('on');
@@ -594,7 +597,7 @@ async function trade(n: number, species: number): Promise<void> {
       pressed.clear();
       calmUntil = frame + 30;
     }
-    if (given) say(`Traded for ${name}!`);
+    if (given) say(got === species ? `Traded for ${name}!` : `Traded for ${name}! It evolved into ${speciesName(got)}!`);
   } finally {
     if (link === l) l.traded(n, given);
   }
@@ -623,7 +626,8 @@ async function gift(n: number, species: number): Promise<void> {
       pressed.clear();
       calmUntil = frame + 30;
     }
-    if (taken) say(`Took the ${name}!`);
+    // The team screen takes it across as somebody else's, so a trade evolution goes off.
+    if (taken) say(`Took the ${speciesName(tradedInto(species))}!`);
   } finally {
     if (link === l) l.traded(n, taken);
   }

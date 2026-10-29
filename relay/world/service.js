@@ -1497,6 +1497,57 @@ var GIFTS = [
   ITEM_SHELL_BELL
 ];
 
+// web/spike-b/shared/items.ts
+var ITEM_TM012 = 289;
+var ITEM_HM08 = 346;
+var isTm = (item) => item >= ITEM_TM012 && item <= ITEM_HM08;
+var ITEM_POKE_DOLL = 80;
+var ITEM_LINK_CABLE = 52;
+var CABLE_IN = 12;
+function cableOrDoll(item, roll) {
+  if (isTm(item)) return item;
+  const k = Math.floor(roll * CABLE_IN);
+  return k === 0 ? ITEM_LINK_CABLE : k === 1 ? ITEM_POKE_DOLL : item;
+}
+var isKeyItem = (item) => item >= 259 && item <= 288 || item >= 349;
+var ITEMS_COUNT = 377;
+var MAX_MONEY = 999999;
+var BAG_ROWS = 30 + 16 + 46;
+var NUM_SPECIES2 = 412;
+var MAX_LEVEL2 = 100;
+var isMon = (m) => {
+  const { species, level } = m ?? {};
+  return Number.isInteger(species) && species > 0 && species < NUM_SPECIES2 && Number.isInteger(level) && level >= 1 && level <= MAX_LEVEL2;
+};
+function cleanBag(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const { items, money, mons } = raw;
+  if (!Array.isArray(items) || items.length > BAG_ROWS) return null;
+  if (mons !== void 0 && (!Array.isArray(mons) || mons.length > 6 || !mons.every(isMon))) return null;
+  const out = { items: [], money: Number.isInteger(money) ? Math.min(Math.max(money, 0), MAX_MONEY) : 0 };
+  for (const r of items) {
+    const id = Number(r?.id), n = Number(r?.n);
+    if (Number.isInteger(id) && id > 0 && id < ITEMS_COUNT && Number.isInteger(n) && n > 0 && !isTm(id) && !isKeyItem(id)) out.items.push({ id, n: Math.min(n, 999) });
+  }
+  if (Array.isArray(mons) && mons.length) out.mons = mons.map(({ species, level }) => ({ species, level }));
+  return out;
+}
+function within(rest, was) {
+  const left = /* @__PURE__ */ new Map();
+  for (const r of was.items) left.set(r.id, (left.get(r.id) ?? 0) + r.n);
+  const items = [];
+  for (const r of rest.items) {
+    const n = Math.min(r.n, left.get(r.id) ?? 0);
+    if (n > 0) {
+      items.push({ id: r.id, n });
+      left.set(r.id, left.get(r.id) - n);
+    }
+  }
+  const out = { items, money: Math.min(rest.money, was.money) };
+  if (rest.mons?.length) out.mons = rest.mons.slice(0, 6).map(({ species, level }) => ({ species, level }));
+  return out;
+}
+
 // web/src/bots/sight.ts
 var SIGHT_RANGE = 5;
 var DELTA = {
@@ -1889,7 +1940,7 @@ var Room = class {
       const cells = land.get(id2).filter((c) => !marked.has(`${c.x}:${c.y}`) && !(id2 === "MAP_LITTLEROOT_TOWN" && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
       for (let i = 0; i < GROUND_PER_MAP && cells.length; i++) {
         const c = cells.splice(Math.floor(rng() * cells.length), 1)[0];
-        const item = scatterItem(rng);
+        const item = cableOrDoll(scatterItem(rng), rng());
         out.set(`${id2}:${c.x}:${c.y}`, { key: ++n, map: id2, x: c.x, y: c.y, item });
       }
     }
@@ -2773,49 +2824,6 @@ function botSpawns(room, maps, count) {
     if (m.id === "MAP_LITTLEROOT_TOWN" && x >= 7 && x <= 13 && y >= 9 && y <= 13) continue;
     add({ map: m.id, x, y }, 1 + Math.floor(r() * 4), botSkin(Math.floor(r() * 12)));
   }
-  return out;
-}
-
-// web/spike-b/shared/items.ts
-var ITEM_TM012 = 289;
-var ITEM_HM08 = 346;
-var isTm = (item) => item >= ITEM_TM012 && item <= ITEM_HM08;
-var isKeyItem = (item) => item >= 259 && item <= 288 || item >= 349;
-var ITEMS_COUNT = 377;
-var MAX_MONEY = 999999;
-var BAG_ROWS = 30 + 16 + 46;
-var NUM_SPECIES2 = 412;
-var MAX_LEVEL2 = 100;
-var isMon = (m) => {
-  const { species, level } = m ?? {};
-  return Number.isInteger(species) && species > 0 && species < NUM_SPECIES2 && Number.isInteger(level) && level >= 1 && level <= MAX_LEVEL2;
-};
-function cleanBag(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  const { items, money, mons } = raw;
-  if (!Array.isArray(items) || items.length > BAG_ROWS) return null;
-  if (mons !== void 0 && (!Array.isArray(mons) || mons.length > 6 || !mons.every(isMon))) return null;
-  const out = { items: [], money: Number.isInteger(money) ? Math.min(Math.max(money, 0), MAX_MONEY) : 0 };
-  for (const r of items) {
-    const id = Number(r?.id), n = Number(r?.n);
-    if (Number.isInteger(id) && id > 0 && id < ITEMS_COUNT && Number.isInteger(n) && n > 0 && !isTm(id) && !isKeyItem(id)) out.items.push({ id, n: Math.min(n, 999) });
-  }
-  if (Array.isArray(mons) && mons.length) out.mons = mons.map(({ species, level }) => ({ species, level }));
-  return out;
-}
-function within(rest, was) {
-  const left = /* @__PURE__ */ new Map();
-  for (const r of was.items) left.set(r.id, (left.get(r.id) ?? 0) + r.n);
-  const items = [];
-  for (const r of rest.items) {
-    const n = Math.min(r.n, left.get(r.id) ?? 0);
-    if (n > 0) {
-      items.push({ id: r.id, n });
-      left.set(r.id, left.get(r.id) - n);
-    }
-  }
-  const out = { items, money: Math.min(rest.money, was.money) };
-  if (rest.mons?.length) out.mons = rest.mons.slice(0, 6).map(({ species, level }) => ({ species, level }));
   return out;
 }
 

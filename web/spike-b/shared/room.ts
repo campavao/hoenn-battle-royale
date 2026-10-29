@@ -35,7 +35,7 @@ import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches
 import { blueTm, scatterItem } from '../../src/match/scatter';
 import roomsJson from '../data/rooms.json';
 import { GIFTS } from '../../src/match/gifts';
-import type { BagRows } from './items';
+import { cableOrDoll, type BagRows } from './items';
 import { SIGHT_RANGE, eitherSees, type Facing } from '../../src/bots/sight';
 import { CLASS_WATER, DIR_NORTH, dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
 
@@ -502,7 +502,7 @@ export class Room {
       for (let i = 0; i < GROUND_PER_MAP && cells.length; i++) {
         const c = cells.splice(Math.floor(rng() * cells.length), 1)[0];
         // A machine is taught there and then, as a match's is (rom.ts teach).
-        const item = scatterItem(rng);
+        const item = cableOrDoll(scatterItem(rng), rng());
         out.set(`${id}:${c.x}:${c.y}`, { key: ++n, map: id, x: c.x, y: c.y, item });
       }
     }

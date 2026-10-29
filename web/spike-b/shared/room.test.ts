@@ -12,7 +12,7 @@ import worldJson from '../data/world.json';
 import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
 import { over } from './over';
-import { cleanBag, isTm, within } from './items';
+import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, isTm, within } from './items';
 import { AFTER_WIN, FIELD_SURF, SAFARI, GROUND_PER_MAP, RING_PHASE, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, WALKUP_BANG, eventPiece, makeRoom } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
@@ -430,6 +430,14 @@ describe('item balls', () => {
     const body = ballsC.slice(ballsC.indexOf('static const struct BrRoom sRooms[] ='));
     const rows = [...body.slice(0, body.indexOf('};')).matchAll(/\{ (MAP_\w+), (\d+), (\d+), (\d+), (\d+), (TRUE|FALSE), (\w+) \}/g)];
     expect(rooms).toEqual(rows.map((r, i) => [r[1], Number(r[2]), Number(r[3]), i < houses, r[6] === 'TRUE', Number(r[4]), Number(r[5]), r[7] !== 'BR_NO_TRADER']));
+  });
+
+  it('the ground has the odd LINK CABLE and POKe DOLL, as the map balls do (BrBalls_Deal)', () => {
+    const g = [...makeRoom(MAPS, PATCHES, 4242).ground().values()].filter((b) => !b.gift);
+    const n = (item: number) => g.filter((b) => b.item === item).length;
+    expect(n(ITEM_LINK_CABLE)).toBeGreaterThan(0);
+    expect(n(ITEM_POKE_DOLL)).toBeGreaterThan(0);
+    expect(n(ITEM_LINK_CABLE)).toBeLessThan(g.length / 6);
   });
 
   it('somebody is home in one house in eight, and the big floors trade; a giver gives once', () => {
