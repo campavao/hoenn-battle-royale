@@ -356,15 +356,18 @@ export class WorldService {
   }
 
   /** The room a join asks for: its code, a new one of its own (HOST), or quick play's. */
-  /** LOBBIES: every hosted room with somebody in it (a quick room is QUICK PLAY's own). */
+  /** LOBBIES: the live relay's list_rooms door. A hosted room a stranger could walk into
+   *  now: not quick play's, not unlisted, not mid-match, not waiting on its host's reload;
+   *  its count the trainers here of the host's MAX, fullest first. */
   private listed(): Listed[] {
     const out: Listed[] = [];
     for (const r of this.rooms.values()) {
       const owner = r.members.get(r.owner);
-      if (r.quick || !owner || r.set.door === 'private') continue;
-      out.push({ code: r.code, host: owner.name, skin: owner.skin, players: r.members.size, seats: r.set.max, playing: !!r.host, pass: r.set.door === 'pass' });
+      if (r.quick || r.host || !owner || owner.away || r.set.door === 'private') continue;
+      const players = [...r.members.values()].filter((p) => !p.away).length;
+      out.push({ code: r.code, host: owner.name, skin: owner.skin, players, seats: r.set.max, playing: false, pass: r.set.door === 'pass' });
     }
-    return out;
+    return out.sort((a, b) => b.players - a.players || (a.code < b.code ? -1 : 1));
   }
 
   private pick(m: Extract<WorldUp, { t: 'join' }>): Lobby | null {
