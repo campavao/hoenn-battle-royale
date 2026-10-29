@@ -5,12 +5,12 @@
 // (ui/screens.ts) on the same stage. Dropping straight into the world is the debug path
 // now (?solo).
 import { Stage, type DrawnScreen } from '../src/ui/stage';
-import { menuScreen, roomScreen, sheetScreen, type RoomModel, type RowSpec, type SheetModel } from '../src/ui/screens';
+import { menuScreen, noticeScreen, roomScreen, sheetScreen, type RoomModel, type RowSpec, type SheetModel } from '../src/ui/screens';
 import { CODE_ENTRY, NAME_ENTRY, PASS_ENTRY, entryScreen, newEntry } from '../src/ui/entry';
 import { FEEDBACK_ROW, HOWTO_ROW, rewatchRow, countdown, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction } from '../src/match/lobby';
 import { howToScreen } from '../src/ui/howto';
 import { howToRead, markHowToRead } from '../src/ui/howto-due';
-import { SKINS, cleanName, loadCareer, saveProfile, skinUnlocked } from '../src/match/career';
+import { SKINS, cleanName, exportCareer, importCareer, loadCareer, saveProfile, skinUnlocked } from '../src/match/career';
 import { LINES } from '../src/bots/lines';
 import { cardFields, lookScreen, statsScreen, trainerScreen } from '../src/ui/profile';
 import { resultsScreen, type ResultsModel } from '../src/ui/results';
@@ -47,6 +47,33 @@ export function seeThrough(): boolean {
 }
 function setSeeThrough(on: boolean): void {
   try { if (on) localStorage.removeItem('hbr-see-through'); else localStorage.setItem('hbr-see-through', '0'); } catch { /* the default holds */ }
+}
+
+/** The career out to a file (app.ts saveCareerFile)... */
+function saveCareerFile(): void {
+  const url = URL.createObjectURL(new Blob([exportCareer()], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'hoenn-battle-royale-career.json';
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
+/** ...and back in: a file not one of ours changes nothing and says so. */
+function loadCareerFile(then: (note: string) => void): void {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/json,.json';
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    void file.text()
+      .then((text) => then(importCareer(text) ? 'Career loaded.' : 'That is not a Hoenn Battle Royale career file.'))
+      .catch(() => then('That file could not be read.'));
+  });
+  input.click();
 }
 
 /** Who I am, as the live game keeps it (career.ts): the name and sprite on the trainer card. */
@@ -161,13 +188,30 @@ export class Lobby {
         { label: 'MY STATS', detail: 'every match so far', id: 'trainer-mystats', onPress: () => this.press({ kind: 'mystats' }) },
         // The live card's BATTLE BACKDROP, the same browser setting (hbr-see-through).
         { label: 'BATTLE BACKDROP', detail: seeThrough() ? 'OVER MAP' : 'CLASSIC', id: 'trainer-seethrough', onPress: () => { setSeeThrough(!seeThrough()); this.stage.redraw(); } },
+        { label: 'MY CAREER', detail: 'save or load a file', id: 'trainer-career', onPress: () => this.stage.push(this.careerAsk) },
       ],
-      note: '',
+      note: this.trainerNote,
       onName: () => this.press({ kind: 'name' }),
       onSkin: () => this.press({ kind: 'skin' }),
       onBack: () => this.stage.pop(),
     };
   });
+
+  /** What MY CAREER last did, under the card's rows. */
+  private trainerNote = '';
+
+  /** MY CAREER (the live card's, POK-243): the career lives in this browser; SAVE writes
+   *  it to a file, LOAD takes one back. */
+  private readonly careerAsk: DrawnScreen = noticeScreen(() => ({
+    title: 'MY CAREER',
+    lines: [{ text: 'Your career lives in this browser. Save it to a file to keep it, or load one to carry it here.' }],
+    buttons: [
+      { label: 'SAVE', id: 'career-save', onPress: () => { saveCareerFile(); this.trainerNote = 'Saved to a file.'; this.stage.pop(); } },
+      { label: 'LOAD', id: 'career-load', onPress: () => { this.stage.pop(); loadCareerFile((said) => { this.trainerNote = said; this.stage.redraw(); }); } },
+      { label: 'BACK', id: 'career-back', onPress: () => this.stage.pop() },
+    ],
+    onBack: () => this.stage.pop(),
+  }));
 
   /** LOBBIES (the live game's, POK-320): the hosted rooms, one row each; a match under
    *  way is joined to watch it until the next. HOST makes one of my own. */
