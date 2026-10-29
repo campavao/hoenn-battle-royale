@@ -21,7 +21,7 @@ import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { DIR_EAST } from './sim';
-import { ATTENDANT, DOCKS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Ring, type Spill } from './shared/room';
+import { ATTENDANT, DOCKS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
@@ -30,6 +30,8 @@ import { Lobby, me, type RoomInfo } from './lobby';
 import { loadCareer, recordMatch } from '../src/match/career';
 import type { MatchTally } from '../src/match/tally';
 import { tallySince } from './carry';
+import { resultsView, standingsOf, tallyLines } from '../src/ui/results';
+import { favourite } from '../src/match/tally';
 import { moveInfo, type Rom as MoveTables } from '../src/battle/movebook';
 import { OUT_BATCH_MS, outs, won } from '../src/match/ticker';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
@@ -939,13 +941,17 @@ function record(round: number): void {
   // Placed by when I went out: the last out is second; never out, and nobody won, a tie for first.
   const placement = res.winner === link.me ? 1 : i >= 0 ? res.entrants.length - i : res.winner ? 2 : 1;
   const now = rom?.tally() ?? null;
-  recordMatch(placement, localStorage, tallySince(tallyFrom, now, myStepsN));
+  lastRound = tallySince(tallyFrom, now, myStepsN);
+  recordMatch(placement, localStorage, lastRound);
   tallyFrom = now;
   myStepsN = 0;
 }
 
 /** The ROM's move table, for MY STATS' favourite move. */
 let romTables: MoveTables = { bytes: new Uint8Array(0), sym: () => undefined };
+
+/** What the last round I played added to MY STATS, for its results. */
+let lastRound: ReturnType<typeof tallySince> | null = null;
 
 /** MY STATS for the round I am in: the hidden ROM's tally as it began, and my steps. */
 let tallyFrom: MatchTally | null = null;
@@ -975,7 +981,36 @@ async function parade(): Promise<void> {
 /** The last one standing (or MATCH OVER, with nobody), and how everybody else went out,
  *  the last out first. `over`: the match has ended, and the button is PLAY AGAIN. */
 const botIds = () => new Set(link.room.actors.filter((a) => a.bot).map((a) => a.id));
+/** The match's end on the live game's results screen (ui/results.ts): my place of how
+ *  many, how long I lasted, everybody's place, and what this round added to MY STATS. */
+function results(res: Results): void {
+  const n = res.entrants.length;
+  const place = new Map<number, number>();
+  if (res.winner) place.set(res.winner, 1);
+  // Still standing with nobody crowned (a draw): first, together.
+  for (const [id] of res.entrants) if (!res.winner && !res.fallen.some((f) => f.id === id)) place.set(id, 1);
+  res.fallen.forEach((f, i) => place.set(f.id, n - i));
+  const nameOf = (id: number) => res.entrants.find(([e]) => e === id)?.[1] ?? 'TRAINER';
+  const mine = res.fallen.find((f) => f.id === link.me);
+  const end = mine?.at ?? res.wonAt ?? link.room.tick;
+  const survived = Math.max(0, Math.round((end - link.room.epoch) / 60));
+  const placed = [...place].map(([seat, placement]) => ({ seat, placement })).sort((p, q) => p.placement - q.placement);
+  const t = lastRound;
+  const beaten = res.fallen.filter((f) => f.by && f.by === nameOf(link.me)).length;
+  lobby!.results({
+    view: resultsView({ placement: place.get(link.me), survived, winner: res.winner || undefined, ended: true }, n, link.me, nameOf),
+    fame: null,
+    standings: standingsOf(placed, link.me, nameOf),
+    record: [
+      { label: 'BEATEN', value: String(beaten) },
+      ...(t ? tallyLines({ won: t.won, caught: t.caught, steps: t.steps, items: t.items, mon: favourite(t.mons), move: favourite(t.moves) }, { species: speciesName, move: (id) => moveInfo(romTables, id)?.name }) : []),
+    ],
+  }, () => { worldSock?.leave(); room = null; lobby!.menu(); });
+}
+
 function standings(done: boolean, res = link.room.results, bots = botIds()): void {
+  // A room's match is over: the live game's results, over the world.
+  if (done && lobby && res.entrants.some(([id]) => id === link.me)) { results(res); return; }
   const name = res.entrants.find(([id]) => id === res.winner)?.[1] ?? 'TRAINER';
   document.getElementById('win-title')!.textContent = !res.winner ? 'MATCH OVER' : res.winner === link.me ? 'YOU WIN!' : `${name} WINS`;
   const list = document.getElementById('win-list')!;

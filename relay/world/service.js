@@ -2619,7 +2619,7 @@ var Room = class {
   fall(a, by, how = {}) {
     const r = this.results;
     if (r.winner || !r.entrants.some(([id]) => id === a.id) || r.fallen.some((f) => f.id === a.id)) return;
-    r.fallen.push({ id: a.id, name: a.name, by, ...how, ...a.bot ? { bot: true } : {} });
+    r.fallen.push({ id: a.id, name: a.name, by, ...how, ...a.bot ? { bot: true } : {}, at: this.tick });
   }
   /** The cells by the truck that no bot stands on: along its row first, nearest first, so
    *  trainers stood side by side facing south do not see each other (and fight the moment

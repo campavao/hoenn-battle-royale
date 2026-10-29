@@ -13,6 +13,7 @@ import { howToRead, markHowToRead } from '../src/ui/howto-due';
 import { SKINS, cleanName, loadCareer, saveProfile, skinUnlocked } from '../src/match/career';
 import { LINES } from '../src/bots/lines';
 import { cardFields, lookScreen, statsScreen, trainerScreen } from '../src/ui/profile';
+import { resultsScreen, type ResultsModel } from '../src/ui/results';
 import type { TallyNames } from '../src/match/tally';
 import { feedbackScreen, type FeedbackState } from '../src/ui/feedback';
 import { cleanNote, sendFeedback } from '../src/net/feedback';
@@ -76,6 +77,13 @@ export class Lobby {
     if (!was || this.stage.current !== this.roomShown) this.stage.show(this.roomShown);
     else this.stage.redraw();
     this.open();
+  }
+
+  /** The live game's results over a finished match: PLAY AGAIN is the room, MAIN MENU
+   *  leaves it. */
+  results(model: Omit<ResultsModel, 'again' | 'menu'>, menu: () => void): void {
+    const full: ResultsModel = { ...model, again: { label: 'PLAY AGAIN', id: 'results-again', onPress: () => this.backToRoom() }, menu };
+    this.stage.show(resultsScreen(() => full));
   }
 
   /** The relay's list of hosted rooms (LOBBIES). */
