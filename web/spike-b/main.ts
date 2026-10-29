@@ -21,7 +21,7 @@ import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { DIR_EAST } from './sim';
-import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Ring } from './shared/room';
+import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Ring } from './shared/room';
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink } from './net';
 import { over } from './shared/over';
@@ -1509,6 +1509,20 @@ function legendArt(species: number): HTMLCanvasElement | null {
   return img;
 }
 
+/** The "!" over a trainer who looked (trainer_see.c's FLDEFF_EXCLAMATION_MARK_ICON, as
+ *  br_walkup.c starts it): a white bubble over their head, popping up, until the walk. */
+function drawBang(x: number, y: number, t: number): void {
+  const bx = Math.round(x + 3), by = Math.round(y - 24 - (t < 6 ? 6 - t : 0));
+  ctx.fillStyle = '#303030';
+  ctx.fillRect(bx + 1, by, 8, 14);
+  ctx.fillRect(bx, by + 1, 10, 12);
+  ctx.fillStyle = '#f8f8f8';
+  ctx.fillRect(bx + 1, by + 1, 8, 12);
+  ctx.fillStyle = '#303030';
+  ctx.fillRect(bx + 4, by + 3, 2, 5);
+  ctx.fillRect(bx + 4, by + 9, 2, 2);
+}
+
 /** The map at world pixel (x, y), or the nearest one to it: whose border fills the space
  *  past every map's edge. Picked by where the camera looks, the same whether it follows a
  *  trainer or is dragged, so the filler never changes with how you got there (Cam). */
@@ -1619,6 +1633,7 @@ function draw(): void {
   }
   drawNurses(visible);
   drawClerks(visible);
+  for (const { a, p } of people) if (a.meet?.walk && link.room.tick - a.meet.since < WALKUP_BANG) drawBang(p.x, p.y - p.lift, link.room.tick - a.meet.since);
   drawFog(vx0, vy0, vx1, vy1, home);
   // A door: the screen fades out and back in over the followed trainer's warp.
   const going = followed?.m.action?.kind === 'warp' ? followed.m.action : null;

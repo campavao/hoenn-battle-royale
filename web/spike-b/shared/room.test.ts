@@ -13,7 +13,7 @@ import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
 import { over } from './over';
 import { cleanBag, isTm, within } from './items';
-import { AFTER_WIN, FIELD_SURF, SAFARI, GROUND_PER_MAP, RING_PHASE, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, eventPiece, makeRoom } from './room';
+import { AFTER_WIN, FIELD_SURF, SAFARI, GROUND_PER_MAP, RING_PHASE, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, WALKUP_BANG, eventPiece, makeRoom } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -256,29 +256,43 @@ describe('room battles', () => {
 
 describe('trainer against trainer', () => {
   const L = 'MAP_LITTLEROOT_TOWN';
+  /** Frames on until a fight's events (after the "!" and the walk-up): them, and how many. */
+  const fightAfter = (room: ReturnType<typeof makeRoom>, max = 400) => {
+    for (let i = 0; i < max; i++) {
+      const e = room.step(new Map());
+      if (e.length) return { e, i };
+    }
+    return { e: [], i: max };
+  };
   it('two trainers who see each other fight once, and stand until each one ends it', () => {
     const room = makeRoom(MAPS, PATCHES, 99);
     room.apply({ c: 'join', id: 3, bot: false, name: 'A', skin: 0, spot: { map: L, x: 9, y: 12 }, facing: 1 });
     room.apply({ c: 'join', id: 5, bot: false, name: 'B', skin: 1, spot: { map: L, x: 12, y: 12 }, facing: 3 });
     const a = room.actor(3)!, b = room.actor(5)!;
     // New by the truck: a grace first.
-    for (let i = 0; i < 299; i++) expect(room.step(new Map())).toEqual([]);
-    // B looks west along the row at A, three cells off: an engage, whoever looks.
-    expect(room.step(new Map())).toMatchObject([
+    for (let i = 0; i < 300; i++) expect(room.step(new Map())).toEqual([]);
+    // B looks west along the row at A, three cells off: an engage, whoever looks. B
+    // looked, so B walks up (br_walkup.h), after the "!".
+    expect(a.battling && b.battling).toBe(true);
+    expect([a.meet?.walk, b.meet?.walk]).toEqual([false, true]);
+    const { e, i } = fightAfter(room);
+    expect(i).toBeGreaterThanOrEqual(WALKUP_BANG);
+    expect(e).toMatchObject([
       { type: 'duel', id: 3, foe: 5, first: true },
       { type: 'duel', id: 5, foe: 3, first: false },
     ]);
-    expect(a.battling && b.battling).toBe(true);
+    expect([a.m.spot.x, b.m.spot.x]).toEqual([9, 10]); // beside
     expect([a.m.facing, b.m.facing]).toEqual([4, 3]); // face to face
     expect(room.step(new Map([[3, [KEY_DOWN]], [5, [KEY_A]]]))).toEqual([]);
-    expect([a.m.spot.y, b.m.spot.y]).toEqual([12, 12]);
+    expect([a.m.spot.x, b.m.spot.x, a.m.spot.y, b.m.spot.y]).toEqual([9, 10, 12, 12]);
     // One side's battle over first: the other is still in theirs.
     room.apply({ c: 'end', id: 3 });
     expect([a.battling, b.battling]).toEqual([false, true]);
     room.apply({ c: 'end', id: 5 });
     // The grace: no second fight straight away.
-    for (let i = 0; i < 119; i++) expect(room.step(new Map())).toEqual([]);
-    expect(room.step(new Map())).toMatchObject([{ type: 'duel' }, { type: 'duel' }]);
+    for (let i = 0; i < 120; i++) expect(room.step(new Map())).toEqual([]);
+    expect(a.meet && b.meet).toBeTruthy();
+    expect(fightAfter(room).e).toMatchObject([{ type: 'duel' }, { type: 'duel' }]);
   });
 
   it('sees five cells along the look and no further; a beaten bot beside them stays out of it', () => {
@@ -295,11 +309,11 @@ describe('trainer against trainer', () => {
       room.actor(1)!.beaten = true;
       room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: L, x: x0, y: y0 }, facing: 4 });
       room.apply({ c: 'join', id: 3, bot: false, name: 'B', skin: 1, spot: { map: L, x: x0 + dx, y: y0 }, facing: 2 });
-      for (let i = 0; i < 299; i++) room.step(new Map());
-      return room.step(new Map()).length;
+      for (let i = 0; i < 300; i++) room.step(new Map());
+      return !!room.actor(2)!.meet;
     };
-    expect(at(6)).toBe(0); // six cells
-    expect(at(5)).toBe(2); // five
+    expect(at(6)).toBe(false); // six cells
+    expect(at(5)).toBe(true); // five
   });
 
   it('a bot that sees a trainer challenges them, once its grace is over; not one the trainer fled', () => {
@@ -309,7 +323,11 @@ describe('trainer against trainer', () => {
     const bot = room.actor(1)!, me = room.actor(2)!;
     const events: ReturnType<typeof room.step> = [];
     for (let i = 0; i < 400 && !me.battling; i++) events.push(...room.step(new Map()));
-    expect(events).toMatchObject([{ type: 'fight', id: 2, foe: 1 }]);
+    expect(events).toEqual([]);
+    // It faced the trainer down the line: it walks up, a map trainer's way.
+    expect(bot.meet?.walk).toBe(true);
+    expect(fightAfter(room).e).toMatchObject([{ type: 'fight', id: 2, foe: 1 }]);
+    expect([me.m.spot.x, bot.m.spot.x]).toEqual([7, 8]);
     expect(me.m.facing).toBe(4); // turned to the bot
     expect(bot.m.facing).toBe(3);
     room.apply({ c: 'end', id: 2, fled: true });
@@ -358,18 +376,20 @@ describe('trainer against trainer', () => {
     room.apply({ c: 'join', id: 5, bot: false, name: 'B', skin: 1, spot: { map: L, x: 11, y: 12 }, facing: 3 });
     for (let i = 0; i < 300; i++) room.step(new Map());
     expect(room.actor(3)!.battling).toBe(true);
+    expect(fightAfter(room).e).toHaveLength(2);
     room.apply({ c: 'end', id: 3, fled: true });
     room.apply({ c: 'end', id: 5 });
-    for (let i = 0; i < 599; i++) expect(room.step(new Map())).toEqual([]);
-    expect(room.step(new Map())).toHaveLength(2);
+    for (let i = 0; i < 600; i++) expect(room.step(new Map())).toEqual([]);
+    expect(room.actor(3)!.meet).toBeTruthy();
+    expect(fightAfter(room).e).toHaveLength(2);
   });
 
   it('a trainer whose foe left is still in the fight until their page ends it', () => {
     const room = makeRoom(MAPS, PATCHES, 99);
     room.apply({ c: 'join', id: 3, bot: false, name: 'A', skin: 0, spot: { map: L, x: 9, y: 12 }, facing: 4 });
     room.apply({ c: 'join', id: 5, bot: false, name: 'B', skin: 1, spot: { map: L, x: 11, y: 12 }, facing: 1 });
-    for (let i = 0; i < 299; i++) room.step(new Map());
-    expect(room.step(new Map())).toHaveLength(2);
+    for (let i = 0; i < 300; i++) room.step(new Map());
+    expect(fightAfter(room).e).toHaveLength(2);
     room.apply({ c: 'leave', id: 5 });
     expect(room.actor(3)!.battling).toBe(true);
     room.apply({ c: 'end', id: 3 });

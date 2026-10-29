@@ -1650,6 +1650,9 @@ var GRACE = 120;
 var LOCKOUT = 600;
 var JOIN_GRACE = 300;
 var BACK = { 1: 2, 2: 1, 3: 4, 4: 3 };
+var WALKUP_BANG = 30;
+var APPROACH_FRAMES = (SIGHT_RANGE + 1) * 16 + 90;
+var KEY_TO = { 1: KEY_DOWN, 2: KEY_UP, 3: KEY_LEFT, 4: KEY_RIGHT };
 var BOT_DUEL_GAP = 60 * 12;
 var BOT_DUEL_MAX = 60 * 120;
 var BOT_BITE = 600;
@@ -1796,6 +1799,15 @@ var Room = class {
         a.shunUntil = this.tick + LOCKOUT;
       }
       const foe = a.foe ? this.actor(a.foe) : void 0;
+      if (a.meet) {
+        a.meet = void 0;
+        if (foe?.meet?.foe === a.id) {
+          foe.meet = void 0;
+          foe.battling = false;
+          foe.foe = 0;
+          foe.calm = this.tick + GRACE;
+        }
+      }
       if (foe?.bot) {
         foe.battling = false;
         foe.calm = this.tick + GRACE;
@@ -2005,6 +2017,7 @@ var Room = class {
       if (a.bot) this.move(a, a.keys, events);
       else for (const bits of ins?.get(a.id) ?? []) this.move(a, bits, events);
     }
+    this.approach(events);
     this.engage(events);
     for (const a of this.actors) if (a.judge && this.tick - (a.since ?? 0) > BOT_DUEL_MAX) this.part(a);
     this.engageBots(events);
@@ -2210,6 +2223,45 @@ var Room = class {
     this.picked.clear();
     this.spills.clear();
   }
+  /** The walk-ups under way: after the "!", the walker steps the eyeline toward the
+   *  other, and beside them (or out of time, or the other gone) the fight starts. */
+  approach(events) {
+    for (const w of this.actors) {
+      const m = w.meet;
+      if (!m || !m.walk) continue;
+      const o = this.actor(m.foe);
+      if (!o || o.meet?.foe !== w.id) {
+        w.meet = void 0;
+        w.battling = false;
+        w.foe = 0;
+        continue;
+      }
+      if (this.tick - m.since < WALKUP_BANG) continue;
+      const dx = o.m.spot.x - w.m.spot.x, dy = o.m.spot.y - w.m.spot.y;
+      const beside = o.m.spot.map === w.m.spot.map && Math.abs(dx) + Math.abs(dy) <= 1;
+      if (w.m.action) {
+        tick(w.m, keysOf(0), this.stepFor(w));
+        continue;
+      }
+      if (!beside && this.tick - m.since < APPROACH_FRAMES) {
+        const dir = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        const before = w.m.strides;
+        tick(w.m, keysOf(KEY_TO[dir]), this.stepFor(w));
+        if (w.m.strides !== before || w.m.action) continue;
+      }
+      const toO = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+      if (dx || dy) {
+        w.m.facing = w.m.moveDir = toO;
+        o.m.facing = o.m.moveDir = BACK[toO];
+      }
+      w.meet = o.meet = void 0;
+      const [h, f] = w.bot ? [o, w] : o.bot ? [w, o] : w.id < o.id ? [w, o] : [o, w];
+      if (m.duel) {
+        events.push({ type: "duel", tick: this.tick, id: h.id, foe: f.id, first: true });
+        events.push({ type: "duel", tick: this.tick, id: f.id, foe: h.id, first: false });
+      } else events.push({ type: "fight", tick: this.tick, id: h.id, foe: f.id });
+    }
+  }
   /** Two trainers on one map who see each other fight (br_engage.c's BrEngage_Tick): the
    *  eyeline both ways, BR_SIGHT_RANGE cells, stopped by collision (bots/sight.ts). Only
    *  trainers standing still, neither in a fight nor in its grace. They turn to face each
@@ -2228,14 +2280,15 @@ var Room = class {
         if (!eitherSees(this.world, look(a), look(b))) continue;
         const dx = b.m.spot.x - a.m.spot.x, dy = b.m.spot.y - a.m.spot.y;
         const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        const bWalks = b.m.facing === BACK[toB] && a.m.facing !== toB;
         a.m.facing = a.m.moveDir = toB;
         b.m.facing = b.m.moveDir = BACK[toB];
         a.battling = b.battling = true;
         a.foe = b.id;
         b.foe = a.id;
         a.keys = a.last = b.keys = b.last = 0;
-        events.push({ type: "duel", tick: this.tick, id: a.id, foe: b.id, first: true });
-        events.push({ type: "duel", tick: this.tick, id: b.id, foe: a.id, first: false });
+        a.meet = { foe: b.id, walk: !bWalks, since: this.tick, duel: true };
+        b.meet = { foe: a.id, walk: bWalks, since: this.tick, duel: true };
         break;
       }
     }
@@ -2248,13 +2301,15 @@ var Room = class {
         if (!eitherSees(this.world, look(h), look(b))) continue;
         const dx = b.m.spot.x - h.m.spot.x, dy = b.m.spot.y - h.m.spot.y;
         const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        const botWalks = b.m.facing === BACK[toB];
         h.m.facing = h.m.moveDir = toB;
         b.m.facing = b.m.moveDir = BACK[toB];
         h.battling = b.battling = true;
         h.foe = b.id;
         b.foe = h.id;
         h.keys = h.last = b.keys = b.last = 0;
-        events.push({ type: "fight", tick: this.tick, id: h.id, foe: b.id });
+        h.meet = { foe: b.id, walk: !botWalks, since: this.tick, duel: false };
+        b.meet = { foe: h.id, walk: botWalks, since: this.tick, duel: false };
         break;
       }
     }
@@ -2415,6 +2470,11 @@ var Room = class {
       mix2(a.boss ?? 0);
       mix2(a.pick?.length ?? 0);
       mix2(a.away ? 1 : 0);
+      if (a.meet) {
+        mix2(a.meet.foe);
+        mix2(a.meet.since);
+        mix2((a.meet.walk ? 1 : 0) | (a.meet.duel ? 2 : 0));
+      }
     }
     for (const [k, t] of this.taken) {
       mix2(k);
