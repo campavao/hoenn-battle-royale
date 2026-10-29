@@ -685,6 +685,23 @@ describe('doors', () => {
   });
 });
 
+describe('marts', () => {
+  it('A at a clerk, or across the counter at one, opens the MART; nobody walks onto a clerk', () => {
+    const room = makeRoom(MAPS, PATCHES, 7);
+    room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_OLDALE_TOWN_MART', x: 3, y: 3 }, facing: 3 });
+    room.apply({ c: 'join', id: 3, bot: false, name: 'B', skin: 0, spot: { map: 'MAP_LILYCOVE_CITY_DEPARTMENT_STORE_2F', x: 7, y: 4 }, facing: 1 });
+    expect(room.step(new Map([[2, [KEY_A]], [3, [KEY_A]]]))).toMatchObject([
+      { type: 'mart', id: 2, map: 'MAP_OLDALE_TOWN_MART' },
+      { type: 'mart', id: 3, map: 'MAP_LILYCOVE_CITY_DEPARTMENT_STORE_2F' },
+    ]);
+    // Facing away: nothing.
+    room.actor(2)!.m.facing = 4;
+    expect(room.step(new Map([[2, [0]]]))).toEqual([]);
+    expect(room.step(new Map([[2, [KEY_A]]]))).toEqual([]);
+    expect(room.stepFor(room.actor(2)!)({ map: 'MAP_OLDALE_TOWN_MART', x: 1, y: 2 }, 1)).toBeNull();
+  });
+});
+
 describe('field moves', () => {
   it('a team that could SURF walks onto water, at SURF pace; one that could not stays on the shore', () => {
     const room = makeRoom(MAPS, PATCHES, 99);

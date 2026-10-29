@@ -230,6 +230,11 @@ export class RomArt {
     return text(this.letters(row, 14));
   }
 
+  /** What the item table prices it at (struct Item's price, after the name and id). */
+  itemPrice(id: number): number {
+    return this.u16(this.sym('gItems') + id * 44 + 16);
+  }
+
   /** Map (group, num)'s MAP section (MapHeader.regionMapSectionId). */
   mapsec(group: number, num: number): number {
     return this.u8(this.u32(this.u32(this.sym('gMapGroups') + group * 4) + num * 4) + 0x14);

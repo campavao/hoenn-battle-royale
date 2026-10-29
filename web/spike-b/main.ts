@@ -32,6 +32,7 @@ import { RomArt } from './romart';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
 import { makeJudge, type Judge } from './judge';
+import { CLERKS, priceOf, shelf } from './shared/marts';
 import type { GbaKey } from '../src/emu';
 import spritesData from '../src/data/sprites.json';
 
@@ -39,6 +40,8 @@ const TILE = 16;
 // include/constants/event_objects.h.
 const OBJ_EVENT_GFX_ITEM_BALL = 59;
 const OBJ_EVENT_GFX_NURSE = 58;
+const OBJ_EVENT_GFX_WOMAN_3 = 24;
+const OBJ_EVENT_GFX_MART_EMPLOYEE = 83;
 const OBJ_EVENT_GFX_BRENDAN_SURFING = 2, OBJ_EVENT_GFX_MAY_SURFING = 92;
 const OBJ_EVENT_GFX_CUTTABLE_TREE = 82, OBJ_EVENT_GFX_PUSHABLE_BOULDER = 87;
 // export-world.py's classes for them.
@@ -299,6 +302,7 @@ let asking: { pick: number; done: (c: string) => void } | null = null;
 
 function askPaint(): void {
   askButtons.forEach((b, i) => b.classList.toggle('on', i === asking?.pick));
+  askButtons[asking?.pick ?? -1]?.scrollIntoView({ block: 'nearest' });
 }
 
 function askKey(k: string): void {
@@ -413,6 +417,7 @@ async function takeBag(key: number, bag: Bag, who: string): Promise<void> {
  *  it as the battle started, as BrPatch_Take does), or A at an item ball. */
 function startFor(e: RoomEvent): void {
   if (e.type === 'nurse') { void nurse(); return; }
+  if (e.type === 'mart') { void mart(e.map); return; }
   if (e.type === 'bots') { void judgeBots(e.a, e.b); return; }
   if (e.type === 'item' || e.type === 'bag') {
     toGive.push(e.type === 'item' ? { key: e.key, item: e.item } : { key: e.key, bag: e.bag, name: e.name });
@@ -495,6 +500,36 @@ async function nurse(): Promise<void> {
   if (c !== 'yes' || isOut || !rom) { say('Good luck.'); return; }
   await rom.heal();
   say('Done. Your POKéMON are fully healed.');
+}
+
+/** A MART's clerk (pokemart.inc): the shelf at this rung, or the LILYCOVE DEPARTMENT
+ *  STORE's, priced as a match prices it; a row, how many, and into the bag the ROM's own
+ *  way. Closed in the fog, as the CENTER is. */
+async function mart(map: string): Promise<void> {
+  if (!rom || !art || isOut || battle || swapping || asking) return;
+  const clerk = CLERKS.find((c) => c.map === map);
+  if (!clerk) return;
+  if (inFogNow()) { say('The fog is here. This MART is closed.'); return; }
+  const a = art;
+  const name = (id: number) => a.itemName(id) || `item ${id}`;
+  let hi = 'Welcome!';
+  for (;;) {
+    if (!rom || isOut || battle) return;
+    const money = await rom.money();
+    const items = shelf(clerk, link.room.ring().phase);
+    const c = await ask(`${hi} You have ¥${money}. May I help you?`, [
+      ...items.map((id): [string, string] => [`${name(id)}  ¥${priceOf(id, a.itemPrice(id))}`, String(id)]),
+      ['SEE YA!', ''],
+    ]);
+    if (!c || !rom || isOut || battle) { say('Please come again!'); return; }
+    const id = Number(c), each = priceOf(id, a.itemPrice(id));
+    const counts = [1, 5, 10].filter((n) => n * each <= money);
+    if (!counts.length) { hi = "You don't have enough money."; continue; }
+    const n = Number(await ask(`${name(id)}? Certainly. How many?`, counts.map((k): [string, string] => [`×${k}  ¥${k * each}`, String(k)])));
+    if (!n || !rom) { hi = 'Is there anything else I can do for you?'; continue; }
+    const took = await rom.buy(id, n, each);
+    hi = took ? `Here you go! ${name(id)} ×${took}. Thank you!` : 'You have no more room for items.';
+  }
 }
 
 const OUTCOME = ['', 'won', 'lost', 'drew', 'ran', 'teleported', 'it fled', 'caught it', 'out of balls', 'forfeited'];
@@ -1041,6 +1076,27 @@ function drawNurses(visible: Placed[]): void {
     ctx.drawImage(nurseArt, (p.gx + c.counterX) * TILE + (TILE - nurseArt.width) / 2, (p.gy + c.counterY - 2) * TILE + TILE - nurseArt.height);
   }
 }
+/** The MARTs' clerks (marts.ts), each the way it faces: the first three frames are
+ *  down, up and left; right is left turned over. */
+const clerkArt = new Map<number, HTMLCanvasElement>();
+function drawClerks(visible: Placed[]): void {
+  if (!art) return;
+  for (const p of visible) {
+    for (const c of CLERKS) {
+      if (c.map !== p.m.id) continue;
+      const gfx = c.store ? OBJ_EVENT_GFX_WOMAN_3 : OBJ_EVENT_GFX_MART_EMPLOYEE;
+      let img = clerkArt.get(gfx);
+      if (!img) clerkArt.set(gfx, (img = art.sprite(gfx, 3)));
+      const w = img.width / 3, f = c.facing === 1 ? 0 : c.facing === 2 ? 1 : 2;
+      const x = (p.gx + c.x) * TILE + (TILE - w) / 2, y = (p.gy + c.y) * TILE + TILE - img.height;
+      ctx.save();
+      if (c.facing === 4) { ctx.translate(x + w, y); ctx.scale(-1, 1); } else ctx.translate(x, y);
+      ctx.drawImage(img, f * w, 0, w, img.height, 0, 0, w, img.height);
+      ctx.restore();
+    }
+  }
+}
+
 /** The item balls and bags nobody has taken, as the ROM draws them (br_loot.c: a
  *  fallen trainer's bag is BIRCH's BAG). */
 function drawGround(x0: number, y0: number, x1: number, y1: number): void {
@@ -1166,6 +1222,7 @@ function draw(): void {
     if (p.cover && !far) ctx.drawImage(p.cover, p.gx * TILE, p.gy * TILE);
   }
   drawNurses(visible);
+  drawClerks(visible);
   drawFog(vx0, vy0, vx1, vy1, home);
   // A door: the screen fades out and back in over the followed trainer's warp.
   const going = followed?.m.action?.kind === 'warp' ? followed.m.action : null;

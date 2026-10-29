@@ -121,6 +121,11 @@ export interface RomBattles {
   reseed(seed: number): void;
   /** Money out of somebody's bag (br_loot.c's Take pays it). */
   addMoney(n: number): Promise<void>;
+  /** The money the trainer has. */
+  money(): Promise<number>;
+  /** A MART's sale: `n` of `item` into the bag the ROM's own way, `each` paid for every
+   *  one that went in. How many did; 0 when they could not pay or nothing fitted. */
+  buy(item: number, n: number, each: number): Promise<number>;
   /** The CENTER's heal (HealPlayerParty), on the team the next battle takes. */
   heal(): Promise<void>;
   /** What the team could do on the field now (room.ts FIELD_*). */
@@ -276,6 +281,28 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       try { const w = reassembleSlots(group); m = unpackSlot(w.type, w.payload); } catch { continue; }
       handle(m);
     }
+  };
+
+  const moneyOf = (k: ReturnType<typeof kept>) => (new DataView(k.bag.buffer, k.bag.byteOffset).getUint32(0, true) ^ k.key) >>> 0;
+  const giveNow = async (item: number, n: number): Promise<Given | null> => {
+    if (broken) return null;
+    const before = kept();
+    // br_loot.c's HandleGive: straight into AddBagItem when no bag of ours is waiting.
+    lay();
+    emu.resume();
+    send({ t: 'give', items: [{ id: item, n }] });
+    await until(emu, () => box.pending() === 0, 60);
+    await frames(emu, 1);
+    emu.pause();
+    const after = kept();
+    // Back to parked with what it left, as after a battle: a refusal's NO ROOM box and
+    // the frames it ran are not where the next battle starts.
+    if (!emu.restore(parked!)) broken = true;
+    else keep(after);
+    carried = last = after;
+    const got = arrived(before, after);
+    const used = after.party.some((b, i) => b !== before.party[i]);
+    return got.items.length || got.money || used ? { ...got, used } : null;
   };
 
   /** One battle: `kick` asks for it, `going` says the ROM took it, `over` that it is back
@@ -643,25 +670,22 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       });
     },
     give(item, n) {
+      return inTurn(() => giveNow(item, n));
+    },
+    money() {
+      return inTurn(async () => moneyOf(carried ?? kept()));
+    },
+    buy(item, n, each) {
       return inTurn(async () => {
-        if (broken) return null;
-        const before = kept();
-        // br_loot.c's HandleGive: straight into AddBagItem when no bag of ours is waiting.
-        lay();
-        emu.resume();
-        send({ t: 'give', items: [{ id: item, n }] });
-        await until(emu, () => box.pending() === 0, 60);
-        await frames(emu, 1);
-        emu.pause();
-        const after = kept();
-        // Back to parked with what it left, as after a battle: a refusal's NO ROOM box and
-        // the frames it ran are not where the next battle starts.
-        if (!emu.restore(parked!)) broken = true;
-        else keep(after);
-        carried = last = after;
-        const got = arrived(before, after);
-        const used = after.party.some((b, i) => b !== before.party[i]);
-        return got.items.length || got.money || used ? { ...got, used } : null;
+        if (broken || n <= 0 || moneyOf(carried ?? kept()) < n * each) return 0;
+        const got = await giveNow(item, n);
+        const took = got?.items.find((r) => r.id === item)?.n ?? 0;
+        if (!took || broken) return 0;
+        const k = carried ?? kept();
+        const next = { ...k, bag: withMoney(k.bag, k.key, -took * each) as typeof k.bag };
+        keep(next);
+        carried = last = next;
+        return took;
       });
     },
     wild(group, num, behavior, onStart, fog = false) {

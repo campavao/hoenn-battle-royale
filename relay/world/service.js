@@ -1078,6 +1078,53 @@ var World = class {
   }
 };
 
+// web/spike-b/shared/marts.ts
+var MARTS = [
+  "FALLARBOR_TOWN",
+  "FORTREE_CITY",
+  "LAVARIDGE_TOWN",
+  "MAUVILLE_CITY",
+  "MOSSDEEP_CITY",
+  "OLDALE_TOWN",
+  "PETALBURG_CITY",
+  "RUSTBORO_CITY",
+  "SLATEPORT_CITY",
+  "SOOTOPOLIS_CITY",
+  "VERDANTURF_TOWN"
+];
+var STORE = "MAP_LILYCOVE_CITY_DEPARTMENT_STORE_";
+var CLERKS = [
+  ...MARTS.map((t) => ({ map: `MAP_${t}_MART`, x: 1, y: 3, facing: 4, store: false })),
+  ...[[2, 10, 6, 2], [2, 7, 6, 2], [3, 8, 2, 1], [3, 10, 2, 1], [4, 7, 6, 2], [4, 9, 6, 2], [5, 7, 2, 1], [5, 9, 2, 1], [5, 15, 6, 3], [5, 17, 6, 2]].map(([f, x, y, facing]) => ({ map: `${STORE}${f}F`, x, y, facing, store: true }))
+];
+var AT = new Map(CLERKS.map((c) => [`${c.map}:${c.x}:${c.y}`, c]));
+function clerkAt(map, x, y) {
+  return AT.get(`${map}:${x}:${y}`);
+}
+var MASTER_BALL = 1;
+var POKE_BALL = 4;
+var FULL_RESTORE = 19;
+var MAX_POTION = 20;
+var REVIVE = 24;
+var MAX_REVIVE = 25;
+var GUARD_SPEC = 73;
+var DIRE_HIT = 74;
+var X_ATTACK = 75;
+var X_DEFEND = 76;
+var X_SPEED = 77;
+var X_ACCURACY = 78;
+var X_SPECIAL = 79;
+var POKE_DOLL = 80;
+var SUN_STONE = 93;
+var MOON_STONE = 94;
+var FIRE_STONE = 95;
+var THUNDER_STONE = 96;
+var WATER_STONE = 97;
+var LEAF_STONE = 98;
+var LINK_CABLE = 52;
+var TOP = [MASTER_BALL, POKE_BALL, MAX_POTION, FULL_RESTORE, REVIVE, MAX_REVIVE, X_ATTACK, X_DEFEND, X_SPEED, X_SPECIAL, X_ACCURACY, GUARD_SPEC, DIRE_HIT, POKE_DOLL];
+var DEPT_STORE = [...TOP, FIRE_STONE, WATER_STONE, THUNDER_STONE, LEAF_STONE, SUN_STONE, MOON_STONE, LINK_CABLE];
+
 // web/src/bots/patches.ts
 var PATCH_KEY_BASE = 8192;
 var PATCH_MAX = 8;
@@ -1880,6 +1927,8 @@ var Room = class {
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
           events.push({ type: "fight", tick: this.tick, id: a.id, foe: foe.id });
+        } else if (!foe && this.clerk(a)) {
+          events.push({ type: "mart", tick: this.tick, id: a.id, map: a.m.spot.map });
         } else if (!foe && a.m.facing === DIR_NORTH) {
           const c = this.maps.get(a.m.spot.map)?.centre;
           if (c && a.m.spot.x === c.counterX && a.m.spot.y === c.counterY) events.push({ type: "nurse", tick: this.tick, id: a.id, map: a.m.spot.map });
@@ -1887,6 +1936,12 @@ var Room = class {
       }
     } else if (!a.m.action) a.arriving = false;
     a.last = bits;
+  }
+  /** The MART clerk `a` talks to: on the cell ahead, or across the counter there. */
+  clerk(a) {
+    const [x, y] = this.ahead(a);
+    const map = a.m.spot.map;
+    return clerkAt(map, x, y) ?? (this.world.cell(map, x, y) === 1 ? clerkAt(map, 2 * x - a.m.spot.x, 2 * y - a.m.spot.y) : void 0);
   }
   /** The cell `a` faces, on its own map. */
   ahead(a) {
@@ -1908,7 +1963,7 @@ var Room = class {
       if (!r || !this.maps.has(r.to.map)) return null;
       if (a.bot && !this.places.has(r.to.map)) return null;
       const t = r.to;
-      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y)) return null;
+      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y)) return null;
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return null;
       return r;
     };

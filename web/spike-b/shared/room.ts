@@ -26,6 +26,7 @@
 // from the seed on cells a trainer can walk to from Littleroot. A ball is solid, as the
 // ROM's are; A at one takes it, for that trainer and off everybody's map.
 
+import { clerkAt, type Clerk } from './marts';
 import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
 import { scatterItem } from '../../src/match/scatter';
@@ -91,6 +92,8 @@ export type RoomEvent =
   | { type: 'bag'; tick: number; id: number; key: number; bag: Bag; name: string }
   /** A at a CENTER's nurse, from the counter. */
   | { type: 'nurse'; tick: number; id: number; map: string }
+  /** A at a MART's clerk. */
+  | { type: 'mart'; tick: number; id: number; map: string }
   /** Two bots saw each other: `id`'s page fights `a` against `b` in a hidden ROM and
    *  says who won (`bots`). Nobody's coin flip (CLAUDE.md: simulate every battle). */
   | { type: 'bots'; tick: number; id: number; a: number; b: number };
@@ -704,6 +707,8 @@ export class Room {
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
           events.push({ type: 'fight', tick: this.tick, id: a.id, foe: foe.id });
+        } else if (!foe && this.clerk(a)) {
+          events.push({ type: 'mart', tick: this.tick, id: a.id, map: a.m.spot.map });
         } else if (!foe && a.m.facing === DIR_NORTH) {
           // The nurse, across the counter (pkmn_center_nurse.inc).
           const c = this.maps.get(a.m.spot.map)?.centre;
@@ -712,6 +717,13 @@ export class Room {
       }
     } else if (!a.m.action) a.arriving = false;
     a.last = bits;
+  }
+
+  /** The MART clerk `a` talks to: on the cell ahead, or across the counter there. */
+  private clerk(a: Actor): Clerk | undefined {
+    const [x, y] = this.ahead(a);
+    const map = a.m.spot.map;
+    return clerkAt(map, x, y) ?? (this.world.cell(map, x, y) === 1 ? clerkAt(map, 2 * x - a.m.spot.x, 2 * y - a.m.spot.y) : undefined);
   }
 
   /** The cell `a` faces, on its own map. */
@@ -737,7 +749,7 @@ export class Room {
       // A townsperson stays out in the street.
       if (a.bot && !this.places.has(r.to.map)) return null;
       const t = r.to;
-      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y)) return null;
+      if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y)) return null;
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return null;
       return r;
     };
