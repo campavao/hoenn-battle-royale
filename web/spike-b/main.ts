@@ -33,6 +33,7 @@ import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattle
 import { groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
 import { GOLD } from '../src/match/events';
+import { FLYING, STORIES } from '../src/match/story';
 import hiddenJson from './data/hidden.json';
 import { RomArt } from './romart';
 import { RingMap } from './ringmap';
@@ -69,6 +70,8 @@ interface Placed {
   border?: HTMLCanvasElement;
   borderTint?: string;
   mips?: HTMLCanvasElement[]; // 1/4, 1/8, 1/16, each averaged from the one before
+  /** Painted with its REGI wall open (br_story.c's Open). */
+  open?: boolean;
   classes: Uint8Array;
   /** The cut trees and Strength boulders standing on it: [x, y, gfx]. */
   props?: [number, number, number][];
@@ -145,13 +148,31 @@ function layout(maps: WorldMap[]): Map<string, Placed> {
 }
 
 let art: RomArt | null = null;
+/** METATILE_Cave_SealedChamberEntrance_* (metatile_labels.h), where Open lays them. */
+const SEALED_CHAMBER: [number, number, number][] = [[7, 19, 0x22a], [8, 19, 0x22b], [9, 19, 0x22c], [7, 20, 0x232], [8, 20, 0x233], [9, 20, 0x234]];
+/** METATILE_Cave_EntranceCover over SealedChamberBraille_Mid: the wall before it opens. */
+const HIDDEN_CHAMBER: [number, number, number][] = [[7, 19, 0x229], [8, 19, 0x229], [9, 19, 0x229], [7, 20, 0x235], [8, 20, 0x235], [9, 20, 0x235]];
+const DOOR_MAPS = new Set(STORIES.filter((s) => s.door).map((s) => s.map));
+/** A wall opened since its map was painted: painted again. */
+function doorsFrame(): void {
+  for (const e of link.room.events) {
+    const p = e.opened ? placed.get(e.map) : undefined;
+    if (p && !p.open) { p.open = true; p.ground = p.cover = p.mips = undefined; }
+  }
+  // A new round's walls are shut again.
+  for (const p of placed.values()) if (p.open && !link.room.events.some((e) => e.opened && e.map === p.m.id)) { p.open = false; p.ground = p.cover = p.mips = undefined; }
+}
 let ringMap: RingMap | null = null;
 /** A map's pictures, cut from the ROM the first time it is seen (~20 ms a map); the rest
  *  are cut in the background after boot so a zoom-out never waits on them. */
 function paint(p: Placed): boolean {
   if (p.ground) return true;
   if (!art) return false;
-  const a = art.map(p.m.group, p.m.num);
+  // A REGI wall: shut as the map's OnLoad hides it (HideRegiEntrance), or open, the
+  // sealed chamber's entrance on its six cells (br_story.c's Open).
+  const wall = !DOOR_MAPS.has(p.m.id) ? undefined : p.open ? SEALED_CHAMBER : HIDDEN_CHAMBER;
+  const over = wall && new Map(wall.map(([x, y, block]) => [y * p.m.w + x, block]));
+  const a = art.map(p.m.group, p.m.num, over);
   p.ground = a.ground;
   p.cover = a.cover;
   p.border = a.border;
@@ -432,6 +453,19 @@ async function openMenu(): Promise<void> {
   }
 }
 
+/** A at a REGI chamber's sealed wall (br_story.c): DESERT RUINS' cracks for anybody,
+ *  ANCIENT TOMB's for a team with a Flying-type in it, ISLAND CAVE's by itself once the
+ *  ring has moved on. */
+async function door(n: number, how: string, opened: boolean): Promise<void> {
+  if (opened) { say('The wall crumbled away! A way in opened up.'); return; }
+  if (how === 'wait') { say("It's sealed tight. It will open when the ring closes in."); return; }
+  const mons = rom ? (await rom.spill()).mons : [];
+  if (mons.some((m) => FLYING.has(m.species))) {
+    link.open(n);
+    say('Your Flying-type POKéMON beat its wings... The wall opened!');
+  } else say('A gust of wind seems to come from inside. A Flying-type POKéMON could open it.');
+}
+
 /** A story's person (story.ts's people): STEVEN hands his over; CAPT. STERN wants the
  *  SCANNER first, out of my bag, as br_story.c's BrStory_Hands asks. */
 async function meet(key: number, bag: Bag, person: Person): Promise<void> {
@@ -478,6 +512,7 @@ function startFor(e: RoomEvent): void {
   if (e.type === 'nurse') { void nurse(); return; }
   if (e.type === 'mart') { void mart(e.map); return; }
   if (e.type === 'trade') { void (e.gives ? gift(e.n, e.species) : trade(e.n, e.species)); return; }
+  if (e.type === 'door') { void door(e.n, e.how, !!e.opened); return; }
   if (e.type === 'legend') {
     // Its own battle; caught, it is mine, and anything else puts it back where it stood
     // for the next trainer (Cam: losing to one puts you out, and it goes back for retries).
@@ -1817,6 +1852,7 @@ function loop(now: number): void {
     roundFrame();
     fieldFrame();
     soundFrame();
+    doorsFrame();
     fogFrame();
     foeFrame();
     remember();

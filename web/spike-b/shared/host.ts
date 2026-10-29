@@ -135,6 +135,11 @@ export class Host {
     if (this.players.has(id)) this.pending.push({ c: 'traded', id, n, given });
   }
 
+  /** The page saw a Flying-type in its team at event `n`'s REGI wall. */
+  open(id: number, n: number): void {
+    if (this.players.has(id)) this.pending.push({ c: 'open', id, n });
+  }
+
   end(id: number, fled = false, won = false): void {
     if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: 'end', id, ...(fled ? { fled: true } : {}), ...(won ? { won: true } : {}) });
   }

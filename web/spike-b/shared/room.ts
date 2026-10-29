@@ -29,7 +29,7 @@
 import { clerkAt, type Clerk } from './marts';
 import { leaderAt } from './gyms';
 import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, draw, eventForRing } from '../../src/match/events';
-import { STORIES, STORY_CHANCE, type Story } from '../../src/match/story';
+import { DOOR_Y, STORIES, STORY_CHANCE, type Story, type StoryDoor } from '../../src/match/story';
 import { rungForPhase } from '../../src/bots/party';
 import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
@@ -115,6 +115,9 @@ export type RoomEvent =
   | { type: 'legend'; tick: number; id: number; key: number; species: number; level: number }
   /** A at an event's trader: his offer, for one of mine (`traded` says which). */
   | { type: 'trade'; tick: number; id: number; n: number; species: number; gives?: boolean }
+  /** A at a REGI chamber's sealed wall (br_story.c's PressedAtWall): `opened` when that
+   *  did it, else how it opens, for the page to say or (a FLY wall) to try. */
+  | { type: 'door'; tick: number; id: number; n: number; how: StoryDoor; opened?: boolean }
   /** A at a MART's clerk. */
   | { type: 'mart'; tick: number; id: number; map: string }
   /** A at a gym leader nobody has beaten yet: their own battle (gyms.ts). */
@@ -136,6 +139,12 @@ export interface Spill {
   person?: { gfx: number; name: string; wants?: number };
 }
 
+/** The REGI chambers' walls (story.ts's door rows): how each opens. */
+const DOORS: Record<string, StoryDoor> = Object.fromEntries(STORIES.filter((s) => s.door).map((s) => [s.id, s.door!]));
+const DOOR_MAPS = new Set(STORIES.filter((s) => s.door).map((s) => s.map));
+/** Standing under the wall's middle, facing it (br_story.c's PressedAtWall). */
+const atWall = (a: Actor): boolean => DOOR_MAPS.has(a.m.spot.map) && a.m.spot.x === 8 && a.m.spot.y === DOOR_Y + 1 && a.m.facing === 2;
+
 /** The people a story stands (include/constants/event_objects.h), by story.ts's names. */
 const PERSON_GFX: Record<string, [number, string]> = { OBJ_EVENT_GFX_STEVEN: [134, 'STEVEN'], OBJ_EVENT_GFX_SCIENTIST_1: [46, 'CAPT. STERN'] };
 
@@ -147,6 +156,8 @@ export interface EventMark {
   species: number; trader?: Trader;
   /** A story event's id (story.ts) and the place the ticker names. */
   story?: string; place?: string;
+  /** A REGI chamber's story: the phase it dropped on, and whether its wall is open. */
+  phase?: number; opened?: boolean;
 }
 
 /** An event's trader (br_event.c): where he stands, the rare he offers for any one of
@@ -230,6 +241,8 @@ export type Command =
   | { c: 'bots'; id: number; a: number; b: number; winner: number }
   /** `id` traded event `n`'s trader the species `given` (0: thought better of it). */
   | { c: 'traded'; id: number; n: number; given: number }
+  /** `id` opened event `n`'s REGI wall (a Flying-type in their party, the page saw). */
+  | { c: 'open'; id: number; n: number }
   /** `id`'s page went (a reload), or came back. */
   | { c: 'away'; id: number; on: boolean }
   /** Drop `id` on `map` when the Safari ends. */
@@ -393,6 +406,9 @@ export class Room {
     } else if (cmd.c === 'away') {
       const a = this.actor(cmd.id);
       if (a && !a.bot) a.away = cmd.on || undefined;
+    } else if (cmd.c === 'open') {
+      const a = this.actor(cmd.id), e = this.events.find((q) => q.n === cmd.n);
+      if (a && e && e.story && DOORS[e.story] && a.m.spot.map === e.map && atWall(a)) e.opened = true;
     } else if (cmd.c === 'traded') {
       const t: (Trader & { gives?: boolean; gone?: boolean }) | undefined = this.events.find((e) => e.n === cmd.n)?.trader ?? this.homes.find((h) => h.n === cmd.n);
       if (!t || t.busy !== cmd.id) return;
@@ -667,6 +683,8 @@ export class Room {
     if (ring.round !== was.round || (r.wonAt !== undefined && this.tick >= r.wonAt + AFTER_WIN)) this.newRound(r.round + 1);
     else if (was.safari && !ring.safari) this.drop(ring.round);
     else if (ring.phase !== was.phase) {
+      // ISLAND CAVE's wall opens by itself once the ring has moved on a phase (br_story.c).
+      for (const e of this.events) if (e.story && DOORS[e.story] === 'wait' && ring.phase > (e.phase ?? 0)) e.opened = true;
       // The fog closes for the first time: who is on the map is the match.
       if (ring.phase === 1 && !r.entrants.length) r.entrants = this.actors.map((a) => [a.id, a.name]);
       const n = eventForRing(ring.phase);
@@ -744,9 +762,10 @@ export class Room {
 
   /** A story event this round has not had (story.ts), where Emerald set that beat, inside
    *  the ring. The ones the page can tell: a place and its reward, or a person handing it
-   *  over; none behind a door, a gate's fight or the ferry, and not the final ring's. */
+   *  over, or a REGI behind its wall; none behind a gate's fight or the ferry, and not
+   *  the final ring's. */
   private storyFor(rng: () => number, ring: Ring): Story | undefined {
-    const open = STORIES.filter((s) => !s.door && (s.people ?? []).every((p) => !p.trainer && PERSON_GFX[p.gfx]) && !s.boat && !s.final && !s.noBots &&
+    const open = STORIES.filter((s) => (s.people ?? []).every((p) => !p.trainer && PERSON_GFX[p.gfx]) && !s.boat && !s.final && !s.noBots &&
       !this.events.some((e) => e.story === s.id) &&
       s.cells.every((c) => this.maps.has(c.map ?? s.map) && this.world.cell(c.map ?? s.map, c.x, c.y) === 0) &&
       !this.inFog({ map: s.map, x: s.cells[0].x, y: s.cells[0].y }, ring));
@@ -771,7 +790,9 @@ export class Room {
       this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: '', bag, ...(p ? { person: { gfx, name, ...(p.wants ? { wants: p.wants } : {}) } } : {}) });
     });
     const trader = spot ? { x: spot.x, y: spot.y, species: offers[Math.floor(rng() * offers.length)], busy: 0 } : undefined;
-    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: 0, story: story.id, place: story.name, ...(trader ? { trader } : {}) });
+    const legend = species.some((sp) => LEGENDS.flat().includes(sp));
+    if (legend) { const b = this.spills.get(eventPiece(n, 0)); if (b) b.legend = true; }
+    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: legend ? species[0] : 0, story: story.id, place: story.name, ...(trader ? { trader } : {}), ...(story.door ? { phase: ring.phase, opened: false } : {}) });
   }
 
   /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
@@ -1054,7 +1075,13 @@ export class Room {
           events.push({ type: 'wild', tick: this.tick, id: a.id, map: a.m.spot.map, x: p.x, y: p.y, key: p.key });
         }
       }
-      if (!a.battling && (bits & KEY_A) && !(a.last & KEY_A)) {
+      const wall = !a.battling && (bits & KEY_A) && !(a.last & KEY_A) && atWall(a) ? this.events.find((e) => e.map === a.m.spot.map && e.story && DOORS[e.story] && !e.opened) : undefined;
+      if (wall) {
+        const how = DOORS[wall.story!];
+        // DESERT RUINS': ROCK SMASH's crack, which anybody makes here (br_story.c).
+        if (how === 'smash') wall.opened = true;
+        events.push({ type: 'door', tick: this.tick, id: a.id, n: wall.n, how, ...(wall.opened ? { opened: true } : {}) });
+      } else if (!a.battling && (bits & KEY_A) && !(a.last & KEY_A)) {
         const [x, y] = this.ahead(a);
         const g = this.groundAt(a.m.spot.map, x, y);
         const b = g ? undefined : this.spillAt(a.m.spot.map, x, y);
@@ -1142,6 +1169,8 @@ export class Room {
       // A townsperson stays out in the street.
       if (a.bot && !this.places.has(r.to.map)) return null;
       const t = r.to;
+      // A REGI chamber's wall: shut until its story opened it (and in a match without one).
+      if (r.warp && DOOR_MAPS.has(from.map) && from.y === DOOR_Y + 1 && t.y < DOOR_Y && !this.events.some((e) => e.map === from.map && e.opened)) return null;
       if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y)) return null;
       // The Zone's gate is shut until the drop, both ways.
       if (from.map.startsWith(SAFARI) !== t.map.startsWith(SAFARI) && this.ring().safari) return null;
@@ -1172,7 +1201,7 @@ export class Room {
     const r = this.results;
     mix(r.round); mix(r.winner); mix(r.wonAt ?? 0); mix(this.epoch); mix(this.opening); mix(this.duelAfter); for (const [n, w] of this.gyms) { mix(n); mix(w.length); }
     for (const h of this.homes) { mix(h.n); mix(h.species); mix(h.busy); mix(h.gone ? 1 : 0); }
-    for (const e of this.events) { mix(e.key); mix(e.x); mix(e.y); mix(e.species); mix(e.story?.length ?? 0); if (e.trader) { mix(e.trader.x); mix(e.trader.y); mix(e.trader.species); mix(e.trader.busy); } }
+    for (const e of this.events) { mix(e.key); mix(e.x); mix(e.y); mix(e.species); mix(e.story?.length ?? 0); mix(e.opened ? 1 : 0); if (e.trader) { mix(e.trader.x); mix(e.trader.y); mix(e.trader.species); mix(e.trader.busy); } }
     for (const [id] of r.entrants) mix(id);
     for (const f of r.fallen) { mix(f.id); str(f.by); mix((f.wild ? 1 : 0) | (f.left ? 2 : 0)); }
     for (const b of this.spills.values()) {

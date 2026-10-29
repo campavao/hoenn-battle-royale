@@ -39,6 +39,8 @@ export interface WorldLink {
   pick(map: string): void;
   /** My trade with event `n`'s trader is over: I gave him `given` (0, nothing). */
   traded(n: number, given: number): void;
+  /** I opened event `n`'s REGI wall. */
+  open(n: number): void;
   /** The ball `key` would not go in my bag: put it back. */
   drop(key: number, rest?: Bag): void;
   /** My team is down: off the map. `by` who beat me, `wild` a wild POKeMON did. */
@@ -81,6 +83,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     field: (bits) => host.field(me, bits),
     bots: (a, b, winner) => host.bots(me, a, b, winner),
     traded: (n, given) => host.traded(me, n, given),
+    open: (n) => host.open(me, n),
     pick: (map) => host.pick(me, map),
     drop: (key, rest) => host.drop(me, key, rest),
     out: (bag, by, wild) => host.out(me, bag, by, wild),
@@ -223,6 +226,7 @@ class Online implements WorldLink {
   bots(a: number, b: number, winner: number): void { this.send({ t: 'bots', a, b, w: winner }); }
 
   traded(n: number, given: number): void { this.send({ t: 'traded', n, sp: given }); }
+  open(n: number): void { this.send({ t: 'open', n }); }
 
   pick(map: string): void { this.send({ t: 'pick', map }); }
 

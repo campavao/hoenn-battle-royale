@@ -156,6 +156,8 @@ export class WorldService {
           if (Number.isInteger(m.bits)) host.field(phone.id, m.bits);
         } else if (m.t === 'pick') {
           if (typeof m.map === 'string') host.pick(phone.id, m.map.slice(0, 64));
+        } else if (m.t === 'open') {
+          if (Number.isInteger(m.n)) host.open(phone.id, m.n);
         } else if (m.t === 'traded') {
           if (Number.isInteger(m.n) && Number.isInteger(m.sp)) host.traded(phone.id, m.n, m.sp);
         } else if (m.t === 'bots') {

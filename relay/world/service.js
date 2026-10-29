@@ -1419,6 +1419,7 @@ var ITEM_SCANNER = 278;
 var ITEM_MASTER_BALL2 = 1;
 var ITEM_METEORITE = 280;
 var ITEM_SUN_STONE = 93;
+var DOOR_Y = 20;
 var STORY_CHANCE = 0.5;
 var STORIES = [
   {
@@ -1983,6 +1984,9 @@ function keysOf(bits) {
   return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A) };
 }
 var FIELD_SURF = 4;
+var DOORS = Object.fromEntries(STORIES.filter((s) => s.door).map((s) => [s.id, s.door]));
+var DOOR_MAPS = new Set(STORIES.filter((s) => s.door).map((s) => s.map));
+var atWall = (a) => DOOR_MAPS.has(a.m.spot.map) && a.m.spot.x === 8 && a.m.spot.y === DOOR_Y + 1 && a.m.facing === 2;
 var PERSON_GFX = { OBJ_EVENT_GFX_STEVEN: [134, "STEVEN"], OBJ_EVENT_GFX_SCIENTIST_1: [46, "CAPT. STERN"] };
 var HOME_N = 1e3;
 var HOME_MONS = [277, 280, 283, 1, 4, 7, 64, 67, 75, 93, 385, 143];
@@ -2100,6 +2104,9 @@ var Room = class {
     } else if (cmd.c === "away") {
       const a = this.actor(cmd.id);
       if (a && !a.bot) a.away = cmd.on || void 0;
+    } else if (cmd.c === "open") {
+      const a = this.actor(cmd.id), e = this.events.find((q) => q.n === cmd.n);
+      if (a && e && e.story && DOORS[e.story] && a.m.spot.map === e.map && atWall(a)) e.opened = true;
     } else if (cmd.c === "traded") {
       const t = this.events.find((e) => e.n === cmd.n)?.trader ?? this.homes.find((h) => h.n === cmd.n);
       if (!t || t.busy !== cmd.id) return;
@@ -2360,6 +2367,7 @@ var Room = class {
     if (ring.round !== was.round || r.wonAt !== void 0 && this.tick >= r.wonAt + AFTER_WIN) this.newRound(r.round + 1);
     else if (was.safari && !ring.safari) this.drop(ring.round);
     else if (ring.phase !== was.phase) {
+      for (const e of this.events) if (e.story && DOORS[e.story] === "wait" && ring.phase > (e.phase ?? 0)) e.opened = true;
       if (ring.phase === 1 && !r.entrants.length) r.entrants = this.actors.map((a) => [a.id, a.name]);
       const n = eventForRing(ring.phase);
       if (n !== void 0) this.dropEvent(n, ring);
@@ -2441,9 +2449,10 @@ var Room = class {
   }
   /** A story event this round has not had (story.ts), where Emerald set that beat, inside
    *  the ring. The ones the page can tell: a place and its reward, or a person handing it
-   *  over; none behind a door, a gate's fight or the ferry, and not the final ring's. */
+   *  over, or a REGI behind its wall; none behind a gate's fight or the ferry, and not
+   *  the final ring's. */
   storyFor(rng, ring) {
-    const open = STORIES.filter((s) => !s.door && (s.people ?? []).every((p) => !p.trainer && PERSON_GFX[p.gfx]) && !s.boat && !s.final && !s.noBots && !this.events.some((e) => e.story === s.id) && s.cells.every((c) => this.maps.has(c.map ?? s.map) && this.world.cell(c.map ?? s.map, c.x, c.y) === 0) && !this.inFog({ map: s.map, x: s.cells[0].x, y: s.cells[0].y }, ring));
+    const open = STORIES.filter((s) => (s.people ?? []).every((p) => !p.trainer && PERSON_GFX[p.gfx]) && !s.boat && !s.final && !s.noBots && !this.events.some((e) => e.story === s.id) && s.cells.every((c) => this.maps.has(c.map ?? s.map) && this.world.cell(c.map ?? s.map, c.x, c.y) === 0) && !this.inFog({ map: s.map, x: s.cells[0].x, y: s.cells[0].y }, ring));
     return open.length ? open[Math.floor(rng() * open.length)] : void 0;
   }
   /** The story's pieces on its own cells (story.ts's storyDrop): its mons at the phase's
@@ -2464,7 +2473,12 @@ var Room = class {
       this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: "", bag, ...p ? { person: { gfx, name, ...p.wants ? { wants: p.wants } : {} } } : {} });
     });
     const trader = spot ? { x: spot.x, y: spot.y, species: offers[Math.floor(rng() * offers.length)], busy: 0 } : void 0;
-    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: 0, story: story.id, place: story.name, ...trader ? { trader } : {} });
+    const legend = species.some((sp) => LEGENDS.flat().includes(sp));
+    if (legend) {
+      const b = this.spills.get(eventPiece(n, 0));
+      if (b) b.legend = true;
+    }
+    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: legend ? species[0] : 0, story: story.id, place: story.name, ...trader ? { trader } : {}, ...story.door ? { phase: ring.phase, opened: false } : {} });
   }
   /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
   part(a) {
@@ -2745,7 +2759,12 @@ var Room = class {
           events.push({ type: "wild", tick: this.tick, id: a.id, map: a.m.spot.map, x: p.x, y: p.y, key: p.key });
         }
       }
-      if (!a.battling && bits & KEY_A && !(a.last & KEY_A)) {
+      const wall = !a.battling && bits & KEY_A && !(a.last & KEY_A) && atWall(a) ? this.events.find((e) => e.map === a.m.spot.map && e.story && DOORS[e.story] && !e.opened) : void 0;
+      if (wall) {
+        const how = DOORS[wall.story];
+        if (how === "smash") wall.opened = true;
+        events.push({ type: "door", tick: this.tick, id: a.id, n: wall.n, how, ...wall.opened ? { opened: true } : {} });
+      } else if (!a.battling && bits & KEY_A && !(a.last & KEY_A)) {
         const [x, y] = this.ahead(a);
         const g = this.groundAt(a.m.spot.map, x, y);
         const b = g ? void 0 : this.spillAt(a.m.spot.map, x, y);
@@ -2822,6 +2841,7 @@ var Room = class {
       if (!r || !this.maps.has(r.to.map)) return null;
       if (a.bot && !this.places.has(r.to.map)) return null;
       const t = r.to;
+      if (r.warp && DOOR_MAPS.has(from.map) && from.y === DOOR_Y + 1 && t.y < DOOR_Y && !this.events.some((e) => e.map === from.map && e.opened)) return null;
       if (this.groundAt(t.map, t.x, t.y) || this.spillAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y)) return null;
       if (from.map.startsWith(SAFARI) !== t.map.startsWith(SAFARI) && this.ring().safari) return null;
       const boss = leaderAt(t.map, t.x, t.y);
@@ -2913,6 +2933,7 @@ var Room = class {
       mix2(e.y);
       mix2(e.species);
       mix2(e.story?.length ?? 0);
+      mix2(e.opened ? 1 : 0);
       if (e.trader) {
         mix2(e.trader.x);
         mix2(e.trader.y);
@@ -3237,6 +3258,10 @@ var Host = class {
   traded(id, n, given) {
     if (this.players.has(id)) this.pending.push({ c: "traded", id, n, given });
   }
+  /** The page saw a Flying-type in its team at event `n`'s REGI wall. */
+  open(id, n) {
+    if (this.players.has(id)) this.pending.push({ c: "open", id, n });
+  }
   end(id, fled = false, won = false) {
     if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: "end", id, ...fled ? { fled: true } : {}, ...won ? { won: true } : {} });
   }
@@ -3421,6 +3446,8 @@ var WorldService = class {
           if (Number.isInteger(m.bits)) host.field(phone.id, m.bits);
         } else if (m.t === "pick") {
           if (typeof m.map === "string") host.pick(phone.id, m.map.slice(0, 64));
+        } else if (m.t === "open") {
+          if (Number.isInteger(m.n)) host.open(phone.id, m.n);
         } else if (m.t === "traded") {
           if (Number.isInteger(m.n) && Number.isInteger(m.sp)) host.traded(phone.id, m.n, m.sp);
         } else if (m.t === "bots") {
