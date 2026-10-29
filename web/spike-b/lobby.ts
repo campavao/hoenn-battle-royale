@@ -7,7 +7,7 @@
 import { Stage, type DrawnScreen } from '../src/ui/stage';
 import { menuScreen, noticeScreen, roomScreen, sheetScreen, type RoomModel, type RowSpec, type SheetModel } from '../src/ui/screens';
 import { CODE_ENTRY, NAME_ENTRY, PASS_ENTRY, entryScreen, newEntry } from '../src/ui/entry';
-import { FEEDBACK_ROW, HOWTO_ROW, rewatchRow, countdown, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction } from '../src/match/lobby';
+import { FEEDBACK_ROW, HOWTO_ROW, rewatchRow, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction } from '../src/match/lobby';
 import { howToScreen } from '../src/ui/howto';
 import { howToRead, markHowToRead } from '../src/ui/howto-due';
 import { SKINS, cleanName, exportCareer, importCareer, loadCareer, saveProfile, skinUnlocked } from '../src/match/career';
@@ -17,8 +17,8 @@ import { resultsScreen, type ResultsModel } from '../src/ui/results';
 import type { TallyNames } from '../src/match/tally';
 import { feedbackScreen, type FeedbackState } from '../src/ui/feedback';
 import { cleanNote, sendFeedback } from '../src/net/feedback';
-import type { Listed, Member, Settings } from './shared/wire';
-import { FOG_STEPS, SAFARI_STEPS, TEXT_SPEEDS, nextTextSpeed, textSpeedLabel, doorLabel, levelOf, nextDoor, nextFog, nextMax, nextSafari, safariLabel } from '../src/match/room';
+import { fillFor, type Listed, type Member, type Settings } from './shared/wire';
+import { BOT_FILL, FOG_STEPS, SAFARI_STEPS, TEXT_SPEEDS, dealable, nextTextSpeed, textSpeedLabel, doorLabel, fillLabel, levelOf, nextDoor, nextFog, nextMax, nextSafari, safariLabel } from '../src/match/room';
 
 /** The room as the relay last said it is (wire.ts's `room`). */
 export interface RoomInfo { code: string; quick: boolean; you: number; key?: string; owner: number; members: Member[]; playing: boolean; startsIn?: number; set: Settings; pass?: string }
@@ -406,24 +406,30 @@ export class Lobby {
     const r = this.room!;
     const isHost = r.owner === r.you;
     const left = r.startsIn !== undefined ? Math.max(0, (r.startsIn - (performance.now() - this.heardAt)) / 1000) : null;
+    // The live room's: MAX seats, FILL's bots in the ones nobody has, and START only for
+    // a match somebody could win (match/room.ts canStart, startNote).
+    const max = r.quick ? Math.max(BOT_FILL, r.members.length) : r.set.max;
+    const fill = fillFor({ bots: r.set.bots, max }, r.members.length);
+    const startable = dealable(r.members.length, fill);
     const note = r.playing ? 'A match is on. You watch it, and are in the next.'
-      : isHost ? (left !== null ? `Starts in ${countdown(left)}, or press START.` : 'Press START when everybody is in.')
-        : left !== null ? `Starts in ${countdown(left)}.` : 'Waiting for the host to start.';
+      : !isHost ? 'Waiting for the host to start.'
+        : !startable ? 'Nobody to play against. Turn FILL on, or wait for somebody.' : '';
     return {
       status: r.quick ? 'QUICK PLAY' : `Room ${r.code}`,
       note,
       seats: r.members.map((m) => ({ seat: m.id, name: m.name, skin: m.skin, isMe: m.id === r.you, spectating: false, alive: true })),
-      max: r.quick ? Math.max(8, r.members.length) : r.set.max,
-      fill: 0,
+      max,
+      fill,
       isHost,
       started: r.playing,
-      canStart: isHost && !r.playing,
+      canStart: isHost && !r.playing && startable,
       startLabel: 'START',
       countdown: left === null ? null : Math.ceil(left),
       // The host's, in a room of their own (a quick room's are the relay's): the live
-      // room's BOTS, FOG and SAFARI.
+      // room's, in its order (app.ts hostOptions).
       options: isHost && !r.quick ? [
         { id: 'room-max', label: `MAX ${r.set.max}`, onPress: () => this.hooks.set({ max: nextMax(r.set.max) }) },
+        { id: 'room-fill', label: fillLabel({ fillOn: r.set.bots, fill }), visual: { kind: 'toggle', on: r.set.bots }, onPress: () => this.hooks.set({ bots: !r.set.bots }) },
         {
           id: 'room-door',
           label: doorLabel(r.set.door, r.pass ?? null),
@@ -433,7 +439,6 @@ export class Lobby {
             else this.stage.push(this.passEntry('PASSCODE', 'Guests type this to come in.', (pass) => this.hooks.set({ door: 'pass', pass })));
           },
         },
-        { id: 'room-fill', label: r.set.bots ? 'BOTS ON' : 'BOTS OFF', visual: { kind: 'toggle', on: r.set.bots }, onPress: () => this.hooks.set({ bots: !r.set.bots }) },
         { id: 'room-text', label: `TEXT ${textSpeedLabel(r.set.textSpeed)}`, visual: { kind: 'level', ...levelOf(TEXT_SPEEDS.map((t) => t.value), r.set.textSpeed) }, onPress: () => this.hooks.set({ textSpeed: nextTextSpeed(r.set.textSpeed) }) },
         { id: 'room-anim', label: r.set.animations ? 'ANIM ON' : 'ANIM OFF', visual: { kind: 'toggle', on: r.set.animations }, onPress: () => this.hooks.set({ animations: !r.set.animations }) },
         { id: 'room-fog', label: `FOG ${r.set.fogSecs}s`, visual: { kind: 'level', ...levelOf(FOG_STEPS, r.set.fogSecs), clock: true }, onPress: () => this.hooks.set({ fogSecs: nextFog(r.set.fogSecs) }) },

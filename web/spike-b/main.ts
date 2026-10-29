@@ -1726,7 +1726,7 @@ function fogLine(): string {
   const where = inFogNow() ? ` · YOU ARE IN THE FOG${way ? ` · Safe ${way}` : ''}` : '';
   if (ring.safari) return `SAFARI ZONE · the drop in ${clock}`;
   if (ring.r === Infinity) return `fog in ${clock}${where}`;
-  if (ring.last) return `FOG EVERYWHERE · new round in ${clock}${where}`;
+  if (ring.last) return `FOG EVERYWHERE${where}`;
   return `fog phase ${ring.phase}, closes again in ${clock}${where}`;
 }
 

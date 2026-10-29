@@ -43,6 +43,17 @@ var world_default = { maps: [{ id: "MAP_PETALBURG_CITY", group: 0, num: 0, w: 30
 var import_patches2 = __toESM(require_patches(), 1);
 
 // web/src/match/clock.ts
+function mulberry32(seed, state) {
+  let a = (state ?? seed) | 0;
+  const rng = () => {
+    a = a + 1831565813 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+  rng.state = () => a;
+  return rng;
+}
 function pickIndex(rng, length) {
   return Math.min(length - 1, Math.floor(rng() * length));
 }
@@ -856,7 +867,7 @@ var World = class {
     if (!cells) {
       const out = [];
       const seen = /* @__PURE__ */ new Set();
-      const add = (s) => {
+      const add2 = (s) => {
         const k = s && s.map === to ? this.key(s) : -1;
         if (k < 0 || seen.has(k)) return;
         seen.add(k);
@@ -864,8 +875,8 @@ var World = class {
       };
       for (const exit of this.exitCells(from, to, surf, cut)) {
         const door = this.warpAt(from, exit.x, exit.y);
-        if (door) add({ map: door.to, x: door.toX, y: door.toY });
-        for (const dir of DIRS) add(this.step(exit, dir, surf, cut));
+        if (door) add2({ map: door.to, x: door.toX, y: door.toY });
+        for (const dir of DIRS) add2(this.step(exit, dir, surf, cut));
       }
       cells = out;
       this.entryCache.set(asked, cells);
@@ -877,14 +888,14 @@ var World = class {
     if (!m) return [];
     const out = [];
     const seen = /* @__PURE__ */ new Set();
-    const add = (x, y) => {
+    const add2 = (x, y) => {
       const k = `${x},${y}`;
       if (seen.has(k)) return;
       seen.add(k);
       out.push({ map: from, x, y });
     };
     for (const w of m.warps ?? []) {
-      if (w.to === to && this.standable(from, w.x, w.y, surf, cut)) add(w.x, w.y);
+      if (w.to === to && this.standable(from, w.x, w.y, surf, cut)) add2(w.x, w.y);
     }
     for (const seam of m.seams) {
       if (seam.to !== to) continue;
@@ -893,7 +904,7 @@ var World = class {
         const cell = seam.dir === "north" ? { map: from, x: i, y: 0 } : seam.dir === "south" ? { map: from, x: i, y: m.h - 1 } : seam.dir === "west" ? { map: from, x: 0, y: i } : { map: from, x: m.w - 1, y: i };
         if (!this.standable(from, cell.x, cell.y, surf, cut)) continue;
         const landed = this.step(cell, seam.dir, surf, cut);
-        if (landed && landed.map === to) add(cell.x, cell.y);
+        if (landed && landed.map === to) add2(cell.x, cell.y);
       }
     }
     return out;
@@ -1282,16 +1293,132 @@ function leaderAt(map, x, y) {
   return AT2.get(`${map}:${x}:${y}`);
 }
 
+// web/src/bots/roster.ts
+var GRADES = [
+  0 /* Rookie */,
+  0 /* Rookie */,
+  1 /* Regular */,
+  1 /* Regular */,
+  2 /* Ace */
+];
+function gradeOf(seed, seat) {
+  const rng = mulberry32((seed ^ seat * 625341585) >>> 0);
+  return GRADES[pickIndex(rng, GRADES.length)];
+}
+
 // web/src/data/encounters.json
 var encounters_default = { maps: { MAP_ALTERING_CAVE: [41, 179, 190, 204, 213, 216, 228, 234, 235], MAP_ARTISAN_CAVE_1F: [235], MAP_ARTISAN_CAVE_B1F: [235], MAP_CAVE_OF_ORIGIN_1F: [41, 42, 322], MAP_CAVE_OF_ORIGIN_ENTRANCE: [41, 42], MAP_CAVE_OF_ORIGIN_UNUSED_RUBY_SAPPHIRE_MAP1: [41, 42, 322], MAP_CAVE_OF_ORIGIN_UNUSED_RUBY_SAPPHIRE_MAP2: [41, 42, 322], MAP_CAVE_OF_ORIGIN_UNUSED_RUBY_SAPPHIRE_MAP3: [41, 42, 322], MAP_DESERT_UNDERPASS: [132, 370, 371], MAP_FIERY_PATH: [321, 66, 88, 109, 339, 218], MAP_GRANITE_CAVE_1F: [335, 74, 41, 63], MAP_GRANITE_CAVE_B1F: [322, 382, 41, 335, 63], MAP_GRANITE_CAVE_B2F: [322, 382, 41, 63], MAP_GRANITE_CAVE_STEVENS_ROOM: [335, 382, 41, 63], MAP_JAGGED_PASS: [339, 351, 66], MAP_MAGMA_HIDEOUT_1F: [74, 75, 321], MAP_MAGMA_HIDEOUT_2F_1R: [74, 75, 321], MAP_MAGMA_HIDEOUT_2F_2R: [74, 75, 321], MAP_MAGMA_HIDEOUT_2F_3R: [74, 75, 321], MAP_MAGMA_HIDEOUT_3F_1R: [74, 75, 321], MAP_MAGMA_HIDEOUT_3F_2R: [74, 75, 321], MAP_MAGMA_HIDEOUT_3F_3R: [74, 75, 321], MAP_MAGMA_HIDEOUT_4F: [74, 75, 321], MAP_METEOR_FALLS_1F_1R: [41, 349], MAP_METEOR_FALLS_1F_2R: [42, 349], MAP_METEOR_FALLS_B1F_1R: [42, 349], MAP_METEOR_FALLS_B1F_2R: [42, 349, 395], MAP_METEOR_FALLS_STEVENS_CAVE: [42, 349], MAP_MIRAGE_TOWER_1F: [27, 332], MAP_MIRAGE_TOWER_2F: [27, 332], MAP_MIRAGE_TOWER_3F: [27, 332], MAP_MIRAGE_TOWER_4F: [27, 332], MAP_MT_PYRE_1F: [377], MAP_MT_PYRE_2F: [377], MAP_MT_PYRE_3F: [377], MAP_MT_PYRE_4F: [377, 361], MAP_MT_PYRE_5F: [377, 361], MAP_MT_PYRE_6F: [377, 361], MAP_MT_PYRE_EXTERIOR: [37, 309, 377], MAP_MT_PYRE_SUMMIT: [377, 361, 411], MAP_NEW_MAUVILLE_ENTRANCE: [81, 100], MAP_NEW_MAUVILLE_INSIDE: [81, 100, 82, 101], MAP_PETALBURG_WOODS: [286, 290, 304, 306, 364, 291, 293], MAP_ROUTE101: [286, 288, 290], MAP_ROUTE102: [288, 286, 290, 295, 298, 392], MAP_ROUTE103: [309, 286, 288], MAP_ROUTE104: [309, 286, 183, 304, 290], MAP_ROUTE110: [309, 337, 353, 354, 367, 43, 286], MAP_ROUTE111: [27, 318, 332, 344], MAP_ROUTE112: [339, 183], MAP_ROUTE113: [308, 218, 227], MAP_ROUTE114: [296, 358, 379, 295, 299], MAP_ROUTE115: [309, 304, 39, 358, 305], MAP_ROUTE116: [286, 304, 301, 315, 63, 370], MAP_ROUTE117: [387, 43, 286, 183, 298, 386], MAP_ROUTE118: [309, 288, 337, 289, 317, 338], MAP_ROUTE119: [43, 369, 288, 289, 317], MAP_ROUTE120: [43, 183, 287, 376, 286, 298, 317], MAP_ROUTE121: [309, 43, 287, 377, 44, 286, 317], MAP_ROUTE123: [309, 43, 287, 377, 44, 286, 317], MAP_ROUTE130: [360], MAP_RUSTURF_TUNNEL: [370], MAP_SAFARI_ZONE_NORTH: [43, 44, 177, 178, 214, 231], MAP_SAFARI_ZONE_NORTHEAST: [190, 216, 228, 241, 163, 165, 191, 204], MAP_SAFARI_ZONE_NORTHWEST: [43, 44, 84, 85, 111, 127], MAP_SAFARI_ZONE_SOUTH: [202, 25, 43, 203, 44, 84, 177], MAP_SAFARI_ZONE_SOUTHEAST: [179, 191, 207, 234, 163, 167, 190, 209], MAP_SAFARI_ZONE_SOUTHWEST: [202, 25, 43, 203, 44, 84, 177], MAP_SEAFLOOR_CAVERN_ROOM1: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM2: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM3: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM4: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM5: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM6: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM7: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM8: [41, 42], MAP_SHOAL_CAVE_LOW_TIDE_ENTRANCE_ROOM: [341, 41, 42], MAP_SHOAL_CAVE_LOW_TIDE_ICE_ROOM: [341, 41, 346, 42], MAP_SHOAL_CAVE_LOW_TIDE_INNER_ROOM: [341, 41, 42], MAP_SHOAL_CAVE_LOW_TIDE_LOWER_ROOM: [341, 41, 42], MAP_SHOAL_CAVE_LOW_TIDE_STAIRS_ROOM: [341, 41, 42], MAP_SKY_PILLAR_1F: [319, 42, 322, 378], MAP_SKY_PILLAR_3F: [319, 42, 322, 378], MAP_SKY_PILLAR_5F: [319, 359, 42, 322, 378], MAP_VICTORY_ROAD_1F: [42, 336, 370, 382, 41, 335, 371, 383], MAP_VICTORY_ROAD_B1F: [383, 42, 336, 355], MAP_VICTORY_ROAD_B2F: [383, 42, 322, 355] }, evolve: { "1": [16, 2], "2": [32, 3], "4": [16, 5], "5": [36, 6], "7": [16, 8], "8": [36, 9], "10": [7, 11], "11": [10, 12], "13": [7, 14], "14": [10, 15], "16": [18, 17], "17": [36, 18], "19": [20, 20], "21": [20, 22], "23": [22, 24], "27": [22, 28], "29": [16, 30], "32": [16, 33], "41": [22, 42], "43": [21, 44], "46": [24, 47], "48": [31, 49], "50": [26, 51], "52": [28, 53], "54": [33, 55], "56": [28, 57], "60": [25, 61], "63": [16, 64], "66": [28, 67], "69": [21, 70], "72": [30, 73], "74": [25, 75], "77": [40, 78], "79": [37, 80], "81": [30, 82], "84": [31, 85], "86": [34, 87], "88": [38, 89], "92": [25, 93], "96": [26, 97], "98": [28, 99], "100": [30, 101], "104": [28, 105], "109": [35, 110], "111": [42, 112], "116": [32, 117], "118": [33, 119], "129": [20, 130], "138": [40, 139], "140": [40, 141], "147": [30, 148], "148": [55, 149], "152": [16, 153], "153": [32, 154], "155": [14, 156], "156": [36, 157], "158": [18, 159], "159": [30, 160], "161": [15, 162], "163": [20, 164], "165": [18, 166], "167": [22, 168], "170": [27, 171], "177": [25, 178], "179": [15, 180], "180": [30, 181], "183": [18, 184], "187": [18, 188], "188": [27, 189], "194": [20, 195], "204": [31, 205], "209": [23, 210], "216": [30, 217], "218": [38, 219], "220": [33, 221], "223": [25, 224], "228": [24, 229], "231": [25, 232], "236": [20, 107], "238": [30, 124], "239": [30, 125], "240": [30, 126], "246": [30, 247], "247": [55, 248], "277": [16, 278], "278": [36, 279], "280": [16, 281], "281": [36, 282], "283": [16, 284], "284": [36, 285], "286": [18, 287], "288": [20, 289], "290": [7, 291], "291": [10, 292], "293": [10, 294], "295": [14, 296], "298": [14, 299], "301": [20, 302], "304": [22, 305], "306": [23, 307], "309": [25, 310], "311": [22, 312], "313": [40, 314], "318": [36, 319], "323": [30, 324], "326": [30, 327], "330": [30, 331], "332": [35, 333], "333": [45, 334], "335": [24, 336], "337": [26, 338], "339": [33, 340], "341": [32, 342], "342": [44, 343], "344": [32, 345], "346": [42, 347], "351": [32, 352], "356": [37, 357], "358": [35, 359], "360": [15, 202], "361": [37, 362], "364": [18, 365], "365": [36, 366], "367": [26, 368], "370": [20, 371], "371": [40, 372], "377": [37, 378], "382": [32, 383], "383": [42, 384], "388": [40, 389], "390": [40, 391], "392": [20, 393], "393": [30, 394], "395": [30, 396], "396": [50, 397], "398": [20, 399], "399": [45, 400] }, names: { "1": "BULBASAUR", "2": "IVYSAUR", "3": "VENUSAUR", "4": "CHARMANDER", "5": "CHARMELEON", "6": "CHARIZARD", "7": "SQUIRTLE", "8": "WARTORTLE", "9": "BLASTOISE", "10": "CATERPIE", "11": "METAPOD", "12": "BUTTERFREE", "13": "WEEDLE", "14": "KAKUNA", "15": "BEEDRILL", "16": "PIDGEY", "17": "PIDGEOTTO", "18": "PIDGEOT", "19": "RATTATA", "20": "RATICATE", "21": "SPEAROW", "22": "FEAROW", "23": "EKANS", "24": "ARBOK", "25": "PIKACHU", "26": "RAICHU", "27": "SANDSHREW", "28": "SANDSLASH", "29": "NIDORAN♀", "30": "NIDORINA", "31": "NIDOQUEEN", "32": "NIDORAN♂", "33": "NIDORINO", "34": "NIDOKING", "35": "CLEFAIRY", "36": "CLEFABLE", "37": "VULPIX", "38": "NINETALES", "39": "JIGGLYPUFF", "40": "WIGGLYTUFF", "41": "ZUBAT", "42": "GOLBAT", "43": "ODDISH", "44": "GLOOM", "45": "VILEPLUME", "46": "PARAS", "47": "PARASECT", "48": "VENONAT", "49": "VENOMOTH", "50": "DIGLETT", "51": "DUGTRIO", "52": "MEOWTH", "53": "PERSIAN", "54": "PSYDUCK", "55": "GOLDUCK", "56": "MANKEY", "57": "PRIMEAPE", "58": "GROWLITHE", "59": "ARCANINE", "60": "POLIWAG", "61": "POLIWHIRL", "62": "POLIWRATH", "63": "ABRA", "64": "KADABRA", "65": "ALAKAZAM", "66": "MACHOP", "67": "MACHOKE", "68": "MACHAMP", "69": "BELLSPROUT", "70": "WEEPINBELL", "71": "VICTREEBEL", "72": "TENTACOOL", "73": "TENTACRUEL", "74": "GEODUDE", "75": "GRAVELER", "76": "GOLEM", "77": "PONYTA", "78": "RAPIDASH", "79": "SLOWPOKE", "80": "SLOWBRO", "81": "MAGNEMITE", "82": "MAGNETON", "83": "FARFETCH'D", "84": "DODUO", "85": "DODRIO", "86": "SEEL", "87": "DEWGONG", "88": "GRIMER", "89": "MUK", "90": "SHELLDER", "91": "CLOYSTER", "92": "GASTLY", "93": "HAUNTER", "94": "GENGAR", "95": "ONIX", "96": "DROWZEE", "97": "HYPNO", "98": "KRABBY", "99": "KINGLER", "100": "VOLTORB", "101": "ELECTRODE", "102": "EXEGGCUTE", "103": "EXEGGUTOR", "104": "CUBONE", "105": "MAROWAK", "106": "HITMONLEE", "107": "HITMONCHAN", "108": "LICKITUNG", "109": "KOFFING", "110": "WEEZING", "111": "RHYHORN", "112": "RHYDON", "113": "CHANSEY", "114": "TANGELA", "115": "KANGASKHAN", "116": "HORSEA", "117": "SEADRA", "118": "GOLDEEN", "119": "SEAKING", "120": "STARYU", "121": "STARMIE", "122": "MR. MIME", "123": "SCYTHER", "124": "JYNX", "125": "ELECTABUZZ", "126": "MAGMAR", "127": "PINSIR", "128": "TAUROS", "129": "MAGIKARP", "130": "GYARADOS", "131": "LAPRAS", "132": "DITTO", "133": "EEVEE", "134": "VAPOREON", "135": "JOLTEON", "136": "FLAREON", "137": "PORYGON", "138": "OMANYTE", "139": "OMASTAR", "140": "KABUTO", "141": "KABUTOPS", "142": "AERODACTYL", "143": "SNORLAX", "144": "ARTICUNO", "145": "ZAPDOS", "146": "MOLTRES", "147": "DRATINI", "148": "DRAGONAIR", "149": "DRAGONITE", "150": "MEWTWO", "151": "MEW", "152": "CHIKORITA", "153": "BAYLEEF", "154": "MEGANIUM", "155": "CYNDAQUIL", "156": "QUILAVA", "157": "TYPHLOSION", "158": "TOTODILE", "159": "CROCONAW", "160": "FERALIGATR", "161": "SENTRET", "162": "FURRET", "163": "HOOTHOOT", "164": "NOCTOWL", "165": "LEDYBA", "166": "LEDIAN", "167": "SPINARAK", "168": "ARIADOS", "169": "CROBAT", "170": "CHINCHOU", "171": "LANTURN", "172": "PICHU", "173": "CLEFFA", "174": "IGGLYBUFF", "175": "TOGEPI", "176": "TOGETIC", "177": "NATU", "178": "XATU", "179": "MAREEP", "180": "FLAAFFY", "181": "AMPHAROS", "182": "BELLOSSOM", "183": "MARILL", "184": "AZUMARILL", "185": "SUDOWOODO", "186": "POLITOED", "187": "HOPPIP", "188": "SKIPLOOM", "189": "JUMPLUFF", "190": "AIPOM", "191": "SUNKERN", "192": "SUNFLORA", "193": "YANMA", "194": "WOOPER", "195": "QUAGSIRE", "196": "ESPEON", "197": "UMBREON", "198": "MURKROW", "199": "SLOWKING", "200": "MISDREAVUS", "201": "UNOWN", "202": "WOBBUFFET", "203": "GIRAFARIG", "204": "PINECO", "205": "FORRETRESS", "206": "DUNSPARCE", "207": "GLIGAR", "208": "STEELIX", "209": "SNUBBULL", "210": "GRANBULL", "211": "QWILFISH", "212": "SCIZOR", "213": "SHUCKLE", "214": "HERACROSS", "215": "SNEASEL", "216": "TEDDIURSA", "217": "URSARING", "218": "SLUGMA", "219": "MAGCARGO", "220": "SWINUB", "221": "PILOSWINE", "222": "CORSOLA", "223": "REMORAID", "224": "OCTILLERY", "225": "DELIBIRD", "226": "MANTINE", "227": "SKARMORY", "228": "HOUNDOUR", "229": "HOUNDOOM", "230": "KINGDRA", "231": "PHANPY", "232": "DONPHAN", "233": "PORYGON2", "234": "STANTLER", "235": "SMEARGLE", "236": "TYROGUE", "237": "HITMONTOP", "238": "SMOOCHUM", "239": "ELEKID", "240": "MAGBY", "241": "MILTANK", "242": "BLISSEY", "243": "RAIKOU", "244": "ENTEI", "245": "SUICUNE", "246": "LARVITAR", "247": "PUPITAR", "248": "TYRANITAR", "249": "LUGIA", "250": "HO-OH", "251": "CELEBI", "277": "TREECKO", "278": "GROVYLE", "279": "SCEPTILE", "280": "TORCHIC", "281": "COMBUSKEN", "282": "BLAZIKEN", "283": "MUDKIP", "284": "MARSHTOMP", "285": "SWAMPERT", "286": "POOCHYENA", "287": "MIGHTYENA", "288": "ZIGZAGOON", "289": "LINOONE", "290": "WURMPLE", "291": "SILCOON", "292": "BEAUTIFLY", "293": "CASCOON", "294": "DUSTOX", "295": "LOTAD", "296": "LOMBRE", "297": "LUDICOLO", "298": "SEEDOT", "299": "NUZLEAF", "300": "SHIFTRY", "301": "NINCADA", "302": "NINJASK", "303": "SHEDINJA", "304": "TAILLOW", "305": "SWELLOW", "306": "SHROOMISH", "307": "BRELOOM", "308": "SPINDA", "309": "WINGULL", "310": "PELIPPER", "311": "SURSKIT", "312": "MASQUERAIN", "313": "WAILMER", "314": "WAILORD", "315": "SKITTY", "316": "DELCATTY", "317": "KECLEON", "318": "BALTOY", "319": "CLAYDOL", "320": "NOSEPASS", "321": "TORKOAL", "322": "SABLEYE", "323": "BARBOACH", "324": "WHISCASH", "325": "LUVDISC", "326": "CORPHISH", "327": "CRAWDAUNT", "328": "FEEBAS", "329": "MILOTIC", "330": "CARVANHA", "331": "SHARPEDO", "332": "TRAPINCH", "333": "VIBRAVA", "334": "FLYGON", "335": "MAKUHITA", "336": "HARIYAMA", "337": "ELECTRIKE", "338": "MANECTRIC", "339": "NUMEL", "340": "CAMERUPT", "341": "SPHEAL", "342": "SEALEO", "343": "WALREIN", "344": "CACNEA", "345": "CACTURNE", "346": "SNORUNT", "347": "GLALIE", "348": "LUNATONE", "349": "SOLROCK", "350": "AZURILL", "351": "SPOINK", "352": "GRUMPIG", "353": "PLUSLE", "354": "MINUN", "355": "MAWILE", "356": "MEDITITE", "357": "MEDICHAM", "358": "SWABLU", "359": "ALTARIA", "360": "WYNAUT", "361": "DUSKULL", "362": "DUSCLOPS", "363": "ROSELIA", "364": "SLAKOTH", "365": "VIGOROTH", "366": "SLAKING", "367": "GULPIN", "368": "SWALOT", "369": "TROPIUS", "370": "WHISMUR", "371": "LOUDRED", "372": "EXPLOUD", "373": "CLAMPERL", "374": "HUNTAIL", "375": "GOREBYSS", "376": "ABSOL", "377": "SHUPPET", "378": "BANETTE", "379": "SEVIPER", "380": "ZANGOOSE", "381": "RELICANTH", "382": "ARON", "383": "LAIRON", "384": "AGGRON", "385": "CASTFORM", "386": "VOLBEAT", "387": "ILLUMISE", "388": "LILEEP", "389": "CRADILY", "390": "ANORITH", "391": "ARMALDO", "392": "RALTS", "393": "KIRLIA", "394": "GARDEVOIR", "395": "BAGON", "396": "SHELGON", "397": "SALAMENCE", "398": "BELDUM", "399": "METANG", "400": "METAGROSS", "401": "REGIROCK", "402": "REGICE", "403": "REGISTEEL", "404": "KYOGRE", "405": "GROUDON", "406": "RAYQUAZA", "407": "LATIAS", "408": "LATIOS", "409": "JIRACHI", "410": "DEOXYS", "411": "CHIMECHO" } };
 
 // web/src/bots/party.ts
 var EXPORTED = encounters_default;
 var ENCOUNTERS = EXPORTED.maps;
+function evolutionOf(species) {
+  const row = EXPORTED.evolve[String(species)];
+  return row ? { level: row[0], into: row[1] } : void 0;
+}
+function grownUp(species, level) {
+  let at = species;
+  for (let step = 0; step < 4; step++) {
+    const evo = evolutionOf(at);
+    if (!evo || level < evo.level) return at;
+    at = evo.into;
+  }
+  return at;
+}
 var LADDER = [5, 15, 30, 50, 75, 100];
 function rungForPhase(phase) {
   const i = phase === 0 ? 0 : phase - 1;
   return LADDER[Math.min(i, LADDER.length - 1)];
+}
+var MOVE_SURF = 57;
+var MOVE_CUT = 15;
+var MOVE_FLY = 19;
+var SURF_RUNG = 30;
+var CUT_RUNG = 20;
+var FLY_RUNG = 25;
+var POOL = [
+  { species: 277, name: "TREECKO", moves: [1, 43] },
+  // POUND, LEER
+  { species: 280, name: "TORCHIC", moves: [10, 45] },
+  // SCRATCH, GROWL
+  { species: 283, name: "MUDKIP", moves: [33, 45], water: true },
+  // TACKLE, GROWL
+  { species: 286, name: "POOCHYENA", moves: [33, 43] },
+  { species: 288, name: "ZIGZAGOON", moves: [33, 39] },
+  // TACKLE, TAIL WHIP
+  { species: 290, name: "WURMPLE", moves: [33, 81] },
+  { species: 304, name: "TAILLOW", moves: [33, 45], flier: true },
+  { species: 309, name: "WINGULL", moves: [55, 39], water: true, flier: true },
+  // WATER GUN
+  { species: 392, name: "RALTS", moves: [93, 45] },
+  // CONFUSION
+  { species: 382, name: "ARON", moves: [33, 106] },
+  { species: 337, name: "ELECTRIKE", moves: [33, 84] },
+  // THUNDER SHOCK
+  { species: 335, name: "MAKUHITA", moves: [4, 43] }
+];
+function hp(level) {
+  return Math.max(10, Math.floor(level * 2.2) + 10);
+}
+function speciesName(species) {
+  return EXPORTED.names[String(species)] ?? String(species);
+}
+function speciesAt(mapId) {
+  return ENCOUNTERS[mapId] ?? [];
+}
+function mon(level, rng, mapId, from = []) {
+  const local = from.length > 0 ? from : mapId ? speciesAt(mapId) : [];
+  if (local.length > 0) {
+    const species2 = grownUp(local[pickIndex(rng, local.length)], level);
+    const max2 = hp(level);
+    return {
+      species: species2,
+      level,
+      hp: max2,
+      maxHp: max2,
+      status: 0,
+      // TACKLE. A real move set per species is the ROM's own learnset table, and
+      // building one here would be a second implementation of what the ROM already
+      // does when it makes the mon.
+      moves: [{ id: 33, pp: 25, ppUps: 0 }],
+      heldItem: 0,
+      otId: 0,
+      personality: Math.floor(rng() * 4294967295) >>> 0,
+      exp: 0,
+      nickname: speciesName(species2),
+      ot: "BR"
+    };
+  }
+  const pick = POOL[pickIndex(rng, POOL.length)];
+  const species = grownUp(pick.species, level);
+  const max = hp(level);
+  const moves = [...pick.moves];
+  if (pick.water && level >= SURF_RUNG && !moves.includes(MOVE_SURF)) moves.push(MOVE_SURF);
+  if (!pick.water && level >= CUT_RUNG && !moves.includes(MOVE_CUT)) moves.push(MOVE_CUT);
+  if (pick.flier && level >= FLY_RUNG && !moves.includes(MOVE_FLY)) moves.push(MOVE_FLY);
+  return {
+    species,
+    level,
+    hp: max,
+    maxHp: max,
+    status: 0,
+    moves: moves.map((id) => ({ id, pp: 25, ppUps: 0 })),
+    heldItem: 0,
+    otId: 0,
+    personality: Math.floor(rng() * 4294967295) >>> 0,
+    exp: 0,
+    nickname: species === pick.species ? pick.name : speciesName(species),
+    ot: "BR"
+  };
+}
+function dealParty(seed, seat, phase, mapId, grade = 1 /* Regular */, pool = []) {
+  const rng = mulberry32((seed ^ seat * 40503) >>> 0);
+  const level = rungForPhase(phase);
+  const bring = grade === 2 /* Ace */ ? 1 : grade === 0 /* Rookie */ ? -1 : 0;
+  const count = Math.max(1, Math.min(6, 1 + Math.floor(Math.max(0, phase - 1) / 2) + bring));
+  const party = [];
+  for (let i = 0; i < count; i++) party.push(mon(level, rng, mapId, i === 0 ? pool : []));
+  return party;
 }
 
 // web/src/net/wire.ts
@@ -1671,6 +1798,65 @@ var STORIES = [
   }
 ];
 
+// web/src/match/gifts.ts
+var ITEM_BRIGHT_POWDER = 179;
+var ITEM_WHITE_HERB = 180;
+var ITEM_QUICK_CLAW = 183;
+var ITEM_CHOICE_BAND2 = 186;
+var ITEM_KINGS_ROCK = 187;
+var ITEM_FOCUS_BAND2 = 196;
+var ITEM_SCOPE_LENS = 198;
+var ITEM_LEFTOVERS2 = 200;
+var ITEM_SHELL_BELL2 = 219;
+var GIFTS = [
+  ITEM_BRIGHT_POWDER,
+  ITEM_WHITE_HERB,
+  ITEM_QUICK_CLAW,
+  ITEM_CHOICE_BAND2,
+  ITEM_KINGS_ROCK,
+  ITEM_FOCUS_BAND2,
+  ITEM_SCOPE_LENS,
+  ITEM_LEFTOVERS2,
+  ITEM_SHELL_BELL2
+];
+
+// web/src/bots/bag.ts
+var ITEM = {
+  POTION: 13,
+  FULL_RESTORE: 19,
+  MAX_POTION: 20,
+  HYPER_POTION: 21,
+  SUPER_POTION: 22,
+  FULL_HEAL: 23,
+  GUARD_SPEC: 73,
+  DIRE_HIT: 74,
+  X_ATTACK: 75,
+  X_DEFEND: 76,
+  X_SPEED: 77
+};
+var HEAL = {
+  [ITEM.POTION]: 20,
+  [ITEM.SUPER_POTION]: 50,
+  [ITEM.HYPER_POTION]: 200,
+  [ITEM.MAX_POTION]: 9999,
+  [ITEM.FULL_RESTORE]: 9999
+};
+function add(bag, id, n = 1) {
+  const mine = bag.find((s) => s.id === id);
+  if (mine) mine.n = Math.min(99, mine.n + n);
+  else if (bag.length < 32) bag.push({ id, n: Math.min(99, n) });
+}
+function carried(party, bag) {
+  const out = bag.map((stack) => ({ ...stack }));
+  for (const mon2 of party) if (mon2.heldItem) add(out, mon2.heldItem);
+  return out;
+}
+function purse(phase, grade = 1 /* Regular */) {
+  const level = rungForPhase(phase);
+  const mult = grade === 2 /* Ace */ ? 3 : grade === 0 /* Rookie */ ? 1 : 2;
+  return level * 20 * mult;
+}
+
 // web/src/bots/patches.ts
 var PATCH_KEY_BASE = 8192;
 var PATCH_MAX = 8;
@@ -1765,28 +1951,6 @@ function scatterItem(rng) {
 
 // web/spike-b/data/rooms.json
 var rooms_default = [["MAP_DEWFORD_TOWN_HOUSE1", 5, 4, true, true, 3, 4, false], ["MAP_DEWFORD_TOWN_HOUSE2", 7, 5, true, true, 6, 4, false], ["MAP_FALLARBOR_TOWN_COZMOS_HOUSE", 3, 5, true, true, 1, 4, false], ["MAP_FALLARBOR_TOWN_MOVE_RELEARNERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_FORTREE_CITY_HOUSE1", 6, 2, true, true, 6, 3, false], ["MAP_FORTREE_CITY_HOUSE2", 6, 4, true, true, 1, 3, false], ["MAP_FORTREE_CITY_HOUSE3", 6, 2, true, true, 6, 3, false], ["MAP_FORTREE_CITY_HOUSE4", 6, 3, true, true, 7, 3, false], ["MAP_FORTREE_CITY_HOUSE5", 6, 2, true, true, 1, 3, false], ["MAP_LAVARIDGE_TOWN_HOUSE", 5, 4, true, true, 3, 3, false], ["MAP_LILYCOVE_CITY_HOUSE1", 3, 5, true, true, 1, 4, false], ["MAP_LILYCOVE_CITY_HOUSE2", 2, 4, true, true, 0, 3, false], ["MAP_LILYCOVE_CITY_HOUSE3", 5, 5, true, true, 4, 4, false], ["MAP_LILYCOVE_CITY_HOUSE4", 3, 5, true, true, 1, 5, false], ["MAP_LILYCOVE_CITY_MOVE_DELETERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_1F", 3, 4, true, true, 1, 4, false], ["MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_2F", 3, 3, true, true, 3, 5, false], ["MAP_LITTLEROOT_TOWN_MAYS_HOUSE_1F", 7, 4, true, true, 9, 4, false], ["MAP_LITTLEROOT_TOWN_MAYS_HOUSE_2F", 5, 3, true, true, 5, 5, false], ["MAP_MAUVILLE_CITY_HOUSE1", 5, 5, true, true, 4, 5, false], ["MAP_MAUVILLE_CITY_HOUSE2", 3, 5, true, true, 1, 4, false], ["MAP_MOSSDEEP_CITY_HOUSE1", 5, 5, true, true, 4, 4, false], ["MAP_MOSSDEEP_CITY_HOUSE2", 3, 5, true, true, 1, 4, false], ["MAP_MOSSDEEP_CITY_HOUSE3", 5, 5, true, true, 4, 5, false], ["MAP_MOSSDEEP_CITY_HOUSE4", 5, 4, true, true, 4, 3, false], ["MAP_MOSSDEEP_CITY_STEVENS_HOUSE", 5, 4, true, true, 3, 3, false], ["MAP_OLDALE_TOWN_HOUSE1", 3, 5, true, true, 1, 4, false], ["MAP_OLDALE_TOWN_HOUSE2", 5, 5, true, true, 4, 5, false], ["MAP_PACIFIDLOG_TOWN_HOUSE1", 5, 5, true, true, 3, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE2", 5, 5, true, true, 3, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE3", 5, 5, true, true, 3, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE4", 5, 5, true, true, 3, 5, false], ["MAP_PACIFIDLOG_TOWN_HOUSE5", 5, 5, true, true, 3, 5, false], ["MAP_PETALBURG_CITY_HOUSE1", 3, 5, true, true, 1, 4, false], ["MAP_PETALBURG_CITY_HOUSE2", 5, 4, true, true, 4, 3, false], ["MAP_PETALBURG_CITY_WALLYS_HOUSE", 5, 5, true, true, 4, 4, false], ["MAP_ROUTE104_MR_BRINEYS_HOUSE", 7, 5, true, true, 6, 4, false], ["MAP_ROUTE109_SEASHORE_HOUSE", 8, 4, true, true, 7, 4, false], ["MAP_ROUTE111_WINSTRATE_FAMILYS_HOUSE", 5, 5, true, true, 5, 3, false], ["MAP_ROUTE114_FOSSIL_MANIACS_HOUSE", 2, 5, true, true, 0, 4, false], ["MAP_ROUTE114_LANETTES_HOUSE", 7, 5, true, true, 5, 3, false], ["MAP_ROUTE116_TUNNELERS_REST_HOUSE", 7, 5, true, true, 6, 4, false], ["MAP_ROUTE119_HOUSE", 3, 5, true, true, 1, 4, false], ["MAP_ROUTE123_BERRY_MASTERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_ROUTE124_DIVING_TREASURE_HUNTERS_HOUSE", 4, 5, true, true, 2, 4, false], ["MAP_RUSTBORO_CITY_CUTTERS_HOUSE", 8, 5, true, true, 7, 4, false], ["MAP_RUSTBORO_CITY_HOUSE1", 4, 5, true, true, 2, 4, false], ["MAP_RUSTBORO_CITY_HOUSE2", 6, 5, true, true, 7, 4, false], ["MAP_RUSTBORO_CITY_HOUSE3", 6, 5, true, true, 7, 4, false], ["MAP_SLATEPORT_CITY_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_SLATEPORT_CITY_NAME_RATERS_HOUSE", 5, 4, true, true, 4, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE1", 4, 3, true, true, 5, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE2", 5, 4, true, true, 3, 4, false], ["MAP_SOOTOPOLIS_CITY_HOUSE3", 4, 3, true, true, 3, 2, false], ["MAP_SOOTOPOLIS_CITY_HOUSE4", 4, 3, true, true, 5, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE5", 5, 4, true, true, 3, 4, false], ["MAP_SOOTOPOLIS_CITY_HOUSE6", 3, 2, true, true, 4, 2, false], ["MAP_SOOTOPOLIS_CITY_HOUSE7", 4, 3, true, true, 2, 3, false], ["MAP_SOOTOPOLIS_CITY_LOTAD_AND_SEEDOT_HOUSE", 4, 3, true, true, 2, 3, false], ["MAP_VERDANTURF_TOWN_FRIENDSHIP_RATERS_HOUSE", 5, 5, true, true, 4, 5, false], ["MAP_VERDANTURF_TOWN_HOUSE", 3, 5, true, true, 1, 4, false], ["MAP_VERDANTURF_TOWN_WANDAS_HOUSE", 4, 5, true, true, 2, 5, false], ["MAP_ABANDONED_SHIP_CORRIDORS_1F", 9, 6, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_CORRIDORS_B1F", 2, 6, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_DECK", 10, 10, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_HIDDEN_FLOOR_CORRIDORS", 11, 2, false, true, 0, 0, false], ["MAP_ABANDONED_SHIP_HIDDEN_FLOOR_ROOMS", 0, 0, false, false, 20, 5, true], ["MAP_ABANDONED_SHIP_ROOMS_1F", 0, 0, false, false, 7, 6, true], ["MAP_ALTERING_CAVE", 16, 12, false, true, 15, 13, true], ["MAP_ANCIENT_TOMB", 4, 21, false, true, 5, 21, true], ["MAP_AQUA_HIDEOUT_1F", 17, 17, false, true, 18, 17, true], ["MAP_AQUA_HIDEOUT_B1F", 0, 0, false, false, 26, 10, true], ["MAP_AQUA_HIDEOUT_B2F", 0, 0, false, false, 16, 11, true], ["MAP_CAVE_OF_ORIGIN_1F", 8, 8, false, true, 0, 0, false], ["MAP_CAVE_OF_ORIGIN_B1F", 6, 12, false, true, 0, 0, false], ["MAP_CAVE_OF_ORIGIN_ENTRANCE", 9, 13, false, true, 0, 0, false], ["MAP_DESERT_RUINS", 4, 21, false, true, 5, 21, true], ["MAP_DESERT_UNDERPASS", 69, 9, false, true, 70, 9, true], ["MAP_DEWFORD_TOWN_HALL", 3, 5, false, true, 0, 0, false], ["MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F", 15, 9, false, true, 9, 5, true], ["MAP_FIERY_PATH", 0, 0, false, false, 18, 18, true], ["MAP_FORTREE_CITY_DECORATION_SHOP", 5, 3, false, true, 0, 0, false], ["MAP_GRANITE_CAVE_1F", 0, 0, false, false, 21, 7, true], ["MAP_GRANITE_CAVE_B1F", 0, 0, false, false, 15, 12, true], ["MAP_GRANITE_CAVE_B2F", 0, 0, false, false, 16, 14, true], ["MAP_GRANITE_CAVE_STEVENS_ROOM", 6, 6, false, true, 0, 0, false], ["MAP_ISLAND_CAVE", 4, 21, false, true, 5, 21, true], ["MAP_JAGGED_PASS", 0, 0, false, false, 13, 21, true], ["MAP_LAVARIDGE_TOWN_HERB_SHOP", 4, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_CONTEST_HALL", 24, 17, false, true, 25, 17, true], ["MAP_LILYCOVE_CITY_CONTEST_LOBBY", 15, 3, false, true, 15, 6, true], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_1F", 8, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_2F", 8, 4, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_1F", 9, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_2F", 9, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_3F", 9, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_4F", 9, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_5F", 9, 3, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_ROOFTOP", 9, 5, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_HARBOR", 9, 11, false, true, 0, 0, false], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_1F", 5, 10, false, true, 10, 7, true], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F", 12, 6, false, true, 11, 7, true], ["MAP_LILYCOVE_CITY_POKEMON_TRAINER_FAN_CLUB", 5, 10, false, true, 0, 0, false], ["MAP_MAGMA_HIDEOUT_1F", 0, 0, false, false, 22, 14, true], ["MAP_MAGMA_HIDEOUT_2F_1R", 16, 19, false, true, 15, 19, true], ["MAP_MAGMA_HIDEOUT_2F_2R", 0, 0, false, false, 25, 13, true], ["MAP_MAGMA_HIDEOUT_2F_3R", 21, 11, false, true, 0, 0, false], ["MAP_MAGMA_HIDEOUT_3F_1R", 0, 0, false, false, 15, 10, true], ["MAP_MAGMA_HIDEOUT_4F", 0, 0, false, false, 29, 14, true], ["MAP_MARINE_CAVE_END", 14, 13, false, true, 15, 13, true], ["MAP_MARINE_CAVE_ENTRANCE", 7, 7, false, true, 8, 6, true], ["MAP_MAUVILLE_CITY_BIKE_SHOP", 5, 3, false, true, 0, 0, false], ["MAP_MAUVILLE_CITY_GAME_CORNER", 11, 3, false, true, 0, 0, false], ["MAP_METEOR_FALLS_1F_1R", 0, 0, false, false, 16, 20, true], ["MAP_METEOR_FALLS_1F_2R", 14, 16, false, true, 13, 16, true], ["MAP_METEOR_FALLS_B1F_1R", 14, 19, false, true, 15, 18, true], ["MAP_METEOR_FALLS_STEVENS_CAVE", 17, 15, false, true, 17, 16, true], ["MAP_MIRAGE_TOWER_1F", 5, 3, false, true, 0, 0, false], ["MAP_MIRAGE_TOWER_2F", 5, 3, false, true, 0, 0, false], ["MAP_MIRAGE_TOWER_3F", 5, 3, false, true, 0, 0, false], ["MAP_MIRAGE_TOWER_4F", 4, 3, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_GAME_CORNER_1F", 6, 3, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_GAME_CORNER_B1F", 4, 1, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_1F", 10, 5, false, true, 0, 0, false], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_2F", 8, 7, false, true, 0, 0, false], ["MAP_MT_CHIMNEY", 18, 21, false, true, 21, 25, true], ["MAP_MT_CHIMNEY_CABLE_CAR_STATION", 4, 7, false, true, 0, 0, false], ["MAP_MT_PYRE_1F", 11, 7, false, true, 0, 0, false], ["MAP_MT_PYRE_EXTERIOR", 0, 0, false, false, 17, 27, true], ["MAP_MT_PYRE_SUMMIT", 24, 17, false, true, 24, 19, true], ["MAP_NEW_MAUVILLE_ENTRANCE", 3, 3, false, true, 0, 0, false], ["MAP_PETALBURG_WOODS", 0, 0, false, false, 26, 22, true], ["MAP_ROUTE104_PRETTY_PETAL_FLOWER_SHOP", 7, 7, false, true, 0, 0, false], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_NORTH_ENTRANCE", 7, 3, false, true, 0, 0, false], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_SOUTH_ENTRANCE", 7, 3, false, true, 0, 0, false], ["MAP_ROUTE111_OLD_LADYS_REST_STOP", 5, 4, false, true, 0, 0, false], ["MAP_ROUTE112_CABLE_CAR_STATION", 4, 7, false, true, 0, 0, false], ["MAP_ROUTE113_GLASS_WORKSHOP", 7, 5, false, true, 0, 0, false], ["MAP_ROUTE114_FOSSIL_MANIACS_TUNNEL", 6, 13, false, true, 0, 0, false], ["MAP_ROUTE117_POKEMON_DAY_CARE", 3, 3, false, true, 0, 0, false], ["MAP_ROUTE119_WEATHER_INSTITUTE_1F", 11, 6, false, true, 9, 6, true], ["MAP_ROUTE119_WEATHER_INSTITUTE_2F", 9, 9, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_1F", 7, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_2F", 11, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_3F", 15, 6, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT1_1F", 10, 5, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT1_2F", 3, 5, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT2_1F", 9, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT2_2F", 6, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_FLAT2_3F", 6, 4, false, true, 0, 0, false], ["MAP_RUSTBORO_CITY_POKEMON_SCHOOL", 6, 4, false, true, 0, 0, false], ["MAP_RUSTURF_TUNNEL", 0, 0, false, false, 18, 15, true], ["MAP_SEAFLOOR_CAVERN_ENTRANCE", 7, 7, false, true, 8, 7, true], ["MAP_SEAFLOOR_CAVERN_ROOM1", 12, 8, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM2", 7, 6, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM3", 7, 7, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM4", 11, 11, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM5", 8, 8, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM6", 5, 4, false, true, 5, 5, true], ["MAP_SEAFLOOR_CAVERN_ROOM7", 3, 19, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM8", 3, 8, false, true, 0, 0, false], ["MAP_SEAFLOOR_CAVERN_ROOM9", 0, 0, false, false, 13, 23, true], ["MAP_SEALED_CHAMBER_INNER_ROOM", 10, 11, false, true, 9, 10, true], ["MAP_SEALED_CHAMBER_OUTER_ROOM", 8, 9, false, true, 8, 11, true], ["MAP_SHOAL_CAVE_LOW_TIDE_ENTRANCE_ROOM", 0, 0, false, false, 18, 17, true], ["MAP_SHOAL_CAVE_LOW_TIDE_ICE_ROOM", 0, 0, false, false, 10, 15, true], ["MAP_SHOAL_CAVE_LOW_TIDE_INNER_ROOM", 0, 0, false, false, 23, 19, true], ["MAP_SHOAL_CAVE_LOW_TIDE_LOWER_ROOM", 13, 5, false, true, 0, 0, false], ["MAP_SKY_PILLAR_1F", 10, 4, false, true, 0, 0, false], ["MAP_SKY_PILLAR_2F", 10, 4, false, true, 0, 0, false], ["MAP_SKY_PILLAR_3F", 10, 5, false, true, 0, 0, false], ["MAP_SKY_PILLAR_4F", 10, 5, false, true, 0, 0, false], ["MAP_SKY_PILLAR_5F", 11, 3, false, true, 0, 0, false], ["MAP_SKY_PILLAR_ENTRANCE", 8, 8, false, true, 0, 0, false], ["MAP_SKY_PILLAR_OUTSIDE", 13, 10, false, true, 0, 0, false], ["MAP_SKY_PILLAR_TOP", 12, 11, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_HARBOR", 9, 11, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_1F", 12, 6, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F", 12, 4, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_POKEMON_FAN_CLUB", 7, 7, false, true, 0, 0, false], ["MAP_SLATEPORT_CITY_STERNS_SHIPYARD_1F", 9, 8, false, true, 8, 6, true], ["MAP_SLATEPORT_CITY_STERNS_SHIPYARD_2F", 7, 6, false, true, 0, 0, false], ["MAP_TERRA_CAVE_END", 10, 12, false, true, 11, 12, true], ["MAP_TERRA_CAVE_ENTRANCE", 11, 10, false, true, 0, 0, false], ["MAP_TRAINER_HILL_ENTRANCE", 9, 8, false, true, 0, 0, false], ["MAP_VICTORY_ROAD_1F", 0, 0, false, false, 23, 22, true], ["MAP_VICTORY_ROAD_B1F", 0, 0, false, false, 22, 14, true], ["MAP_VICTORY_ROAD_B2F", 0, 0, false, false, 23, 19, true]];
-
-// web/src/match/gifts.ts
-var ITEM_BRIGHT_POWDER = 179;
-var ITEM_WHITE_HERB = 180;
-var ITEM_QUICK_CLAW = 183;
-var ITEM_CHOICE_BAND2 = 186;
-var ITEM_KINGS_ROCK = 187;
-var ITEM_FOCUS_BAND2 = 196;
-var ITEM_SCOPE_LENS = 198;
-var ITEM_LEFTOVERS2 = 200;
-var ITEM_SHELL_BELL2 = 219;
-var GIFTS = [
-  ITEM_BRIGHT_POWDER,
-  ITEM_WHITE_HERB,
-  ITEM_QUICK_CLAW,
-  ITEM_CHOICE_BAND2,
-  ITEM_KINGS_ROCK,
-  ITEM_FOCUS_BAND2,
-  ITEM_SCOPE_LENS,
-  ITEM_LEFTOVERS2,
-  ITEM_SHELL_BELL2
-];
 
 // web/spike-b/shared/items.ts
 var ITEM_TM012 = 289;
@@ -2036,8 +2200,8 @@ var APPROACH_FRAMES = (SIGHT_RANGE + 1) * 16 + 90;
 var KEY_TO = { 1: KEY_DOWN, 2: KEY_UP, 3: KEY_LEFT, 4: KEY_RIGHT };
 var BOT_DUEL_GAP = 60 * 12;
 var BOT_DUEL_MAX = 60 * 120;
-var BOT_BITE = 600;
-var BOT_BITES = 3;
+var BOT_BITE = 240;
+var BOT_BITES = 10;
 var ROOMS = rooms_default;
 var SPILL_KEY = 1 << 20;
 var GROUND_PER_MAP = 6;
@@ -2172,19 +2336,19 @@ var Room = class {
       this.part(b);
       const won = cmd.winner === a.id ? a : cmd.winner === b.id ? b : void 0;
       const lost = won === a ? b : won === b ? a : void 0;
-      if (won && lost && !lost.beaten) {
-        lost.beaten = true;
-        this.fall(lost, won.name);
-      }
+      if (won && lost) this.botOut(lost, won.name);
     } else if (cmd.c === "lock") {
       this.results.entrants = this.actors.map((a) => [a.id, a.name]);
+      if (!this.opening) {
+        for (const a of this.actors) if (!a.bot) this.dropOne(a);
+      }
     } else if (cmd.c === "join") {
       if (this.actor(cmd.id) || this.bench.some((b) => b.id === cmd.id)) return;
       if (this.results.entrants.length && !cmd.bot) {
         this.bench.push({ id: cmd.id, name: cmd.name, skin: cmd.skin });
         return;
       }
-      const a = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: this.tick + JOIN_GRACE, shun: 0, shunUntil: 0, arriving: false };
+      const a = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, foe: 0, calm: this.tick + JOIN_GRACE, shun: 0, shunUntil: 0, arriving: false };
       this.actors.push(a);
       this.actors.sort((p, q) => p.id - q.id);
     } else if (cmd.c === "drop") {
@@ -2198,17 +2362,7 @@ var Room = class {
         const key = SPILL_KEY + a.id;
         this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag: structuredClone(cmd.bag) });
       }
-      const foe = a?.foe ? this.actor(a.foe) : void 0;
-      if (foe?.bot) foe.battling = false;
-      for (const o of this.actors) if (o.meet?.foe === cmd.id) this.unmeet(o);
-      for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
-      for (const [key, by] of this.picked) {
-        const b = this.spills.get(key);
-        if (by === cmd.id && (b?.legend || b?.person?.gate !== void 0)) this.picked.delete(key);
-      }
-      for (const e of this.events) if (e.trader?.busy === cmd.id) e.trader.busy = 0;
-      for (const h of this.homes) if (h.busy === cmd.id) h.busy = 0;
-      this.actors = this.actors.filter((o) => o.id !== cmd.id);
+      this.remove(cmd.id);
       if (cmd.c === "leave") this.bench = this.bench.filter((b) => b.id !== cmd.id);
       if (!a || a.bot) return;
       if (cmd.c === "out") this.bench.push({ id: a.id, name: a.name, skin: a.skin });
@@ -2237,10 +2391,7 @@ var Room = class {
       if (foe?.bot) {
         foe.battling = false;
         foe.calm = this.tick + GRACE;
-        if (cmd.won && !foe.beaten) {
-          foe.beaten = true;
-          this.fall(foe, a.name);
-        }
+        if (cmd.won) this.botOut(foe, a.name);
       }
       a.foe = 0;
       if (a.boss) {
@@ -2349,17 +2500,25 @@ var Room = class {
   /** The ring this frame (or at `tick`). */
   ring(tick2 = this.tick) {
     const len = this.ringPhase;
-    const cycle = RING_STEPS.length * len + this.opening;
-    const n = Math.floor((tick2 - this.epoch) / cycle);
-    const round = this.results.round + n;
-    let t = tick2 - this.epoch - n * cycle;
+    const round = this.results.round;
+    let t = tick2 - this.epoch;
     const { cx, cy, far } = this.centre(round);
     if (t < this.opening) return { round, phase: 0, last: false, cx, cy, r: Infinity, next: Infinity, left: this.opening - t, safari: true };
     t -= this.opening;
-    const phase = Math.floor(t / len);
+    const phase = Math.min(RING_STEPS.length - 1, Math.floor(t / len));
     const at = (i) => RING_STEPS[i] === Infinity || RING_STEPS[i] < 0 ? RING_STEPS[i] : RING_STEPS[i] * far;
     const last = phase === RING_STEPS.length - 1;
-    return { round, phase, last, cx, cy, r: at(phase), next: last ? void 0 : at(phase + 1), left: len - (t - phase * len) };
+    return { round, phase, last, cx, cy, r: at(phase), next: last ? void 0 : at(phase + 1), left: last ? 0 : len - (t - phase * len) };
+  }
+  /** The frame this round is over from, for the next to start AFTER_WIN on: its win;
+   *  everybody in it out with nobody left standing; or, with nobody in it at all (a world
+   *  nobody locked), a whole phase of the fog everywhere. */
+  roundEnd() {
+    const r = this.results;
+    if (r.wonAt !== void 0) return r.wonAt;
+    if (r.entrants.length) return r.fallen.length >= r.entrants.length ? r.fallen[r.fallen.length - 1].at : void 0;
+    const end = this.epoch + this.opening + RING_STEPS.length * this.ringPhase;
+    return this.tick >= end ? end - AFTER_WIN : void 0;
   }
   /** Frames a phase lasts: RING_PHASE, or shorter for a solo test (`?ring=` seconds). */
   ringPhase = RING_PHASE;
@@ -2440,7 +2599,8 @@ var Room = class {
     const ring = this.ring();
     const was = this.tick - 1 >= this.epoch ? this.ring(this.tick - 1) : { ...ring, phase: -1 };
     const r = this.results;
-    if (ring.round !== was.round || r.wonAt !== void 0 && this.tick >= r.wonAt + AFTER_WIN) this.newRound(r.round + 1);
+    const end = this.roundEnd();
+    if (end !== void 0 && this.tick >= end + AFTER_WIN) this.newRound(r.round + 1);
     else if (this.tick - PICK_WAIT >= this.epoch && this.ring(this.tick - PICK_WAIT).safari && !this.ring(this.tick - PICK_WAIT + 1).safari) this.drop();
     else if (ring.phase !== was.phase) {
       for (const e of this.events) if (e.story && DOORS[e.story] === "wait" && ring.phase > (e.phase ?? 0)) e.opened = true;
@@ -2455,15 +2615,18 @@ var Room = class {
         r.wonAt = this.tick;
       }
     }
-    if ((this.tick - this.epoch) % Math.max(1, Math.round(this.ringPhase / RING_PHASE * BOT_BITE)) === 0) {
-      for (const a of this.actors) {
-        if (!a.bot || a.beaten || a.battling || !this.inFog(a.m.spot, ring)) continue;
-        a.bites = (a.bites ?? 0) + 1;
-        if (a.bites >= BOT_BITES) {
-          a.beaten = true;
-          this.fall(a, "");
-        }
+    const bite = Math.max(1, Math.min(BOT_BITE, Math.round(this.ringPhase / (30 * 60) * BOT_BITE)));
+    for (const a of [...this.actors]) {
+      if (!a.bot) continue;
+      if (a.battling || !this.inFog(a.m.spot, ring)) {
+        a.bleedAt = void 0;
+        continue;
       }
+      a.bleedAt ??= this.tick + bite;
+      if (this.tick < a.bleedAt) continue;
+      a.bleedAt += bite;
+      a.bites = (a.bites ?? 0) + 1;
+      if (a.bites >= BOT_BITES) this.botOut(a, "");
     }
     for (const [key, at] of this.taken) if (this.tick - at >= REGROW) this.taken.delete(key);
     const events = [];
@@ -2586,7 +2749,7 @@ var Room = class {
     if (!judges.length) return;
     const byMap = /* @__PURE__ */ new Map();
     for (const a of this.actors) {
-      if (!a.bot || a.beaten || a.battling || a.m.action || this.tick < a.calm) continue;
+      if (!a.bot || a.battling || a.m.action || this.tick < a.calm) continue;
       const l = byMap.get(a.m.spot.map) ?? [];
       l.push(a);
       byMap.set(a.m.spot.map, l);
@@ -2615,6 +2778,34 @@ var Room = class {
         }
       }
     }
+  }
+  /** `id` off the map, and everything that waited on them let go. */
+  remove(id) {
+    const a = this.actor(id);
+    const foe = a?.foe ? this.actor(a.foe) : void 0;
+    if (foe?.bot) foe.battling = false;
+    for (const o of this.actors) if (o.meet?.foe === id) this.unmeet(o);
+    for (const o of this.actors) if (o.bot && o.judge === id) this.part(o);
+    for (const [key, by] of this.picked) {
+      const b = this.spills.get(key);
+      if (by === id && (b?.legend || b?.person?.gate !== void 0)) this.picked.delete(key);
+    }
+    for (const e of this.events) if (e.trader?.busy === id) e.trader.busy = 0;
+    for (const h of this.homes) if (h.busy === id) h.busy = 0;
+    this.actors = this.actors.filter((o) => o.id !== id);
+  }
+  /** A bot is beaten (by `by`, '' the fog): out of the match and off the map, its team and
+   *  purse in a bag where it stood, as the live bots' eliminate() drops theirs. */
+  botOut(a, by) {
+    if (!this.actor(a.id)) return;
+    const phase = this.ring().phase + 1;
+    const grade = gradeOf(this.seed, a.id);
+    const party = dealParty(this.seed, a.id, phase, a.m.spot.map, grade);
+    const bag = { items: carried(party, []), money: purse(phase, grade), mons: party.map((m) => ({ species: m.species, level: m.level })) };
+    const key = SPILL_KEY + a.id;
+    if (!emptyBag(bag)) this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag });
+    this.fall(a, by);
+    this.remove(a.id);
   }
   /** `a` is out of this round's match (once; nothing after the win). */
   fall(a, by, how = {}) {
@@ -2700,7 +2891,7 @@ var Room = class {
     const humans = [];
     for (const a of this.actors) if (!a.bot) humans.push(a);
     for (const b of this.bench) {
-      humans.push({ id: b.id, bot: false, name: b.name, skin: b.skin, m: newMover({ map: "MAP_LITTLEROOT_TOWN", x: 10, y: 10 }, 1), keys: 0, last: 0, battling: false, beaten: false, foe: 0, calm: 0, shun: 0, shunUntil: 0, arriving: false });
+      humans.push({ id: b.id, bot: false, name: b.name, skin: b.skin, m: newMover({ map: "MAP_LITTLEROOT_TOWN", x: 10, y: 10 }, 1), keys: 0, last: 0, battling: false, foe: 0, calm: 0, shun: 0, shunUntil: 0, arriving: false });
     }
     humans.sort((p, q) => p.id - q.id);
     this.bench = [];
@@ -2716,8 +2907,8 @@ var Room = class {
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
     for (const a of this.actors) if (a.bot) {
-      a.beaten = false;
       a.bites = 0;
+      a.bleedAt = void 0;
       if (a.judge) this.part(a);
     }
     for (const a of this.actors) if (a.meet) {
@@ -2805,7 +2996,7 @@ var Room = class {
     for (const h of free) {
       if (h.battling) continue;
       for (const b of this.actors) {
-        if (!b.bot || b.beaten || b.battling || b.m.action || this.tick < b.calm || b.m.spot.map !== h.m.spot.map) continue;
+        if (!b.bot || b.battling || b.m.action || this.tick < b.calm || b.m.spot.map !== h.m.spot.map) continue;
         if (h.shun === b.id && this.tick < h.shunUntil) continue;
         const look = (o) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing });
         if (!eitherSees(this.world, look(h), look(b))) continue;
@@ -2889,14 +3080,14 @@ var Room = class {
           a.battling = true;
           events.push({ type: "gate", tick: this.tick, id: a.id, key: b.key, gate: b.person.gate, bag: structuredClone(b.bag), name: b.person.name });
         } else if (b?.legend) {
-          const mon = b.bag.mons[0];
+          const mon2 = b.bag.mons[0];
           this.picked.set(b.key, a.id);
           a.battling = true;
-          events.push({ type: "legend", tick: this.tick, id: a.id, key: b.key, species: mon.species, level: mon.level });
+          events.push({ type: "legend", tick: this.tick, id: a.id, key: b.key, species: mon2.species, level: mon2.level });
         } else if (b) {
           this.picked.set(b.key, a.id);
           events.push({ type: "bag", tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name, ...b.person ? { person: { ...b.person } } : {} });
-        } else if (foe && foe.bot && !foe.beaten && !foe.battling && !foe.m.action) {
+        } else if (foe && foe.bot && !foe.battling && !foe.m.action) {
           a.battling = foe.battling = true;
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
@@ -2983,7 +3174,7 @@ var Room = class {
       mix2(m.py + 1024);
       mix2(m.lift + 1024);
       mix2(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 65535);
-      mix2((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0) | (a.field ?? 0) << 3);
+      mix2((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | (a.field ?? 0) << 3);
       mix2(a.foe);
       mix2(a.calm);
       mix2(a.shun);
@@ -2993,6 +3184,7 @@ var Room = class {
       mix2(a.judge ?? 0);
       mix2(a.since ?? 0);
       mix2(a.bites ?? 0);
+      mix2(a.bleedAt ?? 0);
       mix2(a.boss ?? 0);
       mix2(a.away ? 1 : 0);
       if (a.meet) {
@@ -3159,6 +3351,8 @@ function rand(b) {
   return b.rng / 4294967296;
 }
 var DELAYS = [32, 64, 96, 128];
+var NEAR_TILES = 4;
+var NEAR_PLAYER = { x: 7, y: 5 };
 var DIR_OF = { south: 1, north: 2, west: 3, east: 4 };
 var GRIDS = /* @__PURE__ */ new WeakMap();
 var INSIDE = /* @__PURE__ */ new WeakMap();
@@ -3220,7 +3414,7 @@ function botKeys(room, a, b) {
   if (a.m.action) return 0;
   const ring = room.ring();
   const at = `${ring.round}:${ring.phase}:${room.events.length}`;
-  if (b.plan !== at && (room.tick + a.id * 7) % 30 === 0) {
+  if ((b.plan !== at || !b.goal && room.inFog(a.m.spot, ring)) && (room.tick + a.id * 7) % 30 === 0) {
     b.plan = at;
     b.goal = goal(room, a, b);
     b.steps = void 0;
@@ -3231,6 +3425,16 @@ function botKeys(room, a, b) {
     b.steps = path?.found ? path.steps : void 0;
     if (!b.steps) b.goal = null;
     b.stuck = 0;
+  }
+  if (!b.steps?.length && (room.tick + a.id * 7) % 30 === 0 && room.tick >= a.calm && !ring.safari && !room.inFog(a.m.spot, ring)) {
+    const here = (o2) => o2 !== a && !o2.battling && !o2.away && room.tick >= o2.calm && o2.m.spot.map === a.m.spot.map;
+    const dx = (o2) => Math.abs(o2.m.spot.x - a.m.spot.x), dy = (o2) => Math.abs(o2.m.spot.y - a.m.spot.y);
+    const o = room.actors.find((o2) => !o2.bot && here(o2) && dx(o2) <= NEAR_PLAYER.x && dy(o2) <= NEAR_PLAYER.y) ?? (room.tick >= room.duelAfter ? room.actors.find((o2) => o2.bot && here(o2) && dx(o2) + dy(o2) <= NEAR_TILES) : void 0);
+    const path = o ? findPath(room.world, a.m.spot, o.m.spot, 2e3, true, true) : null;
+    if (path?.found && path.steps.length >= 2) {
+      b.steps = path.steps.slice(0, -1);
+      b.stuck = 0;
+    }
   }
   if (b.steps?.length) {
     if (sameSpot(b.steps[0].to, a.m.spot)) {
@@ -3260,19 +3464,21 @@ function botSpawns(room, maps, count) {
   const grids = new Map(land.map((m) => [m.id, decodeGrid(m.grid, m.w * m.h)]));
   const out = [];
   const taken = /* @__PURE__ */ new Set();
-  const add = (spot, facing, skin) => {
+  const add2 = (spot, facing, skin) => {
     taken.add(`${spot.map}:${spot.x}:${spot.y}`);
     const n = out.length + 1;
     out.push({ name: SKIN_NAME[skin], skin, spot, facing, brain: { rng: n * 2654435761 >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
   };
-  for (const [x, y] of [[7, 12], [13, 13], [11, 16]].slice(0, count)) add({ map: "MAP_LITTLEROOT_TOWN", x, y }, 1, botSkin(out.length * 7 + 1));
-  for (let tries = 0; out.length < count && tries < 5e4; tries++) {
-    const m = land[Math.floor(r() * land.length)];
-    const x = Math.floor(r() * m.w), y = Math.floor(r() * m.h);
-    const c = grids.get(m.id)[y * m.w + x];
-    if (c !== 0 && c !== 7 || taken.has(`${m.id}:${x}:${y}`) || room.groundAt(m.id, x, y)) continue;
-    if (m.id === "MAP_LITTLEROOT_TOWN" && x >= 7 && x <= 13 && y >= 9 && y <= 13) continue;
-    add({ map: m.id, x, y }, 1 + Math.floor(r() * 4), botSkin(Math.floor(r() * 12)));
+  for (const [x, y] of [[7, 12], [13, 13], [11, 16]].slice(0, count)) add2({ map: "MAP_LITTLEROOT_TOWN", x, y }, 1, botSkin(out.length * 7 + 1));
+  const cells = room.reachable().filter((s) => {
+    const m = grids.get(s.map);
+    const c = m?.[s.y * room.maps.get(s.map).w + s.x];
+    return m && (c === 0 || c === 7) && !room.groundAt(s.map, s.x, s.y) && !(s.map === "MAP_LITTLEROOT_TOWN" && s.x >= 7 && s.x <= 13 && s.y >= 9 && s.y <= 13);
+  });
+  for (let tries = 0; out.length < count && cells.length && tries < 5e4; tries++) {
+    const s = cells[Math.floor(r() * cells.length)];
+    if (taken.has(`${s.map}:${s.x}:${s.y}`)) continue;
+    add2(s, 1 + Math.floor(r() * 4), botSkin(Math.floor(r() * 12)));
   }
   return out;
 }
@@ -3460,6 +3666,10 @@ var Host = class {
 
 // web/src/match/room.ts
 var MAX_STEPS = [2, 4, 6, 8, 12, 16, 20, 26, 30];
+function dealable(humans, bots) {
+  return humans + bots >= 2;
+}
+var BOT_FILL = 8;
 var FOG_STEPS = [30, 60, 90, 120, 180];
 var SAFARI_STEPS = [0, 60, 120, 180];
 
@@ -3467,12 +3677,14 @@ var SAFARI_STEPS = [0, 60, 120, 180];
 function over(room) {
   const r = room.results;
   if (r.winner) return true;
-  if (r.entrants.length && !r.entrants.some(([id]) => room.actor(id) && !room.actor(id).bot && !r.fallen.some((f) => f.id === id))) return true;
-  return room.ring().round > r.round;
+  return r.entrants.length > 0 && !r.entrants.some(([id]) => room.actor(id) && !room.actor(id).bot && !r.fallen.some((f) => f.id === id));
 }
 
 // web/spike-b/shared/wire.ts
 var HASH_EVERY = 60;
+function fillFor(set, trainers) {
+  return set.bots ? Math.max(0, set.max - trainers) : 0;
+}
 
 // web/spike-b/shared/service.ts
 function recOf(r) {
@@ -3769,18 +3981,28 @@ var WorldService = class {
       for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
     } while (this.rooms.has(code));
     const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
-    const set = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: ROOM_MAX, door: "open", textSpeed: 5, animations: false };
+    const set = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: BOT_FILL, door: "open", textSpeed: 5, animations: false };
     const room = { pass: "", code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map(), set };
     this.rooms.set(code, room);
     return room;
   }
-  /** START: the Room, everybody in it at the truck, and the match locked to them. */
+  /** START: the Room, everybody in it and FILL's bots for the seats nobody has, and the
+   *  match locked to them. Not a match nobody could win (dealable: two at the least); a
+   *  quick room's count that runs out on one counts again. */
   start(room) {
+    const bots = Math.min(this.opts.bots, fillFor(room.set, room.members.size));
+    if (!dealable(room.members.size, bots)) {
+      if (room.quick) {
+        room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS);
+        this.roster(room);
+      }
+      return;
+    }
     const seed = Math.floor(Math.random() * 4294967294) + 1 >>> 0;
     const r = makeRoom(this.opts.maps, this.opts.patches, seed);
     r.ringPhase = Math.round(room.set.fogSecs * 60);
     r.opening = Math.round(room.set.safariSecs * 60);
-    const host = new Host(r, room.set.bots ? this.opts.bots : 0, this.opts.maps);
+    const host = new Host(r, bots, this.opts.maps);
     for (const p of room.members.values()) {
       host.join(p.name, p.skin, void 0, p.id);
       p.heard = room.t0 = this.opts.now();
@@ -3789,7 +4011,7 @@ var WorldService = class {
     room.host = host;
     room.startsAt = null;
     room.t0 = this.opts.now();
-    this.opts.log(`world: room ${room.code} starts, ${room.members.size} trainers, seed ${seed}`);
+    this.opts.log(`world: room ${room.code} starts, ${room.members.size} trainers and ${bots} bots, seed ${seed}`);
     const state = r.state();
     for (const p of room.members.values()) {
       p.team = void 0;

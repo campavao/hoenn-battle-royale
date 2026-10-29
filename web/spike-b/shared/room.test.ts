@@ -85,14 +85,15 @@ describe('bots', () => {
   // Cam (2026-10-28): "why does everyone move so fast?" They ran and walked six tiles at a
   // go. Emerald's wanderers walk one tile at walking pace, then stand 32..128 frames.
   it("wander like the game's townsfolk: walk one tile, then stand", () => {
-    const host = new Host(makeRoom(MAPS, PATCHES, 5), 64, MAPS);
+    const host = new Host(makeRoom(MAPS, PATCHES, 5), 29, MAPS);
     const bots = host.room.actors.map((a) => a.id);
     const last = new Map<number, string>();
     const stepEnd = new Map<number, number>();
     const wasStep = new Map<number, boolean>();
     const stepFrames = new Map<number, number>();
     let steps = 0, fastest = 0, shortRest = 0, hops = 0, turns = 0;
-    // Wanderers only: one walking into the coming ring has somewhere to be.
+    // Wanderers only: one walking into the coming ring, or up to somebody, has somewhere
+    // to be.
     const walkers = new Set<number>();
     for (let f = 0; f < 3600; f++) {
       host.advance();
@@ -117,7 +118,7 @@ describe('bots', () => {
         if (stepping) fastest = Math.max(fastest, a.m.action!.speed);
       }
     }
-    expect(walkers.size).toBeLessThan(bots.length - 8);
+    expect(walkers.size).toBeLessThan(bots.length - 6);
     const perBotPerMinute = steps / (bots.length - walkers.size);
     // one tile every ~1.5 s on average, never a run
     expect(perBotPerMinute).toBeGreaterThan(15);
@@ -133,20 +134,19 @@ describe('bots', () => {
 
 describe('bots with somewhere to be', () => {
   it('walk into the coming ring before it closes, and some to an event while its legendary stands', () => {
-    const host = new Host(makeRoom(MAPS, PATCHES, 8), 64, MAPS);
+    const host = new Host(makeRoom(MAPS, PATCHES, 8), 29, MAPS);
     const room = host.room;
     // A legendary's event, not a story's (STORY_CHANCE), and not the final ring's sea.
     (room as unknown as { storyFor(): undefined }).storyFor = () => undefined;
     expect(room.centre(room.ring().round).final).toBeUndefined();
     const r0 = room.ring();
-    // How far the bots are from the ring's centre, on average, in tiles of the plane.
-    const far = () => {
-      const d = room.actors.filter((a) => a.bot).map((a) => { const p = room.places.get(a.m.spot.map)!; return Math.hypot(p.gx + a.m.spot.x - r0.cx, p.gy + a.m.spot.y - r0.cy); });
-      return d.reduce((x, y) => x + y, 0) / d.length;
-    };
-    const before = far();
+    // How many bots the first fog would catch, were it to close now.
+    const r1 = { ...r0, r: r0.next! };
+    const outside = () => room.actors.filter((a) => a.bot && room.inFog(a.m.spot, r1)).length;
+    const before = outside();
+    expect(before).toBeGreaterThan(8);
     for (let f = 0; f < RING_PHASE - 60; f++) host.advance();
-    expect(far()).toBeLessThan(before * 0.75);
+    expect(outside()).toBeLessThanOrEqual(before / 2);
     // A legendary on the ground draws some of them.
     room.ringPhase = RING_PHASE;
     for (let f = 0; f < 120; f++) host.advance();
@@ -248,13 +248,19 @@ describe('room battles', () => {
     expect(bot.battling && me.battling).toBe(true);
     expect(bot.m.facing).toBe(3); // turned to face the trainer
     room.apply({ c: 'end', id: 2, won: true });
-    expect(bot.beaten).toBe(true);
-    expect(bot.battling || me.battling).toBe(false);
+    // Beaten: off the map, its team and purse in a bag where it stood (HBR-90).
+    expect(room.actor(1)).toBeUndefined();
+    expect(me.battling).toBe(false);
+    const b = room.spillAt('MAP_LITTLEROOT_TOWN', 10, 12)!;
+    expect(b).toMatchObject({ key: SPILL_KEY + 1, name: 'BOT' });
+    expect(b.bag.mons!.length).toBeGreaterThan(0);
+    expect(b.bag.money).toBeGreaterThan(0);
+    expect(room.results.fallen).toEqual([]); // not in a match: nobody to rank
     me.keys = KEY_B;
     room.apply({ c: 'end', id: 2 }); // not battling: nothing
     expect(me.keys).toBe(KEY_B);
     press(0);
-    expect(press(KEY_A)).toEqual([]); // beaten: once only
+    expect(press(KEY_A)).toMatchObject([{ type: 'bag', id: 2, key: SPILL_KEY + 1, name: 'BOT' }]); // its bag, not a fight
   });
 });
 
@@ -313,7 +319,7 @@ describe('trainer against trainer', () => {
     expect(fightAfter(room).e).toMatchObject([{ type: 'duel' }, { type: 'duel' }]);
   });
 
-  it('sees five cells along the look and no further; a beaten bot beside them stays out of it', () => {
+  it('sees five cells along the look and no further', () => {
     const room0 = makeRoom(MAPS, PATCHES, 99);
     // A row of Littleroot with nothing in the way for seven cells.
     let x0 = -1, y0 = -1;
@@ -323,8 +329,6 @@ describe('trainer against trainer', () => {
     expect(x0).toBeGreaterThanOrEqual(0);
     const at = (dx: number) => {
       const room = makeRoom(MAPS, PATCHES, 99);
-      room.apply({ c: 'join', id: 1, bot: true, name: 'BOT', skin: 4, spot: { map: L, x: x0, y: y0 + 1 }, facing: 2 });
-      room.actor(1)!.beaten = true;
       room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: L, x: x0, y: y0 }, facing: 4 });
       room.apply({ c: 'join', id: 3, bot: false, name: 'B', skin: 1, spot: { map: L, x: x0 + dx, y: y0 }, facing: 2 });
       for (let i = 0; i < 300; i++) room.step(new Map());
@@ -370,8 +374,11 @@ describe('trainer against trainer', () => {
     expect(one.battling).toBe(true);
     room.apply({ c: 'lock' });
     room.apply({ c: 'bots', id: 7, a: 1, b: 2, winner: 2 });
-    expect([one.battling, one.beaten, two.battling, two.beaten]).toEqual([false, true, false, false]);
-    expect(room.results.fallen).toMatchObject([{ id: 1, by: 'TWO' }]);
+    // The loser is off the map, its bag where it stood; the winner walks on.
+    expect(room.actor(1)).toBeUndefined();
+    expect(two.battling).toBe(false);
+    expect(room.spillAt(L, 9, 12)).toMatchObject({ key: SPILL_KEY + 1, name: 'ONE' });
+    expect(room.results.fallen).toMatchObject([{ id: 1, by: 'TWO', bot: true }]);
   });
 
   it('one bot fight at a time, room-wide; the page that ran it leaving lets them go', () => {
@@ -639,7 +646,7 @@ describe('item balls', () => {
 });
 
 describe('the fog', () => {
-  it('closes on a seeded centre phase by phase, then covers everything, then lifts', () => {
+  it('closes on a seeded centre phase by phase, then covers everything until somebody wins', () => {
     const room = makeRoom(MAPS, PATCHES, 31337), same = makeRoom(MAPS, PATCHES, 31337);
     const at = (p: number) => room.ring(p * RING_PHASE + 1);
     expect(at(0)).toMatchObject({ round: 0, phase: 0, r: Infinity, last: false });
@@ -649,9 +656,10 @@ describe('the fog', () => {
     expect(radii[5]).toBeGreaterThan(0);
     expect(radii[6]).toBe(0); // the centre cell alone, as the match's 0
     expect(at(8)).toMatchObject({ phase: 8, r: -1, last: true });
-    expect(at(9)).toMatchObject({ round: 1, phase: 0, r: Infinity });
+    // The fog everywhere holds (director.ts stops its ring there): no lifting on a timer.
+    expect(at(40)).toMatchObject({ round: 0, phase: 8, r: -1, last: true, left: 0 });
     expect(same.ring(3 * RING_PHASE)).toEqual(room.ring(3 * RING_PHASE));
-    expect(at(10).cx !== at(1).cx || at(10).cy !== at(1).cy).toBe(true); // a new round, a new centre
+    expect(room.centre(1).cx !== room.centre(0).cx || room.centre(1).cy !== room.centre(0).cy).toBe(true); // a new round, a new centre
     // the centre is a cell a trainer can stand on, and is never in the fog before the end
     const centre = room.reachable().find((s) => !room.inFog(s, at(5)))!;
     expect(centre).toBeTruthy();
@@ -758,12 +766,20 @@ describe('a fallen trainer\'s bag', () => {
 describe('rounds', () => {
   it('who is on the map when the fog closes plays it, bots too; the last one standing wins; soon after, everybody is back at the truck', () => {
     // A cycle longer than AFTER_WIN, as the match's is.
-    const PHASE = 120;
+    const PHASE = 200;
     const host = new Host(makeRoom(MAPS, PATCHES, 4242), 3, MAPS, 0);
     const mirror = makeRoom(MAPS, PATCHES, 4242);
     host.room.ringPhase = mirror.ringPhase = PHASE;
     mirror.load(host.room.state());
-    const run = (n: number) => { for (let i = 0; i < n; i++) { const { frame } = host.advance(); play(mirror, frame); expect(mirror.hash()).toBe(host.room.hash()); } };
+    // A bot that walks up to a trainer gets a fight their page here calls off at once.
+    const run = (n: number) => {
+      for (let i = 0; i < n; i++) {
+        const { frame, events } = host.advance();
+        play(mirror, frame);
+        expect(mirror.hash()).toBe(host.room.hash());
+        for (const e of events) if (e.type === 'fight') host.end(e.id);
+      }
+    };
     const bots = host.room.actors.filter((x) => x.bot).map((x) => x.id);
     expect(bots.length).toBeGreaterThan(0);
     const a = host.join('A', 0), b = host.join('B', 1), d = host.join('', 0);
@@ -791,7 +807,7 @@ describe('rounds', () => {
 
     // B beats a bot: out. The rest go to the fog as it closes on them; B, who does not
     // bleed in the room, is the last one standing.
-    const bot = host.room.actors.find((x) => x.bot && !x.beaten);
+    const bot = host.room.actors.find((x) => x.bot);
     if (bot) {
       const me = host.room.actor(b)!;
       me.battling = bot.battling = true; me.foe = bot.id;
@@ -799,7 +815,7 @@ describe('rounds', () => {
       host.end(b, false, true);
       run(1);
       expect(host.room.results.fallen.find((f) => f.id === bot.id)).toMatchObject({ id: bot.id, name: bot.name, by: 'B', bot: true });
-      expect(bot.beaten).toBe(true);
+      expect(host.room.actor(bot.id)).toBeUndefined();
     }
     while (!host.room.results.winner) run(PHASE);
     expect(host.room.results.winner).toBe(b);
@@ -817,7 +833,8 @@ describe('rounds', () => {
     expect(host.room.epoch).toBe(won + AFTER_WIN);
     expect(host.room.results).toEqual({ round: 1, entrants: [], fallen: [], winner: 0 });
     expect(host.room.bench).toEqual([]);
-    expect(host.room.actors.filter((x) => x.bot && x.beaten)).toEqual([]);
+    // The bots all went out last round: none of them stands again.
+    expect(host.room.actors.filter((x) => x.bot)).toEqual([]);
     const humans = host.room.actors.filter((x) => !x.bot);
     expect(humans.map((x) => x.id)).toEqual([a, b, c]);
     expect(new Set(humans.map((x) => `${x.m.spot.map}:${x.m.spot.x}:${x.m.spot.y}`)).size).toBe(3);
@@ -828,7 +845,7 @@ describe('rounds', () => {
     host.input(c, 21, Array(10).fill(KEY_DOWN));
     run(2);
     expect(host.room.ring().phase).toBe(1);
-    expect(host.room.results.entrants.map(([id]) => id)).toEqual([...bots, a, b, c]);
+    expect(host.room.results.entrants.map(([id]) => id)).toEqual([a, b, c]);
   });
 
   it('one trainer alone never wins, and two out on one frame leave no winner', () => {
@@ -1104,5 +1121,19 @@ describe('field moves', () => {
     room.apply({ c: 'join', id: 2, bot: true, name: 'B', skin: 4, spot: { map: R, x: 0, y: 0 }, facing: 1 });
     room.apply({ c: 'field', id: 2, bits: 7 });
     expect(room.actor(2)!.field).toBeUndefined();
+  });
+});
+
+describe('no Safari', () => {
+  it('START with SAFARI 0 drops each trainer somewhere of their own, not side by side at the truck', () => {
+    const host = new Host(makeRoom(MAPS, PATCHES, 21), 0, MAPS, 0);
+    const ids = [host.join('A', 0), host.join('B', 1), host.join('C', 2)];
+    host.lock();
+    host.advance();
+    const at = ids.map((id) => host.room.actor(id)!.m.spot);
+    expect(new Set(at.map((s) => s.map)).size).toBeGreaterThan(1);
+    for (const s of at) expect(host.room.places.has(s.map)).toBe(true);
+    // Five seconds of nobody moving: nobody has met anybody.
+    for (let f = 0; f < 600; f++) expect(host.advance().events.filter((e) => e.type === 'duel')).toEqual([]);
   });
 });

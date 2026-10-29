@@ -32,6 +32,10 @@ function rand(b: Brain): number {
 }
 
 const DELAYS = [32, 64, 96, 128];
+/** How near another bot has to be for a bot to walk up to it, and a trainer (on its
+ *  screen, 15 x 10 cells round it) (brain.ts NEAR_TILES, NEAR_PLAYER). */
+const NEAR_TILES = 4;
+const NEAR_PLAYER = { x: 7, y: 5 };
 
 const DIR_OF: Record<SeamDir, number> = { south: 1, north: 2, west: 3, east: 4 };
 
@@ -109,7 +113,8 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
   const at = `${ring.round}:${ring.phase}:${room.events.length}`;
   // A new phase or event: each bot rethinks on its own frame of the next half second, so
   // sixty-four searches never land on one frame.
-  if (b.plan !== at && (room.tick + a.id * 7) % 30 === 0) {
+  // One the fog has caught with nowhere to go (its walk gave up) thinks again too.
+  if ((b.plan !== at || (!b.goal && room.inFog(a.m.spot, ring))) && (room.tick + a.id * 7) % 30 === 0) {
     b.plan = at;
     b.goal = goal(room, a, b);
     b.steps = undefined;
@@ -121,6 +126,17 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
     b.steps = path?.found ? path.steps : undefined;
     if (!b.steps) b.goal = null;
     b.stuck = 0;
+  }
+  // Somebody to fight close by (brain.ts approach): a trainer on the bot's screen, or
+  // another bot within NEAR_TILES while a bot fight could start (the room's one at a
+  // time). Up to them, so the eyelines meet. Out of the fog first.
+  if (!b.steps?.length && (room.tick + a.id * 7) % 30 === 0 && room.tick >= a.calm && !ring.safari && !room.inFog(a.m.spot, ring)) {
+    const here = (o: Actor) => o !== a && !o.battling && !o.away && room.tick >= o.calm && o.m.spot.map === a.m.spot.map;
+    const dx = (o: Actor) => Math.abs(o.m.spot.x - a.m.spot.x), dy = (o: Actor) => Math.abs(o.m.spot.y - a.m.spot.y);
+    const o = room.actors.find((o) => !o.bot && here(o) && dx(o) <= NEAR_PLAYER.x && dy(o) <= NEAR_PLAYER.y) ??
+      (room.tick >= room.duelAfter ? room.actors.find((o) => o.bot && here(o) && dx(o) + dy(o) <= NEAR_TILES) : undefined);
+    const path = o ? findPath(room.world, a.m.spot, o.m.spot, 2000, true, true) : null;
+    if (path?.found && path.steps.length >= 2) { b.steps = path.steps.slice(0, -1); b.stuck = 0; }
   }
   if (b.steps?.length) {
     if (sameSpot(b.steps[0].to, a.m.spot)) { b.steps.shift(); b.stuck = 0; }
@@ -153,14 +169,19 @@ export function botSpawns(room: Room, maps: readonly WorldMap[], count: number):
     out.push({ name: SKIN_NAME[skin], skin, spot, facing, brain: { rng: (n * 2654435761) >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
   };
   for (const [x, y] of [[7, 12], [13, 13], [11, 16]].slice(0, count)) add({ map: 'MAP_LITTLEROOT_TOWN', x, y }, 1, botSkin(out.length * 7 + 1));
-  for (let tries = 0; out.length < count && tries < 50000; tries++) {
-    const m = land[Math.floor(r() * land.length)];
-    const x = Math.floor(r() * m.w), y = Math.floor(r() * m.h);
-    const c = grids.get(m.id)![y * m.w + x];
-    if ((c !== 0 && c !== 7) || taken.has(`${m.id}:${x}:${y}`) || room.groundAt(m.id, x, y)) continue;
-    // Not on the new trainers' corner of Littleroot.
-    if (m.id === 'MAP_LITTLEROOT_TOWN' && x >= 7 && x <= 13 && y >= 9 && y <= 13) continue;
-    add({ map: m.id, x, y }, 1 + Math.floor(r() * 4), botSkin(Math.floor(r() * 12)));
+  // Only where a trainer could walk to them from the truck: a bot dealt into a pocket
+  // (north of the woods, a fenced corner, an island) could never be met, nor walk into
+  // the ring, and only ever went out to the fog.
+  const cells = room.reachable().filter((s) => {
+    const m = grids.get(s.map);
+    const c = m?.[s.y * room.maps.get(s.map)!.w + s.x];
+    return m && (c === 0 || c === 7) && !room.groundAt(s.map, s.x, s.y) &&
+      !(s.map === 'MAP_LITTLEROOT_TOWN' && s.x >= 7 && s.x <= 13 && s.y >= 9 && s.y <= 13);
+  });
+  for (let tries = 0; out.length < count && cells.length && tries < 50000; tries++) {
+    const s = cells[Math.floor(r() * cells.length)];
+    if (taken.has(`${s.map}:${s.x}:${s.y}`)) continue;
+    add(s, 1 + Math.floor(r() * 4), botSkin(Math.floor(r() * 12)));
   }
   return out;
 }
