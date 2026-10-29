@@ -29,7 +29,8 @@ import { Lobby, me, type RoomInfo } from './lobby';
 import { recordMatch } from '../src/match/career';
 import { OUT_BATCH_MS, outs, won } from '../src/match/ticker';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
-import { groundCount } from './shared/items';
+import { groundCount, isTm } from './shared/items';
+import { GIFTS } from '../src/match/gifts';
 import { RomArt } from './romart';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
@@ -229,7 +230,7 @@ function actors(): Actor[] {
  *  room's business (a bot you face, a marked spot you land on); the page only keeps a
  *  held A from the last battle's text out of the next one. */
 function myBits(): number {
-  if (spectating || battle || swapping || parading || asking || intro()) return 0;
+  if (spectating || battle || swapping || romUp || asking || intro()) return 0;
   const bits = (held.has('up') ? KEY_UP : 0) | (held.has('down') ? KEY_DOWN : 0) | (held.has('left') ? KEY_LEFT : 0) |
     (held.has('right') ? KEY_RIGHT : 0) | (held.has('b') ? KEY_B : 0) | (held.has('a') && frame >= calmUntil ? KEY_A : 0);
   return bits;
@@ -308,12 +309,22 @@ function giveNext(): void {
     return;
   }
   const { key, item, gift } = next;
-  rom.give(item, groundCount(item)).then((got) => {
+  // A TM is taught and a held item given, there and then, on the ROM's own screens.
+  const screen = isTm(item) || GIFTS.includes(item);
+  if (screen) { if (gift) say(`A gift: ${name(item)}!`); romUp = true; }
+  const took = screen
+    ? rom.teach(item, () => battleEl.classList.add('on')).finally(() => { romUp = false; battleEl.classList.remove('on'); })
+    : rom.give(item, groundCount(item));
+  took.then((got) => {
     // What the ROM made of it (br_items.c's Apply), not what was on the ground.
     if (!got) {
       say(`No room in the bag for ${name(item)}.`);
       link.drop(key); // it stays where it lay
-    } else if (gift) say(`A gift: ${name(item)}!`);
+    } else if (screen) {
+      const kept = got.items.some((g) => g.id === item);
+      if (kept) say(`${name(item)} went in the BAG.`);
+      else if (!gift) say(`${name(item)}! Taught.`);
+    }
     else if (got.items.length) say(`Found ${got.items.map((g) => `${g.n > 1 ? `${g.n} ` : ''}${name(g.id)}`).join(', ')}!`);
     else if (got.money) say(`Sold ${name(item)} for ¥${got.money}.`);
     else say(`${name(item)}! Your team got stronger.`);
@@ -780,13 +791,15 @@ function record(round: number): void {
   recordMatch(placement);
 }
 
-/** The Hall of Fame: the ROM has the screen, and the pad, until it is over. */
-let parading = false;
+/** A screen of the ROM's own the page shows (the Hall of Fame, a TM's party screen): it
+ *  has the pad until it is over. */
+let romUp = false;
+/** The Hall of Fame: the ROM has the screen until it is over. */
 async function parade(): Promise<void> {
   if (!rom) return;
-  parading = true;
+  romUp = true;
   try { await rom.fame(() => battleEl.classList.add('on')); } catch (e) { console.warn('spike fame failed', e); }
-  parading = false;
+  romUp = false;
   battleEl.classList.remove('on');
 }
 
@@ -1105,14 +1118,14 @@ const GBA_KEY: Record<string, GbaKey> = { up: 'up', down: 'down', left: 'left', 
 addEventListener('keydown', (e) => {
   const k = KEYMAP[e.key];
   if (k && asking) { if (!e.repeat) askKey(k); }
-  else if ((battle || swapping || parading) && rom && k) rom.press(GBA_KEY[k]);
+  else if ((battle || swapping || romUp) && rom && k) rom.press(GBA_KEY[k]);
 });
 addEventListener('keyup', (e) => { const k = KEYMAP[e.key]; if (rom && k) rom.release(GBA_KEY[k]); });
 for (const el of document.querySelectorAll<HTMLElement>('.k')) {
   const k = el.dataset.k!;
   el.addEventListener('pointerdown', () => {
     if (asking) askKey(k);
-    else if ((battle || swapping || parading) && rom) rom.press(GBA_KEY[k]);
+    else if ((battle || swapping || romUp) && rom) rom.press(GBA_KEY[k]);
   });
   el.addEventListener('pointerup', () => rom?.release(GBA_KEY[k]));
 }

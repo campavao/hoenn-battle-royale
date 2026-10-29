@@ -19,6 +19,7 @@
 #include "br/br_field.h"
 #include "br/br_gym.h"
 #include "br/br_levels.h"
+#include "br/br_moves.h"
 #include "br/br_wild.h"
 #include "br/br_zone.h"
 
@@ -135,6 +136,12 @@ static void StartBoss(void)
 
 void BrWild_Tick(void)
 {
+    if (gBrWildAsk.state == BR_WILD_ASKED_TEACH)
+    {
+        BrMoves_TeachSoon(gBrWildAsk.species);
+        gBrWildAsk.state = BR_WILD_DONE;
+        return;
+    }
     if (gBrWildAsk.state == BR_WILD_ASKED_SAFARI)
     {
         sSafari = TRUE;

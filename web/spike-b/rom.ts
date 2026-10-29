@@ -46,6 +46,8 @@ const WILD_ASKED = 1;
 const WILD_FIGHTING = 2;
 const WILD_DONE = 3;
 const WILD_ASKED_SAFARI = 4;
+/** br_wild.h's BR_WILD_ASKED_TEACH: arm the teach for the item in `species`. */
+const WILD_ASKED_TEACH = 5;
 // gBattleOutcome.
 const LOST = 2;
 // include/br/br_ring.h: BR_FOG_TICK_FRAMES.
@@ -137,6 +139,10 @@ export interface RomBattles {
    *  is used and a nugget sold as in a match). What went in, as the ROM filed it; `used`
    *  when it went on the team; null when it did not fit. */
   give(item: number, n: number): Promise<Given | null>;
+  /** A TM or a held item off the ground, as a match's pickup takes it (br_loot.c): into
+   *  the bag, then the party screen to teach it (the bag's GIVE screen to hold it) on
+   *  the ROM's own field, from `onStart` until it is back. What it made of it, as give. */
+  teach(item: number, onStart: () => void): Promise<Given | null>;
   /** What the trainer carries, as a bag left on the ground when they are out (POK-232):
    *  read in turn, after whatever was already going in. */
   spill(): Promise<{ items: { id: number; n: number }[]; money: number; mons: TeamRow[] }>;
@@ -821,6 +827,33 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     },
     give(item, n) {
       return inTurn(() => giveNow(item, n));
+    },
+    teach(item, onStart) {
+      return inTurn(async () => {
+        if (broken) return null;
+        const before = kept();
+        lay();
+        emu.resume();
+        // Armed first: BrMoves_TeachSoon counts the bag, and opens when the GIVE adds one.
+        emu.write(askAt + 4, item, 16);
+        emu.write(askAt, WILD_ASKED_TEACH, 8);
+        await until(emu, () => emu.read(askAt, 8) === WILD_DONE, 30);
+        send({ t: 'give', items: [{ id: item, n: 1 }] });
+        await until(emu, () => box.pending() === 0, 60);
+        const up = await until(emu, () => { drain(() => undefined); return !onField(); }, 180);
+        if (up) {
+          onStart();
+          await until(emu, () => { drain(() => undefined); return onField(); }, 60 * 300);
+        }
+        emu.pause();
+        const after = kept();
+        if (!emu.restore(parked!)) broken = true;
+        else keep(after);
+        carried = last = after;
+        const got = arrived(before, after);
+        const used = after.party.some((b, i) => b !== before.party[i]);
+        return got.items.length || got.money || used ? { ...got, used } : null;
+      });
     },
     money() {
       return inTurn(async () => moneyOf(carried ?? kept()));
