@@ -1,0 +1,34 @@
+# spill-own-held: going out with the out ring full still drops the bag (HBR-89). SpillOwn
+# put the bag on our own ground and sent nothing when BrWire_SendLarge found no room, so
+# the room never saw it and whoever took it got no GIVE: the items were gone. The spill
+# waits now, behind the held OUT, and goes when the page drains the ring.
+#
+# spill-own-items.txt's walk-out with POTION x3 and the POKe BALLs in the bag, and the ring full when the fog
+# finishes TREECKO: head 64, tail 0. No message is ever written to a slot while it is full.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 gPlayerPartyCount 1
+poke u32 *gSaveBlock2Ptr+0xAC 0
+pokebytes *gSaveBlock1Ptr+0x560 0D 00 03 00
+pokebytes *gSaveBlock1Ptr+0x650 04 00 05 00
+poke u16 gPlayerParty+0x56 2
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 2
+poke u16 gBrMailbox+0x08 64
+poke u16 gBrMailbox+0x0A 0
+waitfor u16 gPlayerParty+0x56 0 300
+wait 30
+expect u8 gBrMatch 3
+expect u16 gBrMailbox+0x08 64
+# the page drains the ring: the OUT goes, then the spill with its POTIONs
+poke u16 gBrMailbox+0x0A 64
+wait 10
+expectmsg 9 u8 0 0
+expectmsg 11 u8 3 1
+expectmsg 11 u8 20 2
+expectmsg 11 u16 21 13
+expectmsg 11 u8 23 3
+say spill own held ok

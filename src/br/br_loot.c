@@ -617,6 +617,15 @@ static void HandleGive(const u8 *payload, u8 len)
     count = d[0];
     if (count > 8 || (u16)(1 + 3 * count) > n)
         return;
+    // Out before it came: our own drop is being read out of the pockets a bag at a time
+    // (SendBag), so what was in this one goes back down as it was, in nobody's pockets.
+    if (gBrMatch.phase == BR_PHASE_OUT)
+    {
+        sListWait = 0;
+        if (sGivenBag.kind == BR_LOOT_BAG)
+            PutBack(d + 1, count, FALSE);
+        return;
+    }
     if (sListWait == 0 || sGivenBag.kind != BR_LOOT_BAG)
     {
         GiveRows(d + 1, count);
@@ -855,34 +864,114 @@ void BrLoot_TeamTaken(bool8 taken)
     sTeamTaken = taken;
 }
 
-// [seat, map, count, count*(key, x, y, species, level), hasBag, bagKey, bagX, bagY,
-// itemCount, money, nameLen, name] -- br_wire.h's BR_MSG_SPILL. The bag goes out with
-// the money and the name on it; its item list is the pickup ticket's business.
-void BrLoot_SpillOwn(void)
-{
-    u8 buf[96];
-    struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
-    s16 x, y;
-    u16 len = 0, key;
-    u8 count = 0, i, j;
-    u32 money;
+// A bag's item rows, as a SPILL carries them (br_wire.h: itemCount <= 8, n a u8), and
+// how much one row says: a stack's quantity on the BAG list.
+#define BR_SPILL_ITEMS 8
+#define BR_SPILL_ROW_MAX 99
 
-    // Team and bag on one cell, ours or the first free one round it: the team is in the
-    // bag (HBR-82), and the bag opens on POKeMON or BAG (TryTake).
-    DropCell(self->currentCoords.x, self->currentCoords.y, gBrMySeat, &x, &y);
+// What we were carrying, as a SPILL's item rows: the pockets a beaten trainer's BAG list
+// offers (HBR-82). Not the key items, and not the TMs (HBR-86). The page keeps the rows
+// for the match and GIVEs them to whoever takes the bag (match/session.ts giveBag): with
+// none, a human's bag was money alone and a bot's was not (HBR-87).
+// Rows `skip` on, at most a bag's worth: a stack over 99 is rows of 99 and the rest, and
+// the rows past one bag go in the next (HBR-88: nothing leaves the match, POK-294).
+static u8 PackOwnItems(u8 *out, u8 skip)
+{
+    static const u8 sPockets[] = { ITEMS_POCKET, BALLS_POCKET, BERRIES_POCKET };
+    u16 row = 0;
+    u8 count = 0, p, i;
+
+    for (p = 0; p < ARRAY_COUNT(sPockets) && count < BR_SPILL_ITEMS; p++)
+    {
+        struct BagPocket *pocket = &gBagPockets[sPockets[p]];
+
+        for (i = 0; i < pocket->capacity && count < BR_SPILL_ITEMS; i++)
+        {
+            u16 item = pocket->itemSlots[i].itemId;
+            u16 n = pocket->itemSlots[i].quantity ^ (u16)gSaveBlock2Ptr->encryptionKey;
+
+            if (item == ITEM_NONE)
+                continue;
+            while (n != 0 && count < BR_SPILL_ITEMS)
+            {
+                u8 take = n > BR_SPILL_ROW_MAX ? BR_SPILL_ROW_MAX : n;
+
+                n -= take;
+                if (row++ < skip)
+                    continue;
+                BrWire_WriteU16(out + 3 * count, item);
+                out[3 * count + 2] = take;
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
+// The drop SpillOwn started, sent a bag at a time as the out ring has room (HBR-89): the
+// next bag plus one, 0 when there is none to send. Sent with no room it was on our own
+// ground and nobody else's, and its taker got no GIVE. Where it went and whether the
+// team is in it are kept from the moment we went out. IWRAM: EWRAM is full.
+static u8 sSpillNext;
+static bool8 sSpillTeam;
+static u8 sSpillGroup, sSpillNum;
+static s16 sSpillX, sSpillY;
+static u8 sSpillCell; // sAround's next index for a bag past the first
+
+// A bag past the first goes on the next cell round it with nothing on it, while we are
+// still on the map it went down on; else on the first bag's own cell. Past the last one
+// used, not only past what our table shows: a full table drops a bag it was handed.
+static void NextBagCell(s16 *x, s16 *y)
+{
+    *x = sSpillX;
+    *y = sSpillY;
+    if (gSaveBlock1Ptr->location.mapGroup != sSpillGroup || gSaveBlock1Ptr->location.mapNum != sSpillNum)
+        return;
+    while (sSpillCell < ARRAY_COUNT(sAround))
+    {
+        s16 cx = sSpillX + sSpillDx[sAround[sSpillCell]];
+        s16 cy = sSpillY + sSpillDy[sAround[sSpillCell]];
+
+        sSpillCell++;
+        if (MapGridGetCollisionAt(cx, cy) == 0 && !OnWarp(cx, cy) && BrLoot_At(cx, cy) == NULL)
+        {
+            *x = cx;
+            *y = cy;
+            return;
+        }
+    }
+}
+
+// [seat, map, count, count*(key, x, y, species, level), hasBag, bagKey, bagX, bagY,
+// itemCount, itemCount*(id, n), money, nameLen, name] -- br_wire.h's BR_MSG_SPILL. The
+// first bag goes out with the team in it, the money and the name on it; one after it
+// with only the rows that did not fit, and the name. FALSE when there is nothing left.
+static bool8 SendBag(u8 bag)
+{
+    // header, team, bag flag + key + cell, itemCount, rows, money, name
+    u8 buf[4 + 9 * PARTY_SIZE + 7 + 1 + 3 * BR_SPILL_ITEMS + 4 + 1 + PLAYER_NAME_LENGTH];
+    s16 x = sSpillX, y = sSpillY;
+    u16 len = 0;
+    u8 count = 0, items, i, j, cell = sSpillCell;
+    u32 money = 0;
+
+    items = PackOwnItems(buf, bag * BR_SPILL_ITEMS); // to see that there is a bag at all
+    if (bag != 0 && items == 0)
+        return FALSE;
+    if (bag != 0)
+        NextBagCell(&x, &y);
     buf[len++] = gBrMySeat;
-    buf[len++] = gSaveBlock1Ptr->location.mapGroup;
-    buf[len++] = gSaveBlock1Ptr->location.mapNum;
+    buf[len++] = sSpillGroup;
+    buf[len++] = sSpillNum;
     len++; // count, filled in below
     // Beaten in a link fight, the team is the winner's to put down (BrLoot_WonFrom):
     // only the bag is ours to drop.
-    for (i = 0; i < PARTY_SIZE && !sTeamTaken; i++)
+    for (i = 0; i < PARTY_SIZE && bag == 0 && sSpillTeam; i++)
     {
         if (GetMonData(&gPlayerParty[i], MON_DATA_SPECIES, NULL) == SPECIES_NONE)
             break;
         // The key is ours alone for the match: our seat in the high byte.
-        key = BR_LOOT_KEY_OWN(gBrMySeat, count);
-        BrWire_WriteU16(buf + len, key);
+        BrWire_WriteU16(buf + len, BR_LOOT_KEY_OWN(gBrMySeat, count));
         BrWire_WriteU16(buf + len + 2, (u16)x);
         BrWire_WriteU16(buf + len + 4, (u16)y);
         BrWire_WriteU16(buf + len + 6, GetMonData(&gPlayerParty[i], MON_DATA_SPECIES, NULL));
@@ -892,12 +981,15 @@ void BrLoot_SpillOwn(void)
     }
     buf[3] = count;
     buf[len++] = 1;
-    BrWire_WriteU16(buf + len, BR_LOOT_KEY_BAG(gBrMySeat));
+    BrWire_WriteU16(buf + len, BR_LOOT_KEY_BAG_N(gBrMySeat, bag));
     BrWire_WriteU16(buf + len + 2, (u16)x);
     BrWire_WriteU16(buf + len + 4, (u16)y);
     len += 6;
-    buf[len++] = 0; // itemCount: the bag's contents ride with the pickup
-    money = GetMoney(&gSaveBlock1Ptr->money);
+    items = PackOwnItems(buf + len + 1, bag * BR_SPILL_ITEMS);
+    buf[len++] = items;
+    len += 3 * items;
+    if (bag == 0)
+        money = GetMoney(&gSaveBlock1Ptr->money);
     buf[len++] = money & 0xFF;
     buf[len++] = (money >> 8) & 0xFF;
     buf[len++] = (money >> 16) & 0xFF;
@@ -907,9 +999,48 @@ void BrLoot_SpillOwn(void)
     buf[len++] = i;
     for (j = 0; j < i; j++)
         buf[len++] = gSaveBlock2Ptr->playerName[j];
-    BrWire_SendLarge(BR_MSG_SPILL, buf, len);
+    // Behind anything held, the OUT before it above all (POK-232: the room hears the
+    // elimination first). No room is no harm: the next frame tries again.
+    if (!BrWire_Clear() || !BrWire_SendLarge(BR_MSG_SPILL, buf, len))
+    {
+        sSpillCell = cell; // the same cell when it does go
+        return TRUE;
+    }
     // Nobody hears their own message come back off the relay, so put ours down here.
     ParseSpill(buf, len);
+    sSpillNext++;
+    return TRUE;
+}
+
+// What is left of the drop, as far as the out ring takes it this frame.
+static void SendSpill(void)
+{
+    u8 bag;
+
+    while (sSpillNext != 0 && sSpillNext <= BR_LOOT_BAGS)
+    {
+        bag = sSpillNext - 1;
+        if (!SendBag(bag))
+            break;
+        if (sSpillNext == bag + 1)
+            return; // no room: the rest waits for the ring
+    }
+    sSpillNext = 0;
+}
+
+void BrLoot_SpillOwn(void)
+{
+    struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
+
+    // Team and bag on one cell, ours or the first free one round it: the team is in the
+    // bag (HBR-82), and the bag opens on POKeMON or BAG (TryTake).
+    DropCell(self->currentCoords.x, self->currentCoords.y, gBrMySeat, &sSpillX, &sSpillY);
+    sSpillGroup = gSaveBlock1Ptr->location.mapGroup;
+    sSpillNum = gSaveBlock1Ptr->location.mapNum;
+    sSpillTeam = !sTeamTaken;
+    sSpillCell = 0;
+    sSpillNext = 1;
+    SendSpill();
 }
 
 // ---- taking it ----------------------------------------------------------------
@@ -1593,10 +1724,11 @@ static void HoldLineForReach(void)
 static struct BrLootItem sChosen;
 
 // A trainer's own bag, dropped going out or put back by a taker: its key's low byte 0xFF
-// in a seat's space. A TM forgotten is a bag of one, and is still one press.
+// in a seat's space, or one under it for a drop that took more than one (HBR-88). A TM
+// forgotten is a bag of one, and is still one press.
 static bool8 TrainersBag(const struct BrLootItem *it)
 {
-    return it->kind == BR_LOOT_BAG && it->key < 0x2000 && (it->key & 0xFF) == 0xFF && !OneThing(it);
+    return it->kind == BR_LOOT_BAG && BR_LOOT_IS_OWN_BAG(it->key) && !OneThing(it);
 }
 
 // The bag taken, and its GIVE shown as a list (HandleGive) rather than poured in.
@@ -2470,6 +2602,7 @@ void BrLoot_Init(void)
     BrGym_Init();
     sGivenBag.kind = BR_LOOT_NONE;
     sGiveBackLen = 0;
+    sSpillNext = 0;
     sListWait = 0;
     sListReady = FALSE;
     sSpoilsState = BR_SPOILS_NONE;
@@ -2499,6 +2632,8 @@ void BrLoot_Tick(void)
 {
     u8 i, n, count = 0, spawned = 0, ghosts, limit, keep, shown;
 
+    if (sSpillNext != 0)
+        SendSpill(); // what a full ring held of our own drop (HBR-89)
     if (sGiveBackLen != 0)
         SendGiveBack(); // before TryTake below can put a PICKUP in front of it
     if (sListWait != 0 || sListReady)

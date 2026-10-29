@@ -1,0 +1,31 @@
+# give-after-out: a bag's GIVE that lands after we went out goes back down as the bag, in
+# nobody's pockets (HBR-88 review). Our own drop is read out of the pockets a bag at a
+# time when the ring is full (SendBag), so a GIVE poured in between would send a row twice
+# or not at all.
+#
+# bag-take-all.txt's ground: seat 3's bag on the cell we face, taken, then out before its
+# GIVE (ORAN BERRY x2) arrives.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x1018 0B 14 11 00 00 03 00 09 00 01 FF 03 0C 00 11 00 00 64 00 00 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrLoot+0xA0 1
+tap A
+wait 20
+expect u8 gBrLoot+0xA2 1
+expectmsg 10 u16 1 0x03FF
+poke u8 gBrMatch 3
+# GIVE [count 1] (ORAN BERRY x2)
+pokebytes gDecompressionBuffer 01 8B 00 02
+mailsend gBrMailbox 30 gDecompressionBuffer 4
+wait 40
+# not in the pocket, and back on the ground as seat 3's bag with its berries
+expect u16 *gSaveBlock1Ptr+0x790 0
+expectmsg 11 u16 5 0x03FF
+expectmsg 11 u8 11 1
+expectmsg 11 u16 12 139
+expectmsg 11 u8 14 2
+say give after out ok

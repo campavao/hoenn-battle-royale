@@ -67,6 +67,10 @@
 #define BR_LOOT_KEY_SEAT(key) (((key) >> 8) & 0x1F)
 #define BR_LOOT_KEY_OWN(seat, n) ((u16)(((seat) << 8) | (n)))
 #define BR_LOOT_KEY_BAG(seat) BR_LOOT_KEY_OWN(seat, 0xFF)
+// A drop too big for one bag goes in more (HBR-88): 0xFF, then 0xFE down, eight at most.
+#define BR_LOOT_BAGS 8
+#define BR_LOOT_KEY_BAG_N(seat, n) BR_LOOT_KEY_OWN(seat, 0xFF - (n))
+#define BR_LOOT_IS_OWN_BAG(key) ((key) < 0x2000 && ((key) & 0xFF) >= 0x100 - BR_LOOT_BAGS)
 #define BR_LOOT_KEY_RELEASED(seat, n) ((u16)(BR_LOOT_KEY_FREED | ((seat) << 8) | (n)))
 #define BR_LOOT_KEY_TRAINER(slot, trainerId) ((u16)(BR_LOOT_KEY_NOBODY | ((slot) << 11) | (trainerId)))
 #define BR_LOOT_KEY_ZONE_ITEM(i) ((u16)(BR_LOOT_KEY_NOBODY | 0x0F00 | (i)))

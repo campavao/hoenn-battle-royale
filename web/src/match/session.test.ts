@@ -14,7 +14,7 @@ import regionmapData from '../data/regionmap.json';
 import { Bridge } from '../net/bridge';
 import { fakeEmulator, fakeRelay, memoryStore } from '../net/fakes.testutil';
 import type { RosterEvent } from '../net/relay';
-import { BR_CONT_FLAG, reassembleSlots, unpackSlot, type BinarySlot } from '../net/slots';
+import { BR_CONT_FLAG, BR_MSG, reassembleSlots, unpackSlot, type BinarySlot } from '../net/slots';
 import { PROTOCOL, type MapRef, type Msg, type NpcOutMsg, type PackedMon, type SpillMsg, type StartMsg, type TickerMsg } from '../net/wire';
 import type { MatchTally } from './tally';
 
@@ -353,6 +353,26 @@ describe("one match's books (POK-330 #42)", () => {
     session.note({ t: 'pickup', seat: 0, key: spill.bag!.key }, 'rom');
     expect(toRom).toEqual([{ t: 'give', items: [{ id: 13, n: 1 }, { id: 75, n: 1 }] }]);
     expect(session.loot.forMap(ROUTE_101)).toEqual([]);
+  });
+
+  // HBR-87: a human's bag is what their own ROM spilled going out. The payload is the
+  // one spill-own-items.txt reads off BrLoot_SpillOwn: seat 0's TREECKO, then a bag of
+  // POTION x3, ANTIDOTE x1, POKe BALL x5 and ORAN BERRY x2 (the money set to 3000; the driver's
+  // zeroed key scrambles it). Before, its itemCount was 0
+  // and the taker got the money alone.
+  it("gives the taker a fallen player's items off the spill their ROM sent", () => {
+    const { session, toRom } = books({ mySeat: () => 7 }); // the taker
+    const payload = Uint8Array.from([
+      0x00, 0x00, 0x09, 0x01, 0x00, 0x00, 0x0c, 0x00, 0x10, 0x00, 0x15, 0x01, 0x05, 0x01, 0xff, 0x00, 0x0c, 0x00, 0x10,
+      0x00, 0x04, 0x0d, 0x00, 0x03, 0x0e, 0x00, 0x01, 0x04, 0x00, 0x05, 0x8b, 0x00, 0x02, 0xb8, 0x0b, 0x00, 0x00, 0x03,
+      0xbd, 0xbb, 0xc7,
+    ]);
+    const spill = unpackSlot(BR_MSG.SPILL, payload) as SpillMsg;
+    session.note(spill, { from: 0 });
+    session.note({ t: 'pickup', seat: 7, key: spill.bag!.key }, 'rom');
+    expect(toRom).toEqual([
+      { t: 'give', items: [{ id: 13, n: 3 }, { id: 14, n: 1 }, { id: 4, n: 5 }, { id: 139, n: 2 }] },
+    ]);
   });
 
   it('hands our own ROM the loot where it stands, once per map it arrives on', () => {
