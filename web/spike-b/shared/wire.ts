@@ -10,6 +10,8 @@ export type WorldUp =
   | { t: 'join'; name: string; skin: number; code?: string; host?: boolean; again?: Again }
   /** START (the room's host): the match begins for everybody in the room. */
   | { t: 'start' }
+  /** The host's settings for the room's next match (the live room's options). */
+  | { t: 'set'; set: Partial<Settings> }
   /** LOBBIES: the rooms somebody hosted, answered by `rooms` (before a join, or in one). */
   | { t: 'list' }
   /** My keys for frames `s`, `s`+1, ... (numbered from 1, never reset). */
@@ -57,14 +59,18 @@ export interface Again { code: string; id: number; key: string }
 /** A trainer in a room, as the roster shows them. */
 export interface Member { id: number; name: string; skin: number }
 
-/** Relay to phone. */
+/** What the host sets for a match (the live room's options): bots in it or none, how
+ *  long a ring phase lasts (FOG), and the Safari it opens with (0: none). */
+export interface Settings { bots: boolean; fogSecs: number; safariSecs: number }
+
 /** A room on LOBBIES' list. */
 export interface Listed { code: string; host: string; skin: number; players: number; seats: number; playing: boolean }
 
+/** Relay to phone. */
 export type WorldDown =
   /** The room as it is now, whenever anything in it changes: its code, who is in it, who
    *  has START (`owner`), whether a match is on, and a quick room's count to its start. */
-  | { t: 'room'; code: string; quick: boolean; you: number; owner: number; members: Member[]; playing: boolean; startsIn?: number }
+  | { t: 'room'; code: string; quick: boolean; you: number; owner: number; members: Member[]; playing: boolean; startsIn?: number; set: Settings }
   /** The hosted rooms (LOBBIES): whose, how many in it of ROOM_MAX, and whether its
    *  match is on (joining one under way watches it until the next). */
   | { t: 'rooms'; rooms: Listed[] }

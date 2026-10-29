@@ -15,10 +15,11 @@ import type { WorldMap } from '../../src/bots/world';
 import type { PatchTable } from '../../src/bots/patches';
 import { CODE_ALPHABET, CODE_LENGTH } from '../../src/match/lobby';
 import { Host } from './host';
-import { makeRoom } from './room';
+import { RING_PHASE, makeRoom } from './room';
+import { FOG_STEPS, SAFARI_STEPS } from '../../src/match/room';
 import { cleanBag } from './items';
 import { over } from './over';
-import { HASH_EVERY, type Again, type Listed, type Member, type SpMsg, type WireFrame, type WorldDown, type WorldUp } from './wire';
+import { HASH_EVERY, type Again, type Listed, type Member, type Settings, type SpMsg, type WireFrame, type WorldDown, type WorldUp } from './wire';
 
 export interface Link { send(text: string): void; close(): void }
 export interface Session { onText(text: string): void; onClose(): void }
@@ -94,6 +95,8 @@ interface Lobby {
   t0: number;
   /** Each fighter's published battle, by who publishes it. */
   streams: Map<number, Stream>;
+  /** The host's settings for its next match. */
+  set: Settings;
 }
 
 export class WorldService {
@@ -148,6 +151,14 @@ export class WorldService {
         const host = room.host;
         if (m.t === 'start') {
           if (!host && (phone.id === room.owner)) this.start(room);
+        } else if (m.t === 'set') {
+          if (!host && phone.id === room.owner && !room.quick && m.set && typeof m.set === 'object') {
+            const s = m.set;
+            if (typeof s.bots === 'boolean') room.set.bots = s.bots;
+            if (FOG_STEPS.includes(s.fogSecs as number)) room.set.fogSecs = s.fogSecs as number;
+            if (SAFARI_STEPS.includes(s.safariSecs as number)) room.set.safariSecs = s.safariSecs as number;
+            this.roster(room);
+          }
         } else if (!host) {
           return;
         } else if (m.t === 'in') {
@@ -290,7 +301,9 @@ export class WorldService {
       code = '';
       for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
     } while (this.rooms.has(code));
-    const room: Lobby = { code, quick, owner: 0, members: new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: new Map() };
+    const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
+    const set: Settings = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs };
+    const room: Lobby = { code, quick, owner: 0, members: new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: new Map(), set };
     this.rooms.set(code, room);
     return room;
   }
@@ -299,9 +312,9 @@ export class WorldService {
   private start(room: Lobby): void {
     const seed = (Math.floor(Math.random() * 0xfffffffe) + 1) >>> 0;
     const r = makeRoom(this.opts.maps, this.opts.patches, seed);
-    if (this.opts.ringSecs) r.ringPhase = Math.round(this.opts.ringSecs * 60);
-    r.opening = this.opts.safariSecs !== undefined ? Math.round(this.opts.safariSecs * 60) : r.ringPhase;
-    const host = new Host(r, this.opts.bots, this.opts.maps);
+    r.ringPhase = Math.round(room.set.fogSecs * 60);
+    r.opening = Math.round(room.set.safariSecs * 60);
+    const host = new Host(r, room.set.bots ? this.opts.bots : 0, this.opts.maps);
     for (const p of room.members.values()) { host.join(p.name, p.skin, undefined, p.id); p.heard = room.t0 = this.opts.now(); }
     host.lock();
     room.host = host;
@@ -377,6 +390,7 @@ export class WorldService {
       this.send(p.link, {
         t: 'room', code: room.code, quick: room.quick, you: p.id, owner: room.owner, members, playing: !!room.host,
         ...(room.startsAt !== null ? { startsIn: Math.max(0, room.startsAt - now) } : {}),
+        set: room.set,
       });
     }
   }

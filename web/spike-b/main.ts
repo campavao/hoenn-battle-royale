@@ -2022,6 +2022,7 @@ async function boot(): Promise<void> {
     lobby = new Lobby({
       join: (how) => sock.join(me().name, me().skin, how),
       start: () => sock.start(),
+      set: (set) => sock.set(set),
       list: () => sock.list(),
       relayUrl: url.replace(/\/world$/, ''),
       leave: () => location.reload(),

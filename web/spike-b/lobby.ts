@@ -16,15 +16,18 @@ import { lookScreen, statsScreen, trainerScreen } from '../src/ui/profile';
 import type { TallyNames } from '../src/match/tally';
 import { feedbackScreen, type FeedbackState } from '../src/ui/feedback';
 import { cleanNote, sendFeedback } from '../src/net/feedback';
-import type { Listed, Member } from './shared/wire';
+import type { Listed, Member, Settings } from './shared/wire';
+import { FOG_STEPS, SAFARI_STEPS, levelOf, nextFog, nextSafari, safariLabel } from '../src/match/room';
 
 /** The room as the relay last said it is (wire.ts's `room`). */
-export interface RoomInfo { code: string; quick: boolean; you: number; owner: number; members: Member[]; playing: boolean; startsIn?: number }
+export interface RoomInfo { code: string; quick: boolean; you: number; owner: number; members: Member[]; playing: boolean; startsIn?: number; set: Settings }
 
 export interface LobbyHooks {
   /** Into a room: by code, a new one of my own, or quick play's. */
   join(how: { code?: string; host?: boolean }): void;
   start(): void;
+  /** The host changed a setting for the room's next match. */
+  set(set: Partial<Settings>): void;
   /** Out of the room, back to the menu. */
   leave(): void;
   /** LOBBIES: ask the relay for its hosted rooms (answered through `listed`). */
@@ -274,7 +277,13 @@ export class Lobby {
       canStart: isHost && !r.playing,
       startLabel: 'START',
       countdown: left === null ? null : Math.ceil(left),
-      options: null,
+      // The host's, in a room of their own (a quick room's are the relay's): the live
+      // room's BOTS, FOG and SAFARI.
+      options: isHost && !r.quick ? [
+        { id: 'room-fill', label: r.set.bots ? 'BOTS ON' : 'BOTS OFF', visual: { kind: 'toggle', on: r.set.bots }, onPress: () => this.hooks.set({ bots: !r.set.bots }) },
+        { id: 'room-fog', label: `FOG ${r.set.fogSecs}s`, visual: { kind: 'level', ...levelOf(FOG_STEPS, r.set.fogSecs), clock: true }, onPress: () => this.hooks.set({ fogSecs: nextFog(r.set.fogSecs) }) },
+        { id: 'room-safari', label: safariLabel(r.set.safariSecs), visual: { kind: 'level', ...levelOf(SAFARI_STEPS, r.set.safariSecs, true), clock: true }, onPress: () => this.hooks.set({ safariSecs: nextSafari(r.set.safariSecs) }) },
+      ] : null,
       card: null,
       onStart: () => this.hooks.start(),
       onLeave: () => this.hooks.leave(),

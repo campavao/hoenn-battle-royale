@@ -56,6 +56,30 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it("the host's BOTS, FOG and SAFARI make the match; nobody else's", () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 3, cap: 30, now: () => 0, log: () => undefined });
+    try {
+      const a = phone(), g = phone();
+      const sa = svc.open(a.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      const sg = svc.open(g.link);
+      sg.onText(JSON.stringify({ t: 'join', name: 'gus', skin: 0, code }));
+      expect(g.got.at(-1)).toMatchObject({ t: 'room', set: { bots: true, fogSecs: 120, safariSecs: 120 } });
+      sg.onText(JSON.stringify({ t: 'set', set: { bots: false } }));
+      expect(g.got.at(-1)).toMatchObject({ set: { bots: true } });
+      sa.onText(JSON.stringify({ t: 'set', set: { bots: false, fogSecs: 60, safariSecs: 0 } }));
+      sa.onText(JSON.stringify({ t: 'set', set: { fogSecs: 7 } })); // not a step: ignored
+      expect(g.got.at(-1)).toMatchObject({ set: { bots: false, fogSecs: 60, safariSecs: 0 } });
+      sa.onText(JSON.stringify({ t: 'start' }));
+      const hello = g.got.find((m) => m.t === 'hello') as unknown as { state: { ringPhase?: number; opening?: number; actors: { bot: boolean }[] } };
+      expect(hello.state.ringPhase).toBe(3600);
+      expect(hello.state.opening).toBeUndefined();
+      expect(hello.state.actors.filter((x) => x.bot)).toHaveLength(0);
+    } finally {
+      svc.stop();
+    }
+  });
   it('a reload within a minute is the same trainer; later, it watches', () => {
     // Bots on the map keep the match going after bob is the last trainer left.
     let t = 0;

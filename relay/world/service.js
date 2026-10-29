@@ -3456,6 +3456,10 @@ var Host = class {
   }
 };
 
+// web/src/match/room.ts
+var FOG_STEPS = [30, 60, 90, 120, 180];
+var SAFARI_STEPS = [0, 60, 120, 180];
+
 // web/spike-b/shared/over.ts
 function over(room) {
   const r = room.results;
@@ -3552,6 +3556,14 @@ var WorldService = class {
         const host = room.host;
         if (m.t === "start") {
           if (!host && phone.id === room.owner) this.start(room);
+        } else if (m.t === "set") {
+          if (!host && phone.id === room.owner && !room.quick && m.set && typeof m.set === "object") {
+            const s = m.set;
+            if (typeof s.bots === "boolean") room.set.bots = s.bots;
+            if (FOG_STEPS.includes(s.fogSecs)) room.set.fogSecs = s.fogSecs;
+            if (SAFARI_STEPS.includes(s.safariSecs)) room.set.safariSecs = s.safariSecs;
+            this.roster(room);
+          }
         } else if (!host) {
           return;
         } else if (m.t === "in") {
@@ -3682,7 +3694,9 @@ var WorldService = class {
       code = "";
       for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
     } while (this.rooms.has(code));
-    const room = { code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map() };
+    const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
+    const set = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs };
+    const room = { code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map(), set };
     this.rooms.set(code, room);
     return room;
   }
@@ -3690,9 +3704,9 @@ var WorldService = class {
   start(room) {
     const seed = Math.floor(Math.random() * 4294967294) + 1 >>> 0;
     const r = makeRoom(this.opts.maps, this.opts.patches, seed);
-    if (this.opts.ringSecs) r.ringPhase = Math.round(this.opts.ringSecs * 60);
-    r.opening = this.opts.safariSecs !== void 0 ? Math.round(this.opts.safariSecs * 60) : r.ringPhase;
-    const host = new Host(r, this.opts.bots, this.opts.maps);
+    r.ringPhase = Math.round(room.set.fogSecs * 60);
+    r.opening = Math.round(room.set.safariSecs * 60);
+    const host = new Host(r, room.set.bots ? this.opts.bots : 0, this.opts.maps);
     for (const p of room.members.values()) {
       host.join(p.name, p.skin, void 0, p.id);
       p.heard = room.t0 = this.opts.now();
@@ -3772,7 +3786,8 @@ var WorldService = class {
         owner: room.owner,
         members,
         playing: !!room.host,
-        ...room.startsAt !== null ? { startsIn: Math.max(0, room.startsAt - now) } : {}
+        ...room.startsAt !== null ? { startsIn: Math.max(0, room.startsAt - now) } : {},
+        set: room.set
       });
     }
   }

@@ -17,7 +17,7 @@ import type { PatchTable } from '../src/bots/patches';
 import { tick } from './sim';
 import { Host, play } from './shared/host';
 import { keysOf, makeRoom, type Actor, type Bag, type Room, type RoomEvent } from './shared/room';
-import type { Again, Listed, SpMsg, WireFrame, WorldDown, WorldUp } from './shared/wire';
+import type { Again, Listed, Settings, SpMsg, WireFrame, WorldDown, WorldUp } from './shared/wire';
 
 export interface WorldLink {
   readonly room: Room;
@@ -259,6 +259,8 @@ export interface WorldSocket {
   start(): void;
   /** LOBBIES: ask for the hosted rooms (`onRooms`). */
   list(): void;
+  /** The host's settings for the room's next match. */
+  set(set: Partial<Settings>): void;
   close(): void;
 }
 
@@ -281,7 +283,7 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
     else queue.push(m);
   };
   try { ws = new WebSocket(url); } catch { ws = null; }
-  if (!ws) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, list: () => undefined, close: () => undefined }; }
+  if (!ws) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, list: () => undefined, set: () => undefined, close: () => undefined }; }
   const sock = ws;
   sock.addEventListener('open', () => { for (const m of queue.splice(0)) sock.send(JSON.stringify(m)); });
   sock.addEventListener('close', () => { if (!closed) { closed = true; h.onClosed(); } });
@@ -302,6 +304,7 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
     join: (name, skin, how) => send({ t: 'join', name, skin, ...how }),
     start: () => send({ t: 'start' }),
     list: () => send({ t: 'list' }),
+    set: (set) => send({ t: 'set', set }),
     close: () => { closed = true; sock.close(); },
   };
 }
