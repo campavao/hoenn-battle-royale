@@ -19,6 +19,7 @@ import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } 
 import { PROTOCOL, type Dir, type Msg, type PackedMon } from '../src/net/wire';
 import { loadCheckedRelease } from '../src/release';
 import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, rekey, spillOf, teamOf, withMoney } from './carry';
+import { startMenuTable } from '../src/touch';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 
 const BOOT_MAP_TESTMON = 0x81;
@@ -41,9 +42,10 @@ const LOST = 2;
 // include/br/br_ring.h: BR_FOG_TICK_FRAMES.
 const FOG_TICK = 240;
 /** gBrRing's first ten bytes (active, phase, cx, cy, r, outside, applied, out,
- *  damageTimer): fog everywhere (r = 0xFF, -1), and no ring at all. */
-const FOGGED = [1, 1, 0, 0, 0xff, 0, 0, 0, FOG_TICK & 0xff, FOG_TICK >> 8];
-const CLEAR = [0, 0, 0, 0, 0, 0, 0, 0, FOG_TICK & 0xff, FOG_TICK >> 8];
+ *  damageTimer) at the match's ring phase: fog everywhere (r = 0xFF, -1), or a ring so
+ *  wide nothing is outside it (r = 127 sections). The phase is the level rung (br_levels.c
+ *  BrLevels_Tick): the party lifted to it on the field, a wild one rolled at it. */
+const ringBytes = (phase: number, fog: boolean) => [1, phase, 0, 0, fog ? 0xff : 0x7f, 0, 0, 0, FOG_TICK & 0xff, FOG_TICK >> 8];
 const DREW = 3;
 /** How long the last fight took to start: from the TRAINER card to the battle running. */
 export let lastStart: { ms: number; frames: number } | null = null;
@@ -74,6 +76,9 @@ export interface RomBattles {
   /** The trainer we are fighting went out (left, or the fog took them): the fight is ours
    *  (BrNetlink_PeerOut). */
   foeOut(): void;
+  /** The match's ring phase (1 the first, as the host numbers them): the level rung every
+   *  battle from now on starts at. */
+  setPhase(phase: number): void;
   /** The fog's bite between battles (br_ring.c Bleed): a tenth of each mon's max HP, at
    *  least 1, a fainted one's status cleared. How many are still standing. */
   bleed(): Promise<number>;
@@ -93,6 +98,15 @@ export interface RomBattles {
    *  Ours on the left, theirs on the right, picks moved across. Resolves, back on the
    *  field, with the team left in the bag. `onStart` is when the screen is up. */
   team(mons: TeamRow[], name: string, onStart: () => void): Promise<TeamRow[]>;
+  /** The START menu's row `action` (start_menu.c's MENU_ACTION_*: POKeMON 1, BAG 2, the
+   *  trainer card 4), opened the way the match's PARTY button opens it (touch.ts): START,
+   *  the cursor walked to the row, A -- all on the hidden field, the page keeping the
+   *  screen until the row's own screen is up (`onStart`). Resolves back on the field, with
+   *  whatever was used or moved kept. False when the row would not open. */
+  menu(action: number, onStart: () => void, onEnd: () => void): Promise<boolean>;
+  /** A screen the page put up (menu, team) closes now: B until it is back on the field
+   *  (a challenge closes a menu in the match, br_netlink.c). */
+  leave(): void;
   /** Money out of somebody's bag (br_loot.c's Take pays it). */
   addMoney(n: number): Promise<void>;
   press(k: GbaKey): void;
@@ -156,6 +170,7 @@ function applyPatch(source: Uint8Array, patch: Uint8Array): Promise<Uint8Array> 
 }
 
 export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promise<RomBattles> {
+  const startMenu = startMenuTable(rom, sym('gBrStartMenu'));
   await emu.startBytes(rom);
   const box = new Mailbox(emu, sym('gBrMailbox'));
 
@@ -179,12 +194,14 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   if (!parked) throw new Error('the core would not save a state');
 
   const fightAt = sym('gBrBotFight');
+  const menuCbAt = sym('gMenuCallback');
   const netAt = sym('gBrNetlink');
   const askAt = sym('gBrWildAsk');
   const mainFunc = sym('gBattleMainFunc');
   const outcomeAt = sym('gBattleOutcome');
   const catchAt = sym('gBrCatch');
   const ringAt = sym('gBrRing');
+  const levelsAt = sym('gBrLevels');
   const mainAt = sym('gMain');
   const overworldCb = sym('CB2_Overworld');
   const objectsAt = sym('gObjectEvents');
@@ -205,6 +222,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       dex: emu.bytes(s2 + DEX2_AT, DEX2_LEN).slice(),
       seen1: emu.bytes(s1 + SEEN1_AT, SEEN_LEN).slice(),
       seen2: emu.bytes(s1 + SEEN2_AT, SEEN_LEN).slice(),
+      // The rung the party was lifted to, and the rod it holds for it (br_levels.c).
+      levels: emu.bytes(levelsAt, 8).slice(),
     };
   };
   const keep = (k: ReturnType<typeof kept>) => {
@@ -215,6 +234,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     emu.bytes(s2 + DEX2_AT, DEX2_LEN).set(k.dex);
     emu.bytes(s1 + SEEN1_AT, SEEN_LEN).set(k.seen1);
     emu.bytes(s1 + SEEN2_AT, SEEN_LEN).set(k.seen2);
+    emu.bytes(levelsAt, 8).set(k.levels);
   };
   const send = (msg: Parameters<typeof packSlot>[0]) => {
     for (const s of packSlot(msg)) box.push(s.type, s.payload);
@@ -237,6 +257,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
    *  never before, so the hidden field never shows through. */
   let broken = false;
   let fighting = false;
+  let phase = 1;
+  /** The ring as the ROM should see it on its field or in a battle. */
+  const lay = (fog = false, at = phase) => emu.bytes(ringAt, 10).set(ringBytes(at, fog));
   // The trainer a duel is with left before its turn on the ROM came.
   let foeLeft = false;
   let carried: ReturnType<typeof kept> | null = null;
@@ -244,6 +267,19 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   // is what they had at the end, not the bag a loss puts the team back to (as BrMatch_Out
   // reads it, after the battle).
   let last: ReturnType<typeof kept> | null = null;
+  // A screen the page opened (a menu row, a bag's team) asked to close.
+  let leaving = false;
+  const onField = () => ((emu.read(mainAt + 4, 32) & ~1) >>> 0) === overworldCb;
+  /** Until the screen the player is on is closed and the field has settled: B a few times
+   *  a second once leave() asks for it. */
+  const backOnField = async () => {
+    let n = 0;
+    await until(emu, () => {
+      if (leaving && !(n++ % 12)) { emu.press('b'); } else if (leaving && n % 12 === 4) emu.release('b');
+      return onField();
+    }, Infinity);
+    emu.release('b');
+  };
   // One thing at a time on the ROM: a battle asked for while an item goes in waits for it.
   let queue: Promise<unknown> = Promise.resolve();
   const inTurn = <T>(f: () => Promise<T>): Promise<T> => {
@@ -260,7 +296,11 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     // map is outside it. The fog hurts each mon on the field a tenth at every turn's end
     // and can knock it out, as in every fog battle (BrRing_FogEndTurn, HBR-11). None: no
     // ring. The ROM asks the ring again each turn, so fogNow() reaches a battle under way.
-    emu.bytes(ringAt, 10).set(fog ? FOGGED : CLEAR);
+    // The rung the fight starts at is the rung it ends at: a phase that moves meanwhile
+    // lifts the party at the next thing on the ROM, not on the field the loss left
+    // (lifted there, after the OUT, the team came back a bad egg).
+    const at = phase;
+    lay(fog, at);
     fighting = true;
     emu.resume();
     const t0 = performance.now();
@@ -283,7 +323,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       // The ring is the battle's: back on the field nothing of it is left to bleed the
       // hidden ROM's party while a catch prompt waits.
       fighting = false;
-      emu.bytes(ringAt, 10).set(CLEAR);
+      lay(false, at);
       result = { ok: true, ...after() };
       // A catch with a full party: back on its field the ROM asks which one makes room
       // (br_catch.c). The player answers it on the ROM's screen, as in a match.
@@ -392,8 +432,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       if (fighting && !broken) send({ t: 'out', seat: FOE_SEAT });
       else foeLeft = true;
     },
+    setPhase(p) { phase = Math.max(1, Math.min(255, p | 0)); },
     fogNow() {
-      if (fighting && !broken && emu.read(ringAt, 8) === 0) emu.bytes(ringAt, 10).set(FOGGED);
+      if (fighting && !broken && emu.read(ringAt + 4, 8) !== 0xff) lay(true);
     },
     spill() {
       return inTurn(async () => {
@@ -413,6 +454,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     team(mons, name, onStart) {
       return inTurn(async () => {
         if (broken || !mons.length) return mons;
+        leaving = false;
+        lay();
         emu.resume();
         drain(() => undefined); // anything older is not this bag's
         // The bag where the hidden trainer faces, the team in it: the match's own SPILL,
@@ -450,7 +493,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
           // B closes it; back on the field the box settles (SettleBoxes): a PICKUP for
           // each of theirs taken, a SPILL for any of ours put down.
           map = false;
-          await until(emu, () => ((emu.read(mainAt + 4, 32) & ~1) >>> 0) === overworldCb, Infinity);
+          await backOnField();
           await until(emu, () => map, 600);
           await frames(emu, 10);
         }
@@ -463,11 +506,64 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         return [...mons.filter((_, i) => !taken.has(keys[i])), ...put];
       });
     },
+    menu(action, onStart, onEnd) {
+      return inTurn(async () => {
+        if (broken || !startMenu) return false;
+        leaving = false;
+        lay();
+        emu.resume();
+        drain(() => undefined);
+        const watch = emu.onFrame(() => drain(() => undefined));
+        const tap = async (k: GbaKey) => { emu.press(k); await frames(emu, 3); emu.release(k); await frames(emu, 3); };
+        let up = false;
+        await tap('start');
+        // Taking keys once its handler is in gMenuCallback and its text is drawn.
+        if (await until(emu, () => emu.read(menuCbAt, 32) === startMenu.input, 90)) {
+          await frames(emu, 12);
+          const count = emu.read(startMenu.count, 8);
+          const rows = Array.from({ length: count }, (_, i) => emu.read(startMenu.actions + i, 8));
+          const target = rows.indexOf(action);
+          for (let i = 0; target >= 0 && i < count && emu.read(startMenu.cursor, 8) !== target; i++) {
+            const cur = emu.read(startMenu.cursor, 8);
+            const down = (target - cur + count) % count;
+            await tap(down <= count - down ? 'down' : 'up');
+          }
+          if (target >= 0 && emu.read(startMenu.cursor, 8) === target) {
+            await tap('a');
+            up = !leaving && await until(emu, () => !onField(), 120);
+          }
+        }
+        if (up) {
+          onStart();
+          await backOnField();
+          // Out of the row's screen the game puts the START menu back up, on the hidden
+          // field: the page takes the screen now, and B shuts the menu out of sight.
+          onEnd();
+          // It takes keys once its handler is back and its text drawn (touch.ts's
+          // START_SETTLE_FRAMES).
+          if (await until(emu, () => emu.read(menuCbAt, 32) === startMenu.input, 60)) {
+            await frames(emu, 12);
+            await tap('b');
+          }
+        }
+        await frames(emu, 10);
+        watch();
+        emu.pause();
+        const now = kept();
+        if (!emu.restore(parked!)) broken = true;
+        else keep(now);
+        carried = last = now;
+        leaving = false;
+        return up;
+      });
+    },
+    leave() { leaving = true; },
     give(item, n) {
       return inTurn(async () => {
         if (broken) return null;
         const before = kept();
         // br_loot.c's HandleGive: straight into AddBagItem when no bag of ours is waiting.
+        lay();
         emu.resume();
         send({ t: 'give', items: [{ id: item, n }] });
         await until(emu, () => box.pending() === 0, 60);
