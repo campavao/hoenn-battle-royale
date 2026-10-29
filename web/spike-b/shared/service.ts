@@ -90,7 +90,8 @@ interface Phone {
   watching: number;
   /** Their career, as their page said it (a seat's card). */
   rec?: CardRecord;
-  /** The host took them out: the socket's next join starts afresh. */
+  /** Out of the room (the host's KICK, or their own LEAVE): the socket's next join
+   *  starts afresh. */
   kicked?: boolean;
 }
 
@@ -182,6 +183,9 @@ export class WorldService {
             else if (s.door === 'pass' && typeof s.pass === 'string' && isPass(s.pass)) { room.set.door = 'pass'; room.pass = s.pass.toUpperCase(); }
             this.roster(room);
           }
+        } else if (m.t === 'leave') {
+          this.drop(phone);
+          phone.kicked = true;
         } else if (m.t === 'kick') {
           const p = room.members.get(Number(m.id));
           if (host || phone.id !== room.owner || !p || p === phone) return;

@@ -24,7 +24,7 @@ import { DIR_EAST } from './sim';
 import { ATTENDANT, DOCKS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
-import { connectWorld, soloLink, type WorldLink } from './net';
+import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
 import { over } from './shared/over';
 import { Lobby, me, type RoomInfo } from './lobby';
 import { loadCareer, recordMatch } from '../src/match/career';
@@ -443,7 +443,12 @@ async function openBag(key: number, bag: Bag, who: string): Promise<void> {
  *  I stand, with this world's fog laid over it (ringmap.ts). */
 async function openMenu(): Promise<void> {
   if (!rom || isOut || battle || swapping || asking || spectating) return;
-  const c = await ask('MENU', [['POKéMON', '1'], ['BAG', '2'], ...(ringMap ? [['MAP', '13'] as [string, string]] : []), ['CARD', '4'], ...(lobby ? [['FEEDBACK', 'fb'] as [string, string]] : []), ['EXIT', '']]);
+  const c = await ask('MENU', [['POKéMON', '1'], ['BAG', '2'], ...(ringMap ? [['MAP', '13'] as [string, string]] : []), ['CARD', '4'], ...(lobby ? [['FEEDBACK', 'fb'] as [string, string], ['LEAVE', 'leave'] as [string, string]] : []), ['EXIT', '']]);
+  if (c === 'leave' && lobby) {
+    // The live sheet's LEAVE, asked once: out of the match for good, back to the menu.
+    if (await ask('Leave the match?', [['STAY', ''], ['LEAVE', 'y']]) === 'y') leaveMatch();
+    return;
+  }
   if (c === 'fb' && lobby) {
     // The live game's note, over the match: the world goes on under it.
     swapping = true;
@@ -1148,6 +1153,24 @@ async function takeBack(r: RomBattles): Promise<void> {
   comingBack = null;
   if (!t || !(await r.load(t))) await r.fresh();
   else say('Welcome back!');
+}
+
+/** The relay's socket, from the menu on (null in ?solo). */
+let worldSock: WorldSocket | null = null;
+
+/** LEAVE: the relay takes me out (the standings say "left"), and the menu is back. */
+function leaveMatch(): void {
+  if (!lobby) return;
+  worldSock?.leave();
+  // Not matchOver: no standings for a match I walked out of.
+  forget();
+  matchOn = false;
+  room = null;
+  isOut = waiting = false;
+  if (spectating) toggleSpectate();
+  outEl.classList.remove('on');
+  winEl.classList.remove('on');
+  lobby.menu('You left the match.');
 }
 
 function matchOver(): void {
@@ -2027,6 +2050,7 @@ async function boot(): Promise<void> {
       onMatch: (l) => startMatch(l),
       onClosed: () => { matchOn = false; lobby!.menu('Lost the relay. Reload to play again.'); },
     });
+    worldSock = sock;
     lobby = new Lobby({
       join: (how) => { const c = loadCareer(); sock.join(me().name, me().skin, { ...how, rec: { wins: c.wins, played: c.matches, ...(c.best ? { best: c.best } : {}) } }); },
       start: () => sock.start(),

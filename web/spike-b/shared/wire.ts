@@ -12,6 +12,9 @@ export type WorldUp =
   | { t: 'start' }
   /** The host's settings for the room's next match (the live room's options). */
   | { t: 'set'; set: Partial<Settings> & { pass?: string } }
+  /** LEAVE: out of the room for good, and out of its match (the standings say "left");
+   *  the socket stays for the menu. */
+  | { t: 'leave' }
   /** The host takes a trainer out of the room, before its match. */
   | { t: 'kick'; id: number }
   /** LOBBIES: the rooms somebody hosted, answered by `rooms` (before a join, or in one). */

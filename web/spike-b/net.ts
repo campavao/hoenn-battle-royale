@@ -257,6 +257,8 @@ class Online implements WorldLink {
 export interface WorldSocket {
   join(name: string, skin: number, how: { code?: string; host?: boolean; again?: Again; pass?: string; rec?: CardRecord }): void;
   start(): void;
+  /** LEAVE: out of the room and its match; the socket stays for the menu. */
+  leave(): void;
   /** LOBBIES: ask for the hosted rooms (`onRooms`). */
   list(): void;
   /** The host's settings for the room's next match (with the passcode, for a `pass` door). */
@@ -288,7 +290,7 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
     else queue.push(m);
   };
   try { ws = new WebSocket(url); } catch { ws = null; }
-  if (!ws) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, list: () => undefined, set: () => undefined, kick: () => undefined, close: () => undefined }; }
+  if (!ws) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, list: () => undefined, set: () => undefined, kick: () => undefined, leave: () => undefined, close: () => undefined }; }
   const sock = ws;
   sock.addEventListener('open', () => { for (const m of queue.splice(0)) sock.send(JSON.stringify(m)); });
   sock.addEventListener('close', () => { if (!closed) { closed = true; h.onClosed(); } });
@@ -312,6 +314,7 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
     list: () => send({ t: 'list' }),
     set: (set) => send({ t: 'set', set }),
     kick: (id) => send({ t: 'kick', id }),
+    leave: () => send({ t: 'leave' }),
     close: () => { closed = true; sock.close(); },
   };
 }

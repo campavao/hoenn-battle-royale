@@ -131,6 +131,29 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it('LEAVE mid-match: out of the room and the match (left), and the socket can come back in', () => {
+    let t = 0;
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => t, log: () => undefined });
+    try {
+      const a = phone(), g = phone();
+      const sa = svc.open(a.link), sg = svc.open(g.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sg.onText(JSON.stringify({ t: 'join', name: 'gus', skin: 0, code }));
+      svc.open(phone().link).onText(JSON.stringify({ t: 'join', name: 'hal', skin: 0, code }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      sg.onText(JSON.stringify({ t: 'leave' }));
+      expect(a.got.at(-1)).toMatchObject({ t: 'room', members: [{ name: 'ALICE' }, { name: 'HAL' }] });
+      svc.pump();
+      const fell = () => (svc as unknown as { rooms: Map<string, { host: { room: { results: { fallen: { left?: boolean }[] } } } }> }).rooms.get(code)!.host.room.results.fallen;
+      for (let i = 0; i < 30 && !fell().length; i++) { t += 100; svc.pump(); }
+      expect(fell()).toMatchObject([{ left: true }]);
+      sg.onText(JSON.stringify({ t: 'join', name: 'gus', skin: 0, host: true }));
+      expect(g.got.at(-1)).toMatchObject({ t: 'room', members: [{ name: 'GUS' }] });
+    } finally {
+      svc.stop();
+    }
+  });
   it('a reload within a minute is the same trainer; later, it watches', () => {
     // Bots on the map keep the match going after bob is the last trainer left.
     let t = 0;

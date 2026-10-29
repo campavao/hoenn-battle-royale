@@ -3584,6 +3584,9 @@ var WorldService = class {
             }
             this.roster(room);
           }
+        } else if (m.t === "leave") {
+          this.drop(phone);
+          phone.kicked = true;
         } else if (m.t === "kick") {
           const p = room.members.get(Number(m.id));
           if (host || phone.id !== room.owner || !p || p === phone) return;
