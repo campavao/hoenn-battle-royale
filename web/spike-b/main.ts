@@ -2023,6 +2023,7 @@ async function boot(): Promise<void> {
       join: (how) => sock.join(me().name, me().skin, how),
       start: () => sock.start(),
       list: () => sock.list(),
+      relayUrl: url.replace(/\/world$/, ''),
       leave: () => location.reload(),
       names: { species: speciesName, move: (id) => moveInfo(romTables, id)?.name },
     });

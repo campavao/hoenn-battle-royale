@@ -7,13 +7,15 @@
 import { Stage, type DrawnScreen } from '../src/ui/stage';
 import { menuScreen, roomScreen, type RoomModel, type RowSpec } from '../src/ui/screens';
 import { CODE_ENTRY, NAME_ENTRY, entryScreen, newEntry } from '../src/ui/entry';
-import { HOWTO_ROW, countdown, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction } from '../src/match/lobby';
+import { FEEDBACK_ROW, HOWTO_ROW, countdown, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction } from '../src/match/lobby';
 import { howToScreen } from '../src/ui/howto';
 import { howToRead, markHowToRead } from '../src/ui/howto-due';
 import { SKINS, cleanName, loadCareer, saveProfile, skinUnlocked } from '../src/match/career';
 import { LINES } from '../src/bots/lines';
 import { lookScreen, statsScreen, trainerScreen } from '../src/ui/profile';
 import type { TallyNames } from '../src/match/tally';
+import { feedbackScreen, type FeedbackState } from '../src/ui/feedback';
+import { cleanNote, sendFeedback } from '../src/net/feedback';
 import type { Listed, Member } from './shared/wire';
 
 /** The room as the relay last said it is (wire.ts's `room`). */
@@ -27,6 +29,8 @@ export interface LobbyHooks {
   leave(): void;
   /** LOBBIES: ask the relay for its hosted rooms (answered through `listed`). */
   list(): void;
+  /** The relay SEND FEEDBACK's note goes to (its own socket, net/feedback.ts). */
+  relayUrl: string;
   /** Species and move names for MY STATS: the player's ROM's. */
   names: TallyNames;
 }
@@ -110,6 +114,7 @@ export class Lobby {
     else if (a.kind === 'howto') this.stage.push(this.howTo);
     else if (a.kind === 'lobbies') { this.hooks.list(); this.stage.push(this.lobbies); }
     else if (a.kind === 'join') this.hooks.join({ code: a.code });
+    else if (a.kind === 'feedback') { if (this.said !== 'sending') this.said = 'typing'; this.stage.push(this.feedback); }
     else if (a.kind === 'skin' || a.kind === 'look') { this.browsed = null; this.stage.push(this.look); }
     else if (a.kind === 'mystats') this.stage.push(this.myStats);
   }
@@ -153,6 +158,27 @@ export class Lobby {
     onBack: () => this.stage.pop(),
   }));
 
+  /** SEND FEEDBACK (POK-428): a note to the relay, which files it. The draft stays if
+   *  the screen is left, as the live game's does. */
+  private draft = '';
+  private said: FeedbackState = 'typing';
+  private readonly feedback: DrawnScreen = feedbackScreen(() => ({
+    text: this.draft,
+    state: this.said,
+    onInput: (text) => { this.draft = text; if (this.said !== 'sending') this.said = 'typing'; },
+    onSend: () => {
+      const text = cleanNote(this.draft);
+      if (!text || this.said === 'sending') return;
+      this.said = 'sending';
+      void sendFeedback(this.hooks.relayUrl, { type: 'feedback', text, v: 'spike B', where: this.room ? 'spikeb-room' : 'spikeb-menu', name: me().name, ...(this.room ? { room: this.room.code } : {}) }).then((result) => {
+        this.said = result;
+        if (result === 'sent' && cleanNote(this.draft) === text) this.draft = '';
+        this.stage.redraw();
+      });
+    },
+    onBack: () => this.stage.pop(),
+  }));
+
   /** The wardrobe strip being looked at: a locked one is looked at, not worn. */
   private browsed: number | null = null;
   private readonly look: DrawnScreen = lookScreen(() => {
@@ -189,7 +215,7 @@ export class Lobby {
     // The ways in the world has: no LOBBIES list or daily game here yet.
     rows: playRows('up')
       .filter((r) => r.action.kind === 'quick' || r.action.kind === 'host' || r.action.kind === 'lobbies' || r.action.kind === 'code')
-      .concat(HOWTO_ROW)
+      .concat(HOWTO_ROW, FEEDBACK_ROW)
       .map((r): RowSpec => ({ label: r.label, id: r.id, art: r.art, onPress: () => this.press(r.action), ...(r.id === HOWTO_ROW.id && !howToRead(localStorage) ? { badge: true } : {}) })),
     rowsId: 'lobby-rows',
     tiles: true,
