@@ -78,9 +78,24 @@ call a fix done:
   *and* on the live site after a deploy (`br-version.json`'s `romSha1`, docs/DEPLOY.md).
 - Say which ROM sha you verified on. "Fixed" without one is unverified.
 
-After parallel streams merge, run the whole web e2e suite (`cd web && npx playwright
-test`; `play-again`, `tap` and `spectate` broke last time) and `cd relay && node --test`
-on Node 22, before calling the batch done.
+Before every release, run the whole web e2e suite (`cd web && npx playwright test`;
+`play-again`, `tap` and `spectate` broke last time) and `cd relay && node --test` on
+Node 22. A PR only needs the specs its change touches.
+
+## How work ships (Cam, 2026-10-29)
+
+- Stack PRs: each branch builds on the last open one, and work goes on without waiting
+  for CI or review. Merge oldest first once CI is green.
+- One review per stack, by a fresh-context review subagent the building session starts
+  itself (the one standing exception to "do the work yourself"). Small fixes it asks for
+  go into the next PR in the stack, with no re-review round. A separate reviewer thread
+  only for risky areas: relay and netcode, ROM memory (EWRAM, ROM size), save data, CI
+  and releases.
+- Small, low-risk PRs merge on green and get reviewed later with their stack.
+- Screenshots only when pixels change. Drivers and tests are the check for logic.
+- Releases go out on a timer whenever the relay shows no live match (docs/DEPLOY.md).
+  Until that job exists, the release-owner thread keeps batching them.
+- Spike B is the game. The mGBA live match takes blocker fixes only.
 
 ## Game rules Cam has set
 
