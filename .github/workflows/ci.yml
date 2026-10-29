@@ -68,7 +68,7 @@ jobs:
   # they aren't a job of their own). The Playwright suite is the e2e job's.
   rom:
     runs-on: ubuntu-latest
-    # Two clean agbcc builds (~9 min each uncached), then 110 drivers. Without a ceiling
+    # Two clean agbcc builds (~9 min each uncached), then 412 drivers. Without a ceiling
     # a hung ROM holds a runner for the platform's six hours.
     timeout-minutes: 45
     outputs:
@@ -185,15 +185,16 @@ jobs:
         # (objects-band -> objects-band.py) or an explicit `# capture-only:`.
         run: tools/br/drive-all.sh pokeemerald.gba
 
-  # The Playwright suite, in four shards side by side. One at a time it was 44 of the
-  # rom job's 52 minutes (2026-10-15): the tests run serially by design (one ROM file,
-  # fixed ports; playwright.config.ts), so the only way to go faster is more runners.
+  # The Playwright suite, in eight shards side by side. One at a time it is about an hour
+  # (2026-10-29): the tests run serially by design (one ROM file, fixed ports;
+  # playwright.config.ts), so the only way to go faster is more runners. Four shards ran
+  # 14 to 26 minutes each; eight are about eight minutes of tests apiece.
   # web/scripts/e2e-shard.mjs deals the tests out by their measured time. No `needs`:
   # each shard builds its own ROM (the ROM is never an artifact) and boots the tracked
   # core in web/public/emu -- the one Vercel ships -- not one the wasm job builds.
   e2e:
     runs-on: ubuntu-latest
-    # A shard is about eleven minutes of tests after a minute's build. On a cold cache
+    # A shard is about eight minutes of tests after a minute's build. On a cold cache
     # every shard builds agbcc and the baseline too (~9 min each), so the ceiling leaves
     # room for that, and still holds a hung browser well short of six hours.
     timeout-minutes: 50
@@ -201,7 +202,9 @@ jobs:
       # Every shard finishes: one red shard is not a reason to hide the other three.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        # The ruleset requires `e2e done` (below), not a shard by name, so this list can
+        # change without touching it.
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@v7
 
@@ -260,7 +263,7 @@ jobs:
       - working-directory: relay
         run: npm ci --ignore-scripts
 
-      # Every spec in Chromium across the four shards, play.spec.ts's whole match among
+      # Every spec in Chromium across the shards, play.spec.ts's whole match among
       # them (POK-327: a shot a step under e2e/out/play/chromium). Its Firefox project is
       # the play-firefox job's.
       - name: e2e, shard ${{ matrix.shard }} of ${{ strategy.job-total }}
@@ -281,6 +284,24 @@ jobs:
           # Screenshots only, never the ROM (see the rom job's artifact upload).
           path: web/e2e/out
           if-no-files-found: warn
+
+  # One check for the whole suite, whatever the shard count: the branch ruleset requires
+  # this one, so adding or removing a shard never needs the ruleset changed. `always()`
+  # so a red or cancelled shard turns this red instead of leaving it skipped, which a
+  # ruleset reads as passed.
+  e2e-done:
+    name: e2e done
+    if: always()
+    needs: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every shard passed
+        env:
+          RESULT: ${{ needs.e2e.result }}
+        run: |
+          echo "e2e shards: $RESULT"
+          [ "$RESULT" = success ]
 
   # A release only (a tag or a dispatch): the match played in Firefox (POK-327). The e2e job plays it in Chromium
   # on every push; Firefox is where Cam's 2026-09-18 video had the picture squashed, and

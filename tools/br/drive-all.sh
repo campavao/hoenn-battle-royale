@@ -37,8 +37,15 @@ how() {
   fi
 }
 
+# Drivers are independent (each boots its own core and writes only its own frames
+# directory), so they run $DRIVE_JOBS at a time, one per core by default. One at a time
+# they were 11 of the rom job's 14 minutes (2026-10-29). Results print in name order
+# whatever order they finish in.
+JOBS="${DRIVE_JOBS:-$(nproc 2>/dev/null || echo 1)}"
+
 pass=0
 fail=0
+runnable=()
 for d in "$HERE"/drivers/*.txt; do
   n="$(basename "$d" .txt)"
   kind="$(how "$d")"
@@ -57,23 +64,49 @@ for d in "$HERE"/drivers/*.txt; do
     pass=$((pass + 1))
     continue
   fi
+  runnable+=("$n")
+done
 
+# One driver: its log, and a .result holding "ok" or "fail". Always exits 0, so one red
+# driver never stops the others.
+drive_one() {
+  local n="$1" kind log ok=1
+  kind="$(how "$HERE/drivers/$n.txt")"
   log="$LOGS/$n.log"
-  ok=1
+  rm -f "$log.check"
   bash "$HERE/drive.sh" "$n" ${ROM:+"$ROM"} > "$log" 2>&1 || ok=0
   if [[ "$ok" -eq 1 && "$kind" == checked-by* ]]; then
     # ROM goes along for a checker that drives a second run (replay-check.py)
-    ROM="$ROM" python3 "$ROOT/${kind#checked-by }" < "$log" > "$log.check" 2>&1 || ok=0
+    ROM="$ROM" BR_DRIVER="$n" python3 "$ROOT/${kind#checked-by }" < "$log" > "$log.check" 2>&1 || ok=0
     cat "$log.check" >> "$log"
   fi
+  if [[ "$ok" -eq 1 ]]; then echo ok > "$LOGS/$n.result"; else echo fail > "$LOGS/$n.result"; fi
+}
+
+if [[ "${#runnable[@]}" -gt 0 ]]; then
+  for n in "${runnable[@]}"; do rm -f "$LOGS/$n.result"; done
+  # The first on its own: drive.sh compiles the harness (and on Linux libmgba) on first
+  # use, and two of them doing that at once would race on the same files.
+  drive_one "${runnable[0]}"
+  if [[ "${#runnable[@]}" -gt 1 ]]; then
+    export -f drive_one how
+    export HERE ROOT ROM LOGS
+    # `|| true`: a driver xargs lost (killed, say) has no .result, and the summary below
+    # counts it failed; set -e must not skip that summary.
+    printf '%s\n' "${runnable[@]:1}" | xargs -P "$JOBS" -I{} bash -c 'drive_one "$1"' _ {} || true
+  fi
+fi
+
+for n in "${runnable[@]}"; do
+  kind="$(how "$HERE/drivers/$n.txt")"
   label=""
   [[ "$kind" == "expect" ]] || label=" ($kind)"
-  if [[ "$ok" -eq 1 ]]; then
+  if [[ "$(cat "$LOGS/$n.result" 2>/dev/null)" == ok ]]; then
     echo "ok   $n$label"
     pass=$((pass + 1))
   else
     echo "FAIL $n$label"
-    tail -20 "$log"
+    tail -20 "$LOGS/$n.log"
     fail=$((fail + 1))
   fi
 done
