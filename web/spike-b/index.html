@@ -34,6 +34,28 @@
       body.pad-editing #pad .dpad, body.pad-editing #pad .ab { outline: 2px dashed #f8d070; outline-offset: 4px; cursor: grab; visibility: visible; }
       .pad-edit { position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 110px); transform: translateX(-50%); z-index: 5; background: #fff; border: 3px solid #4c7a99; border-radius: 8px; padding: 8px 10px; }
       .pad-edit[hidden] { display: none; }
+      /* The phone's battle menu (ui/battlemenu.ts, the live game's): FIGHT/BAG/POKeMON/RUN
+         and the moves as windows under the picture, --s CSS pixels to a GBA pixel. */
+      #battle-menu:not([hidden]) { grid-area: 2 / 1; margin-top: calc(var(--s, 1.5) * 4px); display: grid; grid-template-columns: auto auto; justify-content: center; gap: calc(var(--s, 1.5) * 8px); align-content: start; }
+      body.battle-menu #pad .dpad, body.battle-menu #pad .ab, body.battle-no-pad #pad .dpad, body.battle-no-pad #pad .ab { visibility: hidden; }
+      .bm-btn { position: relative; padding: 0; margin: 0; border: 0; background: none; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; user-select: none; }
+      .bm-btn canvas { display: block; }
+      .bm-btn:active:not([aria-disabled="true"]) { filter: brightness(0.9); }
+      .bm-btn[aria-disabled="true"] { cursor: not-allowed; }
+      .bm-btn[hidden], .bm-hint[hidden], .bm-info[hidden] { display: none; }
+      .bm-hold { position: absolute; inset: calc(var(--s, 1.5) * 3px); background: #b8d8f8; mix-blend-mode: multiply; transform-origin: left; transform: scaleX(0); pointer-events: none; }
+      .bm-back, .bm-hint, .bm-info { grid-column: 1 / -1; }
+      .bm-hint { display: flex; justify-content: center; pointer-events: none; }
+      .bm-info { display: grid; gap: calc(var(--s, 1.5) * 8px); }
+      .bm-info-row { display: flex; gap: calc(var(--s, 1.5) * 8px); }
+      .bm-info-row > .bm-btn { flex: none; }
+      .bm-bag { grid-column: 1 / -1; position: relative; }
+      .bm-bag[hidden] { display: none; }
+      .bm-bag canvas { display: block; }
+      .bm-bag-prev, .bm-bag-next { position: absolute; top: 0; bottom: 0; width: calc(var(--s, 1.5) * 56px); }
+      .bm-bag-prev { left: 0; }
+      .bm-bag-next { right: 0; }
+      .bm-bag-list { height: calc(var(--s, 1.5) * 104px); overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
       .pad-edit canvas { display: block; image-rendering: pixelated; }
       .pad-edit-row { display: flex; align-items: center; gap: 9px; }
       .pad-edit button { background: none; border: 0; padding: 4px; }
@@ -64,7 +86,7 @@
       #ask button.on::before { content: '▶'; position: absolute; left: 6px; }
       #battle { z-index: 2; position: fixed; inset: 0; display: none; place-items: center; background: #000; }
       /* A phone held upright: the battle at the top, the pad (which drives it) below. */
-      @media (orientation: portrait) { #battle { place-items: start center; padding-top: calc(env(safe-area-inset-top) + 56px); } }
+      @media (orientation: portrait) { #battle { place-items: start center; align-content: start; padding-top: calc(env(safe-area-inset-top) + 56px); } }
       #intro { z-index: 4; position: fixed; inset: 0; display: grid; place-items: center; background: #000c; padding: 16px; }
       #intro div { max-width: 420px; background: #1b252c; border: 1px solid #4c7a99; border-radius: 10px; padding: 18px 20px; display: grid; gap: 10px; font-size: 15px; }
       #intro b { font-size: 17px; }
@@ -167,7 +189,7 @@
     <div id="ask"><b id="ask-title"></b></div>
     <div id="out"><b id="out-title">OUT</b><span id="out-why"></span><br><span id="out-next">You're back at the truck when the fog lifts.</span><br><button id="out-ok" type="button">Watch</button></div>
     <div id="win"><b id="win-title"></b><ol id="win-list"></ol><button id="win-ok" type="button">OK</button></div>
-    <div id="battle"><div class="note" id="battle-note"></div><canvas id="gba" width="240" height="160"></canvas><canvas id="gba-key" width="240" height="160"></canvas><canvas id="ringfog" width="240" height="160"></canvas></div>
+    <div id="battle"><div class="note" id="battle-note"></div><canvas id="gba" width="240" height="160"></canvas><canvas id="gba-key" width="240" height="160"></canvas><canvas id="ringfog" width="240" height="160"></canvas><div id="battle-menu" class="battle-menu" hidden></div></div>
     <div id="stage" hidden>
       <div id="stage-box">
         <canvas id="ui" width="240" height="320"></canvas>
