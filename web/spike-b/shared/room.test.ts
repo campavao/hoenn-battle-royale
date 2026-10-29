@@ -1197,7 +1197,25 @@ describe('the drop after the Safari (Cam 2026-10-29)', () => {
     // The bank behind the ABANDONED SHIP (ROUTE 108) is no landing; the mainland is.
     const land = room.landing();
     expect([...land].some((k) => k.startsWith('MAP_ROUTE108:'))).toBe(false);
-    expect(land.has('MAP_LITTLEROOT_TOWN:10,10'.replace(',', ':'))).toBe(true);
+    expect(land.has('MAP_LITTLEROOT_TOWN:10:10')).toBe(true);
+    // Exact under one-way ledges: from every landing cell (a sample) the walk reaches at
+    // least 200 cells; from every outdoor cell left out, it never does and comes back.
+    const walk = (k: string) => {
+      const [map, x, y] = k.split(':');
+      const seen = new Set([k]), queue: { map: string; x: number; y: number; z?: number }[] = [{ map, x: +x, y: +y }];
+      while (queue.length && seen.size < 400) {
+        const at = queue.pop()!;
+        for (let dir = 1; dir <= 4; dir++) {
+          const r = (room as unknown as { base: (s: typeof at, d: number) => { to: typeof at } | null }).base(at, dir);
+          if (!r || !room.places.has(r.to.map) || r.to.map.startsWith(SAFARI)) continue;
+          const kk = `${r.to.map}:${r.to.x}:${r.to.y}:${r.to.z ?? ''}`;
+          if (!seen.has(kk)) { seen.add(kk); queue.push(r.to); }
+        }
+      }
+      return seen.size;
+    };
+    const cells = [...land];
+    for (let i = 0; i < cells.length; i += 97) expect(walk(cells[i])).toBeGreaterThanOrEqual(200);
   });
 });
 
