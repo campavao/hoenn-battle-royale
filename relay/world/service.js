@@ -502,10 +502,10 @@ var World = class {
   }
   /** A*'s estimate from a node to (gx, gy) on map `goal`: Manhattan on that map, and
    *  zero anywhere else, where the coordinates mean nothing. */
-  estimate(key, goal, gx, gy) {
+  estimate(key, goal2, gx, gy) {
     const cell = this.cellOf(key);
     const n = this.cellMap[cell];
-    if (n !== goal) return 0;
+    if (n !== goal2) return 0;
     const local = cell - this.bases[n];
     const w = this.widths[n];
     const y = local / w | 0;
@@ -786,8 +786,8 @@ var World = class {
   }
   /** How many map crossings from each map to `goal`, by breadth-first search from the
    *  goal outwards. Undefined entries are maps that cannot reach it at all. */
-  hopsTo(goal, surf, cut) {
-    const asked = `${goal}:${surf ? 1 : 0}${fieldBits(cut)}`;
+  hopsTo(goal2, surf, cut) {
+    const asked = `${goal2}:${surf ? 1 : 0}${fieldBits(cut)}`;
     const cached = this.hopCache.get(asked);
     if (cached) return cached;
     const g = this.graph(surf, cut);
@@ -798,8 +798,8 @@ var World = class {
         back.get(to).add(from);
       }
     }
-    const dist = /* @__PURE__ */ new Map([[goal, 0]]);
-    let edge = [goal];
+    const dist = /* @__PURE__ */ new Map([[goal2, 0]]);
+    let edge = [goal2];
     for (let d = 1; edge.length > 0; d++) {
       const next = [];
       for (const at of edge) {
@@ -815,13 +815,13 @@ var World = class {
     return dist;
   }
   /** Map crossings from `from` to `goal`, or undefined when there is no way at all. */
-  hops(from, goal, surf = false, cut = false) {
-    return this.hopsTo(goal, surf, cut).get(from);
+  hops(from, goal2, surf = false, cut = false) {
+    return this.hopsTo(goal2, surf, cut).get(from);
   }
   /** The neighbouring maps that take a step closer to `goal`, nearest first. Empty when
    *  we are already there, or when nothing from here reaches it. */
-  nextHops(from, goal, surf = false, cut = false) {
-    const dist = this.hopsTo(goal, surf, cut);
+  nextHops(from, goal2, surf = false, cut = false) {
+    const dist = this.hopsTo(goal2, surf, cut);
     const here = dist.get(from);
     if (here === void 0 || here === 0) return [];
     const out = [];
@@ -1033,12 +1033,12 @@ var World = class {
    *  bots drifted. A trainer can reach about 265 regions on foot and 525 with SURF, each
    *  flooded once for the tab, so the whole of it is a few dozen ms once and under one
    *  after. */
-  firstCrossing(from, goal, surf = false, cut = false, arrive, limit = Infinity) {
+  firstCrossing(from, goal2, surf = false, cut = false, arrive, limit = Infinity) {
     const start = this.key(from);
-    const goalMap = this.numbers.get(goal);
+    const goalMap = this.numbers.get(goal2);
     if (start < 0 || goalMap === void 0) return void 0;
     const origin = this.regionOf(start, surf, cut);
-    const left = (id) => this.hops(this.ids[this.regionList[id].map], goal, surf, cut);
+    const left = (id) => this.hops(this.ids[this.regionList[id].map], goal2, surf, cut);
     const h0 = left(origin);
     if (h0 === void 0 || h0 === 0) return void 0;
     const cost = /* @__PURE__ */ new Map([[origin, 0]]);
@@ -1077,6 +1077,147 @@ var World = class {
     return out;
   }
 };
+function sameSpot(a, b) {
+  return a.map === b.map && a.x === b.x && a.y === b.y;
+}
+
+// web/src/bots/path.ts
+var DEFAULT_BUDGET = 4e3;
+var scratches = /* @__PURE__ */ new WeakMap();
+function scratchFor(world) {
+  let s = scratches.get(world);
+  if (!s) {
+    const n = world.cellCount;
+    s = { gen: 0, state: new Int32Array(n), cost: new Int32Array(n), from: new Int32Array(n), heap: new Heap() };
+    scratches.set(world, s);
+  }
+  if (s.gen >= 1073741808) {
+    s.gen = 0;
+    s.state.fill(0);
+  }
+  s.gen++;
+  s.heap.clear();
+  return s;
+}
+var Heap = class {
+  prio = new Float64Array(1024);
+  keys = new Int32Array(1024);
+  size = 0;
+  pushed = 0;
+  clear() {
+    this.size = 0;
+    this.pushed = 0;
+  }
+  push(key, f) {
+    if (this.size === this.keys.length) {
+      const prio = new Float64Array(this.size * 2);
+      prio.set(this.prio);
+      this.prio = prio;
+      const keys = new Int32Array(this.size * 2);
+      keys.set(this.keys);
+      this.keys = keys;
+    }
+    const p = f * 4294967296 + this.pushed++;
+    let i = this.size++;
+    while (i > 0) {
+      const up = i - 1 >> 1;
+      if (this.prio[up] <= p) break;
+      this.prio[i] = this.prio[up];
+      this.keys[i] = this.keys[up];
+      i = up;
+    }
+    this.prio[i] = p;
+    this.keys[i] = key;
+  }
+  pop() {
+    const top = this.keys[0];
+    const last = --this.size;
+    const p = this.prio[last];
+    const key = this.keys[last];
+    let i = 0;
+    for (; ; ) {
+      let child = 2 * i + 1;
+      if (child >= last) break;
+      if (child + 1 < last && this.prio[child + 1] < this.prio[child]) child++;
+      if (this.prio[child] >= p) break;
+      this.prio[i] = this.prio[child];
+      this.keys[i] = this.keys[child];
+      i = child;
+    }
+    this.prio[i] = p;
+    this.keys[i] = key;
+    return top;
+  }
+};
+function search(world, start, goal2, maxVisited, surf, cut, solid) {
+  const s = scratchFor(world);
+  const { state, cost, from, heap } = s;
+  const open = s.gen * 2;
+  const settled = open + 1;
+  const estimate = goal2.map >= 0;
+  state[start] = open;
+  cost[start] = 0;
+  from[start] = -1;
+  heap.push(start, estimate ? world.estimate(start, goal2.map, goal2.x, goal2.y) : 0);
+  let visited = 0;
+  while (heap.size > 0 && visited < maxVisited) {
+    const at = heap.pop();
+    if (state[at] === settled) continue;
+    state[at] = settled;
+    visited++;
+    const cell = world.cellOf(at);
+    if (cell === goal2.cell || goal2.any !== null && goal2.any.has(cell)) {
+      const steps = [];
+      for (let k = at; from[k] >= 0; k = from[k] >> 2) steps.push({ dir: DIRS[from[k] & 3], to: world.spotAt(k) });
+      steps.reverse();
+      return { steps, found: true, visited };
+    }
+    const next = cost[at] + 1;
+    for (let d = 0; d < 4; d++) {
+      const to = world.stepKey(at, d, surf, cut);
+      if (to < 0) continue;
+      if (goal2.stayOn >= 0 && world.mapOf(to) !== goal2.stayOn && !goal2.any?.has(world.cellOf(to))) continue;
+      if (solid !== void 0 && solid.has(world.cellOf(to)) && world.cellOf(to) !== goal2.cell && !goal2.any?.has(world.cellOf(to))) continue;
+      const was = state[to];
+      if (was === settled) continue;
+      if (was === open && cost[to] <= next) continue;
+      state[to] = open;
+      cost[to] = next;
+      from[to] = at * 4 + d;
+      heap.push(to, estimate ? next + world.estimate(to, goal2.map, goal2.x, goal2.y) : next);
+    }
+  }
+  return { steps: [], found: false, visited };
+}
+function nowhere(maxVisited) {
+  return { steps: [], found: false, visited: maxVisited > 0 ? 1 : 0 };
+}
+function findPath(world, from, to, maxVisited = DEFAULT_BUDGET, surf = false, cut = false, solid) {
+  if (sameSpot(from, to)) return { steps: [], found: true, visited: 0 };
+  const start = world.key(from);
+  if (start < 0) return nowhere(maxVisited);
+  return search(
+    world,
+    start,
+    { cell: world.cellOf(world.key(to)), any: null, map: world.mapNumber(to.map), x: to.x, y: to.y, stayOn: -1 },
+    maxVisited,
+    surf,
+    cut,
+    solid
+  );
+}
+function findPathToAny(world, from, goals, maxVisited = DEFAULT_BUDGET, surf = false, cut = false, solid) {
+  if (goals.length === 0) return { steps: [], found: false, visited: 0 };
+  const wanted = /* @__PURE__ */ new Set();
+  for (const g of goals) {
+    const k = world.key(g);
+    if (k >= 0) wanted.add(world.cellOf(k));
+  }
+  const start = world.key(from);
+  if (start >= 0 ? wanted.has(world.cellOf(start)) : goals.some((g) => sameSpot(g, from))) return { steps: [], found: true, visited: 0 };
+  if (start < 0) return nowhere(maxVisited);
+  return search(world, start, { cell: -1, any: wanted, map: -1, x: 0, y: 0, stayOn: world.mapOf(start) }, maxVisited, surf, cut, solid);
+}
 
 // web/spike-b/shared/marts.ts
 var MARTS = [
@@ -1513,6 +1654,8 @@ var JOIN_GRACE = 300;
 var BACK = { 1: 2, 2: 1, 3: 4, 4: 3 };
 var BOT_DUEL_GAP = 60 * 12;
 var BOT_DUEL_MAX = 60 * 120;
+var BOT_BITE = 600;
+var BOT_BITES = 3;
 var SPILL_KEY = 1 << 20;
 var GROUND_PER_MAP = 6;
 var REGROW = 60 * 90;
@@ -1791,17 +1934,22 @@ var Room = class {
       if (ring.phase === 1 && !r.entrants.length) r.entrants = this.actors.map((a) => [a.id, a.name]);
       const n = eventForRing(ring.phase);
       if (n !== void 0) this.dropEvent(n, ring);
-      for (const a of this.actors) {
-        if (!a.bot || a.beaten || a.battling || !this.inFog(a.m.spot, ring)) continue;
-        a.beaten = true;
-        this.fall(a, "");
-      }
     }
     if (!r.winner && r.entrants.length >= 2) {
       const alive = r.entrants.filter(([id]) => !r.fallen.some((f) => f.id === id));
       if (alive.length === 1) {
         r.winner = alive[0][0];
         r.wonAt = this.tick;
+      }
+    }
+    if ((this.tick - this.epoch) % Math.max(1, Math.round(this.ringPhase / RING_PHASE * BOT_BITE)) === 0) {
+      for (const a of this.actors) {
+        if (!a.bot || a.beaten || a.battling || !this.inFog(a.m.spot, ring)) continue;
+        a.bites = (a.bites ?? 0) + 1;
+        if (a.bites >= BOT_BITES) {
+          a.beaten = true;
+          this.fall(a, "");
+        }
       }
     }
     for (const [key, at] of this.taken) if (this.tick - at >= REGROW) this.taken.delete(key);
@@ -1937,6 +2085,7 @@ var Room = class {
     this.actors.sort((p, q) => p.id - q.id);
     for (const a of this.actors) if (a.bot) {
       a.beaten = false;
+      a.bites = 0;
       if (a.judge) this.part(a);
     }
     this.duelAfter = 0;
@@ -2007,7 +2156,7 @@ var Room = class {
       if (dir) {
         a.m.facing = a.m.moveDir = dir;
         const r = this.stepFor(a)(a.m.spot, dir);
-        if (!r || r.hop) {
+        if (!r || (r.hop || r.water && !this.onWater(a)) && !(bits & KEY_A)) {
           a.last = bits;
           return;
         }
@@ -2057,6 +2206,9 @@ var Room = class {
     } else if (!a.m.action) a.arriving = false;
     a.last = bits;
   }
+  onWater(a) {
+    return this.world.cell(a.m.spot.map, a.m.spot.x, a.m.spot.y) === CLASS_WATER2;
+  }
   /** The MART clerk `a` talks to: on the cell ahead, or across the counter there. */
   clerk(a) {
     const [x, y] = this.ahead(a);
@@ -2078,7 +2230,7 @@ var Room = class {
    *  two can't both walk into one cell). */
   stepFor(a) {
     return (from, dir) => {
-      const bits = a.field ?? 0;
+      const bits = a.bot ? 7 : a.field ?? 0;
       const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir) : this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
       if (a.bot && !this.places.has(r.to.map)) return null;
@@ -2125,6 +2277,7 @@ var Room = class {
       mix2(a.last);
       mix2(a.judge ?? 0);
       mix2(a.since ?? 0);
+      mix2(a.bites ?? 0);
     }
     for (const [k, t] of this.taken) {
       mix2(k);
@@ -2257,8 +2410,87 @@ function rand(b) {
   return b.rng / 4294967296;
 }
 var DELAYS = [32, 64, 96, 128];
-function botKeys(_room, a, b) {
+var DIR_OF = { south: 1, north: 2, west: 3, east: 4 };
+var GRIDS = /* @__PURE__ */ new WeakMap();
+var INSIDE = /* @__PURE__ */ new WeakMap();
+function insideNext(room) {
+  const ring = room.ring();
+  const at = `${ring.round}:${ring.phase}`;
+  const hit = INSIDE.get(room);
+  if (hit?.at === at) return hit.cells;
+  const r = ring.next;
+  const next = r === void 0 || r === Infinity || r < 0 ? null : { ...ring, r: Math.max(r, 1.5) };
+  const cells = [];
+  if (next) {
+    for (const id of room.places.keys()) {
+      const m = room.maps.get(id);
+      const grid = GRIDS.get(m) ?? GRIDS.set(m, decodeGrid(m.grid, m.w * m.h)).get(m);
+      for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
+        const c = grid[y * m.w + x];
+        if ((c === 0 || c === 7) && !room.inFog({ map: id, x, y }, next)) cells.push({ map: id, x, y });
+      }
+    }
+  }
+  INSIDE.set(room, { at, cells });
+  return cells;
+}
+function goal(room, a, b) {
+  const ev = room.events[room.events.length - 1];
+  if (ev && room.spills.has(ev.key) && !room.picked.has(ev.key) && rand(b) < 1 / 3 && !room.inFog({ map: ev.map, x: ev.x, y: ev.y })) {
+    const near = room.reachable().filter((s) => s.map === ev.map && Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
+    if (near.length) return near[Math.floor(rand(b) * near.length)];
+  }
+  const cells = insideNext(room);
+  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return null;
+  const p = room.places.get(a.m.spot.map);
+  if (!p) return null;
+  const x = p.gx + a.m.spot.x, y = p.gy + a.m.spot.y;
+  const hops = /* @__PURE__ */ new Map();
+  let best = null, bestH = Infinity, bestD = Infinity;
+  for (const s of cells) {
+    if (!hops.has(s.map)) hops.set(s.map, room.world.hops(a.m.spot.map, s.map, true, true));
+    const h = hops.get(s.map);
+    if (h === void 0 || h > bestH) continue;
+    const q = room.places.get(s.map);
+    const d = Math.abs(q.gx + s.x - x) + Math.abs(q.gy + s.y - y);
+    if (h < bestH || d < bestD) {
+      bestH = h;
+      bestD = d;
+      best = s;
+    }
+  }
+  return best;
+}
+function leg(room, from, to) {
+  if (from.map === to.map) return findPath(room.world, from, to, 6e3, true, true);
+  const hops = room.world.nextHops(from.map, to.map, true, true);
+  const hop = hops.find((m) => room.places.has(m));
+  return hop ? findPathToAny(room.world, from, room.world.entryCells(from.map, hop, true, true), 6e3, true, true) : null;
+}
+function botKeys(room, a, b) {
   if (a.m.action) return 0;
+  const ring = room.ring();
+  const at = `${ring.round}:${ring.phase}:${room.events.length}`;
+  if (b.plan !== at && (room.tick + a.id * 7) % 30 === 0) {
+    b.plan = at;
+    b.goal = goal(room, a, b);
+    b.steps = void 0;
+    b.legs = 0;
+  }
+  if (b.goal && !b.steps?.length && (room.tick + a.id * 7) % 30 === 0) {
+    const path = !sameSpot(a.m.spot, b.goal) && (b.legs = (b.legs ?? 0) + 1) <= 24 ? leg(room, a.m.spot, b.goal) : null;
+    b.steps = path?.found ? path.steps : void 0;
+    if (!b.steps) b.goal = null;
+    b.stuck = 0;
+  }
+  if (b.steps?.length) {
+    if (sameSpot(b.steps[0].to, a.m.spot)) {
+      b.steps.shift();
+      b.stuck = 0;
+    } else if ((b.stuck = (b.stuck ?? 0) + 1) > 90) b.steps = void 0;
+    const s = b.steps?.[0];
+    if (s) return (b.stuck ?? 0) % 30 === 1 || b.stuck === 0 ? KEY_OF[DIR_OF[s.dir]] | KEY_A : 0;
+  }
   if (b.wait > 0) {
     b.wait -= 1;
     return 0;
@@ -2314,6 +2546,7 @@ var Host = class {
   jitter;
   room;
   players = /* @__PURE__ */ new Map();
+  /** Each bot's mind, by id (the host's alone: the room only ever sees its keys). */
   brains = /* @__PURE__ */ new Map();
   pending = [];
   nextId = 1;

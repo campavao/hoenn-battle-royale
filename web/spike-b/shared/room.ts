@@ -34,7 +34,7 @@ import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches
 import { scatterItem } from '../../src/match/scatter';
 import { isTm, type BagRows } from './items';
 import { eitherSees, type Facing } from '../../src/bots/sight';
-import { DIR_NORTH, dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
+import { CLASS_WATER, DIR_NORTH, dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
 
 export const KEY_UP = 1, KEY_DOWN = 2, KEY_LEFT = 4, KEY_RIGHT = 8, KEY_B = 16, KEY_A = 32;
 
@@ -78,6 +78,8 @@ export interface Actor {
    *  proxy duel), and the frame it began. 0 for none. */
   judge?: number;
   since?: number;
+  /** Bites the fog has taken out of a bot (BOT_BITES and it is out). */
+  bites?: number;
 }
 
 /** A team with somebody who could SURF: water is walkable (and up a waterfall). */
@@ -135,6 +137,9 @@ export const BOT_DUEL_GAP = 60 * 12;
 /** A bot-vs-bot fight nobody has answered for this long lets them go (the proxy's own
  *  wall-clock cap is 90 s). */
 export const BOT_DUEL_MAX = 60 * 120;
+/** The fog bites a bot every BOT_BITE frames, and the BOT_BITES-th takes it. */
+export const BOT_BITE = 600;
+export const BOT_BITES = 3;
 
 /** Spill keys, clear of the dealt balls' 1..n. */
 export const SPILL_KEY = 1 << 20;
@@ -513,19 +518,21 @@ export class Room {
       if (ring.phase === 1 && !r.entrants.length) r.entrants = this.actors.map((a) => [a.id, a.name]);
       const n = eventForRing(ring.phase);
       if (n !== undefined) this.dropEvent(n, ring);
-      // Bots do not bleed here: one the ring closes on is out (in a match the fog takes
-      // them over a few bites; here, at once).
-      for (const a of this.actors) {
-        if (!a.bot || a.beaten || a.battling || !this.inFog(a.m.spot, ring)) continue;
-        a.beaten = true;
-        this.fall(a, '');
-      }
     }
     // The last one standing, once the frame's goings are all in (the last two out on one
     // frame: neither).
     if (!r.winner && r.entrants.length >= 2) {
       const alive = r.entrants.filter(([id]) => !r.fallen.some((f) => f.id === id));
       if (alive.length === 1) { r.winner = alive[0][0]; r.wonAt = this.tick; }
+    }
+    // The fog bites a bot in it every ten seconds and takes it at the third (a match's
+    // bleed, in bites): time to walk out, which a bot on its way does (bots.ts).
+    if ((this.tick - this.epoch) % Math.max(1, Math.round(this.ringPhase / RING_PHASE * BOT_BITE)) === 0) {
+      for (const a of this.actors) {
+        if (!a.bot || a.beaten || a.battling || !this.inFog(a.m.spot, ring)) continue;
+        a.bites = (a.bites ?? 0) + 1;
+        if (a.bites >= BOT_BITES) { a.beaten = true; this.fall(a, ''); }
+      }
     }
     for (const [key, at] of this.taken) if (this.tick - at >= REGROW) this.taken.delete(key);
     const events: RoomEvent[] = [];
@@ -659,7 +666,7 @@ export class Room {
     });
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
-    for (const a of this.actors) if (a.bot) { a.beaten = false; if (a.judge) this.part(a); }
+    for (const a of this.actors) if (a.bot) { a.beaten = false; a.bites = 0; if (a.judge) this.part(a); }
     this.duelAfter = 0;
     this.events = [];
     this.taken.clear();
@@ -733,7 +740,8 @@ export class Room {
         // (wanderers never jump), it only faces.
         a.m.facing = a.m.moveDir = dir;
         const r = this.stepFor(a)(a.m.spot, dir);
-        if (!r || r.hop) { a.last = bits; return; }
+        // A, from a bot on its way somewhere (bots.ts): it may jump a ledge, or SURF.
+        if (!r || ((r.hop || (r.water && !this.onWater(a))) && !(bits & KEY_A))) { a.last = bits; return; }
       }
     }
     const before = a.m.strides;
@@ -782,6 +790,10 @@ export class Room {
     a.last = bits;
   }
 
+  private onWater(a: Actor): boolean {
+    return this.world.cell(a.m.spot.map, a.m.spot.x, a.m.spot.y) === CLASS_WATER;
+  }
+
   /** The MART clerk `a` talks to: on the cell ahead, or across the counter there. */
   private clerk(a: Actor): Clerk | undefined {
     const [x, y] = this.ahead(a);
@@ -806,7 +818,9 @@ export class Room {
    *  two can't both walk into one cell). */
   stepFor(a: Actor): StepFn {
     return (from, dir) => {
-      const bits = a.field ?? 0;
+      // A bot can go anywhere a team could (Kanto's bots cross water): a wanderer keeps
+      // to land and off ledges all the same (Room.move).
+      const bits = a.bot ? 7 : a.field ?? 0;
       const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir) : this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
       // A townsperson stays out in the street.
@@ -829,7 +843,7 @@ export class Room {
       mix(m.facing); mix(m.moveDir); mix(m.runningState); mix(m.run ? 1 : 0); mix(m.strides);
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
-      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0);
+      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0);
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
     for (const [k, by] of this.picked) { mix(k); mix(by); }

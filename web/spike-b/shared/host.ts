@@ -46,7 +46,8 @@ const MAX_QUEUE = 600;
 export class Host {
   readonly room: Room;
   private players = new Map<number, Player>();
-  private brains = new Map<number, Brain>();
+  /** Each bot's mind, by id (the host's alone: the room only ever sees its keys). */
+  readonly brains = new Map<number, Brain>();
   private pending: Command[] = [];
   private nextId = 1;
 

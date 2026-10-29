@@ -92,6 +92,8 @@ test("/world: two phones share one room at 60 Hz", async () => {
 });
 
 test("/world: a link block goes to the trainer you are fighting, and nobody else", async () => {
+  // No bots: one walking up to the truck would challenge alice first.
+  process.env.WORLD_BOTS = "0";
   const relay = createRelay({});
   const { port } = await relay.listen(0, "127.0.0.1");
   try {
@@ -138,6 +140,7 @@ test("/world: a link block goes to the trainer you are fighting, and nobody else
     assert.equal(b.inbox.filter((m) => m.t === "bt").length, 0);
     for (const p of [a, b, c]) p.ws.close();
   } finally {
+    delete process.env.WORLD_BOTS;
     await relay.close();
   }
 });

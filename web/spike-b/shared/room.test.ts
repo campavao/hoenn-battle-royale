@@ -87,9 +87,13 @@ describe('bots', () => {
     const wasStep = new Map<number, boolean>();
     const stepFrames = new Map<number, number>();
     let steps = 0, fastest = 0, shortRest = 0, hops = 0, turns = 0;
+    // Wanderers only: one walking into the coming ring has somewhere to be.
+    const walkers = new Set<number>();
     for (let f = 0; f < 3600; f++) {
       host.advance();
+      for (const id of bots) if (host.brains.get(id)?.steps?.length) walkers.add(id);
       for (const id of bots) {
+        if (walkers.has(id)) continue;
         const a = host.room.actor(id)!;
         const k = `${a.m.spot.map}:${a.m.spot.x}:${a.m.spot.y}`;
         const stepping = a.m.action?.kind === 'step';
@@ -108,7 +112,8 @@ describe('bots', () => {
         if (stepping) fastest = Math.max(fastest, a.m.action!.speed);
       }
     }
-    const perBotPerMinute = steps / bots.length;
+    expect(walkers.size).toBeLessThan(bots.length - 8);
+    const perBotPerMinute = steps / (bots.length - walkers.size);
     // one tile every ~1.5 s on average, never a run
     expect(perBotPerMinute).toBeGreaterThan(15);
     expect(perBotPerMinute).toBeLessThan(60);
@@ -118,6 +123,30 @@ describe('bots', () => {
     expect(fastest).toBe(1); // a pixel a frame: walking
     const frames = [...stepFrames.values()].reduce((x, y) => x + y, 0);
     expect(frames / steps).toBeGreaterThan(14); // 16 frames a tile (15 seen mid-action): walking, not 8
+  });
+});
+
+describe('bots with somewhere to be', () => {
+  it('walk into the coming ring before it closes, and some to an event while its legendary stands', () => {
+    const host = new Host(makeRoom(MAPS, PATCHES, 5), 64, MAPS);
+    const room = host.room;
+    const r0 = room.ring();
+    // How far the bots are from the ring's centre, on average, in tiles of the plane.
+    const far = () => {
+      const d = room.actors.filter((a) => a.bot).map((a) => { const p = room.places.get(a.m.spot.map)!; return Math.hypot(p.gx + a.m.spot.x - r0.cx, p.gy + a.m.spot.y - r0.cy); });
+      return d.reduce((x, y) => x + y, 0) / d.length;
+    };
+    const before = far();
+    for (let f = 0; f < RING_PHASE - 60; f++) host.advance();
+    expect(far()).toBeLessThan(before * 0.75);
+    // A legendary on the ground draws some of them.
+    room.ringPhase = RING_PHASE;
+    for (let f = 0; f < 120; f++) host.advance();
+    const e = room.events[0];
+    expect(e).toBeDefined();
+    for (let f = 0; f < 60 * 60; f++) host.advance();
+    const near = room.actors.filter((a) => a.bot && a.m.spot.map === e.map && Math.abs(a.m.spot.x - e.x) + Math.abs(a.m.spot.y - e.y) <= 6);
+    expect(near.length).toBeGreaterThan(0);
   });
 });
 
