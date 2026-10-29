@@ -932,8 +932,11 @@ export class Room {
   private engageBots(events: RoomEvent[]): void {
     if (this.ring().safari) return;
     if (this.tick < this.duelAfter || this.tick % 8) return;
-    // A page that can run it now: not reloading, not in a battle of its own (its ROM is busy).
-    const judges = this.actors.filter((a) => !a.bot && !a.away && !a.battling);
+    // A page that can run it now: not reloading, not in a battle of its own (its ROM is
+    // busy); or one on the bench, out and watching (or in for the next match), which is
+    // still here: a phone that goes leaves the bench too. Otherwise, once the last trainer
+    // was out, the bots only ever bled out in the fog and nobody was crowned.
+    const judges = [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench];
     if (!judges.length) return;
     const byMap = new Map<string, Actor[]>();
     for (const a of this.actors) {

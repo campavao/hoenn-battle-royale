@@ -899,10 +899,13 @@ describe('a match from a room', () => {
     host.advance();
     expect(room.results.winner).toBe(0);
     expect(over(room)).toBe(false);
-    // ...to the end of the round, when the fog lifts.
+    // ...judged by the out trainers' pages, which still answer the bots' fights.
     const round = room.results.round;
     let frames = 1;
-    while (!over(room) && frames < 200_000) { host.advance(); frames++; }
+    while (!over(room) && frames < 200_000) {
+      for (const e of host.advance().events) if (e.type === 'bots') host.bots(e.id, e.a, e.b, e.a);
+      frames++;
+    }
     expect(frames).toBeGreaterThan(60);
     expect(room.results.winner || room.ring().round > round).toBeTruthy();
   });
@@ -1174,5 +1177,54 @@ describe('no Safari', () => {
     for (const s of at) expect(host.room.places.has(s.map)).toBe(true);
     // Five seconds of nobody moving: nobody has met anybody.
     for (let f = 0; f < 600; f++) expect(host.advance().events.filter((e) => e.type === 'duel')).toEqual([]);
+  });
+});
+
+describe('after the last trainer is out', () => {
+  const L = 'MAP_LITTLEROOT_TOWN';
+  it("an out trainer's page still judges the bots' fights, so the bots play it out to a champion", () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 7, bot: false, name: 'A', skin: 0, spot: { map: L, x: 3, y: 3 }, facing: 1 });
+    room.apply({ c: 'join', id: 1, bot: true, name: 'ONE', skin: 4, spot: { map: L, x: 9, y: 12 }, facing: 4 });
+    room.apply({ c: 'join', id: 2, bot: true, name: 'TWO', skin: 5, spot: { map: L, x: 11, y: 12 }, facing: 3 });
+    room.apply({ c: 'lock' });
+    room.apply({ c: 'out', id: 7 });
+    expect(room.bench.map((b) => b.id)).toEqual([7]);
+    const events: ReturnType<typeof room.step> = [];
+    for (let i = 0; i < 400 && !events.length; i++) events.push(...room.step(new Map()));
+    expect(events).toMatchObject([{ type: 'bots', id: 7, a: 1, b: 2 }]);
+    room.apply({ c: 'bots', id: 7, a: 1, b: 2, winner: 2 });
+    room.step(new Map());
+    expect(room.results.winner).toBe(2);
+    // Gone for good (LEAVE, or the socket): nobody is left to judge, and a fight they
+    // were running lets its bots go.
+    const again = makeRoom(MAPS, PATCHES, 99);
+    again.load({ ...room.state(), results: { round: 0, entrants: [], fallen: [], winner: 0 } });
+    again.apply({ c: 'join', id: 3, bot: true, name: 'SIX', skin: 4, spot: { map: L, x: 9, y: 15 }, facing: 4 });
+    again.apply({ c: 'join', id: 4, bot: true, name: 'TEN', skin: 5, spot: { map: L, x: 11, y: 15 }, facing: 3 });
+    again.apply({ c: 'leave', id: 7 });
+    for (let i = 0; i < 400; i++) expect(again.step(new Map()).filter((e) => e.type === 'bots')).toEqual([]);
+  });
+
+  it('a match of one trainer and seven bots, the trainer out at a minute, ends with a champion', () => {
+    const host = new Host(makeRoom(MAPS, PATCHES, 4242), 7, MAPS, 0);
+    host.room.ringPhase = 120 * 60;
+    const me = host.join('ME', 0, undefined, 1000);
+    host.lock();
+    let pend: [number, number, number][] = [];
+    let f = 0;
+    for (; f < 60 * 60 * 20 && !over(host.room); f++) {
+      if (f === 3600) host.out(me);
+      host.input(me, f + 1, [0]);
+      for (const [a, b] of pend.filter(([, , at]) => f >= at)) host.bots(me, a, b, a);
+      pend = pend.filter(([, , at]) => f < at);
+      for (const e of host.advance().events) {
+        if (e.type === 'bots') pend.push([e.a, e.b, f + 600]);
+        if (e.type === 'fight') host.end(me);
+      }
+    }
+    expect(over(host.room)).toBe(true);
+    expect(host.room.results.winner).toBeGreaterThan(0);
+    expect(host.room.results.fallen.some((x) => x.bot && x.by)).toBe(true); // a bot beat a bot
   });
 });
