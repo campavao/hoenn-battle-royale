@@ -26,6 +26,7 @@ import { CATCH_UP_SPEED, spectatePace } from '../src/match/spectate';
 import type { SpMsg } from './shared/wire';
 import { readTally, type MatchTally } from '../src/match/tally';
 import type { FameMon } from '../src/ui/results';
+import { MUSIC_ASKED, MUSIC_QUIET, type MusicAsk } from './music';
 
 /** SaveBlock2's options halfword (include/global.h). */
 const OPTIONS_AT = 0x14;
@@ -232,6 +233,9 @@ export interface RomBattles {
   /** The same, now, from the team the last battle left (null before any): for the end of
    *  a battle, told before the battle's end is. */
   teamNow(): FameMon[] | null;
+  /** The song for where the page's trainer is (music.ts), played by the hidden ROM
+   *  between battles (br_music.h); null for none, and the ROM stands still between them. */
+  music(ask: MusicAsk | null): void;
   press(k: GbaKey): void;
   release(k: GbaKey): void;
   emu: Emulator;
@@ -310,6 +314,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   // Power-on, then the boot block: a fresh game in Littleroot (0,9) at 5,8, no POKeMON
   // (a match's trainers catch their first in the Safari), name "YOU".
   await frames(emu, 30);
+  // No song until the page asks for one: Littleroot's would play on the hidden field.
+  const musicAt = sym('gBrMusic');
+  if (!Number.isNaN(musicAt)) emu.bytes(musicAt, 2).set([MUSIC_ASKED | MUSIC_QUIET, 0]);
   const boot = [BOOT_MAP_SAFARIKIT, 0, 0, 9, 5, 0, 8, 0, ...gen3('YOU'), 0xff];
   emu.bytes(box.base + MAILBOX.OFF_BOOT, boot.length).set(boot);
   await frames(emu, 400);
@@ -424,7 +431,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     const after = kept();
     // Back to parked with what it left, as after a battle: a refusal's NO ROOM box and
     // the frames it ran are not where the next battle starts.
-    if (!emu.restore(parked!)) broken = true;
+    if (!repark(true)) broken = true;
     else keep(after);
     carried = last = after;
     const got = arrived(before, after);
@@ -504,6 +511,55 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     queue = run.catch(() => undefined);
     return run;
   };
+
+  // Route music (br_music.h): between turns the hidden ROM runs on, on its parked field,
+  // and its sound engine plays the song the page asks for. A turn that uses the ROM stops
+  // it and puts the parked state back first (the field it idled on is not where a battle
+  // starts), carrying the sound engine across so the song goes on. After a battle, a
+  // replay or the parade it starts again from the top, as Emerald's does.
+  const sounds: [number, number][] = [];
+  const carryAt = sym('gBrSoundCarry');
+  if (!Number.isNaN(musicAt) && !Number.isNaN(carryAt))
+    for (let at = carryAt - ROM_BASE; romView.getUint32(at, true); at += 8) sounds.push([romView.getUint32(at, true), romView.getUint32(at + 4, true)]);
+  let tune: MusicAsk | null = null;
+  // Running between turns; and run since the parked state was last put back.
+  let singing = false;
+  let idled = false;
+  let turns = 0;
+  const writeTune = () => {
+    if (!tune) return;
+    const want = [tune.asked, tune.how, tune.group, tune.num, tune.x & 0xff, (tune.x >> 8) & 0xff];
+    const now = emu.bytes(musicAt, want.length);
+    if (want.some((v, i) => now[i] !== v)) now.set(want);
+  };
+  /** Back to parked; `sound` carries the sound engine across, so the song goes on. */
+  const repark = (sound: boolean): boolean => {
+    const held = sound ? sounds.map(([at, n]) => emu.bytes(at, n).slice()) : [];
+    if (!emu.restore(parked!)) return false;
+    held.forEach((b, i) => emu.bytes(sounds[i][0], b.length).set(b));
+    return true;
+  };
+  const hush = () => {
+    if (singing) emu.pause();
+    singing = false;
+    if (!idled) return;
+    idled = false;
+    if (!repark(true)) broken = true;
+    else if (carried) keep(carried);
+  };
+  const sing = () => {
+    if (broken || singing || turns || !tune || !sounds.length) return;
+    writeTune();
+    emu.resume();
+    singing = idled = true;
+  };
+  /** A turn that runs the ROM: from the parked state, the song held meanwhile. A turn
+   *  that ends some way other than its own put-back is put back before the next. */
+  const onCore = <T>(f: () => Promise<T>): Promise<T> => inTurn(async () => {
+    turns++;
+    hush();
+    try { return await f(); } finally { turns--; idled = true; sing(); }
+  });
   async function battle(fog: boolean, kick: () => void, going: () => boolean, over: () => boolean, onStart: () => void, after: () => Omit<Fought, 'ok'>): Promise<Fought> {
     if (broken) throw new Error('the parked ROM could not be restored');
     // Every battle from one state would roll the same: a fresh draw each time.
@@ -571,7 +627,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     emu.pause();
     // A ROM that could not be put back would start the next battle from whatever this
     // one left on its field: no more battles from it.
-    if (!emu.restore(parked!)) broken = true;
+    if (!repark(false)) broken = true;
     else if (carried) keep(carried);
     return result;
   }
@@ -583,11 +639,19 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     emu,
     press: (k) => emu.press(k),
     release: (k) => emu.release(k),
+    music(ask) {
+      tune = ask;
+      if (!sounds.length) return;
+      if (turns) { if (ask) writeTune(); return; }
+      if (!ask) { if (singing) emu.pause(); singing = false; return; }
+      if (singing) writeTune();
+      else sing();
+    },
     fight(name, mons, skin, onStart, fog = false) {
       // The path a bot fight takes: its card, its ghost beside us, its challenge. All three
       // go on the ring in one go, on purpose: the ROM reads the ring in order, so the card
       // is staged before the CHALLENGE that needs it (the fight is up in ~80 frames).
-      return inTurn(() => battle(fog, () => {
+      return onCore(() => battle(fog, () => {
         send({ t: 'trainer', seat: FOE_SEAT, name, mons });
         send({ t: 'place', v: PROTOCOL, seat: FOE_SEAT, map: { group: 0, num: 9 }, x: 20, y: 8, f: 1, st: 'alive', sprite: String(skin) });
         send({ t: 'challenge', seat: FOE_SEAT, opponent: ME, nonce: 0 });
@@ -630,7 +694,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       });
     },
     duel(me, foe, skin, first, link, onStart, fog = false) {
-      return inTurn(async () => {
+      return onCore(async () => {
         // Their blocks, held until our side of the link is open (HandleBt drops any that
         // land before), each said to the ROM once, from their seat.
         const inbox: { seq: number; data: number[] }[] = [];
@@ -742,7 +806,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       });
     },
     team(mons, name, onStart) {
-      return inTurn(async () => {
+      return onCore(async () => {
         if (broken || !mons.length) return mons;
         leaving = false;
         lay();
@@ -790,14 +854,14 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         watch();
         emu.pause();
         const now = kept();
-        if (!emu.restore(parked!)) broken = true;
+        if (!repark(true)) broken = true;
         else keep(now);
         carried = last = now;
         return [...mons.filter((_, i) => !taken.has(keys[i])), ...put];
       });
     },
     menu(action, onStart, onEnd, look) {
-      return inTurn(async () => {
+      return onCore(async () => {
         if (broken || !startMenu) return false;
         leaving = false;
         lay();
@@ -847,7 +911,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         // ROPE, a rod, FLY or DIG off the team) did it on the hidden ROM's field, which
         // is not this world: none of it happened, nothing of it is spent.
         const now = back ? kept() : before;
-        if (!emu.restore(parked!)) broken = true;
+        if (!repark(true)) broken = true;
         else keep(now);
         carried = last = now;
         leaving = false;
@@ -855,7 +919,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       });
     },
     drop(look, onStart) {
-      return inTurn(async () => {
+      return onCore(async () => {
         if (broken) return 0;
         leaving = false;
         lay();
@@ -876,7 +940,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         watch();
         emu.pause();
         const now = kept();
-        if (!emu.restore(parked!)) broken = true;
+        if (!repark(true)) broken = true;
         else keep(now);
         carried = last = now;
         leaving = false;
@@ -884,7 +948,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       });
     },
     mirror(feed, onStart) {
-      return inTurn(async () => {
+      return onCore(async () => {
         if (broken || !Number.isFinite(spectAt) || !Number.isFinite(seatAt)) return;
         lay();
         emu.resume();
@@ -936,12 +1000,12 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         tick();
         if (speed !== 1) pace(1);
         emu.pause();
-        if (!emu.restore(parked!)) broken = true;
+        if (!repark(false)) broken = true;
         else if (carried) keep(carried);
       });
     },
     fame(onStart) {
-      return inTurn(async () => {
+      return onCore(async () => {
         if (broken) return false;
         if (carried) keep(carried);
         lay();
@@ -959,7 +1023,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         }
         leaving = false;
         emu.pause();
-        if (!emu.restore(parked!)) broken = true;
+        if (!repark(false)) broken = true;
         else if (carried) keep(carried);
         return up;
       });
@@ -978,10 +1042,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       });
     },
     give(item, n) {
-      return inTurn(() => giveNow(item, n));
+      return onCore(() => giveNow(item, n));
     },
     teach(item, onStart) {
-      return inTurn(async () => {
+      return onCore(async () => {
         if (broken) return null;
         const before = kept();
         leaving = false;
@@ -1004,7 +1068,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         leaving = false;
         emu.pause();
         const after = kept();
-        if (!emu.restore(parked!)) broken = true;
+        if (!repark(true)) broken = true;
         else keep(after);
         carried = last = after;
         const got = arrived(before, after);
@@ -1047,7 +1111,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       });
     },
     buy(item, n, each) {
-      return inTurn(async () => {
+      return onCore(async () => {
         if (broken || n <= 0 || moneyOf(carried ?? kept()) < n * each) return 0;
         const got = await giveNow(item, n);
         const took = got?.items.find((r) => r.id === item)?.n ?? 0;
@@ -1060,7 +1124,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       });
     },
     trade(species, onStart) {
-      return inTurn(async () => {
+      return onCore(async () => {
         if (broken) return 0;
         leaving = false;
         lay();
@@ -1097,7 +1161,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         watch();
         emu.pause();
         const now = kept();
-        if (!emu.restore(parked!)) broken = true;
+        if (!repark(true)) broken = true;
         else keep(now);
         carried = last = now;
         return given;
@@ -1106,7 +1170,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     legend(species, level, onStart, fog = false) {
       let seen = false;
       let stop: (() => void) | null = null;
-      return inTurn(() => battle(fog, () => {
+      return onCore(() => battle(fog, () => {
         drain(() => undefined);
         // Its piece where the hidden trainer faces, under an event's key (BR_EVENT_KEY_BASE),
         // which is what makes it stand as itself (BrLegend_Gfx) and A on it a challenge.
@@ -1127,7 +1191,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     },
     boss(n, onStart, fog = false) {
       // br_wild.h's BR_WILD_BOSS: the same ask, a leader for a map.
-      return inTurn(() => battle(fog, () => {
+      return onCore(() => battle(fog, () => {
         emu.write(askAt + 1, 0xff, 8);
         emu.write(askAt + 2, n, 8);
         emu.write(askAt + 3, 0, 8);
@@ -1137,7 +1201,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     },
     wild(group, num, behavior, onStart, fog = false) {
       // br_wild.h: the map, then ASKED; FIGHTING once it is under way, DONE when it is over.
-      return inTurn(() => battle(fog, () => {
+      return onCore(() => battle(fog, () => {
         emu.write(askAt + 1, group, 8);
         emu.write(askAt + 2, num, 8);
         emu.write(askAt + 3, behavior, 8);

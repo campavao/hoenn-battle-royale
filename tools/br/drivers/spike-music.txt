@@ -1,0 +1,72 @@
+# spike-music: spike B's page tells the hidden ROM where its trainer is, and the ROM
+# plays that place's song (br_music.h): nothing until asked; then the song at once; a
+# fade to the next (the old fades out first); ROUTE118's two halves; SURF, the MACH BIKE
+# and the sea floor; the hidden field's own song put back to ours; and silence.
+# gMPlayInfo_BGM's first word is the song header the BGM player is on, and gSongTable's
+# rows are 8 bytes: song n is gSongTable+8n.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 D3 C9 CF FF
+wait 400
+# Not asked: Littleroot's own song (MUS_LITTLEROOT 405)
+expect u8 gBrMusic 0
+expectsame u32 gMPlayInfo_BGM gSongTable+0xCA8
+# ROUTE101 (0.16), at once: MUS_ROUTE101 (359)
+pokebytes gBrMusic 01 00 00 10 05 00
+wait 3
+expect u16 gBrMusic+6 359
+expect u8 gBrMusic+8 0
+expectsame u32 gMPlayInfo_BGM gSongTable+0xB38
+# On the water, the old song fading out at speed 8 first: MUS_SURF (365)
+pokebytes gBrMusic 03 08
+wait 3
+expect u16 gBrMusic+6 365
+expect u8 gBrMusic+8 1
+expectsame u32 gMPlayInfo_BGM gSongTable+0xB38
+waitfor u8 gBrMusic+8 0 400
+wait 2
+expectsame u32 gMPlayInfo_BGM gSongTable+0xB68
+# ROUTE118 (0.33) west of column 24: MUS_ROUTE110 (360); east: MUS_ROUTE119 (402)
+pokebytes gBrMusic 01 00 00 21 0A 00
+wait 3
+expect u16 gBrMusic+6 360
+expectsame u32 gMPlayInfo_BGM gSongTable+0xB40
+pokebytes gBrMusic+4 1E 00
+wait 3
+expect u16 gBrMusic+6 402
+expectsame u32 gMPlayInfo_BGM gSongTable+0xC90
+# On the MACH BIKE: MUS_CYCLING (403)
+pokebytes gBrMusic 05
+wait 3
+expectsame u32 gMPlayInfo_BGM gSongTable+0xC98
+# UNDERWATER_ROUTE124 (0.50): MUS_UNDERWATER (411)
+pokebytes gBrMusic 01 00 00 32 05 00
+wait 3
+expectsame u32 gMPlayInfo_BGM gSongTable+0xCD8
+# The hidden field puts Littleroot's on: ours again
+copy gMPlayInfo_BGM gSongTable+0xCA8 4
+wait 3
+expectsame u32 gMPlayInfo_BGM gSongTable+0xCD8
+# Quiet, fading out at 4: the empty song (0)
+pokebytes gBrMusic 09 04
+wait 2
+expect u8 gBrMusic+8 1
+waitfor u8 gBrMusic+8 0 400
+wait 2
+expect u16 gBrMusic+6 0
+expectsame u32 gMPlayInfo_BGM gSongTable
+# Let go (asked 0): ROUTE101 is not played
+pokebytes gBrMusic 00 00 00 10 05 00
+wait 5
+expect u16 gBrMusic+6 0
+expectsame u32 gMPlayInfo_BGM gSongTable
+# Through a door into ROUTE104's MR. BRINEY's house (17.0), indoors: the old song fades
+# at 2 (32 frames; out of doors it is 4, 64), then the house's (MUS_PETALBURG 362) at full
+pokebytes gBrMusic 01 00 00 10 05 00
+wait 3
+expectsame u32 gMPlayInfo_BGM gSongTable+0xB38
+pokebytes gBrMusic 01 0F 11 00 05 00
+wait 2
+expect u8 gBrMusic+8 1
+waitfor u8 gBrMusic+8 0 36
+wait 2
+expectsame u32 gMPlayInfo_BGM gSongTable+0xB50

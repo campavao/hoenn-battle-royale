@@ -36,6 +36,7 @@ import { favourite } from '../src/match/tally';
 import { moveInfo, type Rom as MoveTables } from '../src/battle/movebook';
 import { OUT_BATCH_MS, event, felled, opening, outs, won } from '../src/match/ticker';
 import { MessageBox } from './msgbox';
+import { MusicCue, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
@@ -1627,17 +1628,29 @@ function matchOver(): void {
 document.getElementById('menu')!.addEventListener('click', () => { void openMenu(); });
 document.getElementById('find')!.addEventListener('click', () => itemfinder());
 
-// Sound (the live match's MUTE, its own key): the ROM's, heard while its screen is the
-// one shown -- a battle, the team screen, a menu, the parade. Its field runs hidden under
-// ours between those, and its route music would come through in snatches.
+// Sound (the live match's MUTE, its own key): the ROM's. In a battle, a menu or the
+// parade it is that screen's; between them its field runs on hidden under ours and plays
+// the song for where the trainer the camera follows stands (music.ts, br_music.h).
 const MUTE_KEY = 'hbr:muted';
 let muted = false;
 try { muted = localStorage.getItem(MUTE_KEY) === '1'; } catch { /* private window: on */ }
 const soundBtn = document.getElementById('sound')!;
 let heard = -1;
 function soundFrame(): void {
-  const v = !muted && battleEl.classList.contains('on') ? 100 : 0;
+  const v = muted ? 0 : 100;
   if (rom && v !== heard) { rom.emu.setVolume(v); heard = v; }
+  rom?.music(cue.next(muted || !matchOn ? null : whereFollowed()));
+}
+const cue = new MusicCue();
+/** Where the followed trainer stands for the song: through a door, the other side. */
+function whereFollowed(): Where | null {
+  const a = follow ? link.room.actor(follow) : undefined;
+  if (!a) return null;
+  const door = a.m.action?.kind === 'warp' && a.m.action.land ? a.m.action.land : null;
+  const spot = door ?? a.m.spot;
+  const m = placed.get(spot.map)?.m;
+  if (!m) return null;
+  return { group: m.group, num: m.num, x: spot.x, surf: !door && classAt(spot) === CLASS_WATER, bike: a.m.bike, door: !!door };
 }
 function paintSound(): void { soundBtn.textContent = `Sound: ${muted ? 'off' : 'on'}`; }
 soundBtn.addEventListener('click', () => {
@@ -2598,7 +2611,7 @@ function loop(now: number): void {
       `${fps.toFixed(0)} fps · p95 gap ${p95.toFixed(1)} ms\n` +
       `sim ${simMs.toFixed(2)} ms · draw ${drawMs.toFixed(2)} ms · art from your ROM ${artMs.toFixed(0)} ms\n` +
       `${link.room.actors.length} trainers · ${here.map.replace('MAP_', '')} ${here.x},${here.y}\n${link.status()}` +
-      `\nROM ${rom ? (battle ? 'fighting' : 'paused, waiting to fight') : 'booting'}` +
+      `\nROM ${rom ? (battle ? 'fighting' : 'between battles') : 'booting'}` +
       (lastStart ? ` · battle up in ${lastStart.frames} frames (${lastStart.ms.toFixed(0)} ms)` : '') +
       `\n${fogLine()}` +
       (lastResult ? `\n${lastResult}` : '') +
