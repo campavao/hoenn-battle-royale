@@ -141,6 +141,17 @@ async function watchUntilResults(watcher: Page, director: Page = watcher): Promi
   }
 }
 
+/** PLAY AGAIN, on a page whose game is still running. The watchdog's "the game stopped"
+ *  box sits over the results, and a click it intercepts waits out the whole test: a
+ *  spectator's ROM that hung in InitMap held three of these for nine minutes each in CI
+ *  (spectate-follow-jump-seam). So a stopped game fails here, saying what stopped. */
+async function pressPlayAgain(page: Page): Promise<void> {
+  const stall = page.locator('#stall');
+  const line = (await stall.isVisible()) ? await page.locator('#stall-line').textContent() : '';
+  await expect(stall, `the game stopped under the results: ${line}`).toBeHidden({ timeout: 5_000 });
+  await page.locator('#play-again').click();
+}
+
 test.beforeAll(() => {
   test.skip(!romExists(), `no ROM at ${romPath()} -- set HBR_ROM or place pokeemerald.gba at the repo root, then run tools/br/dev-patch.sh`);
 });
@@ -189,7 +200,7 @@ test('a finished match lets go, and the room keeps its code, roster and socket',
   // are still up: nothing has been pressed (POK-371).
   await page.waitForTimeout(8_000);
   await expect(page.locator('#results-panel'), 'the results wait for a press').toBeVisible();
-  await page.locator('#play-again').click();
+  await pressPlayAgain(page);
   await expect(page.locator('#results-panel')).toBeHidden({ timeout: 60_000 });
 
   // Back in the room, not on the lobby: same code, same socket, START armed again.
@@ -285,7 +296,7 @@ test("a guest reads its result for the whole grace, whatever the host's `again` 
     await guest.waitForTimeout(4_000);
     await expect(panel, 'the results wait for a press').toBeVisible();
     expect(Date.now() - shownAt).toBeGreaterThanOrEqual(6_000);
-    await guest.locator('#play-again').click();
+    await pressPlayAgain(guest);
     await expect(panel).toBeHidden({ timeout: 90_000 });
     await expect(guest.locator('#room-code')).toHaveText(`Room ${code}`, { timeout: 30_000 });
 
@@ -355,7 +366,7 @@ async function dealAgainWhileReading(browser: Browser, hold: 'grace' | 'results'
 
     // The host reads its own result, comes back to the room, and deals again.
     await expect(host.locator('#results-panel')).toBeVisible({ timeout: 120_000 });
-    await host.locator('#play-again').click();
+    await pressPlayAgain(host);
     await expect(host.locator('#room-start')).toBeVisible({ timeout: 120_000 });
     await host.locator('#room-start').click();
     await host.waitForFunction(() => (window as unknown as BrWindow).__br?.director?.state?.phase === 'safari', undefined, {

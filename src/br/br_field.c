@@ -891,16 +891,77 @@ u16 BrField_ViewDistance(s16 x, s16 y)
     return (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy);
 }
 
-void BrField_MoveCamera(s16 dx, s16 dy)
+// Whether CameraMove can take one step of (sx, sy) from here. Not a step over a seam the
+// map on the far side does not reach at this row or column: GetIncomingConnection finds
+// no connection there, CameraMove reads its map off NULL, loads whatever that is, and the
+// ROM never comes back out of InitMap. Not a step off the map into the void either
+// (CONNECTION_INVALID, which only lies outside it): CameraMove would take it, but the
+// walk then meets the seam from the void, past where the next map starts, and the way
+// down the map's own edge is the one that gets there. Walking never asks, because a
+// player only ever steps off a tile they stood on.
+static bool8 CameraCanStep(s16 sx, s16 sy)
+{
+    s32 x = gSaveBlock1Ptr->pos.x, y = gSaveBlock1Ptr->pos.y;
+    s32 direction = GetMapBorderIdAt(x + MAP_OFFSET + sx, y + MAP_OFFSET + sy);
+    const struct MapConnections *all = gMapHeader.connections;
+    const struct MapConnection *c;
+    const struct MapLayout *theirs;
+    s32 i, coord, ours, lo, hi;
+
+    if (direction == CONNECTION_NONE)
+        return TRUE;
+    if (direction == CONNECTION_INVALID || all == NULL || all->connections == NULL)
+        return FALSE;
+    // fieldmap.c's GetIncomingConnection and IsCoordInIncomingConnectingMap, asked first.
+    for (i = 0, c = all->connections; i < all->count; i++, c++)
+    {
+        if (c->direction != direction)
+            continue;
+        theirs = Overworld_GetMapHeaderByGroupAndId(c->mapGroup, c->mapNum)->mapLayout;
+        if (direction == CONNECTION_NORTH || direction == CONNECTION_SOUTH)
+        {
+            coord = x;
+            ours = gMapHeader.mapLayout->width;
+            hi = theirs->width + c->offset;
+        }
+        else
+        {
+            coord = y;
+            ours = gMapHeader.mapLayout->height;
+            hi = theirs->height + c->offset;
+        }
+        lo = c->offset < 0 ? 0 : c->offset;
+        if (hi > ours)
+            hi = ours;
+        if (lo <= coord && coord <= hi)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+bool8 BrField_MoveCamera(s16 dx, s16 dy)
 {
     s16 sx, sy;
+    bool8 arrived = TRUE;
 
     if (dx == 0 && dy == 0)
-        return;
+        return TRUE;
     while (dx != 0 || dy != 0)
     {
+        // Across first, as before; down when across is not a step CameraMove can take
+        // here. Neither: the far side is not reachable by walking the view, and the
+        // caller warps there instead.
         sx = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
-        sy = sx != 0 ? 0 : (dy > 0 ? 1 : -1);
+        sy = dy > 0 ? 1 : (dy < 0 ? -1 : 0);
+        if (sx != 0 && CameraCanStep(sx, 0))
+            sy = 0;
+        else if (sy != 0 && CameraCanStep(0, sy))
+            sx = 0;
+        else
+        {
+            arrived = FALSE;
+            break;
+        }
         // field_camera.c's MoveCameraAndRedrawMap, a tile at a time: CameraMove only
         // finds the connection it is crossing for a one-tile move.
         CameraMove(sx, sy);
@@ -911,6 +972,7 @@ void BrField_MoveCamera(s16 dx, s16 dy)
         dy -= sy;
     }
     DrawWholeMapView();
+    return arrived;
 }
 
 // Ghosts and loot used to spawn wherever their cell was, in seat order, and again every

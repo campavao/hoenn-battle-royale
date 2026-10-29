@@ -362,8 +362,9 @@ u16 BrField_ViewDistance(s16 x, s16 y);
 // Move the view by whole tiles at once, as walking would have moved it a tile at a
 // time: map seams crossed and objects spawned and culled on the way, the map redrawn
 // once at the end. The camera object is not touched; what it follows stays put on the
-// map, and is that many tiles nearer the middle of the screen.
-void BrField_MoveCamera(s16 dx, s16 dy);
+// map, and is that many tiles nearer the middle of the screen. FALSE when the walk had
+// to stop short (a seam the next map does not reach there), the view wherever it got.
+bool8 BrField_MoveCamera(s16 dx, s16 dy);
 // This frame's share of the object table: how many ghosts and how many pieces of loot
 // may be up, the nearest first. BR's own spawns and despawns do not change it, so the
 // two ticks agree whichever runs first.
