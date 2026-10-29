@@ -457,3 +457,81 @@ describe('a fallen trainer\'s bag', () => {
     expect(within({ items: [], money: 0, mons: [mon(3)] }, bag).mons).toEqual([mon(3)]);
   });
 });
+
+describe('rounds', () => {
+  it('who is on the map when the fog closes plays it; the last one standing wins; the fog lifts on everybody at the truck', () => {
+    const PHASE = 30;
+    const host = new Host(makeRoom(MAPS, PATCHES, 4242), 4, MAPS, 0);
+    const mirror = makeRoom(MAPS, PATCHES, 4242);
+    host.room.ringPhase = mirror.ringPhase = PHASE;
+    mirror.load(host.room.state());
+    const run = (n: number) => { for (let i = 0; i < n; i++) { const { frame } = host.advance(); play(mirror, frame); expect(mirror.hash()).toBe(host.room.hash()); } };
+    const a = host.join('A', 0), b = host.join('B', 1), d = host.join('', 0);
+    run(PHASE + 1); // into phase 1: the fog closes
+    expect(host.room.ring().phase).toBe(1);
+    expect(host.room.actor(d)!.name).toBe(`TRAINER ${d}`);
+    expect(host.room.results.entrants.map(([id]) => id)).toEqual([a, b, d]);
+
+    // A late joiner waits on the bench, its keys spent as they come.
+    const c = host.join('C', 1);
+    host.input(c, 1, Array(20).fill(KEY_UP));
+    run(1);
+    expect(host.room.actor(c)).toBeUndefined();
+    expect(host.room.bench.map((x) => x.id)).toEqual([c]);
+    expect(host.backlog(c)).toBe(0);
+
+    // A goes out to B; D leaves: B is the last one standing.
+    host.out(a, undefined, b);
+    run(1);
+    expect(host.room.results.fallen).toEqual([{ id: a, name: 'A', by: 'B' }]);
+    expect(host.room.results.winner).toBe(0);
+    expect(host.room.bench.map((x) => x.id).sort()).toEqual([a, c].sort());
+    host.leave(d);
+    run(1);
+    expect(host.room.results.fallen[1]).toMatchObject({ id: d, left: true });
+    expect(host.room.results.winner).toBe(b);
+
+    // The fog lifts: A, B and C at the truck on three cells, nothing of the old round left.
+    const late = makeRoom(MAPS, PATCHES, 4242);
+    late.ringPhase = PHASE;
+    late.load(host.room.state()); // a phone that joined late mirrors the bench and the results too
+    expect(late.hash()).toBe(host.room.hash());
+    run(9 * PHASE - host.room.tick + 1);
+    expect(host.room.ring()).toMatchObject({ round: 1, phase: 0 });
+    expect(host.room.results).toEqual({ round: 1, entrants: [], fallen: [], winner: 0 });
+    expect(host.room.bench).toEqual([]);
+    const humans = host.room.actors.filter((x) => !x.bot);
+    expect(humans.map((x) => x.id)).toEqual([a, b, c]);
+    expect(new Set(humans.map((x) => `${x.m.spot.map}:${x.m.spot.x}:${x.m.spot.y}`)).size).toBe(3);
+    for (const x of humans) expect(x.m.spot.map).toBe('MAP_LITTLEROOT_TOWN');
+    // C walks now, and the next fog closes on all three.
+    host.input(c, 21, Array(10).fill(KEY_DOWN));
+    run(PHASE);
+    expect(host.room.results.entrants.map(([id]) => id)).toEqual([a, b, c]);
+  });
+
+  it('one trainer alone never wins, and two out on one frame leave no winner', () => {
+    const room = makeRoom(MAPS, PATCHES, 5);
+    room.ringPhase = 10;
+    for (const [id, x] of [[1, 9], [2, 10], [3, 11]]) room.apply({ c: 'join', id, bot: false, name: `P${id}`, skin: 0, spot: { map: 'MAP_LITTLEROOT_TOWN', x, y: 10 }, facing: 1 });
+    for (let i = 0; i < 11; i++) room.step();
+    room.apply({ c: 'out', id: 1, wild: true });
+    room.step();
+    expect(room.results.fallen[0]).toEqual({ id: 1, name: 'P1', by: '', wild: true });
+    expect(room.results.winner).toBe(0);
+    room.apply({ c: 'out', id: 2 });
+    room.apply({ c: 'out', id: 3 });
+    room.step();
+    expect(room.results.fallen.length).toBe(3);
+    expect(room.results.winner).toBe(0);
+
+    const solo = makeRoom(MAPS, PATCHES, 5);
+    solo.ringPhase = 10;
+    solo.apply({ c: 'join', id: 1, bot: false, name: 'P1', skin: 0, spot: { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 }, facing: 1 });
+    for (let i = 0; i < 11; i++) solo.step();
+    expect(solo.results.entrants).toEqual([[1, 'P1']]);
+    solo.apply({ c: 'out', id: 1 });
+    solo.step();
+    expect(solo.results.winner).toBe(0);
+  });
+});

@@ -13,8 +13,9 @@ export type WorldUp =
   | { t: 'end'; fled?: boolean }
   /** The ball or bag `k` would not go in my bag: put it back (a bag holding `rest`). */
   | { t: 'drop'; k: number; rest?: Bag }
-  /** My team is down: take my trainer off the map, my bag where I stood; I keep watching. */
-  | { t: 'out'; bag?: Bag }
+  /** My team is down: take my trainer off the map, my bag where I stood; I keep watching.
+   *  `by` who beat me, `wild` a wild POKeMON did; neither, the fog. */
+  | { t: 'out'; bag?: Bag; by?: number; wild?: boolean }
   /** My copy went wrong (a hash or a gap): send me the room again. */
   | { t: 'sync' }
   /** A link block from my ROM's battle, for the trainer I am fighting (br_netlink.c's BT:

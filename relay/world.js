@@ -34,7 +34,7 @@ export function createWorld({ log = () => {}, now = () => performance.now() } = 
   let loading = null;
   const load = () => {
     loading ??= import("./world/service.js").then((m) => {
-      service = new m.WorldService({ maps: m.MAPS, patches: m.PATCHES, bots: BOTS, cap: CAP, now, log });
+      service = new m.WorldService({ maps: m.MAPS, patches: m.PATCHES, bots: BOTS, cap: CAP, now, log, ringSecs: Number(process.env.WORLD_RING_SECS) || undefined });
       return service;
     });
     return loading;
