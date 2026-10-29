@@ -110,6 +110,8 @@ export interface RomBattles {
   /** A new round: the team, bag and Pokédex the game booted with, after whatever is
    *  on the ROM now. */
   fresh(): Promise<void>;
+  /** A new match's seed (the national stand-ins on the routes are the match's). */
+  reseed(seed: number): void;
   /** Money out of somebody's bag (br_loot.c's Take pays it). */
   addMoney(n: number): Promise<void>;
   press(k: GbaKey): void;
@@ -262,7 +264,11 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   let fighting = false;
   let phase = 1;
   /** The ring as the ROM should see it on its field or in a battle. */
-  const lay = (fog = false, at = phase) => emu.bytes(ringAt, 10).set(ringBytes(at, fog));
+  let seedNow = seed >>> 0;
+  const lay = (fog = false, at = phase) => {
+    emu.bytes(ringAt, 10).set(ringBytes(at, fog));
+    emu.write(match + 8, seedNow, 32);
+  };
   // The trainer a duel is with left before its turn on the ROM came.
   let foeLeft = false;
   let carried: ReturnType<typeof kept> | null = null;
@@ -572,6 +578,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       });
     },
     leave() { leaving = true; },
+    reseed(s) { seedNow = s >>> 0; },
     fresh() {
       return inTurn(async () => {
         if (broken) return;

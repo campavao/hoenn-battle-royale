@@ -63,8 +63,9 @@ export class Host {
   /** A new trainer, in Littleroot by the truck (or at `spot`), standing on the next frame
    *  (or on the bench until the next round, when the fog has closed on this one). No name:
    *  TRAINER and their number. */
-  join(name: string, skin: number, spot?: Spot): number {
-    const id = this.nextId++;
+  join(name: string, skin: number, spot?: Spot, given?: number): number {
+    const id = given ?? this.nextId++;
+    if (given !== undefined && given >= this.nextId) this.nextId = given + 1;
     if (!spot) {
       // Not where somebody stands, nor where a join this frame will put them.
       const used = (s: Spot) =>
@@ -76,6 +77,11 @@ export class Host {
     this.pending.push({ c: 'join', id, bot: false, name: name || `TRAINER ${id}`.slice(0, 10), skin, spot, facing: 1 });
     this.players.set(id, { id, queue: [], seq: 0, started: false, waited: 0 });
     return id;
+  }
+
+  /** START: who is on the map once this frame's joins are in is the match. */
+  lock(): void {
+    this.pending.push({ c: 'lock' });
   }
 
   leave(id: number): void {

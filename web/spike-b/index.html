@@ -50,6 +50,55 @@
       /* A phone on its side: the battle between the pad's two halves, not under them. */
       @media (orientation: landscape) and (pointer: coarse) { #battle canvas { width: min(calc(100vw - 2 * (env(safe-area-inset-left) + 200px)), 150vh); } }
       #battle .note { position: absolute; top: 12px; left: 12px; right: 12px; text-align: center; color: #9fb3c0; }
+          /* The live game's stage (web/index.html, ui/stage.ts): the menu and the room. */
+      #stage {
+        position: fixed; inset: 0; z-index: 9;
+        background: #101418;
+        display: flex; justify-content: center; align-items: flex-start;
+        overflow: hidden;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+      #stage[hidden] { display: none; }
+      /* Over the game still running under it: the in-match sheet on a phone (POK-320). */
+      #stage[data-look='overlay'] { background: transparent; }
+      /* Beside the game: the sheet on a desktop, where the room panel always was, in view
+         all match. The game makes room for it (body.docked, set by the stage). At twice
+         the picture's size only when the window can spare that and still give the game
+         as much, and is tall enough for whole pixels; at its own size otherwise, so a
+         window snapped to half a laptop screen keeps most of itself for the game. */
+      :root { --dock: 240px; }
+      @media (min-width: 960px) and (min-height: 640px) { :root { --dock: 480px; } }
+      #stage[data-look='dock'] { right: auto; width: var(--dock); z-index: 3; }
+      body.docked #screen-playing { margin-left: var(--dock); }
+      #stage-box { position: relative; }
+      /* Emerald's fade from black over a cut (POK-320, Stage.cut): the room giving way to
+         the match, the match to its results. Four steps, as the game's palette fades go. */
+      #stage-fade { position: fixed; inset: 0; z-index: 10; background: #000; opacity: 0; pointer-events: none; }
+      #stage-fade.go { animation: stage-fade 320ms steps(4, end); }
+      #stage-fade.hold { opacity: 1; animation: none; }
+      @keyframes stage-fade { from { opacity: 1; } to { opacity: 0; } }
+      @media (prefers-reduced-motion: reduce) { #stage-fade.go { animation: none; } }
+      #ui { display: block; image-rendering: pixelated; }
+      #ui-hits { position: absolute; inset: 0; }
+      #ui-hits ul, #ui-hits li { list-style: none; margin: 0; padding: 0; }
+      /* The mirror: real, invisible, exactly where the drawing is. A container has no
+         place of its own -- it fills the stage and lets touches through to its children. */
+      #ui-hits div, #ui-hits ul, #ui-hits button {
+        position: absolute; margin: 0; padding: 0; border: 0; background: transparent;
+        color: transparent; font-size: 8px; line-height: 1; overflow: hidden; white-space: nowrap;
+        opacity: 0; user-select: none; -webkit-user-select: none;
+      }
+      /* FEEDBACK's box (POK-428): a real <textarea>, invisible like the rest -- the canvas
+         draws what it holds -- and 16px so a phone does not zoom in to type in it. */
+      #ui-hits textarea {
+        position: absolute; margin: 0; padding: 0; border: 0; background: transparent;
+        color: transparent; caret-color: transparent; font-size: 16px; resize: none;
+        opacity: 0; pointer-events: auto;
+      }
+      #ui-hits > div, #ui-hits > ul { inset: 0; pointer-events: none; }
+      #ui-hits li { position: static; pointer-events: none; }
+      #ui-hits button, #ui-hits li > *, #ui-hits > div > * { pointer-events: auto; }
+      #ui-hits button { cursor: pointer; touch-action: manipulation; }
     </style>
   </head>
   <body>
@@ -72,6 +121,13 @@
     <div id="out"><b id="out-title">OUT</b><span id="out-why"></span><br><span id="out-next">You're back at the truck when the fog lifts.</span><br><button id="out-ok" type="button">Watch</button></div>
     <div id="win"><b id="win-title"></b><ol id="win-list"></ol><button id="win-ok" type="button">OK</button></div>
     <div id="battle"><div class="note" id="battle-note"></div><canvas id="gba" width="240" height="160"></canvas></div>
+    <div id="stage" hidden>
+      <div id="stage-box">
+        <canvas id="ui" width="240" height="320"></canvas>
+        <div id="ui-hits"></div>
+      </div>
+    </div>
+    <div id="stage-fade" aria-hidden="true"></div>
     <div id="intro"><div>
       <b>Engine preview: our own overworld</b>
       <span>Not the game, a test of how it could work. The world here is drawn by the page, with the real game's battles.</span>

@@ -23,7 +23,9 @@ import { gradeOf } from '../src/bots/roster';
 import { DIR_EAST } from './sim';
 import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, emptyBag, makeRoom, type Actor, type Bag, type RoomEvent } from './shared/room';
 import { SKIN_GFX } from './shared/bots';
-import { onlineLink, soloLink, type WorldLink } from './net';
+import { connectWorld, soloLink, type WorldLink } from './net';
+import { over } from './shared/over';
+import { Lobby, me, type RoomInfo } from './lobby';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { groundCount } from './shared/items';
 import { RomArt } from './romart';
@@ -118,6 +120,16 @@ const KEYMAP: Record<string, string> = {
 };
 /** The start card is up: nothing behind it moves (review of #157). */
 const intro = () => document.getElementById('intro') !== null;
+// The menu and the room (lobby.ts) have the keys while they are up: Emerald's, as the
+// live game's stage takes them, and a keyboard's letters for an entry.
+const STAGE_KEY: Record<string, GbaKey> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', z: 'a', x: 'b', Enter: 'start' };
+addEventListener('keydown', (e) => {
+  if (!lobby?.shown) return;
+  e.stopImmediatePropagation();
+  if (!e.ctrlKey && !e.metaKey && !e.altKey && lobby.stage.char(e.key)) { e.preventDefault(); return; }
+  const k = STAGE_KEY[e.key];
+  if (k) { e.preventDefault(); if (!e.repeat) lobby.stage.key(k); }
+}, true);
 addEventListener('keydown', (e) => {
   if (intro()) return;
   if (e.key === 'v' || e.key === 'V') { toggleSpectate(); return; }
@@ -480,6 +492,8 @@ function goOut(why: string, by?: number, wild?: boolean): void {
 function showOut(title: string, why: string): void {
   document.getElementById('out-title')!.textContent = title;
   document.getElementById('out-why')!.textContent = why;
+  // From a room, out is out until the room's next match (?solo goes round by round).
+  document.getElementById('out-next')!.textContent = lobby ? 'You can watch the rest of the match.' : "You're back at the truck when the fog lifts.";
   // The winner's own panel says it all: no OUT over it.
   if (!winEl.classList.contains('on')) outEl.classList.add('on');
   if (!spectating) toggleSpectate();
@@ -489,7 +503,11 @@ document.getElementById('out-ok')!.addEventListener('click', () => outEl.classLi
 // ---- rounds (room.ts's results) --------------------------------------------------------
 
 const winEl = document.getElementById('win')!;
-document.getElementById('win-ok')!.addEventListener('click', () => winEl.classList.remove('on'));
+document.getElementById('win-ok')!.addEventListener('click', () => {
+  winEl.classList.remove('on');
+  // PLAY AGAIN: the room, for its next START.
+  if (!matchOn && lobby) lobby.backToRoom();
+});
 /** On the bench: came in after the fog closed on this round. */
 let waiting = false;
 let seenRound = -1;
@@ -521,27 +539,98 @@ function roundFrame(): void {
   }
   if (!here && !isOut && !waiting && link.room.bench.some((b) => b.id === link.me)) {
     waiting = true;
-    showOut('WATCHING', 'The fog had already closed on this round.');
+    showOut('WATCHING', lobby ? 'This match had started without you. You are in the next one.' : 'The fog had already closed on this round.');
   }
   if (res.winner && !shownWin) {
     shownWin = true;
-    const name = res.entrants.find(([id]) => id === res.winner)?.[1] ?? 'TRAINER';
-    document.getElementById('win-title')!.textContent = res.winner === link.me ? 'YOU WIN!' : `${name} WINS`;
-    const list = document.getElementById('win-list')!;
-    list.replaceChildren();
-    const row = (id: number, text: string) => {
-      const li = document.createElement('li');
-      li.textContent = text;
-      if (id === link.me) li.className = 'me';
-      list.append(li);
-    };
-    row(res.winner, `${name}, last one standing`);
-    for (const f of [...res.fallen].reverse()) {
-      row(f.id, `${f.name}, ${f.left ? 'left' : f.wild ? 'beaten by a wild POKéMON' : f.by ? `beaten by ${f.by}` : 'out in the fog'}`);
+    standings(false);
+  }
+  // The relay said the match is over: once the frames that ended it have played here (or
+  // a moment has passed), the standings and PLAY AGAIN.
+  if (endingAt && (over(link.room) || performance.now() - endingAt > 1500)) {
+    endingAt = 0;
+    standings(true);
+  }
+}
+
+/** The last one standing (or MATCH OVER, with nobody), and how everybody else went out,
+ *  the last out first. `over`: the match has ended, and the button is PLAY AGAIN. */
+function standings(done: boolean): void {
+  const res = link.room.results;
+  const name = res.entrants.find(([id]) => id === res.winner)?.[1] ?? 'TRAINER';
+  document.getElementById('win-title')!.textContent = !res.winner ? 'MATCH OVER' : res.winner === link.me ? 'YOU WIN!' : `${name} WINS`;
+  const list = document.getElementById('win-list')!;
+  list.replaceChildren();
+  const row = (id: number, text: string) => {
+    const li = document.createElement('li');
+    li.textContent = text;
+    if (id === link.me) li.className = 'me';
+    list.append(li);
+  };
+  if (res.winner) row(res.winner, `${name}, last one standing`);
+  else {
+    // Trainers by name; the bots still wandering, as a count.
+    let bots = 0;
+    for (const [id, who] of res.entrants) {
+      if (res.fallen.some((f) => f.id === id)) continue;
+      if (link.room.actor(id)?.bot) bots++;
+      else row(id, `${who}, still standing`);
     }
+    // The bots go last: the trainers are who the standings are for.
+    for (const f of [...res.fallen].reverse()) {
+      if (!link.room.actor(f.id)?.bot) row(f.id, `${f.name}, ${f.left ? 'left' : f.wild ? 'beaten by a wild POKéMON' : f.by ? `beaten by ${f.by}` : 'out in the fog'}`);
+    }
+    if (bots) row(0, `${bots} bot trainers still standing`);
+    document.getElementById('win-ok')!.textContent = done && lobby ? 'PLAY AGAIN' : 'OK';
     outEl.classList.remove('on');
     winEl.classList.add('on');
+    return;
   }
+  for (const f of [...res.fallen].reverse()) {
+    row(f.id, `${f.name}, ${f.left ? 'left' : f.wild ? 'beaten by a wild POKéMON' : f.by ? `beaten by ${f.by}` : 'out in the fog'}`);
+  }
+  document.getElementById('win-ok')!.textContent = done && lobby ? 'PLAY AGAIN' : 'OK';
+  outEl.classList.remove('on');
+  winEl.classList.add('on');
+}
+
+// ---- a match, from the room's START to its end (lobby.ts) -----------------------------
+
+let lobby: Lobby | null = null;
+/** The room as the relay last said it is. */
+let room: RoomInfo | null = null;
+/** A match of mine is on (I am in it, or watching it). */
+let matchOn = false;
+/** The relay said it is over; the standings wait for its last frames here. */
+let endingAt = 0;
+let looping = false;
+
+/** A match starts for me (or I come into one under way): its link, and the page as a
+ *  match begins it -- a fresh team, nobody out, the camera on my trainer. */
+function startMatch(l: WorldLink): void {
+  link = l;
+  matchOn = true;
+  endingAt = 0;
+  lobby?.hide();
+  isOut = waiting = shownWin = false;
+  seenRound = lastPhase = -1;
+  wasInFog = false;
+  toGive.length = 0;
+  outEl.classList.remove('on');
+  winEl.classList.remove('on');
+  if (spectating) toggleSpectate();
+  follow = link.me;
+  if (rom) { rom.reseed(l.room.seed); void rom.fresh(); }
+  if (!looping) {
+    looping = true;
+    resize();
+    requestAnimationFrame((t) => { last = t; loop(t); });
+  }
+}
+
+function matchOver(): void {
+  matchOn = false;
+  endingAt = performance.now();
 }
 document.getElementById('menu')!.addEventListener('click', () => { void openMenu(); });
 
@@ -1014,22 +1103,40 @@ async function boot(): Promise<void> {
   const patches = await loadPatches();
   const q = new URLSearchParams(location.search);
   const url = q.get('world') ?? `${(import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL}/world`;
-  statsEl.textContent = 'joining the shared world...';
-  const online = q.has('solo') ? null : await onlineLink(url, q.get('name') ?? '', Math.random() < 0.5 ? 0 : 1, (seed) => makeRoom(hoenn.maps, patches, seed, hoenn.world));
-  link = online ?? soloLink(hoenn.maps, patches, hoenn.world, (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0);
-  // A quicker fog to try it alone: ?ring=<seconds a phase> (solo only: the relay's ring is
-  // everybody's).
-  const ringSecs = Number(q.get('ring'));
-  if (!link.online && ringSecs > 0) link.room.ringPhase = Math.round(ringSecs * 60);
-  follow = link.me;
-  resize();
-  requestAnimationFrame((t) => { last = t; loop(t); });
   // The rest of Hoenn, a map a tick, so zooming out never waits.
   const rest = [...placed.values()];
   const next = () => { const p = rest.find((r) => !r.mips); if (p) { paint(p); mipFor(p, 0); setTimeout(next, 16); } };
   setTimeout(next, 500);
-  bootRom(files, link.room.seed).then((r) => { rom = r; giveNext(); }, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { link, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; } };
+  const booted = (r: RomBattles) => { rom = r; if (link) r.reseed(link.room.seed); giveNext(); };
+  if (q.has('solo')) {
+    // The debug path (Cam, 2026-10-29): straight into a world of the page's own, the bots
+    // and nobody else. A quicker fog to try it: ?ring=<seconds a phase>.
+    startMatch(soloLink(hoenn.maps, patches, hoenn.world, (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0));
+    const ringSecs = Number(q.get('ring'));
+    if (ringSecs > 0) link.room.ringPhase = Math.round(ringSecs * 60);
+  } else {
+    // The live game's way in: the menu, a room, START (lobby.ts).
+    document.getElementById('intro')?.remove();
+    const make = (seed: number) => makeRoom(hoenn.maps, patches, seed, hoenn.world);
+    const sock = connectWorld(url, make, {
+      onRoom: (r) => {
+        room = r;
+        if (matchOn && !r.playing) matchOver();
+        else if (!matchOn) lobby!.roomIs(r);
+      },
+      onNoRoom: (code) => lobby!.menu(code ? `There is no room ${code}.` : 'Every place in the world is taken.'),
+      onMatch: (l) => startMatch(l),
+      onClosed: () => { matchOn = false; lobby!.menu('Lost the relay. Reload to play again.'); },
+    });
+    lobby = new Lobby({
+      join: (how) => sock.join(me().name, me().skin, how),
+      start: () => sock.start(),
+      leave: () => location.reload(),
+    });
+    lobby.menu();
+  }
+  bootRom(files, link?.room.seed ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
+  (window as unknown as { __spike: unknown }).__spike = { get link() { return link; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; } };
 }
 
 void boot();

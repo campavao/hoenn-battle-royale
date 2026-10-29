@@ -5,8 +5,11 @@ import type { Bag, RoomState } from './room';
 
 /** Phone to relay. */
 export type WorldUp =
-  /** In: who I am. Answered by `hello`, or `full`. */
-  | { t: 'join'; name: string; skin: number }
+  /** In: who I am, and which room -- a code, a new one of my own (`host`), or, with
+   *  neither, quick play. Answered by `room` (or `no_room`, `full`). */
+  | { t: 'join'; name: string; skin: number; code?: string; host?: boolean }
+  /** START (the room's host): the match begins for everybody in the room. */
+  | { t: 'start' }
   /** My keys for frames `s`, `s`+1, ... (numbered from 1, never reset). */
   | { t: 'in'; s: number; k: number[] }
   /** My battle is over (`fled`: it never got going, or was run from). */
@@ -26,8 +29,17 @@ export type WorldUp =
  *  room's hash after it, every HASH_EVERY frames. */
 export type WireFrame = Frame & { a?: number; h?: number };
 
+/** A trainer in a room, as the roster shows them. */
+export interface Member { id: number; name: string; skin: number }
+
 /** Relay to phone. */
 export type WorldDown =
+  /** The room as it is now, whenever anything in it changes: its code, who is in it, who
+   *  has START (`owner`), whether a match is on, and a quick room's count to its start. */
+  | { t: 'room'; code: string; quick: boolean; you: number; owner: number; members: Member[]; playing: boolean; startsIn?: number }
+  /** No room by that code (or it is full). */
+  | { t: 'no_room'; code: string }
+  /** A match: my trainer's id in it and the Room as it starts (or as it is, joining late). */
   | { t: 'hello'; id: number; state: RoomState }
   | { t: 'state'; state: RoomState }
   | { t: 'f'; f: WireFrame[] }

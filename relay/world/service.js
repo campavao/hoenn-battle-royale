@@ -42,6 +42,230 @@ var world_default = { maps: [{ id: "MAP_PETALBURG_CITY", group: 0, num: 0, w: 30
 // web/spike-b/shared/relay-entry.ts
 var import_patches2 = __toESM(require_patches(), 1);
 
+// web/src/match/clock.ts
+function pickIndex(rng, length) {
+  return Math.min(length - 1, Math.floor(rng() * length));
+}
+
+// web/src/data/lines.json
+var lines_default = [
+  "Ack! Ack! Aaack!",
+  "Ah, well played.",
+  "All right, come again!",
+  "And you are?",
+  "Are your friends strong?",
+  "As strong as ever!",
+  "Big bro, I lost!",
+  "Bow! Bowwow!",
+  "But it messed up.",
+  "Close this menu.",
+  "Come on, battle with me!",
+  "Crash and burn!",
+  "Down and out!",
+  "Enjoy your cruise!",
+  "Gwaaah! I blew it!",
+  "H-help me!",
+  "Here is your prize!",
+  "Here you go!",
+  "Huh? Did I just lose?",
+  "I admit defeat!",
+  "I bow to your superiority.",
+  "I failed to win!",
+  "I give up!",
+  "I got trumped in power?",
+  "I hate this!",
+  "I hope to see you again!",
+  "I love plush DOLLS!",
+  "I love shiny things!",
+  "I ran out of energy again!",
+  "I ran out of energy!",
+  "I surrender!",
+  "I took a serious licking!",
+  "I was beaten in heart?",
+  "I was done in?",
+  "I wondrously lost!",
+  "It worked rather well.",
+  "LILYCOVE CITY it is, then!",
+  "Let me see your talent!",
+  "Let the battle begin!",
+  "Little bro, I lost!",
+  "Losing left me bitter!",
+  "Losing makes me sore!",
+  "No signs of tiring at all!",
+  "No! Please!",
+  "Oh, fine then.",
+  "Oh, how super!",
+  "Oh, noooooh!",
+  "Oh, please, no!",
+  "Oh, yes, strong you are.",
+  "Okay, here goes!",
+  "Okay, see you!",
+  "Ouch! My legs cramped up!",
+  "Ouch, ouch, ouch!",
+  "Overall, a weak team.",
+  "Ow! Down and out!",
+  "Please come again!",
+  "Please do visit again.",
+  "Please do visit us again!",
+  "Please enjoy yourself.",
+  "Please enter.",
+  "Please step this way.",
+  "Please wait.",
+  "Please, go ahead.",
+  "Right this way, please!",
+  "Right this way, please.",
+  "Super awesome!",
+  "Superb, it should be said.",
+  "Take good care of it!",
+  "Thank you for playing!",
+  "Thank you for waiting.",
+  "Thank you, dear!",
+  "Thanks for coming.",
+  "The air is tasty here!",
+  "The match ended up a draw.",
+  "They will cost less.",
+  "They will cost more.",
+  "This is a sample message.",
+  "This is sample message 1.",
+  "This is sample message 2.",
+  "This is sample message 3.",
+  "This is sample message 4.",
+  "This is too humiliating!",
+  "Uncle! I give up!",
+  "Use the BASEMENT KEY?",
+  "Uses many popular moves.",
+  "Way too strong!",
+  "We hope to see you again!",
+  "We hope to see you again.",
+  "Well, excuse me?!",
+  "What a high level you are!",
+  "What an expert!",
+  "What happened here?",
+  "Where did you come from?",
+  "Which move should I teach?",
+  "Whoa, you overwhelmed me!",
+  "Why are you so serious?",
+  "Why have you come here?",
+  "Wickedly fast!",
+  "With honor I admit defeat!",
+  "You can have this!",
+  "You got me!",
+  "You had more heart!",
+  "You soared above me!"
+];
+
+// web/src/bots/lines.ts
+var INTRO = [
+  "YOU LOOK LOST.",
+  "NICE TEAM. SHAME.",
+  "I WAS HERE FIRST.",
+  "THE FOG IS COMING.",
+  "LET ME THROUGH!",
+  "NO HARD FEELINGS.",
+  "I NEED YOUR BALLS.",
+  "THIS ROUTE IS MINE.",
+  "YOU AGAIN?",
+  "MAKE IT QUICK.",
+  "I HAVE BEEN WALKING.",
+  "FOUND YOU."
+];
+var WIN = [
+  "TOLD YOU.",
+  "THAT IS ONE MORE.",
+  "BAD LUCK.",
+  "I NEEDED THAT.",
+  "STILL STANDING.",
+  "NEXT!",
+  "GOOD RUN THOUGH.",
+  "THE RING IS MINE."
+];
+var LOSE = [
+  "NOT LIKE THIS...",
+  "TAKE THEM THEN.",
+  "I WAS CLOSE.",
+  "GOOD FIGHT.",
+  "WATCH THE FOG.",
+  "SEE YOU NEXT ONE.",
+  "AT LEAST I WALKED.",
+  "THAT IS ME DONE."
+];
+var VOICE_COUNT = Math.max(INTRO.length, WIN.length, LOSE.length);
+var LINES = [.../* @__PURE__ */ new Set([...INTRO, ...WIN, ...LOSE, ...lines_default])];
+var LINE_COUNT = LINES.length;
+
+// web/src/match/career.ts
+var SKINS = [
+  "BRENDAN",
+  "MAY",
+  "RIVAL BRENDAN",
+  "RIVAL MAY",
+  "HIKER",
+  "BEAUTY",
+  "CAMPER",
+  "PICNICKER",
+  "SWIMMER",
+  "SWIMMER GIRL",
+  "EXPERT",
+  "EXPERT LADY",
+  "POKEFAN",
+  "POKEFAN LADY",
+  "YOUNGSTER",
+  "LASS"
+];
+var RETIRED_SKINS = /* @__PURE__ */ new Set([2, 3]);
+var WARDROBE = SKINS.map((_, i) => i).filter((i) => !RETIRED_SKINS.has(i));
+var SKIN_UNLOCK_WINS = [
+  0,
+  0,
+  Number.POSITIVE_INFINITY,
+  Number.POSITIVE_INFINITY,
+  1,
+  2,
+  4,
+  5,
+  9,
+  10,
+  13,
+  15,
+  18,
+  20,
+  23,
+  25
+];
+
+// web/src/match/lobby.ts
+var CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+var CODE_LENGTH = 6;
+var ART = {
+  quick: { gfx: [0, 89] },
+  host: { gfx: [58] },
+  lobbies: { gfx: [35, 47] },
+  code: { item: 265 },
+  daily: { item: 93 },
+  howto: { item: 361 },
+  // The ITEMFINDER: it finds what is hidden.
+  debug: { item: 261 },
+  feedback: { item: 121 }
+};
+var FEEDBACK_ROW = {
+  label: "SEND FEEDBACK",
+  action: { kind: "feedback" },
+  id: "lobby-feedback",
+  art: ART.feedback
+};
+var HOWTO_ROW = {
+  label: "HOW TO PLAY",
+  action: { kind: "howto" },
+  id: "lobby-howto",
+  art: ART.howto
+};
+var DEBUG_ROW = {
+  label: "DEBUG",
+  action: { kind: "debug" },
+  id: "lobby-debug",
+  art: ART.debug
+};
+
 // web/src/bots/world.ts
 var NO_REACH = { cell: () => false, across: () => false };
 var CLASS_WALL = 1;
@@ -903,11 +1127,6 @@ function dealPatches(table, mapId, map, seed) {
   return patches;
 }
 
-// web/src/match/clock.ts
-function pickIndex(rng, length) {
-  return Math.min(length - 1, Math.floor(rng() * length));
-}
-
 // web/src/data/encounters.json
 var encounters_default = { maps: { MAP_ALTERING_CAVE: [41, 179, 190, 204, 213, 216, 228, 234, 235], MAP_ARTISAN_CAVE_1F: [235], MAP_ARTISAN_CAVE_B1F: [235], MAP_CAVE_OF_ORIGIN_1F: [41, 42, 322], MAP_CAVE_OF_ORIGIN_ENTRANCE: [41, 42], MAP_CAVE_OF_ORIGIN_UNUSED_RUBY_SAPPHIRE_MAP1: [41, 42, 322], MAP_CAVE_OF_ORIGIN_UNUSED_RUBY_SAPPHIRE_MAP2: [41, 42, 322], MAP_CAVE_OF_ORIGIN_UNUSED_RUBY_SAPPHIRE_MAP3: [41, 42, 322], MAP_DESERT_UNDERPASS: [132, 370, 371], MAP_FIERY_PATH: [321, 66, 88, 109, 339, 218], MAP_GRANITE_CAVE_1F: [335, 74, 41, 63], MAP_GRANITE_CAVE_B1F: [322, 382, 41, 335, 63], MAP_GRANITE_CAVE_B2F: [322, 382, 41, 63], MAP_GRANITE_CAVE_STEVENS_ROOM: [335, 382, 41, 63], MAP_JAGGED_PASS: [339, 351, 66], MAP_MAGMA_HIDEOUT_1F: [74, 75, 321], MAP_MAGMA_HIDEOUT_2F_1R: [74, 75, 321], MAP_MAGMA_HIDEOUT_2F_2R: [74, 75, 321], MAP_MAGMA_HIDEOUT_2F_3R: [74, 75, 321], MAP_MAGMA_HIDEOUT_3F_1R: [74, 75, 321], MAP_MAGMA_HIDEOUT_3F_2R: [74, 75, 321], MAP_MAGMA_HIDEOUT_3F_3R: [74, 75, 321], MAP_MAGMA_HIDEOUT_4F: [74, 75, 321], MAP_METEOR_FALLS_1F_1R: [41, 349], MAP_METEOR_FALLS_1F_2R: [42, 349], MAP_METEOR_FALLS_B1F_1R: [42, 349], MAP_METEOR_FALLS_B1F_2R: [42, 349, 395], MAP_METEOR_FALLS_STEVENS_CAVE: [42, 349], MAP_MIRAGE_TOWER_1F: [27, 332], MAP_MIRAGE_TOWER_2F: [27, 332], MAP_MIRAGE_TOWER_3F: [27, 332], MAP_MIRAGE_TOWER_4F: [27, 332], MAP_MT_PYRE_1F: [377], MAP_MT_PYRE_2F: [377], MAP_MT_PYRE_3F: [377], MAP_MT_PYRE_4F: [377, 361], MAP_MT_PYRE_5F: [377, 361], MAP_MT_PYRE_6F: [377, 361], MAP_MT_PYRE_EXTERIOR: [37, 309, 377], MAP_MT_PYRE_SUMMIT: [377, 361, 411], MAP_NEW_MAUVILLE_ENTRANCE: [81, 100], MAP_NEW_MAUVILLE_INSIDE: [81, 100, 82, 101], MAP_PETALBURG_WOODS: [286, 290, 304, 306, 364, 291, 293], MAP_ROUTE101: [286, 288, 290], MAP_ROUTE102: [288, 286, 290, 295, 298, 392], MAP_ROUTE103: [309, 286, 288], MAP_ROUTE104: [309, 286, 183, 304, 290], MAP_ROUTE110: [309, 337, 353, 354, 367, 43, 286], MAP_ROUTE111: [27, 318, 332, 344], MAP_ROUTE112: [339, 183], MAP_ROUTE113: [308, 218, 227], MAP_ROUTE114: [296, 358, 379, 295, 299], MAP_ROUTE115: [309, 304, 39, 358, 305], MAP_ROUTE116: [286, 304, 301, 315, 63, 370], MAP_ROUTE117: [387, 43, 286, 183, 298, 386], MAP_ROUTE118: [309, 288, 337, 289, 317, 338], MAP_ROUTE119: [43, 369, 288, 289, 317], MAP_ROUTE120: [43, 183, 287, 376, 286, 298, 317], MAP_ROUTE121: [309, 43, 287, 377, 44, 286, 317], MAP_ROUTE123: [309, 43, 287, 377, 44, 286, 317], MAP_ROUTE130: [360], MAP_RUSTURF_TUNNEL: [370], MAP_SAFARI_ZONE_NORTH: [43, 44, 177, 178, 214, 231], MAP_SAFARI_ZONE_NORTHEAST: [190, 216, 228, 241, 163, 165, 191, 204], MAP_SAFARI_ZONE_NORTHWEST: [43, 44, 84, 85, 111, 127], MAP_SAFARI_ZONE_SOUTH: [202, 25, 43, 203, 44, 84, 177], MAP_SAFARI_ZONE_SOUTHEAST: [179, 191, 207, 234, 163, 167, 190, 209], MAP_SAFARI_ZONE_SOUTHWEST: [202, 25, 43, 203, 44, 84, 177], MAP_SEAFLOOR_CAVERN_ROOM1: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM2: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM3: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM4: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM5: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM6: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM7: [41, 42], MAP_SEAFLOOR_CAVERN_ROOM8: [41, 42], MAP_SHOAL_CAVE_LOW_TIDE_ENTRANCE_ROOM: [341, 41, 42], MAP_SHOAL_CAVE_LOW_TIDE_ICE_ROOM: [341, 41, 346, 42], MAP_SHOAL_CAVE_LOW_TIDE_INNER_ROOM: [341, 41, 42], MAP_SHOAL_CAVE_LOW_TIDE_LOWER_ROOM: [341, 41, 42], MAP_SHOAL_CAVE_LOW_TIDE_STAIRS_ROOM: [341, 41, 42], MAP_SKY_PILLAR_1F: [319, 42, 322, 378], MAP_SKY_PILLAR_3F: [319, 42, 322, 378], MAP_SKY_PILLAR_5F: [319, 359, 42, 322, 378], MAP_VICTORY_ROAD_1F: [42, 336, 370, 382, 41, 335, 371, 383], MAP_VICTORY_ROAD_B1F: [383, 42, 336, 355], MAP_VICTORY_ROAD_B2F: [383, 42, 322, 355] }, evolve: { "1": [16, 2], "2": [32, 3], "4": [16, 5], "5": [36, 6], "7": [16, 8], "8": [36, 9], "10": [7, 11], "11": [10, 12], "13": [7, 14], "14": [10, 15], "16": [18, 17], "17": [36, 18], "19": [20, 20], "21": [20, 22], "23": [22, 24], "27": [22, 28], "29": [16, 30], "32": [16, 33], "41": [22, 42], "43": [21, 44], "46": [24, 47], "48": [31, 49], "50": [26, 51], "52": [28, 53], "54": [33, 55], "56": [28, 57], "60": [25, 61], "63": [16, 64], "66": [28, 67], "69": [21, 70], "72": [30, 73], "74": [25, 75], "77": [40, 78], "79": [37, 80], "81": [30, 82], "84": [31, 85], "86": [34, 87], "88": [38, 89], "92": [25, 93], "96": [26, 97], "98": [28, 99], "100": [30, 101], "104": [28, 105], "109": [35, 110], "111": [42, 112], "116": [32, 117], "118": [33, 119], "129": [20, 130], "138": [40, 139], "140": [40, 141], "147": [30, 148], "148": [55, 149], "152": [16, 153], "153": [32, 154], "155": [14, 156], "156": [36, 157], "158": [18, 159], "159": [30, 160], "161": [15, 162], "163": [20, 164], "165": [18, 166], "167": [22, 168], "170": [27, 171], "177": [25, 178], "179": [15, 180], "180": [30, 181], "183": [18, 184], "187": [18, 188], "188": [27, 189], "194": [20, 195], "204": [31, 205], "209": [23, 210], "216": [30, 217], "218": [38, 219], "220": [33, 221], "223": [25, 224], "228": [24, 229], "231": [25, 232], "236": [20, 107], "238": [30, 124], "239": [30, 125], "240": [30, 126], "246": [30, 247], "247": [55, 248], "277": [16, 278], "278": [36, 279], "280": [16, 281], "281": [36, 282], "283": [16, 284], "284": [36, 285], "286": [18, 287], "288": [20, 289], "290": [7, 291], "291": [10, 292], "293": [10, 294], "295": [14, 296], "298": [14, 299], "301": [20, 302], "304": [22, 305], "306": [23, 307], "309": [25, 310], "311": [22, 312], "313": [40, 314], "318": [36, 319], "323": [30, 324], "326": [30, 327], "330": [30, 331], "332": [35, 333], "333": [45, 334], "335": [24, 336], "337": [26, 338], "339": [33, 340], "341": [32, 342], "342": [44, 343], "344": [32, 345], "346": [42, 347], "351": [32, 352], "356": [37, 357], "358": [35, 359], "360": [15, 202], "361": [37, 362], "364": [18, 365], "365": [36, 366], "367": [26, 368], "370": [20, 371], "371": [40, 372], "377": [37, 378], "382": [32, 383], "383": [42, 384], "388": [40, 389], "390": [40, 391], "392": [20, 393], "393": [30, 394], "395": [30, 396], "396": [50, 397], "398": [20, 399], "399": [45, 400] }, names: { "1": "BULBASAUR", "2": "IVYSAUR", "3": "VENUSAUR", "4": "CHARMANDER", "5": "CHARMELEON", "6": "CHARIZARD", "7": "SQUIRTLE", "8": "WARTORTLE", "9": "BLASTOISE", "10": "CATERPIE", "11": "METAPOD", "12": "BUTTERFREE", "13": "WEEDLE", "14": "KAKUNA", "15": "BEEDRILL", "16": "PIDGEY", "17": "PIDGEOTTO", "18": "PIDGEOT", "19": "RATTATA", "20": "RATICATE", "21": "SPEAROW", "22": "FEAROW", "23": "EKANS", "24": "ARBOK", "25": "PIKACHU", "26": "RAICHU", "27": "SANDSHREW", "28": "SANDSLASH", "29": "NIDORAN♀", "30": "NIDORINA", "31": "NIDOQUEEN", "32": "NIDORAN♂", "33": "NIDORINO", "34": "NIDOKING", "35": "CLEFAIRY", "36": "CLEFABLE", "37": "VULPIX", "38": "NINETALES", "39": "JIGGLYPUFF", "40": "WIGGLYTUFF", "41": "ZUBAT", "42": "GOLBAT", "43": "ODDISH", "44": "GLOOM", "45": "VILEPLUME", "46": "PARAS", "47": "PARASECT", "48": "VENONAT", "49": "VENOMOTH", "50": "DIGLETT", "51": "DUGTRIO", "52": "MEOWTH", "53": "PERSIAN", "54": "PSYDUCK", "55": "GOLDUCK", "56": "MANKEY", "57": "PRIMEAPE", "58": "GROWLITHE", "59": "ARCANINE", "60": "POLIWAG", "61": "POLIWHIRL", "62": "POLIWRATH", "63": "ABRA", "64": "KADABRA", "65": "ALAKAZAM", "66": "MACHOP", "67": "MACHOKE", "68": "MACHAMP", "69": "BELLSPROUT", "70": "WEEPINBELL", "71": "VICTREEBEL", "72": "TENTACOOL", "73": "TENTACRUEL", "74": "GEODUDE", "75": "GRAVELER", "76": "GOLEM", "77": "PONYTA", "78": "RAPIDASH", "79": "SLOWPOKE", "80": "SLOWBRO", "81": "MAGNEMITE", "82": "MAGNETON", "83": "FARFETCH'D", "84": "DODUO", "85": "DODRIO", "86": "SEEL", "87": "DEWGONG", "88": "GRIMER", "89": "MUK", "90": "SHELLDER", "91": "CLOYSTER", "92": "GASTLY", "93": "HAUNTER", "94": "GENGAR", "95": "ONIX", "96": "DROWZEE", "97": "HYPNO", "98": "KRABBY", "99": "KINGLER", "100": "VOLTORB", "101": "ELECTRODE", "102": "EXEGGCUTE", "103": "EXEGGUTOR", "104": "CUBONE", "105": "MAROWAK", "106": "HITMONLEE", "107": "HITMONCHAN", "108": "LICKITUNG", "109": "KOFFING", "110": "WEEZING", "111": "RHYHORN", "112": "RHYDON", "113": "CHANSEY", "114": "TANGELA", "115": "KANGASKHAN", "116": "HORSEA", "117": "SEADRA", "118": "GOLDEEN", "119": "SEAKING", "120": "STARYU", "121": "STARMIE", "122": "MR. MIME", "123": "SCYTHER", "124": "JYNX", "125": "ELECTABUZZ", "126": "MAGMAR", "127": "PINSIR", "128": "TAUROS", "129": "MAGIKARP", "130": "GYARADOS", "131": "LAPRAS", "132": "DITTO", "133": "EEVEE", "134": "VAPOREON", "135": "JOLTEON", "136": "FLAREON", "137": "PORYGON", "138": "OMANYTE", "139": "OMASTAR", "140": "KABUTO", "141": "KABUTOPS", "142": "AERODACTYL", "143": "SNORLAX", "144": "ARTICUNO", "145": "ZAPDOS", "146": "MOLTRES", "147": "DRATINI", "148": "DRAGONAIR", "149": "DRAGONITE", "150": "MEWTWO", "151": "MEW", "152": "CHIKORITA", "153": "BAYLEEF", "154": "MEGANIUM", "155": "CYNDAQUIL", "156": "QUILAVA", "157": "TYPHLOSION", "158": "TOTODILE", "159": "CROCONAW", "160": "FERALIGATR", "161": "SENTRET", "162": "FURRET", "163": "HOOTHOOT", "164": "NOCTOWL", "165": "LEDYBA", "166": "LEDIAN", "167": "SPINARAK", "168": "ARIADOS", "169": "CROBAT", "170": "CHINCHOU", "171": "LANTURN", "172": "PICHU", "173": "CLEFFA", "174": "IGGLYBUFF", "175": "TOGEPI", "176": "TOGETIC", "177": "NATU", "178": "XATU", "179": "MAREEP", "180": "FLAAFFY", "181": "AMPHAROS", "182": "BELLOSSOM", "183": "MARILL", "184": "AZUMARILL", "185": "SUDOWOODO", "186": "POLITOED", "187": "HOPPIP", "188": "SKIPLOOM", "189": "JUMPLUFF", "190": "AIPOM", "191": "SUNKERN", "192": "SUNFLORA", "193": "YANMA", "194": "WOOPER", "195": "QUAGSIRE", "196": "ESPEON", "197": "UMBREON", "198": "MURKROW", "199": "SLOWKING", "200": "MISDREAVUS", "201": "UNOWN", "202": "WOBBUFFET", "203": "GIRAFARIG", "204": "PINECO", "205": "FORRETRESS", "206": "DUNSPARCE", "207": "GLIGAR", "208": "STEELIX", "209": "SNUBBULL", "210": "GRANBULL", "211": "QWILFISH", "212": "SCIZOR", "213": "SHUCKLE", "214": "HERACROSS", "215": "SNEASEL", "216": "TEDDIURSA", "217": "URSARING", "218": "SLUGMA", "219": "MAGCARGO", "220": "SWINUB", "221": "PILOSWINE", "222": "CORSOLA", "223": "REMORAID", "224": "OCTILLERY", "225": "DELIBIRD", "226": "MANTINE", "227": "SKARMORY", "228": "HOUNDOUR", "229": "HOUNDOOM", "230": "KINGDRA", "231": "PHANPY", "232": "DONPHAN", "233": "PORYGON2", "234": "STANTLER", "235": "SMEARGLE", "236": "TYROGUE", "237": "HITMONTOP", "238": "SMOOCHUM", "239": "ELEKID", "240": "MAGBY", "241": "MILTANK", "242": "BLISSEY", "243": "RAIKOU", "244": "ENTEI", "245": "SUICUNE", "246": "LARVITAR", "247": "PUPITAR", "248": "TYRANITAR", "249": "LUGIA", "250": "HO-OH", "251": "CELEBI", "277": "TREECKO", "278": "GROVYLE", "279": "SCEPTILE", "280": "TORCHIC", "281": "COMBUSKEN", "282": "BLAZIKEN", "283": "MUDKIP", "284": "MARSHTOMP", "285": "SWAMPERT", "286": "POOCHYENA", "287": "MIGHTYENA", "288": "ZIGZAGOON", "289": "LINOONE", "290": "WURMPLE", "291": "SILCOON", "292": "BEAUTIFLY", "293": "CASCOON", "294": "DUSTOX", "295": "LOTAD", "296": "LOMBRE", "297": "LUDICOLO", "298": "SEEDOT", "299": "NUZLEAF", "300": "SHIFTRY", "301": "NINCADA", "302": "NINJASK", "303": "SHEDINJA", "304": "TAILLOW", "305": "SWELLOW", "306": "SHROOMISH", "307": "BRELOOM", "308": "SPINDA", "309": "WINGULL", "310": "PELIPPER", "311": "SURSKIT", "312": "MASQUERAIN", "313": "WAILMER", "314": "WAILORD", "315": "SKITTY", "316": "DELCATTY", "317": "KECLEON", "318": "BALTOY", "319": "CLAYDOL", "320": "NOSEPASS", "321": "TORKOAL", "322": "SABLEYE", "323": "BARBOACH", "324": "WHISCASH", "325": "LUVDISC", "326": "CORPHISH", "327": "CRAWDAUNT", "328": "FEEBAS", "329": "MILOTIC", "330": "CARVANHA", "331": "SHARPEDO", "332": "TRAPINCH", "333": "VIBRAVA", "334": "FLYGON", "335": "MAKUHITA", "336": "HARIYAMA", "337": "ELECTRIKE", "338": "MANECTRIC", "339": "NUMEL", "340": "CAMERUPT", "341": "SPHEAL", "342": "SEALEO", "343": "WALREIN", "344": "CACNEA", "345": "CACTURNE", "346": "SNORUNT", "347": "GLALIE", "348": "LUNATONE", "349": "SOLROCK", "350": "AZURILL", "351": "SPOINK", "352": "GRUMPIG", "353": "PLUSLE", "354": "MINUN", "355": "MAWILE", "356": "MEDITITE", "357": "MEDICHAM", "358": "SWABLU", "359": "ALTARIA", "360": "WYNAUT", "361": "DUSKULL", "362": "DUSCLOPS", "363": "ROSELIA", "364": "SLAKOTH", "365": "VIGOROTH", "366": "SLAKING", "367": "GULPIN", "368": "SWALOT", "369": "TROPIUS", "370": "WHISMUR", "371": "LOUDRED", "372": "EXPLOUD", "373": "CLAMPERL", "374": "HUNTAIL", "375": "GOREBYSS", "376": "ABSOL", "377": "SHUPPET", "378": "BANETTE", "379": "SEVIPER", "380": "ZANGOOSE", "381": "RELICANTH", "382": "ARON", "383": "LAIRON", "384": "AGGRON", "385": "CASTFORM", "386": "VOLBEAT", "387": "ILLUMISE", "388": "LILEEP", "389": "CRADILY", "390": "ANORITH", "391": "ARMALDO", "392": "RALTS", "393": "KIRLIA", "394": "GARDEVOIR", "395": "BAGON", "396": "SHELGON", "397": "SALAMENCE", "398": "BELDUM", "399": "METANG", "400": "METAGROSS", "401": "REGIROCK", "402": "REGICE", "403": "REGISTEEL", "404": "KYOGRE", "405": "GROUDON", "406": "RAYQUAZA", "407": "LATIAS", "408": "LATIOS", "409": "JIRACHI", "410": "DEOXYS", "411": "CHIMECHO" } };
 
@@ -1217,7 +1436,9 @@ var Room = class {
     return this.actors.find((a) => a.id === id);
   }
   apply(cmd) {
-    if (cmd.c === "join") {
+    if (cmd.c === "lock") {
+      this.results.entrants = this.actors.map((a) => [a.id, a.name]);
+    } else if (cmd.c === "join") {
       if (this.actor(cmd.id) || this.bench.some((b) => b.id === cmd.id)) return;
       if (this.results.entrants.length && !cmd.bot) {
         this.bench.push({ id: cmd.id, name: cmd.name, skin: cmd.skin });
@@ -1769,8 +1990,9 @@ var Host = class {
   /** A new trainer, in Littleroot by the truck (or at `spot`), standing on the next frame
    *  (or on the bench until the next round, when the fog has closed on this one). No name:
    *  TRAINER and their number. */
-  join(name, skin, spot) {
-    const id = this.nextId++;
+  join(name, skin, spot, given) {
+    const id = given ?? this.nextId++;
+    if (given !== void 0 && given >= this.nextId) this.nextId = given + 1;
     if (!spot) {
       const used = (s) => this.room.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y) || this.pending.some((c) => c.c === "join" && c.spot.map === s.map && c.spot.x === s.x && c.spot.y === s.y);
       const near = this.room.truck();
@@ -1779,6 +2001,10 @@ var Host = class {
     this.pending.push({ c: "join", id, bot: false, name: name || `TRAINER ${id}`.slice(0, 10), skin, spot, facing: 1 });
     this.players.set(id, { id, queue: [], seq: 0, started: false, waited: 0 });
     return id;
+  }
+  /** START: who is on the map once this frame's joins are in is the match. */
+  lock() {
+    this.pending.push({ c: "lock" });
   }
   leave(id) {
     this.players.delete(id);
@@ -1884,36 +2110,44 @@ var Host = class {
   }
 };
 
+// web/spike-b/shared/over.ts
+function over(room) {
+  const r = room.results;
+  if (r.winner) return true;
+  if (r.entrants.length && !r.entrants.some(([id]) => room.actor(id) && !room.actor(id).bot && !r.fallen.some((f) => f.id === id))) return true;
+  return room.ring().round > r.round;
+}
+
 // web/spike-b/shared/wire.ts
 var HASH_EVERY = 60;
 
 // web/spike-b/shared/service.ts
 var FRAME_MS = 1e3 / 60;
-var IDLE_MS = 6e4;
 var QUIET_MS = 12e4;
 var SYNC_MS = 1e3;
 var BT_MAX = 256;
+var ROOM_MAX = 30;
+var AUTO_START_MS = 6e4;
+var FIRST_ID = 1e3;
 var WorldService = class {
   constructor(opts) {
     this.opts = opts;
   }
   opts;
-  host = null;
-  links = /* @__PURE__ */ new Map();
+  rooms = /* @__PURE__ */ new Map();
+  where = /* @__PURE__ */ new Map();
   timer = null;
-  t0 = 0;
-  emptySince = 0;
+  nextId = FIRST_ID;
+  /** Trainers on this relay, in every room. */
   get players() {
-    return this.links.size;
+    return this.where.size;
   }
+  /** The first running match's frame (a test's clock). */
   get tick() {
-    return this.host?.room.tick ?? 0;
+    return [...this.rooms.values()].find((r) => r.host)?.host.room.tick ?? 0;
   }
   open(link) {
-    let id = 0;
-    let heard = this.opts.now();
-    let synced = -Infinity;
-    const send = (m) => link.send(JSON.stringify(m));
+    let phone = null;
     return {
       onText: (text) => {
         let m;
@@ -1923,91 +2157,177 @@ var WorldService = class {
           return;
         }
         if (!m || typeof m !== "object") return;
-        heard = this.opts.now();
-        if (m.t === "join" && !id) {
-          if (this.links.size >= this.opts.cap) {
-            send({ t: "full" });
+        if (phone) phone.heard = this.opts.now();
+        if (m.t === "join" && !phone) {
+          if (this.where.size >= this.opts.cap) {
+            this.send(link, { t: "full" });
             link.close();
             return;
           }
-          const host = this.start();
+          const room2 = this.pick(m);
+          if (!room2) {
+            this.send(link, { t: "no_room", code: String(m.code ?? "") });
+            return;
+          }
           const name = String(m.name ?? "").toUpperCase().replace(/[^A-Z0-9 ]/g, "").trim().slice(0, 10);
           const skin = Number.isInteger(m.skin) && m.skin >= 0 && m.skin < 16 ? m.skin : 0;
-          id = host.join(name, skin);
-          this.links.set(id, { send: link.send, close: link.close, quiet: () => this.opts.now() - heard > QUIET_MS });
-          send({ t: "hello", id, state: host.room.state() });
-          this.opts.log(`world: ${name}#${id} in (${this.links.size} here, tick ${host.room.tick})`);
-        } else if (!id || !this.host) {
+          const id = this.nextId++;
+          phone = { id, name: name || `TRAINER ${id - FIRST_ID + 1}`.slice(0, 10), skin, link, heard: this.opts.now(), synced: -Infinity };
+          room2.members.set(id, phone);
+          this.where.set(id, room2);
+          if (!room2.owner) room2.owner = id;
+          this.opts.log(`world: ${phone.name}#${id} in room ${room2.code}${room2.quick ? " (quick)" : ""}, ${room2.members.size} there`);
+          this.roster(room2);
+          if (room2.host) {
+            room2.host.join(phone.name, phone.skin, void 0, id);
+            this.send(link, { t: "hello", id, state: room2.host.room.state() });
+          }
+          this.run();
+          return;
+        }
+        const room = phone ? this.where.get(phone.id) : void 0;
+        if (!phone || !room) return;
+        const host = room.host;
+        if (m.t === "start") {
+          if (!host && phone.id === room.owner) this.start(room);
+        } else if (!host) {
           return;
         } else if (m.t === "in") {
           if (!Number.isInteger(m.s) || m.s < 1 || !Array.isArray(m.k) || m.k.length > 120) return;
-          this.host.input(id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
+          host.input(phone.id, m.s, m.k.map((v) => (Number(v) | 0) & 63));
         } else if (m.t === "end") {
-          this.host.end(id, m.fled === true, m.won === true);
+          host.end(phone.id, m.fled === true, m.won === true);
         } else if (m.t === "out") {
-          this.host.out(id, cleanBag(m.bag) ?? void 0, Number.isInteger(m.by) && m.by > 0 ? m.by : void 0, m.wild === true);
+          host.out(phone.id, cleanBag(m.bag) ?? void 0, Number.isInteger(m.by) && m.by > 0 ? m.by : void 0, m.wild === true);
         } else if (m.t === "drop") {
-          if (Number.isInteger(m.k)) this.host.drop(id, m.k, cleanBag(m.rest) ?? void 0);
+          if (Number.isInteger(m.k)) host.drop(phone.id, m.k, cleanBag(m.rest) ?? void 0);
         } else if (m.t === "bt") {
           if (!Number.isInteger(m.q) || !Array.isArray(m.d) || m.d.length > BT_MAX) return;
-          const me = this.host.room.actor(id);
-          const foe = me?.battling && me.foe ? this.host.room.actor(me.foe) : void 0;
-          if (!foe || foe.bot || !foe.battling || foe.foe !== id) return;
-          this.links.get(foe.id)?.send(JSON.stringify({ t: "bt", q: m.q & 65535, d: m.d.map((v) => (Number(v) | 0) & 255) }));
+          const me = host.room.actor(phone.id);
+          const foe = me?.battling && me.foe ? host.room.actor(me.foe) : void 0;
+          if (!foe || foe.bot || !foe.battling || foe.foe !== phone.id) return;
+          const to = room.members.get(foe.id);
+          if (to) this.send(to.link, { t: "bt", q: m.q & 65535, d: m.d.map((v) => (Number(v) | 0) & 255) });
         } else if (m.t === "sync") {
           const now = this.opts.now();
-          if (now - synced < SYNC_MS) return;
-          synced = now;
-          send({ t: "state", state: this.host.room.state() });
+          if (now - phone.synced < SYNC_MS) return;
+          phone.synced = now;
+          this.send(link, { t: "state", state: host.room.state() });
         }
       },
       onClose: () => {
-        if (!id) return;
-        this.links.delete(id);
-        this.host?.leave(id);
-        if (!this.links.size) this.emptySince = this.opts.now();
-        this.opts.log(`world: #${id} out (${this.links.size} here)`);
-        id = 0;
+        if (!phone) return;
+        const room = this.where.get(phone.id);
+        this.where.delete(phone.id);
+        if (!room) return;
+        room.members.delete(phone.id);
+        room.host?.leave(phone.id);
+        if (room.owner === phone.id) room.owner = room.members.keys().next().value ?? 0;
+        this.opts.log(`world: #${phone.id} out of room ${room.code} (${room.members.size} there)`);
+        if (!room.members.size) this.close(room);
+        else this.roster(room);
+        phone = null;
       }
     };
   }
-  start() {
-    if (this.host) return this.host;
+  /** The room a join asks for: its code, a new one of its own (HOST), or quick play's. */
+  pick(m) {
+    if (typeof m.code === "string" && m.code) {
+      const r = this.rooms.get(m.code.toUpperCase());
+      return r && r.members.size < ROOM_MAX ? r : null;
+    }
+    if (m.host === true) return this.make(false);
+    let best = null;
+    for (const r of this.rooms.values()) {
+      if (r.quick && !r.host && r.members.size < ROOM_MAX && (!best || r.members.size > best.members.size)) best = r;
+    }
+    return best ?? this.make(true);
+  }
+  make(quick) {
+    let code = "";
+    do {
+      code = "";
+      for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+    } while (this.rooms.has(code));
+    const room = { code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0 };
+    this.rooms.set(code, room);
+    return room;
+  }
+  /** START: the Room, everybody in it at the truck, and the match locked to them. */
+  start(room) {
     const seed = Math.floor(Math.random() * 4294967294) + 1 >>> 0;
-    const room = makeRoom(this.opts.maps, this.opts.patches, seed);
-    if (this.opts.ringSecs) room.ringPhase = Math.round(this.opts.ringSecs * 60);
-    this.host = new Host(room, this.opts.bots, this.opts.maps);
-    this.t0 = this.opts.now();
-    this.timer = setInterval(() => this.pump(), 4);
-    this.opts.log(`world: up, seed ${seed}, ${this.host.room.actors.length} bots`);
-    return this.host;
+    const r = makeRoom(this.opts.maps, this.opts.patches, seed);
+    if (this.opts.ringSecs) r.ringPhase = Math.round(this.opts.ringSecs * 60);
+    const host = new Host(r, this.opts.bots, this.opts.maps);
+    for (const p of room.members.values()) host.join(p.name, p.skin, void 0, p.id);
+    host.lock();
+    room.host = host;
+    room.startsAt = null;
+    room.t0 = this.opts.now();
+    this.opts.log(`world: room ${room.code} starts, ${room.members.size} trainers, seed ${seed}`);
+    const state = r.state();
+    for (const p of room.members.values()) this.send(p.link, { t: "hello", id: p.id, state });
+    this.roster(room);
   }
-  /** Every frame that is due, sent; a host that fell far behind skips ahead instead. */
-  pump() {
-    try {
-      this.frames();
-    } catch (err) {
-      this.opts.log(`world: stopped on ${err instanceof Error ? err.stack : String(err)}`);
-      this.stop();
-    }
+  /** The match is over: the room waits for its next START (a quick one counts again). */
+  finish(room) {
+    const res = room.host?.room.results;
+    this.opts.log(`world: room ${room.code} over${res?.winner ? `, ${res.entrants.find(([id]) => id === res.winner)?.[1]} wins` : ""}`);
+    room.host = null;
+    if (room.quick) room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS);
+    this.roster(room);
   }
-  frames() {
-    const host = this.host;
-    if (!host) return;
+  close(room) {
+    this.rooms.delete(room.code);
+    if (!this.rooms.size) this.stop();
+  }
+  roster(room) {
+    const members = [...room.members.values()].map((p) => ({ id: p.id, name: p.name, skin: p.skin }));
     const now = this.opts.now();
-    for (const l of this.links.values()) if (l.quiet()) l.close();
-    if (!this.links.size && now - this.emptySince > IDLE_MS) {
-      this.stop();
-      return;
+    for (const p of room.members.values()) {
+      this.send(p.link, {
+        t: "room",
+        code: room.code,
+        quick: room.quick,
+        you: p.id,
+        owner: room.owner,
+        members,
+        playing: !!room.host,
+        ...room.startsAt !== null ? { startsIn: Math.max(0, room.startsAt - now) } : {}
+      });
     }
-    let due = Math.floor((now - this.t0) / FRAME_MS) - host.room.tick;
+  }
+  send(link, m) {
+    link.send(JSON.stringify(m));
+  }
+  run() {
+    if (!this.timer) this.timer = setInterval(() => this.pump(), 4);
+  }
+  /** Every room's frames that are due, sent; a quick room whose count ran out, started. */
+  pump() {
+    const now = this.opts.now();
+    for (const room of [...this.rooms.values()]) {
+      try {
+        for (const p of [...room.members.values()]) if (now - p.heard > QUIET_MS) p.link.close();
+        if (!room.host && room.startsAt !== null && now >= room.startsAt) this.start(room);
+        if (room.host) this.frames(room, now);
+      } catch (err) {
+        this.opts.log(`world: room ${room.code} stopped on ${err instanceof Error ? err.stack : String(err)}`);
+        for (const p of room.members.values()) p.link.close();
+        this.close(room);
+      }
+    }
+  }
+  frames(room, now) {
+    const host = room.host;
+    let due = Math.floor((now - room.t0) / FRAME_MS) - host.room.tick;
     if (due > 30) {
-      this.t0 += (due - 2) * FRAME_MS;
+      room.t0 += (due - 2) * FRAME_MS;
       due = 2;
     }
     if (due <= 0) return;
     const out = /* @__PURE__ */ new Map();
-    for (const id of this.links.keys()) out.set(id, []);
+    for (const id of room.members.keys()) out.set(id, []);
     for (let i = 0; i < due; i++) {
       const { frame, acks } = host.advance();
       const h = frame.tick % HASH_EVERY === 0 ? host.room.hash() : void 0;
@@ -2018,15 +2338,17 @@ var WorldService = class {
         if (h !== void 0) f.h = h;
         list.push(f);
       }
+      if (over(host.room)) break;
     }
-    for (const [id, list] of out) this.links.get(id)?.send(JSON.stringify({ t: "f", f: list }));
+    for (const [id, list] of out) if (list.length) room.members.get(id)?.link.send(JSON.stringify({ t: "f", f: list }));
+    if (over(host.room)) this.finish(room);
   }
   stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-    this.host = null;
-    for (const l of this.links.values()) l.close();
-    this.links.clear();
+    for (const room of this.rooms.values()) for (const p of room.members.values()) p.link.close();
+    this.rooms.clear();
+    this.where.clear();
   }
 };
 

@@ -122,7 +122,9 @@ export type Command =
   /** `id`'s team is down (the fog, or a lost battle): off the map, watching. What they
    *  carried lies where they stood (POK-232). `by` the trainer or bot that beat them,
    *  `wild` a wild POKeMON did; neither, the fog. */
-  | { c: 'out'; id: number; bag?: Bag; by?: number; wild?: boolean };
+  | { c: 'out'; id: number; bag?: Bag; by?: number; wild?: boolean }
+  /** START (a lobby's): the trainers on the map now are the match; anybody later watches. */
+  | { c: 'lock' };
 
 /** The marked spots grow back: the ring's phase does it in the game; here, a while. */
 export const REGROW = 60 * 90;
@@ -228,7 +230,9 @@ export class Room {
   }
 
   apply(cmd: Command): void {
-    if (cmd.c === 'join') {
+    if (cmd.c === 'lock') {
+      this.results.entrants = this.actors.map((a) => [a.id, a.name]);
+    } else if (cmd.c === 'join') {
       if (this.actor(cmd.id) || this.bench.some((b) => b.id === cmd.id)) return;
       // The fog has closed on this round: in from the next.
       if (this.results.entrants.length && !cmd.bot) { this.bench.push({ id: cmd.id, name: cmd.name, skin: cmd.skin }); return; }

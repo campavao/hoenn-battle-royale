@@ -7,6 +7,7 @@ import type { PatchTable } from '../../src/bots/patches';
 import worldJson from '../data/world.json';
 import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
+import { over } from './over';
 import { cleanBag, isTm, within } from './items';
 import { AFTER_WIN, GROUND_PER_MAP, RING_PHASE, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, makeRoom } from './room';
 
@@ -558,5 +559,32 @@ describe('rounds', () => {
     solo.apply({ c: 'out', id: 1 });
     solo.step();
     expect(solo.results.winner).toBe(0);
+  });
+});
+
+describe('a match from a room', () => {
+  it('START locks it to everybody at the truck, and it is over when the trainers are', () => {
+    const host = new Host(makeRoom(MAPS, PATCHES, 11), 3, MAPS);
+    const a = host.join('ALICE', 0, undefined, 1000);
+    const b = host.join('BOB', 0, undefined, 1001);
+    host.lock();
+    host.advance();
+    const room = host.room;
+    expect(room.results.entrants.map(([id]) => id).sort((x, y) => x - y)).toEqual([1, 2, 3, a, b]);
+    expect(over(room)).toBe(false);
+    // Later than START: on the bench, not in it.
+    const c = host.join('CARA', 0, undefined, 1002);
+    host.advance();
+    expect(room.bench.map((x) => x.id)).toEqual([c]);
+    expect(room.results.entrants.some(([id]) => id === c)).toBe(false);
+    // One trainer out: still on (the bots and BOB play on).
+    host.out(a);
+    host.advance();
+    expect(over(room)).toBe(false);
+    // The last trainer out: over, whoever of the bots is left.
+    host.out(b);
+    host.advance();
+    expect(room.results.winner).toBe(0);
+    expect(over(room)).toBe(true);
   });
 });

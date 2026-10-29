@@ -1,5 +1,6 @@
-// node --test: /world, spike B's shared world, over real sockets. Two phones join one
-// room, see each other, walk, and their copies of the room agree with the relay's.
+// node --test: /world, spike B's shared world, over real sockets. Phones meet in a room
+// (HOST, a code, QUICK PLAY), the host starts it, and they see each other, walk, and
+// their copies of the match agree with the relay's.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -32,15 +33,32 @@ test("/world: two phones share one room at 60 Hz", async () => {
   try {
     const a = phone(port), b = phone(port);
     await Promise.all([a.open(), b.open()]);
-    a.send({ t: "join", name: "alice", skin: 0 });
+    a.send({ t: "join", name: "alice", skin: 0, host: true });
+    const ra = await a.until((m) => m.t === "room");
+    assert.equal(ra.owner, ra.you, "alice hosts");
+    assert.equal(ra.quick, false);
+    assert.equal(ra.startsIn, undefined, "a room of your own waits for START");
+    b.send({ t: "join", name: "bob", skin: 1, code: ra.code.toLowerCase() });
+    const rb = await b.until((m) => m.t === "room");
+    assert.equal(rb.code, ra.code);
+    assert.deepEqual(rb.members.map((m) => m.name), ["ALICE", "BOB"]);
+    assert.equal((await a.until((m) => m.t === "room")).members.length, 2, "alice hears bob come in");
+    // Only the host starts it.
+    b.send({ t: "start" });
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(b.inbox.filter((m) => m.t === "hello").length, 0);
+    a.send({ t: "start" });
     const ha = await a.until((m) => m.t === "hello");
-    b.send({ t: "join", name: "bob", skin: 1 });
     const hb = await b.until((m) => m.t === "hello");
-    assert.notEqual(ha.id, hb.id);
+    assert.equal(ha.id, ra.you);
+    assert.equal(hb.id, rb.you);
     assert.ok(ha.state.actors.length >= 60, "the bots are in");
-    // a hears b join in a frame's cmds
-    const join = await a.until((m) => m.t === "f" && m.f.some((f) => f.cmds?.some((c) => c.c === "join" && c.id === hb.id)));
-    assert.ok(join);
+    // The first frame puts them both at the truck and locks the match to everybody in it.
+    const first = await a.until((m) => m.t === "f");
+    const cmds = first.f[0].cmds ?? [];
+    assert.deepEqual(cmds.filter((c) => c.c === "join").map((c) => c.id), [ha.id, hb.id]);
+    assert.equal(cmds.at(-1).c, "lock");
+    assert.equal((await b.until((m) => m.t === "room")).playing, true);
     // a walks: its keys come back acked
     a.send({ t: "in", s: 1, k: Array(20).fill(2) });
     const acked = await a.until((m) => m.t === "f" && m.f.some((f) => f.a >= 20));
@@ -80,10 +98,15 @@ test("/world: a link block goes to the trainer you are fighting, and nobody else
     const [a, b, c] = [phone(port), phone(port), phone(port)];
     await Promise.all([a.open(), b.open(), c.open()]);
     const ids = [];
+    let code = "";
     for (const [p, name] of [[a, "alice"], [b, "bob"], [c, "cara"]]) {
-      p.send({ t: "join", name, skin: 0 });
-      ids.push((await p.until((m) => m.t === "hello")).id);
+      p.send({ t: "join", name, skin: 0, ...(code ? { code } : { host: true }) });
+      const r = await p.until((m) => m.t === "room");
+      code = r.code;
+      ids.push(r.you);
     }
+    a.send({ t: "start" });
+    for (const p of [a, b, c]) await p.until((m) => m.t === "hello");
     // Not fighting anybody: dropped.
     a.send({ t: "bt", q: 1, d: [1, 2, 3] });
     // By the truck alice (10,10), bob (11,10) and cara (9,10) stand in a row facing south.
@@ -115,6 +138,46 @@ test("/world: a link block goes to the trainer you are fighting, and nobody else
     assert.equal(b.inbox.filter((m) => m.t === "bt").length, 0);
     for (const p of [a, b, c]) p.ws.close();
   } finally {
+    await relay.close();
+  }
+});
+
+test("/world: a code nobody has, and quick play's count", async () => {
+  process.env.WORLD_AUTOSTART_SECS = "1";
+  const relay = createRelay({});
+  const { port } = await relay.listen(0, "127.0.0.1");
+  try {
+    const [a, b, c] = [phone(port), phone(port), phone(port)];
+    await Promise.all([a.open(), b.open(), c.open()]);
+    a.send({ t: "join", name: "alice", skin: 0, code: "ZZZZZZ" });
+    assert.deepEqual(await a.until((m) => m.t === "no_room"), { t: "no_room", code: "ZZZZZZ" });
+    // Not in a room, a phone can still pick one.
+    a.send({ t: "join", name: "alice", skin: 0 });
+    const ra = await a.until((m) => m.t === "room");
+    assert.equal(ra.quick, true);
+    assert.ok(ra.startsIn > 0 && ra.startsIn <= 1000, "a quick room counts down");
+    b.send({ t: "join", name: "bob", skin: 0 });
+    assert.equal((await b.until((m) => m.t === "room")).code, ra.code, "quick play fills the room that is waiting");
+    // Nobody presses START: the count does.
+    await a.until((m) => m.t === "hello", 3000);
+    await b.until((m) => m.t === "hello");
+    await new Promise((r) => setTimeout(r, 300));
+    a.send({ t: "sync" });
+    const sa = (await a.until((m) => m.t === "state")).state;
+    assert.equal(sa.results.entrants.filter(([id]) => id >= 1000).length, 2);
+    // Somebody who comes in once it is on watches it, from the bench.
+    c.send({ t: "join", name: "cara", skin: 0, code: ra.code });
+    const rc = await c.until((m) => m.t === "room");
+    assert.equal(rc.playing, true);
+    await c.until((m) => m.t === "hello");
+    await new Promise((r) => setTimeout(r, 300));
+    c.send({ t: "sync" });
+    const sc = (await c.until((m) => m.t === "state")).state;
+    assert.ok(sc.bench.some((x) => x.id === rc.you), "cara watches");
+    assert.ok(!sc.results.entrants.some(([id]) => id === rc.you));
+    for (const p of [a, b, c]) p.ws.close();
+  } finally {
+    delete process.env.WORLD_AUTOSTART_SECS;
     await relay.close();
   }
 });

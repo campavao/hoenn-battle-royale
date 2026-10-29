@@ -196,22 +196,52 @@ class Online implements WorldLink {
   }
 }
 
-/** The relay's shared world, or null if it is not there within `ms`. */
-export function onlineLink(url: string, name: string, skin: number, make: (seed: number) => Room, ms = 4000): Promise<WorldLink | null> {
-  return new Promise((resolve) => {
-    let ws: WebSocket;
-    try { ws = new WebSocket(url); } catch { resolve(null); return; }
-    const link = new Online(ws, make);
-    let done = false;
-    const finish = (v: WorldLink | null) => { if (!done) { done = true; clearTimeout(timer); resolve(v); } };
-    const timer = setTimeout(() => { ws.close(); finish(null); }, ms);
-    ws.addEventListener('open', () => ws.send(JSON.stringify({ t: 'join', name, skin } satisfies WorldUp)));
-    ws.addEventListener('message', (ev) => {
-      const m = JSON.parse(String(ev.data)) as WorldDown;
-      if (m.t === 'full') { finish(null); return; }
-      link.receive(m, () => finish(link));
-    });
-    ws.addEventListener('error', () => finish(null));
-    ws.addEventListener('close', () => finish(null));
+/** The relay's side of spike B, from the menu on: one socket for the rooms and every match
+ *  in them. `onMatch` hands over the match's link each time one starts for me (or I come
+ *  into one under way, to watch). */
+export interface WorldSocket {
+  join(name: string, skin: number, how: { code?: string; host?: boolean }): void;
+  start(): void;
+  close(): void;
+}
+
+export interface WorldHandlers {
+  onRoom(r: Extract<WorldDown, { t: 'room' }>): void;
+  onNoRoom(code: string): void;
+  onMatch(link: WorldLink): void;
+  /** The socket closed (or never opened). */
+  onClosed(): void;
+}
+
+export function connectWorld(url: string, make: (seed: number) => Room, h: WorldHandlers): WorldSocket {
+  let ws: WebSocket | null = null;
+  let match: Online | null = null;
+  let closed = false;
+  const queue: WorldUp[] = [];
+  const send = (m: WorldUp) => {
+    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
+    else queue.push(m);
+  };
+  try { ws = new WebSocket(url); } catch { ws = null; }
+  if (!ws) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, close: () => undefined }; }
+  const sock = ws;
+  sock.addEventListener('open', () => { for (const m of queue.splice(0)) sock.send(JSON.stringify(m)); });
+  sock.addEventListener('close', () => { if (!closed) { closed = true; h.onClosed(); } });
+  sock.addEventListener('message', (ev) => {
+    const m = JSON.parse(String(ev.data)) as WorldDown;
+    if (m.t === 'room') h.onRoom(m);
+    else if (m.t === 'no_room') h.onNoRoom(m.code);
+    else if (m.t === 'full') h.onNoRoom('');
+    else if (m.t === 'hello') {
+      const next = new Online(sock, make);
+      next.receive(m, () => undefined);
+      match = next;
+      h.onMatch(next);
+    } else match?.receive(m, () => undefined);
   });
+  return {
+    join: (name, skin, how) => send({ t: 'join', name, skin, ...how }),
+    start: () => send({ t: 'start' }),
+    close: () => { closed = true; sock.close(); },
+  };
 }
