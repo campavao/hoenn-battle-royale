@@ -7,7 +7,7 @@ import type { Bag, RoomState } from './room';
 export type WorldUp =
   /** In: who I am, and which room -- a code, a new one of my own (`host`), or, with
    *  neither, quick play. Answered by `room` (or `no_room`, `full`). */
-  | { t: 'join'; name: string; skin: number; code?: string; host?: boolean }
+  | { t: 'join'; name: string; skin: number; code?: string; host?: boolean; again?: Again }
   /** START (the room's host): the match begins for everybody in the room. */
   | { t: 'start' }
   /** My keys for frames `s`, `s`+1, ... (numbered from 1, never reset). */
@@ -34,6 +34,10 @@ export type WorldUp =
  *  room's hash after it, every HASH_EVERY frames. */
 export type WireFrame = Frame & { a?: number; h?: number };
 
+/** Back in after a reload (Cam, 2026-10-20: within a minute): the room, my trainer's id
+ *  in its match, and the key the relay gave me with it. */
+export interface Again { code: string; id: number; key: string }
+
 /** A trainer in a room, as the roster shows them. */
 export interface Member { id: number; name: string; skin: number }
 
@@ -45,7 +49,7 @@ export type WorldDown =
   /** No room by that code (or it is full). */
   | { t: 'no_room'; code: string }
   /** A match: my trainer's id in it and the Room as it starts (or as it is, joining late). */
-  | { t: 'hello'; id: number; state: RoomState }
+  | { t: 'hello'; id: number; state: RoomState; key?: string }
   | { t: 'state'; state: RoomState }
   | { t: 'f'; f: WireFrame[] }
   /** A link block from the trainer I am fighting. */

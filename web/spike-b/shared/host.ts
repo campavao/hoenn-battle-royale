@@ -117,6 +117,14 @@ export class Host {
     if (this.players.has(id)) this.pending.push({ c: 'bots', id, a, b, winner });
   }
 
+  /** A page gone for now (`on`), or back. Back, it numbers its keys from 1 again. */
+  away(id: number, on: boolean): void {
+    const p = this.players.get(id);
+    if (!p) return;
+    if (!on) { p.queue = []; p.seq = 0; p.started = false; p.waited = 0; }
+    this.pending.push({ c: 'away', id, on });
+  }
+
   /** The page's trade with event `n`'s trader is done: it gave him `given` (0, none). */
   traded(id: number, n: number, given: number): void {
     if (this.players.has(id)) this.pending.push({ c: 'traded', id, n, given });

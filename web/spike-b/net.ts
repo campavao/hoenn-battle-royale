@@ -17,12 +17,14 @@ import type { PatchTable } from '../src/bots/patches';
 import { tick } from './sim';
 import { Host, play } from './shared/host';
 import { keysOf, makeRoom, type Actor, type Bag, type Room, type RoomEvent } from './shared/room';
-import type { WireFrame, WorldDown, WorldUp } from './shared/wire';
+import type { Again, WireFrame, WorldDown, WorldUp } from './shared/wire';
 
 export interface WorldLink {
   readonly room: Room;
   readonly me: number;
   readonly online: boolean;
+  /** What a reload brings back to rejoin as the same trainer (online only). */
+  readonly key?: string;
   /** One frame: my keys in, the battles that started for me out. */
   frame(bits: number): RoomEvent[];
   /** My trainer as it is drawn (none for the frame before the room has me). */
@@ -81,6 +83,7 @@ const CUSHION = 3;
 class Online implements WorldLink {
   room!: Room;
   me = 0;
+  key?: string;
   readonly online = true;
   private queue: WireFrame[] = [];
   private playing = false;
@@ -109,6 +112,7 @@ class Online implements WorldLink {
       this.room = this.make(m.state.seed);
       this.room.load(m.state);
       this.me = m.id;
+      this.key = m.key;
       ready();
     } else if (m.t === 'state') {
       this.room.load(m.state);
@@ -214,7 +218,7 @@ class Online implements WorldLink {
  *  in them. `onMatch` hands over the match's link each time one starts for me (or I come
  *  into one under way, to watch). */
 export interface WorldSocket {
-  join(name: string, skin: number, how: { code?: string; host?: boolean }): void;
+  join(name: string, skin: number, how: { code?: string; host?: boolean; again?: Again }): void;
   start(): void;
   close(): void;
 }

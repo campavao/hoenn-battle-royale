@@ -39,4 +39,43 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it('a reload within a minute is the same trainer; later, it watches', () => {
+    let t = 0;
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => t, log: () => undefined });
+    try {
+      const a = phone(), b = phone();
+      const sa = svc.open(a.link), sb = svc.open(b.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, code }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      const hello = a.got.find((m) => m.t === 'hello') as unknown as { id: number; key: string };
+      expect(hello.key).toBeTruthy();
+      t += 1000; svc.pump();
+      sa.onClose();
+      t += 20_000; svc.pump();
+      // Back with the key: the same trainer, still on the map.
+      const a2 = phone();
+      const sa2 = svc.open(a2.link);
+      sa2.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, code, again: { code, id: hello.id, key: hello.key } }));
+      const back = a2.got.find((m) => m.t === 'hello') as unknown as { id: number; state: { actors: { id: number }[] } };
+      expect(back.id).toBe(hello.id);
+      expect(back.state.actors.some((x) => x.id === hello.id)).toBe(true);
+      // A wrong key is somebody else: in to watch, as a new trainer.
+      const c = phone();
+      svc.open(c.link).onText(JSON.stringify({ t: 'join', name: 'eve', skin: 0, code, again: { code, id: hello.id, key: 'nope' } }));
+      expect((c.got.find((m) => m.t === 'hello') as unknown as { id: number }).id).not.toBe(hello.id);
+      // Gone past the minute: off the map, and the key no longer brings it back.
+      sa2.onClose();
+      t += 61_000; svc.pump();
+      const a3 = phone();
+      svc.open(a3.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, code, again: { code, id: hello.id, key: hello.key } }));
+      const late = a3.got.find((m) => m.t === 'hello') as unknown as { id: number; state: { actors: { id: number }[] } };
+      expect(late.id).not.toBe(hello.id);
+      expect(late.state.actors.some((x) => x.id === hello.id)).toBe(false);
+      void sb;
+    } finally {
+      svc.stop();
+    }
+  });
 });

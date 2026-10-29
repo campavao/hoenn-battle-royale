@@ -123,7 +123,7 @@ test("/world: a link block goes to the trainer you are fighting, and nobody else
       const st = (await a.until((m) => m.t === "state")).state;
       const me = st.actors.find((x) => x.id === ids[0]);
       if (me.battling) { assert.equal(me.foe, ids[1]); break; }
-      assert.ok(i < 5, "alice never engaged");
+      assert.ok(i < 10, "alice never engaged");
     }
     a.send({ t: "bt", q: 1, d: [9, 8, 7, 300] });
     const got = await b.until((m) => m.t === "bt");

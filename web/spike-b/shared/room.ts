@@ -78,6 +78,9 @@ export interface Actor {
    *  proxy duel), and the frame it began. 0 for none. */
   judge?: number;
   since?: number;
+  /** A trainer whose page is gone for now (a reload): they stand, and nobody engages
+   *  them, until it is back or the relay gives up on it. */
+  away?: boolean;
   /** Bites the fog has taken out of a bot (BOT_BITES and it is out). */
   bites?: number;
 }
@@ -181,7 +184,9 @@ export type Command =
    *  0 for no answer (its ROM could not), and both walk on. */
   | { c: 'bots'; id: number; a: number; b: number; winner: number }
   /** `id` traded event `n`'s trader the species `given` (0: thought better of it). */
-  | { c: 'traded'; id: number; n: number; given: number };
+  | { c: 'traded'; id: number; n: number; given: number }
+  /** `id`'s page went (a reload), or came back. */
+  | { c: 'away'; id: number; on: boolean };
 
 /** The marked spots grow back: the ring's phase does it in the game; here, a while. */
 export const REGROW = 60 * 90;
@@ -303,6 +308,9 @@ export class Room {
     if (cmd.c === 'field') {
       const a = this.actor(cmd.id);
       if (a && !a.bot) a.field = cmd.bits & 7;
+    } else if (cmd.c === 'away') {
+      const a = this.actor(cmd.id);
+      if (a && !a.bot) a.away = cmd.on || undefined;
     } else if (cmd.c === 'traded') {
       const t = this.events.find((e) => e.n === cmd.n)?.trader;
       if (!t || t.busy !== cmd.id) return;
@@ -702,7 +710,7 @@ export class Room {
    *  trainers standing still, neither in a fight nor in its grace. They turn to face each
    *  other, and the lower id is the side that challenged. */
   private engage(events: RoomEvent[]): void {
-    const free = this.actors.filter((a) => !a.bot && !a.battling && !a.m.action && this.tick >= a.calm);
+    const free = this.actors.filter((a) => !a.bot && !a.away && !a.battling && !a.m.action && this.tick >= a.calm);
     for (let i = 0; i < free.length; i++) {
       const a = free[i];
       if (a.battling) continue;
@@ -877,7 +885,7 @@ export class Room {
       mix(m.facing); mix(m.moveDir); mix(m.runningState); mix(m.run ? 1 : 0); mix(m.strides);
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
-      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0);
+      mix((a.battling ? 1 : 0) | (a.beaten ? 2 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.away ? 1 : 0);
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
     for (const [k, by] of this.picked) { mix(k); mix(by); }

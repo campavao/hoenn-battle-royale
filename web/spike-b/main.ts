@@ -648,6 +648,7 @@ function inFogNow(): boolean {
 function goOut(why: string, by?: number, wild?: boolean): void {
   if (isOut || !link.room.actor(link.me)) return;
   isOut = true;
+  forget();
   // Nothing more goes into a trainer who is out: what was on its way stays on the ground.
   for (const g of toGive.splice(0)) link.drop(g.key);
   // What I carried lies where I fell (POK-232), once what was already going in is in.
@@ -768,6 +769,38 @@ let lobby: Lobby | null = null;
 let room: RoomInfo | null = null;
 /** A match of mine is on (I am in it, or watching it). */
 let matchOn = false;
+
+// A reload within a minute comes back as the same trainer with the same team (Cam,
+// 2026-10-20): the relay holds the trainer for AWAY_MS, the page keeps what lets it back
+// in (the room, its id, its key) and the ROM's own (party, bag, Pokédex), every few
+// seconds. A reload mid-battle is a forfeit: the relay does not hold a battling trainer.
+const AGAIN = 'spikeB.again';
+const AGAIN_ROM = 'spikeB.againRom';
+const AGAIN_MS = 60_000;
+interface Token { code: string; id: number; key: string; at: number }
+function token(): Token | null {
+  try {
+    const t = JSON.parse(localStorage.getItem(AGAIN) ?? 'null') as Token | null;
+    return t && Date.now() - t.at < AGAIN_MS ? t : null;
+  } catch { return null; }
+}
+function forget(): void {
+  try { localStorage.removeItem(AGAIN); localStorage.removeItem(AGAIN_ROM); } catch { /* private window */ }
+}
+/** The team a reload is bringing back, until the ROM has booted to take it. */
+let comingBack: string | null = null;
+let savedAt = 0;
+/** Every few seconds of a match: still here, and the team as it is. */
+function remember(): void {
+  if (!link?.online || !link.key || !room || !matchOn || isOut || !link.room.actor(link.me)) return;
+  const now = Date.now();
+  if (now - savedAt < 5000) return;
+  savedAt = now;
+  try { localStorage.setItem(AGAIN, JSON.stringify({ code: room.code, id: link.me, key: link.key, at: now })); } catch { return; }
+  if (rom && !battle && !asking && !swapping && !comingBack) {
+    void rom.save().then((t) => { try { localStorage.setItem(AGAIN_ROM, t); } catch { /* full */ } });
+  }
+}
 /** The relay said it is over; the standings wait for its last frames here. */
 let endingAt = 0;
 let looping = false;
@@ -790,7 +823,13 @@ function startMatch(l: WorldLink): void {
   winEl.classList.remove('on');
   if (spectating) toggleSpectate();
   follow = link.me;
-  if (rom) { rom.reseed(l.room.seed); void rom.fresh(); }
+  savedAt = 0;
+  const back = token();
+  comingBack = null;
+  if (back && l.online && back.id === l.me) {
+    try { comingBack = localStorage.getItem(AGAIN_ROM); } catch { comingBack = null; }
+  } else forget();
+  if (rom) { rom.reseed(l.room.seed); void (comingBack ? takeBack(rom) : rom.fresh()); }
   if (!looping) {
     looping = true;
     resize();
@@ -798,7 +837,16 @@ function startMatch(l: WorldLink): void {
   }
 }
 
+/** The team the reload left with, into the booted ROM. */
+async function takeBack(r: RomBattles): Promise<void> {
+  const t = comingBack;
+  comingBack = null;
+  if (!t || !(await r.load(t))) await r.fresh();
+  else say('Welcome back!');
+}
+
 function matchOver(): void {
+  forget();
   matchOn = false;
   endingAt = performance.now();
 }
@@ -1353,6 +1401,7 @@ function loop(now: number): void {
     fieldFrame();
     fogFrame();
     foeFrame();
+    remember();
     for (const k of pressed) watch.key(k);
     pressed.clear();
   }
@@ -1409,7 +1458,7 @@ async function boot(): Promise<void> {
   const rest = [...placed.values()];
   const next = () => { const p = rest.find((r) => !r.mips); if (p) { paint(p); mipFor(p, 0); setTimeout(next, 16); } };
   setTimeout(next, 500);
-  const booted = (r: RomBattles) => { rom = r; if (link) r.reseed(link.room.seed); giveNext(); };
+  const booted = (r: RomBattles) => { rom = r; if (link) r.reseed(link.room.seed); if (comingBack) void takeBack(r); giveNext(); };
   if (q.has('solo')) {
     // The debug path (Cam, 2026-10-29): straight into a world of the page's own, the bots
     // and nobody else. A quicker fog to try it: ?ring=<seconds a phase>.
@@ -1427,7 +1476,7 @@ async function boot(): Promise<void> {
         // The standings stay up until PLAY AGAIN; then the room as it is by then.
         else if (!matchOn && !winEl.classList.contains('on')) lobby!.roomIs(r);
       },
-      onNoRoom: (code) => lobby!.menu(code ? `There is no room ${code}.` : 'Every place in the world is taken.'),
+      onNoRoom: (code) => { forget(); lobby!.menu(code ? `There is no room ${code}.` : 'Every place in the world is taken.'); },
       onMatch: (l) => startMatch(l),
       onClosed: () => { matchOn = false; lobby!.menu('Lost the relay. Reload to play again.'); },
     });
@@ -1436,7 +1485,10 @@ async function boot(): Promise<void> {
       start: () => sock.start(),
       leave: () => location.reload(),
     });
-    lobby.menu();
+    // Reloaded within a minute of a match: straight back in (or, too late, in to watch).
+    const back = token();
+    if (back) { lobby.hide(); sock.join(me().name, me().skin, { code: back.code, again: { code: back.code, id: back.id, key: back.key } }); }
+    else lobby.menu();
   }
   bootRom(files, link?.room.seed ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
   (window as unknown as { __spike: unknown }).__spike = { get link() { return link; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; } };

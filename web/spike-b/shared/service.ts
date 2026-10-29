@@ -18,7 +18,7 @@ import { Host } from './host';
 import { makeRoom } from './room';
 import { cleanBag } from './items';
 import { over } from './over';
-import { HASH_EVERY, type Member, type WireFrame, type WorldDown, type WorldUp } from './wire';
+import { HASH_EVERY, type Again, type Member, type WireFrame, type WorldDown, type WorldUp } from './wire';
 
 export interface Link { send(text: string): void; close(): void }
 export interface Session { onText(text: string): void; onClose(): void }
@@ -48,6 +48,10 @@ const BT_MAX = 256;
 const ROOM_MAX = 30;
 /** match/room.ts's AUTO_START_MS. */
 const AUTO_START_MS = 60_000;
+/** A page gone mid-match (a reload) keeps its trainer this long (Cam, 2026-10-20). */
+const AWAY_MS = 60_000;
+/** Where an away phone's frames go meanwhile. */
+const NOWHERE: Link = { send: () => undefined, close: () => undefined };
 /** Ids for trainers, clear of the bots' 1..n. */
 const FIRST_ID = 1000;
 
@@ -58,6 +62,9 @@ interface Phone {
   link: Link;
   heard: number;
   synced: number;
+  /** What a reload comes back in with (Again), and since when it has been gone (0: here). */
+  key: string;
+  away: number;
 }
 
 interface Lobby {
@@ -94,6 +101,10 @@ export class WorldService {
         try { m = JSON.parse(text) as WorldUp; } catch { return; }
         if (!m || typeof m !== 'object') return;
         if (phone) phone.heard = this.opts.now();
+        if (m.t === 'join' && !phone && m.again && typeof m.again === 'object') {
+          const back = this.back(m.again, link);
+          if (back) { phone = back; return; }
+        }
         if (m.t === 'join' && !phone) {
           if (this.where.size >= this.opts.cap) { this.send(link, { t: 'full' }); link.close(); return; }
           const room = this.pick(m);
@@ -101,7 +112,7 @@ export class WorldService {
           const name = String(m.name ?? '').toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim().slice(0, 10);
           const skin = Number.isInteger(m.skin) && m.skin >= 0 && m.skin < 16 ? m.skin : 0;
           const id = this.nextId++;
-          phone = { id, name: name || `TRAINER ${id - FIRST_ID + 1}`.slice(0, 10), skin, link, heard: this.opts.now(), synced: -Infinity };
+          phone = { id, name: name || `TRAINER ${id - FIRST_ID + 1}`.slice(0, 10), skin, link, heard: this.opts.now(), synced: -Infinity, key: Math.random().toString(36).slice(2, 12), away: 0 };
           room.members.set(id, phone);
           this.where.set(id, room);
           if (!room.owner) room.owner = id;
@@ -110,7 +121,7 @@ export class WorldService {
           // A match under way: in, to watch it until the next.
           if (room.host) {
             room.host.join(phone.name, phone.skin, undefined, id);
-            this.send(link, { t: 'hello', id, state: room.host.room.state() });
+            this.send(link, { t: 'hello', id, state: room.host.room.state(), key: phone.key });
           }
           this.run();
           return;
@@ -155,19 +166,52 @@ export class WorldService {
       },
       onClose: () => {
         if (!phone) return;
-        const room = this.where.get(phone.id);
-        this.where.delete(phone.id);
-        if (!room) return;
-        room.members.delete(phone.id);
-        room.host?.leave(phone.id);
-        // START passes to whoever came in next.
-        if (room.owner === phone.id) room.owner = room.members.keys().next().value ?? 0;
-        this.opts.log(`world: #${phone.id} out of room ${room.code} (${room.members.size} there)`);
-        if (!room.members.size) this.close(room);
-        else this.roster(room);
+        const p = phone;
         phone = null;
+        const room = this.where.get(p.id);
+        const me = room?.host?.room.actor(p.id);
+        // Mid-match, a reload comes back within the minute to the trainer it left; a
+        // reload mid-battle is a forfeit (Cam), and a page waiting on the bench just goes.
+        if (room?.host && me && !me.battling) {
+          p.away = this.opts.now();
+          p.link = NOWHERE;
+          room.host.away(p.id, true);
+          this.opts.log(`world: #${p.id} away from room ${room.code}`);
+          return;
+        }
+        this.drop(p);
       },
     };
+  }
+
+  /** A phone gone for good: out of its room, and its trainer out of the match. */
+  private drop(p: Phone): void {
+    const room = this.where.get(p.id);
+    this.where.delete(p.id);
+    if (!room) return;
+    room.members.delete(p.id);
+    room.host?.leave(p.id);
+    // START passes to whoever came in next.
+    if (room.owner === p.id) room.owner = [...room.members.values()].find((q) => !q.away)?.id ?? 0;
+    this.opts.log(`world: #${p.id} out of room ${room.code} (${room.members.size} there)`);
+    if (![...room.members.values()].some((q) => !q.away)) this.close(room);
+    else this.roster(room);
+  }
+
+  /** A reload's way back to the trainer it left, or null. */
+  private back(again: Again, link: Link): Phone | null {
+    const room = typeof again.code === 'string' ? this.rooms.get(again.code.toUpperCase()) : undefined;
+    const p = room?.members.get(Number(again.id));
+    if (!room?.host || !p || !p.away || p.key !== again.key) return null;
+    p.link = link;
+    p.away = 0;
+    p.heard = this.opts.now();
+    p.synced = -Infinity;
+    room.host.away(p.id, false);
+    this.opts.log(`world: #${p.id} back in room ${room.code}`);
+    this.send(link, { t: 'hello', id: p.id, state: room.host.room.state(), key: p.key });
+    this.roster(room);
+    return p;
   }
 
   /** The room a join asks for: its code, a new one of its own (HOST), or quick play's. */
@@ -209,7 +253,7 @@ export class WorldService {
     room.t0 = this.opts.now();
     this.opts.log(`world: room ${room.code} starts, ${room.members.size} trainers, seed ${seed}`);
     const state = r.state();
-    for (const p of room.members.values()) this.send(p.link, { t: 'hello', id: p.id, state });
+    for (const p of room.members.values()) this.send(p.link, { t: 'hello', id: p.id, state, key: p.key });
     this.roster(room);
   }
 
@@ -228,7 +272,7 @@ export class WorldService {
   }
 
   private roster(room: Lobby): void {
-    const members: Member[] = [...room.members.values()].map((p) => ({ id: p.id, name: p.name, skin: p.skin }));
+    const members: Member[] = [...room.members.values()].filter((p) => !p.away).map((p) => ({ id: p.id, name: p.name, skin: p.skin }));
     const now = this.opts.now();
     for (const p of room.members.values()) {
       this.send(p.link, {
@@ -252,9 +296,14 @@ export class WorldService {
     for (const room of [...this.rooms.values()]) {
       try {
         // Waiting in a room a phone has nothing to say (the socket's pings keep it honest).
-        if (room.host) for (const p of [...room.members.values()]) if (now - p.heard > QUIET_MS) p.link.close();
+        if (room.host) for (const p of [...room.members.values()]) if (!p.away && now - p.heard > QUIET_MS) p.link.close();
+        // Gone longer than a reload takes: out, as if they had left.
+        for (const p of [...room.members.values()]) if (p.away && (now - p.away > AWAY_MS || !room.host)) this.drop(p);
+        if (!this.rooms.has(room.code)) continue;
         if (!room.host && room.startsAt !== null && now >= room.startsAt) this.start(room);
-        if (room.host) this.frames(room, now);
+        // Everybody away (one phone against the bots, reloading): the match waits for them,
+        // bots and all (Cam, 2026-10-20).
+        if (room.host && [...room.members.values()].some((p) => !p.away)) this.frames(room, now);
       } catch (err) {
         // Once, not every 4 ms: this room's match stops, the others go on.
         this.opts.log(`world: room ${room.code} stopped on ${err instanceof Error ? err.stack : String(err)}`);

@@ -135,6 +135,10 @@ export interface RomBattles {
   addMoney(n: number): Promise<void>;
   /** The money the trainer has. */
   money(): Promise<number>;
+  /** The trainer's own (party, bag, Pokédex), as text for a reload to bring back. */
+  save(): Promise<string>;
+  /** Back from save()'s text. False when it would not read. */
+  load(text: string): Promise<boolean>;
   /** A MART's sale: `n` of `item` into the bag the ROM's own way, `each` paid for every
    *  one that went in. How many did; 0 when they could not pay or nothing fitted. */
   buy(item: number, n: number, each: number): Promise<number>;
@@ -687,6 +691,33 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     },
     money() {
       return inTurn(async () => moneyOf(carried ?? kept()));
+    },
+    save() {
+      return inTurn(async () => {
+        const k = carried ?? kept();
+        const b64 = (u: Uint8Array) => btoa(String.fromCharCode(...u));
+        return JSON.stringify({ count: k.count, key: k.key, party: b64(k.party), bag: b64(k.bag), dex: b64(k.dex), seen1: b64(k.seen1), seen2: b64(k.seen2), levels: b64(k.levels) });
+      });
+    },
+    load(text) {
+      return inTurn(async () => {
+        if (broken) return false;
+        try {
+          const j = JSON.parse(text);
+          const un = (s: string, n: number) => {
+            const u = Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+            if (u.length !== n) throw new Error('size');
+            return u;
+          };
+          const k = {
+            count: j.count >>> 0, key: j.key >>> 0, party: un(j.party, PARTY_LEN), bag: un(j.bag, BAG_LEN),
+            dex: un(j.dex, DEX2_LEN), seen1: un(j.seen1, SEEN_LEN), seen2: un(j.seen2, SEEN_LEN), levels: un(j.levels, 8),
+          };
+          keep(k);
+          carried = last = k;
+          return true;
+        } catch { return false; }
+      });
     },
     buy(item, n, each) {
       return inTurn(async () => {
