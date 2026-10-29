@@ -91,7 +91,7 @@ export interface Listed { code: string; host: string; skin: number; players: num
 export type WorldDown =
   /** The room as it is now, whenever anything in it changes: its code, who is in it, who
    *  has START (`owner`), whether a match is on, and a quick room's count to its start. */
-  | { t: 'room'; code: string; quick: boolean; you: number; owner: number; members: Member[]; playing: boolean; startsIn?: number; set: Settings; pass?: string }
+  | { t: 'room'; code: string; quick: boolean; you: number; key?: string; owner: number; members: Member[]; playing: boolean; startsIn?: number; set: Settings; pass?: string }
   /** The hosted rooms (LOBBIES): whose, how many in it of ROOM_MAX, and whether its
    *  match is on (joining one under way watches it until the next). */
   | { t: 'rooms'; rooms: Listed[] }

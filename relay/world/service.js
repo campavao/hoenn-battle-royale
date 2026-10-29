@@ -3675,6 +3675,7 @@ var WorldService = class {
         if (!phone) return;
         const p = phone;
         phone = null;
+        if (p.link !== link) return;
         const room = this.where.get(p.id);
         const me = room?.host?.room.actor(p.id);
         const was = p.watching;
@@ -3708,12 +3709,24 @@ var WorldService = class {
     if (!room.members.size) this.close(room);
     else this.roster(room);
   }
-  /** A reload's way back to the trainer it left, or null. */
+  /** A reload's (or a dropped socket's) way back to the trainer it left, or null. The
+   *  old socket may not have been seen to close yet (a dead one is found by the ping
+   *  sweep): with the key, the new one takes the phone over all the same, in a match or
+   *  in the room before one. */
   back(again, link) {
     const room = typeof again.code === "string" ? this.rooms.get(again.code.toUpperCase()) : void 0;
     const p = room?.members.get(Number(again.id));
-    if (!room?.host || !p || !p.away || p.key !== again.key) return null;
+    if (!room || !p || p.key !== again.key || typeof again.key !== "string") return null;
+    if (!room.host && p.away) return null;
+    const old = p.link;
     p.link = link;
+    if (old !== NOWHERE && old !== link) old.close();
+    if (!room.host) {
+      p.heard = this.opts.now();
+      this.opts.log(`world: #${p.id} back in room ${room.code}`);
+      this.roster(room);
+      return p;
+    }
     p.away = 0;
     p.heard = this.opts.now();
     p.synced = -Infinity;
@@ -3850,6 +3863,7 @@ var WorldService = class {
         code: room.code,
         quick: room.quick,
         you: p.id,
+        key: p.key,
         owner: room.owner,
         members,
         playing: !!room.host,

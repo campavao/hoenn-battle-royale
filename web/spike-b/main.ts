@@ -1120,6 +1120,13 @@ function token(): Token | null {
     return t && Date.now() - t.at < AGAIN_MS ? t : null;
   } catch { return null; }
 }
+/** A match a reload left more than AGAIN_MS ago, still recent enough to be on: its room. */
+function lateCode(): string | null {
+  try {
+    const t = JSON.parse(localStorage.getItem(AGAIN) ?? 'null') as Token | null;
+    return t && Date.now() - t.at < 30 * 60_000 ? t.code : null;
+  } catch { return null; }
+}
 function forget(): void {
   try { localStorage.removeItem(AGAIN); localStorage.removeItem(AGAIN_ROM); } catch { /* private window */ }
 }
@@ -1208,7 +1215,9 @@ function resumeMatch(l: WorldLink): void {
 }
 
 function startMatch(l: WorldLink): void {
-  if (resuming && matchOn) { resumeMatch(l); return; }
+  // The relay took the same trainer back (its id): the match carries on. Anything else
+  // (the hold gone, in again as a watcher) is a match come into afresh.
+  if (resuming && matchOn && l.me === link.me) { resumeMatch(l); return; }
   resuming = reconnecting = false;
   link = l;
   // The room's battle pace (the host's TEXT and ANIM); ?solo keeps the parked FAST, none.
@@ -2394,7 +2403,8 @@ async function boot(): Promise<void> {
           return { t: 'join', name: who.name, skin: who.skin, code: room.code, again: { code: room.code, id: link.me, key: link.key } };
         }
         reconnecting = false;
-        return room ? { t: 'join', name: who.name, skin: who.skin, code: room.code } : undefined;
+        // In the room before a match: the same seat (the key takes it over), not a second.
+        return room ? { t: 'join', name: who.name, skin: who.skin, code: room.code, ...(room.key ? { again: { code: room.code, id: room.you, key: room.key } } : {}) } : undefined;
       },
     });
     worldSock = sock;
@@ -2412,7 +2422,12 @@ async function boot(): Promise<void> {
     // Reloaded within a minute of a match: straight back in (or, too late, in to watch).
     const back = token();
     if (back) { lobby.hide(); sock.join(me().name, me().skin, { code: back.code, again: { code: back.code, id: back.id, key: back.key } }); }
-    else lobby.menu();
+    else {
+      // Too late to be the same trainer: the menu's WATCH goes back in to look (HBR-20).
+      lobby.rewatch = lateCode();
+      forget();
+      lobby.menu(lobby.rewatch ? 'Too late to rejoin the match. WATCH it from here.' : '');
+    }
   }
   bootRom(files, link?.room.seed ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
   (window as unknown as { __spike: unknown }).__spike = { get link() { return link; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; } };

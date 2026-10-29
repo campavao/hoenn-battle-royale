@@ -7,7 +7,7 @@
 import { Stage, type DrawnScreen } from '../src/ui/stage';
 import { menuScreen, roomScreen, sheetScreen, type RoomModel, type RowSpec, type SheetModel } from '../src/ui/screens';
 import { CODE_ENTRY, NAME_ENTRY, PASS_ENTRY, entryScreen, newEntry } from '../src/ui/entry';
-import { FEEDBACK_ROW, HOWTO_ROW, countdown, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction } from '../src/match/lobby';
+import { FEEDBACK_ROW, HOWTO_ROW, rewatchRow, countdown, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction } from '../src/match/lobby';
 import { howToScreen } from '../src/ui/howto';
 import { howToRead, markHowToRead } from '../src/ui/howto-due';
 import { SKINS, cleanName, loadCareer, saveProfile, skinUnlocked } from '../src/match/career';
@@ -21,7 +21,7 @@ import type { Listed, Member, Settings } from './shared/wire';
 import { FOG_STEPS, SAFARI_STEPS, TEXT_SPEEDS, nextTextSpeed, textSpeedLabel, doorLabel, levelOf, nextDoor, nextFog, nextMax, nextSafari, safariLabel } from '../src/match/room';
 
 /** The room as the relay last said it is (wire.ts's `room`). */
-export interface RoomInfo { code: string; quick: boolean; you: number; owner: number; members: Member[]; playing: boolean; startsIn?: number; set: Settings; pass?: string }
+export interface RoomInfo { code: string; quick: boolean; you: number; key?: string; owner: number; members: Member[]; playing: boolean; startsIn?: number; set: Settings; pass?: string }
 
 export interface LobbyHooks {
   /** Into a room: by code, a new one of my own, or quick play's. */
@@ -143,7 +143,12 @@ export class Lobby {
     else if (a.kind === 'feedback') { if (this.said !== 'sending') this.said = 'typing'; this.stage.push(this.feedback); }
     else if (a.kind === 'skin' || a.kind === 'look') { this.browsed = null; this.stage.push(this.look); }
     else if (a.kind === 'mystats') this.stage.push(this.myStats);
+    else if (a.kind === 'rewatch') { this.rewatch = null; this.hooks.join({ code: a.code }); }
   }
+
+  /** The room of a match a reload left too late to come back in as its trainer: the main
+   *  menu's WATCH row goes back into it to look. */
+  rewatch: string | null = null;
 
   /** The TRAINER CARD (the live game's, POK-335): name, sprite and record, and the two
    *  rows the world has a use for, MY LOOK and MY STATS. */
@@ -285,7 +290,8 @@ export class Lobby {
     // The ways in the world has: no LOBBIES list or daily game here yet.
     rows: playRows('up')
       .filter((r) => r.action.kind === 'quick' || r.action.kind === 'host' || r.action.kind === 'lobbies' || r.action.kind === 'code')
-      .concat(HOWTO_ROW, FEEDBACK_ROW)
+      // The match a reload left too late to come back into (HBR-20): WATCH it.
+      .concat(this.rewatch ? [rewatchRow(this.rewatch)] : [], HOWTO_ROW, FEEDBACK_ROW)
       .map((r): RowSpec => ({ label: r.label, id: r.id, art: r.art, onPress: () => this.press(r.action), ...(r.id === HOWTO_ROW.id && !howToRead(localStorage) ? { badge: true } : {}) })),
     rowsId: 'lobby-rows',
     tiles: true,

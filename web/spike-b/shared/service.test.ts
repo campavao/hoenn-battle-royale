@@ -185,6 +185,40 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it('a new socket with the key takes the trainer over before the old one is seen to close', () => {
+    let t = 0;
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 3, cap: 30, now: () => t, log: () => undefined });
+    try {
+      const a = phone(), b = phone();
+      const sa = svc.open(a.link), sb = svc.open(b.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const room = a.got.at(-1) as unknown as { code: string; you: number; key: string };
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, code: room.code }));
+      // In the room: the seat itself, not a second ALICE.
+      const a2 = phone();
+      const sa2 = svc.open(a2.link);
+      sa2.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, code: room.code, again: { code: room.code, id: room.you, key: room.key } }));
+      expect(b.got.at(-1)).toMatchObject({ t: 'room', members: [{ name: 'ALICE' }, { name: 'BOB' }], owner: room.you });
+      expect(a.closed).toBe(true);
+      sa.onClose();
+      expect(b.got.at(-1)).toMatchObject({ t: 'room', members: [{ name: 'ALICE' }, { name: 'BOB' }] });
+      sa2.onText(JSON.stringify({ t: 'start' }));
+      const hello = a2.got.find((m) => m.t === 'hello') as unknown as { id: number; key: string };
+      expect(hello.id).toBe(room.you);
+      t += 1000; svc.pump();
+      // Mid-match, the old socket still open: the new one is the same trainer, at once.
+      const a3 = phone();
+      svc.open(a3.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, code: room.code, again: { code: room.code, id: hello.id, key: hello.key } }));
+      expect(a3.got.find((m) => m.t === 'hello')).toMatchObject({ id: hello.id });
+      sa2.onClose();
+      t += 1000; svc.pump();
+      const rooms = (svc as unknown as { rooms: Map<string, { members: Map<number, { away: number }>; host: { room: { actor(id: number): unknown } } }> }).rooms;
+      expect(rooms.get(room.code)!.members.get(hello.id)!.away).toBe(0);
+      expect(rooms.get(room.code)!.host.room.actor(hello.id)).toBeTruthy();
+    } finally {
+      svc.stop();
+    }
+  });
   it('a reload within a minute is the same trainer; later, it watches', () => {
     // Bots on the map keep the match going after bob is the last trainer left.
     let t = 0;
