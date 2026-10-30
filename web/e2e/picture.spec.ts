@@ -100,7 +100,7 @@ test.beforeAll(() => {
 
 /** Solo from the boot to the seed's Safari cell, standing still. */
 async function boot(page: Page, sym: Record<string, number>, hash: string): Promise<void> {
-  await page.goto(`/#solo&nobots&seed=${SEED}${hash}&rom=${romHashParam()}`);
+  await page.goto(`/classic/#solo&nobots&seed=${SEED}${hash}&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
   await page.waitForSelector('body.in-match', { timeout: 60_000 });
   await expect
@@ -390,7 +390,7 @@ test("on a desktop Route 120's clouds are drawn once each, where the OAM puts th
   const ctx = await browser.newContext({ viewport: DESKTOP });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${ROUTE_120.id},27,71&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${ROUTE_120.id},27,71&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 60_000 });
     await expect
@@ -512,7 +512,7 @@ async function rustboroIsTheMap(browser: Browser, how: { name: string; context: 
   const ctx = await browser.newContext(how.context);
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${RUSTBORO.id},${RUSTBORO_LAND.x},${RUSTBORO_LAND.y}&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${RUSTBORO.id},${RUSTBORO_LAND.x},${RUSTBORO_LAND.y}&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 60_000 });
     await expect

@@ -55,7 +55,7 @@ test('a player out at the buzzer is taken to the trainer they watch, and hears t
     const host = await ctx.newPage();
     // #fast: a 25-second opening. Nothing is thrown, so nothing is caught, and the
     // buzzer puts us out (Kanto's rule) with the room's bots still in it.
-    await host.goto(`/#host&fast&seed=20260916&testmon&rom=${romHashParam()}`);
+    await host.goto(`/classic/#host&fast&seed=20260916&testmon&rom=${romHashParam()}`);
     await host.waitForFunction(() => (window as unknown as Partial<OutWindow>).__hbr !== undefined, undefined, { timeout: 90_000 });
     await startWith(host, 1);
     await host.waitForFunction(

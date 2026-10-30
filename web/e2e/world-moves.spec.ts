@@ -84,7 +84,7 @@ test('the other seats walk on past the picture in the bag, and are the ROM\'s ag
   const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: { field?: unknown } }).__hbr?.field !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 30_000 });
 

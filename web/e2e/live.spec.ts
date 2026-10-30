@@ -31,7 +31,7 @@ test('the deployed site patches a stock ROM in the browser', async ({ page }) =>
   page.on('requestfailed', (r) => failed.push(`${r.url()} ${r.failure()?.errorText ?? ''}`));
   page.on('pageerror', (e) => failed.push(`pageerror: ${e.message}`));
 
-  await page.goto(`${site}/#solo`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${site}/classic/#solo`, { waitUntil: 'domcontentloaded' });
   // Picked as early as the page allows, ON PURPOSE. `#screen-importing` is the default
   // screen -- no `hidden` in index.html -- so the picker is live from the first paint,
   // while the change listener is not attached until runImportScreen runs, which is after

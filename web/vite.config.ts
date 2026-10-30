@@ -113,7 +113,9 @@ export default defineConfig({
     target: "es2022",
     rollupOptions: {
       input: {
+        // The game (spike B) at /, and the classic shell at /classic/ for its last week.
         main: resolve(__dirname, "index.html"),
+        classic: resolve(__dirname, "classic/index.html"),
         spike: resolve(__dirname, "spike/index.html"),
       },
     },

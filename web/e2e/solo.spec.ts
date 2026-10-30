@@ -17,7 +17,7 @@ test.beforeAll(() => {
 test('a solo match ends on its results, and MAIN MENU goes back to the lobby', async ({ page }) => {
   test.setTimeout(420_000);
 
-  await page.goto(`/#solo&fast&rom=${romHashParam()}`);
+  await page.goto(`/classic/#solo&fast&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
 
   // A whole match at the dev pace: 25s opening, 15s ring phases, bots filling the field,

@@ -1,4 +1,4 @@
-// Spike B (/spike-b/), the game the old overworld is being swapped for, played the way a
+// The game (spike B, at /), played the way a
 // player gets to it: no ROM on the device yet, PICK ROM, the menu, a hosted room with
 // bots, START, and the match through to its results. Nothing here presses a key in the
 // match: catching nothing in the Safari puts the player out at the drop (the rule), so
@@ -23,7 +23,7 @@ async function setOption(page: Page, id: string, want: string): Promise<void> {
 
 test('a new player picks a ROM on spike B itself and gets the menu', async ({ page }) => {
   test.setTimeout(120_000);
-  await page.goto('/spike-b/');
+  await page.goto('/');
   await expect(page.locator('#pick-rom')).toBeVisible({ timeout: 60_000 });
   await page.locator('#rom-input').setInputFiles(romPath());
   await expect(page.locator('#lobby-rows button', { hasText: 'QUICK PLAY' })).toBeVisible({ timeout: 90_000 });
@@ -35,7 +35,7 @@ test('a new player picks a ROM on spike B itself and gets the menu', async ({ pa
 
 test('a hosted room with bots plays through to its results', async ({ page }) => {
   test.setTimeout(600_000);
-  await page.goto(`/spike-b/?rom=${romHashParam()}`);
+  await page.goto(`/?rom=${romHashParam()}`);
   await page.locator('#lobby-rows button', { hasText: 'HOST A ROOM' }).click({ timeout: 90_000 });
   await expect(page.locator('#room-start')).toBeVisible({ timeout: 30_000 });
   await setOption(page, 'room-fog', 'FOG 30s');

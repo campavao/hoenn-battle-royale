@@ -25,7 +25,7 @@ test('a watcher walks in on a running match, and the match is not theirs', async
   try {
     // A match, running and locked.
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&fast&seed=20260916&testmon&rom=${rom}`);
+    await host.goto(`/classic/#host&fast&seed=20260916&testmon&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     await startWith(host, 1);
     await host.waitForFunction(
@@ -52,7 +52,7 @@ test('a watcher walks in on a running match, and the match is not theirs', async
         }
       }),
     );
-    await watcher.goto(`/#watch=${code}&rom=${rom}`);
+    await watcher.goto(`/classic/#watch=${code}&rom=${rom}`);
     await watcher.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
 
     // The late start: the fog's position arrives at once rather than at the next ring.

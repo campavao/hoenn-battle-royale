@@ -170,7 +170,7 @@ test('a potion in a link battle heals the same mon on both ROMs, whoever drinks 
 
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&noauto&nobots&testmon&rom=${rom}`);
+    await host.goto(`/classic/#host&noauto&nobots&testmon&rom=${rom}`);
     await host.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
     const codeEl = host.locator('#room-code');
     await expect(codeEl).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 30_000 });
@@ -178,7 +178,7 @@ test('a potion in a link battle heals the same mon on both ROMs, whoever drinks 
     if (!code) throw new Error('could not parse a room code');
 
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&noauto&nobots&testmon&rom=${rom}`);
+    await guest.goto(`/classic/#join=${code}&noauto&nobots&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
     const pages = [host, guest];
 

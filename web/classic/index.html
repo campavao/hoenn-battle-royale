@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <title>Hoenn Battle Royale</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#0f151a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: #101418; color: #e8eef2; font: 14px/1.4 system-ui, sans-serif; }
+      body {
+        display: flex;
+        flex-direction: column;
+        min-height: 100dvh;
+        padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+      }
+      #app { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+      /* Read by a screen reader and a test, drawn by the stage: the version line is on
+         the drawn screens' last line (POK-320). */
+      .sr-only {
+        position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+        overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+      }
+
+      .screen {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        padding: 0 calc(16px + env(safe-area-inset-right)) 16px calc(16px + env(safe-area-inset-left));
+      }
+      .screen[hidden] { display: none; }
+
+      #screen-playing { padding: 0; align-items: center; position: relative; }
+      #stage {
+        position: fixed; inset: 0; z-index: 9;
+        background: #101418;
+        display: flex; justify-content: center; align-items: flex-start;
+        overflow: hidden;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+      #stage[hidden] { display: none; }
+      /* Over the game still running under it: the in-match sheet on a phone (POK-320). */
+      #stage[data-look='overlay'] { background: transparent; }
+      /* Beside the game: the sheet on a desktop, where the room panel always was, in view
+         all match. The game makes room for it (body.docked, set by the stage). At twice
+         the picture's size only when the window can spare that and still give the game
+         as much, and is tall enough for whole pixels; at its own size otherwise, so a
+         window snapped to half a laptop screen keeps most of itself for the game. */
+      :root { --dock: 240px; }
+      @media (min-width: 960px) and (min-height: 640px) { :root { --dock: 480px; } }
+      #stage[data-look='dock'] { right: auto; width: var(--dock); z-index: 3; }
+      body.docked #screen-playing { margin-left: var(--dock); }
+      #stage-box { position: relative; }
+      /* POK-419: a lazy chunk that will not load; a tap reloads (app.ts chunkFailed). */
+      #chunk-reload {
+        position: fixed; z-index: 1001; left: 50%; transform: translateX(-50%);
+        top: calc(env(safe-area-inset-top, 0px) + 8px); max-width: calc(100vw - 32px);
+        padding: 8px 14px; border: 2px solid #383838; border-radius: 6px;
+        background: #f8f8f8; color: #383838; font: 600 14px/1.3 system-ui, sans-serif;
+      }
+      /* Emerald's fade from black over a cut (POK-320, Stage.cut): the room giving way to
+         the match, the match to its results. Four steps, as the game's palette fades go. */
+      #stage-fade { position: fixed; inset: 0; z-index: 10; background: #000; opacity: 0; pointer-events: none; }
+      #stage-fade.go { animation: stage-fade 320ms steps(4, end); }
+      #stage-fade.hold { opacity: 1; animation: none; }
+      @keyframes stage-fade { from { opacity: 1; } to { opacity: 0; } }
+      @media (prefers-reduced-motion: reduce) { #stage-fade.go { animation: none; } }
+      #ui { display: block; image-rendering: pixelated; }
+      #ui-hits { position: absolute; inset: 0; }
+      #ui-hits ul, #ui-hits li { list-style: none; margin: 0; padding: 0; }
+      /* The mirror: real, invisible, exactly where the drawing is. A container has no
+         place of its own -- it fills the stage and lets touches through to its children. */
+      #ui-hits div, #ui-hits ul, #ui-hits button {
+        position: absolute; margin: 0; padding: 0; border: 0; background: transparent;
+        color: transparent; font-size: 8px; line-height: 1; overflow: hidden; white-space: nowrap;
+        opacity: 0; user-select: none; -webkit-user-select: none;
+      }
+      /* FEEDBACK's box (POK-428): a real <textarea>, invisible like the rest -- the canvas
+         draws what it holds -- and 16px so a phone does not zoom in to type in it. */
+      #ui-hits textarea {
+        position: absolute; margin: 0; padding: 0; border: 0; background: transparent;
+        color: transparent; caret-color: transparent; font-size: 16px; resize: none;
+        opacity: 0; pointer-events: auto;
+      }
+      #ui-hits > div, #ui-hits > ul { inset: 0; pointer-events: none; }
+      #ui-hits li { position: static; pointer-events: none; }
+      #ui-hits button, #ui-hits li > *, #ui-hits > div > * { pointer-events: auto; }
+      #ui-hits button { cursor: pointer; touch-action: manipulation; }
+      #ui-hits button:disabled { cursor: default; }
+      #ui-hits [hidden] { display: none; }
+      /* The picture and the field around it (POK-317, web/src/field.ts). #screen-wrap is
+         the whole area the game may take; field.ts places the 240x160 picture inside it at
+         one scale and draws the map past its edges on #field at the same scale. Out of a
+         match the box is the picture's own 3:2; in one it takes what is left. */
+      #screen-wrap {
+        position: relative;
+        flex: 0 0 auto;
+        overflow: hidden;
+        background: #000;
+        touch-action: none;
+        width: 100%;
+        max-width: 480px;
+        aspect-ratio: 240 / 160;
+      }
+      body.in-match #screen-wrap { flex: 1 1 0; min-height: 0; max-width: none; aspect-ratio: auto; }
+      canvas { image-rendering: pixelated; display: block; }
+      #field { position: absolute; left: 0; top: 0; }
+      #overlay { position: absolute; left: 0; top: 0; pointer-events: none; }
+      #sides { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+      #sides[hidden] { display: none; }
+      #sides .side { position: absolute; display: flex; flex-direction: column; align-items: center; }
+      #sides .side-pic, #sides .side-balls { image-rendering: pixelated; }
+      #sides .side-name { display: flex; justify-content: center; background: rgba(16, 20, 24, 0.6); border-radius: 2px; width: 100%; }
+      #key-layer { position: absolute; left: 0; top: 0; pointer-events: none; }
+      #key-layer[hidden] { display: none; }
+      /* Under the see-through battle, over the field: dims the map the battle draws on
+         (Cam, 2026-10-12: "a small overlay underneath, maybe 50% opacity"), grey and the
+         whole field (2026-10-14, POK-348: "make it gray instead of black"), and under a
+         menu the same (2026-10-19, #33; field.ts fieldDimmed). */
+      #key-dim { position: absolute; left: 0; top: 0; pointer-events: none; background: rgba(40, 40, 40, 0.5); }
+      #key-dim[hidden] { display: none; }
+      /* No object-fit: field.ts sizes the canvas to its buffer's own aspect, and Firefox
+         composes object-fit with the clip-path that hides the band into a picture
+         squashed to two thirds with black bars (Cam's 2026-09-18 video, "everything got
+         squished"). */
+      #canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+      /* In a match the pad floats over the bottom of the field rather than under the
+         picture (the reference: thumbs over the map). Only its controls take a touch;
+         the map between them is tappable. */
+      body.in-match #pad { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; pointer-events: none; }
+      body.in-match #pad .dpad-surface, body.in-match #pad .btn, body.in-match #pad .menu-btn { pointer-events: auto; }
+      body.in-match .dpad-surface:not(.active)::before, body.in-match .dpad-surface:not(.active)::after,
+      body.in-match .btn:not(.down):not(:active), body.in-match .menu-btn { background: rgba(38, 49, 58, 0.62); }
+      /* Top-LEFT, not top-right: the ROM draws its own corner up there (N LEFT, the
+         clock, the spectator eye) and the ticker owns the bottom, so this is the one
+         edge a badge can sit on without hiding something a player needs to read. */
+      .fps {
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        font: 11px ui-monospace, monospace;
+        color: #9fb3c0;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+      /* #perf (POK-247): over every screen, the results included, and in the way of no tap.
+         Under the status bar, never in it: iOS blurs whatever sits there, and Cam's
+         screenshot could not be read (2026-10-27). It gets a band of its own, so it
+         covers no HUD and no title either: five lines, a fixed band, because the
+         picture's band is sized once at boot (askForBand) and a band that grew or
+         shrank with the numbers would move the picture every second. A sixth line, on
+         a phone narrower than 360px, runs over the picture's top on its own black. */
+      body.perf-band { --perf-h: 59px; }
+      .fps.perf {
+        position: fixed; z-index: 1000; top: env(safe-area-inset-top, 0px); left: 0; right: 0;
+        min-height: var(--perf-h); padding: 2px calc(6px + env(safe-area-inset-right)) 2px calc(6px + env(safe-area-inset-left));
+        font-size: 9px; line-height: 11px; background: #000; border-radius: 0;
+        white-space: pre-line; pointer-events: none;
+      }
+      body.perf-band, body.perf-band #stage { padding-top: calc(env(safe-area-inset-top) + var(--perf-h)); }
+      body.perf-band .pad-edit { top: calc(var(--s, 1.5) * 52px + env(safe-area-inset-top) + var(--perf-h)); }
+      /* The game stopped (POK-328, emu/watchdog.ts): over everything but #perf, with the
+         line a screenshot has to carry and the two ways out. */
+      .stall {
+        position: fixed;
+        inset: 0;
+        z-index: 999;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+        background: rgba(0, 0, 0, 0.6);
+      }
+      .stall[hidden] { display: none; }
+      .stall-box { max-width: 420px; background: #1a2128; border: 2px solid #33424c; border-radius: 10px; padding: 14px 16px; }
+      .stall-head { margin: 0 0 6px; font-weight: 600; color: #ffe08a; letter-spacing: 0.04em; }
+      .stall-line { margin: 0 0 12px; font: 12px/1.5 ui-monospace, monospace; color: #cfe3ef; overflow-wrap: anywhere; }
+      .stall-box button { font: inherit; background: #4f6b7d; color: #fff; border: 0; border-radius: 6px; padding: 6px 14px; margin-right: 8px; cursor: pointer; }
+
+      #pad {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        align-items: center;
+        gap: 8px;
+        padding: 16px calc(16px + env(safe-area-inset-right)) 8px calc(16px + env(safe-area-inset-left));
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        width: 100%;
+      }
+      .dpad-surface { position: relative; width: 132px; height: 132px; justify-self: start; touch-action: none; }
+      .dpad-surface::before,
+      .dpad-surface::after {
+        content: '';
+        position: absolute;
+        background: #26313a;
+        border-radius: 10px;
+        transition: background 60ms;
+      }
+      .dpad-surface::before { left: 36px; top: 0; width: 60px; height: 132px; }
+      .dpad-surface::after { left: 0; top: 36px; width: 132px; height: 60px; }
+      .dpad-surface.active::before,
+      .dpad-surface.active::after { background: #4c7a99; }
+
+      .ab { display: grid; grid-template-columns: 72px 72px; gap: 12px; justify-content: end; align-content: end; justify-self: end; }
+      .btn { display: grid; place-items: center; background: #26313a; border-radius: 10px; color: #cfe3ef; font-weight: 600; touch-action: none; }
+      .btn:active, .btn.down { background: #4c7a99; }
+      .ab .btn.round { height: 72px; border-radius: 50%; }
+      .sys { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: center; }
+      .sys .btn { width: 96px; height: 36px; font-size: 12px; }
+
+      /* A phone's HUD and dock (ui/phonehud.ts, mockup v2): Emerald windows drawn at the
+         field's scale, --s CSS pixels to a GBA pixel, set by phonehud from the pad's
+         width. In a match on the page's upright layout, which a tablet keeps on its side too: a
+         phone on its side (the short landscape below) and a computer keep the old row.
+         The D-pad and A/B go see-through, and can be moved, faded and hidden (--dpad-*, --ab-*, --pad-alpha, body.pad-hidden). */
+      #hud, .dock, #moves { display: none; }
+      .pad-edit[hidden] { display: none; }
+      #hud canvas, .dock canvas, .pad-edit canvas { display: block; image-rendering: pixelated; }
+      @media not all and (orientation: landscape) and (max-height: 520px) {
+        body.in-match #hud { display: block; position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+        body.in-match #hud.off-field > * { visibility: hidden; }
+        /* At the top of the glass: the body's padding already clears the status bar
+           (Cam, 2026-10-17: the inset was counted twice). The sign goes a few seconds
+           after a new section, as Emerald's map popup does (ui/phonehud.ts SIGN_MS). */
+        .hud-sign { position: absolute; left: calc(var(--s, 1.5) * 4px); top: calc(var(--s, 1.5) * 4px); transition: opacity 300ms, visibility 300ms; }
+        .hud-sign.gone { opacity: 0; visibility: hidden; }
+        .hud-fog { position: absolute; right: calc(var(--s, 1.5) * 4px); top: calc(var(--s, 1.5) * 4px); }
+        /* The field moves' symbols (HBR-78), down the right edge under the fog window (its
+           tallest, four lines, is 72 GBA pixels). */
+        .hud-moves { position: absolute; right: calc(var(--s, 1.5) * 4px); top: calc(var(--s, 1.5) * 80px); }
+        .hud-moves.gone { display: none; }
+        body.in-match #pad { padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); row-gap: 0; }
+        body.in-match #pad .sys { display: none; }
+        body.in-match .dock {
+          grid-column: 1 / -1;
+          display: grid;
+          grid-template-columns: auto auto auto;
+          grid-template-rows: auto auto;
+          justify-content: center;
+          gap: calc(var(--s, 1.5) * 4px);
+          padding: calc(var(--s, 1.5) * 4px) 0;
+          /* The dock's height before the HUD fills it, which the boot measures the layout
+             with (HBR-57): two rows of DOCK_H (ui/phonehud.ts), the gap and the padding,
+             border-box. */
+          min-height: calc(var(--s, 1.5) * 92px);
+          pointer-events: auto;
+        }
+        .hud-btn { padding: 0; margin: 0; border: 0; background: none; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+        .hud-btn:active:not([aria-disabled="true"]) { filter: brightness(0.86); }
+        .hud-btn[aria-disabled="true"] { cursor: not-allowed; }
+        #hud-party { grid-area: 1 / 1; }
+        #hud-map { grid-area: 2 / 1; }
+        #hud-start { grid-area: 1 / 3; }
+        #hud-ctx { grid-area: 2 / 3; }
+        .hud-menu {
+          grid-area: 1 / 2 / 3 / 3;
+          align-self: center;
+          width: calc(var(--s, 1.5) * 32px);
+          height: calc(var(--s, 1.5) * 32px);
+          border-radius: 50%;
+          border: calc(var(--s, 1.5) * 2px) solid rgba(255, 255, 255, 0.55);
+          background: rgba(74, 74, 106, 0.75);
+          color: #fff;
+          font: calc(var(--s, 1.5) * 14px) / 1 system-ui, sans-serif;
+          cursor: pointer;
+        }
+        /* The D-pad stays a cross (Cam, 2026-10-17: "back to the dpad, analog stick
+           doesn't work"), see-through like A/B. One outlined cross drawn as a picture,
+           not the two bars: see-through bars darken where they overlap. */
+        body.in-match #pad .dpad-surface {
+          margin: 0 0 12px 16px;
+          transform: translate(var(--dpad-dx, 0px), var(--dpad-dy, 0px));
+          opacity: var(--pad-alpha, 0.6);
+          background: center / 100% 100% no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 132 132'%3E%3Cpath d='M45 1H87a8 8 0 0 1 8 8V37H123a8 8 0 0 1 8 8V87a8 8 0 0 1 -8 8H95V123a8 8 0 0 1 -8 8H45a8 8 0 0 1 -8 -8V95H9a8 8 0 0 1 -8 -8V45a8 8 0 0 1 8 -8H37V9a8 8 0 0 1 8 -8z' fill='rgba(74,74,106,0.35)' stroke='rgba(255,255,255,0.55)' stroke-width='2'/%3E%3C/svg%3E");
+        }
+        body.in-match #pad .dpad-surface::before, body.in-match #pad .dpad-surface::after { display: none; }
+        body.in-match #pad .dpad-surface.active { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 132 132'%3E%3Cpath d='M45 1H87a8 8 0 0 1 8 8V37H123a8 8 0 0 1 8 8V87a8 8 0 0 1 -8 8H95V123a8 8 0 0 1 -8 8H45a8 8 0 0 1 -8 -8V95H9a8 8 0 0 1 -8 -8V45a8 8 0 0 1 8 -8H37V9a8 8 0 0 1 8 -8z' fill='rgba(255,255,255,0.6)' stroke='rgba(255,255,255,0.55)' stroke-width='2'/%3E%3C/svg%3E"); }
+        body.in-match #pad .ab {
+          margin: 0 16px 12px 0;
+          transform: translate(var(--ab-dx, 0px), var(--ab-dy, 0px));
+          opacity: var(--pad-alpha, 0.6);
+        }
+        body.in-match #pad .ab .btn.round { border: 2px solid rgba(255, 255, 255, 0.55); color: #fff; }
+        body.in-match #pad .ab .btn.round:not(.down):not(:active) { background: rgba(74, 74, 106, 0.35); }
+        body.pad-hidden.in-match #pad .dpad-surface, body.pad-hidden.in-match #pad .ab { visibility: hidden; }
+        body.pad-editing #pad .dpad-surface, body.pad-editing #pad .ab { outline: 2px dashed #f8d070; outline-offset: 4px; cursor: grab; visibility: visible; }
+        .pad-edit {
+          position: fixed;
+          left: 50%;
+          top: calc(var(--s, 1.5) * 52px + env(safe-area-inset-top));
+          transform: translateX(-50%);
+          z-index: 5;
+          pointer-events: auto;
+          border-style: solid;
+          border-width: calc(var(--s, 1.5) * 8px);
+          border-image: url(/ui/frame-1.png) 8 / calc(var(--s, 1.5) * 8px) round;
+          background: #fff;
+          background-clip: padding-box;
+          image-rendering: pixelated;
+        }
+        .pad-edit-row { display: flex; align-items: center; gap: calc(var(--s, 1.5) * 6px); }
+        /* The battle menu: under the picture, in place of the D-pad, A/B and the dock,
+           which keep their room (visibility, not display) so the picture stays put.
+           The D-pad and A/B stay down between choices too, while the battle runs by
+           itself (battle-no-pad, ui/battlemenu.ts battleWantsNoPad); the room menu,
+           in the dock, comes back then. */
+        body.in-match .battle-menu:not([hidden]) {
+          position: absolute; left: 0; right: 0; z-index: 3;
+          display: grid; grid-template-columns: auto auto; justify-content: center;
+          gap: calc(var(--s, 1.5) * 8px); align-content: start;
+        }
+        body.battle-menu.in-match #pad .dpad-surface, body.battle-menu.in-match #pad .ab, body.battle-menu.in-match .dock,
+        body.battle-no-pad.in-match #pad .dpad-surface, body.battle-no-pad.in-match #pad .ab { visibility: hidden; }
+        .bm-btn { position: relative; padding: 0; margin: 0; border: 0; background: none; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; user-select: none; }
+        .bm-btn canvas { display: block; }
+        .bm-btn:active:not([aria-disabled="true"]) { filter: brightness(0.9); }
+        .bm-btn[aria-disabled="true"] { cursor: not-allowed; }
+        .bm-btn[hidden], .bm-hint[hidden], .bm-info[hidden] { display: none; }
+        /* Held: the window fills pale blue from the left, under its words (multiply). */
+        .bm-hold {
+          position: absolute; inset: calc(var(--s, 1.5) * 3px); background: #b8d8f8; mix-blend-mode: multiply;
+          transform-origin: left; transform: scaleX(0); pointer-events: none;
+        }
+        .bm-back, .bm-hint, .bm-info { grid-column: 1 / -1; }
+        .bm-hint { display: flex; justify-content: center; pointer-events: none; }
+        .bm-info { display: grid; gap: calc(var(--s, 1.5) * 8px); }
+        .bm-info-row { display: flex; gap: calc(var(--s, 1.5) * 8px); }
+        .bm-info-row > .bm-btn { flex: none; }
+        /* The bag (ui/bag.ts): the pocket bar with its arrows over its left and right
+           quarters, the list scrolling inside its own box, the description, BACK/USE. */
+        .bm-bag { grid-column: 1 / -1; position: relative; }
+        .bm-bag[hidden] { display: none; }
+        .bm-bag canvas { display: block; }
+        .bm-bag-prev, .bm-bag-next { position: absolute; top: 0; bottom: 0; width: calc(var(--s, 1.5) * 56px); }
+        .bm-bag-prev { left: 0; }
+        .bm-bag-next { right: 0; }
+        .bm-bag-list { height: calc(var(--s, 1.5) * 104px); overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+        /* Off the field (a battle, the bag, the party) the dock's windows do nothing: they
+           go, the room menu stays. */
+        body.in-match .dock.off-field > .hud-btn { visibility: hidden; }
+      }
+
+      /* Landscape on a phone (POK-245): the screen is the scarce thing, so it takes
+         the middle and the controls go either side of it rather than under it. The
+         @media hook is orientation plus a short viewport -- a landscape laptop is not
+         a phone and should keep the ordinary layout. */
+      @media (orientation: landscape) and (max-height: 520px) {
+        /* The grid is on the playing screen, which is what actually holds these three
+           -- #app holds the <section>, not its children. */
+        #screen-playing {
+          display: grid;
+          grid-template-columns: auto 1fr auto;
+          grid-template-rows: auto 1fr auto auto;
+          align-items: center;
+          /* `display: contents` on #pad drops its own padding with its box, so the
+             gutters have to be said here or a thumb is pressing the bezel. */
+          gap: 0 10px;
+          padding: 0 calc(10px + env(safe-area-inset-right)) 4px calc(10px + env(safe-area-inset-left));
+        }
+        /* `width: 100%` would make the middle column take everything and push the
+           pad off the left edge, so here the screen is exactly as wide as it is. */
+        #screen-wrap { grid-column: 2; grid-row: 2; width: auto; max-width: none; align-self: stretch; justify-self: stretch; aspect-ratio: auto; min-height: 0; }
+        /* `display: contents` lifts the pad's own children into the grid, so the
+           D-pad and the buttons can sit either side of the screen without moving
+           them in the markup. */
+        #pad { display: contents; }
+        #pad .dpad-surface { grid-column: 1; grid-row: 2; justify-self: center; }
+        #pad .ab { grid-column: 3; grid-row: 2; justify-self: center; align-content: center; }
+        #pad .sys { grid-column: 1 / -1; grid-row: 3; }
+        /* Sideways the pad is in the grid's side columns, not over the field. */
+        body.in-match #pad { position: static; }
+      }
+
+      /* A computer is not a phone (POK-253). With a keyboard and a mouse the touch
+         pad is dead weight and a 480px screen in the middle of a 1440px window is
+         worse than useless: the game takes the window, and the only chrome left is
+         the two buttons that are not a game control. `pointer: fine` is the test --
+         a tablet with a stylus keeps the pad, a laptop does not -- in a window 600px
+         wide or more (app.ts PHONE_BELOW): narrower, it is laid out as a phone. */
+      @media (hover: hover) and (pointer: fine) and (min-width: 600px) {
+        #pad { display: none; }
+        body.in-match #hud { display: none; }
+        #screen-playing { padding: 0; }
+        /* basis 0, not auto: on `auto` the picture sizes the box and the box then
+           overflows the window instead of the picture shrinking to fit it. The game
+           takes the window, match or not; field.ts fits the picture and fills the rest. */
+        #screen-wrap { flex: 1 1 0; min-height: 0; width: 100%; max-width: none; aspect-ratio: auto; }
+      }
+      /* The keyboard's GBA (ui/keys.ts): small and half see-through, on the field past the
+         picture and never on it -- keys.ts places it from field.ts's layout (left, top),
+         as the GBA's shape (data-mode=pad) or one row (row), or hides it where there is no
+         room. A phone has the pad instead, so this is a desktop match's only. */
+      #keys { display: none; }
+      @media (hover: hover) and (pointer: fine) and (min-width: 600px) {
+        body.in-match #keys {
+          display: grid;
+          position: absolute; left: 0; top: 0;
+          grid-template-columns: repeat(7, 26px);
+          grid-template-rows: 24px 26px 26px 26px 24px;
+          grid-template-areas:
+            "l     l     .     .     .     r     r"
+            ".     up    .     .     .     .     a"
+            "left  .     right .     b     .     ."
+            ".     down  .     .     .     .     ."
+            ".     .     sel   sel   start start .";
+          gap: 3px;
+          opacity: 0.5;
+          pointer-events: none;
+          font: 9px/1 ui-monospace, monospace;
+          color: #e8f1f6;
+        }
+        #keys .k {
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          background: rgba(20, 28, 34, 0.85); border: 1px solid #5d7383; border-radius: 5px;
+          white-space: nowrap;
+        }
+        #keys .k b { font-weight: 700; font-size: 11px; }
+        #keys .k i { font-style: normal; font-size: 8px; color: #9fb3c0; margin-top: 1px; }
+        #keys .k.on { background: #e8f1f6; color: #111; border-color: #fff; }
+        #keys .k.on i { color: #333; }
+        #keys .k-a, #keys .k-b { border-radius: 50%; }
+        #keys .k-l { grid-area: l; } #keys .k-r { grid-area: r; }
+        #keys .k-up { grid-area: up; } #keys .k-down { grid-area: down; }
+        #keys .k-left { grid-area: left; } #keys .k-right { grid-area: right; }
+        #keys .k-a { grid-area: a; } #keys .k-b { grid-area: b; }
+        #keys .k-select { grid-area: sel; } #keys .k-start { grid-area: start; }
+        body.in-match #keys[hidden] { display: none; }
+        /* A computer's field moves (HBR-78), down the field's top right at its scale. */
+        body.in-match #moves:not(.gone) { display: block; position: absolute; right: 8px; top: 8px; pointer-events: none; z-index: 1; }
+        body.in-match #keys[data-mode='row'] {
+          grid-template: none / none; grid-template-areas: none;
+          grid-auto-flow: column; grid-auto-columns: auto; grid-auto-rows: 24px;
+        }
+        #keys[data-mode='row'] .k { grid-area: auto; flex-direction: row; gap: 4px; padding: 0 6px; }
+        #keys[data-mode='row'] .k i { margin-top: 0; }
+      }
+      /* The phone's menu button (POK-320): in a match, the sheet -- the room, LEAVE, the
+         settings -- is drawn over the game behind it. A desktop has the sheet beside the
+         game instead, and no pad to put a button in. */
+      .menu-btn {
+        display: none;
+        width: 44px; height: 36px; border: 0; border-radius: 10px;
+        background: #26313a; color: #cfe3ef; font-size: 18px; line-height: 1;
+        place-items: center; touch-action: manipulation;
+      }
+      body.in-match .menu-btn { display: grid; }
+      button, input { font: inherit; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <p id="version" class="sr-only">—</p>
+
+      <!-- The screens before the game are drawn on #stage (web/src/ui, POK-320): these
+           sections only keep the page's own layout while they are up. The file input is
+           the one real control, live from the first paint; the drawn PICK ROM opens it. -->
+      <section id="screen-importing" class="screen">
+        <input id="rom-input" class="sr-only" type="file" accept=".gba" aria-label="Pokemon Emerald (U) ROM" />
+      </section>
+
+      <section id="screen-patching" class="screen" hidden></section>
+
+      <section id="screen-lobby" class="screen" hidden></section>
+
+      <section id="screen-playing" class="screen" hidden>
+        <!-- During a match only game controls are on the glass (Cam, 2026-09-18). The
+             room, LEAVE and the settings are the sheet, drawn on #stage (POK-320): beside
+             the game on a desktop, behind #menu-btn on a phone. -->
+        <div id="screen-wrap">
+          <!-- The field past the picture, drawn by field.ts; the picture sits over it. -->
+          <canvas id="field" width="240" height="160" aria-hidden="true"></canvas>
+          <!-- The see-through battle's dim over the field, under the picture (field.ts). -->
+          <div id="key-dim" aria-hidden="true" hidden></div>
+          <canvas id="canvas" width="240" height="160"></canvas>
+          <!-- The see-through battle's keyed copy of the LCD, in its place (field.ts). -->
+          <canvas id="key-layer" width="240" height="160" aria-hidden="true" hidden></canvas>
+          <!-- The people the ROM hides past its band (POK-319), drawn over the picture. -->
+          <canvas id="overlay" width="240" height="160" aria-hidden="true"></canvas>
+          <!-- Both trainers beside a trainer battle, names and balls (ui/sides.ts, #18). -->
+          <div id="sides" aria-hidden="true" hidden></div>
+          <div id="fps" class="fps" hidden></div>
+          <!-- The keyboard's GBA (ui/keys.ts): a desktop match only. -->
+          <div id="keys" aria-hidden="true"></div>
+          <!-- A phone's HUD over the field (ui/phonehud.ts): the route sign, the fog window. -->
+          <div id="hud" aria-hidden="true"></div>
+          <!-- A computer's field moves (ui/phonehud.ts MovesWindow): the field's top right. -->
+          <div id="moves" class="gone" aria-hidden="true"></div>
+          <!-- A phone's battle menu (ui/battlemenu.ts): under the picture, over the pad. -->
+          <div id="battle-menu" class="battle-menu" hidden></div>
+        </div>
+        <div id="pad">
+          <div id="dpad-surface" class="dpad-surface" aria-label="D-pad"></div>
+          <div class="ab">
+            <div class="btn round" data-key="b">B</div>
+            <div class="btn round" data-key="a">A</div>
+          </div>
+          <div class="sys">
+            <div class="btn" data-key="select">SELECT</div>
+            <!-- Not over the picture: the ROM draws its own corner top-right and the
+                 ticker along the bottom, so the one place a button covers nothing is
+                 in the pad. -->
+            <button id="menu-btn" class="menu-btn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="stage">&#9776;</button>
+            <div class="btn" data-key="start">START</div>
+          </div>
+          <!-- A phone's dock (ui/phonehud.ts): PARTY and MAP, START and SELECT as what it
+               does here, and the room menu between them. Upright only; on its side and on
+               a computer the row above stays. -->
+          <div id="dock" class="dock">
+            <button id="hud-menu" class="hud-menu" type="button" aria-label="Menu" aria-expanded="false" aria-controls="stage">&#9776;</button>
+          </div>
+          <!-- Moving the D-pad and A/B (the sheet's MOVE PAD): drag them, fade them, DONE. -->
+          <div id="pad-edit" class="pad-edit" hidden></div>
+        </div>
+      </section>
+    </div>
+    <!-- The stage (web/src/ui/stage.ts, POK-320): every screen outside the game, in
+         Emerald's own font and frames, on one canvas. #ui-hits mirrors what is drawn in
+         invisible DOM -- a button over every pressable thing -- so a tap, a screen reader
+         and a test find the same things the eye does. -->
+    <div id="stage" hidden>
+      <div id="stage-box">
+        <canvas id="ui" width="240" height="320"></canvas>
+        <div id="ui-hits"></div>
+      </div>
+    </div>
+    <div id="stage-fade" aria-hidden="true"></div>
+    <!-- The game stopped under the player (POK-328): web/src/emu/watchdog.ts calls it,
+         app.ts wireWatchdog fills the line in, and it goes again if the game comes back. -->
+    <div id="stall" class="stall" role="alertdialog" aria-labelledby="stall-head" aria-describedby="stall-line" hidden>
+      <div class="stall-box">
+        <p id="stall-head" class="stall-head">THE GAME STOPPED</p>
+        <p id="stall-line" class="stall-line"></p>
+        <button id="stall-reload" type="button">RELOAD</button>
+        <button id="stall-leave" type="button">LEAVE</button>
+      </div>
+    </div>
+    <script type="module" src="/src/app.ts"></script>
+  </body>
+</html>

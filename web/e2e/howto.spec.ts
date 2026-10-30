@@ -17,7 +17,7 @@ test('a first import shows the panels once; the menu row shows them again', asyn
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 390, height: 844 });
   // No `#rom=`: the file goes in the way a player's does, which is what makes them new.
-  await page.goto('/');
+  await page.goto('/classic/');
   await expect(page.locator('#pick-rom')).toBeVisible({ timeout: 30_000 });
   await page.setInputFiles('#rom-input', romPath());
 

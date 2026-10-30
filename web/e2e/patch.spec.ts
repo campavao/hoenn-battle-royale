@@ -44,7 +44,7 @@ test('a stock Emerald ROM is patched in the browser and boots battle royale', as
     }).observe(document, { subtree: true, childList: true, characterData: true });
   });
 
-  await page.goto('/#solo');
+  await page.goto('/classic/#solo');
   await expect(page.locator('#screen-importing')).toBeVisible();
   // The import screen is drawn in Emerald's frame (POK-320); its PICK ROM opens the
   // page's own file input, which is where the file goes.

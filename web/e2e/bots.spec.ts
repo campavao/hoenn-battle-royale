@@ -28,7 +28,7 @@ test('the host fills the room with bots and the guest sees them walking', async 
   const guestCtx = await browser.newContext();
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&testmon&rom=${rom}`);
+    await host.goto(`/classic/#host&testmon&rom=${rom}`);
     await host.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
     const codeEl = host.locator('#room-code');
     await expect(codeEl).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 30_000 });
@@ -36,7 +36,7 @@ test('the host fills the room with bots and the guest sees them walking', async 
     if (!code) throw new Error('could not parse a room code');
 
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&testmon&rom=${rom}`);
+    await guest.goto(`/classic/#join=${code}&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
     await startWith(host, 2);
 

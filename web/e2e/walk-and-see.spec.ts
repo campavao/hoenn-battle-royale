@@ -128,7 +128,7 @@ test("a guest walking right moves on the host's screen", async ({ browser }) => 
 
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&nobots&fast&testmon&seed=${SAME_AREA_SEED}&rom=${rom}`);
+    await host.goto(`/classic/#host&nobots&fast&testmon&seed=${SAME_AREA_SEED}&rom=${rom}`);
     await host.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
 
     const codeEl = host.locator('#room-code');
@@ -138,7 +138,7 @@ test("a guest walking right moves on the host's screen", async ({ browser }) => 
     if (!code) throw new Error(`could not parse a room code out of "${codeText}"`);
 
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&nobots&fast&testmon&rom=${rom}`);
+    await guest.goto(`/classic/#join=${code}&nobots&fast&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
     await startWith(host, 2);
 

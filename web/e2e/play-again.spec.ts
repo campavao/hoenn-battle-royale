@@ -159,7 +159,7 @@ test.beforeAll(() => {
 test('a finished match lets go, and the room keeps its code, roster and socket', async ({ page }) => {
   test.setTimeout(WHOLE_MATCH_MS + PARADE_MS + 120_000);
 
-  await page.goto(`/#host&fast&seed=20260916&testmon&rom=${romHashParam()}`);
+  await page.goto(`/classic/#host&fast&seed=20260916&testmon&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
   const codeEl = page.locator('#room-code');
   await expect(codeEl).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
@@ -272,13 +272,13 @@ test("a guest reads its result for the whole grace, whatever the host's `again` 
 
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&fast&seed=20260916&testmon&rom=${rom}`);
+    await host.goto(`/classic/#host&fast&seed=20260916&testmon&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
 
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
+    await guest.goto(`/classic/#join=${code}&fast&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
     await startWith(host, 2);
 
@@ -345,13 +345,13 @@ async function dealAgainWhileReading(browser: Browser, hold: 'grace' | 'results'
 
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&fast&seed=20260916&testmon&rom=${rom}`);
+    await host.goto(`/classic/#host&fast&seed=20260916&testmon&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
 
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
+    await guest.goto(`/classic/#join=${code}&fast&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
     await startWith(host, 2);
 

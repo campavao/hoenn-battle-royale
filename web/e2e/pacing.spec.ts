@@ -114,7 +114,7 @@ test('a busy phone page does not slow the game', async ({ browser }) => {
     const sym = loadSymbols();
     const counter = sym.gMain + VBLANK_COUNTER1;
     const dropped = () => page.evaluate((a) => (window as unknown as HbrWindow).__hbr.emu.read(a, 32), sym.gBrMailbox + MAILBOX_DROPPED);
-    await page.goto(`/#solo&perf&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&perf&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 30_000 });
     await page.waitForFunction((a) => (window as unknown as HbrWindow).__hbr.emu.read(a, 32) > 600, counter, { timeout: 60_000 });
     const droppedBefore = await dropped();

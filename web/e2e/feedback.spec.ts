@@ -38,7 +38,7 @@ async function sendNote(page: Page, shot: string): Promise<void> {
 
 test('SEND FEEDBACK on the menu sends a note and comes back to the menu', async ({ page }) => {
   test.setTimeout(90_000);
-  await page.goto(`/#rom=${romHashParam()}`);
+  await page.goto(`/classic/#rom=${romHashParam()}`);
   const row = page.locator('#lobby-feedback');
   await expect(row).toBeVisible({ timeout: 60_000 });
   await row.click();
@@ -51,7 +51,7 @@ test('FEEDBACK in the sheet of a phone match sends a note and goes back to the s
   const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&fast&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&fast&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await expect(page.locator('#hud-menu')).toBeVisible({ timeout: 60_000 });
     await page.locator('#hud-menu').tap();

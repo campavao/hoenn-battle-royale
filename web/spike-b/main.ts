@@ -39,6 +39,7 @@ import { MessageBox } from './msgbox';
 import { MusicCue, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { devRomParam, importRom } from './import';
+import { askToKeepStorage, registerServiceWorker } from '../src/pwa';
 import { groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
 import { GOLD } from '../src/match/events';
@@ -2639,7 +2640,21 @@ function loop(now: number): void {
 
 const DEFAULT_RELAY_URL = 'wss://hoenn-relay-production.up.railway.app';
 
+/** A lazy chunk that will not load (a release took this page's hashed files off the
+ *  site): the page offers a reload, never takes one itself mid-match (app.ts chunkFailed). */
+addEventListener('vite:preloadError', () => {
+  if (document.getElementById('chunk-reload')) return;
+  const b = document.createElement('button');
+  b.id = 'chunk-reload';
+  b.type = 'button';
+  b.textContent = "Part of the game didn't load. Tap to reload.";
+  b.addEventListener('click', () => location.reload());
+  document.body.append(b);
+});
+
 async function boot(): Promise<void> {
+  registerServiceWorker();
+  void askToKeepStorage();
   const hoenn = new WorldIndex(((await import('./data/world.json')).default as { maps: WorldMap[] }).maps);
   placed = layout(hoenn.maps);
   let files: Awaited<ReturnType<typeof loadRom>>;

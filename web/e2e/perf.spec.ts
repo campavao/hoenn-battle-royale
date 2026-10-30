@@ -89,7 +89,7 @@ async function hostsAMatch(browser: Browser, run: (typeof RUNS)[number]): Promis
     try {
       // One tab hosting, bots filling it: START deals the same match anybody would get.
       // `#perf`, so the readout a phone would show is up too.
-      await host.goto(`/#host&fast&seed=20260916&testmon&perf&rom=${rom}`);
+      await host.goto(`/classic/#host&fast&seed=20260916&testmon&perf&rom=${rom}`);
       await host.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
       // A full room, not the default eight (POK-330 #49): rooms fill to thirty now, and
       // thirty bots' route-finding is the host's worst case -- the one the tick budget

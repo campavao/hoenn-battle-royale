@@ -374,7 +374,7 @@ export function debugScreen(pace: () => ReturnType<typeof devPace>, redraw: () =
         },
       })),
       { label: 'CLEAR CACHE', detail: 'drops the flags', id: 'debug-fresh', onPress: () => reload('fresh') },
-      { label: 'SPIKE B', detail: 'TS overworld', id: 'debug-spike-b', onPress: () => location.assign(`${import.meta.env.BASE_URL}spike-b/`) },
+      { label: 'THE GAME', detail: 'spike B, at /', id: 'debug-spike-b', onPress: () => location.assign('/') },
     ],
     rowsId: 'debug-rows',
     note: 'Each applies to the next match.',

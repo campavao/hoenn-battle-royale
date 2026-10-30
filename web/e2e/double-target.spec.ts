@@ -62,7 +62,7 @@ test("a phone's double battle: the pad picks the target, and B goes back to the 
     const page = await ctx.newPage();
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
-    await page.goto(`/#solo&safari=5&fog=600&testmon&seed=${SEED}&land=MAP_MOSSDEEP_CITY_GYM,${LAND.x},${LAND.y}&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&safari=5&fog=600&testmon&seed=${SEED}&land=MAP_MOSSDEEP_CITY_GYM,${LAND.x},${LAND.y}&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 60_000 });
     await until(page, sym, 'the drop map', (x) => x.pick, 60_000);

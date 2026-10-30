@@ -17,7 +17,7 @@ test('a guest gets into a passcoded room with the code, and is asked again for a
   const guestCtx = await browser.newContext();
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&noauto&nobots&rom=${rom}`);
+    await host.goto(`/classic/#host&noauto&nobots&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
@@ -36,7 +36,7 @@ test('a guest gets into a passcoded room with the code, and is asked again for a
 
     // A guest finds it on LOBBIES, marked, and knocks with the wrong code.
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#rom=${rom}`);
+    await guest.goto(`/classic/#rom=${rom}`);
     const lobbies = guest.locator('#lobby-rows button', { hasText: 'LOBBIES' });
     await expect(lobbies).toBeEnabled({ timeout: 60_000 });
     await lobbies.click();
@@ -73,7 +73,7 @@ test('JOIN BY CODE into a passcoded room asks for the passcode, and the code get
   const guestCtx = await browser.newContext();
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&noauto&nobots&rom=${rom}`);
+    await host.goto(`/classic/#host&noauto&nobots&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
@@ -89,7 +89,7 @@ test('JOIN BY CODE into a passcoded room asks for the passcode, and the code get
 
     // The code on the entry, and the relay's `passcode` refusal is a question, not a dead end.
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#rom=${rom}`);
+    await guest.goto(`/classic/#rom=${rom}`);
     const join = guest.locator('#lobby-rows button', { hasText: 'JOIN BY CODE' });
     await expect(join).toBeEnabled({ timeout: 60_000 });
     await join.click();

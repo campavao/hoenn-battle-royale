@@ -52,6 +52,9 @@ const MATCH = { ignoreVary: true };
  *  and the next navigation is the offline one. Everything else the page asks for goes
  *  through us and caches itself. */
 const SHELL = ['/', '/manifest.webmanifest', '/icon.svg'];
+/** The pages, each naming its own hashed files under /assets/: the game at /, and the
+ *  classic game at /classic/ for the week it stays (2026-10-30). */
+const PAGES = ['/', '/classic/'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -93,10 +96,6 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return; // the relay, and anything else, is not ours
   const path = url.pathname;
-  // Engine spike B (/spike-b/): left to the network. Its hashed files sit outside
-  // /assets/, where nothing would ever prune them.
-  if (path.startsWith('/spike-b/')) return;
-
   if (request.mode === 'navigate') {
     event.respondWith(networkFirst(event, request, { page: true }));
   } else if (path === VERSION_PATH) {
@@ -141,9 +140,12 @@ async function networkFirst(event, request, { page = false } = {}) {
         (async () => {
           // Pruned before this page is stored: it reads the page this one replaces, and
           // still runs when a disk over its quota refuses the store.
-          if (page && new URL(request.url).pathname === '/') {
+          const at = page ? new URL(request.url).pathname : '';
+          if (PAGES.includes(at)) {
             const was = await caches.match(request, { ...MATCH, ignoreSearch: true });
-            await pruneAssets(await copy.clone().text(), was ? await was.text() : '');
+            // The other page's files stay while it is cached: two pages, one /assets/.
+            const others = await Promise.all(PAGES.filter((p) => p !== at).map((p) => caches.match(p, { ...MATCH, ignoreSearch: true })));
+            await pruneAssets(await copy.clone().text(), was ? await was.text() : '', await Promise.all(others.filter(Boolean).map((r) => r.text())));
           }
           await put(request, copy);
         })(),
@@ -258,10 +260,11 @@ async function reachable(cache, html) {
  *  map change or not, and the new build fetched the same 440 KB again. Waiting for the
  *  script instead pruned nothing ever again when it never cached (a disk over quota),
  *  just when the space mattered most; this keeps one build back, never more. */
-async function pruneAssets(html, was) {
+async function pruneAssets(html, was, others = []) {
   const cache = await caches.open(CACHE);
   const { keep, missing } = await reachable(cache, html);
   if (missing && was) for (const ref of (await reachable(cache, was)).keep) keep.add(ref);
+  for (const other of others) for (const ref of (await reachable(cache, other)).keep) keep.add(ref);
   for (const key of await cache.keys()) {
     const path = new URL(key.url).pathname;
     if (path.startsWith('/assets/') && !keep.has(path)) await cache.delete(key);

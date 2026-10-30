@@ -36,7 +36,7 @@ test("a phone's HUD: the sign, the fog window, the dock, and the corner box off"
   const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 60_000 });
     await onField(page, sym);
