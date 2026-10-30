@@ -71,6 +71,9 @@
       #hud-ctx { grid-area: 2 / 3; }
       .hud-menu { grid-area: 1 / 2 / 3 / 3; align-self: center; width: calc(var(--s, 1.5) * 32px); height: calc(var(--s, 1.5) * 32px); border-radius: 50%; border: calc(var(--s, 1.5) * 2px) solid rgba(255, 255, 255, 0.55); background: rgba(74, 74, 106, 0.75); color: #fff; font: calc(var(--s, 1.5) * 14px) / 1 system-ui, sans-serif; cursor: pointer; }
       body.phone-hud #hud > button, body.phone-hud #corner { display: none; }
+      /* The fog window (ui/phonehud.ts FOG_W, 120 GBA pixels and its margin) stays up for a
+         trainer out and watching: the watch strip wraps short of it, not under it. */
+      body.phone-hud #hud { right: calc(env(safe-area-inset-right) + var(--s, 1.5) * 128px); }
       body.phone-hud #pad .st { display: none; }
       body:has(#stage:not([hidden])) :is(#phud, #pdock), body:has(#battle.on:not(.screen)) #pdock { visibility: hidden; }
       /* The phone's battle menu (ui/battlemenu.ts, the live game's): FIGHT/BAG/POKeMON/RUN

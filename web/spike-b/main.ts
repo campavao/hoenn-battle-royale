@@ -2659,7 +2659,7 @@ async function boot(): Promise<void> {
   placed = layout(hoenn.maps);
   let files: Awaited<ReturnType<typeof loadRom>>;
   try {
-    files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; }, (emu) => importRom(emu, 'spike B'), devRomParam());
+    files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; }, (emu) => importRom(emu, ''), devRomParam());
     romEmu = files.emu;
     versionLine = files.version;
     if (touchPad) { wireBattleMenu(files); wirePhoneHud(); }
