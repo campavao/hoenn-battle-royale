@@ -2,6 +2,7 @@ import { defineConfig, type Plugin } from 'vite';
 import { dirname, resolve } from 'node:path';
 import { readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { worldHash } from './world-hash';
 
 // The threaded mGBA core needs SharedArrayBuffer, which needs cross-origin
 // isolation. These two headers are the whole requirement; vercel.json sets the
@@ -101,6 +102,7 @@ const lan = process.env.HBR_LAN === '1';
 
 export default defineConfig({
   plugins: [dropRoms(), bundleBudget()],
+  define: { __WORLD_HASH__: JSON.stringify(worldHash()) },
   server: {
     headers: isolation,
     host: lan,

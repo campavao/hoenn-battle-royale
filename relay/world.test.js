@@ -5,6 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRelay } from "./server.js";
+import { WORLD_HASH } from "./world/service.js";
 
 function phone(port) {
   const ws = new WebSocket(`ws://127.0.0.1:${port}/world`);
@@ -23,7 +24,8 @@ function phone(port) {
   return {
     ws, inbox, until,
     open: () => new Promise((r, j) => { ws.addEventListener("open", r, { once: true }); ws.addEventListener("error", j, { once: true }); }),
-    send: (m) => ws.send(JSON.stringify(m)),
+    // A page of this build: its joins carry the world it was built with (spike-b/net.ts).
+    send: (m) => ws.send(JSON.stringify(m.t === "join" && !("w" in m) ? { ...m, w: WORLD_HASH } : m)),
   };
 }
 
@@ -87,6 +89,26 @@ test("/world: two phones share one room at 60 Hz", async () => {
     const health = await (await fetch(`http://127.0.0.1:${port}/health`)).json();
     assert.equal(health.world, 2);
     a.ws.close(); b.ws.close();
+  } finally {
+    await relay.close();
+  }
+});
+
+test("/world: a page of another world is told to reload, and nothing else", async () => {
+  const relay = createRelay({});
+  const { port } = await relay.listen(0, "127.0.0.1");
+  try {
+    const [a, b] = [phone(port), phone(port)];
+    await Promise.all([a.open(), b.open()]);
+    a.send({ t: "join", name: "alice", skin: 0, host: true, w: "000000000000" });
+    assert.deepEqual(await a.until((m) => m.t === "old"), { t: "old" });
+    b.send({ t: "join", name: "bob", skin: 0, host: true, w: undefined });
+    await b.until((m) => m.t === "old");
+    assert.ok(!a.inbox.some((m) => m.t === "room") && !b.inbox.some((m) => m.t === "room"), "neither got a room");
+    // The same socket, reloaded into this world, gets in.
+    a.send({ t: "join", name: "alice", skin: 0, host: true });
+    await a.until((m) => m.t === "room");
+    for (const p of [a, b]) p.ws.close();
   } finally {
     await relay.close();
   }

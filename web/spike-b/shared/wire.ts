@@ -7,8 +7,9 @@ import type { FameMon } from '../../src/ui/results';
 /** Phone to relay. */
 export type WorldUp =
   /** In: who I am, and which room -- a code, a new one of my own (`host`), or, with
-   *  neither, quick play. Answered by `room` (or `no_room`, `full`). */
-  | { t: 'join'; name: string; skin: number; code?: string; host?: boolean; again?: Again; pass?: string; rec?: CardRecord }
+   *  neither, quick play. Answered by `room` (or `no_room`, `full`). `w`: the page's
+   *  WORLD_HASH (tools/br/bundle-world.mjs), refused with `old` when it is not the relay's. */
+  | { t: 'join'; name: string; skin: number; code?: string; host?: boolean; again?: Again; pass?: string; rec?: CardRecord; w?: string }
   /** START (the room's host): the match begins for everybody in the room. */
   | { t: 'start' }
   /** The host's settings for the room's next match (the live room's options). */
@@ -116,7 +117,9 @@ export type WorldDown =
   | { t: 'eyes'; n: number }
   /** Trainer `id`'s team as they last told it. */
   | { t: 'team'; id: number; mons: FameMon[] }
-  | { t: 'full' };
+  | { t: 'full' }
+  /** This page's world is not the relay's (an old tab after a deploy): reload. */
+  | { t: 'old' };
 
 export const HASH_EVERY = 60;
 

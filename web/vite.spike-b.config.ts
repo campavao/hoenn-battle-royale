@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
+import { worldHash } from './world-hash';
 
 // Engine spike B (/spike-b/), built on its own after the game: as a second input of the
 // main build it would pull the code it shares with the game out of main.js into a chunk
@@ -9,6 +10,7 @@ export default defineConfig({
   base: '/spike-b/',
   root: resolve(__dirname, 'spike-b'),
   publicDir: false,
+  define: { __WORLD_HASH__: JSON.stringify(worldHash()) },
   build: {
     target: 'es2022',
     outDir: resolve(__dirname, 'dist/spike-b'),

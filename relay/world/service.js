@@ -2454,9 +2454,9 @@ var Room = class {
       const a = this.actor(cmd.id);
       if (!a || a.bot || a.battling || a.m.action) return;
       const [x, y] = this.ahead(a);
-      const who = ferryAt(a.m.spot.map, x, y);
-      if (cmd.to === "" && who === "sailor") a.m = newMover(HARBOR_LANDING, 1);
-      else if (who === "attendant" && this.sailingTo().some((s) => s.id === cmd.to)) {
+      const who2 = ferryAt(a.m.spot.map, x, y);
+      if (cmd.to === "" && who2 === "sailor") a.m = newMover(HARBOR_LANDING, 1);
+      else if (who2 === "attendant" && this.sailingTo().some((s) => s.id === cmd.to)) {
         const d = DOCKS[cmd.to];
         a.m = newMover({ map: d.map, x: d.x, y: d.y }, 2);
       }
@@ -4055,6 +4055,9 @@ var AUTO_START_MS = 6e4;
 var AWAY_MS = 6e4;
 var NOWHERE = { send: () => void 0, close: () => void 0 };
 var FIRST_ID = 1e3;
+function who(p) {
+  return `${p.name.replace(/\s+/g, "_")}#${p.id}`;
+}
 var WorldService = class {
   constructor(opts) {
     this.opts = opts;
@@ -4090,6 +4093,10 @@ var WorldService = class {
           this.send(link, { t: "rooms", rooms: this.listed() });
           return;
         }
+        if (m.t === "join" && !phone && this.opts.world && m.w !== this.opts.world) {
+          this.send(link, { t: "old" });
+          return;
+        }
         if (m.t === "join" && !phone && m.again && typeof m.again === "object") {
           const back = this.back(m.again, link);
           if (back) {
@@ -4118,8 +4125,10 @@ var WorldService = class {
           phone = { id, name: name || `TRAINER ${id - FIRST_ID + 1}`.slice(0, 10), skin, link, heard: this.opts.now(), synced: -Infinity, key: Math.random().toString(36).slice(2, 12), away: 0, watching: 0, ...recOf(m.rec) };
           room2.members.set(id, phone);
           this.where.set(id, room2);
+          const hosted = !room2.owner && !room2.quick;
           if (!room2.owner) room2.owner = id;
           this.opts.log(`world: ${phone.name}#${id} in room ${room2.code}${room2.quick ? " (quick)" : ""}, ${room2.members.size} there`);
+          this.opts.log(hosted ? `room ${room2.code} hosted by ${who(phone)}${room2.set.door === "open" ? " (open)" : ""}` : `room ${room2.code}: ${who(phone)} ${room2.quick ? "quick-joined" : room2.host ? "spectates" : "joined"}`);
           this.roster(room2);
           if (room2.host) {
             room2.host.join(phone.name, phone.skin, void 0, id);
@@ -4143,11 +4152,13 @@ var WorldService = class {
             if (MAX_STEPS.includes(s.max)) room.set.max = s.max;
             if (s.textSpeed === 1 || s.textSpeed === 3 || s.textSpeed === 5) room.set.textSpeed = s.textSpeed;
             if (typeof s.animations === "boolean") room.set.animations = s.animations;
+            const door = room.set.door;
             if (s.door === "open" || s.door === "private") room.set.door = s.door;
             else if (s.door === "pass" && typeof s.pass === "string" && isPass(s.pass)) {
               room.set.door = "pass";
               room.pass = s.pass.toUpperCase();
             }
+            if (room.set.door !== door && room.set.door !== "pass") this.opts.log(`room ${room.code} is now ${room.set.door}`);
             this.roster(room);
           }
         } else if (m.t === "leave") {
@@ -4344,6 +4355,7 @@ var WorldService = class {
     room.startsAt = null;
     room.t0 = this.opts.now();
     this.opts.log(`world: room ${room.code} starts, ${room.members.size} trainers and ${bots} bots, seed ${seed}`);
+    this.opts.log(`match ${room.code} started (${room.quick ? "quick" : "host"}) | ${room.members.size} trainer${room.members.size === 1 ? "" : "s"} | max ${room.quick ? ROOM_MAX : room.set.max}`);
     const state = r.state();
     for (const p of room.members.values()) {
       p.team = void 0;
@@ -4355,6 +4367,7 @@ var WorldService = class {
   finish(room) {
     const res = room.host?.room.results;
     this.opts.log(`world: room ${room.code} over${res?.winner ? `, ${res.entrants.find(([id]) => id === res.winner)?.[1]} wins` : ""}`);
+    if (room.host) this.opts.log(`match ${room.code} ended after ${Math.round((this.opts.now() - room.t0) / 1e3)}s`);
     room.host = null;
     room.streams.clear();
     for (const p of room.members.values()) p.watching = 0;
@@ -4501,3 +4514,4 @@ export {
   PATCHES,
   WorldService
 };
+export const WORLD_HASH = "e109cf939117";

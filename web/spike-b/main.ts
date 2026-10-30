@@ -38,6 +38,7 @@ import { OUT_BATCH_MS, event, felled, opening, outs, won } from '../src/match/ti
 import { MessageBox } from './msgbox';
 import { MusicCue, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
+import { devRomParam, importRom } from './import';
 import { groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
 import { GOLD } from '../src/match/events';
@@ -1489,21 +1490,25 @@ function wirePhoneHud(): void {
   scale();
   document.body.classList.add('phone-hud');
   setInterval(() => {
-    // On the map: a trainer out, or watching, has neither (the watch strip is theirs).
-    const me = link?.room.actor(link.me);
-    top.hidden = dock.hidden = !me;
+    // On the map. A trainer out has no dock (the watch strip is theirs), but keeps the
+    // fog window for the one they watch, as live does: the clock and how many are left
+    // (Cam, 2026-10-30). The sign's corner is the watch strip's, so it goes.
+    const mine = link?.room.actor(link.me);
+    const me = mine ?? (spectating && follow ? link?.room.actor(follow) : undefined);
+    top.hidden = !me;
+    dock.hidden = !mine;
     if (!me) { hud.hide(); return; }
     const ring = link.room.ring();
     const res = link.room.results;
     const fogged = link.room.inFog(me.m.spot);
     if (fogged && !hudFogged) fogFlashTo = frame + BR_HUD_FOG_FRAMES;
     hudFogged = fogged;
-    const way = ringMap?.way(me.m.spot, ring) ?? '';
+    const way = mine ? ringMap?.way(me.m.spot, ring) ?? '' : '';
     const section = link.room.maps.get(me.m.spot.map)?.section ?? '';
     const sign = signFor(section);
     hud.update({
-      onField: !battle && !swapping && !romUp && !asking && !spectating,
-      place: sign.name,
+      onField: !battle && !swapping && !romUp && !asking && (!spectating || !mine),
+      place: mine ? sign.name : '',
       theme: sign.theme,
       clock: Math.ceil(ring.left / 60),
       left: res.entrants.length ? res.entrants.length - res.fallen.length : link.room.actors.length,
@@ -2639,7 +2644,7 @@ async function boot(): Promise<void> {
   placed = layout(hoenn.maps);
   let files: Awaited<ReturnType<typeof loadRom>>;
   try {
-    files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; });
+    files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; }, (emu) => importRom(emu, 'spike B'), devRomParam());
     romEmu = files.emu;
     versionLine = files.version;
     if (touchPad) { wireBattleMenu(files); wirePhoneHud(); }
@@ -2688,6 +2693,7 @@ async function boot(): Promise<void> {
       },
       onNoRoom: (code, pass) => { forget(); lobby!.menu(pass ? `That is not room ${code}'s passcode.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.'); },
       onKicked: () => { room = null; forget(); lobby!.menu('The host took you out of the room.'); },
+      onOld: () => { room = null; matchOn = false; forget(); lobby!.old(); },
       onRooms: (rooms) => lobby?.listed(rooms),
       onMatch: (l) => startMatch(l),
       onOpen: () => lobby?.linkIs('up'),
