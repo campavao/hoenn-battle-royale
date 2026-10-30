@@ -134,7 +134,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
 /** Frames the playout keeps in hand before it starts (and again after running dry). */
 const CUSHION = 3;
 
-class Online implements WorldLink {
+export class Online implements WorldLink {
   room!: Room;
   me = 0;
   key?: string;
@@ -163,7 +163,7 @@ class Online implements WorldLink {
     // A hidden tab (walked away from) runs no frames; it says it is still here, under the
     // relay's QUIET_MS, or the relay drops it and it comes back to the menu (Cam 10-29).
     // A background tab's timers run at most once a minute: 20 s is well inside either.
-    const here = setInterval(() => { if (document.hidden) this.send({ t: 'here' }); }, 20_000);
+    const here = setInterval(() => { if (typeof document !== 'undefined' && document.hidden) this.send({ t: 'here' }); }, 20_000);
     ws.addEventListener('close', () => { this.closed = true; clearInterval(here); });
   }
 
@@ -253,11 +253,19 @@ class Online implements WorldLink {
     if (real.battling) return (this.predicted = real);
     const a = structuredClone(real);
     const step = this.room.stepFor(a);
+    // Stepped onto a marked spot: stand there until the relay says whose it is. A step
+    // counts its stride as it starts, so the spot is asked once it is over, as Room.move
+    // asks (`arriving`): asked as the stride counted, the step was never over yet, and the
+    // drawn trainer walked on past the spot until the relay's battle pulled it back (Cam
+    // 10-30, "it rubber bands me back").
+    let arriving = a.arriving;
     for (const { bits } of this.sent) {
       const before = a.m.strides;
       tick(a.m, keysOf(bits), step);
-      // Stepped onto a marked spot: stand there until the relay says whose it is.
-      if (a.m.strides !== before && !a.m.action && this.room.patchesOn(a.m.spot.map).some((q) => q.x === a.m.spot.x && q.y === a.m.spot.y && !this.room.isTaken(q.key))) break;
+      if (a.m.strides !== before) arriving = true;
+      if (!arriving || a.m.action) continue;
+      arriving = false;
+      if (this.room.patchesOn(a.m.spot.map).some((q) => q.x === a.m.spot.x && q.y === a.m.spot.y && !this.room.isTaken(q.key))) break;
     }
     return (this.predicted = a);
   }

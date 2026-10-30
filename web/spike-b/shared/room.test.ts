@@ -87,7 +87,11 @@ describe('bots', () => {
   // Cam (2026-10-28): "why does everyone move so fast?" They ran and walked six tiles at a
   // go. Emerald's wanderers walk one tile at walking pace, then stand 32..128 frames.
   it("wander like the game's townsfolk: walk one tile, then stand", () => {
-    const host = new Host(makeRoom(MAPS, PATCHES, 5), 29, MAPS);
+    // In the Zone, where they have nowhere to be (out in Hoenn each is soon on its way
+    // somewhere, bots.ts wander).
+    const r = makeRoom(MAPS, PATCHES, 5);
+    r.opening = 120 * 60;
+    const host = new Host(r, 29, MAPS);
     const bots = host.room.actors.map((a) => a.id);
     const last = new Map<number, string>();
     const stepEnd = new Map<number, number>();
@@ -97,7 +101,8 @@ describe('bots', () => {
     // Wanderers only: one walking into the coming ring, or up to somebody, has somewhere
     // to be.
     const walkers = new Set<number>();
-    for (let f = 0; f < 3600; f++) {
+    const FRAMES = 3600;
+    for (let f = 0; f < FRAMES; f++) {
       host.advance();
       for (const id of bots) if (host.brains.get(id)?.steps?.length) walkers.add(id);
       for (const id of bots) {
@@ -121,7 +126,7 @@ describe('bots', () => {
       }
     }
     expect(walkers.size).toBeLessThan(bots.length - 6);
-    const perBotPerMinute = steps / (bots.length - walkers.size);
+    const perBotPerMinute = steps / (bots.length - walkers.size) * 3600 / FRAMES;
     // one tile every ~1.5 s on average, never a run
     expect(perBotPerMinute).toBeGreaterThan(15);
     expect(perBotPerMinute).toBeLessThan(60);
@@ -956,6 +961,53 @@ describe('a bag in a bot\'s way', () => {
     // A new round's bag starts empty of the old round's pickings (review of batch 12).
     (room as unknown as { newRound(n: number): void }).newRound(1);
     expect(room.actor(1)!.loot).toBeUndefined();
+  });
+});
+
+describe('Cam 10-30', () => {
+  it("the Zone's bots walk about it, and a trainer cannot fight one there", () => {
+    const r = makeRoom(MAPS, PATCHES, 7);
+    r.ringPhase = 120 * 60; r.opening = 60 * 60;
+    const host = new Host(r, 7, MAPS, 0);
+    const me = host.join('ME', 0, undefined, 1000);
+    host.lock();
+    host.advance();
+    const where = () => r.actors.filter((a) => a.bot).map((a) => `${a.m.spot.map}:${a.m.spot.x},${a.m.spot.y}`);
+    const first = where();
+    expect(first.every((s) => s.startsWith(SAFARI))).toBe(true);
+    for (let f = 0; f < 60 * 20; f++) { host.input(me, f + 1, [0]); host.advance(); }
+    expect(where().filter((s, i) => s !== first[i]).length).toBeGreaterThan(3);
+    // Facing one, A starts nothing.
+    const bot = r.actors.find((a) => a.bot && !a.m.action)!;
+    const m = r.actor(me)!;
+    const s = bot.m.spot;
+    r.actors = r.actors.filter((a) => a.id === me || a.id === bot.id || a.m.spot.map !== s.map || Math.abs(a.m.spot.x - s.x - 1) + Math.abs(a.m.spot.y - s.y) > 0);
+    m.m = { ...m.m, spot: { map: s.map, x: s.x + 1, y: s.y }, facing: 3, moveDir: 3, action: null };
+    const events = r.step(new Map([[me, [KEY_A]]]));
+    expect(events.filter((e) => e.type === 'fight')).toEqual([]);
+    expect(m.battling).toBe(false);
+  });
+
+  it('with five or more left the bots still go about and meet, a MAX 8 match not standing still', () => {
+    const r = makeRoom(MAPS, PATCHES, 7);
+    r.ringPhase = 120 * 60; r.opening = 60 * 60;
+    const host = new Host(r, 7, MAPS, 0);
+    const me = host.join('ME', 0, undefined, 1000);
+    host.lock();
+    let pend: [number, number, number][] = [];
+    const fights: number[] = [];
+    for (let f = 0; f < 60 * 60 * 6; f++) {
+      host.input(me, f + 1, [0]);
+      for (const [a, b] of pend.filter(([, , at]) => f >= at)) host.bots(me, a, b, a);
+      pend = pend.filter(([, , at]) => f < at);
+      for (const e of host.advance().events) {
+        if (e.type === 'bots') { pend.push([e.a, e.b, f + 600]); fights.push(f); }
+        if (e.type === 'fight') host.end(me);
+      }
+    }
+    // Seed 7 had three bot fights in the first two minutes and none for the next five.
+    expect(fights.length).toBeGreaterThanOrEqual(5);
+    for (let i = 1; i < fights.length; i++) expect(fights[i] - fights[i - 1]).toBeLessThan(60 * 120);
   });
 });
 
