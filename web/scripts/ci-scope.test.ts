@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { scope } from './ci-scope.mjs';
 
 describe('ci-scope', () => {
-  it('runs the game's spec and nothing of the ROM for a spike B change', () => {
+  it('runs the game spec and nothing of the ROM for a spike B change', () => {
     // #172's files.
     expect(
       scope([
