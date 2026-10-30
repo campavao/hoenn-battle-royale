@@ -93,7 +93,7 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
     if (near.length) return near[Math.floor(rand(b) * near.length)];
   }
   const cells = insideNext(room);
-  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return null;
+  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return wander(room, a, b);
   const p = room.places.get(a.m.spot.map);
   if (!p) return null;
   const x = p.gx + a.m.spot.x, y = p.gy + a.m.spot.y;
@@ -110,6 +110,19 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
     if (h < bestH || d < bestD) { bestH = h; bestD = d; best = s; }
   }
   return best;
+}
+
+/** Somewhere to walk to inside the ring (brain.ts's wander: a cell of the landing pool,
+ *  this map's own first, else anywhere in it). Live's bots are always on their way
+ *  somewhere, so they cross paths and fight; standing about waiting for the fog, the
+ *  last four or five of a match never met (Cam 10-30, "bots just idle around"). */
+function wander(room: Room, a: Actor, b: Brain): Spot | null {
+  const ring = room.ring();
+  if (ring.safari) return null;
+  const inside = room.reachable().filter((s) => !room.inFog(s, ring));
+  const here = inside.filter((s) => s.map === a.m.spot.map);
+  const pool = here.length && rand(b) < 0.5 ? here : inside;
+  return pool.length ? pool[Math.floor(rand(b) * pool.length)] : null;
 }
 
 /** The next leg towards `to`: there on its own map, or over to the next outdoor map on
@@ -138,7 +151,9 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
   // One the fog has caught with nowhere to go (its walk gave up) thinks again too.
   // A hunter's quarry moves: it looks again whenever its walk runs out, and every 4 s.
   const hunt = hunting(room) && (!b.steps?.length || (room.tick + a.id * 7) % 240 === 0);
-  if ((b.plan !== at || hunt || (!b.goal && room.inFog(a.m.spot, ring))) && (room.tick + a.id * 7) % 30 === 0) {
+  // There, or given up: on somewhere else after a few seconds (brain.ts's next wander).
+  const idle = !b.goal && !b.steps?.length && (room.tick + a.id * 7) % 300 === 0;
+  if ((b.plan !== at || hunt || idle || (!b.goal && room.inFog(a.m.spot, ring))) && (room.tick + a.id * 7) % 30 === 0) {
     b.plan = at;
     b.goal = goal(room, a, b);
     b.steps = undefined;

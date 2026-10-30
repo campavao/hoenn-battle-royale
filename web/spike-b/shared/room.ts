@@ -1418,7 +1418,8 @@ export class Room {
         } else if (b) {
           this.picked.set(b.key, a.id);
           events.push({ type: 'bag', tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name, ...(b.person ? { person: { ...b.person } } : {}) });
-        } else if (foe && foe.bot && !foe.battling && !foe.m.action) {
+        } else if (foe && foe.bot && !foe.battling && !foe.m.action && !a.m.spot.map.startsWith(SAFARI)) {
+          // Not in the Zone, which is for catching (engage's rule; Cam 10-30 fought one there).
           a.battling = foe.battling = true;
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
@@ -1475,8 +1476,10 @@ export class Room {
       const bits = a.bot ? 7 : a.field ?? 0;
       const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir) : this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
-      // A townsperson stays out in the street.
-      if (a.bot && !this.places.has(r.to.map)) return null;
+      // A townsperson stays out in the street, or in the Zone's (live's bots wander the
+      // Safari's pool through the opening, brain.ts setTargets): no Zone map is a place
+      // of the plane, so the Zone's bots stood still (Cam 10-30).
+      if (a.bot && !this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) return null;
       const t = r.to;
       // A REGI chamber's wall: shut until its story opened it (and in a match without one).
       if (r.warp && DOOR_MAPS.has(from.map) && from.y === DOOR_Y + 1 && t.y < DOOR_Y && !this.events.some((e) => e.map === from.map && e.opened)) return null;

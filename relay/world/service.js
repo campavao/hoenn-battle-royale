@@ -3363,7 +3363,7 @@ var Room = class {
         } else if (b) {
           this.picked.set(b.key, a.id);
           events.push({ type: "bag", tick: this.tick, id: a.id, key: b.key, bag: structuredClone(b.bag), name: b.name, ...b.person ? { person: { ...b.person } } : {} });
-        } else if (foe && foe.bot && !foe.battling && !foe.m.action) {
+        } else if (foe && foe.bot && !foe.battling && !foe.m.action && !a.m.spot.map.startsWith(SAFARI)) {
           a.battling = foe.battling = true;
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
@@ -3411,7 +3411,7 @@ var Room = class {
       const bits = a.bot ? 7 : a.field ?? 0;
       const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir) : this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
-      if (a.bot && !this.places.has(r.to.map)) return null;
+      if (a.bot && !this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) return null;
       const t = r.to;
       if (r.warp && DOOR_MAPS.has(from.map) && from.y === DOOR_Y + 1 && t.y < DOOR_Y && !this.events.some((e) => e.map === from.map && e.opened)) return null;
       const bag = this.spillAt(t.map, t.x, t.y);
@@ -3687,7 +3687,7 @@ function goal(room, a, b) {
     if (near.length) return near[Math.floor(rand(b) * near.length)];
   }
   const cells = insideNext(room);
-  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return null;
+  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return wander(room, a, b);
   const p = room.places.get(a.m.spot.map);
   if (!p) return null;
   const x = p.gx + a.m.spot.x, y = p.gy + a.m.spot.y;
@@ -3707,6 +3707,14 @@ function goal(room, a, b) {
   }
   return best;
 }
+function wander(room, a, b) {
+  const ring = room.ring();
+  if (ring.safari) return null;
+  const inside = room.reachable().filter((s) => !room.inFog(s, ring));
+  const here = inside.filter((s) => s.map === a.m.spot.map);
+  const pool = here.length && rand(b) < 0.5 ? here : inside;
+  return pool.length ? pool[Math.floor(rand(b) * pool.length)] : null;
+}
 function leg(room, from, to) {
   if (from.map === to.map) return findPath(room.world, from, to, 6e3, true, true);
   const hops = room.world.nextHops(from.map, to.map, true, true);
@@ -3723,7 +3731,8 @@ function botKeys(room, a, b) {
   const ring = room.ring();
   const at = `${ring.round}:${ring.phase}:${room.events.length}`;
   const hunt = hunting(room) && (!b.steps?.length || (room.tick + a.id * 7) % 240 === 0);
-  if ((b.plan !== at || hunt || !b.goal && room.inFog(a.m.spot, ring)) && (room.tick + a.id * 7) % 30 === 0) {
+  const idle = !b.goal && !b.steps?.length && (room.tick + a.id * 7) % 300 === 0;
+  if ((b.plan !== at || hunt || idle || !b.goal && room.inFog(a.m.spot, ring)) && (room.tick + a.id * 7) % 30 === 0) {
     b.plan = at;
     b.goal = goal(room, a, b);
     b.steps = void 0;
