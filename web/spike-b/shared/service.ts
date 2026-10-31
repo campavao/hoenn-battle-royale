@@ -260,6 +260,8 @@ export class WorldService {
           if (typeof m.map === 'string') host.pick(phone.id, m.map.slice(0, 64));
         } else if (m.t === 'sail') {
           if (typeof m.to === 'string') host.sail(phone.id, m.to);
+        } else if (m.t === 'fly') {
+          if (typeof m.map === 'string' && Number.isInteger(m.x) && Number.isInteger(m.y)) host.fly(phone.id, m.map.slice(0, 64), m.x, m.y);
         } else if (m.t === 'open') {
           if (Number.isInteger(m.n)) host.open(phone.id, m.n);
         } else if (m.t === 'released') {

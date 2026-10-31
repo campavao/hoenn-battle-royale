@@ -147,6 +147,11 @@ export class Host {
     if (this.players.has(id)) this.pending.push({ c: 'open', id, n });
   }
 
+  /** FLY off the page's MAP landed it on `map` at x, y. */
+  fly(id: number, map: string, x: number, y: number): void {
+    if (this.players.has(id)) this.pending.push({ c: 'fly', id, to: { map, x, y } });
+  }
+
   /** The page asked the ferry for story `to`'s island ('' home). */
   sail(id: number, to: string): void {
     if (this.players.has(id) && typeof to === 'string' && to.length <= 32) this.pending.push({ c: 'sail', id, to });

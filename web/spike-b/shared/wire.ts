@@ -40,6 +40,8 @@ export type WorldUp =
   | { t: 'released'; mons: { sp: number; lv: number }[] }
   | { t: 'open'; n: number }
   | { t: 'sail'; to: string }
+  /** FLY off the MAP landed me here (the town's heal location). */
+  | { t: 'fly'; map: string; x: number; y: number }
   /** Drop me on this map when the Safari ends. */
   | { t: 'pick'; map: string }
   /** The ball or bag `k` would not go in my bag: put it back (a bag holding `rest`). */

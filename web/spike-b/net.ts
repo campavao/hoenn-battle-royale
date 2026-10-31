@@ -47,6 +47,8 @@ export interface WorldLink {
   open(n: number): void;
   /** I sail to story `to`'s island, or ('') back to Lilycove. */
   sail(to: string): void;
+  /** FLY off the MAP landed me on `map` at x, y. */
+  fly(map: string, x: number, y: number): void;
   /** The ball `key` would not go in my bag: put it back. */
   drop(key: number, rest?: Bag): void;
   /** My team is down: off the map. `by` who beat me, `wild` a wild POKeMON did. */
@@ -114,6 +116,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     released: (mons) => host.released(me, mons),
     open: (n) => host.open(me, n),
     sail: (to) => host.sail(me, to),
+    fly: (map, x, y) => host.fly(me, map, x, y),
     pick: (map) => host.pick(me, map),
     drop: (key, rest) => host.drop(me, key, rest),
     out: (bag, by, wild) => host.out(me, bag, by, wild),
@@ -289,6 +292,7 @@ export class Online implements WorldLink {
   released(mons: { species: number; level: number }[]): void { this.send({ t: 'released', mons: mons.map((m) => ({ sp: m.species, lv: m.level })) }); }
   open(n: number): void { this.send({ t: 'open', n }); }
   sail(to: string): void { this.send({ t: 'sail', to }); }
+  fly(map: string, x: number, y: number): void { this.send({ t: 'fly', map, x, y }); }
 
   pick(map: string): void { this.send({ t: 'pick', map }); }
 
