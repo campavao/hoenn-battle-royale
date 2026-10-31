@@ -186,6 +186,33 @@ test('a dropped bag opens its team, and MOVES off the team opens the move screen
   await expect(page.locator('#msg')).toHaveAttribute('data-text', /No new moves/, { timeout: 5_000 });
 });
 
+test("a MART sells the way Emerald's does: the shelf, how many, the price, YES", async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.goto(`/?rom=${romHashParam()}#solo&nobots&safari=600&seed=7`);
+  await page.locator('#intro-go').click({ timeout: 90_000 });
+  type S = { link: { me: number; room: { actor(id: number): unknown } }; rom?: { money(): Promise<number>; spill(): Promise<{ items: { id: number; n: number }[] }> }; asking: boolean; startFor(e: unknown): void };
+  const s = <T>(f: (s: S) => T) => page.evaluate((src) => new Function('s', `return (${src})(s)`)((window as unknown as { __spike: S }).__spike), f.toString()) as Promise<T>;
+  await page.waitForFunction(() => { const s = (window as unknown as { __spike?: S }).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 90_000 });
+  const press = async (k: string) => { await key(page, k, true); await page.waitForTimeout(100); await key(page, k, false); await page.waitForTimeout(350); };
+  const before = await s((s) => s.rom!.money());
+
+  // OLDALE's clerk at the opening's rung: ROYALe BALL, POTION, POKe DOLL. The shelf is a
+  // canvas of Emerald's windows (askbox.ts), not the page's old list (Cam, 10-30).
+  await s((s) => s.startFor({ type: 'mart', tick: 0, id: s.link.me, map: 'MAP_OLDALE_TOWN_MART' }));
+  await expect.poll(() => s((s) => s.asking), { timeout: 10_000 }).toBe(true);
+  await expect(page.locator('#askbox')).toBeVisible();
+  await press('ArrowDown'); // POTION
+  await press('z');
+  await press('ArrowUp'); await press('ArrowUp'); // x3 on the roller
+  await press('z');
+  await press('z'); // YES
+  await expect.poll(() => s((s) => s.rom!.money()), { timeout: 15_000 }).toBe(before - 900);
+  expect(await s(async (s) => (await s.rom!.spill()).items.find((r) => r.id === 13)?.n ?? 0), 'three POTIONs in the bag').toBe(3);
+  await press('x'); // CANCEL off the shelf
+  await expect.poll(() => s((s) => s.asking), { timeout: 5_000 }).toBe(false);
+  await expect(page.locator('#askbox')).toBeHidden();
+});
+
 test('a tap on the map walks the trainer there, and the pad buzzes', async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 390, height: 844 });
