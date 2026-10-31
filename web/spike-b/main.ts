@@ -2005,11 +2005,16 @@ function padUp(k: string): void {
   rom?.release(GBA_KEY[k]);
 }
 // The touch pad: the live game's D-pad, A, B and START, the same as a controller's.
-wireDpad(document.getElementById('dpad-surface')!, padDown, padUp);
+/** A short tap of haptic feedback as a pad button goes down (the live game's buzz, POK-245).
+ *  A phone without it, every desktop, and a page not touched yet get nothing. */
+function buzz(ms = 8): void {
+  try { navigator.vibrate?.(ms); } catch { /* refused: not worth a word */ }
+}
+wireDpad(document.getElementById('dpad-surface')!, (k) => { buzz(); padDown(k); }, padUp);
 for (const el of document.querySelectorAll<HTMLElement>('#pad .k')) {
   const k = el.dataset.k!;
   const up = () => { el.classList.remove('down'); padUp(k); };
-  el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); el.classList.add('down'); padDown(k); });
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); el.classList.add('down'); buzz(); padDown(k); });
   el.addEventListener('pointerup', up);
   el.addEventListener('pointercancel', up);
 }

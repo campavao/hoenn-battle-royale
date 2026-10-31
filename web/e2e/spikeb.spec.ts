@@ -130,9 +130,10 @@ test('a Safari catch, the drop on the fly map, and out of the Safari', async ({ 
   expect(await s((s) => s.rom?.partyCount() ?? 0), 'the team came with the trainer').toBe(caught);
 });
 
-test('a tap on the map walks the trainer there', async ({ page }) => {
+test('a tap on the map walks the trainer there, and the pad buzzes', async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => { (window as unknown as { buzzes: number }).buzzes = 0; navigator.vibrate = () => { (window as unknown as { buzzes: number }).buzzes++; return true; }; });
   await page.goto(`/?rom=${romHashParam()}`);
   await page.locator('#lobby-rows button', { hasText: 'HOST A ROOM' }).click({ timeout: 90_000 });
   await page.locator('#room-start').click({ timeout: 30_000 });
@@ -160,4 +161,7 @@ test('a tap on the map walks the trainer there', async ({ page }) => {
   await page.mouse.click(goal!.x, goal!.y);
   const at = () => page.evaluate(() => { const s = (window as unknown as { __spike: W }).__spike; const p = s.link.room.actor(s.link.me).m.spot; return `${p.map}:${p.x}:${p.y}`; });
   await expect.poll(at, { timeout: 15_000 }).toBe(goal!.spot);
+  // A pad button going down buzzes, as the live game's does (POK-245).
+  await page.locator('#pad .k[data-k="b"]').dispatchEvent('pointerdown', { pointerId: 1 });
+  expect(await page.evaluate(() => (window as unknown as { buzzes: number }).buzzes)).toBeGreaterThan(0);
 });
