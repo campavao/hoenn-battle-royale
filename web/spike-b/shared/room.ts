@@ -32,7 +32,7 @@ import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, dra
 import { DOOR_Y, FINAL_CHANCE, STORIES, STORY_CHANCE, type Story, type StoryDoor } from '../../src/match/story';
 import { dealParty, rungForPhase } from '../../src/bots/party';
 import { gradeOf } from '../../src/bots/roster';
-import { add, carried, purse, type Stack } from '../../src/bots/bag';
+import { add, carried, purse, quaff, type Stack } from '../../src/bots/bag';
 import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
 import { blueTm, scatterItem } from '../../src/match/scatter';
@@ -109,6 +109,9 @@ export interface Actor {
    *  who walks, `duel` for two trainers (a bot's is a fight). */
   meet?: { foe: number; walk: boolean; since: number; duel: boolean };
 }
+
+/** brain.ts QUAFF_COOLDOWN_MS: a bot drinks at most one medicine every 10 s. */
+const QUAFF_FRAMES = 600;
 
 /** A bot's team as the seed deals it, with the wounds its fights left it: a fainted slot
  *  stays down, a hurt one keeps its share (at least 1 HP), and the rest are whole. */
@@ -684,6 +687,20 @@ export class Room {
     return this.gyms.some(([m]) => m === n);
   }
 
+  /** Every CENTER's doorstep on the match's own outdoor maps: the cell below a door into a
+   *  map with a nurse (world.ts centre), where its trainers walk out. Found once. */
+  centreSteps(): Spot[] {
+    if (this.steps) return this.steps;
+    const out: Spot[] = [];
+    for (const id of this.places.keys()) {
+      for (const w of this.world.map(id)?.warps ?? []) {
+        if (this.world.map(w.to)?.centre && this.world.cell(id, w.x, w.y + 1) === 0) out.push({ map: id, x: w.x, y: w.y + 1 });
+      }
+    }
+    return (this.steps = out);
+  }
+  private steps: Spot[] | null = null;
+
   isTaken(key: number): boolean {
     const at = this.taken.get(key);
     return at !== undefined && this.tick - at < REGROW;
@@ -935,6 +952,18 @@ export class Room {
       a.bleedAt += bite;
       a.bites = (a.bites ?? 0) + 1;
       if (a.bites >= BOT_BITES) this.botOut(a, '');
+    }
+    // A bot sees to its wounds (#222's wear), here and not in bots.ts, which only the host
+    // runs: every copy of the room heals it on the same frame. On a CENTER's doorstep it
+    // has been in, the whole team back (brain.ts healHere); out of the fog, every
+    // QUAFF_FRAMES it may drink the weakest medicine it carries onto its worst-hurt mon
+    // under 60% (tryQuaff, bag.ts quaff).
+    for (const a of this.actors) {
+      if (!a.bot || a.battling || !a.wear) continue;
+      if (this.centreSteps().some((s) => s.map === a.m.spot.map && s.x === a.m.spot.x && s.y === a.m.spot.y)) { a.wear = undefined; continue; }
+      if (!a.loot?.items.length || (this.tick + a.id * 13) % QUAFF_FRAMES !== 0 || this.inFog(a.m.spot, ring)) continue;
+      const party = wornParty(dealParty(this.seed, a.id, ring.phase + 1, a.m.spot.map, gradeOf(this.seed, a.id)), a.wear);
+      if (quaff(party, a.loot.items) !== null) a.wear = party.map((m) => (m.maxHp > 0 ? m.hp / m.maxHp : 0));
     }
     for (const [key, at] of this.taken) if (this.tick - at >= REGROW) this.taken.delete(key);
     const events: RoomEvent[] = [];

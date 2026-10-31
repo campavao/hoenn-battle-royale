@@ -1876,6 +1876,16 @@ var HEAL = {
   [ITEM.MAX_POTION]: 9999,
   [ITEM.FULL_RESTORE]: 9999
 };
+function isMedicine(id) {
+  return HEAL[id] !== void 0;
+}
+function take(bag, id) {
+  const i = bag.findIndex((s) => s.id === id && s.n > 0);
+  if (i < 0) return false;
+  bag[i].n--;
+  if (bag[i].n <= 0) bag.splice(i, 1);
+  return true;
+}
 function add(bag, id, n = 1) {
   const mine = bag.find((s) => s.id === id);
   if (mine) mine.n = Math.min(99, mine.n + n);
@@ -1885,6 +1895,31 @@ function carried(party, bag) {
   const out = bag.map((stack) => ({ ...stack }));
   for (const mon2 of party) if (mon2.heldItem) add(out, mon2.heldItem);
   return out;
+}
+var QUAFF_AT = 0.6;
+function quaff(party, bag) {
+  let worst = -1;
+  let share = QUAFF_AT;
+  for (let i = 0; i < party.length; i++) {
+    const mon3 = party[i];
+    if (mon3.hp <= 0 || mon3.maxHp <= 0) continue;
+    const frac = mon3.hp / mon3.maxHp;
+    if (frac < share) {
+      share = frac;
+      worst = i;
+    }
+  }
+  if (worst < 0) return null;
+  let best = null;
+  for (const stack of bag) {
+    if (stack.n <= 0 || !isMedicine(stack.id)) continue;
+    if (best === null || HEAL[stack.id] < HEAL[best]) best = stack.id;
+  }
+  if (best === null) return null;
+  take(bag, best);
+  const mon2 = party[worst];
+  party[worst] = { ...mon2, hp: Math.min(mon2.maxHp, mon2.hp + HEAL[best]) };
+  return best;
 }
 function purse(phase, grade = 1 /* Regular */) {
   const level = rungForPhase(phase);
@@ -2290,6 +2325,15 @@ var KEY_SELECT = 64;
 function keysOf(bits) {
   return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A), select: !!(bits & KEY_SELECT) };
 }
+var QUAFF_FRAMES = 600;
+function wornParty(party, wear) {
+  if (!wear) return party;
+  return party.map((m, i) => {
+    const w = wear[i];
+    if (w === void 0) return m;
+    return { ...m, hp: w <= 0 ? 0 : Math.max(1, Math.min(m.maxHp, Math.round(m.maxHp * w))) };
+  });
+}
 var FIELD_SURF = 4;
 var ATTENDANT = { map: "MAP_LILYCOVE_CITY_HARBOR", x: 8, y: 10 };
 var HARBOR_LANDING = { map: "MAP_LILYCOVE_CITY_HARBOR", x: 8, y: 11 };
@@ -2605,6 +2649,19 @@ var Room = class {
   bossDown(n) {
     return this.gyms.some(([m]) => m === n);
   }
+  /** Every CENTER's doorstep on the match's own outdoor maps: the cell below a door into a
+   *  map with a nurse (world.ts centre), where its trainers walk out. Found once. */
+  centreSteps() {
+    if (this.steps) return this.steps;
+    const out = [];
+    for (const id of this.places.keys()) {
+      for (const w of this.world.map(id)?.warps ?? []) {
+        if (this.world.map(w.to)?.centre && this.world.cell(id, w.x, w.y + 1) === 0) out.push({ map: id, x: w.x, y: w.y + 1 });
+      }
+    }
+    return this.steps = out;
+  }
+  steps = null;
   isTaken(key) {
     const at = this.taken.get(key);
     return at !== void 0 && this.tick - at < REGROW;
@@ -2832,6 +2889,16 @@ var Room = class {
       a.bleedAt += bite;
       a.bites = (a.bites ?? 0) + 1;
       if (a.bites >= BOT_BITES) this.botOut(a, "");
+    }
+    for (const a of this.actors) {
+      if (!a.bot || a.battling || !a.wear) continue;
+      if (this.centreSteps().some((s) => s.map === a.m.spot.map && s.x === a.m.spot.x && s.y === a.m.spot.y)) {
+        a.wear = void 0;
+        continue;
+      }
+      if (!a.loot?.items.length || (this.tick + a.id * 13) % QUAFF_FRAMES !== 0 || this.inFog(a.m.spot, ring)) continue;
+      const party = wornParty(dealParty(this.seed, a.id, ring.phase + 1, a.m.spot.map, gradeOf(this.seed, a.id)), a.wear);
+      if (quaff(party, a.loot.items) !== null) a.wear = party.map((m) => m.maxHp > 0 ? m.hp / m.maxHp : 0);
     }
     for (const [key, at] of this.taken) if (this.tick - at >= REGROW) this.taken.delete(key);
     const events = [];
@@ -3749,24 +3816,11 @@ function health(a) {
   const w = a.wear;
   return w?.length ? w.reduce((s, v) => s + v, 0) / w.length : 1;
 }
-var STEPS2 = /* @__PURE__ */ new WeakMap();
-function centreSteps(room) {
-  const hit = STEPS2.get(room);
-  if (hit) return hit;
-  const out = [];
-  for (const id of room.places.keys()) {
-    for (const w of room.world.map(id)?.warps ?? []) {
-      if (room.world.map(w.to)?.centre && room.world.cell(id, w.x, w.y + 1) === 0) out.push({ map: id, x: w.x, y: w.y + 1 });
-    }
-  }
-  STEPS2.set(room, out);
-  return out;
-}
 function centreFor(room, a) {
   const p = room.places.get(a.m.spot.map);
   if (!p) return null;
   let best = null, bestH = Infinity, bestD = Infinity;
-  for (const s of centreSteps(room)) {
+  for (const s of room.centreSteps()) {
     if (room.inFog(s)) continue;
     const h = room.world.hops(a.m.spot.map, s.map, true, true);
     if (h === void 0 || h > bestH) continue;
@@ -3848,8 +3902,7 @@ function botKeys(room, a, b) {
   if (a.m.action) return 0;
   const ring = room.ring();
   const at = `${ring.round}:${ring.phase}:${room.events.length}${health(a) < HURT ? ":hurt" : ""}`;
-  if (a.wear && centreSteps(room).some((s) => sameSpot(s, a.m.spot))) {
-    a.wear = void 0;
+  if (b.goal && !a.wear && sameSpot(a.m.spot, b.goal) && room.centreSteps().some((s) => sameSpot(s, a.m.spot))) {
     b.goal = null;
     b.steps = void 0;
     b.wait = 120;
@@ -4101,13 +4154,13 @@ var Host = class {
       if (p.started) {
         const n = p.queue.length > this.jitter + CATCH_UP && room.tick % 4 === 0 ? 2 : p.queue.length ? 1 : 0;
         if (!n) p.started = false;
-        const take2 = p.queue.splice(0, n);
+        const take3 = p.queue.splice(0, n);
         p.seq += n;
-        if (n) used.set(a.id, take2);
+        if (n) used.set(a.id, take3);
       }
-      const take = used.get(a.id);
-      if (!take) stall.push(a.id);
-      else if (take.length !== 1 || take[0] !== a.keys) ins.push([a.id, ...take]);
+      const take2 = used.get(a.id);
+      if (!take2) stall.push(a.id);
+      else if (take2.length !== 1 || take2[0] !== a.keys) ins.push([a.id, ...take2]);
       acks.set(a.id, p.seq);
     }
     for (const p of this.players.values()) {
@@ -4697,4 +4750,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "e65f98b2e503";
+export const WORLD_HASH = "0419f893c74b";
