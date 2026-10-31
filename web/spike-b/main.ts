@@ -40,6 +40,9 @@ import { MusicCue, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { devRomParam, importRom } from './import';
 import { askToKeepStorage, registerServiceWorker } from '../src/pwa';
+import { parseRoomHash, withRoom, withoutRoom } from '../src/hash';
+import { recordSolo, statFlushed, statMessage } from '../src/match/stats';
+import { WORLD_HASH_SHORT } from './net';
 import { groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
 import { GOLD } from '../src/match/events';
@@ -300,7 +303,78 @@ function myBits(): number {
   const bits = (held.has('up') ? KEY_UP : 0) | (held.has('down') ? KEY_DOWN : 0) | (held.has('left') ? KEY_LEFT : 0) |
     (held.has('right') ? KEY_RIGHT : 0) | (held.has('b') ? KEY_B : 0) | (held.has('a') && frame >= calmUntil ? KEY_A : 0) |
     (held.has('select') || frame < selectUntil ? KEY_SELECT : 0);
-  return bits;
+  // A thumb on the pad takes over from a tapped walk.
+  if (bits) { tapWalk = null; return bits; }
+  return tapBits();
+}
+
+// ---- tap to walk (the live game's touch.ts, on the page's own world) ------------------
+// A tap on the map is a place to go: the route is a walk over the room's own steps (what a
+// thumb on the pad could walk), held a cell at a time. A tap on something that cannot be
+// stood on (a trainer, a sign, the nurse) is "walk up to it, face it, press A".
+
+const DIR_BIT: Record<number, number> = { 1: KEY_DOWN, 2: KEY_UP, 3: KEY_LEFT, 4: KEY_RIGHT };
+let tapWalk: { dirs: number[]; at: string; since: number; press: boolean } | null = null;
+const spotKey = (p: Spot) => `${p.map}:${p.x}:${p.y}`;
+
+function tapBits(): number {
+  const me = link.mine();
+  if (!tapWalk || !me) return 0;
+  const here = spotKey(me.m.spot);
+  if (here !== tapWalk.at) { tapWalk.at = here; tapWalk.since = frame; tapWalk.dirs.shift(); }
+  // Turned to face what was tapped (a bump turns): A, once, and the walk is done.
+  if (!tapWalk.dirs.length || (tapWalk.dirs.length === 1 && tapWalk.press && me.m.facing === tapWalk.dirs[0] && frame - tapWalk.since > 6)) {
+    const a = tapWalk.press && frame >= calmUntil;
+    tapWalk = null;
+    return a ? KEY_A : 0;
+  }
+  // Nothing moves for a second: something is in the way (another trainer). Stop.
+  if (frame - tapWalk.since > 60) { tapWalk = null; return 0; }
+  return DIR_BIT[tapWalk.dirs[0]];
+}
+
+/** Starts a walk to the cell under the finger. */
+function tapTo(clientX: number, clientY: number): void {
+  const me = link?.mine();
+  if (!me || !rom || isOut || battle || swapping || romUp || asking || intro()) return;
+  const dpr = devicePixelRatio || 1;
+  const wx = cam.x + (clientX * dpr - devW / 2) / zoom;
+  const wy = cam.y + (clientY * dpr - devH / 2) / zoom;
+  const p = mapUnder(wx, wy);
+  if (!p) return;
+  const goal = { map: p.m.id, x: Math.floor(wx / TILE) - p.gx, y: Math.floor(wy / TILE) - p.gy };
+  if (goal.x < 0 || goal.y < 0 || goal.x >= p.m.w || goal.y >= p.m.h) return;
+  const route = routeTo(me, goal);
+  tapWalk = route ? { dirs: route.dirs, at: spotKey(me.m.spot), since: frame, press: route.press } : null;
+}
+
+/** The steps to `goal`, or to beside it and one more toward it (a bump: face it, then A)
+ *  when it cannot be stood on. A breadth-first walk over the room's own step function. */
+function routeTo(me: Actor, goal: Spot): { dirs: number[]; press: boolean } | null {
+  const step = link.room.stepFor(me);
+  const want = spotKey(goal);
+  // A trainer on it: walk up and talk (the step function knows the ground, not who stands on it).
+  const taken = link.room.actors.some((a) => a.id !== me.id && spotKey(a.m.spot) === want);
+  const from = new Map<string, [string, number] | null>([[spotKey(me.m.spot), null]]);
+  const q: Spot[] = [me.m.spot];
+  const back = (k: string) => { const dirs: number[] = []; for (let c = k; from.get(c); c = from.get(c)![0]) dirs.unshift(from.get(c)![1]); return dirs; };
+  let beside: { k: string; d: number } | null = null;
+  for (let i = 0; i < q.length && i < 4000; i++) {
+    const at = q[i];
+    const k = spotKey(at);
+    if (k === want && !taken) return { dirs: back(k), press: false };
+    for (const d of [1, 2, 3, 4]) {
+      const r = step(at, d);
+      // The goal one step off, and not to be stood on: beside it is where to go.
+      const dx = d === 3 ? -1 : d === 4 ? 1 : 0, dy = d === 1 ? 1 : d === 2 ? -1 : 0;
+      if (!beside && at.map === goal.map && at.x + dx === goal.x && at.y + dy === goal.y && (!r || spotKey(r.to) !== want || taken)) beside = { k, d };
+      if (!r || r.warp || from.has(spotKey(r.to)) || (taken && spotKey(r.to) === want)) continue;
+      from.set(spotKey(r.to), [k, d]);
+      q.push(r.to);
+    }
+    if (beside) return { dirs: [...back(beside.k), beside.d], press: true };
+  }
+  return null;
 }
 
 // ---- marked spots: the live game's visible encounters ------------------------------------
@@ -1143,7 +1217,7 @@ function results(res: Results, waited = 0): void {
     ],
     // The CHAMPION page, a bot's too, as live (HBR-96).
     champion: res.winner && res.winner !== link.me ? { name: nameOf(res.winner), lines: [{ label: 'BEATEN', value: String(beaten(res.winner)) }] } : undefined,
-  }, () => { worldSock?.leave(); room = null; lobby!.menu(); });
+  }, () => { worldSock?.leave(); room = null; unlink(); lobby!.menu(); });
 }
 
 function standings(done: boolean, res = link.room.results, bots = botIds()): void {
@@ -1934,11 +2008,16 @@ function padUp(k: string): void {
   rom?.release(GBA_KEY[k]);
 }
 // The touch pad: the live game's D-pad, A, B and START, the same as a controller's.
-wireDpad(document.getElementById('dpad-surface')!, padDown, padUp);
+/** A short tap of haptic feedback as a pad button goes down (the live game's buzz, POK-245).
+ *  A phone without it, every desktop, and a page not touched yet get nothing. */
+function buzz(ms = 8): void {
+  try { navigator.vibrate?.(ms); } catch { /* refused: not worth a word */ }
+}
+wireDpad(document.getElementById('dpad-surface')!, (k) => { buzz(); padDown(k); }, padUp);
 for (const el of document.querySelectorAll<HTMLElement>('#pad .k')) {
   const k = el.dataset.k!;
   const up = () => { el.classList.remove('down'); padUp(k); };
-  el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); el.classList.add('down'); padDown(k); });
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); el.classList.add('down'); buzz(); padDown(k); });
   el.addEventListener('pointerup', up);
   el.addEventListener('pointercancel', up);
 }
@@ -2088,8 +2167,9 @@ const watch = new Watch({
 const pointers = new Map<number, { x: number; y: number }>();
 let pinch0: { d: number; zoom: number } | null = null;
 let moved = 0;
+let tapAt: { x: number; y: number; t: number } | null = null;
 canvas.addEventListener('pointerdown', (e) => {
-  if (!spectating) return;
+  if (!spectating) { tapAt = { x: e.clientX, y: e.clientY, t: performance.now() }; return; }
   canvas.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   moved = 0;
@@ -2115,6 +2195,9 @@ canvas.addEventListener('pointermove', (e) => {
   }
 });
 const endPointer = (e: PointerEvent) => {
+  // On my own trainer: a tap (short, and where it went down) is a place to walk to.
+  if (!spectating && tapAt && e.type === 'pointerup' && performance.now() - tapAt.t < 400 && Math.hypot(e.clientX - tapAt.x, e.clientY - tapAt.y) < 12) tapTo(e.clientX, e.clientY);
+  tapAt = null;
   if (spectating && pointers.size === 1 && moved < 6) followAt(e.clientX, e.clientY);
   pointers.delete(e.pointerId);
   if (pointers.size < 2) pinch0 = null;
@@ -2646,6 +2729,23 @@ function loop(now: number): void {
 
 // ---- boot -----------------------------------------------------------------------------
 
+/** QUICK PLAY's matches with no relay, which nothing else sees (match/stats.ts, POK-243),
+ *  told to the relay's own socket the next time it is there: once, never answered. */
+function sendStat(relay: string): void {
+  const msg = statMessage(`world-${WORLD_HASH_SHORT}`);
+  if (!msg) return;
+  try {
+    const ws = new WebSocket(relay);
+    ws.onopen = () => { ws.send(JSON.stringify(msg)); statFlushed(); setTimeout(() => ws.close(), 500); };
+    ws.onerror = () => ws.close();
+  } catch { /* kept for next time */ }
+}
+
+/** Takes the room's link out of the address bar (left it, gone, or never there). */
+function unlink(): void {
+  if (parseRoomHash(location.hash)) history.replaceState(null, '', `${location.pathname}${location.search}${withoutRoom(location.hash) ? `#${withoutRoom(location.hash)}` : ''}`);
+}
+
 const DEFAULT_RELAY_URL = 'wss://hoenn-relay-production.up.railway.app';
 
 /** A lazy chunk that will not load (a release took this page's hashed files off the
@@ -2709,17 +2809,19 @@ async function boot(): Promise<void> {
     const sock = connectWorld(url, make, {
       onRoom: (r) => {
         room = r;
+        // A hosted room's link is the address bar: copy it, send it, and a friend is in.
+        if (!r.quick && parseRoomHash(location.hash)?.code !== r.code) history.replaceState(null, '', `#${withRoom(location.hash, 'join', r.code)}`);
         rom?.pace(r.set.textSpeed, r.set.animations);
         if (matchOn && !r.playing) matchOver();
         // The standings stay up until PLAY AGAIN; then the room as it is by then.
         else if (!matchOn && !winEl.classList.contains('on')) lobby!.roomIs(r);
       },
-      onNoRoom: (code, pass) => { forget(); lobby!.menu(pass ? `That is not room ${code}'s passcode.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.'); },
-      onKicked: () => { room = null; forget(); lobby!.menu('The host took you out of the room.'); },
+      onNoRoom: (code, pass) => { forget(); unlink(); lobby!.menu(pass ? `That is not room ${code}'s passcode.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.'); },
+      onKicked: () => { room = null; forget(); unlink(); lobby!.menu('The host took you out of the room.'); },
       onOld: () => { room = null; matchOn = false; forget(); lobby!.old(); },
       onRooms: (rooms) => lobby?.listed(rooms),
       onMatch: (l) => startMatch(l),
-      onOpen: () => lobby?.linkIs('up'),
+      onOpen: () => { lobby?.linkIs('up'); sendStat(url.replace(/\/world$/, '')); },
       onClosed: () => {
         reconnecting = false;
         lobby!.linkIs('down');
@@ -2747,21 +2849,28 @@ async function boot(): Promise<void> {
     });
     worldSock = sock;
     sheetBtn.hidden = false;
+    const joinAs = (how: { code?: string; host?: boolean; pass?: string }) => { const c = loadCareer(); sock.join(me().name, me().skin, { ...how, rec: { wins: c.wins, played: c.matches, ...(c.best ? { best: c.best } : {}) } }); };
     lobby = new Lobby({
-      join: (how) => { const c = loadCareer(); sock.join(me().name, me().skin, { ...how, rec: { wins: c.wins, played: c.matches, ...(c.best ? { best: c.best } : {}) } }); },
+      join: joinAs,
       start: () => sock.start(),
       set: (set) => sock.set(set),
       kick: (id) => sock.kick(id),
       list: () => sock.list(),
       relayUrl: url.replace(/\/world$/, ''),
-      leave: () => location.reload(),
+      // Out of the room for good: its link goes too, or the reload would walk back in.
+      leave: () => { unlink(); location.reload(); },
       names: { species: speciesName, move: (id) => moveInfo(romTables, id)?.name },
-      solo: () => { room = null; startMatch(soloLink(hoenn.maps, patches, hoenn.world, (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0)); },
+      solo: () => { room = null; recordSolo(); startMatch(soloLink(hoenn.maps, patches, hoenn.world, (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0)); },
     });
     // Reloaded within a minute of a match: straight back in (or, too late, in to watch).
     const back = token();
+    const linked = parseRoomHash(location.hash);
     if (back) { lobby.hide(); sock.join(me().name, me().skin, { code: back.code, again: { code: back.code, id: back.id, key: back.key } }); }
-    else {
+    // A room's link (#join=CODE), or #host / #quick: straight in, as the live game's are.
+    else if (linked?.mode === 'join' || linked?.mode === 'host' || linked?.mode === 'quick') {
+      lobby.hide();
+      joinAs(linked.mode === 'join' ? { code: linked.code } : linked.mode === 'host' ? { host: true } : {});
+    } else {
       // Too late to be the same trainer: the menu's WATCH goes back in to look (HBR-20).
       lobby.rewatch = lateCode();
       forget();

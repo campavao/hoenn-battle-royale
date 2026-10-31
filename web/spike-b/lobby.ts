@@ -5,6 +5,7 @@
 // (ui/screens.ts) on the same stage. Dropping straight into the world is the debug path
 // now (?solo).
 import { Stage, type DrawnScreen } from '../src/ui/stage';
+import { loadStats, setStatsOff } from '../src/match/stats';
 import { menuScreen, noticeScreen, roomScreen, sheetScreen, type RoomModel, type RowSpec, type SheetModel } from '../src/ui/screens';
 import { CODE_ENTRY, NAME_ENTRY, PASS_ENTRY, entryScreen, newEntry } from '../src/ui/entry';
 import { FEEDBACK_ROW, HOWTO_ROW, rewatchRow, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction } from '../src/match/lobby';
@@ -228,6 +229,8 @@ export class Lobby {
         // The live card's BATTLE BACKDROP, the same browser setting (hbr-see-through).
         { label: 'BATTLE BACKDROP', detail: seeThrough() ? 'OVER MAP' : 'CLASSIC', id: 'trainer-seethrough', onPress: () => { setSeeThrough(!seeThrough()); this.stage.redraw(); } },
         { label: 'MY CAREER', detail: 'save or load a file', id: 'trainer-career', onPress: () => this.stage.push(this.careerAsk) },
+        // The live card's anonymous play count (match/stats.ts): solo matches, told to the relay.
+        { label: 'SEND PLAY COUNT', detail: loadStats().off ? 'OFF' : 'ON', id: 'trainer-stats', onPress: () => { setStatsOff(!loadStats().off); this.stage.redraw(); } },
       ],
       note: this.trainerNote,
       onName: () => this.press({ kind: 'name' }),
