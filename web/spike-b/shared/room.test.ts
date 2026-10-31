@@ -443,6 +443,12 @@ describe('item balls', () => {
     for (const b of g) if (!b.gift) perMap.set(b.map, (perMap.get(b.map) ?? 0) + 1);
     expect(perMap.size).toBeGreaterThanOrEqual(5); // every map you can walk to
     expect(Math.max(...perMap.values())).toBeLessThanOrEqual(GROUND_PER_MAP);
+    // All over Hoenn, not the seven maps walkable from Littleroot (a drop in Mauville found
+    // nothing on the ground), and every one on open ground a trainer walks out of.
+    for (const m of ['MAP_MAUVILLE_CITY', 'MAP_FORTREE_CITY', 'MAP_LILYCOVE_CITY', 'MAP_SLATEPORT_CITY', 'MAP_ROUTE119']) expect(perMap.get(m), m).toBeGreaterThan(0);
+    const open = new Set(one.open().map((c) => `${c.map}:${c.x}:${c.y}`));
+    const outdoors = g.filter((b) => one.places.has(b.map));
+    for (const b of outdoors) expect(open.has(`${b.map}:${b.x}:${b.y}`), `${b.map}:${b.x}:${b.y}`).toBe(true);
     for (const b of g) {
       expect(one.world.cell(b.map, b.x, b.y)).toBe(0);
       expect(one.patchesOn(b.map).some((q) => q.x === b.x && q.y === b.y)).toBe(false);
@@ -649,6 +655,13 @@ describe('item balls', () => {
     expect(back.groundAt(b.map, b.x, b.y)).toBeUndefined();
     back.apply({ c: 'drop', id: 1, key: b.key });
     expect(back.groundAt(b.map, b.x, b.y)).toEqual(b);
+    // The same anywhere in Hoenn, not only on the maps walkable from Littleroot: a trainer
+    // dropped in Mauville takes the ball beside them.
+    const far = makeRoom(MAPS, PATCHES, 4242);
+    const m = [...far.ground().values()].find((q) => q.map === 'MAP_MAUVILLE_CITY' && far.world.cell(q.map, q.x - 1, q.y) === 0 && !far.groundAt(q.map, q.x - 1, q.y))!;
+    expect(m, 'a ball in Mauville with ground west of it').toBeTruthy();
+    far.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: { map: m.map, x: m.x - 1, y: m.y }, facing: 4 });
+    expect(far.step(new Map([[1, [KEY_A]]]))).toMatchObject([{ type: 'item', id: 1, key: m.key, item: m.item }]);
     // now the cell is open
     let walked = false;
     for (let i = 0; i < 40 && !walked; i++) { press(KEY_RIGHT); walked = room.actor(1)!.m.spot.x === b.x; }

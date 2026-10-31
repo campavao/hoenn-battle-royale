@@ -360,6 +360,8 @@ const DEALS = new Map<string, ReadonlyMap<string, Ground>>();
 /** Every cell a trainer can walk to from Littleroot, per set of maps. */
 const REACH = new Map<string, Spot[]>();
 const LANDS = new Map<string, Set<string>>();
+/** The cells inside those big components themselves, per set of maps (Room.open). */
+const OPENS = new Map<string, Spot[]>();
 /** The maps with a landing cell, by landing(). */
 const LANDED = new WeakMap<ReadonlySet<string>, Set<string>>();
 /** The least ground a drop's cell must be joined to on foot (Room.landing). */
@@ -599,10 +601,11 @@ export class Room {
     return at !== undefined && this.tick - at < REGROW;
   }
 
-  /** Every item ball the seed deals, taken or not, by cell (`map:x:y`). Walked out from
-   *  Littleroot on foot over this room's maps, so none is on an island or behind a ledge
-   *  that only goes one way out; each on plain ground, never a marked spot or a door, nor
-   *  the corner new trainers stand on. */
+  /** Every item ball the seed deals, taken or not, by cell (`map:x:y`). On the room's
+   *  open ground (open(): every outdoor map, none on an island or behind a ledge that only
+   *  goes one way out; it was the ground walkable from Littleroot, which put all of them
+   *  on seven maps), each on plain ground, never a marked spot or a door, nor the corner
+   *  new trainers stand on. */
   ground(): ReadonlyMap<string, Ground> {
     if (this.dealt) return this.dealt;
     // The same seed over the same maps deals the same balls: dealt once a process (the
@@ -611,7 +614,7 @@ export class Room {
     const hit = DEALS.get(id);
     if (hit) return (this.dealt = hit);
     const land = new Map<string, Spot[]>();
-    for (const at of this.reachable()) {
+    for (const at of this.open()) {
       if (this.world.cell(at.map, at.x, at.y) !== 0 || this.world.warpAt(at.map, at.x, at.y)) continue;
       const l = land.get(at.map) ?? [];
       l.push(at);
@@ -1143,12 +1146,25 @@ export class Room {
     for (let v = 0; v < N; v++) if (sizes[comp[v]] >= LANDING) { ok[v] = 1; queue.push(v); }
     while (queue.length) for (const u of prev[queue.pop()!]) if (!ok[u]) { ok[u] = 1; queue.push(u); }
     const out = new Set<string>();
+    const open: Spot[] = [];
     for (let v = 0; v < N; v++) {
       const s = spots[v];
       if (ok[v] && s.z === undefined && this.world.cell(s.map, s.x, s.y) === 0) out.add(`${s.map}:${s.x}:${s.y}`);
+      if (sizes[comp[v]] >= LANDING && s.z === undefined) open.push(s);
     }
     LANDS.set(id, out);
+    OPENS.set(id, open);
     return out;
+  }
+
+  /** Outdoor cells inside a big stretch of ground (landing's components): every one of
+   *  them walks to every other, so nothing put there is behind a ledge that only goes one
+   *  way, or on a pocket only SURF reaches -- and they cover all of Hoenn, not the part of
+   *  it walkable from Littleroot. */
+  open(): readonly Spot[] {
+    const id = 'landing:' + [...this.maps.keys()].join();
+    if (!OPENS.has(id)) { LANDS.delete(id); this.landing(); }
+    return OPENS.get(id)!;
   }
 
   /** The fly map's time (PICK_WAIT after the Safari, or after a battle fought in the
