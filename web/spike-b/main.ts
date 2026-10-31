@@ -1022,7 +1022,11 @@ function endBattle(r: Fought | null): void {
   if (after && !stale) sendTeam(after);
   // A catch with a full party let one go: it lies beside me, for anybody (POK-294).
   if (r?.released?.length && !stale) (battle?.link ?? link).released(r.released);
-  (battle?.link ?? link).end(duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f)), !stale && (!!battle?.foe?.bot || boss !== undefined) && !!r?.ok && r.outcome === 1);
+  // So too a bot run from with a POKe DOLL (br_engage.c's BrEngage_OnBattleEnd holds any
+  // fleer off its pursuer): without it the bot stood beside me and fought again after the
+  // two-second grace. Not the RUN that leaves a fight the match was won in.
+  const ranFromBot = !!battle?.foe?.bot && !!r?.ok && (r.outcome & 0x7f) === 4 && link.room.results.winner !== link.me;
+  (battle?.link ?? link).end((duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f))) || ranFromBot, !stale && (!!battle?.foe?.bot || boss !== undefined) && !!r?.ok && r.outcome === 1);
   if (!stale && boss !== undefined && r?.ok && r.outcome === 1) say(`You beat ${LEADERS[boss].name}! Took their TM and ¥1000.`);
   const wild = battle && !battle.foe && boss === undefined;
   const by = battle?.foe?.id;
