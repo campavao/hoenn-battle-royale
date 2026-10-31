@@ -16,7 +16,7 @@ import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
 import { over } from './over';
 import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, isTm, within } from './items';
-import { HURT, botKeys, centreSteps, health } from './bots';
+import { HURT, botKeys, health } from './bots';
 import { AFTER_WIN, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, WALKUP_BANG, eventPiece, makeRoom, wornParty } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
@@ -640,7 +640,7 @@ describe('item balls', () => {
     const room = makeRoom(MAPS, PATCHES, 4242);
     (room as unknown as { opening: number }).opening = 0;
     // Oldale's CENTER door is (6,16); its doorstep is the cell below.
-    expect(centreSteps(room)).toContainEqual({ map: 'MAP_OLDALE_TOWN', x: 6, y: 17 });
+    expect(room.centreSteps()).toContainEqual({ map: 'MAP_OLDALE_TOWN', x: 6, y: 17 });
     room.apply({ c: 'join', id: 7, bot: true, name: 'BOT', skin: 0, spot: { map: 'MAP_OLDALE_TOWN', x: 10, y: 12 }, facing: 1 });
     const bot = room.actor(7)!;
     bot.calm = 1e9; // nobody to fight here, nothing but the walk
@@ -656,6 +656,30 @@ describe('item balls', () => {
     walk(60 * 60);
     expect(bot.wear).toBeUndefined();
     expect(bot.m.spot).toEqual({ map: 'MAP_OLDALE_TOWN', x: 6, y: 17 });
+  });
+
+  it("the heal and a potion are the room's own: a copy that never runs the bots heals them on the same frame", () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    (room as unknown as { opening: number }).opening = 0;
+    room.apply({ c: 'join', id: 7, bot: true, name: 'BOT', skin: 0, spot: { map: 'MAP_OLDALE_TOWN', x: 6, y: 17 }, facing: 1 });
+    const bot = room.actor(7)!;
+    bot.calm = 1e9;
+    // On the doorstep with no brain at all (a page's copy): whole on the next frame.
+    bot.wear = [0.1];
+    room.step();
+    expect(bot.wear).toBeUndefined();
+    // Off it, hurt, with a POTION: within QUAFF_FRAMES it drinks it, the worst mon up 20 HP.
+    bot.m = { ...bot.m, spot: { map: 'MAP_OLDALE_TOWN', x: 10, y: 12 } };
+    bot.loot = { items: [{ id: 13, n: 1 }], money: 0 };
+    bot.wear = [0.25, 1];
+    for (let i = 0; i < 600 && bot.loot.items.length; i++) room.step();
+    expect(bot.loot.items).toEqual([]);
+    expect(bot.wear[0]).toBeGreaterThan(0.25);
+    // Whole enough (over 60%): it keeps the next one.
+    bot.loot = { items: [{ id: 13, n: 1 }], money: 0 };
+    bot.wear = [0.7, 1];
+    for (let i = 0; i < 700; i++) room.step();
+    expect(bot.loot.items).toEqual([{ id: 13, n: 1 }]);
   });
 
   it('FLY off the MAP lands where the flight did: a town of the match, a cell to stand on, not out of the Zone', () => {

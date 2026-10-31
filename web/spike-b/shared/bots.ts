@@ -77,30 +77,13 @@ export function health(a: Actor): number {
   return w?.length ? w.reduce((s, v) => s + v, 0) / w.length : 1;
 }
 
-/** Every CENTER's doorstep on the match's own outdoor maps: the cell below a door into a
- *  map with a nurse (world.ts centre), where its trainers walk out. A bot that stands on
- *  one has been in (brain.ts healHere: the whole team back, status gone). */
-const STEPS = new WeakMap<Room, Spot[]>();
-export function centreSteps(room: Room): Spot[] {
-  const hit = STEPS.get(room);
-  if (hit) return hit;
-  const out: Spot[] = [];
-  for (const id of room.places.keys()) {
-    for (const w of room.world.map(id)?.warps ?? []) {
-      if (room.world.map(w.to)?.centre && room.world.cell(id, w.x, w.y + 1) === 0) out.push({ map: id, x: w.x, y: w.y + 1 });
-    }
-  }
-  STEPS.set(room, out);
-  return out;
-}
-
 /** The CENTER a hurt bot walks to (brain.ts centreRoute): the doorstep fewest map
  *  crossings away, then nearest, out of the fog; none and it goes on as it was. */
 function centreFor(room: Room, a: Actor): Spot | null {
   const p = room.places.get(a.m.spot.map);
   if (!p) return null;
   let best: Spot | null = null, bestH = Infinity, bestD = Infinity;
-  for (const s of centreSteps(room)) {
+  for (const s of room.centreSteps()) {
     if (room.inFog(s)) continue;
     const h = room.world.hops(a.m.spot.map, s.map, true, true);
     if (h === undefined || h > bestH) continue;
@@ -195,9 +178,8 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
   const ring = room.ring();
   // Hurt is a plan of its own: it rethinks the moment a fight leaves it under HURT.
   const at = `${ring.round}:${ring.phase}:${room.events.length}${health(a) < HURT ? ':hurt' : ''}`;
-  // On a CENTER's doorstep: in, and out whole (brain.ts healHere), a moment inside.
-  if (a.wear && centreSteps(room).some((s) => sameSpot(s, a.m.spot))) {
-    a.wear = undefined;
+  // Healed on a CENTER's doorstep (Room.step): a moment inside before it goes on.
+  if (b.goal && !a.wear && sameSpot(a.m.spot, b.goal) && room.centreSteps().some((s) => sameSpot(s, a.m.spot))) {
     b.goal = null;
     b.steps = undefined;
     b.wait = 120;
