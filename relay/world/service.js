@@ -4132,6 +4132,10 @@ var WorldService = class {
             this.send(link, { t: "no_room", code: String(m.code ?? "") });
             return;
           }
+          if (room2 === "rom") {
+            this.send(link, { t: "no_room", code: String(m.code ?? "").toUpperCase(), rom: true });
+            return;
+          }
           if (room2.set.door === "pass" && String(m.pass ?? "").toUpperCase() !== room2.pass) {
             this.send(link, { t: "no_room", code: room2.code, pass: true });
             return;
@@ -4322,19 +4326,22 @@ var WorldService = class {
     }
     return out.sort((a, b) => b.players - a.players || (a.code < b.code ? -1 : 1));
   }
+  /** The room a join goes to, or 'rom' for a room whose battles run on another patch. */
   pick(m) {
+    const rom = typeof m.r === "string" ? m.r.slice(0, 16) : "";
     if (typeof m.code === "string" && m.code) {
       const r = this.rooms.get(m.code.toUpperCase());
+      if (r && r.rom && rom && r.rom !== rom) return "rom";
       return r && r.members.size < (r.quick ? ROOM_MAX : r.set.max) ? r : null;
     }
-    if (m.host === true) return this.make(false);
+    if (m.host === true) return this.make(false, rom);
     let best = null;
     for (const r of this.rooms.values()) {
-      if (r.quick && !r.host && r.members.size < ROOM_MAX && (!best || r.members.size > best.members.size)) best = r;
+      if (r.quick && !r.host && r.rom === rom && r.members.size < ROOM_MAX && (!best || r.members.size > best.members.size)) best = r;
     }
-    return best ?? this.make(true);
+    return best ?? this.make(true, rom);
   }
-  make(quick) {
+  make(quick, rom) {
     let code = "";
     do {
       code = "";
@@ -4342,7 +4349,7 @@ var WorldService = class {
     } while (this.rooms.has(code));
     const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
     const set = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: BOT_FILL, door: "open", textSpeed: 5, animations: false };
-    const room = { pass: "", code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map(), set };
+    const room = { rom, pass: "", code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map(), set };
     this.rooms.set(code, room);
     return room;
   }
@@ -4531,4 +4538,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "e49480ecfa41";
+export const WORLD_HASH = "110a9b031b4f";

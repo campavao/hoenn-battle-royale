@@ -327,11 +327,15 @@ declare const __WORLD_HASH__: string | undefined;
 const WORLD = typeof __WORLD_HASH__ === 'string' ? __WORLD_HASH__ : undefined;
 /** The build's world, short: a `stat` line's version (the relay keeps 16 characters). */
 export const WORLD_HASH_SHORT = (WORLD ?? 'dev').slice(0, 8);
+/** The patched ROM this page battles on (rom.ts romSha), sent with every join. */
+let ROM_SHA = '';
+export function battlesOn(sha: string): void { ROM_SHA = sha; }
 
 export interface WorldHandlers {
   onRoom(r: Extract<WorldDown, { t: 'room' }>): void;
-  /** No room by that code; `pass`: there is, and the passcode was wrong. */
-  onNoRoom(code: string, pass?: boolean): void;
+  /** No room by that code; `pass`: there is, and the passcode was wrong; `rom`: there is,
+   *  and its battles run on another patch of the game. */
+  onNoRoom(code: string, pass?: boolean, rom?: boolean): void;
   /** The host took me out of the room. */
   onKicked(): void;
   /** This page is an older (or newer) world than the relay's: it has to reload. */
@@ -398,7 +402,7 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
     sock.addEventListener('message', (ev) => {
       const m = JSON.parse(String(ev.data)) as WorldDown;
       if (m.t === 'room') h.onRoom(m);
-      else if (m.t === 'no_room') h.onNoRoom(m.code, m.pass);
+      else if (m.t === 'no_room') h.onNoRoom(m.code, m.pass, m.rom);
       else if (m.t === 'kicked') h.onKicked();
       else if (m.t === 'old') h.onOld();
       else if (m.t === 'rooms') h.onRooms(m.rooms);
@@ -414,7 +418,7 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
   };
   if (!open()) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, list: () => undefined, set: () => undefined, kick: () => undefined, leave: () => undefined, close: () => undefined }; }
   return {
-    join: (name, skin, how) => send({ t: 'join', name, skin, ...how, ...(WORLD ? { w: WORLD } : {}) }),
+    join: (name, skin, how) => send({ t: 'join', name, skin, ...how, ...(WORLD ? { w: WORLD } : {}), ...(ROM_SHA ? { r: ROM_SHA } : {}) }),
     start: () => send({ t: 'start' }),
     list: () => send({ t: 'list' }),
     set: (set) => send({ t: 'set', set }),

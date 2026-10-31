@@ -42,7 +42,7 @@ import { devRomParam, importRom } from './import';
 import { askToKeepStorage, registerServiceWorker } from '../src/pwa';
 import { devPace, parseRoomHash, withRoom, withoutRoom } from '../src/hash';
 import { recordSolo, statFlushed, statMessage } from '../src/match/stats';
-import { WORLD_HASH_SHORT } from './net';
+import { WORLD_HASH_SHORT, battlesOn } from './net';
 import { groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
 import { GOLD } from '../src/match/events';
@@ -2794,6 +2794,7 @@ async function boot(): Promise<void> {
     files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; }, (emu) => importRom(emu, ''), devRomParam());
     romEmu = files.emu;
     versionLine = files.version;
+  battlesOn(files.romSha);
     if (touchPad) { wireBattleMenu(files); wirePhoneHud(); }
   } catch (e) {
     console.warn('spike ROM not loaded', e);
@@ -2852,7 +2853,7 @@ async function boot(): Promise<void> {
         // The standings stay up until PLAY AGAIN; then the room as it is by then.
         else if (!matchOn && !winEl.classList.contains('on')) lobby!.roomIs(r);
       },
-      onNoRoom: (code, pass) => { forget(); unlink(); lobby!.menu(pass ? `That is not room ${code}'s passcode.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.'); },
+      onNoRoom: (code, pass, rom) => { forget(); unlink(); lobby!.menu(rom ? `Room ${code} is on another version of the game. Reload the page to update.` : pass ? `That is not room ${code}'s passcode.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.'); },
       onKicked: () => { room = null; forget(); unlink(); lobby!.menu('The host took you out of the room.'); },
       onOld: () => { room = null; matchOn = false; forget(); lobby!.old(); },
       onRooms: (rooms) => lobby?.listed(rooms),

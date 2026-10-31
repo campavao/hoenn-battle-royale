@@ -148,6 +148,9 @@ interface Lobby {
   set: Settings;
   /** The passcode, when the door is `pass`: the host's to read out, nobody else's. */
   pass: string;
+  /** The patched ROM its battles run on (join's `r`), as its first member brought it; ''
+   *  for a page that did not say. */
+  rom: string;
 }
 
 /** A trainer as the live relay's log lines name one (play-log.mjs NAME: no spaces). */
@@ -189,6 +192,7 @@ export class WorldService {
           if (this.where.size >= this.opts.cap) { this.send(link, { t: 'full' }); link.close(); return; }
           const room = this.pick(m);
           if (!room) { this.send(link, { t: 'no_room', code: String(m.code ?? '') }); return; }
+          if (room === 'rom') { this.send(link, { t: 'no_room', code: String(m.code ?? '').toUpperCase(), rom: true }); return; }
           if (room.set.door === 'pass' && String(m.pass ?? '').toUpperCase() !== room.pass) { this.send(link, { t: 'no_room', code: room.code, pass: true }); return; }
           const name = String(m.name ?? '').toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim().slice(0, 10);
           const skin = Number.isInteger(m.skin) && m.skin >= 0 && m.skin < 16 ? m.skin : 0;
@@ -388,21 +392,24 @@ export class WorldService {
     return out.sort((a, b) => b.players - a.players || (a.code < b.code ? -1 : 1));
   }
 
-  private pick(m: Extract<WorldUp, { t: 'join' }>): Lobby | null {
+  /** The room a join goes to, or 'rom' for a room whose battles run on another patch. */
+  private pick(m: Extract<WorldUp, { t: 'join' }>): Lobby | 'rom' | null {
+    const rom = typeof m.r === 'string' ? m.r.slice(0, 16) : '';
     if (typeof m.code === 'string' && m.code) {
       const r = this.rooms.get(m.code.toUpperCase());
+      if (r && r.rom && rom && r.rom !== rom) return 'rom';
       return r && r.members.size < (r.quick ? ROOM_MAX : r.set.max) ? r : null;
     }
-    if (m.host === true) return this.make(false);
-    // The fullest quick room still waiting for its start; or a new one.
+    if (m.host === true) return this.make(false, rom);
+    // The fullest quick room on this patch still waiting for its start; or a new one.
     let best: Lobby | null = null;
     for (const r of this.rooms.values()) {
-      if (r.quick && !r.host && r.members.size < ROOM_MAX && (!best || r.members.size > best.members.size)) best = r;
+      if (r.quick && !r.host && r.rom === rom && r.members.size < ROOM_MAX && (!best || r.members.size > best.members.size)) best = r;
     }
-    return best ?? this.make(true);
+    return best ?? this.make(true, rom);
   }
 
-  private make(quick: boolean): Lobby {
+  private make(quick: boolean, rom: string): Lobby {
     let code = '';
     do {
       code = '';
@@ -411,7 +418,7 @@ export class WorldService {
     const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
     // The live room's: MAX 8 with FILL on (BOT_FILL), a quick room's the same.
     const set: Settings = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: BOT_FILL, door: 'open', textSpeed: 5, animations: false };
-    const room: Lobby = { pass: '', code, quick, owner: 0, members: new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: new Map(), set };
+    const room: Lobby = { rom, pass: '', code, quick, owner: 0, members: new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: new Map(), set };
     this.rooms.set(code, room);
     return room;
   }
