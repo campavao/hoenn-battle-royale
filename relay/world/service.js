@@ -4107,9 +4107,11 @@ function fillFor(set, trainers) {
 function recOf(r) {
   if (!r || typeof r !== "object") return {};
   const n = (v) => Number.isInteger(v) && v >= 0 && v < 1e6 ? v : void 0;
-  const { wins, played, best } = r;
+  const { wins, played, best, intro, win, lose } = r;
   const w = n(wins), p = n(played), b = n(best);
-  return w === void 0 || p === void 0 ? {} : { rec: { wins: w, played: p, ...b ? { best: b } : {} } };
+  const line = (v) => Number.isInteger(v) && v >= 0 && v < 1e3 ? v : void 0;
+  const i = line(intro), wl = line(win), l = line(lose);
+  return w === void 0 || p === void 0 ? {} : { rec: { wins: w, played: p, ...b ? { best: b } : {}, ...i !== void 0 ? { intro: i } : {}, ...wl !== void 0 ? { win: wl } : {}, ...l !== void 0 ? { lose: l } : {} } };
 }
 var isPass = (s) => s.length === 4 && [...s.toUpperCase()].every((c) => CODE_ALPHABET.includes(c));
 function teamOf(t) {
@@ -4648,4 +4650,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "41aeabdd9963";
+export const WORLD_HASH = "625a94ff1881";

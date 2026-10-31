@@ -17,7 +17,8 @@
 import { Emulator, type GbaKey } from '../src/emu';
 import { Mailbox, MAILBOX } from '../src/net/mailbox';
 import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from '../src/net/slots';
-import { PROTOCOL, type Dir, type Msg, type PackedMon } from '../src/net/wire';
+import { PROTOCOL, type Dir, type Lines, type Msg, type PackedMon } from '../src/net/wire';
+import { voice } from '../src/match/ticker';
 import { loadCheckedRelease } from '../src/release';
 import { isPrePatched, sha1Hex } from '../src/rom/emerald';
 import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fameTeam, fieldOf, healed, rekey, spillOf, teamOf, withMoney, withoutItem } from './carry';
@@ -129,7 +130,8 @@ export interface Given { items: { id: number; n: number }[]; money: number; used
 
 export interface RomBattles {
   /** Fight `name`'s party. Resolves when the ROM is back on the field. */
-  fight(name: string, mons: PackedMon[], skin: number, onStart: () => void, fog?: boolean): Promise<Fought>;
+  /** `voice`: the foe's three lines, said in the fight (br_battle.c BrBattle_SetVoice). */
+  fight(name: string, mons: PackedMon[], skin: number, onStart: () => void, fog?: boolean, voice?: Lines): Promise<Fought>;
   /** The wild battle a marked spot on map (group, num) starts; `behavior` is the spot's
    *  metatile behaviour (water or land, and the backdrop). */
   wild(group: number, num: number, behavior: number, onStart: () => void, fog?: boolean): Promise<Fought>;
@@ -147,7 +149,7 @@ export interface RomBattles {
   /** A link battle with another trainer (br_netlink.c): this ROM's side of it, the blocks
    *  out through `link.send` and theirs in through `link.recv`. `first` is the side that
    *  challenged (link id 0). Resolves when the ROM is back on the field. */
-  duel(me: string, foe: string, skin: number, first: boolean, link: DuelLink, onStart: () => void, fog?: boolean): Promise<Fought>;
+  duel(me: string, foe: string, skin: number, first: boolean, link: DuelLink, onStart: () => void, fog?: boolean, voice?: Lines): Promise<Fought>;
   /** The trainer we are fighting went out (left, or the fog took them): the fight is ours
    *  (BrNetlink_PeerOut). */
   foeOut(): void;
@@ -703,11 +705,13 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       if (singing) writeTune();
       else sing();
     },
-    fight(name, mons, skin, onStart, fog = false) {
+    fight(name, mons, skin, onStart, fog = false, lines) {
       // The path a bot fight takes: its card, its ghost beside us, its challenge. All three
       // go on the ring in one go, on purpose: the ROM reads the ring in order, so the card
       // is staged before the CHALLENGE that needs it (the fight is up in ~80 frames).
       return onCore(() => battle(fog, () => {
+        // Its lines first: the intro after "would like to battle!", the win or lose at the end.
+        if (lines) for (const m of voice(FOE_SEAT, lines)) send(m);
         send({ t: 'trainer', seat: FOE_SEAT, name, mons });
         send({ t: 'place', v: PROTOCOL, seat: FOE_SEAT, map: { group: 0, num: 9 }, x: 20, y: 8, f: 1, st: 'alive', sprite: String(skin) });
         send({ t: 'challenge', seat: FOE_SEAT, opponent: ME, nonce: 0 });
@@ -749,7 +753,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         return alive;
       });
     },
-    duel(me, foe, skin, first, link, onStart, fog = false) {
+    duel(me, foe, skin, first, link, onStart, fog = false, lines) {
       return onCore(async () => {
         // Their blocks, held until our side of the link is open (HandleBt drops any that
         // land before), each said to the ROM once, from their seat.
@@ -784,6 +788,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
             const back = (({ 1: 2, 2: 1, 3: 4, 4: 3 } as Record<number, number>)[f] ?? 2) as Dir;
             send({ t: 'place', v: PROTOCOL, seat: FOE_SEAT, map: { group: emu.read(s1 + 4, 8), num: emu.read(s1 + 5, 8) },
               x: emu.read(self + 0x10, 16) + dx, y: emu.read(self + 0x12, 16) + dy, f: back, st: 'alive', sprite: String(skin) });
+            if (lines) for (const m of voice(FOE_SEAT, lines)) send(m);
             send(first ? { t: 'challenge', seat: ME, opponent: FOE_SEAT, nonce: 0 } : { t: 'challenge', seat: FOE_SEAT, opponent: ME, nonce: 0 });
             if (foeLeft) send({ t: 'out', seat: FOE_SEAT });
           }, () => emu.read(netAt, 8) === 1,

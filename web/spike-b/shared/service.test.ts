@@ -133,6 +133,20 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it("MY VOICE rides with a trainer's card, for whoever fights them, sane or not at all", () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
+    try {
+      const a = phone(), b = phone();
+      svc.open(a.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true, rec: { wins: 1, played: 2, intro: 3, win: 4, lose: 5 } }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      svc.open(b.link).onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, code, rec: { wins: 0, played: 0, intro: -1, win: 'x', lose: 1000 } }));
+      const members = (b.got.filter((m) => m.t === 'room').at(-1) as unknown as { members: { name: string; rec?: object }[] }).members;
+      expect(members.find((m) => m.name === 'ALICE')!.rec).toEqual({ wins: 1, played: 2, intro: 3, win: 4, lose: 5 });
+      expect(members.find((m) => m.name === 'BOB')!.rec).toEqual({ wins: 0, played: 0 });
+    } finally {
+      svc.stop();
+    }
+  });
   it('LOBBIES lists the hosted rooms, not quick play\'s, to anybody who asks', () => {
     const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
     try {

@@ -87,7 +87,16 @@ export interface Again { code: string; id: number; key: string }
 export interface Member { id: number; name: string; skin: number; rec?: CardRecord }
 
 /** A trainer's career as their device keeps it (career.ts), for the card on their seat. */
-export interface CardRecord { wins: number; played: number; best?: number }
+export interface CardRecord {
+  wins: number;
+  played: number;
+  best?: number;
+  /** MY VOICE: the three lines picked in MY LOOK, as indices into bots/lines.ts LINES, for
+   *  the ROM of whoever fights them (br_battle.c says them in the fight). */
+  intro?: number;
+  win?: number;
+  lose?: number;
+}
 
 /** What the host sets for a match (the live room's options): FILL (bots in the seats
  *  nobody has) or none, how long a ring phase lasts (FOG), and the Safari it opens with

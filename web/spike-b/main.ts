@@ -17,6 +17,7 @@
 
 import { WorldIndex } from '../src/bots/hoenn';
 import type { PeekBag } from './shared/wire';
+import { lineAt, voiceFor } from '../src/bots/lines';
 import type { PackedMon } from '../src/net/wire';
 import { isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
 import { loadPatches } from '../src/bots/patches';
@@ -815,8 +816,8 @@ function startFor(e: RoomEvent): void {
     // With the wounds its last fights left it (room.ts wear): bots wear down, as live.
     const party = wornParty(dealParty(link.room.seed, foe.id, link.room.ring().phase + 1, foe.m.spot.map, gradeOf(link.room.seed, foe.id)), foe.wear);
     const fog = inFogNow(), l = link;
-    handOff(foe, (r, onStart) => r.fight(foe.name, party, foe.skin, onStart, fog).then((f) => {
-      // Before the fight's end: the room takes it from the trainer still fighting that bot.
+    handOff(foe, (r, onStart) => r.fight(foe.name, party, foe.skin, onStart, fog, voiceFor(link.room.seed, foe.id)).then((f) => {
+      // Before the fight's end: the room takes it from the trainer the bot last fought.
       if (f.foe?.length && l === link) l.wear(foe.id, f.foe.map((m) => (m.maxHp > 0 ? m.hp / m.maxHp : 0)));
       return f;
     }));
@@ -840,7 +841,7 @@ function startFor(e: RoomEvent): void {
         if (take) for (const [q, d] of early.splice(0)) take(q, d);
       },
     };
-    handOff(foe, (r, onStart) => r.duel(me.name, foe.name, foe.skin, e.first, wire, onStart, fog));
+    handOff(foe, (r, onStart) => r.duel(me.name, foe.name, foe.skin, e.first, wire, onStart, fog, voiceOfMember(foe.id)));
   } else {
     const m = placed.get(e.map)!.m;
     const fog = inFogNow();
@@ -1421,6 +1422,13 @@ function standings(done: boolean, res = link.room.results, bots = botIds()): voi
 let lobby: Lobby | null = null;
 /** The room as the relay last said it is. */
 let room: RoomInfo | null = null;
+/** A trainer's MY VOICE as their card in the room says it (lines.ts LINES), for my ROM to
+ *  say in our fight; none for one who never told it. */
+function voiceOfMember(id: number): { intro: string; win: string; lose: string } | undefined {
+  const rec = room?.members.find((m) => m.id === id)?.rec;
+  if (!rec || rec.intro === undefined) return undefined;
+  return { intro: lineAt(rec.intro), win: lineAt(rec.win ?? 0), lose: lineAt(rec.lose ?? 0) };
+}
 /** A match of mine is on (I am in it, or watching it). */
 let matchOn = false;
 
@@ -3115,7 +3123,11 @@ async function boot(): Promise<void> {
     });
     worldSock = sock;
     sheetBtn.hidden = false;
-    const joinAs = (how: { code?: string; host?: boolean; pass?: string }) => { const c = loadCareer(); sock.join(me().name, me().skin, { ...how, rec: { wins: c.wins, played: c.matches, ...(c.best ? { best: c.best } : {}) } }); };
+    const joinAs = (how: { code?: string; host?: boolean; pass?: string }) => {
+      const c = loadCareer();
+      // MY VOICE goes with the card: whoever fights me hears my lines (MY LOOK's picks).
+      sock.join(me().name, me().skin, { ...how, rec: { wins: c.wins, played: c.matches, ...(c.best ? { best: c.best } : {}), intro: c.intro ?? 0, win: c.win ?? 0, lose: c.lose ?? 0 } });
+    };
     lobby = new Lobby({
       join: joinAs,
       start: () => sock.start(),
