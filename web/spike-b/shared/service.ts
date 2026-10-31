@@ -295,6 +295,8 @@ export class WorldService {
           if (typeof m.map === 'string') host.pick(phone.id, m.map.slice(0, 64));
         } else if (m.t === 'sail') {
           if (typeof m.to === 'string') host.sail(phone.id, m.to);
+        } else if (m.t === 'wear') {
+          if (Number.isInteger(m.bot) && Array.isArray(m.hp) && m.hp.length >= 1 && m.hp.length <= 6 && m.hp.every((v) => typeof v === 'number' && v >= 0 && v <= 1)) host.wear(phone.id, m.bot, m.hp);
         } else if (m.t === 'fly') {
           if (typeof m.map === 'string' && Number.isInteger(m.x) && Number.isInteger(m.y)) host.fly(phone.id, m.map.slice(0, 64), m.x, m.y);
         } else if (m.t === 'open') {
