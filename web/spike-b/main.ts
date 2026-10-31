@@ -1351,12 +1351,20 @@ let savedAt = 0;
  *  Caught nothing: out at the buzzer. Otherwise the fly map, "Drop where?", and the room
  *  drops me where I chose. */
 let dropRound = -1;
+/** The round the buzzer last pulled me out of a screen in: once a round. */
+let buzzRound = -1;
+const buzzedRound = (round: number): boolean => { if (buzzRound === round) return true; buzzRound = round; return false; };
 function safariFrame(ring: Ring): void {
   const me = link.room.actor(link.me);
   if (!me || isOut || !rom || dropRound === ring.round || !me.m.spot.map.startsWith(SAFARI)) return;
   if (ring.safari && rom.safariBalls() > 0) return;
-  // The battle, the menu or the question on screen first: the map comes up after it.
-  if (battle || swapping) return;
+  // The battle, the menu or the question on screen first: the map comes up after it. At
+  // the buzzer they are pulled out of it, as live (BrMatch_BuzzerClosing, the menus' B),
+  // or a straggler sat in the Zone until the room's PICK_WAIT dropped them anyhow.
+  if (battle || swapping) {
+    if (!ring.safari && !buzzedRound(ring.round)) { if (battle) rom.buzzer(); else rom.leave(); }
+    return;
+  }
   asking?.done('');
   dropRound = ring.round;
   void flyDrop();
