@@ -141,6 +141,10 @@ export interface RomBattles {
   /** The trainer we are fighting went out (left, or the fog took them): the fight is ours
    *  (BrNetlink_PeerOut). */
   foeOut(): void;
+  /** The match is mine and I am still fighting (a wild one, a bot, a boss): the ROM's
+   *  RESULT win (br_match.c sWinPending) leaves the fight at its next choice with the RUN
+   *  that cannot fail, "You won the match!" (BR_RUN_OVER). A link fight ends by foeOut. */
+  wonMatch(): void;
   /** The match's ring phase (1 the first, as the host numbers them): the level rung every
    *  battle from now on starts at. */
   setPhase(phase: number): void;
@@ -754,6 +758,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
           foeLeft = false;
         }
       });
+    },
+    wonMatch() {
+      if (fighting && !broken) send({ t: 'result', seat: ME, outcome: 'win' });
     },
     foeOut() {
       // Before the duel's turn on the ROM has come (it waits behind whatever was going

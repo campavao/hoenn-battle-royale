@@ -213,6 +213,54 @@ test("a MART sells the way Emerald's does: the shelf, how many, the price, YES",
   await expect(page.locator('#askbox')).toBeHidden();
 });
 
+test('crowned mid-fight: the fight ends, "You won the match!", then the crown', async ({ page }) => {
+  test.setTimeout(300_000);
+  await page.goto(`/?rom=${romHashParam()}#solo&safari=20&fog=12&seed=7`);
+  await page.locator('#intro-go').click({ timeout: 90_000 });
+  type S = { link: { me: number; room: any }; rom?: { partyCount(): number }; battle: unknown; swapping: boolean; startFor(e: unknown): void };
+  const s = <T>(f: (s: S) => T) => page.evaluate((src) => new Function('s', `return (${src})(s)`)((window as unknown as { __spike: S }).__spike), f.toString()) as Promise<T>;
+  await page.waitForFunction(() => { const s = (window as unknown as { __spike?: S }).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 90_000 });
+  const press = async (k: string) => { await key(page, k, true); await page.waitForTimeout(120); await key(page, k, false); await page.waitForTimeout(350); };
+  const shown = () => page.locator('#battle').evaluate((el) => el.classList.contains('on'));
+  // A team out of a bag, so the Safari's luck does not decide the test.
+  await s((s) => s.startFor({ type: 'bag', tick: 0, id: s.link.me, key: 0x7e0001, name: 'MAY', bag: { items: [], money: 0, mons: [{ species: 277, level: 30 }] } }));
+  await expect.poll(shown, { timeout: 20_000 }).toBe(true);
+  await page.waitForTimeout(800);
+  await press('z'); await press('Enter'); await press('x');
+  await expect.poll(() => s((s) => s.swapping), { timeout: 20_000 }).toBe(false);
+  // Out of the Safari, A on the drop's fly map, then to the nearest marked spot in Hoenn.
+  await expect.poll(() => s((s) => !s.link.room.ring().safari), { timeout: 120_000 }).toBe(true);
+  for (let i = 0; i < 60 && (await s((s) => s.swapping || !s.rom)); i++) await press('z');
+  await page.waitForTimeout(2000);
+  const spot = () => s((s) => { const p = s.link.room.actor(s.link.me)?.m.spot; return p ? `${p.map}:${p.x}:${p.y}` : ''; });
+  for (let tries = 0; tries < 6 && !(await s((s) => !!s.battle)); tries++) {
+    const dirs = await route(page, '(p, room) => room.patchesOn(p.map).some((q) => q.x === p.x && q.y === p.y)');
+    expect(dirs, 'a marked spot to walk to').not.toBeNull();
+    for (const d of dirs!) {
+      const was = await spot();
+      await key(page, KEY[d], true);
+      await expect.poll(async () => (await spot()) !== was || !!(await s((s) => s.battle)), { timeout: 15_000, intervals: [30] }).toBe(true);
+      await key(page, KEY[d], false);
+      if (await s((s) => s.battle)) break;
+    }
+    await page.waitForTimeout(1500);
+  }
+  await expect.poll(shown, { timeout: 30_000 }).toBe(true);
+  // The match counts its entrants as the fog first closes; then the rest go out at once.
+  await page.waitForFunction(() => (window as unknown as { __spike: S }).__spike.link.room.results.entrants.length >= 2, undefined, { timeout: 60_000 });
+  await s((s) => { const room = s.link.room; for (const a of [...room.actors]) if (a.id !== s.link.me) { room.fall(a, 'the fog'); room.remove(a.id); } });
+  await expect.poll(() => s((s) => s.link.room.results.winner === s.link.me), { timeout: 5_000 }).toBe(true);
+  // The ROM leaves the fight at its next choice (BR_RUN_OVER) while the crown waits: the
+  // standings opened over a fight that went on (audit, 10-30).
+  for (let i = 0; i < 12 && (await s((s) => !!s.battle)); i++) {
+    expect(await page.locator('#win').evaluate((el) => el.classList.contains('on')), 'no standings over the fight').toBe(false);
+    await press('z');
+    await page.waitForTimeout(1500);
+  }
+  expect(await s((s) => !!s.battle), 'the fight is over').toBe(false);
+  expect(await s((s) => (window as unknown as { __spike: { lastResult: string } }).__spike.lastResult)).toContain('ran');
+});
+
 test('a tap on the map walks the trainer there, and the pad buzzes', async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 390, height: 844 });
