@@ -2468,6 +2468,11 @@ var Room = class {
     } else if (cmd.c === "away") {
       const a = this.actor(cmd.id) ?? this.bench.find((b) => b.id === cmd.id);
       if (a && !("bot" in a && a.bot)) a.away = cmd.on || void 0;
+    } else if (cmd.c === "wear") {
+      const b = this.actor(cmd.bot);
+      if (!b?.bot || b.foughtBy !== cmd.id) return;
+      b.foughtBy = void 0;
+      b.wear = cmd.hp.slice(0, 6).map((v) => Math.min(1, Math.max(0, v)));
     } else if (cmd.c === "fly") {
       const a = this.actor(cmd.id), t = cmd.to;
       if (!a || a.bot || a.battling || a.m.action || this.ring().safari || !this.places.has(t.map)) return;
@@ -3287,7 +3292,10 @@ var Room = class {
       if (m.duel) {
         events.push({ type: "duel", tick: this.tick, id: h.id, foe: f.id, first: true });
         events.push({ type: "duel", tick: this.tick, id: f.id, foe: h.id, first: false });
-      } else events.push({ type: "fight", tick: this.tick, id: h.id, foe: f.id });
+      } else {
+        f.foughtBy = h.id;
+        events.push({ type: "fight", tick: this.tick, id: h.id, foe: f.id });
+      }
     }
   }
   /** Two trainers on one map who see each other fight (br_engage.c's BrEngage_Tick): the
@@ -3436,6 +3444,7 @@ var Room = class {
           a.battling = foe.battling = true;
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
+          foe.foughtBy = a.id;
           events.push({ type: "fight", tick: this.tick, id: a.id, foe: foe.id });
         } else if (!foe && this.clerk(a)) {
           events.push({ type: "mart", tick: this.tick, id: a.id, map: a.m.spot.map });
@@ -3977,6 +3986,10 @@ var Host = class {
   open(id, n) {
     if (this.players.has(id)) this.pending.push({ c: "open", id, n });
   }
+  /** What trainer `id`'s fight left of bot `bot`'s team: each slot's HP share. */
+  wear(id, bot, hp2) {
+    if (this.players.has(id)) this.pending.push({ c: "wear", id, bot, hp: hp2 });
+  }
   /** FLY off the page's MAP landed it on `map` at x, y. */
   fly(id, map, x, y) {
     if (this.players.has(id)) this.pending.push({ c: "fly", id, to: { map, x, y } });
@@ -4290,6 +4303,8 @@ var WorldService = class {
           if (typeof m.map === "string") host.pick(phone.id, m.map.slice(0, 64));
         } else if (m.t === "sail") {
           if (typeof m.to === "string") host.sail(phone.id, m.to);
+        } else if (m.t === "wear") {
+          if (Number.isInteger(m.bot) && Array.isArray(m.hp) && m.hp.length >= 1 && m.hp.length <= 6 && m.hp.every((v) => typeof v === "number" && v >= 0 && v <= 1)) host.wear(phone.id, m.bot, m.hp);
         } else if (m.t === "fly") {
           if (typeof m.map === "string" && Number.isInteger(m.x) && Number.isInteger(m.y)) host.fly(phone.id, m.map.slice(0, 64), m.x, m.y);
         } else if (m.t === "open") {
@@ -4633,4 +4648,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "d3fa2ff73752";
+export const WORLD_HASH = "41aeabdd9963";

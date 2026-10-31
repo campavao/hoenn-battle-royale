@@ -89,7 +89,12 @@ export let lastStart: { ms: number; frames: number } | null = null;
  *  keeps the screen, and nothing showed). */
 /** A battle's end. `released`: who a catch with a full party let go (BrLoot_Released's
  *  SPILL), for the page to lay beside the trainer. */
-export interface Fought { ok: boolean; outcome: number; species: number; level: number; released?: { species: number; level: number }[] }
+export interface Fought {
+  ok: boolean; outcome: number; species: number; level: number; released?: { species: number; level: number }[];
+  /** A bot's team as the fight left it (br_bot.c sends gEnemyParty under its seat): each
+   *  slot's HP and most. */
+  foe?: { hp: number; maxHp: number }[];
+}
 
 /** A link battle's wire: our blocks out; theirs handed in by the page as they come. */
 export interface DuelLink {
@@ -628,8 +633,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     // Whatever else the ROM says meanwhile is nobody's here (a duel takes its blocks first),
     // but the mon a catch with a full party let go (BrLoot_Released): nothing leaves the match.
     const released: { species: number; level: number }[] = [];
+    let foe: Fought['foe'];
     const pub = emu.onFrame(() => drain((m) => {
       if (m.t === 'spill' && m.seat === ME && !m.bag) for (const r of m.mons) released.push({ species: r.species, level: r.level });
+      else if (m.t === 'party' && m.seat === FOE_SEAT) foe = m.mons.map((r) => ({ hp: r.hp, maxHp: r.maxHp }));
       else published(m);
     }));
     kick();
@@ -651,7 +658,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       // hidden ROM's party while a catch prompt waits.
       fighting = false;
       lay(false, at);
-      result = { ok: true, ...after(), released };
+      result = { ok: true, ...after(), released, ...(foe ? { foe } : {}) };
       // A catch with a full party: back on its field the ROM asks which one makes room
       // (br_catch.c). The player answers it on the ROM's screen, as in a match.
       // Ten seconds with the prompt never put up (asked, byte 1, still 0) is a stall, not

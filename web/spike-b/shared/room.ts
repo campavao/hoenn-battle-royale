@@ -97,12 +97,28 @@ export interface Actor {
   /** A bot's pickings: the balls and the bags' items and money it took on its way, which
    *  go into the bag it drops when it is out. */
   loot?: { items: Stack[]; money: number };
+  /** The trainer a bot's last fight was with: theirs is the one word on its wounds. */
+  foughtBy?: number;
+  /** A bot's wounds: each slot's HP as a share of its most, as its last fight left it
+   *  (wornParty), none for a fresh one. */
+  wear?: number[];
   /** Fighting gym leader n - 1 (gyms.ts). */
   boss?: number;
   /** A fight that started from a look, before it starts (br_walkup.h): the "!", then the
    *  walker walks the eyeline to the cell beside the other. On both; `walk` on the one
    *  who walks, `duel` for two trainers (a bot's is a fight). */
   meet?: { foe: number; walk: boolean; since: number; duel: boolean };
+}
+
+/** A bot's team as the seed deals it, with the wounds its fights left it: a fainted slot
+ *  stays down, a hurt one keeps its share (at least 1 HP), and the rest are whole. */
+export function wornParty<T extends { hp: number; maxHp: number }>(party: T[], wear: readonly number[] | undefined): T[] {
+  if (!wear) return party;
+  return party.map((m, i) => {
+    const w = wear[i];
+    if (w === undefined) return m;
+    return { ...m, hp: w <= 0 ? 0 : Math.max(1, Math.min(m.maxHp, Math.round(m.maxHp * w))) };
+  });
 }
 
 /** A team with somebody who could SURF: water is walkable (and up a waterfall). */
@@ -337,6 +353,8 @@ export type Command =
   | { c: 'open'; id: number; n: number }
   /** `id` flew off the MAP (FLY, br_map.c) and landed at `to`. */
   | { c: 'fly'; id: number; to: Spot }
+  /** Trainer `id`'s ROM's word on the bot it is fighting: what is left of its team. */
+  | { c: 'wear'; id: number; bot: number; hp: number[] }
   /** `id` sails to story `to`'s island, or ('') from an island back to Lilycove. */
   | { c: 'sail'; id: number; to: string }
   /** `id`'s page went (a reload), or came back. */
@@ -523,6 +541,14 @@ export class Room {
     } else if (cmd.c === 'away') {
       const a = this.actor(cmd.id) ?? this.bench.find((b) => b.id === cmd.id);
       if (a && !('bot' in a && a.bot)) a.away = cmd.on || undefined;
+    } else if (cmd.c === 'wear') {
+      // Once, from the trainer it last fought (out by now, if it won), and only a bot
+      // still in: its next fight is with the team that one left it (classic's setParty,
+      // brain.ts). A share, so a new rung's levels keep it (climb()).
+      const b = this.actor(cmd.bot);
+      if (!b?.bot || b.foughtBy !== cmd.id) return;
+      b.foughtBy = undefined;
+      b.wear = cmd.hp.slice(0, 6).map((v) => Math.min(1, Math.max(0, v)));
     } else if (cmd.c === 'fly') {
       // To a town of the match's own Hoenn, on a cell a trainer could stand on, and not
       // out of the Zone before the drop (its gate is shut both ways).
@@ -1357,7 +1383,7 @@ export class Room {
       if (m.duel) {
         events.push({ type: 'duel', tick: this.tick, id: h.id, foe: f.id, first: true });
         events.push({ type: 'duel', tick: this.tick, id: f.id, foe: h.id, first: false });
-      } else events.push({ type: 'fight', tick: this.tick, id: h.id, foe: f.id });
+      } else { f.foughtBy = h.id; events.push({ type: 'fight', tick: this.tick, id: h.id, foe: f.id }); }
     }
   }
 
@@ -1519,6 +1545,7 @@ export class Room {
           a.battling = foe.battling = true;
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
+          foe.foughtBy = a.id;
           events.push({ type: 'fight', tick: this.tick, id: a.id, foe: foe.id });
         } else if (!foe && this.clerk(a)) {
           events.push({ type: 'mart', tick: this.tick, id: a.id, map: a.m.spot.map });

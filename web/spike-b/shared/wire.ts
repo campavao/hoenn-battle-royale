@@ -42,6 +42,9 @@ export type WorldUp =
   | { t: 'sail'; to: string }
   /** FLY off the MAP landed me here (the town's heal location). */
   | { t: 'fly'; map: string; x: number; y: number }
+  /** The bot I just fought, as my ROM left its team (br_bot.c's PARTY of gEnemyParty):
+   *  each slot's HP as a share of its most, for its next fight. */
+  | { t: 'wear'; bot: number; hp: number[] }
   /** Drop me on this map when the Safari ends. */
   | { t: 'pick'; map: string }
   /** The ball or bag `k` would not go in my bag: put it back (a bag holding `rest`). */

@@ -16,7 +16,7 @@ import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
 import { over } from './over';
 import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, isTm, within } from './items';
-import { AFTER_WIN, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, WALKUP_BANG, eventPiece, makeRoom } from './room';
+import { AFTER_WIN, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, WALKUP_BANG, eventPiece, makeRoom, wornParty } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -601,6 +601,38 @@ describe('item balls', () => {
     expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'ferry', home: true }));
     room.apply({ c: 'sail', id: 1000, to: '' });
     expect(room.actor(1000)!.m.spot).toEqual(harbor);
+  });
+
+  it('a bot wears down: the fight its trainer reports leaves its HP, and nobody else can say so', () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_PETALBURG_CITY', x: 10, y: 22 }, facing: 1 });
+    room.apply({ c: 'join', id: 1001, bot: false, name: 'C', skin: 0, spot: { map: 'MAP_PETALBURG_CITY', x: 12, y: 22 }, facing: 1 });
+    room.apply({ c: 'join', id: 7, bot: true, name: 'BOT', skin: 0, spot: { map: 'MAP_PETALBURG_CITY', x: 11, y: 22 }, facing: 3 });
+    const bot = room.actor(7)!;
+    // Not before it has fought anybody.
+    room.apply({ c: 'wear', id: 1000, bot: 7, hp: [0.5] });
+    expect(bot.wear).toBeUndefined();
+    // A at it: a fight, with A (room.ts's own fight start).
+    room.actor(1000)!.m.spot = { map: 'MAP_PETALBURG_CITY', x: 10, y: 22 };
+    room.actor(1000)!.m.facing = 4;
+    room.actor(1000)!.calm = 0;
+    room.step(new Map([[1000, [0]]]));
+    const ev = room.step(new Map([[1000, [KEY_A]]])).find((e) => e.type === 'fight');
+    expect(ev).toMatchObject({ id: 1000, foe: 7 });
+    // Not from somebody it did not fight.
+    room.apply({ c: 'wear', id: 1001, bot: 7, hp: [0.1] });
+    expect(bot.wear).toBeUndefined();
+    // A, out of it already (a loss puts the trainer out first): once.
+    room.apply({ c: 'out', id: 1000 });
+    room.apply({ c: 'wear', id: 1000, bot: 7, hp: [0.5, 0, 2] });
+    expect(bot.wear).toEqual([0.5, 0, 1]);
+    room.apply({ c: 'wear', id: 1000, bot: 7, hp: [1, 1, 1] });
+    expect(bot.wear).toEqual([0.5, 0, 1]);
+    // Its next team as dealt, with those wounds: a fainted slot stays down, a scratch keeps 1 HP.
+    const team = [{ hp: 40, maxHp: 40 }, { hp: 30, maxHp: 30 }, { hp: 20, maxHp: 20 }, { hp: 10, maxHp: 10 }];
+    expect(wornParty(team, bot.wear).map((m) => m.hp)).toEqual([20, 0, 20, 10]);
+    expect(wornParty(team, [0.001]).map((m) => m.hp)[0]).toBe(1);
+    expect(wornParty(team, undefined)).toBe(team);
   });
 
   it('FLY off the MAP lands where the flight did: a town of the match, a cell to stand on, not out of the Zone', () => {

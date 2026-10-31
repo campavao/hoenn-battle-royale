@@ -23,7 +23,7 @@ import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { DIR_EAST } from './sim';
-import { ATTENDANT, BOATS, DOCKS, MOORINGS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
+import { ATTENDANT, BOATS, DOCKS, MOORINGS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
@@ -628,7 +628,7 @@ async function peek(): Promise<void> {
   rom?.sound(SE_WIN_OPEN);
   const r = link.room;
   const team: FameMon[] = a.bot
-    ? dealParty(r.seed, a.id, r.ring().phase + 1, a.m.spot.map, gradeOf(r.seed, a.id)).map((m) => ({ species: m.species, level: m.level, hp: m.hp, maxHp: m.maxHp, moves: m.moves.map((v) => ({ id: v.id })) }))
+    ? wornParty(dealParty(r.seed, a.id, r.ring().phase + 1, a.m.spot.map, gradeOf(r.seed, a.id)), a.wear).map((m) => ({ species: m.species, level: m.level, hp: m.hp, maxHp: m.maxHp, moves: m.moves.map((v) => ({ id: v.id })) }))
     : link.teams.get(a.id) ?? [];
   const bag: PeekBag | undefined = a.bot ? { items: (a.loot?.items ?? []).map((s) => ({ id: s.id, n: s.n })), money: a.loot?.money ?? 0 } : link.bags.get(a.id);
   for (;;) {
@@ -812,9 +812,14 @@ function startFor(e: RoomEvent): void {
     // map it stands on, at the rung, one more mon every two phases.
     // Its grade too (roster.ts). No Zone pool: the ROM deals one at the Safari opening,
     // which this world has not got yet.
-    const party = dealParty(link.room.seed, foe.id, link.room.ring().phase + 1, foe.m.spot.map, gradeOf(link.room.seed, foe.id));
-    const fog = inFogNow();
-    handOff(foe, (r, onStart) => r.fight(foe.name, party, foe.skin, onStart, fog));
+    // With the wounds its last fights left it (room.ts wear): bots wear down, as live.
+    const party = wornParty(dealParty(link.room.seed, foe.id, link.room.ring().phase + 1, foe.m.spot.map, gradeOf(link.room.seed, foe.id)), foe.wear);
+    const fog = inFogNow(), l = link;
+    handOff(foe, (r, onStart) => r.fight(foe.name, party, foe.skin, onStart, fog).then((f) => {
+      // Before the fight's end: the room takes it from the trainer still fighting that bot.
+      if (f.foe?.length && l === link) l.wear(foe.id, f.foe.map((m) => (m.maxHp > 0 ? m.hp / m.maxHp : 0)));
+      return f;
+    }));
   } else if (e.type === 'duel') {
     // Another trainer: both ROMs fight it out as a link battle, the blocks through the relay.
     // A menu is no hiding place: whatever screen I have open closes, a question goes unanswered.
@@ -850,7 +855,7 @@ async function judgeBots(ida: number, idb: number): Promise<void> {
   const l = link, r = l.room;
   const side = (id: number) => {
     const b = r.actor(id);
-    return { seat: id, party: b ? dealParty(r.seed, id, r.ring().phase + 1, b.m.spot.map, gradeOf(r.seed, id)) : [] };
+    return { seat: id, party: b ? wornParty(dealParty(r.seed, id, r.ring().phase + 1, b.m.spot.map, gradeOf(r.seed, id)), b.wear) : [] };
   };
   const a = side(ida), b = side(idb);
   const out = judge ? await judge(a, b).catch(() => null) : null;
@@ -1299,7 +1304,7 @@ const SCREEN_WAIT_MS = 60_000;
 function championTeam(id: number): PackedMon[] {
   const a = link.room.actor(id), r = link.room;
   const name = (a?.name ?? '').slice(0, 7);
-  if (a?.bot) return dealParty(r.seed, a.id, r.ring().phase + 1, a.m.spot.map, gradeOf(r.seed, a.id)).map((m) => ({ ...m, ot: name }));
+  if (a?.bot) return wornParty(dealParty(r.seed, a.id, r.ring().phase + 1, a.m.spot.map, gradeOf(r.seed, a.id)), a.wear).map((m) => ({ ...m, ot: name }));
   return (link.teams.get(id) ?? []).map((m) => ({
     species: m.species, level: m.level, hp: m.hp ?? m.maxHp ?? 1, maxHp: m.maxHp ?? m.hp ?? 1, status: 0,
     moves: (m.moves ?? []).map((v) => ({ id: v.id, pp: 0, ppUps: 0 })), heldItem: 0,

@@ -49,6 +49,8 @@ export interface WorldLink {
   sail(to: string): void;
   /** FLY off the MAP landed me on `map` at x, y. */
   fly(map: string, x: number, y: number): void;
+  /** What my fight left of the bot I fought (rom.ts Fought.foe). */
+  wear(bot: number, hp: number[]): void;
   /** The ball `key` would not go in my bag: put it back. */
   drop(key: number, rest?: Bag): void;
   /** My team is down: off the map. `by` who beat me, `wild` a wild POKeMON did. */
@@ -120,6 +122,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     open: (n) => host.open(me, n),
     sail: (to) => host.sail(me, to),
     fly: (map, x, y) => host.fly(me, map, x, y),
+    wear: (bot, hp) => host.wear(me, bot, hp),
     pick: (map) => host.pick(me, map),
     drop: (key, rest) => host.drop(me, key, rest),
     out: (bag, by, wild) => host.out(me, bag, by, wild),
@@ -303,6 +306,7 @@ export class Online implements WorldLink {
   open(n: number): void { this.send({ t: 'open', n }); }
   sail(to: string): void { this.send({ t: 'sail', to }); }
   fly(map: string, x: number, y: number): void { this.send({ t: 'fly', map, x, y }); }
+  wear(bot: number, hp: number[]): void { this.send({ t: 'wear', bot, hp }); }
 
   pick(map: string): void { this.send({ t: 'pick', map }); }
 

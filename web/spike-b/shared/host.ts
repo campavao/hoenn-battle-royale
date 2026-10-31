@@ -147,6 +147,11 @@ export class Host {
     if (this.players.has(id)) this.pending.push({ c: 'open', id, n });
   }
 
+  /** What trainer `id`'s fight left of bot `bot`'s team: each slot's HP share. */
+  wear(id: number, bot: number, hp: number[]): void {
+    if (this.players.has(id)) this.pending.push({ c: 'wear', id, bot, hp });
+  }
+
   /** FLY off the page's MAP landed it on `map` at x, y. */
   fly(id: number, map: string, x: number, y: number): void {
     if (this.players.has(id)) this.pending.push({ c: 'fly', id, to: { map, x, y } });
