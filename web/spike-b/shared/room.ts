@@ -321,6 +321,44 @@ export const SPILL_KEY = 1 << 20;
 /** An item ball: its key, its cell and what is in it. */
 export interface Ground { key: number; map: string; x: number; y: number; item: number; gift?: boolean }
 
+/** The Safari Zone's balls (br_zone.c's sSafariItemCells): one an area, each as far
+ *  from that area's spawn cells as the grid allows. */
+export const ZONE_CELLS: readonly Spot[] = [
+  { map: 'MAP_SAFARI_ZONE_NORTHWEST', x: 8, y: 36 },
+  { map: 'MAP_SAFARI_ZONE_NORTH', x: 19, y: 8 },
+  { map: 'MAP_SAFARI_ZONE_NORTHEAST', x: 5, y: 20 },
+  { map: 'MAP_SAFARI_ZONE_SOUTHWEST', x: 31, y: 21 },
+  { map: 'MAP_SAFARI_ZONE_SOUTH', x: 4, y: 20 },
+  { map: 'MAP_SAFARI_ZONE_SOUTHEAST', x: 30, y: 20 },
+];
+export const ITEM_MASTER_BALL = 1;
+/** What a Zone ball holds (br_zone.c's sBallItems): POKe BALL, HYPER and MAX POTION, FULL
+ *  RESTORE, REVIVE, FULL HEAL, X ATTACK and SPEED, RARE CANDY, the six stones, NUGGET, PP UP. */
+export const ZONE_ITEMS: readonly number[] = [4, 21, 19, 24, 20, 23, 75, 77, 68, 95, 97, 96, 98, 93, 94, 110, 69];
+/** Or, one ball in BR_ZONE_TM_IN, a machine (sBallTMs): DRAGON CLAW to OVERHEAT. */
+export const ZONE_TMS: readonly number[] = [2, 6, 13, 14, 15, 19, 22, 24, 25, 26, 29, 30, 31, 35, 36, 38, 40, 50].map((n) => 288 + n);
+const ZONE_TM_IN = 2;
+/** Kanto's one-in-eight (v0.49.0): a match has a MASTER BALL in one of them, or none. */
+const ZONE_MASTER_ODDS = 8;
+
+/** What the Zone's six balls hold for a match's seed (br_zone.c BrZone_Ensure), in
+ *  ZONE_CELLS order. */
+export function zoneBalls(seed: number): number[] {
+  let z = (seed ^ 0x5a17) >>> 0 || 1;
+  const zr = () => { z ^= z << 13; z ^= z >>> 17; z ^= z << 5; return (z >>> 0) / 4294967296; };
+  const pick = (t: readonly number[]) => t[Math.floor(zr() * t.length)];
+  const zone = ZONE_CELLS.map(() => (Math.floor(zr() * ZONE_TM_IN) === 0 ? pick(ZONE_TMS) : pick(ZONE_ITEMS)));
+  if (Math.floor(zr() * ZONE_MASTER_ODDS) === 0) zone[Math.floor(zr() * zone.length)] = ITEM_MASTER_BALL;
+  return zone;
+}
+
+/** The DAY CARE, which is a chest (POK-306, Cam: "a chest where the first one there takes
+ *  the Pokemon"): the middle of its floor, and what is in it, fully evolved and nothing
+ *  legendary (br_zone.c's sChest). */
+export const CHEST: Spot = { map: 'MAP_ROUTE117_POKEMON_DAY_CARE', x: 5, y: 5 };
+export const CHEST_SPECIES: readonly number[] = [397, 400, 334, 359, 329, 394, 366, 384, 376, 331, 343, 391, 389, 307, 338, 285, 279, 282];
+const CHEST_KEY = 4 << 20;
+
 /** Item balls a map gets: the match deals two a section, and a spike map is two or three
  *  of them (Cam, POK-354: "more items all over the place"). */
 export const GROUND_PER_MAP = 6;
@@ -491,6 +529,7 @@ export class Room {
   ) {
     this.base = stepFn(world);
     this.homes = this.dealHomes(0);
+    this.placeChest(0);
   }
 
   /** Round `round`'s people at home, from the seed: the houses this world goes into,
@@ -749,6 +788,13 @@ export class Room {
         out.set(`${id}:${c.x}:${c.y}`, { key: ++n, map: id, x: c.x, y: c.y, item });
       }
     }
+    // The Zone's six (br_zone.c BrZone_Ensure): a machine one time in two, and one match in
+    // eight a MASTER BALL in place of one of them. On the Zone's own maps, which the
+    // opening walks; a room with no Zone has none.
+    const zone = zoneBalls(this.seed);
+    ZONE_CELLS.forEach((c, i) => {
+      if (this.maps.has(c.map) && !out.has(`${c.map}:${c.x}:${c.y}`)) out.set(`${c.map}:${c.x}:${c.y}`, { key: ++n, map: c.map, x: c.x, y: c.y, item: zone[i] });
+    });
     // A cache in every house and on every other floor that had nothing (br_balls.c's
     // sRooms, Cam 2026-10-18: "an item, trader, or both on every floor"): a machine, or
     // gold one time in three in a house and one in eight on a floor.
@@ -1392,6 +1438,18 @@ export class Room {
     this.taken.clear();
     this.picked.clear();
     this.spills.clear();
+    this.placeChest(round);
+  }
+
+  /** The DAY CARE's chest for round `round` (br_zone.c BrZone_PlaceChest): one POKeMON off
+   *  the seed, at level 0 -- the rung the match is at when somebody walks in, which the page
+   *  that takes it fills in. */
+  private placeChest(round: number): void {
+    if (!this.maps.has(CHEST.map)) return;
+    let h = Math.imul(this.seed ^ Math.imul(round + 1, 0x2545f491) ^ 0x06d0, 0x85ebca6b);
+    h ^= h >>> 13;
+    const species = CHEST_SPECIES[(h >>> 0) % CHEST_SPECIES.length];
+    this.spills.set(CHEST_KEY, { key: CHEST_KEY, map: CHEST.map, x: CHEST.x, y: CHEST.y, name: 'DAY CARE', bag: { items: [], money: 0, mons: [{ species, level: 0 }] } });
   }
 
   /** The walk-ups under way: after the "!", the walker steps the eyeline toward the

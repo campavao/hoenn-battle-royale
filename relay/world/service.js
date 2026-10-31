@@ -2410,6 +2410,35 @@ var BOT_BITE = 240;
 var BOT_BITES = 10;
 var ROOMS = rooms_default;
 var SPILL_KEY = 1 << 20;
+var ZONE_CELLS = [
+  { map: "MAP_SAFARI_ZONE_NORTHWEST", x: 8, y: 36 },
+  { map: "MAP_SAFARI_ZONE_NORTH", x: 19, y: 8 },
+  { map: "MAP_SAFARI_ZONE_NORTHEAST", x: 5, y: 20 },
+  { map: "MAP_SAFARI_ZONE_SOUTHWEST", x: 31, y: 21 },
+  { map: "MAP_SAFARI_ZONE_SOUTH", x: 4, y: 20 },
+  { map: "MAP_SAFARI_ZONE_SOUTHEAST", x: 30, y: 20 }
+];
+var ITEM_MASTER_BALL3 = 1;
+var ZONE_ITEMS = [4, 21, 19, 24, 20, 23, 75, 77, 68, 95, 97, 96, 98, 93, 94, 110, 69];
+var ZONE_TMS = [2, 6, 13, 14, 15, 19, 22, 24, 25, 26, 29, 30, 31, 35, 36, 38, 40, 50].map((n) => 288 + n);
+var ZONE_TM_IN = 2;
+var ZONE_MASTER_ODDS = 8;
+function zoneBalls(seed) {
+  let z = (seed ^ 23063) >>> 0 || 1;
+  const zr = () => {
+    z ^= z << 13;
+    z ^= z >>> 17;
+    z ^= z << 5;
+    return (z >>> 0) / 4294967296;
+  };
+  const pick = (t) => t[Math.floor(zr() * t.length)];
+  const zone = ZONE_CELLS.map(() => Math.floor(zr() * ZONE_TM_IN) === 0 ? pick(ZONE_TMS) : pick(ZONE_ITEMS));
+  if (Math.floor(zr() * ZONE_MASTER_ODDS) === 0) zone[Math.floor(zr() * zone.length)] = ITEM_MASTER_BALL3;
+  return zone;
+}
+var CHEST = { map: "MAP_ROUTE117_POKEMON_DAY_CARE", x: 5, y: 5 };
+var CHEST_SPECIES = [397, 400, 334, 359, 329, 394, 366, 384, 376, 331, 343, 391, 389, 307, 338, 285, 279, 282];
+var CHEST_KEY = 4 << 20;
 var GROUND_PER_MAP = 6;
 var REGROW = 60 * 90;
 var AFTER_WIN = 60 * 15;
@@ -2436,6 +2465,7 @@ var Room = class {
     this.anchors = anchors;
     this.base = stepFn(world);
     this.homes = this.dealHomes(0);
+    this.placeChest(0);
   }
   world;
   maps;
@@ -2708,6 +2738,10 @@ var Room = class {
         out.set(`${id2}:${c.x}:${c.y}`, { key: ++n, map: id2, x: c.x, y: c.y, item });
       }
     }
+    const zone = zoneBalls(this.seed);
+    ZONE_CELLS.forEach((c, i) => {
+      if (this.maps.has(c.map) && !out.has(`${c.map}:${c.x}:${c.y}`)) out.set(`${c.map}:${c.x}:${c.y}`, { key: ++n, map: c.map, x: c.x, y: c.y, item: zone[i] });
+    });
     for (const [map, x, y, house, cache2] of ROOMS) {
       if (!cache2) continue;
       if (!this.maps.has(map) || this.places.has(map) || this.world.cell(map, x, y) !== 0 || out.has(`${map}:${x}:${y}`)) continue;
@@ -3329,6 +3363,17 @@ var Room = class {
     this.taken.clear();
     this.picked.clear();
     this.spills.clear();
+    this.placeChest(round);
+  }
+  /** The DAY CARE's chest for round `round` (br_zone.c BrZone_PlaceChest): one POKeMON off
+   *  the seed, at level 0 -- the rung the match is at when somebody walks in, which the page
+   *  that takes it fills in. */
+  placeChest(round) {
+    if (!this.maps.has(CHEST.map)) return;
+    let h = Math.imul(this.seed ^ Math.imul(round + 1, 625341585) ^ 1744, 2246822507);
+    h ^= h >>> 13;
+    const species = CHEST_SPECIES[(h >>> 0) % CHEST_SPECIES.length];
+    this.spills.set(CHEST_KEY, { key: CHEST_KEY, map: CHEST.map, x: CHEST.x, y: CHEST.y, name: "DAY CARE", bag: { items: [], money: 0, mons: [{ species, level: 0 }] } });
   }
   /** The walk-ups under way: after the "!", the walker steps the eyeline toward the
    *  other, and beside them (or out of time, or the other gone) the fight starts. */
@@ -4765,4 +4810,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "32e17ecb0825";
+export const WORLD_HASH = "78f111933355";
