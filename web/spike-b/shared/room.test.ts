@@ -737,6 +737,21 @@ describe('a fallen trainer\'s bag', () => {
   const bag = { items: [{ id: 13, n: 3 }, { id: 4, n: 6 }], money: 1200 };
   const mon = (species: number) => ({ species, level: 5 });
 
+  it('never shuts a door: off a doormat or a door, beside it (Cam 10-31)', () => {
+    const world = makeRoom(MAPS, PATCHES, 99).world;
+    // A Centre's mat (just walked in), Oldale's Centre door (just walked out).
+    for (const at of [{ map: 'MAP_OLDALE_TOWN_POKEMON_CENTER_1F', x: 7, y: 8 }, { map: 'MAP_OLDALE_TOWN', x: 6, y: 16 }]) {
+      expect(world.warpAt(at.map, at.x, at.y), `${at.map} is a door`).toBeTruthy();
+      const room = makeRoom(MAPS, PATCHES, 99);
+      room.apply({ c: 'join', id: 1, bot: false, name: 'MAY', skin: 0, spot: at, facing: 1 });
+      room.apply({ c: 'out', id: 1, bag });
+      const b = room.spills.get(SPILL_KEY + 1)!;
+      expect(b, at.map).toMatchObject({ map: at.map, name: 'MAY', bag });
+      expect(world.warpAt(b.map, b.x, b.y), `${at.map}: not on a door`).toBeUndefined();
+      expect(Math.abs(b.x - at.x) + Math.abs(b.y - at.y), `${at.map}: beside it`).toBe(1);
+    }
+  });
+
   it('lies where they fell; solid; A takes it whole, and what did not fit goes back', () => {
     const room = makeRoom(MAPS, PATCHES, 99);
     const at = { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 12 };

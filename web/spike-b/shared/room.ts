@@ -511,10 +511,9 @@ export class Room {
       // then round; nowhere free, and it stays in its ball, as the ROM's does.
       const a = this.actor(cmd.id);
       if (!a) return;
-      const step = this.stepFor(a);
       const used = new Set<string>();
       for (const mon of cmd.mons.slice(0, 6)) {
-        const to = [a.m.facing, 1, 2, 3, 4].map((d) => step(a.m.spot, d)).find((r) => r && !r.warp && !r.hop && !used.has(`${r.to.map}:${r.to.x}:${r.to.y}`) && !this.spillAt(r.to.map, r.to.x, r.to.y) && !this.groundAt(r.to.map, r.to.x, r.to.y))?.to;
+        const to = this.beside(a, used);
         if (!to) return;
         used.add(`${to.map}:${to.x}:${to.y}`);
         let key = RELEASED_SPILL | ((cmd.id & 0xff) << 12) | (this.tick & 0xfff);
@@ -562,8 +561,8 @@ export class Room {
       const a = this.actor(cmd.id);
       // Where they stood: nobody else can be on that cell, nor a ball (both are solid).
       if (a && cmd.c === 'out' && cmd.bag && !emptyBag(cmd.bag)) {
-        const key = SPILL_KEY + a.id;
-        this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag: structuredClone(cmd.bag) });
+        const key = SPILL_KEY + a.id, at = this.fallen(a);
+        this.spills.set(key, { key, map: at.map, x: at.x, y: at.y, name: a.name, bag: structuredClone(cmd.bag) });
       }
       this.remove(cmd.id);
       if (cmd.c === 'leave') this.bench = this.bench.filter((b) => b.id !== cmd.id);
@@ -794,6 +793,22 @@ export class Room {
   groundAt(map: string, x: number, y: number): Ground | undefined {
     const g = this.ground().get(`${map}:${x}:${y}`);
     return g && !this.picked.has(g.key) ? g : undefined;
+  }
+
+  /** A free cell beside a trainer, facing first, then round: walkable for them, not a
+   *  door, a ledge, a ball or a bag, nor one of `used`. */
+  private beside(a: Actor, used = new Set<string>()): Spot | undefined {
+    const step = this.stepFor(a);
+    return [a.m.facing, 1, 2, 3, 4].map((d) => step(a.m.spot, d)).find((r) => r && !r.warp && !r.hop
+      && !this.world.warpAt(r.to.map, r.to.x, r.to.y) && !used.has(`${r.to.map}:${r.to.x}:${r.to.y}`)
+      && !this.spillAt(r.to.map, r.to.x, r.to.y) && !this.groundAt(r.to.map, r.to.x, r.to.y))?.to;
+  }
+
+  /** Where a fallen trainer's bag lies: where they stood, but never on a doormat or a
+   *  door (the cell they stand on just through one), which a solid bag would shut. */
+  private fallen(a: Actor): Spot {
+    const s = a.m.spot;
+    return this.world.warpAt(s.map, s.x, s.y) ? this.beside(a) ?? s : s;
   }
 
   /** The bag lying on a cell, if any. */
@@ -1044,8 +1059,8 @@ export class Room {
     const party = dealParty(this.seed, a.id, phase, a.m.spot.map, grade);
     // And whatever it picked up on its way (bots carry what they pick up, POK-322).
     const bag: Bag = { items: carried(party, a.loot?.items ?? []), money: purse(phase, grade) + (a.loot?.money ?? 0), mons: party.map((m) => ({ species: m.species, level: m.level })) };
-    const key = SPILL_KEY + a.id;
-    if (!emptyBag(bag)) this.spills.set(key, { key, map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y, name: a.name, bag });
+    const key = SPILL_KEY + a.id, at = this.fallen(a);
+    if (!emptyBag(bag)) this.spills.set(key, { key, map: at.map, x: at.x, y: at.y, name: a.name, bag });
     this.fall(a, by);
     this.remove(a.id);
   }
