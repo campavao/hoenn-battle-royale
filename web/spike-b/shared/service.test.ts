@@ -92,6 +92,47 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it('READY UP: back from a match, a quick room waits for its owner (or somebody new), then counts', () => {
+    let t = 0;
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => t, log: () => undefined });
+    try {
+      const [a, b, c] = [phone(), phone(), phone()];
+      const sa = svc.open(a.link), sb = svc.open(b.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0 }));
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0 }));
+      type R = { t: 'room'; startsIn?: number; ready?: boolean; playing: boolean };
+      const last = (p: { got: { t: string }[] }) => p.got.filter((m) => m.t === 'room').at(-1) as unknown as R;
+      expect(last(a).startsIn).toBeGreaterThan(0);
+      // The first match counts itself in, as quick play's promise.
+      t += 60_001;
+      svc.pump();
+      expect(a.got.some((m) => m.t === 'hello')).toBe(true);
+      const rooms = (svc as unknown as { rooms: Map<string, unknown>; finish(r: unknown): void });
+      rooms.finish([...rooms.rooms.values()][0]);
+      expect(last(a)).toMatchObject({ ready: true, playing: false });
+      expect(last(a).startsIn).toBeUndefined();
+      // Nobody is pulled into the next one while they read their results.
+      const hellos = () => a.got.filter((m) => m.t === 'hello').length;
+      t += 600_000;
+      svc.pump();
+      expect(hellos()).toBe(1);
+      // Only the owner readies up; their READY UP counts, START in the count deals.
+      sb.onText(JSON.stringify({ t: 'start' }));
+      expect(last(a).ready).toBe(true);
+      sa.onText(JSON.stringify({ t: 'start' }));
+      expect(last(a).ready).toBeUndefined();
+      expect(last(a).startsIn).toBe(60_000);
+      sa.onText(JSON.stringify({ t: 'start' }));
+      expect(hellos()).toBe(2);
+      // Back again: somebody new quick-joins, and the count is theirs too.
+      rooms.finish([...rooms.rooms.values()][0]);
+      expect(last(b).ready).toBe(true);
+      svc.open(c.link).onText(JSON.stringify({ t: 'join', name: 'cy', skin: 0 }));
+      expect(last(b).startsIn).toBe(60_000);
+    } finally {
+      svc.stop();
+    }
+  });
   it('LOBBIES lists the hosted rooms, not quick play\'s, to anybody who asks', () => {
     const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
     try {
