@@ -2353,6 +2353,7 @@ var TRUCK = 40;
 var DEALS = /* @__PURE__ */ new Map();
 var REACH = /* @__PURE__ */ new Map();
 var LANDS = /* @__PURE__ */ new Map();
+var OPENS = /* @__PURE__ */ new Map();
 var LANDED = /* @__PURE__ */ new WeakMap();
 var LANDING = 200;
 var RING_PHASE = 60 * 120;
@@ -2565,17 +2566,18 @@ var Room = class {
     const at = this.taken.get(key);
     return at !== void 0 && this.tick - at < REGROW;
   }
-  /** Every item ball the seed deals, taken or not, by cell (`map:x:y`). Walked out from
-   *  Littleroot on foot over this room's maps, so none is on an island or behind a ledge
-   *  that only goes one way out; each on plain ground, never a marked spot or a door, nor
-   *  the corner new trainers stand on. */
+  /** Every item ball the seed deals, taken or not, by cell (`map:x:y`). On the room's
+   *  open ground (open(): every outdoor map, none on an island or behind a ledge that only
+   *  goes one way out; it was the ground walkable from Littleroot, which put all of them
+   *  on seven maps), each on plain ground, never a marked spot or a door, nor the corner
+   *  new trainers stand on. */
   ground() {
     if (this.dealt) return this.dealt;
     const id = `${this.seed}:${[...this.maps.keys()].join()}`;
     const hit = DEALS.get(id);
     if (hit) return this.dealt = hit;
     const land = /* @__PURE__ */ new Map();
-    for (const at of this.reachable()) {
+    for (const at of this.open()) {
       if (this.world.cell(at.map, at.x, at.y) !== 0 || this.world.warpAt(at.map, at.x, at.y)) continue;
       const l = land.get(at.map) ?? [];
       l.push(at);
@@ -3088,12 +3090,27 @@ var Room = class {
       queue.push(u);
     }
     const out = /* @__PURE__ */ new Set();
+    const open = [];
     for (let v = 0; v < N; v++) {
       const s = spots[v];
       if (ok[v] && s.z === void 0 && this.world.cell(s.map, s.x, s.y) === 0) out.add(`${s.map}:${s.x}:${s.y}`);
+      if (sizes[comp[v]] >= LANDING && s.z === void 0) open.push(s);
     }
     LANDS.set(id, out);
+    OPENS.set(id, open);
     return out;
+  }
+  /** Outdoor cells inside a big stretch of ground (landing's components): every one of
+   *  them walks to every other, so nothing put there is behind a ledge that only goes one
+   *  way, or on a pocket only SURF reaches -- and they cover all of Hoenn, not the part of
+   *  it walkable from Littleroot. */
+  open() {
+    const id = "landing:" + [...this.maps.keys()].join();
+    if (!OPENS.has(id)) {
+      LANDS.delete(id);
+      this.landing();
+    }
+    return OPENS.get(id);
   }
   /** The fly map's time (PICK_WAIT after the Safari, or after a battle fought in the
    *  Zone since): whoever is still there, having chosen nowhere, drops anywhere outdoors
@@ -4514,4 +4531,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "e109cf939117";
+export const WORLD_HASH = "e49480ecfa41";
