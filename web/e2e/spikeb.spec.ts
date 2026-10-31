@@ -4,7 +4,8 @@
 // match: catching nothing in the Safari puts the player out at the drop (the rule), so
 // the spec watches the rest and checks what a player who is out sees.
 import { test, expect, type Page } from '@playwright/test';
-import { romExists, romHashParam, romPath } from './symbols';
+import fs from 'node:fs';
+import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
 
 test.beforeAll(() => {
   test.skip(!romExists(), `no ROM at ${romPath()} -- set HBR_ROM or place pokeemerald.gba at the repo root, then run tools/br/dev-patch.sh`);
@@ -356,4 +357,66 @@ test('the debug flags deal a world of the page own: #solo&fast&nobots&seed=7', a
   expect(r.ring, '#fast: 15 s a fog phase').toBe(15 * 60);
   expect(r.opening, '#fast: 25 s of Safari').toBe(25 * 60);
   expect(r.actors, '#nobots: me and nobody else, by my own name').toEqual(['CAM']);
+});
+
+test("the field's own sounds are the ROM's: asked once, a fanfare holds the song and gives it back", async ({ page }) => {
+  test.setTimeout(180_000);
+  // The song table and the sound engine's players, from the ROM: gBrSoundCarry's rows
+  // 1..4 are gMPlayInfo_BGM, _SE1, _SE2, _SE3 (br_music.c).
+  const sym = loadSymbols();
+  const rom = fs.readFileSync(romPath());
+  const header = (id: number) => rom.readUInt32LE(sym.gSongTable - 0x08000000 + 8 * id);
+  const players = [1, 2, 3, 4].map((i) => rom.readUInt32LE(sym.gBrSoundCarry - 0x08000000 + 8 * i));
+  const at = { music: sym.gBrMusic, players, door: header(8), item: header(370), heal: header(368) };
+  await page.goto(`/?rom=${romHashParam()}#solo&nobots&safari=600&seed=7`);
+  await page.locator('#intro-go').click({ timeout: 90_000 });
+  type S = { link: { me: number; room: { actor(id: number): unknown } }; rom?: { emu: { read(a: number, w: 8 | 16 | 32): number }; sound(id: number): void; give(item: number, n: number): Promise<unknown> } };
+  const s = <T>(f: (s: S) => T) => page.evaluate((src) => new Function('s', `return (${src})(s)`)((window as unknown as { __spike: S }).__spike), f.toString()) as Promise<T>;
+  await page.waitForFunction(() => { const s = (window as unknown as { __spike?: S }).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 90_000 });
+  const press = async (k: string) => { await key(page, k, true); await page.waitForTimeout(100); await key(page, k, false); await page.waitForTimeout(350); };
+  /** gBrMusic's sound and playing, and each player's song header and status. */
+  const engine = () => page.evaluate((at) => {
+    const e = (window as unknown as { __spike: S }).__spike.rom!.emu;
+    return {
+      sound: e.read(at.music + 10, 16),
+      playing: e.read(at.music + 6, 16),
+      players: at.players.map((p) => ({ header: e.read(p, 32) >>> 0, status: e.read(p + 4, 32) >>> 0 })),
+    };
+  }, at);
+  const PAUSE = 0x80000000;
+  const on = (e: Awaited<ReturnType<typeof engine>>, h: number) => e.players.some((p) => p.header === h && !(p.status & PAUSE) && p.status & 0xffff);
+  await expect.poll(async () => (await engine()).playing, { timeout: 15_000 }).toBeGreaterThan(0);
+  const song = () => engine().then((e) => e.players[0].header === header(e.playing) && !(e.players[0].status & PAUSE));
+  expect(await song(), 'the route song plays on the hidden ROM').toBe(true);
+
+  // What the page asks for, in order.
+  await page.evaluate(() => { const r = (window as unknown as { __spike: S }).__spike.rom!; const f = r.sound.bind(r); (window as unknown as { asked: number[] }).asked = []; r.sound = (id) => { (window as unknown as { asked: number[] }).asked.push(id); f(id); }; });
+  const asked = () => page.evaluate(() => (window as unknown as { asked: number[] }).asked.splice(0));
+
+  // An SE: played on its player, under the song, and the ask cleared.
+  await s((s) => s.rom!.sound(8));
+  await expect.poll(async () => (await engine()).sound, { timeout: 2_000 }).toBe(0);
+  expect((await engine()).players.some((p) => p.header === at.door), 'SE_DOOR on an SE player').toBe(true);
+  expect(await song(), 'the song plays on under it').toBe(true);
+  await asked();
+  // Walking into the Safari's fences thuds (SE_WALL_HIT); START opens (SE_WIN_OPEN) and the
+  // cursor ticks (SE_SELECT).
+  for (const k of ['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight']) { await key(page, k, true); await page.waitForTimeout(1_600); await key(page, k, false); }
+  expect(await asked(), 'a wall thuds').toContain(7);
+  await press('m');
+  await press('ArrowDown');
+  await press('x');
+  expect((await asked()).slice(0, 2), 'START, then the cursor').toEqual([6, 5]);
+
+  // A fanfare holds the song; a turn cut short its task, and the song still comes back
+  // well inside the fanfare's 160 frames.
+  await s((s) => s.rom!.sound(370 | 0x8000));
+  await expect.poll(async () => on(await engine(), at.item), { timeout: 2_000 }).toBe(true);
+  expect((await engine()).players[0].status & PAUSE, 'the song held').toBeTruthy();
+  await s((s) => s.rom!.give(13, 1));
+  await expect.poll(song, { timeout: 1_000 }).toBe(true);
+  // Left to finish, a fanfare gives it back of its own.
+  await s((s) => s.rom!.sound(368 | 0x8000));
+  await expect.poll(async () => on(await engine(), at.heal), { timeout: 2_000 }).toBe(true);
+  await expect.poll(song, { timeout: 10_000 }).toBe(true);
 });

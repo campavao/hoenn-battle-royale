@@ -23,6 +23,13 @@ const HOW_FADE = 0x08, HOW_BIKE_EDGE = 0x44;
  *  side, where they land. */
 export interface Where { group: number; num: number; x: number; surf: boolean; bike: boolean; door: boolean }
 
+/** gBrMusic.sound (br_music.h): the field's own sounds, constants/songs.h's, which the
+ *  hidden ROM plays once on its field. A fanfare holds the song and gives it back. */
+export const SOUND_FANFARE = 0x8000;
+export const SE_SELECT = 5, SE_WIN_OPEN = 6, SE_WALL_HIT = 7, SE_DOOR = 8, SE_EXIT = 9, SE_LEDGE = 10;
+export const SE_FIELD_POISON = 79, SE_SHOP = 95;
+export const MUS_HEAL = 368 | SOUND_FANFARE, MUS_OBTAIN_ITEM = 370 | SOUND_FANFARE, MUS_OBTAIN_TMHM = 372 | SOUND_FANFARE;
+
 /** gBrMusic's page half. */
 export interface MusicAsk { asked: number; how: number; group: number; num: number; x: number }
 

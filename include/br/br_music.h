@@ -22,6 +22,11 @@
 // coming out (GetMapMusicFadeoutSpeed), and the new one starts at full once it is gone.
 #define BR_MUSIC_DOOR 0xF
 
+// sound's top bit: the rest is a fanfare (PlayFanfare), not an SE (PlaySE). The page's
+// field plays no sound of its own -- its doors, ledges, walls, pickups and shops are the
+// ROM's own sounds, played here on the hidden field (POK-358's parity audit).
+#define BR_MUSIC_FANFARE 0x8000
+
 struct BrMusic
 {
     /* 0 */ u8 asked;    // page: BR_MUSIC_*, 0 while the page does not drive the music
@@ -33,7 +38,10 @@ struct BrMusic
     /* 6 */ u16 playing; // ROM: the song started, or waiting for the old one to fade
     /* 8 */ u8 waiting;  // ROM: the old song is fading out first
     /* 9 */ u8 fadeIn;   // ROM: playing's fade-in speed once it starts
-    /* 10 */ u16 unused;
+    /* 10 */ u16 sound;   // page: a sound to play once on the field, 0 for none -- an SE
+                         //       (constants/songs.h), or with BR_MUSIC_FANFARE a fanfare
+                         //       (MUS_OBTAIN_ITEM, MUS_HEAL), which holds the song and gives
+                         //       it back; the ROM clears it once it played
 };
 BR_OFFSET(BrMusic, asked, 0)
 BR_OFFSET(BrMusic, how, 1)
@@ -42,6 +50,7 @@ BR_OFFSET(BrMusic, mapNum, 3)
 BR_OFFSET(BrMusic, x, 4)
 BR_OFFSET(BrMusic, playing, 6)
 BR_OFFSET(BrMusic, waiting, 8)
+BR_OFFSET(BrMusic, sound, 10)
 BR_SIZE(BrMusic, 12)
 
 extern struct BrMusic gBrMusic;

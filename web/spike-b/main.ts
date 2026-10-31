@@ -36,7 +36,7 @@ import { favourite } from '../src/match/tally';
 import { moveInfo, type Rom as MoveTables } from '../src/battle/movebook';
 import { OUT_BATCH_MS, event, felled, opening, outs, won } from '../src/match/ticker';
 import { MessageBox } from './msgbox';
-import { MusicCue, type Where } from './music';
+import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_DOOR, SE_EXIT, SE_FIELD_POISON, SE_LEDGE, SE_SELECT, SE_SHOP, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { devRomParam, importRom } from './import';
 import { askToKeepStorage, registerServiceWorker } from '../src/pwa';
@@ -492,11 +492,12 @@ function giveNext(): void {
       if (hidden) dug.delete(hidden); // still buried
       else link.drop(key); // it stays where it lay
     } else if (screen) {
+      rom?.sound(MUS_OBTAIN_TMHM);
       const kept = got.items.some((g) => g.id === item);
       if (kept) say(`${name(item)} went in the BAG.`);
       else if (!gift) say(`Taught ${name(item)}!`);
     }
-    else if (got.items.length) say(`Found ${got.items.map((g) => `${g.n > 1 ? `${g.n} ` : ''}${name(g.id)}`).join(', ')}!`);
+    else if (got.items.length) rom?.sound(MUS_OBTAIN_ITEM), say(`Found ${got.items.map((g) => `${g.n > 1 ? `${g.n} ` : ''}${name(g.id)}`).join(', ')}!`);
     else if (got.money) say(`Sold ${name(item)} for ¥${got.money}.`);
     else say(`${name(item)}! Your team got stronger.`);
   }, (e) => console.warn('spike give failed', e)).finally(() => { giving = false; giveNext(); });
@@ -537,6 +538,7 @@ function askKey(k: string): void {
   if (!asking) return;
   const r = asking.roller;
   if (r) {
+    if (k !== 'b' && k !== 'start') rom?.sound(SE_SELECT);
     if (k === 'up') r.n = r.n % r.max + 1;
     else if (k === 'down') r.n = (r.n + r.max - 2) % r.max + 1;
     else if (k === 'right') r.n = Math.min(r.max, r.n + 10);
@@ -547,6 +549,7 @@ function askKey(k: string): void {
     return;
   }
   const n = asking.rows.length;
+  if (k === 'up' || k === 'down' || k === 'a') rom?.sound(SE_SELECT);
   if (k === 'up') asking.pick = (asking.pick + n - 1) % n;
   else if (k === 'down') asking.pick = (asking.pick + 1) % n;
   else if (k === 'a') return asking.done(asking.rows[asking.pick][1]);
@@ -596,6 +599,7 @@ async function openMenu(): Promise<void> {
   // The ROM's rows (start_menu.c): POKéMON once I have one, no MAP in the Safari, my
   // name for the trainer card. A phone has the room on its dock, as live.
   const name = link.room.actor(link.me)?.name || 'YOU';
+  rom.sound(SE_WIN_OPEN);
   const rows: [string, string][] = [
     ...(rom.partyCount() > 0 ? [['POKéMON', '1'] as [string, string]] : []),
     ['BAG', '2'],
@@ -906,6 +910,7 @@ async function nurse(): Promise<void> {
   const c = await ask('HEAL your party?', [['YES', 'yes'], ['NO', '']]);
   if (c !== 'yes' || isOut || !rom) { say('Good luck.'); return; }
   await rom.heal();
+  rom.sound(MUS_HEAL);
   say('Done. Your POKéMON are fully healed.');
 }
 
@@ -1003,6 +1008,7 @@ async function mart(map: string): Promise<void> {
     if (!n || !rom) continue;
     if (await ask(`${name(id)}, and you want ${n}. That will be ¥${n * each}. Okay?`, [['YES', 'y'], ['NO', '']]) !== 'y' || !rom) continue;
     const took = await rom.buy(id, n, each);
+    if (took) rom.sound(SE_SHOP);
     say(took ? 'Here you go! Thank you very much.' : 'You have no more room for items.');
   }
 }
@@ -1801,7 +1807,19 @@ function soundFrame(): void {
   const v = muted ? 0 : 100;
   if (rom && v !== heard) { rom.emu.setVolume(v); heard = v; }
   rom?.music(cue.next(muted || !matchOn ? null : whereFollowed()));
+  // The followed trainer's steps, as field_player_avatar.c and field_screen_effect.c sound
+  // them: a wall's thud at each bump, a ledge's hop, a door (SE_DOOR, from outside) or a
+  // mat or stairs (SE_EXIT, DoWarp) at each warp.
+  const a = follow ? link.room.actor(follow) : undefined;
+  const act = a?.m.action;
+  if (act && act !== heardAction) {
+    if (act.kind === 'bump') rom?.sound(SE_WALL_HIT);
+    else if (act.kind === 'hop') rom?.sound(SE_LEDGE);
+    else if (act.kind === 'warp') rom?.sound(placed.get(a!.m.spot.map)?.m.outdoor ? SE_DOOR : SE_EXIT);
+  }
+  heardAction = act;
 }
+let heardAction: unknown = null;
 const cue = new MusicCue();
 /** Where the followed trainer stands for the song: through a door, the other side. */
 function whereFollowed(): Where | null {
@@ -1991,6 +2009,7 @@ function fogFrame(): void {
   if (!fog || --fogTimer > 0) return;
   fogTimer = FOG_TICK;
   poisonAt = frame;
+  rom.sound(SE_FIELD_POISON);
   void rom.bleed().then((alive) => { if (!alive) goOut('Your team fainted in the fog.'); });
 }
 
