@@ -71,12 +71,17 @@ export interface WorldLink {
 }
 
 
-export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, seed: number): WorldLink {
+/** What a world of the page's own is dealt: the debug flags' pace, seed and bots
+ *  (#fast, #fog=, #safari=, #nobots; frames), and who plays it. */
+export interface SoloOpts { bots?: number; ringFrames?: number; openingFrames?: number; name?: string; skin?: number }
+
+export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, seed: number, opts: SoloOpts = {}): WorldLink {
   const room = makeRoom(maps, patches, seed, world);
-  room.opening = room.ringPhase; // the Safari opening, as a match has it
+  if (opts.ringFrames) room.ringPhase = opts.ringFrames;
+  room.opening = opts.openingFrames ?? room.ringPhase; // the Safari opening, as a match has it
   // The live game's offline QUICK PLAY: you and BOT_FILL bots.
-  const host = new Host(room, BOT_FILL, maps, 0);
-  const me = host.join('YOU', 0);
+  const host = new Host(room, opts.bots ?? BOT_FILL, maps, 0);
+  const me = host.join(opts.name || 'YOU', opts.skin ?? 0);
   host.advance();
   let seq = 0;
   const teams = new Map<number, FameMon[]>();

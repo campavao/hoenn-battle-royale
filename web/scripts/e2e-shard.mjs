@@ -54,8 +54,9 @@ export const FILE_SECONDS = {
   'speaker.spec.ts': 21,
   'spectate-dpad.spec.ts': 14,
   'spectate.spec.ts': 72,
-  // Measured locally (2026-10-30), not yet four CI runs: the import, then a whole hosted match.
-  'spikeb.spec.ts': 300,
+  // Measured locally (2026-10-31), not yet four CI runs: seven tests, a whole hosted match
+  // and a Safari catch among them.
+  'spikeb.spec.ts': 660,
   'stall.spec.ts': 33,
   'tap.spec.ts': 7,
   'walk-and-see.spec.ts': 14,
