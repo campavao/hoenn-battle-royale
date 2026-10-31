@@ -1,7 +1,33 @@
 {
- "readAt": "2026-10-31T01:49:05.924Z",
+ "readAt": "2026-10-31T07:42:06.996Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "4WJWSS",
+   "at": "2026-10-31T02:49:46.607Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-10-31T02:49:53.846Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "7FWME6",
    "at": "2026-10-29T16:17:32.292Z",
@@ -3147,15 +3173,16 @@
   {
    "id": "6144a717",
    "first": "2026-10-17T02:37:29.310Z",
-   "last": "2026-10-29T16:17:32.213Z",
+   "last": "2026-10-31T02:49:38.688Z",
    "since": "2026-10-15",
    "versions": [
     "2",
-    "3"
+    "3",
+    "world-e109cf93"
    ],
    "solo": 2,
-   "checkins": 13,
-   "v": "3"
+   "checkins": 14,
+   "v": "world-e109cf93"
   }
  ],
  "solo": [
