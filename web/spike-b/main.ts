@@ -40,6 +40,7 @@ import { MusicCue, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { devRomParam, importRom } from './import';
 import { askToKeepStorage, registerServiceWorker } from '../src/pwa';
+import { parseRoomHash, withRoom, withoutRoom } from '../src/hash';
 import { groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
 import { GOLD } from '../src/match/events';
@@ -1214,7 +1215,7 @@ function results(res: Results, waited = 0): void {
     ],
     // The CHAMPION page, a bot's too, as live (HBR-96).
     champion: res.winner && res.winner !== link.me ? { name: nameOf(res.winner), lines: [{ label: 'BEATEN', value: String(beaten(res.winner)) }] } : undefined,
-  }, () => { worldSock?.leave(); room = null; lobby!.menu(); });
+  }, () => { worldSock?.leave(); room = null; unlink(); lobby!.menu(); });
 }
 
 function standings(done: boolean, res = link.room.results, bots = botIds()): void {
@@ -2726,6 +2727,11 @@ function loop(now: number): void {
 
 // ---- boot -----------------------------------------------------------------------------
 
+/** Takes the room's link out of the address bar (left it, gone, or never there). */
+function unlink(): void {
+  if (parseRoomHash(location.hash)) history.replaceState(null, '', `${location.pathname}${location.search}${withoutRoom(location.hash) ? `#${withoutRoom(location.hash)}` : ''}`);
+}
+
 const DEFAULT_RELAY_URL = 'wss://hoenn-relay-production.up.railway.app';
 
 /** A lazy chunk that will not load (a release took this page's hashed files off the
@@ -2789,13 +2795,15 @@ async function boot(): Promise<void> {
     const sock = connectWorld(url, make, {
       onRoom: (r) => {
         room = r;
+        // A hosted room's link is the address bar: copy it, send it, and a friend is in.
+        if (!r.quick && parseRoomHash(location.hash)?.code !== r.code) history.replaceState(null, '', `#${withRoom(location.hash, 'join', r.code)}`);
         rom?.pace(r.set.textSpeed, r.set.animations);
         if (matchOn && !r.playing) matchOver();
         // The standings stay up until PLAY AGAIN; then the room as it is by then.
         else if (!matchOn && !winEl.classList.contains('on')) lobby!.roomIs(r);
       },
-      onNoRoom: (code, pass) => { forget(); lobby!.menu(pass ? `That is not room ${code}'s passcode.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.'); },
-      onKicked: () => { room = null; forget(); lobby!.menu('The host took you out of the room.'); },
+      onNoRoom: (code, pass) => { forget(); unlink(); lobby!.menu(pass ? `That is not room ${code}'s passcode.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.'); },
+      onKicked: () => { room = null; forget(); unlink(); lobby!.menu('The host took you out of the room.'); },
       onOld: () => { room = null; matchOn = false; forget(); lobby!.old(); },
       onRooms: (rooms) => lobby?.listed(rooms),
       onMatch: (l) => startMatch(l),
@@ -2827,21 +2835,28 @@ async function boot(): Promise<void> {
     });
     worldSock = sock;
     sheetBtn.hidden = false;
+    const joinAs = (how: { code?: string; host?: boolean; pass?: string }) => { const c = loadCareer(); sock.join(me().name, me().skin, { ...how, rec: { wins: c.wins, played: c.matches, ...(c.best ? { best: c.best } : {}) } }); };
     lobby = new Lobby({
-      join: (how) => { const c = loadCareer(); sock.join(me().name, me().skin, { ...how, rec: { wins: c.wins, played: c.matches, ...(c.best ? { best: c.best } : {}) } }); },
+      join: joinAs,
       start: () => sock.start(),
       set: (set) => sock.set(set),
       kick: (id) => sock.kick(id),
       list: () => sock.list(),
       relayUrl: url.replace(/\/world$/, ''),
-      leave: () => location.reload(),
+      // Out of the room for good: its link goes too, or the reload would walk back in.
+      leave: () => { unlink(); location.reload(); },
       names: { species: speciesName, move: (id) => moveInfo(romTables, id)?.name },
       solo: () => { room = null; startMatch(soloLink(hoenn.maps, patches, hoenn.world, (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0)); },
     });
     // Reloaded within a minute of a match: straight back in (or, too late, in to watch).
     const back = token();
+    const linked = parseRoomHash(location.hash);
     if (back) { lobby.hide(); sock.join(me().name, me().skin, { code: back.code, again: { code: back.code, id: back.id, key: back.key } }); }
-    else {
+    // A room's link (#join=CODE), or #host / #quick: straight in, as the live game's are.
+    else if (linked?.mode === 'join' || linked?.mode === 'host' || linked?.mode === 'quick') {
+      lobby.hide();
+      joinAs(linked.mode === 'join' ? { code: linked.code } : linked.mode === 'host' ? { host: true } : {});
+    } else {
       // Too late to be the same trainer: the menu's WATCH goes back in to look (HBR-20).
       lobby.rewatch = lateCode();
       forget();

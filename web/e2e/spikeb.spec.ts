@@ -165,3 +165,52 @@ test('a tap on the map walks the trainer there, and the pad buzzes', async ({ pa
   await page.locator('#pad .k[data-k="b"]').dispatchEvent('pointerdown', { pointerId: 1 });
   expect(await page.evaluate(() => (window as unknown as { buzzes: number }).buzzes)).toBeGreaterThan(0);
 });
+
+test('two players: the room link brings a friend in, and both see one world', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const phone = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true };
+  const [hc, gc] = [await browser.newContext(phone), await browser.newContext(phone)];
+  try {
+    const [host, guest] = [await hc.newPage(), await gc.newPage()];
+    // The host hosts; the address bar is the room's link.
+    await host.goto(`/?rom=${romHashParam()}#host`);
+    await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 90_000 });
+    const link = new URL(host.url());
+    const code = (await host.locator('#room-code').textContent())!.replace('Room ', '');
+    expect(link.hash, 'the room link').toBe(`#join=${code}`);
+    // The friend opens it: straight into the room.
+    await guest.goto(`/?rom=${romHashParam()}${link.hash}`);
+    await expect(host.locator('#room-roster li', { hasText: 'CAM' })).toHaveCount(2, { timeout: 90_000 });
+    await expect(host.locator('#room-start')).toBeEnabled();
+    await host.locator('#room-start').click();
+
+    type W = { link: { me: number; room: { actors: { id: number; name: string; bot?: boolean; battling?: number; m: { spot: { map: string; x: number; y: number } } }[] } }; rom?: unknown };
+    const humans = (p: typeof host) => p.evaluate(() => {
+      const s = (window as unknown as { __spike: W }).__spike;
+      return s.link?.room.actors.filter((a) => !a.bot).map((a) => ({ id: a.id, at: `${a.m.spot.map}:${a.m.spot.x}:${a.m.spot.y}`, battling: !!a.battling })).sort((a, b) => a.id - b.id) ?? [];
+    });
+    await expect.poll(async () => (await humans(host)).length, { timeout: 90_000 }).toBe(2);
+    await expect.poll(async () => (await humans(guest)).length, { timeout: 30_000 }).toBe(2);
+    // One world: both pages put both trainers in the same cells.
+    await expect.poll(async () => JSON.stringify(await humans(host)) === JSON.stringify(await humans(guest)), { timeout: 10_000 }).toBe(true);
+    // Not pulled into a duel on the spot (HBR-104).
+    await guest.waitForTimeout(8_000);
+    expect((await humans(host)).some((h) => h.battling), 'nobody fighting eight seconds in').toBe(false);
+
+    // The guest walks; the host sees the same steps.
+    await guest.waitForFunction(() => !!(window as unknown as { __spike: W }).__spike.rom, undefined, { timeout: 60_000 });
+    const before = await humans(guest);
+    for (const k of ['ArrowDown', 'ArrowLeft', 'ArrowUp', 'ArrowRight']) {
+      await guest.evaluate((k) => dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })), k);
+      await guest.waitForTimeout(700);
+      await guest.evaluate((k) => dispatchEvent(new KeyboardEvent('keyup', { key: k, bubbles: true })), k);
+      if (JSON.stringify(await humans(guest)) !== JSON.stringify(before)) break;
+    }
+    const moved = await humans(guest);
+    expect(JSON.stringify(moved), 'the guest moved').not.toBe(JSON.stringify(before));
+    await expect.poll(async () => JSON.stringify(await humans(host)) === JSON.stringify(await humans(guest)), { timeout: 10_000 }).toBe(true);
+  } finally {
+    await hc.close();
+    await gc.close();
+  }
+});
