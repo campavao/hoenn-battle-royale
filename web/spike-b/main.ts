@@ -2288,6 +2288,15 @@ const watch = new Watch({
   link: () => link ?? null,
   rom: () => rom,
   idle: () => (isOut || waiting) && !battle && !swapping && !asking,
+  describe: (key) => {
+    const r = link.room;
+    for (const g of r.ground().values()) if (g.key === key) return art?.itemName(g.item) || null;
+    const s = r.spills.get(key);
+    if (!s || s.legend || s.person?.gate !== undefined) return null;
+    if (s.person) return s.bag.items[0] ? art?.itemName(s.bag.items[0].id) || null : null;
+    return `${s.name}'s bag`;
+  },
+  tell: (text) => tick(text),
 });
 
 // Drag and pinch / wheel, spectating only. A tap on a trainer follows them.

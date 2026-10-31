@@ -43,6 +43,30 @@ export interface WatchHost {
   /** Free to watch a battle on the hidden ROM: out of the match (or benched), nothing of
    *  my own on it. */
   idle(): boolean;
+  /** What a piece of loot was, as a watcher is told it ("POTION", "MAY's bag"); null for
+   *  one not worth a line (a legendary's or a gate's, which are fights). */
+  describe(key: number): string | null;
+  /** A line on the ticker. */
+  tell(text: string): void;
+}
+
+/** The loot `picked` (room.ts: key, and who took it) gained since the last look that
+ *  `who` took. Every key is looked at once: `seen` keeps them, so what was taken before
+ *  the watch began is never told. */
+export function pickedBy(picked: ReadonlyMap<number, number>, seen: Set<number>, who: number): number[] {
+  const out: number[] = [];
+  for (const [key, by] of picked) {
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (who && by === who) out.push(key);
+  }
+  return out;
+}
+
+/** Who the camera goes to when the trainer it is on is out: the next one still in, in
+ *  the strip's order (Kanto: "the first living trainer is picked for you"). */
+export function nextAfter(ids: readonly number[], gone: number): number | null {
+  return ids.find((id) => id > gone) ?? ids[0] ?? null;
 }
 
 /** A trainer's sprite is 32 pixels tall on a 16-pixel cell, and the camera sits on the
@@ -64,6 +88,8 @@ export class Watch {
   private queue: { from: number; m: SpMsg }[] = [];
   private mirroring = false;
   private publisher: RomBattles | null = null;
+  /** Loot keys looked at already (pickedBy). */
+  private seen = new Set<number>();
 
   constructor(private host: WatchHost) {
     this.strip = document.getElementById('watch')!;
@@ -105,7 +131,14 @@ export class Watch {
     this.eyesEl.hidden = this.eyes <= 0 || this.host.spectating();
     const on = this.host.spectating();
     this.strip.hidden = !on;
-    const id = this.host.follow();
+    let id = this.host.follow();
+    // The trainer watched is out (off the map): on to the next one still in, rather than
+    // a camera left on the cell they fell on until NEXT.
+    if (on && id && !this.host.trainers().some((t) => t.id === id)) {
+      id = nextAfter(this.others(), id) ?? 0;
+      this.host.setFollow(id);
+    }
+    this.tellPicked(on ? id : 0);
     const a = on && id ? this.host.trainers().find((t) => t.id === id) : undefined;
     this.who.textContent = a ? `WATCHING ${a.name}` : on ? 'Drag to look around' : '';
     (document.getElementById('watch-stop') as HTMLButtonElement).hidden = !a;
@@ -116,6 +149,18 @@ export class Watch {
     // middle of the screen.
     const up = (HEAD_ABOVE * this.host.zoom()) / (devicePixelRatio || 1);
     this.label.style.transform = `translate(-50%, calc(-100% - ${up.toFixed(1)}px))`;
+  }
+
+  /** What the trainer watched just took off the ground or out of a bag (POK-268): drawn
+   *  by the watcher's own page off the room's `picked`, which every page has. */
+  private tellPicked(who: number): void {
+    const link = this.host.link();
+    if (!link) return;
+    const a = who ? this.host.trainers().find((t) => t.id === who) : undefined;
+    for (const key of pickedBy(link.room.picked, this.seen, a ? who : 0)) {
+      const what = this.host.describe(key);
+      if (what && a) this.host.tell(`${a.name} took ${what}!`);
+    }
   }
 
   /** Who I watch now, for the relay: somebody followed while spectating, or nobody. */
@@ -133,6 +178,8 @@ export class Watch {
       this.told = 0;
       this.eyes = 0;
       this.queue = [];
+      // What was taken before this page came in is nobody's news.
+      this.seen = new Set(link ? link.room.picked.keys() : []);
       if (link) {
         link.onEyes = (n) => { this.eyes = n; this.eyesEl.textContent = `👁 ${n}`; };
         link.onSp = (from, m) => {
