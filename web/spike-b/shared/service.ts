@@ -20,7 +20,7 @@ import { BOT_FILL, FOG_STEPS, MAX_STEPS, SAFARI_STEPS, dealable } from '../../sr
 import { cleanBag } from './items';
 import { over } from './over';
 import type { FameMon } from '../../src/ui/results';
-import { HASH_EVERY, fillFor, type Again, type CardRecord, type Listed, type Member, type Settings, type SpMsg, type WireFrame, type WorldDown, type WorldUp } from './wire';
+import { HASH_EVERY, fillFor, type Again, type CardRecord, type Listed, type Member, type PeekBag, type Settings, type SpMsg, type WireFrame, type WorldDown, type WorldUp } from './wire';
 
 /** A career off the wire, whole numbers or nothing: what a seat's card shows. */
 function recOf(r: unknown): { rec?: CardRecord } {
@@ -56,6 +56,21 @@ function teamOf(t: unknown): FameMon[] | undefined {
     });
   }
   return out;
+}
+
+/** A bag as told for a watcher's peek: up to 120 stacks and the money, or nothing. */
+function bagOf(b: unknown): PeekBag | undefined {
+  if (!b || typeof b !== 'object') return undefined;
+  const { items, money } = b as { items?: unknown; money?: unknown };
+  if (!Array.isArray(items) || items.length > 120 || !Number.isInteger(money) || (money as number) < 0 || (money as number) > 999999) return undefined;
+  const out: PeekBag['items'] = [];
+  for (const s of items as { id?: unknown; n?: unknown }[]) {
+    if (!s || !Number.isInteger(s.id) || !Number.isInteger(s.n)) return undefined;
+    const id = s.id as number, n = s.n as number;
+    if (id < 1 || id > 0xffff || n < 1 || n > 999) return undefined;
+    out.push({ id, n });
+  }
+  return { items: out, money: money as number };
 }
 
 export interface Link { send(text: string): void; close(): void }
@@ -125,6 +140,8 @@ interface Phone {
   kicked?: boolean;
   /** Their team as they last told it (the hall of fame's, when they win). */
   team?: FameMon[];
+  /** Their bag as last told, for a watcher's START. */
+  bag?: PeekBag;
 }
 
 /** The battle a phone's ROM is publishing, as sent: for a watcher who comes in after it
@@ -248,7 +265,9 @@ export class WorldService {
           const mons = teamOf(m.mons);
           if (!mons) return;
           phone.team = mons;
-          for (const p of room.members.values()) this.send(p.link, { t: 'team', id: phone.id, mons });
+          phone.bag = bagOf(m.bag);
+          const bag = phone.bag;
+          for (const p of room.members.values()) this.send(p.link, { t: 'team', id: phone.id, mons, ...(bag ? { bag } : {}) });
         } else if (!host) {
           return;
         } else if (m.t === 'in') {
@@ -515,7 +534,7 @@ export class WorldService {
   /** Every team the room's trainers have told, to one phone just in (the legendary's
    *  chip and the champion's hall of fame read them). */
   private teamsTo(room: Lobby, link: Link): void {
-    for (const o of room.members.values()) if (o.team) this.send(link, { t: 'team', id: o.id, mons: o.team });
+    for (const o of room.members.values()) if (o.team) this.send(link, { t: 'team', id: o.id, mons: o.team, ...(o.bag ? { bag: o.bag } : {}) });
   }
 
   /** How many watch trainer `id`, to them. */

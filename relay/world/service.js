@@ -4120,6 +4120,19 @@ function teamOf(t) {
   }
   return out;
 }
+function bagOf(b) {
+  if (!b || typeof b !== "object") return void 0;
+  const { items, money } = b;
+  if (!Array.isArray(items) || items.length > 120 || !Number.isInteger(money) || money < 0 || money > 999999) return void 0;
+  const out = [];
+  for (const s of items) {
+    if (!s || !Number.isInteger(s.id) || !Number.isInteger(s.n)) return void 0;
+    const id = s.id, n = s.n;
+    if (id < 1 || id > 65535 || n < 1 || n > 999) return void 0;
+    out.push({ id, n });
+  }
+  return { items: out, money };
+}
 var FRAME_MS = 1e3 / 60;
 var QUIET_MS = 12e4;
 var SYNC_MS = 1e3;
@@ -4255,7 +4268,9 @@ var WorldService = class {
           const mons = teamOf(m.mons);
           if (!mons) return;
           phone.team = mons;
-          for (const p of room.members.values()) this.send(p.link, { t: "team", id: phone.id, mons });
+          phone.bag = bagOf(m.bag);
+          const bag = phone.bag;
+          for (const p of room.members.values()) this.send(p.link, { t: "team", id: phone.id, mons, ...bag ? { bag } : {} });
         } else if (!host) {
           return;
         } else if (m.t === "in") {
@@ -4506,7 +4521,7 @@ var WorldService = class {
   /** Every team the room's trainers have told, to one phone just in (the legendary's
    *  chip and the champion's hall of fame read them). */
   teamsTo(room, link) {
-    for (const o of room.members.values()) if (o.team) this.send(link, { t: "team", id: o.id, mons: o.team });
+    for (const o of room.members.values()) if (o.team) this.send(link, { t: "team", id: o.id, mons: o.team, ...o.bag ? { bag: o.bag } : {} });
   }
   /** How many watch trainer `id`, to them. */
   eyes(room, id) {
@@ -4602,4 +4617,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "c87151778de4";
+export const WORLD_HASH = "219563029b11";

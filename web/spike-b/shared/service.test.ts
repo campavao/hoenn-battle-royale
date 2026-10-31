@@ -278,6 +278,34 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it("a trainer's bag rides with their team, for a watcher's START, sane or not at all", () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
+    try {
+      const a = phone(), b = phone();
+      const sa = svc.open(a.link), sb = svc.open(b.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, code }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      const id = (a.got.find((m) => m.t === 'hello') as unknown as { id: number }).id;
+      const mons = [{ species: 252, level: 9, moves: [] }];
+      const bag = { items: [{ id: 13, n: 3 }, { id: 4, n: 1 }], money: 2500 };
+      sa.onText(JSON.stringify({ t: 'team', mons, bag }));
+      expect(b.got.at(-1)).toEqual({ t: 'team', id, mons, bag });
+      // A bag that will not read goes as none; the team still goes.
+      for (const bad of [{ items: [{ id: 0, n: 1 }], money: 0 }, { items: [{ id: 13, n: 1000 }], money: 0 }, { items: [], money: -1 }, { items: Array(121).fill({ id: 1, n: 1 }), money: 0 }, 'x']) {
+        sa.onText(JSON.stringify({ t: 'team', mons, bag: bad }));
+        expect(b.got.at(-1)).toEqual({ t: 'team', id, mons });
+      }
+      sa.onText(JSON.stringify({ t: 'team', mons, bag }));
+      // In mid-match, to watch: the bag comes with the hello's teams.
+      const c = phone();
+      svc.open(c.link).onText(JSON.stringify({ t: 'join', name: 'cy', skin: 0, code }));
+      expect(c.got.find((m) => m.t === 'team')).toEqual({ t: 'team', id, mons, bag });
+    } finally {
+      svc.stop();
+    }
+  });
   it("a hidden tab's 'here' keeps it in; out and watching, a dropped socket comes back to watching", () => {
     let t = 0;
     const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 3, cap: 30, now: () => t, log: () => undefined });
