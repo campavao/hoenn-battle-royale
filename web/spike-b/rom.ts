@@ -85,6 +85,8 @@ const DREW = 3;
 const ROM_BASE = 0x08000000;
 /** How fast the hidden ROM runs a battle's start nobody sees (battle()). */
 const HURRY_SPEED = 8;
+/** br_event.h's BR_EVENT_MAX: the events gBrEvents has room for. */
+const BR_EVENT_MAX = 4;
 /** How long the last fight took to start: from the TRAINER card to the battle running. */
 export let lastStart: { ms: number; frames: number } | null = null;
 
@@ -112,7 +114,13 @@ export interface DuelLink {
  *  trainer stands, as a MAP section and a cell of it, and the ring as the ROM draws it --
  *  r 127 for nothing fogged (the page fogs over it), -1 for fog everywhere -- and the
  *  section the prompt names safe, in the ROM's own letters ([] names none). */
-export interface MapLook { mapsec: number; cellX: number; cellY: number; r: number; place: number[] }
+export interface MapLook {
+  mapsec: number; cellX: number; cellY: number; r: number; place: number[];
+  /** The match's marks, as the room has them (the hidden ROM saw none of it): the leaders
+   *  anybody has beaten, a bit each in br_gym.c's order, and the events dropped this round,
+   *  each as its MAP section and whether its legendary is taken. */
+  marks?: { gyms: number; events: { mapsec: number; taken: boolean }[] };
+}
 
 /** Somebody else's battle, as the page hands it to a mirror (watch.ts): what their ROM
  *  published, in order, from its BSTART. */
@@ -552,6 +560,28 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     const s1 = emu.read(save1, 32);
     emu.write(s1, along(romView.getInt32(layout, true), rom[entry + 2], look.cellX), 16);
     emu.write(s1 + 2, along(romView.getInt32(layout + 4, true), rom[entry + 3], look.cellY), 16);
+    if (look.marks) markFrom(look.marks);
+  };
+  /** The heads and balls the MAP draws (BrGym_DrawOnMap, BrEvent_DrawOnMap) are read from
+   *  gBrGymsBeaten and gBrEvents, which only this ROM's own fights and the classic's EVENT
+   *  messages ever wrote: the room's say goes in instead. An event slot's trader is left
+   *  off, so none is spawned on the hidden field for it (rom.trade() sends its own). */
+  const gymsAt = sym('gBrGymsBeaten');
+  const eventsAt = sym('gBrEvents');
+  const markFrom = (marks: NonNullable<MapLook['marks']>) => {
+    emu.write(gymsAt, marks.gyms & 0xff, 8);
+    const evs = marks.events.slice(-BR_EVENT_MAX);
+    let live = 0, taken = 0;
+    emu.write(eventsAt, emu.read(match + 8, 32), 32); // gBrEvents.seed: this match's
+    evs.forEach((e, i) => {
+      emu.write(eventsAt + 4 + i * 2, 0xb000 | (i << 4), 16);
+      emu.write(eventsAt + 12 + i, e.mapsec, 8);
+      emu.write(eventsAt + 20 + i * 8 + 4, 0, 16);
+      live |= 1 << i;
+      if (e.taken) taken |= 1 << i;
+    });
+    emu.write(eventsAt + 16, live, 8);
+    emu.write(eventsAt + 17, taken, 8);
   };
   // One thing at a time on the ROM: a battle asked for while an item goes in waits for it.
   let queue: Promise<unknown> = Promise.resolve();

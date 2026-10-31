@@ -120,4 +120,23 @@ describe('ring map', () => {
     expect(count(47, closing)).toBeGreaterThan(count(48, closing));
     expect(count(95, closing)).toBe(count(48, closing));
   });
+  it("marks the MAP with the room's beaten leaders and this round's events, grey once taken", () => {
+    const r = makeRoom(MAPS, patchJson as unknown as PatchTable, 12345);
+    const m = new RingMap(r, art);
+    expect(m.marks()).toEqual({ gyms: 0, events: [] });
+    r.gyms.push([0, 'ROXANNE'], [2, 'WATTSON']);
+    const spill = (key: number) => r.spills.set(key, { key, map: 'MAP_ROUTE110', x: 12, y: 30, name: '', bag: { items: [], money: 0, mons: [] } });
+    r.events.push({ n: 0, key: 7, map: 'MAP_ROUTE110', x: 12, y: 30, species: 0 });
+    r.events.push({ n: 1, key: 8, map: 'MAP_ROUTE110', x: 12, y: 31, species: 144 });
+    r.events.push({ n: 2, key: 9, map: 'MAP_ROUTE110', x: 12, y: 32, species: 145 });
+    spill(8); spill(9); r.picked.set(9, 1);
+    const route110 = SECTIONS.findIndex((x) => x.id === 'MAPSEC_ROUTE_110');
+    expect(m.marks()).toEqual({
+      gyms: 0b101,
+      // A story with no legendary is never grey; one lying on the ground is not taken yet.
+      events: [{ mapsec: route110, taken: false }, { mapsec: route110, taken: false }, { mapsec: route110, taken: true }],
+    });
+    r.spills.delete(8);
+    expect(m.marks().events[1].taken).toBe(true);
+  });
 });
