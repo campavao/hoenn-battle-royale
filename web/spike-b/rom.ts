@@ -47,6 +47,9 @@ const ME = 0;
 const FOE_SEAT = 31;
 /** Whose a dropped bag is on the hidden ROM: a seat nobody here sits in. */
 const DROP_SEAT = 30;
+/** br_match.h's BR_PHASE_SAFARI and BR_PHASE_PLAY (gBrMatch.phase). */
+const BR_PHASE_SAFARI = 1;
+const BR_PHASE_PLAY = 2;
 /** An event's first piece (web/src/match/events.ts's eventKey(0, 0)). */
 const LEGEND_KEY = 0xb000;
 /** Event 0's trader (BR_EVENT_TRADER_KEY), and below it his claim key. */
@@ -147,6 +150,9 @@ export interface RomBattles {
    *  RESULT win (br_match.c sWinPending) leaves the fight at its next choice with the RUN
    *  that cannot fail, "You won the match!" (BR_RUN_OVER). A link fight ends by foeOut. */
   wonMatch(): void;
+  /** The Safari's buzzer while one of its battles runs: the next choice is a RUN out
+   *  (br_match.c's BrMatch_BuzzerClosing, BR_RUN_ROLL), so the drop is not kept waiting. */
+  buzzer(): void;
   /** The match's ring phase (1 the first, as the host numbers them): the level rung every
    *  battle from now on starts at. */
   setPhase(phase: number): void;
@@ -477,6 +483,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
    *  never before, so the hidden field never shows through. */
   let broken = false;
   let fighting = false;
+  /** buzzer() set the Zone's phase under a battle: PLAY's again once it ends. */
+  let buzzed = false;
   let phase = 1;
   /** The ring as the ROM should see it on its field or in a battle. */
   let seedNow = seed >>> 0;
@@ -627,6 +635,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     if (shown) {
       onStart();
       await until(emu, over, Infinity);
+      if (buzzed) { emu.write(match, BR_PHASE_PLAY, 8); buzzed = false; }
       // The ring is the battle's: back on the field nothing of it is left to bleed the
       // hidden ROM's party while a catch prompt waits.
       fighting = false;
@@ -768,6 +777,15 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     },
     wonMatch() {
       if (fighting && !broken) send({ t: 'result', seat: ME, outcome: 'win' });
+    },
+    buzzer() {
+      // The parked match is PLAY's; BrMatch_BuzzerClosing asks for the Zone's phase with
+      // its clock at 0. Put back as the battle ends, before the field acts on it.
+      if (!fighting || broken) return;
+      emu.write(match, BR_PHASE_SAFARI, 8);
+      emu.write(match + 1, 1, 8);
+      emu.write(match + 12, 0, 16);
+      buzzed = true;
     },
     foeOut() {
       // Before the duel's turn on the ROM has come (it waits behind whatever was going
