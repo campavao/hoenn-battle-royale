@@ -129,3 +129,35 @@ test('a Safari catch, the drop on the fly map, and out of the Safari', async ({ 
   await expect.poll(() => spot(), { timeout: 60_000 }).not.toMatch(/^MAP_SAFARI/);
   expect(await s((s) => s.rom?.partyCount() ?? 0), 'the team came with the trainer').toBe(caught);
 });
+
+test('a tap on the map walks the trainer there', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/?rom=${romHashParam()}`);
+  await page.locator('#lobby-rows button', { hasText: 'HOST A ROOM' }).click({ timeout: 90_000 });
+  await page.locator('#room-start').click({ timeout: 30_000 });
+  type W = { link: { me: number; room: any }; rom?: unknown; cam: { x: number; y: number }; zoom: number; placed: Map<string, { gx: number; gy: number }> };
+  await page.waitForFunction(() => { const s = (window as unknown as { __spike: W }).__spike; return !!s.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 90_000 });
+  await page.waitForTimeout(1500);
+  // A cell five steps off on the room's own steps, and where it is on the screen.
+  const goal = await page.evaluate(() => {
+    const s = (window as unknown as { __spike: W }).__spike, room = s.link.room, a = room.actor(s.link.me);
+    const step = room.stepFor(a);
+    const k = (p: { map: string; x: number; y: number }) => `${p.map}:${p.x}:${p.y}`;
+    const depth = new Map([[k(a.m.spot), 0]]);
+    const q = [a.m.spot];
+    for (let i = 0; i < q.length; i++) {
+      const p = q[i], n = depth.get(k(p))!;
+      if (n === 5) {
+        const g = s.placed.get(p.map)!, dpr = devicePixelRatio || 1;
+        return { spot: k(p), x: ((g.gx + p.x) * 16 + 8 - s.cam.x) * s.zoom / dpr + innerWidth / 2, y: ((g.gy + p.y) * 16 + 8 - s.cam.y) * s.zoom / dpr + innerHeight / 2 };
+      }
+      for (const d of [1, 2, 3, 4]) { const r = step(p, d); if (r && !r.warp && !r.water && !depth.has(k(r.to))) { depth.set(k(r.to), n + 1); q.push(r.to); } }
+    }
+    return null;
+  });
+  expect(goal, 'a cell five steps away').not.toBeNull();
+  await page.mouse.click(goal!.x, goal!.y);
+  const at = () => page.evaluate(() => { const s = (window as unknown as { __spike: W }).__spike; const p = s.link.room.actor(s.link.me).m.spot; return `${p.map}:${p.x}:${p.y}`; });
+  await expect.poll(at, { timeout: 15_000 }).toBe(goal!.spot);
+});

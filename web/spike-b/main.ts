@@ -300,7 +300,78 @@ function myBits(): number {
   const bits = (held.has('up') ? KEY_UP : 0) | (held.has('down') ? KEY_DOWN : 0) | (held.has('left') ? KEY_LEFT : 0) |
     (held.has('right') ? KEY_RIGHT : 0) | (held.has('b') ? KEY_B : 0) | (held.has('a') && frame >= calmUntil ? KEY_A : 0) |
     (held.has('select') || frame < selectUntil ? KEY_SELECT : 0);
-  return bits;
+  // A thumb on the pad takes over from a tapped walk.
+  if (bits) { tapWalk = null; return bits; }
+  return tapBits();
+}
+
+// ---- tap to walk (the live game's touch.ts, on the page's own world) ------------------
+// A tap on the map is a place to go: the route is a walk over the room's own steps (what a
+// thumb on the pad could walk), held a cell at a time. A tap on something that cannot be
+// stood on (a trainer, a sign, the nurse) is "walk up to it, face it, press A".
+
+const DIR_BIT: Record<number, number> = { 1: KEY_DOWN, 2: KEY_UP, 3: KEY_LEFT, 4: KEY_RIGHT };
+let tapWalk: { dirs: number[]; at: string; since: number; press: boolean } | null = null;
+const spotKey = (p: Spot) => `${p.map}:${p.x}:${p.y}`;
+
+function tapBits(): number {
+  const me = link.mine();
+  if (!tapWalk || !me) return 0;
+  const here = spotKey(me.m.spot);
+  if (here !== tapWalk.at) { tapWalk.at = here; tapWalk.since = frame; tapWalk.dirs.shift(); }
+  // Turned to face what was tapped (a bump turns): A, once, and the walk is done.
+  if (!tapWalk.dirs.length || (tapWalk.dirs.length === 1 && tapWalk.press && me.m.facing === tapWalk.dirs[0] && frame - tapWalk.since > 6)) {
+    const a = tapWalk.press && frame >= calmUntil;
+    tapWalk = null;
+    return a ? KEY_A : 0;
+  }
+  // Nothing moves for a second: something is in the way (another trainer). Stop.
+  if (frame - tapWalk.since > 60) { tapWalk = null; return 0; }
+  return DIR_BIT[tapWalk.dirs[0]];
+}
+
+/** Starts a walk to the cell under the finger. */
+function tapTo(clientX: number, clientY: number): void {
+  const me = link?.mine();
+  if (!me || !rom || isOut || battle || swapping || romUp || asking || intro()) return;
+  const dpr = devicePixelRatio || 1;
+  const wx = cam.x + (clientX * dpr - devW / 2) / zoom;
+  const wy = cam.y + (clientY * dpr - devH / 2) / zoom;
+  const p = mapUnder(wx, wy);
+  if (!p) return;
+  const goal = { map: p.m.id, x: Math.floor(wx / TILE) - p.gx, y: Math.floor(wy / TILE) - p.gy };
+  if (goal.x < 0 || goal.y < 0 || goal.x >= p.m.w || goal.y >= p.m.h) return;
+  const route = routeTo(me, goal);
+  tapWalk = route ? { dirs: route.dirs, at: spotKey(me.m.spot), since: frame, press: route.press } : null;
+}
+
+/** The steps to `goal`, or to beside it and one more toward it (a bump: face it, then A)
+ *  when it cannot be stood on. A breadth-first walk over the room's own step function. */
+function routeTo(me: Actor, goal: Spot): { dirs: number[]; press: boolean } | null {
+  const step = link.room.stepFor(me);
+  const want = spotKey(goal);
+  // A trainer on it: walk up and talk (the step function knows the ground, not who stands on it).
+  const taken = link.room.actors.some((a) => a.id !== me.id && spotKey(a.m.spot) === want);
+  const from = new Map<string, [string, number] | null>([[spotKey(me.m.spot), null]]);
+  const q: Spot[] = [me.m.spot];
+  const back = (k: string) => { const dirs: number[] = []; for (let c = k; from.get(c); c = from.get(c)![0]) dirs.unshift(from.get(c)![1]); return dirs; };
+  let beside: { k: string; d: number } | null = null;
+  for (let i = 0; i < q.length && i < 4000; i++) {
+    const at = q[i];
+    const k = spotKey(at);
+    if (k === want && !taken) return { dirs: back(k), press: false };
+    for (const d of [1, 2, 3, 4]) {
+      const r = step(at, d);
+      // The goal one step off, and not to be stood on: beside it is where to go.
+      const dx = d === 3 ? -1 : d === 4 ? 1 : 0, dy = d === 1 ? 1 : d === 2 ? -1 : 0;
+      if (!beside && at.map === goal.map && at.x + dx === goal.x && at.y + dy === goal.y && (!r || spotKey(r.to) !== want || taken)) beside = { k, d };
+      if (!r || r.warp || from.has(spotKey(r.to)) || (taken && spotKey(r.to) === want)) continue;
+      from.set(spotKey(r.to), [k, d]);
+      q.push(r.to);
+    }
+    if (beside) return { dirs: [...back(beside.k), beside.d], press: true };
+  }
+  return null;
 }
 
 // ---- marked spots: the live game's visible encounters ------------------------------------
@@ -2088,8 +2159,9 @@ const watch = new Watch({
 const pointers = new Map<number, { x: number; y: number }>();
 let pinch0: { d: number; zoom: number } | null = null;
 let moved = 0;
+let tapAt: { x: number; y: number; t: number } | null = null;
 canvas.addEventListener('pointerdown', (e) => {
-  if (!spectating) return;
+  if (!spectating) { tapAt = { x: e.clientX, y: e.clientY, t: performance.now() }; return; }
   canvas.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   moved = 0;
@@ -2115,6 +2187,9 @@ canvas.addEventListener('pointermove', (e) => {
   }
 });
 const endPointer = (e: PointerEvent) => {
+  // On my own trainer: a tap (short, and where it went down) is a place to walk to.
+  if (!spectating && tapAt && e.type === 'pointerup' && performance.now() - tapAt.t < 400 && Math.hypot(e.clientX - tapAt.x, e.clientY - tapAt.y) < 12) tapTo(e.clientX, e.clientY);
+  tapAt = null;
   if (spectating && pointers.size === 1 && moved < 6) followAt(e.clientX, e.clientY);
   pointers.delete(e.pointerId);
   if (pointers.size < 2) pinch0 = null;
