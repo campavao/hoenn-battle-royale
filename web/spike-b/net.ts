@@ -19,7 +19,7 @@ import { Host, play } from './shared/host';
 import { BOT_FILL } from '../src/match/room';
 import { keysOf, makeRoom, type Actor, type Bag, type Room, type RoomEvent } from './shared/room';
 import type { FameMon } from '../src/ui/results';
-import type { Again, CardRecord, Listed, Settings, SpMsg, WireFrame, WorldDown, WorldUp } from './shared/wire';
+import type { Again, CardRecord, Listed, PeekBag, Settings, SpMsg, WireFrame, WorldDown, WorldUp } from './shared/wire';
 
 export interface WorldLink {
   readonly room: Room;
@@ -66,10 +66,12 @@ export interface WorldLink {
   onSp: ((from: number, m: SpMsg) => void) | null;
   /** How many are watching me. */
   onEyes: ((n: number) => void) | null;
-  /** My team as it stands, for the hall of fame if I win. */
-  team(mons: FameMon[]): void;
+  /** My team as it stands, for the hall of fame if I win; my bag for a watcher. */
+  team(mons: FameMon[], bag?: PeekBag): void;
   /** Every trainer's team as they last told it. */
   readonly teams: Map<number, FameMon[]>;
+  /** And their bag, for a watcher's START (players only: a bot's is its room loot). */
+  readonly bags: Map<number, PeekBag>;
   /** For the stats line. */
   status(): string;
 }
@@ -89,6 +91,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
   host.advance();
   let seq = 0;
   const teams = new Map<number, FameMon[]>();
+  const bags = new Map<number, PeekBag>();
   // The bots' fights this page judges, as the relay keeps them (service.ts publish), for
   // watching one: from its BSTART, however late the watch begins.
   const streams = new Map<number, { foe: number; sent: SpMsg[] }>();
@@ -136,7 +139,8 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     onSp: null,
     onEyes: null,
     teams,
-    team: (mons) => { teams.set(me, mons); },
+    bags,
+    team: (mons, bag) => { teams.set(me, mons); if (bag) bags.set(me, bag); },
     status: () => 'solo: you and the bots (no relay)',
   };
   return link;
@@ -169,6 +173,7 @@ export class Online implements WorldLink {
   onSp: ((from: number, m: SpMsg) => void) | null = null;
   onEyes: ((n: number) => void) | null = null;
   readonly teams = new Map<number, FameMon[]>();
+  readonly bags = new Map<number, PeekBag>();
 
   constructor(private readonly ws: WebSocket, private readonly make: (seed: number) => Room) {
     // A hidden tab (walked away from) runs no frames; it says it is still here, under the
@@ -201,6 +206,7 @@ export class Online implements WorldLink {
       this.onEyes?.(m.n);
     } else if (m.t === 'team') {
       this.teams.set(m.id, m.mons);
+      if (m.bag) this.bags.set(m.id, m.bag);
     }
   }
 
@@ -284,7 +290,11 @@ export class Online implements WorldLink {
   end(fled = false, won = false): void { this.send({ t: 'end', ...(fled ? { fled } : {}), ...(won ? { won } : {}) }); }
   field(bits: number): void { this.send({ t: 'field', bits }); }
 
-  team(mons: FameMon[]): void { this.teams.set(this.me, mons); this.send({ t: 'team', mons }); }
+  team(mons: FameMon[], bag?: PeekBag): void {
+    this.teams.set(this.me, mons);
+    if (bag) this.bags.set(this.me, bag);
+    this.send({ t: 'team', mons, ...(bag ? { bag } : {}) });
+  }
 
   bots(a: number, b: number, winner: number): void { this.send({ t: 'bots', a, b, w: winner }); }
 

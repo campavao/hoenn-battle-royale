@@ -62,8 +62,11 @@ export type WorldUp =
    *  side A of it, so a page out of the match can watch two bots fight as live does. */
   | { t: 'sp'; m: SpMsg; as?: number }
   /** My team as it stands (after a battle, a catch, a trade): the results screen's hall
-   *  of fame when I win. */
-  | { t: 'team'; mons: FameMon[] };
+   *  of fame when I win. And my bag, for a watcher's START (Kanto's peek). */
+  | { t: 'team'; mons: FameMon[]; bag?: PeekBag };
+
+/** A bag as a watcher reads it: what is in it and the money (read-only). */
+export interface PeekBag { items: { id: number; n: number }[]; money: number }
 
 /** A published battle's message as it left the fighter's ROM (web/src/net/wire.ts's
  *  BstartMsg and TurnMsg): opaque bytes, for the watcher's ROM to replay. */
@@ -122,8 +125,8 @@ export type WorldDown =
   | { t: 'sp'; from: number; m: SpMsg }
   /** How many are watching me now. */
   | { t: 'eyes'; n: number }
-  /** Trainer `id`'s team as they last told it. */
-  | { t: 'team'; id: number; mons: FameMon[] }
+  /** Trainer `id`'s team (and bag) as they last told it. */
+  | { t: 'team'; id: number; mons: FameMon[]; bag?: PeekBag }
   | { t: 'full' }
   /** This page's world is not the relay's (an old tab after a deploy): reload. */
   | { t: 'old' };

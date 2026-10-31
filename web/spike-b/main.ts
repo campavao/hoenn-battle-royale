@@ -16,6 +16,7 @@
 // player's ROM in the browser (romart.ts): the site ships none. Nothing here is shell code.
 
 import { WorldIndex } from '../src/bots/hoenn';
+import type { PeekBag } from './shared/wire';
 import { isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
 import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
@@ -524,7 +525,8 @@ function askPaint(): void {
   const scale = zoom / (devicePixelRatio || 1);
   const labels = asking.rows.map(([label]) => label);
   if (asking.start) {
-    const balls = link.room.ring().safari && rom ? rom.safariBalls() : null;
+    // My own SAFARI BALLs: not on a watcher's peek, which is somebody else's START.
+    const balls = link.room.ring().safari && rom && !spectating ? rom.safariBalls() : null;
     startMenu.show(labels, asking.pick, balls, scale);
   } else if (asking.roller) {
     askBox.show({ kind: 'count', title: asking.title, ...asking.roller }, scale);
@@ -595,6 +597,7 @@ async function openBag(key: number, bag: Bag, who: string): Promise<void> {
  *  asked here first so the hidden field never shows. MAP (13) is the ROM's, standing where
  *  I stand, with this world's fog laid over it (ringmap.ts). */
 async function openMenu(): Promise<void> {
+  if (spectating && !battle && !swapping && !asking) return void peek();
   if (!rom || isOut || battle || swapping || asking || spectating) return;
   // The ROM's rows (start_menu.c): POKéMON once I have one, no MAP in the Safari, my
   // name for the trainer card. A phone has the room on its dock, as live.
@@ -611,6 +614,40 @@ async function openMenu(): Promise<void> {
   const c = await ask('MENU', rows, true);
   if (c === 'room') { openSheet(); return; }
   await runMenu(c);
+}
+
+/** START while watching (Kanto's peek): the trainer watched's POKéMON and BAG, read-only
+ *  -- their team with levels, HP and moves, their bag and money. A player's is what their
+ *  page last told the room (refreshed every few seconds, `team`); a bot's is dealt from
+ *  the seed, as its fights are, and its bag is what it picked up on its way. */
+async function peek(): Promise<void> {
+  const id = follow;
+  const a = id ? link.room.actor(id) : undefined;
+  if (!a) return;
+  rom?.sound(SE_WIN_OPEN);
+  const r = link.room;
+  const team: FameMon[] = a.bot
+    ? dealParty(r.seed, a.id, r.ring().phase + 1, a.m.spot.map, gradeOf(r.seed, a.id)).map((m) => ({ species: m.species, level: m.level, hp: m.hp, maxHp: m.maxHp, moves: m.moves.map((v) => ({ id: v.id })) }))
+    : link.teams.get(a.id) ?? [];
+  const bag: PeekBag | undefined = a.bot ? { items: (a.loot?.items ?? []).map((s) => ({ id: s.id, n: s.n })), money: a.loot?.money ?? 0 } : link.bags.get(a.id);
+  for (;;) {
+    const c = await ask(a.name, [['POKéMON', 'mons'], ['BAG', 'bag'], ['EXIT', '']], true);
+    if (c === 'mons') {
+      if (!team.length) { await ask(`${a.name} has not told their team yet.`, [['OK', '']]); continue; }
+      for (;;) {
+        const rows = team.map((m, i): [string, string] => [`${speciesName(m.species)} Lv${m.level}${m.maxHp ? ` ${m.hp ?? m.maxHp}/${m.maxHp}` : ''}`, String(i + 1)]);
+        const p = await ask(`${a.name}'s POKéMON`, rows);
+        if (!p) break;
+        const m = team[Number(p) - 1];
+        const moves = (m.moves ?? []).map((v): [string, string] => [moveInfo(romTables, v.id)?.name ?? `MOVE ${v.id}`, '']);
+        await ask(`${speciesName(m.species)}'s moves`, moves.length ? moves : [['-', '']]);
+      }
+    } else if (c === 'bag') {
+      if (!bag) { await ask(`${a.name} has not told their bag yet.`, [['OK', '']]); continue; }
+      const rows = bag.items.map((s): [string, string] => [`${art?.itemName(s.id) || `item ${s.id}`} x${s.n}`, '']);
+      await ask(`${a.name}'s BAG  ¥${bag.money}`, rows.length ? rows : [['(nothing)', '']]);
+    } else return;
+  }
 }
 
 /** A row of the START menu (start_menu.c's MENU_ACTION_*) on the ROM's own screen: what
@@ -887,11 +924,11 @@ function teamFrame(): void {
   tellTeam();
 }
 
-function sendTeam(mons: FameMon[]): void {
-  const text = JSON.stringify(mons);
+function sendTeam(mons: FameMon[], bag?: PeekBag): void {
+  const text = JSON.stringify([mons, bag]);
   if (text === teamSent) return;
   teamSent = text;
-  link.team(mons);
+  link.team(mons, bag);
 }
 
 /** My team to the room now, if it changed since I last told it. */
@@ -899,7 +936,15 @@ function tellTeam(): void {
   if (teamAsking || !rom) return;
   teamAsking = true;
   const l = link;
-  void rom.fameTeam().then((mons) => { if (l === link) sendTeam(mons); }).catch(() => undefined).finally(() => { teamAsking = false; });
+  // The bag goes with it, for whoever watches (their START): what is in it and the money.
+  const r = rom;
+  void r.fameTeam()
+    .then(async (mons) => {
+      const s = await r.spill().catch(() => null);
+      if (l === link) sendTeam(mons, s ? { items: s.items, money: s.money } : undefined);
+    })
+    .catch(() => undefined)
+    .finally(() => { teamAsking = false; });
 }
 
 /** The CENTER's nurse, as the match has her (pkmn_center_nurse.inc): one question, and
@@ -2860,7 +2905,8 @@ function loop(now: number): void {
     gymFrame();
     hudFrame();
     if (pressed.has('a')) dig();
-    for (const k of pressed) watch.key(k);
+    // Not while a box is up (the peek's): left and right are its keys then.
+    if (!asking) for (const k of pressed) watch.key(k);
     pressed.clear();
   }
   const t1 = performance.now();
