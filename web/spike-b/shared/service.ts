@@ -26,9 +26,12 @@ import { HASH_EVERY, fillFor, type Again, type CardRecord, type Listed, type Mem
 function recOf(r: unknown): { rec?: CardRecord } {
   if (!r || typeof r !== 'object') return {};
   const n = (v: unknown) => (Number.isInteger(v) && (v as number) >= 0 && (v as number) < 1e6 ? (v as number) : undefined);
-  const { wins, played, best } = r as { [k: string]: unknown };
+  const { wins, played, best, intro, win, lose } = r as { [k: string]: unknown };
   const w = n(wins), p = n(played), b = n(best);
-  return w === undefined || p === undefined ? {} : { rec: { wins: w, played: p, ...(b ? { best: b } : {}) } };
+  // A line is its index into the shared pool (bots/lines.ts LINES): small, or none.
+  const line = (v: unknown) => (Number.isInteger(v) && (v as number) >= 0 && (v as number) < 1000 ? (v as number) : undefined);
+  const i = line(intro), wl = line(win), l = line(lose);
+  return w === undefined || p === undefined ? {} : { rec: { wins: w, played: p, ...(b ? { best: b } : {}), ...(i !== undefined ? { intro: i } : {}), ...(wl !== undefined ? { win: wl } : {}), ...(l !== undefined ? { lose: l } : {}) } };
 }
 
 /** A passcode: four of the room codes' letters (ui/entry.ts PASS_ENTRY). */
