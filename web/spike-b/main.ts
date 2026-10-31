@@ -287,8 +287,16 @@ function actors(): Actor[] {
 /** The dock's BIKE / WALK, a tap: SELECT held long enough for the step under way to end
  *  and the bike to be got on or off (sim.ts reads it as the next action is chosen). */
 let selectUntil = 0;
+let toldLoading = false;
 function myBits(): number {
   if (spectating || battle || swapping || romUp || asking || intro()) return 0;
+  // The battle ROM still booting (a match started seconds after the page opened): a
+  // marked spot or a trainer stepped into now could only say "still loading" and spend
+  // the spot, so the trainer waits for it, once told why.
+  if (!rom) {
+    if (held.size && !toldLoading) { toldLoading = true; tick('Getting the game ready…'); }
+    return 0;
+  }
   const bits = (held.has('up') ? KEY_UP : 0) | (held.has('down') ? KEY_DOWN : 0) | (held.has('left') ? KEY_LEFT : 0) |
     (held.has('right') ? KEY_RIGHT : 0) | (held.has('b') ? KEY_B : 0) | (held.has('a') && frame >= calmUntil ? KEY_A : 0) |
     (held.has('select') || frame < selectUntil ? KEY_SELECT : 0);

@@ -53,3 +53,79 @@ test('a hosted room with bots plays through to its results', async ({ page }) =>
   await expect(page.locator('#results-standings')).toBeVisible();
   await expect(page.locator('#results-line')).toContainText(/of \d+/);
 });
+
+/** The walk to the nearest cell `goal` takes, over the room's own step function (bots
+ *  walk the same one), as directions: 1 south, 2 north, 3 west, 4 east. */
+async function route(page: Page, goal: string): Promise<number[] | null> {
+  return page.evaluate((goal) => {
+    const s = (window as unknown as { __spike: { link: { me: number; room: any } } }).__spike;
+    const room = s.link.room, a = room.actor(s.link.me);
+    const ok = new Function('p', 'room', `return (${goal})(p, room)`) as (p: unknown, room: unknown) => boolean;
+    const step = room.stepFor(a);
+    const k = (p: { map: string; x: number; y: number }) => `${p.map}:${p.x}:${p.y}`;
+    const from = new Map<string, [string, number] | null>([[k(a.m.spot), null]]);
+    const q = [a.m.spot];
+    for (let i = 0; i < q.length && i < 6000; i++) {
+      const p = q[i];
+      if (i > 0 && ok(p, room)) {
+        const dirs: number[] = [];
+        for (let c = k(p); from.get(c); c = from.get(c)![0]) dirs.unshift(from.get(c)![1]);
+        return dirs;
+      }
+      for (const d of [1, 2, 3, 4]) {
+        const r = step(p, d);
+        if (!r || r.warp || r.water || from.has(k(r.to))) continue;
+        from.set(k(r.to), [k(p), d]);
+        q.push(r.to);
+      }
+    }
+    return null;
+  }, goal);
+}
+
+const KEY = { 1: 'ArrowDown', 2: 'ArrowUp', 3: 'ArrowLeft', 4: 'ArrowRight', a: 'z' } as Record<number | string, string>;
+const key = (page: Page, k: string, down: boolean) => page.evaluate(([k, down]) => dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { key: k as string, bubbles: true })), [k, down] as const);
+
+test('a Safari catch, the drop on the fly map, and out of the Safari', async ({ page }) => {
+  test.setTimeout(420_000);
+  // Straight in, the way quick play can be: the battle ROM may still be booting.
+  await page.goto(`/?rom=${romHashParam()}`);
+  await page.locator('#lobby-rows button', { hasText: 'HOST A ROOM' }).click({ timeout: 90_000 });
+  await setOption(page, 'room-safari', 'SAFARI 120s');
+  await page.locator('#room-start').click();
+  type S = { link: { me: number; room: { actor(id: number): { m: { spot: { map: string; x: number; y: number } } } | undefined; ring(): { safari?: boolean } } }; rom?: { partyCount(): number }; battle: unknown; swapping: boolean };
+  const s = <T>(f: (s: S) => T) => page.evaluate((src) => new Function('s', `return (${src})(s)`)((window as unknown as { __spike: S }).__spike), f.toString()) as Promise<T>;
+  await expect.poll(() => s((s) => !!s.link?.room.actor(s.link.me)), { timeout: 60_000 }).toBe(true);
+  const spot = () => s((s) => { const p = s.link.room.actor(s.link.me)?.m.spot; return p ? `${p.map}:${p.x}:${p.y}` : ''; });
+
+  // To marked spots until something is caught: A once every two seconds in a battle
+  // (BALL is where the cursor starts), never a spot spent on a ROM still booting.
+  let caught = 0;
+  for (let tries = 0; tries < 8 && !caught; tries++) {
+    const dirs = await route(page, '(p, room) => room.patchesOn(p.map).some((q) => q.x === p.x && q.y === p.y) && !room.taken.has(room.patchKey ? room.patchKey(p) : -1)');
+    expect(dirs, 'a marked spot to walk to').not.toBeNull();
+    for (const d of dirs!) {
+      const was = await spot();
+      await key(page, KEY[d], true);
+      await expect.poll(async () => (await spot()) !== was || !!(await s((s) => s.battle)), { timeout: 15_000, intervals: [30] }).toBe(true);
+      await key(page, KEY[d], false);
+      if (await s((s) => s.battle)) break;
+    }
+    await expect.poll(() => s((s) => !!s.battle), { timeout: 5_000 }).toBe(true).catch(() => undefined);
+    for (let t = 0; t < 45 && (await s((s) => !!s.battle)); t++) {
+      expect(await page.locator('#battle-note').textContent(), 'a real battle, not "still loading"').not.toContain('loading');
+      await key(page, KEY.a, true); await page.waitForTimeout(150); await key(page, KEY.a, false);
+      await page.waitForTimeout(1850);
+    }
+    caught = await s((s) => s.rom?.partyCount() ?? 0);
+  }
+  expect(caught, 'a POKeMON caught in the Safari').toBeGreaterThan(0);
+
+  // The buzzer: the ROM's own fly map ("Drop where?"), A to pick, and out of the Safari.
+  await expect.poll(() => s((s) => !s.link.room.ring().safari), { timeout: 150_000 }).toBe(true);
+  await expect.poll(() => s((s) => s.swapping), { timeout: 15_000 }).toBe(true);
+  await page.waitForTimeout(3000);
+  await key(page, KEY.a, true); await page.waitForTimeout(150); await key(page, KEY.a, false);
+  await expect.poll(() => spot(), { timeout: 60_000 }).not.toMatch(/^MAP_SAFARI/);
+  expect(await s((s) => s.rom?.partyCount() ?? 0), 'the team came with the trainer').toBe(caught);
+});
