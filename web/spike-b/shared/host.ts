@@ -115,8 +115,8 @@ export class Host {
   }
 
   /** The page fought two bots for the room (a `bots` event): who won, 0 for nobody. */
-  bots(id: number, a: number, b: number, winner: number): void {
-    if (this.players.has(id)) this.pending.push({ c: 'bots', id, a, b, winner });
+  bots(id: number, a: number, b: number, winner: number, hp?: number[], used?: [number[] | undefined, number[] | undefined]): void {
+    if (this.players.has(id)) this.pending.push({ c: 'bots', id, a, b, winner, ...(hp ? { hp } : {}), ...(used?.some(Boolean) ? { used: [used[0] ?? [], used[1] ?? []] as [number[], number[]] } : {}) });
   }
 
   /** A page gone for now (`on`), or back. Back, it numbers its keys from 1 again. */
@@ -148,8 +148,8 @@ export class Host {
   }
 
   /** What trainer `id`'s fight left of bot `bot`'s team: each slot's HP share. */
-  wear(id: number, bot: number, hp: number[]): void {
-    if (this.players.has(id)) this.pending.push({ c: 'wear', id, bot, hp });
+  wear(id: number, bot: number, hp: number[], spent?: number[]): void {
+    if (this.players.has(id)) this.pending.push({ c: 'wear', id, bot, hp, ...(spent ? { spent } : {}) });
   }
 
   /** FLY off the page's MAP landed it on `map` at x, y. */

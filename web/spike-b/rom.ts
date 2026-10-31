@@ -95,6 +95,8 @@ export interface Fought {
   /** A bot's team as the fight left it (br_bot.c sends gEnemyParty under its seat): each
    *  slot's HP and most. */
   foe?: { hp: number; maxHp: number }[];
+  /** What the bot spent of the items its card carried (br_bot.c SendSpent). */
+  spent?: number[];
 }
 
 /** A link battle's wire: our blocks out; theirs handed in by the page as they come. */
@@ -131,7 +133,7 @@ export interface Given { items: { id: number; n: number }[]; money: number; used
 export interface RomBattles {
   /** Fight `name`'s party. Resolves when the ROM is back on the field. */
   /** `voice`: the foe's three lines, said in the fight (br_battle.c BrBattle_SetVoice). */
-  fight(name: string, mons: PackedMon[], skin: number, onStart: () => void, fog?: boolean, voice?: Lines): Promise<Fought>;
+  fight(name: string, mons: PackedMon[], skin: number, onStart: () => void, fog?: boolean, voice?: Lines, items?: number[]): Promise<Fought>;
   /** The wild battle a marked spot on map (group, num) starts; `behavior` is the spot's
    *  metatile behaviour (water or land, and the backdrop). */
   wild(group: number, num: number, behavior: number, onStart: () => void, fog?: boolean): Promise<Fought>;
@@ -636,9 +638,11 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     // but the mon a catch with a full party let go (BrLoot_Released): nothing leaves the match.
     const released: { species: number; level: number }[] = [];
     let foe: Fought['foe'];
+    let spent: number[] | undefined;
     const pub = emu.onFrame(() => drain((m) => {
       if (m.t === 'spill' && m.seat === ME && !m.bag) for (const r of m.mons) released.push({ species: r.species, level: r.level });
       else if (m.t === 'party' && m.seat === FOE_SEAT) foe = m.mons.map((r) => ({ hp: r.hp, maxHp: r.maxHp }));
+      else if (m.t === 'spent' && m.seat === FOE_SEAT) spent = m.items;
       else published(m);
     }));
     kick();
@@ -660,7 +664,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       // hidden ROM's party while a catch prompt waits.
       fighting = false;
       lay(false, at);
-      result = { ok: true, ...after(), released, ...(foe ? { foe } : {}) };
+      result = { ok: true, ...after(), released, ...(foe ? { foe } : {}), ...(spent?.length ? { spent } : {}) };
       // A catch with a full party: back on its field the ROM asks which one makes room
       // (br_catch.c). The player answers it on the ROM's screen, as in a match.
       // Ten seconds with the prompt never put up (asked, byte 1, still 0) is a stall, not
@@ -705,14 +709,15 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       if (singing) writeTune();
       else sing();
     },
-    fight(name, mons, skin, onStart, fog = false, lines) {
+    fight(name, mons, skin, onStart, fog = false, lines, items) {
       // The path a bot fight takes: its card, its ghost beside us, its challenge. All three
       // go on the ring in one go, on purpose: the ROM reads the ring in order, so the card
       // is staged before the CHALLENGE that needs it (the fight is up in ~80 frames).
       return onCore(() => battle(fog, () => {
         // Its lines first: the intro after "would like to battle!", the win or lose at the end.
         if (lines) for (const m of voice(FOE_SEAT, lines)) send(m);
-        send({ t: 'trainer', seat: FOE_SEAT, name, mons });
+        // With what it may spend in there (POK-237): br_bot.c hands the AI four at most.
+        send({ t: 'trainer', seat: FOE_SEAT, name, mons, ...(items?.length ? { items: items.slice(0, 4) } : {}) });
         send({ t: 'place', v: PROTOCOL, seat: FOE_SEAT, map: { group: 0, num: 9 }, x: 20, y: 8, f: 1, st: 'alive', sprite: String(skin) });
         send({ t: 'challenge', seat: FOE_SEAT, opponent: ME, nonce: 0 });
       }, () => emu.read(fightAt + 2, 8) === 1, () => emu.read(fightAt + 2, 8) === 0, onStart,

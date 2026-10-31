@@ -417,6 +417,26 @@ describe('trainer against trainer', () => {
     expect(room.results.fallen).toMatchObject([{ id: 1, by: 'TWO', bot: true }]);
   });
 
+  it("a bots' fight spends from both bags and leaves the winner what it had left (brain.ts settleAnswered)", () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 1, bot: true, name: 'ONE', skin: 4, spot: { map: L, x: 9, y: 12 }, facing: 4 });
+    room.apply({ c: 'join', id: 2, bot: true, name: 'TWO', skin: 5, spot: { map: L, x: 11, y: 12 }, facing: 3 });
+    room.apply({ c: 'join', id: 7, bot: false, name: 'A', skin: 0, spot: { map: L, x: 3, y: 3 }, facing: 1 });
+    const one = room.actor(1)!, two = room.actor(2)!;
+    one.loot = { items: [{ id: 13, n: 2 }, { id: 22, n: 1 }], money: 0 };
+    two.loot = { items: [{ id: 13, n: 1 }], money: 0 };
+    for (let i = 0; i < 400 && !one.battling; i++) room.step(new Map());
+    expect(one.foe).toBe(2);
+    room.apply({ c: 'lock' });
+    // TWO won on half its lead and a fainted second; ONE drank a POTION, TWO its only one.
+    room.apply({ c: 'bots', id: 7, a: 1, b: 2, winner: 2, hp: [0.5, 0, 3], used: [[13], [13, 13]] });
+    expect(two.wear).toEqual([0.5, 0, 1]);
+    expect(two.loot!.items).toEqual([]);
+    // What ONE drank is not on the ground where it fell.
+    expect(room.spillAt(L, 9, 12)!.bag.items).not.toContainEqual({ id: 13, n: 2 });
+    expect(room.spillAt(L, 9, 12)!.bag.items).toContainEqual({ id: 13, n: 1 });
+  });
+
   it('one bot fight at a time, room-wide; the page that ran it leaving lets them go', () => {
     const room = makeRoom(MAPS, PATCHES, 99);
     room.apply({ c: 'join', id: 7, bot: false, name: 'A', skin: 0, spot: { map: L, x: 3, y: 3 }, facing: 1 });
@@ -634,6 +654,26 @@ describe('item balls', () => {
     expect(wornParty(team, bot.wear).map((m) => m.hp)).toEqual([20, 0, 20, 10]);
     expect(wornParty(team, [0.001]).map((m) => m.hp)[0]).toBe(1);
     expect(wornParty(team, undefined)).toBe(team);
+  });
+
+  it("a bot fights a trainer with its own bag: what the ROM says it spent is gone from it (POK-237)", () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_PETALBURG_CITY', x: 10, y: 22 }, facing: 4 });
+    room.apply({ c: 'join', id: 7, bot: true, name: 'BOT', skin: 0, spot: { map: 'MAP_PETALBURG_CITY', x: 11, y: 22 }, facing: 3 });
+    const bot = room.actor(7)!;
+    bot.loot = { items: [{ id: 13, n: 2 }, { id: 22, n: 1 }], money: 0 };
+    room.actor(1000)!.calm = 0;
+    room.step(new Map([[1000, [0]]]));
+    expect(room.step(new Map([[1000, [KEY_A]]])).find((e) => e.type === 'fight')).toMatchObject({ id: 1000, foe: 7 });
+    room.apply({ c: 'wear', id: 1000, bot: 7, hp: [0.5], spent: [13, 22] });
+    expect(bot.loot.items).toEqual([{ id: 13, n: 1 }]);
+    // Once: a second report spends nothing more.
+    room.apply({ c: 'wear', id: 1000, bot: 7, hp: [0.5], spent: [13] });
+    expect(bot.loot.items).toEqual([{ id: 13, n: 1 }]);
+    // Beaten: what it has left is what goes down.
+    room.apply({ c: 'end', id: 1000, won: true });
+    expect(room.spillAt('MAP_PETALBURG_CITY', 11, 22)!.bag.items).toContainEqual({ id: 13, n: 1 });
+    expect(room.spillAt('MAP_PETALBURG_CITY', 11, 22)!.bag.items).not.toContainEqual({ id: 22, n: 1 });
   });
 
   it('a hurt bot walks to a CENTER and comes out whole (brain.ts HURT and healHere)', () => {

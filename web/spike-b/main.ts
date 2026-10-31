@@ -23,6 +23,7 @@ import { isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/worl
 import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
+import { battleItems } from '../src/bots/bag';
 import { DIR_EAST } from './sim';
 import { ATTENDANT, BOATS, DOCKS, MOORINGS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
@@ -816,9 +817,12 @@ function startFor(e: RoomEvent): void {
     // With the wounds its last fights left it (room.ts wear): bots wear down, as live.
     const party = wornParty(dealParty(link.room.seed, foe.id, link.room.ring().phase + 1, foe.m.spot.map, gradeOf(link.room.seed, foe.id)), foe.wear);
     const fog = inFogNow(), l = link;
-    handOff(foe, (r, onStart) => r.fight(foe.name, party, foe.skin, onStart, fog, voiceFor(link.room.seed, foe.id)).then((f) => {
-      // Before the fight's end: the room takes it from the trainer the bot last fought.
-      if (f.foe?.length && l === link) l.wear(foe.id, f.foe.map((m) => (m.maxHp > 0 ? m.hp / m.maxHp : 0)));
+    // And its bag (POK-237): what it picked up, the fight's to spend.
+    const items = battleItems(foe.loot?.items ?? []);
+    handOff(foe, (r, onStart) => r.fight(foe.name, party, foe.skin, onStart, fog, voiceFor(link.room.seed, foe.id), items).then((f) => {
+      // Before the fight's end: the room takes it from the trainer the bot last fought,
+      // its wounds and what it spent.
+      if (f.foe?.length && l === link) l.wear(foe.id, f.foe.map((m) => (m.maxHp > 0 ? m.hp / m.maxHp : 0)), f.spent);
       return f;
     }));
   } else if (e.type === 'duel') {
@@ -856,11 +860,17 @@ async function judgeBots(ida: number, idb: number): Promise<void> {
   const l = link, r = l.room;
   const side = (id: number) => {
     const b = r.actor(id);
-    return { seat: id, party: b ? wornParty(dealParty(r.seed, id, r.ring().phase + 1, b.m.spot.map, gradeOf(r.seed, id)), b.wear) : [] };
+    // Each with its wounds and its bag, as in a fight with a trainer (brain.ts begin).
+    return { seat: id, party: b ? wornParty(dealParty(r.seed, id, r.ring().phase + 1, b.m.spot.map, gradeOf(r.seed, id)), b.wear) : [], items: battleItems(b?.loot?.items ?? []) };
   };
   const a = side(ida), b = side(idb);
   const out = judge ? await judge(a, b).catch(() => null) : null;
-  if (link === l) l.bots(ida, idb, out?.winner ?? 0);
+  if (link !== l) return;
+  if (!out) { l.bots(ida, idb, 0); return; }
+  // What the winner has left, mon for mon (brain.ts settleAnswered), as shares.
+  const won = out.winner === ida ? a : b, left = out.winner === ida ? out.a : out.b;
+  const hp = won.party.map((m, i) => (m.maxHp > 0 ? Math.min(1, (left[i]?.hp ?? m.hp) / m.maxHp) : 0));
+  l.bots(ida, idb, out.winner, hp, [out.usedA, out.usedB]);
 }
 
 /** Once a second, between battles: what my team could do on the field (SURF, CUT,

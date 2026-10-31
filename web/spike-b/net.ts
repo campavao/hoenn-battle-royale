@@ -36,7 +36,7 @@ export interface WorldLink {
   /** What my team could do on the field now (FIELD_*). */
   field(bits: number): void;
   /** The bots the room gave me to fight: `winner` won (0, no answer). */
-  bots(a: number, b: number, winner: number): void;
+  bots(a: number, b: number, winner: number, hp?: number[], used?: [number[], number[]]): void;
   /** Where to drop me when the Safari ends. */
   pick(map: string): void;
   /** My trade with event `n`'s trader is over: I gave him `given` (0, nothing). */
@@ -50,7 +50,7 @@ export interface WorldLink {
   /** FLY off the MAP landed me on `map` at x, y. */
   fly(map: string, x: number, y: number): void;
   /** What my fight left of the bot I fought (rom.ts Fought.foe). */
-  wear(bot: number, hp: number[]): void;
+  wear(bot: number, hp: number[], spent?: number[]): void;
   /** The ball `key` would not go in my bag: put it back. */
   drop(key: number, rest?: Bag): void;
   /** My team is down: off the map. `by` who beat me, `wild` a wild POKeMON did. */
@@ -116,13 +116,13 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     mine: () => host.room.actor(me),
     end: (fled, won) => host.end(me, fled, won),
     field: (bits) => host.field(me, bits),
-    bots: (a, b, winner) => host.bots(me, a, b, winner),
+    bots: (a, b, winner, hp, used) => host.bots(me, a, b, winner, hp, used),
     traded: (n, given) => host.traded(me, n, given),
     released: (mons) => host.released(me, mons),
     open: (n) => host.open(me, n),
     sail: (to) => host.sail(me, to),
     fly: (map, x, y) => host.fly(me, map, x, y),
-    wear: (bot, hp) => host.wear(me, bot, hp),
+    wear: (bot, hp, spent) => host.wear(me, bot, hp, spent),
     pick: (map) => host.pick(me, map),
     drop: (key, rest) => host.drop(me, key, rest),
     out: (bag, by, wild) => host.out(me, bag, by, wild),
@@ -299,14 +299,16 @@ export class Online implements WorldLink {
     this.send({ t: 'team', mons, ...(bag ? { bag } : {}) });
   }
 
-  bots(a: number, b: number, winner: number): void { this.send({ t: 'bots', a, b, w: winner }); }
+  bots(a: number, b: number, winner: number, hp?: number[], used?: [number[], number[]]): void {
+    this.send({ t: 'bots', a, b, w: winner, ...(hp ? { hp } : {}), ...(used?.[0].length ? { ua: used[0] } : {}), ...(used?.[1].length ? { ub: used[1] } : {}) });
+  }
 
   traded(n: number, given: number): void { this.send({ t: 'traded', n, sp: given }); }
   released(mons: { species: number; level: number }[]): void { this.send({ t: 'released', mons: mons.map((m) => ({ sp: m.species, lv: m.level })) }); }
   open(n: number): void { this.send({ t: 'open', n }); }
   sail(to: string): void { this.send({ t: 'sail', to }); }
   fly(map: string, x: number, y: number): void { this.send({ t: 'fly', map, x, y }); }
-  wear(bot: number, hp: number[]): void { this.send({ t: 'wear', bot, hp }); }
+  wear(bot: number, hp: number[], spent?: number[]): void { this.send({ t: 'wear', bot, hp, ...(spent?.length ? { spent } : {}) }); }
 
   pick(map: string): void { this.send({ t: 'pick', map }); }
 
