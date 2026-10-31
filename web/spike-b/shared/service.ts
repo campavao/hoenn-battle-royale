@@ -262,6 +262,8 @@ export class WorldService {
           if (typeof m.to === 'string') host.sail(phone.id, m.to);
         } else if (m.t === 'open') {
           if (Number.isInteger(m.n)) host.open(phone.id, m.n);
+        } else if (m.t === 'released') {
+          if (Array.isArray(m.mons)) host.released(phone.id, m.mons.filter((r) => Number.isInteger(r?.sp) && r.sp > 0 && r.sp < 412 && Number.isInteger(r.lv) && r.lv >= 1 && r.lv <= 100).map((r) => ({ species: r.sp, level: r.lv })));
         } else if (m.t === 'traded') {
           if (Number.isInteger(m.n) && Number.isInteger(m.sp)) host.traded(phone.id, m.n, m.sp);
         } else if (m.t === 'bots') {

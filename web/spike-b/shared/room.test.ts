@@ -169,6 +169,30 @@ describe('bots with somewhere to be', () => {
   });
 });
 
+describe('released', () => {
+  it('a mon a full party let go lies beside its trainer as a ball, never under them (POK-294)', () => {
+    const host = new Host(makeRoom(MAPS, PATCHES, 99), 0, MAPS);
+    const a = host.join('A', 0, { map: 'MAP_ROUTE101', x: 10, y: 10 });
+    host.advance();
+    const me = host.room.actor(a)!;
+    host.released(a, [{ species: 25, level: 12 }]);
+    host.advance();
+    host.released(a, [{ species: 4, level: 9 }]);
+    host.advance();
+    const balls = [...host.room.spills.values()].filter((s) => s.bag.mons?.length === 1 && [25, 4].includes(s.bag.mons[0].species));
+    expect(balls.map((b) => b.bag.mons![0].species).sort((x, y) => x - y)).toEqual([4, 25]);
+    for (const b of balls) {
+      expect(b.map).toBe(me.m.spot.map);
+      expect(Math.abs(b.x - me.m.spot.x) + Math.abs(b.y - me.m.spot.y), 'beside, not under').toBe(1);
+    }
+    expect(new Set(balls.map((b) => `${b.x}:${b.y}`)).size, 'one cell each').toBe(2);
+    // A page that was not there sees the same balls.
+    const late = makeRoom(MAPS, PATCHES, 99);
+    late.load(host.room.state());
+    expect([...late.spills.keys()].sort()).toEqual([...host.room.spills.keys()].sort());
+  });
+});
+
 describe('comings and goings', () => {
   it('a trainer who leaves mid-fight lets the bot walk again', () => {
     const room = makeRoom(MAPS, PATCHES, 99);

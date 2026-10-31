@@ -36,6 +36,8 @@ export type WorldUp =
   | { t: 'bots'; a: number; b: number; w: number }
   /** My trade with event `n`'s trader is over: I gave him `sp` (0, nothing). */
   | { t: 'traded'; n: number; sp: number }
+  /** My catch with a full party let these go (room.ts `released`): species, level. */
+  | { t: 'released'; mons: { sp: number; lv: number }[] }
   | { t: 'open'; n: number }
   | { t: 'sail'; to: string }
   /** Drop me on this map when the Safari ends. */

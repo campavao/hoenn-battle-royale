@@ -41,6 +41,8 @@ export interface WorldLink {
   pick(map: string): void;
   /** My trade with event `n`'s trader is over: I gave him `given` (0, nothing). */
   traded(n: number, given: number): void;
+  /** My catch with a full party let these go: they lie beside me (room.ts `released`). */
+  released(mons: { species: number; level: number }[]): void;
   /** I opened event `n`'s REGI wall. */
   open(n: number): void;
   /** I sail to story `to`'s island, or ('') back to Lilycove. */
@@ -109,6 +111,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     field: (bits) => host.field(me, bits),
     bots: (a, b, winner) => host.bots(me, a, b, winner),
     traded: (n, given) => host.traded(me, n, given),
+    released: (mons) => host.released(me, mons),
     open: (n) => host.open(me, n),
     sail: (to) => host.sail(me, to),
     pick: (map) => host.pick(me, map),
@@ -283,6 +286,7 @@ export class Online implements WorldLink {
   bots(a: number, b: number, winner: number): void { this.send({ t: 'bots', a, b, w: winner }); }
 
   traded(n: number, given: number): void { this.send({ t: 'traded', n, sp: given }); }
+  released(mons: { species: number; level: number }[]): void { this.send({ t: 'released', mons: mons.map((m) => ({ sp: m.species, lv: m.level })) }); }
   open(n: number): void { this.send({ t: 'open', n }); }
   sail(to: string): void { this.send({ t: 'sail', to }); }
 

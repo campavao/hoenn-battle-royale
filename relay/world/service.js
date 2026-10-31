@@ -2332,6 +2332,7 @@ var HOME_N = 1e3;
 var HOME_MONS = [277, 280, 283, 1, 4, 7, 64, 67, 75, 93, 385, 143];
 var EVENT_SPILL = 2 << 20;
 var eventPiece = (n, i) => EVENT_SPILL | n << 4 | i;
+var RELEASED_SPILL = 3 << 20;
 var emptyBag = (b) => !b.items.length && !b.money && !b.mons?.length;
 var GRACE = 120;
 var LOCKOUT = 600;
@@ -2464,6 +2465,19 @@ var Room = class {
     } else if (cmd.c === "open") {
       const a = this.actor(cmd.id), e = this.events.find((q) => q.n === cmd.n);
       if (a && e && e.story && DOORS[e.story] && a.m.spot.map === e.map && atWall(a)) e.opened = true;
+    } else if (cmd.c === "released") {
+      const a = this.actor(cmd.id);
+      if (!a) return;
+      const step = this.stepFor(a);
+      const used = /* @__PURE__ */ new Set();
+      for (const mon2 of cmd.mons.slice(0, 6)) {
+        const to = [a.m.facing, 1, 2, 3, 4].map((d) => step(a.m.spot, d)).find((r) => r && !r.warp && !r.hop && !used.has(`${r.to.map}:${r.to.x}:${r.to.y}`) && !this.spillAt(r.to.map, r.to.x, r.to.y) && !this.groundAt(r.to.map, r.to.x, r.to.y))?.to;
+        if (!to) return;
+        used.add(`${to.map}:${to.x}:${to.y}`);
+        let key = RELEASED_SPILL | (cmd.id & 255) << 12 | this.tick & 4095;
+        while (this.spills.has(key)) key++;
+        this.spills.set(key, { key, map: to.map, x: to.x, y: to.y, name: "", bag: { items: [], money: 0, mons: [{ species: mon2.species, level: mon2.level }] } });
+      }
     } else if (cmd.c === "traded") {
       const t = this.events.find((e) => e.n === cmd.n)?.trader ?? this.homes.find((h) => h.n === cmd.n);
       if (!t || t.busy !== cmd.id) return;
@@ -3917,6 +3931,10 @@ var Host = class {
   traded(id, n, given) {
     if (this.players.has(id)) this.pending.push({ c: "traded", id, n, given });
   }
+  /** The page's catch with a full party let `mons` go (room.ts `released`). */
+  released(id, mons) {
+    if (this.players.has(id) && mons.length) this.pending.push({ c: "released", id, mons: mons.slice(0, 6) });
+  }
   /** The page saw a Flying-type in its team at event `n`'s REGI wall. */
   open(id, n) {
     if (this.players.has(id)) this.pending.push({ c: "open", id, n });
@@ -4209,6 +4227,8 @@ var WorldService = class {
           if (typeof m.to === "string") host.sail(phone.id, m.to);
         } else if (m.t === "open") {
           if (Number.isInteger(m.n)) host.open(phone.id, m.n);
+        } else if (m.t === "released") {
+          if (Array.isArray(m.mons)) host.released(phone.id, m.mons.filter((r) => Number.isInteger(r?.sp) && r.sp > 0 && r.sp < 412 && Number.isInteger(r.lv) && r.lv >= 1 && r.lv <= 100).map((r) => ({ species: r.sp, level: r.lv })));
         } else if (m.t === "traded") {
           if (Number.isInteger(m.n) && Number.isInteger(m.sp)) host.traded(phone.id, m.n, m.sp);
         } else if (m.t === "bots") {
@@ -4538,4 +4558,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "110a9b031b4f";
+export const WORLD_HASH = "7024546d5354";
