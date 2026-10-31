@@ -1,0 +1,3 @@
+# Node scripts with a #! line: CRLF there breaks their import under vitest on Windows
+# (scripts/e2e-shard.mjs, "Invalid or unexpected token"). CI checks out LF anyway.
+*.mjs text eol=lf
