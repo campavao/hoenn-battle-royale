@@ -48,7 +48,8 @@ import { GIFTS } from '../src/match/gifts';
 import { GOLD } from '../src/match/events';
 import { FLYING, STORIES } from '../src/match/story';
 import hiddenJson from './data/hidden.json';
-import { RomArt } from './romart';
+import { RomArt, type MapAnim } from './romart';
+import { ANIM_COUNTER_MAX } from '../src/tile-anims';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
 import { FADE_COLOR_WORD, FADE_Y_WORD, FOG_EVA, FOG_EVB, fadeOf, keyPicture } from '../src/field';
@@ -95,6 +96,8 @@ interface Placed {
   ground?: HTMLCanvasElement;
   cover?: HTMLCanvasElement;
   border?: HTMLCanvasElement;
+  /** Its animated cells (romart.ts), laid over the ground each frame. */
+  anims?: MapAnim[];
   borderTint?: string;
   mips?: HTMLCanvasElement[]; // 1/4, 1/8, 1/16, each averaged from the one before
   /** Painted with its REGI wall open (br_story.c's Open). */
@@ -213,7 +216,27 @@ function paint(p: Placed): boolean {
   p.ground = a.ground;
   p.cover = a.cover;
   p.border = a.border;
+  p.anims = a.anims;
   return true;
+}
+
+/** The map's animated cells in view (romart.ts anims), each in the look tileset_anims.c's
+ *  counter has on show now: the sea, its edges, the waterfalls, the flowers, the towns'
+ *  own (Cam, 10-30: "water animation not working"). */
+function drawAnims(ctx: CanvasRenderingContext2D, p: Placed, vx0: number, vy0: number, vx1: number, vy1: number): void {
+  if (!p.anims?.length) return;
+  const step = frame % ANIM_COUNTER_MAX;
+  const x0 = Math.floor(vx0 / TILE) - p.gx, y0 = Math.floor(vy0 / TILE) - p.gy;
+  const x1 = Math.ceil(vx1 / TILE) - p.gx, y1 = Math.ceil(vy1 / TILE) - p.gy;
+  const w = p.m.w;
+  for (const a of p.anims) {
+    const sx = a.states[step] * TILE;
+    for (const i of a.cells) {
+      const cx = i % w, cy = (i - cx) / w;
+      if (cx < x0 || cx > x1 || cy < y0 || cy > y1) continue;
+      ctx.drawImage(a.sheet, sx, 0, TILE, TILE, (p.gx + cx) * TILE, (p.gy + cy) * TILE, TILE, TILE);
+    }
+  }
 }
 
 // ---- actors: the one source of position ------------------------------------------------
@@ -2593,7 +2616,7 @@ function draw(): void {
     visible.push(p);
     if ((p.ground || painted++ < 2) && paint(p)) {
       if (far) ctx.drawImage(mipFor(p, z), x, y, p.m.w * TILE, p.m.h * TILE);
-      else ctx.drawImage(p.ground!, x, y);
+      else { ctx.drawImage(p.ground!, x, y); drawAnims(ctx, p, vx0, vy0, vx1, vy1); }
     }
   }
   if (!far) for (const p of visible) drawPatches(p);

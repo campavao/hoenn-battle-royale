@@ -9,6 +9,7 @@ import { HOENN } from './bots/hoenn';
 import type { Band, Emulator } from './emu';
 import { GBA_H, GBA_W, PATCH_MAP, PATCH_MAX, PATCH_SPRITE_IDS, PATCH_TAKEN_SIZE, SPRITE_COUNT, lcdOrigin, neighbours, type Camera, type FieldSprite, type PatchMark, type Reached } from './field';
 import spritesData from './data/sprites.json';
+import { TILE_ANIMS, type TileAnim } from './tile-anims';
 
 const TILE = 16;
 const SHEETS = spritesData as Record<string, { w: number; h: number; frames: number }>;
@@ -106,32 +107,7 @@ const CORE_PEOPLE_MAX = 64;
 const CORE_HEADER = 8;
 const CORE_ENTRY = 16;
 
-/** One of tileset_anims.c's animations of a town's own tiles, as its QueueAnimTiles_*
- *  call reads: `frames` (a pointer array) shown `tiles` tiles at `dest` (a tile of the
- *  secondary tileset) on the frames whose timer % div is `phase`, frame (timer / div -
- *  lag) % count. `eight` is one of eight, its VDests: phase and lag k at dest + 4k, for k
- *  0..7. Mauville's flowers switch to `framesB` (countB long) past their first 12. */
-type TileAnim = { set: string; frames: string; count: number; tiles: number; div: number; dest: number; phase?: number; lag?: number; eight?: true; framesB?: string; countB?: number };
-
-/** tileset_anims.c's TilesetAnim_* for the outdoor towns (array lengths checked against
- *  the source by field-extra.test.ts). */
-export const TILE_ANIMS: readonly TileAnim[] = [
-  { set: 'Rustboro', frames: 'Rustboro_WindyWater', count: 8, tiles: 4, div: 8, dest: 128, eight: true },
-  { set: 'Rustboro', frames: 'Rustboro_Fountain', count: 2, tiles: 4, div: 8, dest: 448 },
-  { set: 'Dewford', frames: 'Dewford_Flag', count: 4, tiles: 6, div: 8, dest: 170 },
-  { set: 'Slateport', frames: 'Slateport_Balloons', count: 4, tiles: 4, div: 16, dest: 224 },
-  { set: 'Mauville', frames: 'Mauville_Flower1', count: 12, framesB: 'Mauville_Flower1_B', countB: 4, tiles: 4, div: 8, dest: 96, eight: true },
-  { set: 'Mauville', frames: 'Mauville_Flower2', count: 12, framesB: 'Mauville_Flower2_B', countB: 4, tiles: 4, div: 8, dest: 128, eight: true },
-  { set: 'Lavaridge', frames: 'Lavaridge_Steam', count: 4, tiles: 4, div: 16, dest: 288 },
-  { set: 'Lavaridge', frames: 'Lavaridge_Steam', count: 4, tiles: 4, div: 16, dest: 292, lag: -2 },
-  { set: 'Lavaridge', frames: 'Lavaridge_Cave_Lava', count: 4, tiles: 4, div: 16, phase: 1, dest: 160 },
-  { set: 'EverGrande', frames: 'EverGrande_Flowers', count: 8, tiles: 4, div: 8, dest: 224, eight: true },
-  { set: 'Pacifidlog', frames: 'Pacifidlog_LogBridges', count: 4, tiles: 30, div: 16, dest: 464 },
-  { set: 'Pacifidlog', frames: 'Pacifidlog_WaterCurrents', count: 8, tiles: 8, div: 16, phase: 1, dest: 496 },
-  { set: 'Sootopolis', frames: 'Sootopolis_StormyWater', count: 8, tiles: 96, div: 16, dest: 240 },
-  { set: 'BattleFrontierOutsideWest', frames: 'BattleFrontierOutsideWest_Flag', count: 4, tiles: 6, div: 8, dest: 218 },
-  { set: 'BattleFrontierOutsideEast', frames: 'BattleFrontierOutsideEast_Flag', count: 4, tiles: 6, div: 8, dest: 218 },
-];
+export { TILE_ANIMS } from './tile-anims';
 
 const ANIMS_HEADER = 8;
 const ANIMS_ENTRY = 32;

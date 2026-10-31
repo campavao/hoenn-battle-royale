@@ -15,13 +15,22 @@
 // The object palettes' table (sObjectEventSpritePalettes) is static, so it has no symbol:
 // it is found by its shape, a run of {ROM pointer, tag 0x11xx} entries.
 
+import { ANIM_COUNTER_MAX, GENERAL_ANIMS, TILE_ANIMS, framesShown } from '../src/tile-anims';
+
 const ROM = 0x08000000;
 const TILE = 8;
 const BLOCK = 16;
 const LAYER_COVERED = 1;
 const PAL_TAG_NONE = 0x11ff;
 
-export interface MapArt { ground: HTMLCanvasElement; cover: HTMLCanvasElement; border: HTMLCanvasElement }
+/** A metatile with animated tiles in it (tileset_anims.c), on `cells` (y * width + x) of a
+ *  map: its looks side by side in `sheet`, 16 px each, and which one is on show at each
+ *  step of the ROM's 256-step counter (`states`). */
+export interface MapAnim { sheet: HTMLCanvasElement; states: Uint8Array; cells: Int32Array }
+export interface MapArt { ground: HTMLCanvasElement; cover: HTMLCanvasElement; border: HTMLCanvasElement; anims: MapAnim[] }
+/** A run of animated tiles: from tile `at` (past 511 the secondary's), `tiles` long, the
+ *  ROM address of the frame on show at each step of the counter (0 for none yet). */
+interface TileRun { at: number; tiles: number; shown: number[] }
 
 export function lz77(rom: Uint8Array, at: number): Uint8Array {
   if (rom[at] !== 0x10) throw new Error(`not LZ77 at ${at.toString(16)}`);
@@ -66,6 +75,7 @@ interface Tileset { tiles: Uint8Array; palettes: number[][]; metatiles: number; 
 export class RomArt {
   private dv: DataView;
   private tilesets = new Map<number, Tileset>();
+  private runsFor = new Map<string, TileRun[]>();
   private objPals: Map<number, number[]> | null = null;
 
   constructor(private rom: Uint8Array, readonly sym: (name: string) => number) {
@@ -96,18 +106,42 @@ export class RomArt {
     return t;
   }
 
+  /** The animated runs of tiles on a map whose tilesets are at `priAt` and `secAt`: the
+   *  primary's TilesetAnim_General and the town's own (tile-anims.ts). */
+  private runs(priAt: number, secAt: number): TileRun[] {
+    const key = `${priAt}:${secAt}`;
+    let out = this.runsFor.get(key);
+    if (out) return out;
+    out = [];
+    const table = (name: string) => this.sym(`gTilesetAnims_${name}`);
+    for (const a of [...GENERAL_ANIMS, ...TILE_ANIMS]) {
+      const primary = GENERAL_ANIMS.includes(a);
+      // A build whose symbols name none of it plays nothing.
+      if (this.sym(`gTileset_${a.set}`) !== (primary ? priAt : secAt)) continue;
+      if (Number.isNaN(table(a.frames)) || (a.framesB && Number.isNaN(table(a.framesB)))) continue;
+      for (let k = 0; k < (a.eight ? 8 : 1); k++) {
+        out.push({ at: (primary ? 0 : 512) + a.dest + 4 * k, tiles: a.tiles, shown: framesShown(a, k, table, this.u32) });
+      }
+    }
+    this.runsFor.set(key, out);
+    return out;
+  }
+
   /** Ground, cover and border for map (group, num), as render-maps.py draws them; `over`
    *  puts other metatiles on some cells (a cell's y * width + x), as MapGridSetMetatileIdAt
-   *  does in the game. */
+   *  does in the game. The ground is drawn with each animation's first look; `anims` has
+   *  the rest, for the page to lay over it. */
   map(group: number, num: number, over?: ReadonlyMap<number, number>): MapArt {
     const header = this.u32(this.u32(this.sym('gMapGroups') + group * 4) + num * 4);
     const layout = this.u32(header);
     const w = this.dv.getInt32(layout - ROM, true), h = this.dv.getInt32(layout + 4 - ROM, true);
     const border = this.u32(layout + 8), blocks = this.u32(layout + 0xc);
-    const pri = this.tileset(this.u32(layout + 0x10)), sec = this.tileset(this.u32(layout + 0x14));
+    const priAt = this.u32(layout + 0x10), secAt = this.u32(layout + 0x14);
+    const pri = this.tileset(priAt), sec = this.tileset(secAt);
     // Primary palettes 0..5, the secondary's 6..12, the primary's again from 13.
     const pals = [...pri.palettes.slice(0, 6), ...sec.palettes.slice(6, 13), ...pri.palettes.slice(13)];
-    const draw = (px: Uint32Array, stride: number, bx: number, by: number, block: number, cover: boolean) => {
+    // `frame(tid)`: an animated tile's ROM address in the look being drawn, or 0.
+    const draw = (px: Uint32Array, stride: number, bx: number, by: number, block: number, cover: boolean, frame?: (tid: number) => number) => {
       const mid = block & 0x3ff;
       const ts = mid < 512 ? pri : sec;
       const i = mid < 512 ? mid : mid - 512;
@@ -116,8 +150,9 @@ export class RomArt {
         for (let t = 0; t < 4; t++) {
           const e = this.u16(ts.metatiles + i * 16 + (layer * 4 + t) * 2);
           const tid = e & 0x3ff;
-          const src = tid < 512 ? pri.tiles : sec.tiles;
-          const off = (tid < 512 ? tid : tid - 512) * 32;
+          const anim = frame?.(tid) ?? 0;
+          const src = anim ? this.rom : tid < 512 ? pri.tiles : sec.tiles;
+          const off = anim ? anim - ROM : (tid < 512 ? tid : tid - 512) * 32;
           if (off + 32 > src.length) continue;
           const pal = pals[(e >> 12) & 0xf];
           const hf = e & 0x400, vf = e & 0x800;
@@ -156,7 +191,44 @@ export class RomArt {
     const borderCv = paint(2 * BLOCK, 2 * BLOCK, 0xff000000, (px) => {
       for (let i = 0; i < 4; i++) draw(px, 2 * BLOCK, (i & 1) * BLOCK, (i >> 1) * BLOCK, this.u16(border + i * 2), false);
     });
-    return { ground, cover, border: borderCv };
+    // The animated metatiles (tileset_anims.c): each one's cells, and each look it takes
+    // as the counter goes round, drawn once.
+    const runs = this.runs(priAt, secAt);
+    const anims: MapAnim[] = [];
+    if (runs.length) {
+      const runsOf = new Map<number, TileRun[]>();
+      const cellsOf = new Map<number, number[]>();
+      for (let i = 0; i < w * h; i++) {
+        const mid = (over?.get(i) ?? this.u16(blocks + i * 2)) & 0x3ff;
+        let used = runsOf.get(mid);
+        if (!used) {
+          const ts = mid < 512 ? pri : sec, m = mid < 512 ? mid : mid - 512;
+          const tids = Array.from({ length: 8 }, (_, t) => this.u16(ts.metatiles + m * 16 + t * 2) & 0x3ff);
+          used = runs.filter((r) => tids.some((tid) => tid >= r.at && tid < r.at + r.tiles));
+          runsOf.set(mid, used);
+        }
+        if (used.length) (cellsOf.get(mid) ?? cellsOf.set(mid, []).get(mid)!).push(i);
+      }
+      for (const [mid, cells] of cellsOf) {
+        const used = runsOf.get(mid)!;
+        const looks = new Map<string, number>(); // the frames on show -> the step that shows them
+        const states = new Uint8Array(ANIM_COUNTER_MAX);
+        for (let c = 0; c < ANIM_COUNTER_MAX; c++) {
+          const k = used.map((r) => r.shown[c]).join(',');
+          if (!looks.has(k)) looks.set(k, c);
+          states[c] = [...looks.keys()].indexOf(k);
+        }
+        const steps = [...looks.values()];
+        const sheet = paint(steps.length * BLOCK, BLOCK, 0xff000000, (px) => {
+          steps.forEach((c, n) => draw(px, steps.length * BLOCK, n * BLOCK, 0, mid, false, (tid) => {
+            const r = used.find((q) => tid >= q.at && tid < q.at + q.tiles);
+            return r && r.shown[c] ? r.shown[c] + (tid - r.at) * 32 : 0;
+          }));
+        });
+        anims.push({ sheet, states, cells: Int32Array.from(cells) });
+      }
+    }
+    return { ground, cover, border: borderCv, anims };
   }
 
   /** The metatile behaviour of cell (x, y) on map (group, num), as the layout ships it:
