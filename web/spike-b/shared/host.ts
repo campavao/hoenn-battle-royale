@@ -137,6 +137,11 @@ export class Host {
     if (this.players.has(id)) this.pending.push({ c: 'traded', id, n, given });
   }
 
+  /** The page's catch with a full party let `mons` go (room.ts `released`). */
+  released(id: number, mons: { species: number; level: number }[]): void {
+    if (this.players.has(id) && mons.length) this.pending.push({ c: 'released', id, mons: mons.slice(0, 6) });
+  }
+
   /** The page saw a Flying-type in its team at event `n`'s REGI wall. */
   open(id: number, n: number): void {
     if (this.players.has(id)) this.pending.push({ c: 'open', id, n });

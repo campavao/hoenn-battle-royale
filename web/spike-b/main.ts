@@ -1020,6 +1020,8 @@ function endBattle(r: Fought | null): void {
   // wins the match shows on everybody's results as it ended (review of batch 3).
   const after = rom?.teamNow();
   if (after && !stale) sendTeam(after);
+  // A catch with a full party let one go: it lies beside me, for anybody (POK-294).
+  if (r?.released?.length && !stale) (battle?.link ?? link).released(r.released);
   (battle?.link ?? link).end(duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f)), !stale && (!!battle?.foe?.bot || boss !== undefined) && !!r?.ok && r.outcome === 1);
   if (!stale && boss !== undefined && r?.ok && r.outcome === 1) say(`You beat ${LEADERS[boss].name}! Took their TM and ¥1000.`);
   const wild = battle && !battle.foe && boss === undefined;

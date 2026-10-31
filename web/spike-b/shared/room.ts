@@ -232,6 +232,8 @@ const HOME_MONS = [277, 280, 283, 1, 4, 7, 64, 67, 75, 93, 385, 143];
 /** Event pieces' keys: clear of the dealt balls' and the trainers' (SPILL_KEY + id). */
 export const EVENT_SPILL = 2 << 20;
 export const eventPiece = (n: number, i: number): number => EVENT_SPILL | (n << 4) | i;
+/** A released mon's ball: clear of both (`released`). */
+export const RELEASED_SPILL = 3 << 20;
 
 /** Nothing in it: no items, no money, nobody. */
 export const emptyBag = (b: Bag): boolean => !b.items.length && !b.money && !b.mons?.length;
@@ -299,6 +301,9 @@ export type Command =
   | { c: 'bots'; id: number; a: number; b: number; winner: number }
   /** `id` traded event `n`'s trader the species `given` (0: thought better of it). */
   | { c: 'traded'; id: number; n: number; given: number }
+  /** `id` caught one more than a party holds and let `mons` go: they lie beside them, as
+   *  balls anybody can take (POK-294, BrLoot_Released: nothing leaves the match). */
+  | { c: 'released'; id: number; mons: { species: number; level: number }[] }
   /** `id` opened event `n`'s REGI wall (a Flying-type in their party, the page saw). */
   | { c: 'open'; id: number; n: number }
   /** `id` sails to story `to`'s island, or ('') from an island back to Lilycove. */
@@ -500,6 +505,22 @@ export class Room {
     } else if (cmd.c === 'open') {
       const a = this.actor(cmd.id), e = this.events.find((q) => q.n === cmd.n);
       if (a && e && e.story && DOORS[e.story] && a.m.spot.map === e.map && atWall(a)) e.opened = true;
+    } else if (cmd.c === 'released') {
+      // Beside the trainer, never under: a ball at their feet is taken back by the A
+      // already held, into a party still full (br_loot.c's BrLoot_Released). Facing first,
+      // then round; nowhere free, and it stays in its ball, as the ROM's does.
+      const a = this.actor(cmd.id);
+      if (!a) return;
+      const step = this.stepFor(a);
+      const used = new Set<string>();
+      for (const mon of cmd.mons.slice(0, 6)) {
+        const to = [a.m.facing, 1, 2, 3, 4].map((d) => step(a.m.spot, d)).find((r) => r && !r.warp && !r.hop && !used.has(`${r.to.map}:${r.to.x}:${r.to.y}`) && !this.spillAt(r.to.map, r.to.x, r.to.y) && !this.groundAt(r.to.map, r.to.x, r.to.y))?.to;
+        if (!to) return;
+        used.add(`${to.map}:${to.x}:${to.y}`);
+        let key = RELEASED_SPILL | ((cmd.id & 0xff) << 12) | (this.tick & 0xfff);
+        while (this.spills.has(key)) key++;
+        this.spills.set(key, { key, map: to.map, x: to.x, y: to.y, name: '', bag: { items: [], money: 0, mons: [{ species: mon.species, level: mon.level }] } });
+      }
     } else if (cmd.c === 'traded') {
       const t: (Trader & { gives?: boolean; gone?: boolean }) | undefined = this.events.find((e) => e.n === cmd.n)?.trader ?? this.homes.find((h) => h.n === cmd.n);
       if (!t || t.busy !== cmd.id) return;
