@@ -150,6 +150,9 @@ export interface HudView {
   fogEverywhere: boolean;
   /** Outside the ring, "Safe" and the way to it (safeWay); null inside or with no ring. */
   safe: string | null;
+  /** In the fog, the lead's HP as the corner says it ("HP 26/40", br_hud.c LeadHp), for
+   *  a page with no ROM corner to say it; null otherwise. */
+  lead?: string | null;
   ctx: Ctx;
   /** gPlayerPartyCount: the start menu has no POKeMON row before the first catch. */
   party: number;
@@ -307,6 +310,7 @@ export function fogLines(v: HudView): Line[] {
   const lines: Line[] = [{ left: { text: v.ring === null ? 'Safari' : 'Fog', color: TEXT_BLUE }, right: clock }];
   if (v.fogEverywhere && v.ring !== null) lines.push({ left: { text: fitText(v.ring, inner), color: TEXT_RED } });
   if (v.safe) lines.push({ left: { text: v.safe, color: TEXT_RED } });
+  if (v.lead) lines.push({ left: { text: v.lead, color: TEXT_RED } });
   lines.push({
     left: { text: `${v.left} left`, color: TEXT_BLUE },
     right: v.eyes > 0 ? { text: `${v.eyes} watch`, color: TEXT_GRAY } : undefined,

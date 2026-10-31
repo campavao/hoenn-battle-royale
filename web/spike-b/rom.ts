@@ -162,6 +162,9 @@ export interface RomBattles {
   safariBalls(): number;
   /** How many POKeMON I carry (gPlayerPartyCount): none until the Safari's first catch. */
   partyCount(): number;
+  /** The first of the party still standing, "HP 26/40" (br_hud.c LeadHp); '' with
+   *  nobody standing. */
+  leadHp(): string;
   /** I won: Emerald's Hall of Fame with my team, the live winner's parade (br_match.c's
    *  RESULT for our own seat). Resolves when it is over (or never came up). */
   fame(onStart: () => void): Promise<boolean>;
@@ -797,6 +800,14 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     setSafari(on) { safari = on; },
     safariBalls() { return (carried ?? start).balls; },
     partyCount() { return (carried ?? start).count; },
+    leadHp() {
+      const k = carried ?? start;
+      for (let i = 0; i < k.count; i++) {
+        const at = i * 100, hp = k.party[at + 86] | (k.party[at + 87] << 8);
+        if (hp) return `HP ${hp}/${k.party[at + 88] | (k.party[at + 89] << 8)}`;
+      }
+      return '';
+    },
     fogNow() {
       if (fighting && !broken && emu.read(ringAt + 4, 8) !== 0xff) lay(true);
     },
