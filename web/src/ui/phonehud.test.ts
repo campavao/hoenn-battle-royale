@@ -109,6 +109,16 @@ describe('the sign and the fog window', () => {
     expect(fogHeight(3)).toBe(64);
   });
 
+  it('in the fog, the way back in and the lead\'s HP, red, over the count (POK-358)', () => {
+    expect(text(view({ safe: 'Safe ←', lead: 'HP 72/79' }))).toEqual([
+      ['Fog', '1:35'],
+      ['Safe ←', ''],
+      ['HP 72/79', ''],
+      ['7 left', ''],
+    ]);
+    expect(fogLines(view({ lead: 'HP 72/79' }))[1].left?.color).toBe(TEXT_RED);
+  });
+
   it('two in the Safari, red under thirty seconds, FOG! in its flash, the eyes when anybody watches', () => {
     expect(text(view({ ring: null }))).toEqual([
       ['Safari', '1:35'],

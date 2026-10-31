@@ -1663,6 +1663,7 @@ function wirePhoneHud(): void {
       ring: ring.safari ? null : ring.last ? 'Fog everywhere' : ringMap?.place(ring) ?? '',
       fogEverywhere: !!ring.last,
       safe: way ? `Safe ${way}` : null,
+      lead: mine && fogged ? rom?.leadHp() || null : null,
       ctx: { label: me.m.bike ? 'WALK' : 'BIKE', item: ITEM_MACH_BIKE, enabled: me.m.bike || !!link.room.stepFor(me).cycling?.(me.m.spot) },
       party: rom?.partyCount() ?? 0,
       moves: [],
@@ -1876,6 +1877,8 @@ let hudRound = -1;
 let toldOpening = -1;
 let toldWin = false;
 let cornerText = '';
+/** br_hud.h: how long the corner's count and its other line each have it. */
+const BR_HUD_ALT_FRAMES = 120;
 function hudFrame(): void {
   const res = link.room.results;
   if (res.round !== hudRound) { hudRound = res.round; toldOuts = res.fallen.length; toldWin = !!res.winner; outsSince = 0; }
@@ -1926,8 +1929,12 @@ function hudFrame(): void {
   const s = Math.ceil(ring.left / 60);
   const clock = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   const count = ring.safari ? 'SAFARI' : res.entrants.length ? `${left} LEFT` : `${link.room.actors.length} IN`;
-  const fog = !isOut && inFogNow() && frame % 60 < 30;
-  const text = `${count}\n${fog ? 'FOG!' : clock}`;
+  const inFog = !isOut && inFogNow(), fog = inFog && frame % 60 < 30;
+  // In the fog the count takes turns with the lead's HP, two seconds each (br_hud.c
+  // DrawCorner, BR_HUD_ALT_FRAMES): a team bleeding with nothing on screen to say so
+  // (POK-358).
+  const lead = inFog && frame % (2 * BR_HUD_ALT_FRAMES) >= BR_HUD_ALT_FRAMES ? rom?.leadHp() : '';
+  const text = `${lead || count}\n${fog ? 'FOG!' : clock}`;
   if (text !== cornerText) {
     cornerText = text;
     cornerEl.textContent = text;
@@ -1978,6 +1985,7 @@ function fogFrame(): void {
   wasInFog = fog;
   if (!fog || --fogTimer > 0) return;
   fogTimer = FOG_TICK;
+  poisonAt = frame;
   void rom.bleed().then((alive) => { if (!alive) goOut('Your team fainted in the fog.'); });
 }
 
@@ -1988,6 +1996,37 @@ function fogFrame(): void {
  *  A patch whose symbols do not name the picture yet gets a flat veil. */
 let fogTile: HTMLCanvasElement | null | undefined;
 const FOG_SIZE = 64;
+/** Each fog bite on the field is felt as a poison step is (br_ring.c Bleed, POK-358):
+ *  fldeff_misc.c Task_FieldPoisonEffect's mosaic, up 2 a frame past 8 and back down, a
+ *  block of (n + 1) GBA pixels, on the map's layers -- the ground and the roofs over the
+ *  sprites alike (overworld.c sets BG1-3's mosaic) -- and not on the sprites. */
+const POISON_MOSAIC = [2, 4, 6, 8, 10, 8, 6, 4, 2];
+let poisonAt = -99;
+/** This frame's mosaic block, in canvas pixels; 0 for none. */
+function poisonBlock(z: number): number {
+  const n = POISON_MOSAIC[frame - poisonAt];
+  return n ? Math.max(1, Math.round((n + 1) * z)) : 0;
+}
+const mosaicCanvas = document.createElement('canvas');
+/** `c`, a canvas the size of the field's, in blocks of `b` pixels. */
+function pixelate(c: HTMLCanvasElement, b: number): void {
+  const w = Math.ceil(c.width / b), h = Math.ceil(c.height / b);
+  if (mosaicCanvas.width !== w || mosaicCanvas.height !== h) { mosaicCanvas.width = w; mosaicCanvas.height = h; }
+  const m = mosaicCanvas.getContext('2d')!;
+  m.imageSmoothingEnabled = false;
+  m.clearRect(0, 0, w, h);
+  m.drawImage(c, 0, 0, w * b, h * b, 0, 0, w, h);
+  const x = c.getContext('2d')!;
+  x.save();
+  x.setTransform(1, 0, 0, 1, 0, 0);
+  x.imageSmoothingEnabled = false;
+  x.clearRect(0, 0, c.width, c.height);
+  x.drawImage(mosaicCanvas, 0, 0, w, h, 0, 0, w * b, h * b);
+  x.restore();
+}
+/** The roofs' layer while a mosaic is on: drawn apart, blocked, then laid over. */
+const coverCanvas = document.createElement('canvas');
+
 function drawFog(x0: number, y0: number, x1: number, y1: number, home: Placed): void {
   const ring = link.room.ring();
   if (ring.r === Infinity) return;
@@ -2659,6 +2698,8 @@ function draw(): void {
       else { ctx.drawImage(p.ground!, x, y); drawAnims(ctx, p, vx0, vy0, vx1, vy1); }
     }
   }
+  const block = far ? 0 : poisonBlock(z);
+  if (block) pixelate(canvas, block);
   if (!far) for (const p of visible) drawPatches(p);
   if (!far) drawGround(vx0, vy0, vx1, vy1);
   if (!far) drawProps(visible, all);
@@ -2696,7 +2737,20 @@ function draw(): void {
       ctx.strokeRect(dx - 1, dy - 1, info.w + 2, info.h + 2);
     }
   }
-  for (const p of visible) {
+  if (block) {
+    if (coverCanvas.width !== W || coverCanvas.height !== H) { coverCanvas.width = W; coverCanvas.height = H; }
+    const c = coverCanvas.getContext('2d')!;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, W, H);
+    c.imageSmoothingEnabled = false;
+    c.setTransform(z, 0, 0, z, ox, oy);
+    for (const p of visible) if (p.cover) c.drawImage(p.cover, p.gx * TILE, p.gy * TILE);
+    pixelate(coverCanvas, block);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(coverCanvas, 0, 0);
+    ctx.restore();
+  } else for (const p of visible) {
     if (p.cover && !far) ctx.drawImage(p.cover, p.gx * TILE, p.gy * TILE);
   }
   drawNurses(visible);
