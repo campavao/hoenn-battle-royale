@@ -18,6 +18,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const require = createRequire(resolve(root, 'web/package.json'));
 const esbuild = require('esbuild');
 const out = resolve(root, 'relay/world/service.js');
+// The hash again, inside web/: Vercel builds the site from web/ alone, where relay/ is not.
+const hashOut = resolve(root, 'web/spike-b/world-hash.json');
 
 const r = await esbuild.build({
   entryPoints: [resolve(root, 'web/spike-b/shared/relay-entry.ts')],
@@ -39,16 +41,19 @@ const r = await esbuild.build({
 const body = r.outputFiles[0].text;
 const hash = createHash('sha1').update(body).digest('hex').slice(0, 12);
 const text = `${body}export const WORLD_HASH = ${JSON.stringify(hash)};\n`;
+const hashText = `${JSON.stringify({ hash })}\n`;
 if (process.argv.includes('--check')) {
-  let now = '';
+  let now = '', hashNow = '';
   try { now = readFileSync(out, 'utf8'); } catch { /* missing */ }
-  if (now !== text) {
-    console.error('relay/world/service.js is stale: run node tools/br/bundle-world.mjs');
+  try { hashNow = readFileSync(hashOut, 'utf8'); } catch { /* missing */ }
+  if (now !== text || hashNow !== hashText) {
+    console.error('relay/world/service.js (or web/spike-b/world-hash.json) is stale: run node tools/br/bundle-world.mjs');
     process.exit(1);
   }
   console.log('relay/world/service.js is fresh');
 } else {
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, text);
+  writeFileSync(hashOut, hashText);
   console.log(`wrote relay/world/service.js (${(text.length / 1024).toFixed(0)} KB)`);
 }
