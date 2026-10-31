@@ -49,6 +49,7 @@ import { GOLD } from '../src/match/events';
 import { FLYING, STORIES } from '../src/match/story';
 import hiddenJson from './data/hidden.json';
 import { RomArt, type MapAnim } from './romart';
+import { AskBox } from './askbox';
 import { ANIM_COUNTER_MAX } from '../src/tile-anims';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
@@ -503,52 +504,62 @@ function giveNext(): void {
 
 // A dropped bag asks what to take (HBR-82): POKéMON, its team on the ROM's BAG screen, or
 // BAG, its items. B or CANCEL leaves it lying. The pad drives the question.
-const askEl = document.getElementById('ask')!;
-let askButtons: HTMLButtonElement[] = [];
-let asking: { pick: number; start: boolean; done: (c: string) => void } | null = null;
+/** A MART's shelf (shop.c's buy list): each row's price and what the picked one is. */
+interface Shelf { money: number; prices: (number | undefined)[]; words: (pick: number) => string[] }
+/** shop.c's quantity roller: up and down one, left and right ten, 1..max. */
+interface Roller { n: number; max: number; each: number; inBag: number; money: number }
+let asking: { pick: number; start: boolean; title: string; rows: [string, string][]; shelf?: Shelf; roller?: Roller; done: (c: string) => void } | null = null;
 const startMenu = new StartMenu(document.getElementById('startmenu') as HTMLCanvasElement, document.getElementById('stock') as HTMLCanvasElement);
-document.getElementById('startmenu')!.addEventListener('pointerdown', (e) => {
-  const i = startMenu.rowFor(e.clientX, e.clientY);
-  if (asking && i >= 0) { asking.pick = i; asking.done(askButtons[i].dataset.c!); }
-});
+const askBox = new AskBox(document.getElementById('askbox') as HTMLCanvasElement);
+for (const [id, rowFor] of [['startmenu', (x: number, y: number) => startMenu.rowFor(x, y)], ['askbox', (x: number, y: number) => askBox.rowFor(x, y)]] as const) {
+  document.getElementById(id)!.addEventListener('pointerdown', (e) => {
+    const i = rowFor(e.clientX, e.clientY);
+    if (asking && i >= 0 && asking.rows[i]) { asking.pick = i; asking.done(asking.rows[i][1]); }
+  });
+}
 
 function askPaint(): void {
-  if (asking?.start) {
+  if (!asking) return;
+  const scale = zoom / (devicePixelRatio || 1);
+  const labels = asking.rows.map(([label]) => label);
+  if (asking.start) {
     const balls = link.room.ring().safari && rom ? rom.safariBalls() : null;
-    startMenu.show(askButtons.map((b) => b.textContent ?? ''), asking.pick, balls, zoom / (devicePixelRatio || 1));
-    return;
-  }
-  askButtons.forEach((b, i) => b.classList.toggle('on', i === asking?.pick));
-  askButtons[asking?.pick ?? -1]?.scrollIntoView({ block: 'nearest' });
+    startMenu.show(labels, asking.pick, balls, scale);
+  } else if (asking.roller) {
+    askBox.show({ kind: 'count', title: asking.title, ...asking.roller }, scale);
+  } else if (asking.shelf) {
+    const { money, prices, words } = asking.shelf;
+    askBox.show({ kind: 'shop', money, rows: labels.map((name, i) => ({ name, price: prices[i] })), pick: asking.pick, words: words(asking.pick) }, scale);
+  } else askBox.show({ kind: 'choice', title: asking.title, rows: labels, pick: asking.pick }, scale);
 }
 
 function askKey(k: string): void {
   if (!asking) return;
-  const n = askButtons.length;
+  const r = asking.roller;
+  if (r) {
+    if (k === 'up') r.n = r.n % r.max + 1;
+    else if (k === 'down') r.n = (r.n + r.max - 2) % r.max + 1;
+    else if (k === 'right') r.n = Math.min(r.max, r.n + 10);
+    else if (k === 'left') r.n = Math.max(1, r.n - 10);
+    else if (k === 'a') return asking.done(String(r.n));
+    else if (k === 'b') return asking.done('');
+    askPaint();
+    return;
+  }
+  const n = asking.rows.length;
   if (k === 'up') asking.pick = (asking.pick + n - 1) % n;
   else if (k === 'down') asking.pick = (asking.pick + 1) % n;
-  else if (k === 'a') return asking.done(askButtons[asking.pick].dataset.c!);
+  else if (k === 'a') return asking.done(asking.rows[asking.pick][1]);
   else if (k === 'b' || (k === 'start' && asking.start)) return asking.done('');
   askPaint();
 }
 
-/** A question on the page, its rows `[label, answer]`; '' is no (B answers it too). The
- *  START menu (`start`) is Emerald's window on the field instead. */
-function ask(title: string, rows: [string, string][], start = false): Promise<string> {
-  document.getElementById('ask-title')!.textContent = title;
-  for (const b of askButtons) b.remove();
-  askButtons = rows.map(([label, c], i) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = label;
-    b.dataset.c = c;
-    b.addEventListener('click', () => { if (asking) { asking.pick = i; asking.done(c); } });
-    askEl.append(b);
-    return b;
-  });
-  if (!start) askEl.classList.add('on');
+/** A question as Emerald asks it (askbox.ts): `title` in the message box, its rows
+ *  `[label, answer]` in a window over it; '' is no (B answers it too). The START menu
+ *  (`start`) is its own window on the field; a MART's `shelf` and `roller` are shop.c's. */
+function ask(title: string, rows: [string, string][], start = false, more: { pick?: number; shelf?: Shelf; roller?: Roller } = {}): Promise<string> {
   return new Promise((resolve) => {
-    asking = { pick: 0, start, done: (c) => { asking = null; askEl.classList.remove('on'); startMenu.hide(); calmUntil = frame + 30; resolve(c); } };
+    asking = { pick: 0, start, title, rows, ...more, done: (c) => { asking = null; startMenu.hide(); askBox.hide(); calmUntil = frame + 30; resolve(c); } };
     askPaint();
   });
 }
@@ -558,7 +569,7 @@ function ask(title: string, rows: [string, string][], start = false): Promise<st
 async function openBag(key: number, bag: Bag, who: string): Promise<void> {
   const mons = bag.mons ?? [];
   const things = bag.items.length > 0 || bag.money > 0;
-  const c = mons.length && things ? await ask(`${who}'s BAG`, [['POKéMON', 'mons'], ['BAG', 'items'], ['CANCEL', '']]) : mons.length ? 'mons' : 'items';
+  const c = mons.length && things ? await ask(`What will you take from ${who}'s BAG?`, [['POKéMON', 'mons'], ['BAG', 'items'], ['CANCEL', '']]) : mons.length ? 'mons' : 'items';
   if (c === 'items') return takeBag(key, bag, who);
   if (c !== 'mons' || isOut || !rom) { link.drop(key, bag); return; }
   swapping = true;
@@ -965,23 +976,29 @@ async function mart(map: string): Promise<void> {
   if (inFogNow()) { say('The fog is here. This MART is closed.'); return; }
   const a = art;
   const name = (id: number) => a.itemName(id) || `item ${id}`;
-  let hi = 'Welcome!';
+  // shop.c's way: the shelf with the money box and what the picked item is, how many on
+  // the roller, the price asked YES/NO, and back to the shelf.
+  let pick = 0;
   for (;;) {
     if (!rom || isOut || battle) return;
     const money = await rom.money();
     const items = shelf(clerk, link.room.ring().phase);
-    const c = await ask(`${hi} You have ¥${money}. May I help you?`, [
-      ...items.map((id): [string, string] => [`${name(id)}  ¥${priceOf(id, a.itemPrice(id))}`, String(id)]),
-      ['SEE YA!', ''],
-    ]);
+    const prices = items.map((id) => priceOf(id, a.itemPrice(id)));
+    const c = await ask('', [...items.map((id): [string, string] => [name(id), String(id)]), ['CANCEL', '']], false, {
+      pick: Math.max(0, Math.min(pick, items.length)),
+      shelf: { money, prices, words: (i) => (i < items.length ? a.itemDescription(items[i]) : ['Quit shopping.']) },
+    });
     if (!c || !rom || isOut || battle) { say('Please come again!'); return; }
     const id = Number(c), each = priceOf(id, a.itemPrice(id));
-    const counts = [1, 5, 10].filter((n) => n * each <= money);
-    if (!counts.length) { hi = "You don't have enough money."; continue; }
-    const n = Number(await ask(`${name(id)}? Certainly. How many?`, counts.map((k): [string, string] => [`×${k}  ¥${k * each}`, String(k)])));
-    if (!n || !rom) { hi = 'Is there anything else I can do for you?'; continue; }
+    pick = items.indexOf(id);
+    if (each > money) { say("You don't have enough money."); continue; }
+    const inBag = (await rom.spill()).items.find((r) => r.id === id)?.n ?? 0;
+    const max = Math.max(1, Math.min(99, Math.floor(money / each), 999 - inBag));
+    const n = Number(await ask(`${name(id)}? Certainly. How many would you like?`, [], false, { roller: { n: 1, max, each, inBag, money } }));
+    if (!n || !rom) continue;
+    if (await ask(`${name(id)}, and you want ${n}. That will be ¥${n * each}. Okay?`, [['YES', 'y'], ['NO', '']]) !== 'y' || !rom) continue;
     const took = await rom.buy(id, n, each);
-    hi = took ? `Here you go! ${name(id)} ×${took}. Thank you!` : 'You have no more room for items.';
+    say(took ? 'Here you go! Thank you very much.' : 'You have no more room for items.');
   }
 }
 

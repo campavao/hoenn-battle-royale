@@ -141,6 +141,7 @@ const GEN3_DISPLAY: ReadonlyMap<string, number> = new Map<string, number>([
   ['’', 0xb4],
   ["'", 0xb4],
   ['×', 0xb9],
+  ['¥', 0xb7],
 ]);
 const GEN3_DISPLAY_REVERSE: ReadonlyMap<number, string> = new Map(Array.from(GEN3_DISPLAY.entries(), ([ch, byte]) => [byte, ch] as const));
 

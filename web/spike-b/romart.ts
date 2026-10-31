@@ -65,7 +65,8 @@ export function text(letters: readonly number[]): string {
     out += c >= 0xbb && c <= 0xd4 ? String.fromCharCode(65 + c - 0xbb)
       : c >= 0xd5 && c <= 0xee ? String.fromCharCode(97 + c - 0xd5)
       : c >= 0xa1 && c <= 0xaa ? String.fromCharCode(48 + c - 0xa1)
-      : c === 0x1b ? 'é' : c === 0xae ? '-' : c === 0xad ? '.' : c === 0xb4 ? "'" : c === 0xab ? '!' : c === 0xac ? '?' : ' ';
+      : c === 0x1b ? 'é' : c === 0xae ? '-' : c === 0xad ? '.' : c === 0xb4 ? "'" : c === 0xab ? '!' : c === 0xac ? '?'
+      : c === 0xb8 ? ',' : c === 0xf0 ? ':' : c === 0xba ? '/' : ' ';
   }
   return out;
 }
@@ -302,6 +303,19 @@ export class RomArt {
     const row = this.sym('gItems') + id * 44;
     if (this.u16(row + 14) !== id) return '';
     return text(this.letters(row, 14));
+  }
+
+  /** An item's words as the BAG and the MART show them (struct Item's description, @20),
+   *  a line each. */
+  itemDescription(id: number): string[] {
+    const row = this.sym('gItems') + id * 44;
+    if (this.u16(row + 14) !== id) return [];
+    const lines: number[][] = [[]];
+    for (const c of this.letters(this.u32(row + 20), 160)) {
+      if (c === 0xfe) lines.push([]);
+      else lines[lines.length - 1].push(c);
+    }
+    return lines.map(text);
   }
 
   /** What the item table prices it at (struct Item's price, after the name and id). */
