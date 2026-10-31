@@ -130,6 +130,62 @@ test('a Safari catch, the drop on the fly map, and out of the Safari', async ({ 
   expect(await s((s) => s.rom?.partyCount() ?? 0), 'the team came with the trainer').toBe(caught);
 });
 
+test('a dropped bag opens its team, and MOVES off the team opens the move screen', async ({ page }) => {
+  test.setTimeout(300_000);
+  // A world of the page's own with a long Safari, so nothing ends under the test.
+  await page.goto(`/?rom=${romHashParam()}#solo&nobots&safari=600&seed=7`);
+  await page.locator('#intro-go').click({ timeout: 90_000 });
+  type S = { link: { me: number; room: { actor(id: number): unknown } }; rom?: { partyCount(): number }; swapping: boolean; asking: boolean; startFor(e: unknown): void };
+  const s = <T>(f: (s: S) => T) => page.evaluate((src) => new Function('s', `return (${src})(s)`)((window as unknown as { __spike: S }).__spike), f.toString()) as Promise<T>;
+  await page.waitForFunction(() => { const s = (window as unknown as { __spike?: S }).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 90_000 });
+  const press = async (k: string) => { await key(page, k, true); await page.waitForTimeout(120); await key(page, k, false); await page.waitForTimeout(400); };
+  const shown = () => page.locator('#battle').evaluate((el) => el.classList.contains('on'));
+  const idle = () => expect.poll(() => s((s) => s.swapping), { timeout: 20_000 }).toBe(false);
+
+  // A beaten trainer's bag at my feet: POKeMON is the ROM's team screen (HBR-82). It
+  // opened nothing (Cam, 10-30): the page waited on a BUSY the ROM sends 120 frames late.
+  // TREECKO at 30 has forgotten moves to relearn; TORCHIC at 11 knows all it has learned.
+  await s((s) => s.startFor({ type: 'bag', tick: 0, id: s.link.me, key: 0x7e0001, name: 'MAY', bag: { items: [{ id: 13, n: 3 }], money: 300, mons: [{ species: 277, level: 30 }, { species: 280, level: 11 }] } }));
+  await expect.poll(() => s((s) => s.asking), { timeout: 10_000 }).toBe(true);
+  await press('z');
+  await expect.poll(shown, { timeout: 15_000 }).toBe(true);
+  await page.waitForTimeout(1000);
+  // A marks a mon of theirs, START moves the marked across, B is done.
+  await press('z');
+  await press('ArrowRight');
+  await press('z');
+  await press('Enter');
+  await press('x');
+  await idle();
+  expect(await s((s) => s.rom!.partyCount()), 'both mons taken out of the bag').toBe(2);
+
+  // START > POKeMON > a mon > MOVES (its second row): the party menu shuts and the field
+  // opens the move relearner (BrCatch_Tick). It did that on the hidden field after the
+  // page took the screen back, so nothing showed (Cam, 10-30).
+  const moves = async (slot: number) => {
+    await press('m');
+    await expect.poll(() => s((s) => s.asking), { timeout: 5_000 }).toBe(true);
+    await press('z');
+    await expect.poll(shown, { timeout: 15_000 }).toBe(true);
+    await page.waitForTimeout(1500);
+    for (let i = 0; i < slot; i++) await press('ArrowDown');
+    await press('z');
+    await press('ArrowDown');
+    await press('z');
+  };
+  await moves(0);
+  await page.waitForTimeout(4000);
+  expect(await shown(), "TREECKO's move screen on show").toBe(true);
+  expect(await s((s) => s.swapping)).toBe(true);
+  for (let i = 0; i < 6 && (await s((s) => s.swapping)); i++) await press('x');
+  await idle();
+
+  // Nothing to learn: the ROM says so on its own field, and the page says it on its own.
+  await moves(1);
+  await idle();
+  await expect(page.locator('#msg')).toHaveAttribute('data-text', /No new moves/, { timeout: 5_000 });
+});
+
 test('a tap on the map walks the trainer there, and the pad buzzes', async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 390, height: 844 });

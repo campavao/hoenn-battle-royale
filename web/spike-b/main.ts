@@ -585,11 +585,12 @@ async function runMenu(c: string): Promise<void> {
   swapping = true;
   held.clear();
   try {
-    await rom.menu(Number(c), () => {
+    const { said } = await rom.menu(Number(c), () => {
       if (!swapping) return;
       battleEl.classList.add('on');
       if (look) uncover = ringMap!.cover(fogEl, rom!.emu);
     }, () => { uncover(); battleEl.classList.remove('on'); }, look);
+    if (said) say(said);
   } finally {
     uncover();
     swapping = false;
