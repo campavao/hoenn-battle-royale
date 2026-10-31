@@ -191,8 +191,9 @@ export interface RomBattles {
    *  trainer card 4), opened the way the match's PARTY button opens it (touch.ts): START,
    *  the cursor walked to the row, A -- all on the hidden field, the page keeping the
    *  screen until the row's own screen is up (`onStart`). Resolves back on the field, with
-   *  whatever was used or moved kept. False when the row would not open. */
-  menu(action: number, onStart: () => void, onEnd: () => void, look?: MapLook): Promise<boolean>;
+   *  whatever was used or moved kept: `up` false when the row would not open, and `said`
+   *  what the hidden field told the player instead of a screen, for the page to say. */
+  menu(action: number, onStart: () => void, onEnd: () => void, look?: MapLook): Promise<{ up: boolean; said: string }>;
   /** The drop (br_pick.c): the fly map, "Drop where?", opened on `look`, every section a
    *  choice, its own twenty seconds. The section chosen, or 0 when the clock ran out on
    *  none. `onStart` when the map is up. */
@@ -833,32 +834,35 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
           mons: mons.map((m, i) => ({ key: keys[i], x, y, species: m.species, level: m.level })),
           bag: { key: (DROP_SEAT << 8) | 0xff, x, y, items: [], money: 0, name: name.slice(0, 7) },
         });
-        let menu = false, map = false;
         const taken = new Set<number>();
         const put: { species: number; level: number }[] = [];
         const watch = emu.onFrame(() => drain((m) => {
-          if (m.t === 'busy') { if (m.kind === 'menu') menu = true; else if (!m.kind) map = true; }
-          else if (m.t === 'pickup' && keys.includes(m.key)) taken.add(m.key);
+          if (m.t === 'pickup' && keys.includes(m.key)) taken.add(m.key);
           // One of ours put down for theirs (SwapInOurs): it stays with the bag.
           else if (m.t === 'spill' && m.seat !== DROP_SEAT) for (const r of m.mons) put.push({ species: r.species, level: r.level });
         }));
         const tap = async () => { emu.press('a'); await frames(emu, 4); emu.release('a'); };
+        const off = () => ((emu.read(mainAt + 4, 32) & ~1) >>> 0) !== overworldCb;
         // A at the bag asks POKeMON or BAG (BrBagMenu_Choose), and the page has asked that
-        // already: POKeMON, its first line. The screen is the page's until the box is up.
+        // already: POKeMON, its first line, once the box hears keys (br_bagmenu.c's
+        // BR_BAGMENU_DEAF_FRAMES, 20). Not on the ROM's BUSY: a menu says so only after
+        // 120 frames of it (BR_BUSY_MENU_SETTLE), and the page gave up at 120, so a bag's
+        // POKeMON opened nothing (Cam, 10-30). The screen is the page's until it is up.
         await frames(emu, 3);
-        await tap();
-        const asked = await until(emu, () => menu, 120);
-        if (asked) await tap();
-        const up = asked && await until(emu, () => ((emu.read(mainAt + 4, 32) & ~1) >>> 0) !== overworldCb, 120);
-        if (!up) console.warn('spike: the team\'s screen did not open', { asked, callback2: emu.read(mainAt + 4, 32).toString(16) });
+        let up = false;
+        for (let i = 0; i < 2 && !up; i++) {
+          await tap();
+          if ((up = await until(emu, off, 30))) break;
+          await tap();
+          up = await until(emu, off, 90);
+        }
+        if (!up) console.warn('spike: the team\'s screen did not open', { callback2: emu.read(mainAt + 4, 32).toString(16) });
         else {
           onStart();
           // B closes it; back on the field the box settles (SettleBoxes): a PICKUP for
           // each of theirs taken, a SPILL for any of ours put down.
-          map = false;
           await backOnField();
-          await until(emu, () => map, 600);
-          await frames(emu, 10);
+          await frames(emu, 60);
         }
         watch();
         emu.pause();
@@ -871,17 +875,25 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     },
     menu(action, onStart, onEnd, look) {
       return onCore(async () => {
-        if (broken || !startMenu) return false;
+        if (broken || !startMenu) return { up: false, said: '' };
         leaving = false;
         lay();
         if (look) lookFrom(look);
         emu.resume();
         drain(() => undefined);
         // The MAP is a look here: FLY off it would fly the hidden field, not this world.
-        const watch = emu.onFrame(() => { drain(() => undefined); if (look) emu.write(mapAt + 1, 0xff, 8); });
+        // MOVES off the team is noted as it is asked (gBrCatch.movesSlot), for the line its
+        // field says when there is nothing to learn.
+        let moves = false;
+        const watch = emu.onFrame(() => {
+          drain(() => undefined);
+          if (look) emu.write(mapAt + 1, 0xff, 8);
+          if (!Number.isNaN(catchAt) && emu.read(catchAt + 2, 8) !== 0xff) moves = true;
+        });
         const tap = async (k: GbaKey) => { emu.press(k); await frames(emu, 3); emu.release(k); await frames(emu, 3); };
         let up = false;
         let back = true;
+        let said = '';
         const before = kept();
         await tap('start');
         // Taking keys once its handler is in gMenuCallback and its text is drawn.
@@ -906,12 +918,26 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
           // Out of the row's screen the game puts the START menu back up, on the hidden
           // field: the page takes the screen now, and B shuts the menu out of sight.
           onEnd();
-          // It takes keys once its handler is back and its text drawn (touch.ts's
-          // START_SETTLE_FRAMES).
-          if (await until(emu, () => emu.read(menuCbAt, 32) === startMenu.input, 60)) {
+          // Or the row asked the field for a screen of its own and shut the menu: the
+          // team's MOVES (party_menu.c's CursorCb_BrMoves) is the relearner once the field
+          // is back (BrCatch_Tick). That one is the player's too, and what it taught stays.
+          let again = false;
+          for (;;) {
+            // The START menu takes keys once its handler is back and its text drawn
+            // (touch.ts's START_SETTLE_FRAMES).
+            await until(emu, () => emu.read(menuCbAt, 32) === startMenu.input || !onField(), 120);
+            if (onField()) break;
+            again = true;
+            onStart();
+            await backOnField();
+            onEnd();
+          }
+          if (emu.read(menuCbAt, 32) === startMenu.input) {
             await frames(emu, 12);
             await tap('b');
-          } else back = false;
+          } else back = again;
+          // MOVES with nothing to teach: BrCatch_Tick said so on the hidden field's HUD.
+          if (moves && !again) said = 'No new moves at this level.';
         }
         await frames(emu, 10);
         watch();
@@ -924,7 +950,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         else keep(now);
         carried = last = now;
         leaving = false;
-        return up;
+        return { up, said };
       });
     },
     drop(look, onStart) {
