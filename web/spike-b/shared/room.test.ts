@@ -585,11 +585,12 @@ describe('item balls', () => {
     room.step();
     const a = room.actor(1000)!;
     a.calm = 0;
-    expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'ferry', to: [] }));
+    const slateport = { id: 'slateport', name: 'SLATEPORT CITY' };
+    expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'ferry', to: [slateport] }));
     room.step(new Map([[1000, [0]]]));
     expect(room.maps.has('MAP_SOUTHERN_ISLAND_INTERIOR')).toBe(true);
     r.tellStory(0, { ...room.ring(), r: Infinity }, STORIES.find((s) => s.id === 'southern-island'), () => 0.5);
-    expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'ferry', to: [{ id: 'southern-island', name: 'SOUTHERN ISLAND' }] }));
+    expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'ferry', to: [slateport, { id: 'southern-island', name: 'SOUTHERN ISLAND' }] }));
     room.apply({ c: 'sail', id: 1000, to: 'southern-island' });
     expect(room.actor(1000)!.m.spot).toEqual({ map: 'MAP_SOUTHERN_ISLAND_EXTERIOR', x: 13, y: 22 });
     // The island is measured by the dock (the fog there is Lilycove's).
@@ -600,6 +601,39 @@ describe('item balls', () => {
     expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'ferry', home: true }));
     room.apply({ c: 'sail', id: 1000, to: '' });
     expect(room.actor(1000)!.m.spot).toEqual(harbor);
+  });
+
+  it('the SS TIDAL and MR. BRINEY run: each stop sails where its own menu does (br_boot.c)', () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const at = (map: string, x: number, y: number, facing: number) => {
+      room.actor(1000)!.m.spot = { map, x, y };
+      room.actor(1000)!.m.facing = facing;
+      room.step(new Map([[1000, [0]]]));
+      return room.step(new Map([[1000, [KEY_A]]])).find((e) => e.type === 'ferry');
+    };
+    const sail = (to: string) => { room.apply({ c: 'sail', id: 1000, to }); return { ...room.actor(1000)!.m.spot }; };
+    room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_SLATEPORT_CITY_HARBOR', x: 8, y: 11 }, facing: 2 });
+    room.step();
+    room.actor(1000)!.calm = 0;
+    // Slateport's attendant: Lilycove, and nowhere else (the FRONTIER is off the menu).
+    expect(at('MAP_SLATEPORT_CITY_HARBOR', 8, 11, 2)).toMatchObject({ to: [{ id: 'lilycove', name: 'LILYCOVE CITY' }] });
+    expect(sail('petalburg')).toEqual({ map: 'MAP_SLATEPORT_CITY_HARBOR', x: 8, y: 11 });
+    expect(sail('lilycove')).toEqual({ map: 'MAP_LILYCOVE_CITY_HARBOR', x: 8, y: 11 });
+    // ...and back, from Lilycove's.
+    expect(at('MAP_LILYCOVE_CITY_HARBOR', 8, 11, 2)).toMatchObject({ to: [{ id: 'slateport' }] });
+    expect(sail('slateport')).toEqual({ map: 'MAP_SLATEPORT_CITY_HARBOR', x: 8, y: 11 });
+    // MR. BRINEY in his cottage: Dewford; at Dewford: Petalburg or Slateport (the beach).
+    expect(at('MAP_ROUTE104_MR_BRINEYS_HOUSE', 5, 4, 2)).toMatchObject({ briney: true, to: [{ id: 'dewford', name: 'DEWFORD' }] });
+    expect(sail('dewford')).toEqual({ map: 'MAP_DEWFORD_TOWN', x: 11, y: 9 });
+    expect(at('MAP_DEWFORD_TOWN', 11, 9, 4)).toMatchObject({ briney: true, to: [{ id: 'petalburg' }, { id: 'beach', name: 'SLATEPORT' }] });
+    expect(sail('beach')).toEqual({ map: 'MAP_ROUTE109', x: 20, y: 24 });
+    expect(at('MAP_ROUTE109', 20, 24, 4)).toMatchObject({ briney: true, to: [{ id: 'dewford' }] });
+    expect(sail('petalburg')).toEqual({ map: 'MAP_ROUTE109', x: 20, y: 24 }); // not from here
+    expect(sail('dewford')).toEqual({ map: 'MAP_DEWFORD_TOWN', x: 11, y: 9 });
+    room.actor(1000)!.m.facing = 4;
+    expect(sail('petalburg')).toEqual({ map: 'MAP_ROUTE104_MR_BRINEYS_HOUSE', x: 5, y: 4 });
+    // He stands solid, as any townsperson.
+    expect(room.stepFor(room.actor(1000)!)({ map: 'MAP_ROUTE104_MR_BRINEYS_HOUSE', x: 5, y: 4 }, 2)).toBeNull();
   });
 
   it("ISLAND CAVE's wall opens by itself a phase on; ANCIENT TOMB's for the page that saw a flier", () => {

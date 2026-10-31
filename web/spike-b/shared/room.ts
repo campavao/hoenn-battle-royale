@@ -132,7 +132,7 @@ export type RoomEvent =
   | { type: 'guarded'; tick: number; id: number; name: string }
   /** A at the ferry's attendant (the live islands' stories, none: not sailing) or at a
    *  dock's sailor (`home`: back to Lilycove). */
-  | { type: 'ferry'; tick: number; id: number; to: { id: string; name: string }[]; home?: boolean }
+  | { type: 'ferry'; tick: number; id: number; to: { id: string; name: string }[]; home?: boolean; briney?: boolean }
   /** A at a MART's clerk. */
   | { type: 'mart'; tick: number; id: number; map: string }
   /** A at a gym leader nobody has beaten yet: their own battle (gyms.ts). */
@@ -168,11 +168,40 @@ export const DOCKS: Record<string, { map: string; x: number; y: number; sailor: 
   'navel-rock-top': { map: 'MAP_NAVEL_ROCK_HARBOR', x: 8, y: 4, sailor: [8, 5] },
   'navel-rock-bottom': { map: 'MAP_NAVEL_ROCK_HARBOR', x: 8, y: 4, sailor: [8, 5] },
 };
-/** The ferry's people, by cell: the attendant, and each dock's sailor. */
-export function ferryAt(map: string, x: number, y: number): 'attendant' | 'sailor' | undefined {
+/** Hoenn's own boats, kept running (br_boot.c; Cam: keep the harbours open): the SS TIDAL
+ *  between Slateport's and Lilycove's harbours, the BATTLE FRONTIER off its menu, and
+ *  MR. BRINEY between his cottage on Route 104, Dewford's dock and Route 109's beach, each
+ *  stop sailing where its multichoice does (MULTI_BRINEY_ON_DEWFORD, _OFF_DEWFORD). Where
+ *  each lands you: the scripts' own warps (SSTidalCorridor's 8,11; Dewford's sail to the
+ *  cottage, 5,4), or beside BRINEY ashore. */
+export const PORTS: Record<string, { name: string; land: Spot; facing: number }> = {
+  slateport: { name: 'SLATEPORT CITY', land: { map: 'MAP_SLATEPORT_CITY_HARBOR', x: 8, y: 11 }, facing: 1 },
+  lilycove: { name: 'LILYCOVE CITY', land: HARBOR_LANDING, facing: 1 },
+  petalburg: { name: 'PETALBURG', land: { map: 'MAP_ROUTE104_MR_BRINEYS_HOUSE', x: 5, y: 4 }, facing: 1 },
+  dewford: { name: 'DEWFORD', land: { map: 'MAP_DEWFORD_TOWN', x: 11, y: 9 }, facing: 4 },
+  beach: { name: 'SLATEPORT', land: { map: 'MAP_ROUTE109', x: 20, y: 24 }, facing: 4 },
+};
+/** Who sails from where (each map.json's object): Slateport's ferry attendant, and
+ *  MR. BRINEY at each of his three stops, all at once (one man in pret, VAR_BRINEY_LOCATION;
+ *  a room has many trainers). Lilycove's attendant is ATTENDANT, with the islands. */
+export const BOATS: { map: string; x: number; y: number; gfx: number; to: string[]; briney?: boolean }[] = [
+  { map: 'MAP_SLATEPORT_CITY_HARBOR', x: 8, y: 10, gfx: 45, to: ['lilycove'] },
+  { map: 'MAP_ROUTE104_MR_BRINEYS_HOUSE', x: 5, y: 3, gfx: 21, to: ['dewford'], briney: true },
+  { map: 'MAP_DEWFORD_TOWN', x: 12, y: 9, gfx: 21, to: ['petalburg', 'beach'], briney: true },
+  { map: 'MAP_ROUTE109', x: 21, y: 24, gfx: 21, to: ['dewford'], briney: true },
+];
+/** MR. BRINEY's boat, moored at each stop (OBJ_EVENT_GFX_MR_BRINEYS_BOAT). */
+export const MOORINGS: Spot[] = [
+  { map: 'MAP_ROUTE104', x: 12, y: 54 }, { map: 'MAP_DEWFORD_TOWN', x: 12, y: 8 }, { map: 'MAP_ROUTE109', x: 21, y: 26 },
+];
+const boatAt = (map: string, x: number, y: number) => BOATS.find((b) => b.map === map && b.x === x && b.y === y);
+/** The ferry's people, by cell: the attendant, each dock's sailor, and the boats'. */
+export function ferryAt(map: string, x: number, y: number): 'attendant' | 'sailor' | 'boat' | undefined {
   if (map === ATTENDANT.map && x === ATTENDANT.x && y === ATTENDANT.y) return 'attendant';
+  if (boatAt(map, x, y)) return 'boat';
   return Object.values(DOCKS).some((d) => d.map === map && d.sailor[0] === x && d.sailor[1] === y) ? 'sailor' : undefined;
 }
+const port = (id: string) => ({ id, name: PORTS[id].name });
 /** Every map the ferry's docks lead to on foot (their warps): the islands, which no
  *  seam or door joins to Hoenn. */
 export function islandMaps(all: readonly WorldMap[]): WorldMap[] {
@@ -497,8 +526,12 @@ export class Room {
       if (!a || a.bot || a.battling || a.m.action) return;
       const [x, y] = this.ahead(a);
       const who = ferryAt(a.m.spot.map, x, y);
+      const boat = who === 'boat' ? boatAt(a.m.spot.map, x, y) : undefined;
       if (cmd.to === '' && who === 'sailor') a.m = newMover(HARBOR_LANDING, 1);
-      else if (who === 'attendant' && this.sailingTo().some((s) => s.id === cmd.to)) {
+      else if ((boat?.to.includes(cmd.to) || (who === 'attendant' && cmd.to === 'slateport')) && PORTS[cmd.to]) {
+        const p = PORTS[cmd.to];
+        a.m = newMover({ ...p.land }, p.facing);
+      } else if (who === 'attendant' && this.sailingTo().some((s) => s.id === cmd.to)) {
         const d = DOCKS[cmd.to];
         a.m = newMover({ map: d.map, x: d.x, y: d.y }, 2);
       }
@@ -1429,7 +1462,9 @@ export class Room {
       const wall = !a.battling && (bits & KEY_A) && !(a.last & KEY_A) && atWall(a) ? this.events.find((e) => e.map === a.m.spot.map && e.story && DOORS[e.story] && !e.opened) : undefined;
       const ferry = !wall && !a.battling && (bits & KEY_A) && !(a.last & KEY_A) ? ferryAt(a.m.spot.map, ...this.ahead(a)) : undefined;
       if (ferry) {
-        events.push({ type: 'ferry', tick: this.tick, id: a.id, to: ferry === 'attendant' ? this.sailingTo() : [], ...(ferry === 'sailor' ? { home: true } : {}) });
+        const boat = ferry === 'boat' ? boatAt(a.m.spot.map, ...this.ahead(a)) : undefined;
+        const to = ferry === 'attendant' ? [port('slateport'), ...this.sailingTo()] : boat ? boat.to.map(port) : [];
+        events.push({ type: 'ferry', tick: this.tick, id: a.id, to, ...(ferry === 'sailor' ? { home: true } : {}), ...(boat?.briney ? { briney: true } : {}) });
       } else if (wall) {
         const how = DOORS[wall.story!];
         // DESERT RUINS': ROCK SMASH's crack, which anybody makes here (br_story.c).

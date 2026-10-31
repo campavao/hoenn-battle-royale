@@ -2300,10 +2300,26 @@ var DOCKS = {
   "navel-rock-top": { map: "MAP_NAVEL_ROCK_HARBOR", x: 8, y: 4, sailor: [8, 5] },
   "navel-rock-bottom": { map: "MAP_NAVEL_ROCK_HARBOR", x: 8, y: 4, sailor: [8, 5] }
 };
+var PORTS = {
+  slateport: { name: "SLATEPORT CITY", land: { map: "MAP_SLATEPORT_CITY_HARBOR", x: 8, y: 11 }, facing: 1 },
+  lilycove: { name: "LILYCOVE CITY", land: HARBOR_LANDING, facing: 1 },
+  petalburg: { name: "PETALBURG", land: { map: "MAP_ROUTE104_MR_BRINEYS_HOUSE", x: 5, y: 4 }, facing: 1 },
+  dewford: { name: "DEWFORD", land: { map: "MAP_DEWFORD_TOWN", x: 11, y: 9 }, facing: 4 },
+  beach: { name: "SLATEPORT", land: { map: "MAP_ROUTE109", x: 20, y: 24 }, facing: 4 }
+};
+var BOATS = [
+  { map: "MAP_SLATEPORT_CITY_HARBOR", x: 8, y: 10, gfx: 45, to: ["lilycove"] },
+  { map: "MAP_ROUTE104_MR_BRINEYS_HOUSE", x: 5, y: 3, gfx: 21, to: ["dewford"], briney: true },
+  { map: "MAP_DEWFORD_TOWN", x: 12, y: 9, gfx: 21, to: ["petalburg", "beach"], briney: true },
+  { map: "MAP_ROUTE109", x: 21, y: 24, gfx: 21, to: ["dewford"], briney: true }
+];
+var boatAt = (map, x, y) => BOATS.find((b) => b.map === map && b.x === x && b.y === y);
 function ferryAt(map, x, y) {
   if (map === ATTENDANT.map && x === ATTENDANT.x && y === ATTENDANT.y) return "attendant";
+  if (boatAt(map, x, y)) return "boat";
   return Object.values(DOCKS).some((d) => d.map === map && d.sailor[0] === x && d.sailor[1] === y) ? "sailor" : void 0;
 }
+var port = (id) => ({ id, name: PORTS[id].name });
 function islandMaps(all) {
   const byId = new Map(all.map((m) => [m.id, m]));
   const out = /* @__PURE__ */ new Map();
@@ -2457,8 +2473,12 @@ var Room = class {
       if (!a || a.bot || a.battling || a.m.action) return;
       const [x, y] = this.ahead(a);
       const who2 = ferryAt(a.m.spot.map, x, y);
+      const boat = who2 === "boat" ? boatAt(a.m.spot.map, x, y) : void 0;
       if (cmd.to === "" && who2 === "sailor") a.m = newMover(HARBOR_LANDING, 1);
-      else if (who2 === "attendant" && this.sailingTo().some((s) => s.id === cmd.to)) {
+      else if ((boat?.to.includes(cmd.to) || who2 === "attendant" && cmd.to === "slateport") && PORTS[cmd.to]) {
+        const p = PORTS[cmd.to];
+        a.m = newMover({ ...p.land }, p.facing);
+      } else if (who2 === "attendant" && this.sailingTo().some((s) => s.id === cmd.to)) {
         const d = DOCKS[cmd.to];
         a.m = newMover({ map: d.map, x: d.x, y: d.y }, 2);
       }
@@ -3367,7 +3387,9 @@ var Room = class {
       const wall = !a.battling && bits & KEY_A && !(a.last & KEY_A) && atWall(a) ? this.events.find((e) => e.map === a.m.spot.map && e.story && DOORS[e.story] && !e.opened) : void 0;
       const ferry = !wall && !a.battling && bits & KEY_A && !(a.last & KEY_A) ? ferryAt(a.m.spot.map, ...this.ahead(a)) : void 0;
       if (ferry) {
-        events.push({ type: "ferry", tick: this.tick, id: a.id, to: ferry === "attendant" ? this.sailingTo() : [], ...ferry === "sailor" ? { home: true } : {} });
+        const boat = ferry === "boat" ? boatAt(a.m.spot.map, ...this.ahead(a)) : void 0;
+        const to = ferry === "attendant" ? [port("slateport"), ...this.sailingTo()] : boat ? boat.to.map(port) : [];
+        events.push({ type: "ferry", tick: this.tick, id: a.id, to, ...ferry === "sailor" ? { home: true } : {}, ...boat?.briney ? { briney: true } : {} });
       } else if (wall) {
         const how = DOORS[wall.story];
         if (how === "smash") wall.opened = true;
@@ -4569,4 +4591,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "9e2c9cd7148f";
+export const WORLD_HASH = "679eb31bb747";
