@@ -27,6 +27,11 @@ on:
         description: 'Release note; blank lists the commits since the last tag'
         required: false
         default: ''
+      relay:
+        description: 'Deploy the relay even if relay/ is unchanged since the previous tag (that tag failed before its relay step)'
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   # A release never shares the branch's group: a push landing mid-release would
@@ -704,9 +709,12 @@ jobs:
           # is set at all, even empty, so the run exports exactly one of them.
           PROJECT_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
           ACCOUNT_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          # A tag whose release failed before this step (v0.3.62) still counts as the
+          # previous tag, so the next release would skip a relay that never deployed.
+          FORCE_RELAY: ${{ inputs.relay }}
         run: |
           prev="$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)"
-          if [ -n "$prev" ] && git diff --quiet "$prev" "$TAG" -- relay/; then
+          if [ "$FORCE_RELAY" != "true" ] && [ -n "$prev" ] && git diff --quiet "$prev" "$TAG" -- relay/; then
             echo "relay/ unchanged since $prev; the relay stays up"
             exit 0
           fi

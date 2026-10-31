@@ -25,13 +25,7 @@
 /sound
 /src
 /tools
-# relay/ is the Node server, not the site, but web/world-hash.ts reads the WORLD_HASH out
-# of relay/world/service.js when vite loads its config (#192). Leave that one file in
-# the upload, or the build dies on ENOENT before it starts (v0.3.62's release).
-/relay/*
-!/relay/world
-/relay/world/*
-!/relay/world/service.js
+/relay
 /*.elf
 /*.map
 /*.mk
