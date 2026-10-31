@@ -320,6 +320,8 @@ export interface WorldSocket {
 /** The world this page was built with (vite's define, world-hash.ts); unset under vitest. */
 declare const __WORLD_HASH__: string | undefined;
 const WORLD = typeof __WORLD_HASH__ === 'string' ? __WORLD_HASH__ : undefined;
+/** The build's world, short: a `stat` line's version (the relay keeps 16 characters). */
+export const WORLD_HASH_SHORT = (WORLD ?? 'dev').slice(0, 8);
 
 export interface WorldHandlers {
   onRoom(r: Extract<WorldDown, { t: 'room' }>): void;

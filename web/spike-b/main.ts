@@ -41,6 +41,8 @@ import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattle
 import { devRomParam, importRom } from './import';
 import { askToKeepStorage, registerServiceWorker } from '../src/pwa';
 import { parseRoomHash, withRoom, withoutRoom } from '../src/hash';
+import { recordSolo, statFlushed, statMessage } from '../src/match/stats';
+import { WORLD_HASH_SHORT } from './net';
 import { groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
 import { GOLD } from '../src/match/events';
@@ -2727,6 +2729,18 @@ function loop(now: number): void {
 
 // ---- boot -----------------------------------------------------------------------------
 
+/** QUICK PLAY's matches with no relay, which nothing else sees (match/stats.ts, POK-243),
+ *  told to the relay's own socket the next time it is there: once, never answered. */
+function sendStat(relay: string): void {
+  const msg = statMessage(`world-${WORLD_HASH_SHORT}`);
+  if (!msg) return;
+  try {
+    const ws = new WebSocket(relay);
+    ws.onopen = () => { ws.send(JSON.stringify(msg)); statFlushed(); setTimeout(() => ws.close(), 500); };
+    ws.onerror = () => ws.close();
+  } catch { /* kept for next time */ }
+}
+
 /** Takes the room's link out of the address bar (left it, gone, or never there). */
 function unlink(): void {
   if (parseRoomHash(location.hash)) history.replaceState(null, '', `${location.pathname}${location.search}${withoutRoom(location.hash) ? `#${withoutRoom(location.hash)}` : ''}`);
@@ -2807,7 +2821,7 @@ async function boot(): Promise<void> {
       onOld: () => { room = null; matchOn = false; forget(); lobby!.old(); },
       onRooms: (rooms) => lobby?.listed(rooms),
       onMatch: (l) => startMatch(l),
-      onOpen: () => lobby?.linkIs('up'),
+      onOpen: () => { lobby?.linkIs('up'); sendStat(url.replace(/\/world$/, '')); },
       onClosed: () => {
         reconnecting = false;
         lobby!.linkIs('down');
@@ -2846,7 +2860,7 @@ async function boot(): Promise<void> {
       // Out of the room for good: its link goes too, or the reload would walk back in.
       leave: () => { unlink(); location.reload(); },
       names: { species: speciesName, move: (id) => moveInfo(romTables, id)?.name },
-      solo: () => { room = null; startMatch(soloLink(hoenn.maps, patches, hoenn.world, (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0)); },
+      solo: () => { room = null; recordSolo(); startMatch(soloLink(hoenn.maps, patches, hoenn.world, (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0)); },
     });
     // Reloaded within a minute of a match: straight back in (or, too late, in to watch).
     const back = token();
