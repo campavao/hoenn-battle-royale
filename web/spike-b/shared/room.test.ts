@@ -603,6 +603,21 @@ describe('item balls', () => {
     expect(room.actor(1000)!.m.spot).toEqual(harbor);
   });
 
+  it('FLY off the MAP lands where the flight did: a town of the match, a cell to stand on, not out of the Zone', () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_PETALBURG_CITY', x: 10, y: 22 }, facing: 1 });
+    const fly = (map: string, x: number, y: number) => { room.apply({ c: 'fly', id: 1000, to: { map, x, y } }); return { ...room.actor(1000)!.m.spot }; };
+    // The Zone's gate is shut until the drop: no flying out of it.
+    (room as unknown as { opening: number }).opening = 60 * 60;
+    expect(room.ring().safari).toBeTruthy();
+    expect(fly('MAP_PETALBURG_CITY', 20, 17)).toEqual({ map: 'MAP_PETALBURG_CITY', x: 10, y: 22 });
+    (room as unknown as { opening: number }).opening = 0;
+    expect(room.ring().safari).toBeFalsy();
+    expect(fly('MAP_NOWHERE', 1, 1)).toEqual({ map: 'MAP_PETALBURG_CITY', x: 10, y: 22 });
+    expect(fly('MAP_PETALBURG_CITY', 0, 0)).toEqual({ map: 'MAP_PETALBURG_CITY', x: 10, y: 22 }); // a wall
+    expect(fly('MAP_PETALBURG_CITY', 20, 17)).toEqual({ map: 'MAP_PETALBURG_CITY', x: 20, y: 17 });
+  });
+
   it('the SS TIDAL and MR. BRINEY run: each stop sails where its own menu does (br_boot.c)', () => {
     const room = makeRoom(MAPS, PATCHES, 4242);
     const at = (map: string, x: number, y: number, facing: number) => {

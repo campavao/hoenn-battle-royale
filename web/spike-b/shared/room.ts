@@ -335,6 +335,8 @@ export type Command =
   | { c: 'released'; id: number; mons: { species: number; level: number }[] }
   /** `id` opened event `n`'s REGI wall (a Flying-type in their party, the page saw). */
   | { c: 'open'; id: number; n: number }
+  /** `id` flew off the MAP (FLY, br_map.c) and landed at `to`. */
+  | { c: 'fly'; id: number; to: Spot }
   /** `id` sails to story `to`'s island, or ('') from an island back to Lilycove. */
   | { c: 'sail'; id: number; to: string }
   /** `id`'s page went (a reload), or came back. */
@@ -521,6 +523,13 @@ export class Room {
     } else if (cmd.c === 'away') {
       const a = this.actor(cmd.id) ?? this.bench.find((b) => b.id === cmd.id);
       if (a && !('bot' in a && a.bot)) a.away = cmd.on || undefined;
+    } else if (cmd.c === 'fly') {
+      // To a town of the match's own Hoenn, on a cell a trainer could stand on, and not
+      // out of the Zone before the drop (its gate is shut both ways).
+      const a = this.actor(cmd.id), t = cmd.to;
+      if (!a || a.bot || a.battling || a.m.action || this.ring().safari || !this.places.has(t.map)) return;
+      if (this.world.cell(t.map, t.x, t.y) !== 0 || this.actors.some((o) => o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return;
+      a.m = newMover({ map: t.map, x: t.x, y: t.y }, 1);
     } else if (cmd.c === 'sail') {
       const a = this.actor(cmd.id);
       if (!a || a.bot || a.battling || a.m.action) return;

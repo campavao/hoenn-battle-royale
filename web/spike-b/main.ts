@@ -619,12 +619,16 @@ async function runMenu(c: string): Promise<void> {
   swapping = true;
   held.clear();
   try {
-    const { said } = await rom.menu(Number(c), () => {
+    const { said, flew } = await rom.menu(Number(c), () => {
       if (!swapping) return;
       battleEl.classList.add('on');
       if (look) uncover = ringMap!.cover(fogEl, rom!.emu);
     }, () => { uncover(); battleEl.classList.remove('on'); }, look);
     if (said) say(said);
+    // FLY off the MAP: where Emerald's flight landed the hidden field, this world's
+    // trainer goes (room.ts `fly`).
+    const to = flew && [...link.room.maps.values()].find((m) => m.group === flew.group && m.num === flew.num);
+    if (to) link.fly(to.id, flew.x, flew.y);
   } finally {
     uncover();
     swapping = false;
@@ -3021,7 +3025,7 @@ async function boot(): Promise<void> {
     }
   }
   bootRom(files, link?.room.seed ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { get link() { return link; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; } };
+  (window as unknown as { __spike: unknown }).__spike = { get link() { return link; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; } };
 }
 
 void boot();

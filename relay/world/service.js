@@ -2468,6 +2468,11 @@ var Room = class {
     } else if (cmd.c === "away") {
       const a = this.actor(cmd.id) ?? this.bench.find((b) => b.id === cmd.id);
       if (a && !("bot" in a && a.bot)) a.away = cmd.on || void 0;
+    } else if (cmd.c === "fly") {
+      const a = this.actor(cmd.id), t = cmd.to;
+      if (!a || a.bot || a.battling || a.m.action || this.ring().safari || !this.places.has(t.map)) return;
+      if (this.world.cell(t.map, t.x, t.y) !== 0 || this.actors.some((o) => o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return;
+      a.m = newMover({ map: t.map, x: t.x, y: t.y }, 1);
     } else if (cmd.c === "sail") {
       const a = this.actor(cmd.id);
       if (!a || a.bot || a.battling || a.m.action) return;
@@ -3972,6 +3977,10 @@ var Host = class {
   open(id, n) {
     if (this.players.has(id)) this.pending.push({ c: "open", id, n });
   }
+  /** FLY off the page's MAP landed it on `map` at x, y. */
+  fly(id, map, x, y) {
+    if (this.players.has(id)) this.pending.push({ c: "fly", id, to: { map, x, y } });
+  }
   /** The page asked the ferry for story `to`'s island ('' home). */
   sail(id, to) {
     if (this.players.has(id) && typeof to === "string" && to.length <= 32) this.pending.push({ c: "sail", id, to });
@@ -4258,6 +4267,8 @@ var WorldService = class {
           if (typeof m.map === "string") host.pick(phone.id, m.map.slice(0, 64));
         } else if (m.t === "sail") {
           if (typeof m.to === "string") host.sail(phone.id, m.to);
+        } else if (m.t === "fly") {
+          if (typeof m.map === "string" && Number.isInteger(m.x) && Number.isInteger(m.y)) host.fly(phone.id, m.map.slice(0, 64), m.x, m.y);
         } else if (m.t === "open") {
           if (Number.isInteger(m.n)) host.open(phone.id, m.n);
         } else if (m.t === "released") {
@@ -4591,4 +4602,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "679eb31bb747";
+export const WORLD_HASH = "c87151778de4";

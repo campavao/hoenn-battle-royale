@@ -208,7 +208,7 @@ export interface RomBattles {
    *  screen until the row's own screen is up (`onStart`). Resolves back on the field, with
    *  whatever was used or moved kept: `up` false when the row would not open, and `said`
    *  what the hidden field told the player instead of a screen, for the page to say. */
-  menu(action: number, onStart: () => void, onEnd: () => void, look?: MapLook): Promise<{ up: boolean; said: string }>;
+  menu(action: number, onStart: () => void, onEnd: () => void, look?: MapLook): Promise<{ up: boolean; said: string; flew?: { group: number; num: number; x: number; y: number } }>;
   /** The drop (br_pick.c): the fly map, "Drop where?", opened on `look`, every section a
    *  choice, its own twenty seconds. The section chosen, or 0 when the clock ran out on
    *  none. `onStart` when the map is up. */
@@ -519,6 +519,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   /** The parked field made to stand where `look` says, for the MAP's player icon
    *  (region_map.c InitMapBasedOnPlayerLocation): the section, and a spot on the parked
    *  map's own layout that its sum lands on the cell. Undone by the restore after. */
+  const partyMenuAt = sym('gPartyMenu');
   const lookFrom = (look: MapLook) => {
     const r = emu.bytes(ringAt, 36);
     r[4] = look.r & 0xff;
@@ -928,15 +929,17 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         if (look) lookFrom(look);
         emu.resume();
         drain(() => undefined);
-        // The MAP is a look here: FLY off it would fly the hidden field, not this world.
         // MOVES off the team is noted as it is asked (gBrCatch.movesSlot), for the line its
-        // field says when there is nothing to learn.
+        // field says when there is nothing to learn. A on a town on the MAP, with somebody
+        // who could learn FLY, is Emerald's own flight (br_map.c, POK-278): BrMap_TakeFlight
+        // names the bird in gPartyMenu.slotId, which nothing else on a look writes.
         let moves = false;
+        if (look) emu.write(partyMenuAt + 9, 0xff, 8);
         const watch = emu.onFrame(() => {
           drain(() => undefined);
-          if (look) emu.write(mapAt + 1, 0xff, 8);
           if (!Number.isNaN(catchAt) && emu.read(catchAt + 2, 8) !== 0xff) moves = true;
         });
+        let flew: { group: number; num: number; x: number; y: number } | undefined;
         const tap = async (k: GbaKey) => { emu.press(k); await frames(emu, 3); emu.release(k); await frames(emu, 3); };
         let up = false;
         let back = true;
@@ -965,11 +968,21 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
           // Out of the row's screen the game puts the START menu back up, on the hidden
           // field: the page takes the screen now, and B shuts the menu out of sight.
           onEnd();
+          // A flight: the bird, then the warp, on the hidden field. Where it lands (the
+          // town's heal location) is where the page's trainer goes; the hidden ROM is
+          // parked again after, as after any row.
+          const s1 = () => emu.read(save1, 32);
+          const from = emu.read(s1() + 4, 16);
+          if (look && emu.read(partyMenuAt + 9, 8) < 6 && await until(emu, () => onField() && emu.read(s1() + 4, 16) !== from, 900)) {
+            await frames(emu, 30);
+            const s = s1();
+            flew = { group: emu.read(s + 4, 8), num: emu.read(s + 5, 8), x: emu.read(s, 16), y: emu.read(s + 2, 16) };
+          }
           // Or the row asked the field for a screen of its own and shut the menu: the
           // team's MOVES (party_menu.c's CursorCb_BrMoves) is the relearner once the field
           // is back (BrCatch_Tick). That one is the player's too, and what it taught stays.
-          let again = false;
-          for (;;) {
+          let again = !!flew;
+          for (; !flew;) {
             // The START menu takes keys once its handler is back and its text drawn
             // (touch.ts's START_SETTLE_FRAMES).
             await until(emu, () => emu.read(menuCbAt, 32) === startMenu.input || !onField(), 120);
@@ -979,7 +992,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
             await backOnField();
             onEnd();
           }
-          if (emu.read(menuCbAt, 32) === startMenu.input) {
+          if (!flew && emu.read(menuCbAt, 32) === startMenu.input) {
             await frames(emu, 12);
             await tap('b');
           } else back = again;
@@ -997,7 +1010,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         else keep(now);
         carried = last = now;
         leaving = false;
-        return { up, said };
+        return { up, said, ...(flew ? { flew } : {}) };
       });
     },
     drop(look, onStart) {
