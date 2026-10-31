@@ -22,6 +22,7 @@ import { loadCheckedRelease } from '../src/release';
 import { isPrePatched, sha1Hex } from '../src/rom/emerald';
 import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fameTeam, fieldOf, healed, rekey, spillOf, teamOf, withMoney, withoutItem } from './carry';
 import { startMenuTable } from '../src/touch';
+import { FADE_COLOR_WORD, FADE_Y_WORD, fadeOf } from '../src/field';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 import { CATCH_UP_SPEED, spectatePace } from '../src/match/spectate';
 import type { SpMsg } from './shared/wire';
@@ -940,6 +941,12 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         emu.write(askAt, WILD_ASKED_PICK, 8);
         const up = await until(emu, () => emu.read(askAt, 8) === WILD_FIGHTING && !onField(), 120);
         if (up) {
+          // Off the field is not on screen yet: the ROM fades to black and loads the region
+          // map, and showing it then put a black band over the page for a moment at every
+          // buzzer. The page keeps the field until the map's fade-in is done (two seconds
+          // at most, so a ROM with no fade to read still shows its map).
+          const fadeAt = sym('gPaletteFade');
+          await until(emu, () => { if (Number.isNaN(fadeAt)) return true; const f = fadeOf(emu.read(fadeAt + FADE_Y_WORD, 16), emu.read(fadeAt + FADE_COLOR_WORD, 16)); return !f.active && f.y === 0; }, 120);
           onStart();
           // Chosen, or the map's clock (BrPick.timer) ran out with the cursor on no place,
           // which asks nothing: a second on, it is nobody's choice.
