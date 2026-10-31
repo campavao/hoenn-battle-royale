@@ -575,7 +575,9 @@ function ask(title: string, rows: [string, string][], start = false, more: { pic
 /** A at a dropped bag: what it holds, the way the match asks (br_loot.c's TryTake). What
  *  is left goes back down as the bag, for somebody else (POK-294: nothing leaves). */
 async function openBag(key: number, bag: Bag, who: string): Promise<void> {
-  const mons = bag.mons ?? [];
+  // Level 0 is the DAY CARE's chest (room.ts placeChest): the rung the match is at now.
+  const rung = rungForPhase(link.room.ring().phase + 1);
+  const mons = (bag.mons ?? []).map((m) => (m.level > 0 ? m : { ...m, level: rung }));
   const things = bag.items.length > 0 || bag.money > 0;
   const c = mons.length && things ? await ask(`What will you take from ${who}'s BAG?`, [['POKéMON', 'mons'], ['BAG', 'items'], ['CANCEL', '']]) : mons.length ? 'mons' : 'items';
   if (c === 'items') return takeBag(key, bag, who);

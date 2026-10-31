@@ -5,6 +5,7 @@ import { SAFARI_CELLS } from '../../src/match/safari';
 import { GIFTS } from '../../src/match/gifts';
 import { GOLD } from '../../src/match/events';
 import ballsC from '../../../src/br/br_balls.c?raw';
+import zoneC from '../../../src/br/br_zone.c?raw';
 import roomsJson from '../data/rooms.json';
 import { describe, expect, it } from 'vitest';
 import type { WorldMap } from '../../src/bots/world';
@@ -17,7 +18,7 @@ import { Host, play } from './host';
 import { over } from './over';
 import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, isTm, within } from './items';
 import { HURT, botKeys, health } from './bots';
-import { AFTER_WIN, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, WALKUP_BANG, eventPiece, makeRoom, wornParty } from './room';
+import { AFTER_WIN, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, WALKUP_BANG, CHEST, CHEST_SPECIES, ITEM_MASTER_BALL, ZONE_CELLS, ZONE_ITEMS, ZONE_TMS, eventPiece, makeRoom, zoneBalls, wornParty } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -481,9 +482,10 @@ describe('trainer against trainer', () => {
 describe('item balls', () => {
   it('are dealt from the seed on plain ground a trainer can reach, a few a map', () => {
     const one = makeRoom(MAPS, PATCHES, 4242), two = makeRoom(MAPS, PATCHES, 4242), other = makeRoom(MAPS, PATCHES, 7);
-    const g = [...one.ground().values()];
-    expect(g).toEqual([...two.ground().values()]);
-    expect(g).not.toEqual([...other.ground().values()]);
+    // The field's (the Zone's six are br_zone.c's, below).
+    const g = [...one.ground().values()].filter((b) => !b.map.startsWith(SAFARI));
+    expect(g).toEqual([...two.ground().values()].filter((b) => !b.map.startsWith(SAFARI)));
+    expect(g).not.toEqual([...other.ground().values()].filter((b) => !b.map.startsWith(SAFARI)));
     const perMap = new Map<string, number>();
     for (const b of g) if (!b.gift) perMap.set(b.map, (perMap.get(b.map) ?? 0) + 1);
     expect(perMap.size).toBeGreaterThanOrEqual(5); // every map you can walk to
@@ -506,7 +508,7 @@ describe('item balls', () => {
     const room = makeRoom(MAPS, PATCHES, 4242);
     const rooms = roomsJson as [string, number, number, boolean, boolean, number, number, boolean][];
     const g = [...room.ground().values()];
-    const caches = g.filter((b) => !room.places.has(b.map));
+    const caches = g.filter((b) => !room.places.has(b.map) && !b.map.startsWith(SAFARI));
     expect(caches.length).toBeGreaterThan(20);
     for (const b of caches) {
       expect(rooms.some(([m, x, y, , cache]) => cache && m === b.map && x === b.x && y === b.y)).toBe(true);
@@ -972,7 +974,7 @@ describe('a fallen trainer\'s bag', () => {
     room.apply({ c: 'join', id: 2, bot: false, name: 'B', skin: 0, spot: { map: 'MAP_LITTLEROOT_TOWN', x: 9, y: 12 }, facing: 1 });
     room.apply({ c: 'out', id: 1, bag: { items: [], money: 0 } });
     room.apply({ c: 'leave', id: 2 });
-    expect(room.spills.size).toBe(0);
+    expect([...room.spills.values()].filter((s) => s.map !== CHEST.map)).toEqual([]); // the DAY CARE's chest is the room's
   });
 
   it('what a phone sends is made safe, and a bag put back never grows', () => {
@@ -1620,5 +1622,50 @@ describe('after the last trainer is out', () => {
     expect(over(host.room)).toBe(true);
     expect(host.room.results.winner).toBeGreaterThan(0);
     expect(host.room.results.fallen.some((x) => x.bot && x.by)).toBe(true); // a bot beat a bot
+  });
+});
+
+describe('the Safari Zone loot (br_zone.c)', () => {
+  it("six balls, one an area on br_zone.c's own cells, and about one match in eight has the MASTER BALL", () => {
+    // The C's sSafariItemCells, by area: the room's cells are the ROM's, not a copy.
+    const names: Record<string, string> = { 0: 'NORTHWEST', 1: 'NORTH', 12: 'NORTHEAST', 2: 'SOUTHWEST', 3: 'SOUTH', 13: 'SOUTHEAST' };
+    const cells = [...zoneC.slice(zoneC.indexOf('sSafariItemCells')).matchAll(/\{\s*(\d+),\s*(\d+),\s*(\d+)\s*\}/g)].slice(0, 6).map((m) => `MAP_SAFARI_ZONE_${names[m[1]]}:${m[2]}:${m[3]}`);
+    expect(ZONE_CELLS.map((c) => `${c.map}:${c.x}:${c.y}`)).toEqual(cells);
+    let masters = 0;
+    for (let seed = 1; seed <= 400; seed++) {
+      const ids = zoneBalls(seed);
+      expect(ids).toHaveLength(6);
+      for (const id of ids) expect(id === ITEM_MASTER_BALL || ZONE_ITEMS.includes(id) || ZONE_TMS.includes(id)).toBe(true);
+      const m = ids.filter((id) => id === ITEM_MASTER_BALL).length;
+      expect(m).toBeLessThanOrEqual(1);
+      masters += m;
+    }
+    expect(masters).toBeGreaterThan(25);
+    expect(masters).toBeLessThan(75);
+    // On the room's ground, each where a trainer can stand to reach it.
+    const room = makeRoom(MAPS, PATCHES, 7);
+    expect(ZONE_CELLS.map((c) => room.groundAt(c.map, c.x, c.y)?.item)).toEqual(zoneBalls(7));
+    // (plain ground or tall grass, the class-7 cell NORTHEAST's is: the ROM's own cells)
+    for (const c of ZONE_CELLS) expect([0, 7], `${c.map} ${c.x},${c.y}`).toContain(room.world.cell(c.map, c.x, c.y));
+  });
+
+  it('the DAY CARE is a chest: one fully evolved POKeMON on its floor, the first one there takes it, every round', () => {
+    const chest = [...zoneC.slice(zoneC.indexOf('sChest[]')).split('};')[0].matchAll(/SPECIES_([A-Z]+)/g)].map((m) => m[1]);
+    expect(chest.length).toBe(CHEST_SPECIES.length);
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const s = room.spillAt(CHEST.map, CHEST.x, CHEST.y);
+    expect(s?.bag.mons).toHaveLength(1);
+    expect(CHEST_SPECIES).toContain(s!.bag.mons![0].species);
+    // Level 0: the rung the match is at when somebody takes it (the page's).
+    expect(s!.bag.mons![0].level).toBe(0);
+    // Taken, it is gone for the round, and back in the next.
+    room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: { map: CHEST.map, x: CHEST.x, y: CHEST.y + 1 }, facing: 2 });
+    const a = room.actor(1000)!;
+    a.calm = 0;
+    room.step(new Map([[1000, [0]]]));
+    expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ id: 1000, key: s!.key }));
+    expect(room.spillAt(CHEST.map, CHEST.x, CHEST.y)).toBeUndefined();
+    (room as unknown as { newRound(n: number): void }).newRound(1);
+    expect(room.spillAt(CHEST.map, CHEST.x, CHEST.y)?.bag.mons).toHaveLength(1);
   });
 });
