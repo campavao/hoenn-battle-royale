@@ -95,6 +95,18 @@ void BrMusic_Tick(void)
 
     if (!gBrMusic.asked || !BrField_OverworldRunning())
         return;
+    // The page's sound, once: an SE over the song, or a fanfare in its place (the song
+    // comes back from the top once it is done, below).
+    if (gBrMusic.sound != 0)
+    {
+        u16 sound = gBrMusic.sound;
+
+        gBrMusic.sound = 0;
+        if (sound & BR_MUSIC_FANFARE)
+            PlayFanfare(sound & ~BR_MUSIC_FANFARE);
+        else
+            PlaySE(sound);
+    }
     want = Want();
     if (want != gBrMusic.playing)
     {
@@ -124,5 +136,11 @@ void BrMusic_Tick(void)
     {
         gBrMusic.fadeIn = 0;
         Start();
+    }
+    // A fanfare a turn cut short: its task is not carried across the parked state, so
+    // nothing would give the song back.
+    else if (IsFanfareTaskInactive() && (gMPlayInfo_BGM.status & MUSICPLAYER_STATUS_PAUSE))
+    {
+        m4aMPlayContinue(&gMPlayInfo_BGM);
     }
 }

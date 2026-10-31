@@ -254,6 +254,9 @@ export interface RomBattles {
   /** The song for where the page's trainer is (music.ts), played by the hidden ROM
    *  between battles (br_music.h); null for none, and the ROM stands still between them. */
   music(ask: MusicAsk | null): void;
+  /** A sound of the field's (music.ts SE_*, MUS_* fanfares), played once by the hidden
+   *  ROM on its field (gBrMusic.sound); nothing on a patch without it, or with no song. */
+  sound(id: number): void;
   press(k: GbaKey): void;
   release(k: GbaKey): void;
   emu: Emulator;
@@ -677,6 +680,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     emu,
     press: (k) => emu.press(k),
     release: (k) => emu.release(k),
+    sound(id) {
+      // Only while the song plays: a ROM standing still would play it when it next ran.
+      if (sounds.length && tune && singing && !turns) emu.write(musicAt + 10, id & 0xffff, 16);
+    },
     music(ask) {
       tune = ask;
       if (!sounds.length) return;
