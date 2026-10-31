@@ -4224,6 +4224,7 @@ var WorldService = class {
           const hosted = !room2.owner && !room2.quick;
           if (!room2.owner) room2.owner = id;
           this.opts.log(`world: ${phone.name}#${id} in room ${room2.code}${room2.quick ? " (quick)" : ""}, ${room2.members.size} there`);
+          if (this.waiting(room2)) room2.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS);
           this.opts.log(hosted ? `room ${room2.code} hosted by ${who(phone)}${room2.set.door === "open" ? " (open)" : ""}` : `room ${room2.code}: ${who(phone)} ${room2.quick ? "quick-joined" : room2.host ? "spectates" : "joined"}`);
           this.roster(room2);
           if (room2.host) {
@@ -4238,7 +4239,12 @@ var WorldService = class {
         if (!phone || !room) return;
         const host = room.host;
         if (m.t === "start") {
-          if (!host && phone.id === room.owner) this.start(room);
+          if (!host && phone.id === room.owner) {
+            if (this.waiting(room)) {
+              room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS);
+              this.roster(room);
+            } else this.start(room);
+          }
         } else if (m.t === "set") {
           if (!host && phone.id === room.owner && !room.quick && m.set && typeof m.set === "object") {
             const s = m.set;
@@ -4476,8 +4482,15 @@ var WorldService = class {
     room.host = null;
     room.streams.clear();
     for (const p of room.members.values()) p.watching = 0;
-    if (room.quick) room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS);
+    if (room.quick) {
+      room.played = true;
+      room.startsAt = null;
+    }
     this.roster(room);
+  }
+  /** A quick room back from a match, waiting for READY UP: no match, no count. */
+  waiting(room) {
+    return room.quick && !!room.played && !room.host && room.startsAt === null;
   }
   close(room) {
     for (const id of room.members.keys()) if (this.where.get(id) === room) this.where.delete(id);
@@ -4547,6 +4560,7 @@ var WorldService = class {
         members,
         playing: !!room.host,
         ...room.startsAt !== null ? { startsIn: Math.max(0, room.startsAt - now) } : {},
+        ...this.waiting(room) ? { ready: true } : {},
         set: room.set,
         ...p.id === room.owner && room.set.door === "pass" ? { pass: room.pass } : {}
       });
@@ -4619,4 +4633,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "31e58d6c2bc5";
+export const WORLD_HASH = "d3fa2ff73752";

@@ -22,7 +22,7 @@ import { fillFor, type Listed, type Member, type Settings } from './shared/wire'
 import { BOT_FILL, FOG_STEPS, SAFARI_STEPS, TEXT_SPEEDS, dealable, nextTextSpeed, textSpeedLabel, doorLabel, fillLabel, levelOf, nextDoor, nextFog, nextMax, nextSafari, safariLabel } from '../src/match/room';
 
 /** The room as the relay last said it is (wire.ts's `room`). */
-export interface RoomInfo { code: string; quick: boolean; you: number; key?: string; owner: number; members: Member[]; playing: boolean; startsIn?: number; set: Settings; pass?: string }
+export interface RoomInfo { code: string; quick: boolean; you: number; key?: string; owner: number; members: Member[]; playing: boolean; startsIn?: number; set: Settings; pass?: string; ready?: boolean }
 
 export interface LobbyHooks {
   /** Into a room: by code, a new one of my own, or quick play's. */
@@ -457,6 +457,7 @@ export class Lobby {
     const fill = fillFor({ bots: r.set.bots, max }, r.members.length);
     const startable = dealable(r.members.length, fill);
     const note = r.playing ? 'A match is on. You watch it, and are in the next.'
+      : r.ready ? (isHost ? 'READY UP when everybody is: the next match counts down from it.' : 'Waiting for the host to READY UP.')
       : !isHost ? 'Waiting for the host to start.'
         : !startable ? 'Nobody to play against. Turn FILL on, or wait for somebody.' : '';
     return {
@@ -468,7 +469,7 @@ export class Lobby {
       isHost,
       started: r.playing,
       canStart: isHost && !r.playing && startable,
-      startLabel: 'START',
+      startLabel: r.ready ? 'READY UP' : 'START',
       countdown: left === null ? null : Math.ceil(left),
       // The host's, in a room of their own (a quick room's are the relay's): the live
       // room's, in its order (app.ts hostOptions).
