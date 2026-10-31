@@ -214,3 +214,15 @@ test('two players: the room link brings a friend in, and both see one world', as
     await gc.close();
   }
 });
+
+test('the debug flags deal a world of the page own: #solo&fast&nobots&seed=7', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto(`/?rom=${romHashParam()}#solo&fast&nobots&seed=7`);
+  type W = { link?: { me: number; room: { seed: number; ringPhase: number; opening: number; actors: { id: number; name: string }[] } } };
+  await page.waitForFunction(() => !!(window as unknown as { __spike: W }).__spike?.link, undefined, { timeout: 90_000 });
+  const r = await page.evaluate(() => { const l = (window as unknown as { __spike: W }).__spike.link!; return { seed: l.room.seed, ring: l.room.ringPhase, opening: l.room.opening, actors: l.room.actors.map((a) => a.name) }; });
+  expect(r.seed, '#seed=7').toBe(7);
+  expect(r.ring, '#fast: 15 s a fog phase').toBe(15 * 60);
+  expect(r.opening, '#fast: 25 s of Safari').toBe(25 * 60);
+  expect(r.actors, '#nobots: me and nobody else, by my own name').toEqual(['CAM']);
+});

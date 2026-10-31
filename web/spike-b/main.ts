@@ -40,7 +40,7 @@ import { MusicCue, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { devRomParam, importRom } from './import';
 import { askToKeepStorage, registerServiceWorker } from '../src/pwa';
-import { parseRoomHash, withRoom, withoutRoom } from '../src/hash';
+import { devPace, parseRoomHash, withRoom, withoutRoom } from '../src/hash';
 import { recordSolo, statFlushed, statMessage } from '../src/match/stats';
 import { WORLD_HASH_SHORT } from './net';
 import { groundCount, isTm, tradedInto } from './shared/items';
@@ -2796,12 +2796,24 @@ async function boot(): Promise<void> {
   const next = () => { const p = rest.find((r) => !r.mips); if (p) { paint(p); mipFor(p, 0); setTimeout(next, 16); } };
   setTimeout(next, 500);
   const booted = (r: RomBattles) => { rom = r; r.emu.onFrame(trackBag); if (link) r.reseed(link.room.seed); if (comingBack) void takeBack(r); giveNext(); };
-  if (q.has('solo')) {
+  // A world of the page's own, as the live game's debug flags deal it (debug.ts): #fast
+  // (25 s of Safari, 15 s a fog phase), #safari=, #fog=, #seed=, #nobots. ?ring=<seconds>
+  // is the older spelling of #fog=.
+  const solo = (): WorldLink => {
+    const pace = devPace(location.hash);
+    const ring = Number(q.get('ring')) || pace?.fogSecs;
+    const seed = Number(new URLSearchParams(location.hash.slice(1)).get('seed')) >>> 0;
+    return soloLink(hoenn.maps, patches, hoenn.world, seed || (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0, {
+      ...(ring ? { ringFrames: Math.round(ring * 60) } : {}),
+      ...(pace?.safariSecs !== undefined || ring ? { openingFrames: Math.round((pace?.safariSecs ?? ring!) * 60) } : {}),
+      ...(new URLSearchParams(location.hash.slice(1)).has('nobots') ? { bots: 0 } : {}),
+      name: me().name, skin: me().skin,
+    });
+  };
+  if (q.has('solo') || parseRoomHash(location.hash)?.mode === 'solo') {
     // The debug path (Cam, 2026-10-29): straight into a world of the page's own, the bots
-    // and nobody else. A quicker fog to try it: ?ring=<seconds a phase>.
-    startMatch(soloLink(hoenn.maps, patches, hoenn.world, (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0));
-    const ringSecs = Number(q.get('ring'));
-    if (ringSecs > 0) link.room.ringPhase = link.room.opening = Math.round(ringSecs * 60);
+    // and nobody else.
+    startMatch(solo());
   } else {
     // The live game's way in: the menu, a room, START (lobby.ts).
     document.getElementById('intro')?.remove();
@@ -2860,7 +2872,7 @@ async function boot(): Promise<void> {
       // Out of the room for good: its link goes too, or the reload would walk back in.
       leave: () => { unlink(); location.reload(); },
       names: { species: speciesName, move: (id) => moveInfo(romTables, id)?.name },
-      solo: () => { room = null; recordSolo(); startMatch(soloLink(hoenn.maps, patches, hoenn.world, (crypto.getRandomValues(new Uint32Array(1))[0] || 1) >>> 0)); },
+      solo: () => { room = null; recordSolo(); startMatch(solo()); },
     });
     // Reloaded within a minute of a match: straight back in (or, too late, in to watch).
     const back = token();
