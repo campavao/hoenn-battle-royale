@@ -97,7 +97,7 @@ describe('teamOf', () => {
 });
 
 describe('fameTeam', () => {
-  it('reads the nickname, moves, HP and shininess the hall of fame shows', () => {
+  it('reads the nickname, moves, HP, shininess, personality and OT id the hall of fame shows', () => {
     const party = new Uint8Array(600);
     const v = new DataView(party.buffer);
     // personality 0: GAEM, growth then attacks; 0x0102 ^ 0x0304 is not under 8, not shiny
@@ -111,7 +111,7 @@ describe('fameTeam', () => {
     party[84] = 9;
     v.setUint16(86, 20, true);
     v.setUint16(88, 27, true);
-    expect(fameTeam(party, 1)).toEqual([{ species: 252, nickname: 'TAMY', level: 9, hp: 20, maxHp: 27, shiny: false, moves: [{ id: 1 }, { id: 43 }] }]);
+    expect(fameTeam(party, 1)).toEqual([{ species: 252, nickname: 'TAMY', level: 9, hp: 20, maxHp: 27, shiny: false, moves: [{ id: 1 }, { id: 43 }], personality: 0, otId: key }]);
     expect(fameTeam(party, 0)).toEqual([]);
   });
 });

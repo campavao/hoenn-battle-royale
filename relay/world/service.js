@@ -4115,6 +4115,8 @@ function teamOf(t) {
       ...int(m.hp, 999) !== void 0 ? { hp: m.hp } : {},
       ...int(m.maxHp, 999) !== void 0 ? { maxHp: m.maxHp } : {},
       ...m.shiny === true ? { shiny: true } : {},
+      ...int(m.personality, 4294967295) !== void 0 ? { personality: m.personality } : {},
+      ...int(m.otId, 4294967295) !== void 0 ? { otId: m.otId } : {},
       moves
     });
   }
@@ -4617,4 +4619,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "219563029b11";
+export const WORLD_HASH = "31e58d6c2bc5";

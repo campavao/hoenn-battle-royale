@@ -278,6 +278,24 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it("a team row keeps its personality and OT id, for the champion's parade on everybody's ROM", () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
+    try {
+      const a = phone(), b = phone();
+      const sa = svc.open(a.link), sb = svc.open(b.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, code }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      const id = (a.got.find((m) => m.t === 'hello') as unknown as { id: number }).id;
+      sa.onText(JSON.stringify({ t: 'team', mons: [{ species: 43, level: 9, personality: 0xdeadbeef, otId: 12345, moves: [] }] }));
+      expect(b.got.at(-1)).toEqual({ t: 'team', id, mons: [{ species: 43, level: 9, personality: 0xdeadbeef, otId: 12345, moves: [] }] });
+      sa.onText(JSON.stringify({ t: 'team', mons: [{ species: 43, level: 9, personality: -1, otId: 2 ** 32, moves: [] }] }));
+      expect(b.got.at(-1)).toEqual({ t: 'team', id, mons: [{ species: 43, level: 9, moves: [] }] });
+    } finally {
+      svc.stop();
+    }
+  });
   it("a trainer's bag rides with their team, for a watcher's START, sane or not at all", () => {
     const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
     try {

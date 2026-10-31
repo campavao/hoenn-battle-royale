@@ -106,6 +106,9 @@ export interface FameMon {
   maxHp?: number;
   shiny?: boolean;
   moves?: readonly { id: number }[];
+  /** The row's personality and OT id, for a parade of it (its colours, gender, shine). */
+  personality?: number;
+  otId?: number;
 }
 
 /** The champion's team (POK-243's half of the parade), or null when it never arrived --

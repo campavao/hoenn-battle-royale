@@ -52,6 +52,8 @@ function teamOf(t: unknown): FameMon[] | undefined {
       ...(int(m.hp, 999) !== undefined ? { hp: m.hp as number } : {}),
       ...(int(m.maxHp, 999) !== undefined ? { maxHp: m.maxHp as number } : {}),
       ...(m.shiny === true ? { shiny: true } : {}),
+      ...(int(m.personality, 0xffffffff) !== undefined ? { personality: m.personality as number } : {}),
+      ...(int(m.otId, 0xffffffff) !== undefined ? { otId: m.otId as number } : {}),
       moves,
     });
   }
