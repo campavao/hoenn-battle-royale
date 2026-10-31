@@ -25,13 +25,13 @@ test('the host leaves mid-match and the guest picks up the clock', async ({ brow
 
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&fast&seed=20260916&testmon&rom=${rom}`);
+    await host.goto(`/classic/#host&fast&seed=20260916&testmon&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
 
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
+    await guest.goto(`/classic/#join=${code}&fast&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
     await startWith(host, 2);
 
@@ -107,13 +107,13 @@ test('the host tabs out and hands the match over without leaving', async ({ brow
 
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&fast&seed=20260917&testmon&rom=${rom}`);
+    await host.goto(`/classic/#host&fast&seed=20260917&testmon&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
 
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
+    await guest.goto(`/classic/#join=${code}&fast&testmon&rom=${rom}`);
     await startWith(host, 2);
     await expect(guest.locator('#match-strip')).toContainText(/SAFE: /, { timeout: 120_000 });
     expect(await guest.evaluate(() => (window as unknown as BrWindow).__br.director)).toBeUndefined();
@@ -183,7 +183,7 @@ test('a guest promoted while its tab is hidden hands the match on', async ({ bro
 
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&fast&seed=20260918&testmon&rom=${rom}`);
+    await host.goto(`/classic/#host&fast&seed=20260918&testmon&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
@@ -193,10 +193,10 @@ test('a guest promoted while its tab is hidden hands the match on', async ({ bro
     sleepy.on('console', (msg) => {
       if (msg.text().startsWith('[room]')) said.push(msg.text());
     });
-    await sleepy.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
+    await sleepy.goto(`/classic/#join=${code}&fast&testmon&rom=${rom}`);
     await expect(host.locator('#room-roster li')).toHaveCount(2, { timeout: 60_000 });
     const awake = await awakeCtx.newPage();
-    await awake.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
+    await awake.goto(`/classic/#join=${code}&fast&testmon&rom=${rom}`);
     await startWith(host, 3);
     await expect(sleepy.locator('#match-strip')).toContainText(/SAFE: /, { timeout: 120_000 });
     await expect(awake.locator('#match-strip')).toContainText(/SAFE: /, { timeout: 120_000 });
@@ -246,12 +246,12 @@ test('a socket that blips rejoins with one of everything, not two', async ({ bro
 
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&noauto&nobots&rom=${rom}`);
+    await host.goto(`/classic/#host&noauto&nobots&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&noauto&rom=${rom}`);
+    await guest.goto(`/classic/#join=${code}&noauto&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
 
     const listeners = () =>

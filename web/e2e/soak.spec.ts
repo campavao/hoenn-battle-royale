@@ -92,7 +92,7 @@ test('a whole match, with the host carrying it', async ({ browser }) => {
       // The real thing: default pace, a full room of bots, no `#fast`. The host is the
       // worst case by construction -- the director, the bots' A*, the loot table, the
       // ticker and (once two bots meet) a second emulator, all on top of its own game.
-      await host.goto(`/#host&seed=20260916&testmon&perf&rom=${rom}`);
+      await host.goto(`/classic/#host&seed=20260916&testmon&perf&rom=${rom}`);
       await host.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
       // Thirty, not the default eight (perf.spec's ladder): rooms fill to thirty now, and
       // a full room is what the ticket's acceptance is written for.

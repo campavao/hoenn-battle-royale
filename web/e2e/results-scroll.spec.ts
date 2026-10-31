@@ -42,7 +42,7 @@ const picture = (page: Page) =>
     return h;
   });
 
-for (const path of ['/', '/spike-b/']) {
+for (const path of ['/', '/classic/']) {
   test(`${path}: a finger, an arrow and the wheel each move the standings`, async ({ browser }) => {
     const ctx = await browser.newContext({ viewport: PHONE, hasTouch: true, isMobile: true });
     const page = await ctx.newPage();

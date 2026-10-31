@@ -35,7 +35,7 @@ export function createWorld({ log = () => {}, now = () => performance.now() } = 
   let loading = null;
   const load = () => {
     loading ??= import("./world/service.js").then((m) => {
-      service = new m.WorldService({ maps: m.MAPS, patches: m.PATCHES, bots: process.env.WORLD_BOTS !== undefined ? Number(process.env.WORLD_BOTS) : BOTS, cap: CAP, now, log, ringSecs: Number(process.env.WORLD_RING_SECS) || undefined, safariSecs: process.env.WORLD_SAFARI_SECS !== undefined ? Number(process.env.WORLD_SAFARI_SECS) : undefined,
+      service = new m.WorldService({ maps: m.MAPS, patches: m.PATCHES, world: m.WORLD_HASH, bots: process.env.WORLD_BOTS !== undefined ? Number(process.env.WORLD_BOTS) : BOTS, cap: CAP, now, log, ringSecs: Number(process.env.WORLD_RING_SECS) || undefined, safariSecs: process.env.WORLD_SAFARI_SECS !== undefined ? Number(process.env.WORLD_SAFARI_SECS) : undefined,
         autoStartMs: Number(process.env.WORLD_AUTOSTART_SECS) * 1000 || undefined });
       return service;
     });

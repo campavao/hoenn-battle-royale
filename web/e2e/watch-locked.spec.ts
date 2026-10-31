@@ -37,14 +37,14 @@ test('a watcher follows somebody, cannot walk, and its BAG is theirs', async ({ 
       await p.waitForFunction((addr) => (window as unknown as Dev).__br.mailbox.ram.read(addr, 16) === 0x4252, sym.gBrMailbox, { timeout: 30_000 });
     };
     const host = await ctxs[0].newPage();
-    await host.goto(`/#host&noauto&nobots&testmon&rom=${rom}`);
+    await host.goto(`/classic/#host&noauto&nobots&testmon&rom=${rom}`);
     await ready(host);
     const codeEl = host.locator('#room-code');
     await expect(codeEl).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 30_000 });
     const code = ((await codeEl.textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
     const guest = await ctxs[1].newPage();
-    await guest.goto(`/#join=${code}&noauto&nobots&testmon&rom=${rom}`);
+    await guest.goto(`/classic/#join=${code}&noauto&nobots&testmon&rom=${rom}`);
     await ready(guest);
     await host.locator('#room-start').click();
     await guest.waitForSelector('body.in-match', { timeout: 60_000 });
@@ -54,7 +54,7 @@ test('a watcher follows somebody, cannot walk, and its BAG is theirs', async ({ 
     ];
 
     const watcher = await ctxs[2].newPage();
-    await watcher.goto(`/#watch=${code}&rom=${rom}`);
+    await watcher.goto(`/classic/#watch=${code}&rom=${rom}`);
     await ready(watcher);
     const follow = () =>
       watcher.evaluate(([addr, off]) => (window as unknown as Dev).__br.mailbox.ram.read(addr + off, 8), [sym.gBrSpectate, SPECTATE_FOLLOW]);

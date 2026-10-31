@@ -38,7 +38,7 @@ async function open(browser: Browser, hash: string): Promise<Page> {
   await page.addInitScript(() => {
     try { localStorage.setItem('hbr:career', JSON.stringify({ matches: 0, wins: 0, name: 'E2E' })); } catch {}
   });
-  await page.goto(`${site}/${hash}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${site}/classic/${hash}`, { waitUntil: 'domcontentloaded' });
   // The picker is live before the shell can take a file (see live.spec.ts); the shell
   // reads `input.files` when it attaches, so setting it early is safe and is the point.
   await page.waitForSelector('#rom-input', { timeout: 60_000 });

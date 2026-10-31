@@ -59,7 +59,7 @@ test('the worker caches what it should and never the version file', async () => 
 // the same COOP/COEP headers production sends.
 const PREVIEW = 'http://localhost:5175';
 
-test('after one visit the shell comes back with the network gone', async ({ browser }) => {
+test('after one visit the game comes back with the network gone', async ({ browser }) => {
   test.setTimeout(90_000);
   const ctx = await browser.newContext();
   try {
@@ -69,7 +69,7 @@ test('after one visit the shell comes back with the network gone', async ({ brow
     await page.goto(`${PREVIEW}/`);
     // The import screen is the shell being up; the ROM is the player's and we have not
     // given it one, which is exactly the state a first visit is in.
-    await expect(page.locator('#screen-importing')).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('#pick-rom')).toBeVisible({ timeout: 30_000 });
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 30_000,
     });
@@ -91,7 +91,7 @@ test('after one visit the shell comes back with the network gone', async ({ brow
     await ctx.setOffline(true);
     said.length = 0;
     await page.reload();
-    await expect(page.locator('#screen-importing')).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('#pick-rom')).toBeVisible({ timeout: 30_000 });
     // Not an error page: the real shell, with its own import screen -- drawn on the
     // stage once the core is up (POK-320), so it gets the core's time.
     await expect(page.locator('#dropzone')).toBeVisible({ timeout: 30_000 });

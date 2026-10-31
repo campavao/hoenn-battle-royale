@@ -18,7 +18,11 @@ judge, unset only when it needs this session's reasoning.
   under `#if BR` (not `#ifdef`: `make BR=0` defines it as 0; `tools/br/check-guards.py`
   enforces it). Write C89-ish: agbcc is GCC 2.95 (declarations before statements, no
   designated initialisers, no `//` in odd places).
-- `web/` — Vite + TypeScript shell. `relay/` — Node WebSocket relay. `tools/br/` — harness,
+- `web/` — Vite + TypeScript. The game is spike B (`web/spike-b/`, page `web/index.html`,
+  served at `/`, its world on the relay's `/world`); the old mGBA-overworld shell
+  (`web/src/app.ts`, page `web/classic/index.html`) is at `/classic/` until about
+  2026-11-06, then deleted. Spike B still imports most of `web/src/` (bots, match, ui,
+  emu, net). `relay/` — Node WebSocket relay. `tools/br/` — harness,
   exporters, patch builder. `docs/` — design and handoffs. **Deploying (site, relay, tag):
   `docs/DEPLOY.md`** — when Cam asks to ship, that is the recipe, and read the live
   `rom` back afterwards.
@@ -93,7 +97,10 @@ Node 22. A PR only needs the specs its change touches.
 - Screenshots only when pixels change. Drivers and tests are the check for logic.
 - Releases go out on a timer whenever the relay shows no live match (docs/DEPLOY.md).
   Until that job exists, the release-owner thread keeps batching them.
-- Spike B is the game. The mGBA live match takes blocker fixes only.
+- Spike B is the game. The mGBA live match (now `/classic/`) takes blocker fixes only.
+- A change to `web/spike-b/shared/` needs `node tools/br/bundle-world.mjs` (the relay runs
+  the bundle). Its `WORLD_HASH` is what every page sends on join: a page built against
+  another bundle is told to reload, so a dev server needs a restart after re-bundling.
 
 ## Game rules Cam has set
 

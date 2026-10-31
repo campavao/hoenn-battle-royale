@@ -16,6 +16,39 @@ function phone() {
 }
 
 describe('world rooms', () => {
+  it('a page of another world is told `old` and gets no room', () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined, world: 'abc' });
+    try {
+      const a = phone();
+      const s = svc.open(a.link);
+      s.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true, w: 'old' }));
+      expect(a.got).toEqual([{ t: 'old' }]);
+      s.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true, w: 'abc' }));
+      expect(a.got.at(-1)!.t).toBe('room');
+    } finally {
+      svc.stop();
+    }
+  });
+  it('says what happens in the live relay\'s words, so the play log counts world matches', async () => {
+    const lines: string[] = [];
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 3, cap: 30, now: () => 0, log: (l) => lines.push(l) });
+    try {
+      const [a, b] = [phone(), phone()];
+      const sa = svc.open(a.link), sb = svc.open(b.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'ash ketchum', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sb.onText(JSON.stringify({ t: 'join', name: 'misty', skin: 1, code }));
+      sa.onText(JSON.stringify({ t: 'set', set: { door: 'private' } }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      const { parseLine } = await import('../../../tools/br/play-log.mjs' as string) as { parseLine(m: string, at: string): { kind: string; [k: string]: unknown } | null };
+      const kinds = lines.map((l) => parseLine(l, '2026-10-30T00:00:00Z')).filter((e) => e).map((e) => e!.kind);
+      expect(kinds).toEqual(['host', 'join', 'door', 'match']);
+      const match = lines.map((l) => parseLine(l, '2026-10-30T00:00:00Z')).find((e) => e?.kind === 'match');
+      expect(match).toMatchObject({ code, mode: 'host', trainers: 2, max: 8 });
+    } finally {
+      svc.stop();
+    }
+  });
   it('a room waits as long as it likes; a match lets a silent phone go', () => {
     let t = 0;
     const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 3, cap: 30, now: () => t, log: () => undefined });

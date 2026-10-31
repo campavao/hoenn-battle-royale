@@ -317,12 +317,18 @@ export interface WorldSocket {
   close(): void;
 }
 
+/** The world this page was built with (vite's define, world-hash.ts); unset under vitest. */
+declare const __WORLD_HASH__: string | undefined;
+const WORLD = typeof __WORLD_HASH__ === 'string' ? __WORLD_HASH__ : undefined;
+
 export interface WorldHandlers {
   onRoom(r: Extract<WorldDown, { t: 'room' }>): void;
   /** No room by that code; `pass`: there is, and the passcode was wrong. */
   onNoRoom(code: string, pass?: boolean): void;
   /** The host took me out of the room. */
   onKicked(): void;
+  /** This page is an older (or newer) world than the relay's: it has to reload. */
+  onOld(): void;
   onRooms(rooms: Listed[]): void;
   onMatch(link: WorldLink): void;
   /** The socket closed (or never opened) for good. */
@@ -387,6 +393,7 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
       if (m.t === 'room') h.onRoom(m);
       else if (m.t === 'no_room') h.onNoRoom(m.code, m.pass);
       else if (m.t === 'kicked') h.onKicked();
+      else if (m.t === 'old') h.onOld();
       else if (m.t === 'rooms') h.onRooms(m.rooms);
       else if (m.t === 'full') h.onNoRoom('');
       else if (m.t === 'hello') {
@@ -400,7 +407,7 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
   };
   if (!open()) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, list: () => undefined, set: () => undefined, kick: () => undefined, leave: () => undefined, close: () => undefined }; }
   return {
-    join: (name, skin, how) => send({ t: 'join', name, skin, ...how }),
+    join: (name, skin, how) => send({ t: 'join', name, skin, ...how, ...(WORLD ? { w: WORLD } : {}) }),
     start: () => send({ t: 'start' }),
     list: () => send({ t: 'list' }),
     set: (set) => send({ t: 'set', set }),

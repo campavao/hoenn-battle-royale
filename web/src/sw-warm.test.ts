@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { warm, warmList } from './sw-warm';
-import appSource from './app.ts?raw';
+import appSource from './pwa.ts?raw';
 
 describe('what a first visit hands the service worker (POK-246)', () => {
   const origin = 'https://hoenn.example';

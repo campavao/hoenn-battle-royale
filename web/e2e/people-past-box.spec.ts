@@ -130,7 +130,7 @@ test('a seat past pret\'s box but in the rows a phone shows is the ROM\'s own: a
   const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 30_000 });
 
@@ -227,7 +227,7 @@ test('a person the match strips is not drawn past the box either', async ({ brow
   const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&nobots&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&nobots&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 30_000 });
     await page.waitForFunction(

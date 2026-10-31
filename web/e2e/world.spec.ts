@@ -72,7 +72,7 @@ async function walk(page: Page, key: string, done: () => Promise<boolean>, ms: n
 }
 
 async function land(page: Page, sym: Record<string, number>, hash: string, at = { map: RUSTBORO, ...LAND }): Promise<void> {
-  await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${at.map.id},${at.x},${at.y}${hash}&rom=${romHashParam()}`);
+  await page.goto(`/classic/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${at.map.id},${at.x},${at.y}${hash}&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
   await page.waitForSelector('body.in-match', { timeout: 60_000 });
   await expect

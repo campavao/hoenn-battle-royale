@@ -26,7 +26,7 @@ test("chunks that won't load: a tap-to-reload line, and the tap reloads", async 
   try {
     const page = await ctx.newPage();
     await page.route(CHUNKS, (route) => route.abort('failed'));
-    await page.goto(`/#solo&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&rom=${romHashParam()}`);
     const line = page.locator('#chunk-reload');
     await expect(line).toBeVisible({ timeout: 60_000 });
     await expect(line).toHaveText("Part of the game didn't load. Tap to reload.");

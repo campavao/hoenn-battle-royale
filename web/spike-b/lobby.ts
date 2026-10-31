@@ -45,6 +45,14 @@ export interface LobbyHooks {
 
 /** BATTLE BACKDROP: OVER MAP (the default, nothing stored) or CLASSIC ('0'), as the live
  *  game keeps it (app.ts SEE_THROUGH_KEY). */
+let shared: Stage | null = null;
+/** The page's one Stage: the ROM import screen (import.ts) draws on it before the lobby
+ *  takes it over, and two would both answer the same taps. */
+export function pageStage(): Stage {
+  const $ = (id: string) => document.getElementById(id) as HTMLElement;
+  return (shared ??= new Stage($('stage'), $('ui') as HTMLCanvasElement, $('ui-hits'), $('stage-fade')));
+}
+
 export function seeThrough(): boolean {
   try { return localStorage.getItem('hbr-see-through') !== '0'; } catch { return true; }
 }
@@ -104,8 +112,7 @@ export class Lobby {
   private rooms: Listed[] = [];
 
   constructor(private readonly hooks: LobbyHooks) {
-    const $ = (id: string) => document.getElementById(id) as HTMLElement;
-    this.stage = new Stage($('stage'), $('ui') as HTMLCanvasElement, $('ui-hits'), $('stage-fade'));
+    this.stage = pageStage();
     void menuBgLoaded.then(() => { if (this.stage.current === this.main) this.stage.redraw(); });
   }
 
@@ -146,6 +153,18 @@ export class Lobby {
   backToRoom(): void {
     if (this.room) { this.stage.show(this.roomShown); this.open(); }
     else this.menu();
+  }
+
+  /** The relay runs another world than this page (a deploy since it loaded): only a
+   *  reload gets the page into a room again. */
+  old(): void {
+    this.inSheet = false;
+    this.room = null;
+    this.stage.show(noticeScreen(() => ({
+      title: 'HOENN BATTLE ROYALE',
+      lines: [{ text: 'A new version of the game is out. Reload the page to play.' }],
+      buttons: [{ label: 'RELOAD', id: 'old-reload', onPress: () => location.reload() }],
+    })));
   }
 
   hide(): void {

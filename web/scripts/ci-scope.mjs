@@ -24,11 +24,11 @@ import { resolve } from 'node:path';
 export const RULES = [
   // Words: nothing builds or runs them.
   { match: /^docs\/|\.md$|^\.claude\//, rom: false, e2e: [] },
-  // Spike B: the /spike-b/ page and the relay's /world socket (world.js, and service.js
-  // bundled from web/spike-b/shared). The shell only links to the page (ui/profile.ts), no
-  // spec opens it or /world, and its checks are the web job's unit tests and the relay job's
-  // suite, which imports server.js and with it world.js.
-  { match: /^web\/spike-b\/|^relay\/world(\.js|\.test\.js|\/)|^tools\/br\/bundle-world\.mjs$/, rom: false, e2e: [] },
+  // The game (web/spike-b, served at /) and the relay's /world socket (world.js, and
+  // service.js bundled from web/spike-b/shared): its spec, which plays a match through
+  // /world, besides the web job's unit tests and the relay job's suite. The classic page's
+  // specs never load it.
+  { match: /^web\/spike-b\/|^relay\/world(\.js|\.test\.js|\/)|^tools\/br\/bundle-world\.mjs$/, rom: false, e2e: ['spikeb.spec.ts'] },
   // A spec changed: that spec. Helpers beside the specs (symbols.ts, play.ts, ...) fall through
   // to the web/ rule below, since every spec uses them.
   { match: /^web\/e2e\/[^/]+\.spec\.ts$/, rom: false, e2e: (path) => [basename(path)] },

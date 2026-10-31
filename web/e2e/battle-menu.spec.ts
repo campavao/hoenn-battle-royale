@@ -65,7 +65,7 @@ const write = (page: Page, addr: number, v: number, bits: 8 | 16 | 32) =>
 /** Solo on a phone into a wild battle off a patch in the grass west of the landing,
  *  up to its action menu. */
 async function intoWildBattle(page: Page, sym: Record<string, number>): Promise<Ram> {
-  await page.goto(`/#solo&safari=5&fog=600&testmon&seed=${SEED}&land=MAP_ROUTE102,${LAND.x},${LAND.y}&rom=${romHashParam()}`);
+  await page.goto(`/classic/#solo&safari=5&fog=600&testmon&seed=${SEED}&land=MAP_ROUTE102,${LAND.x},${LAND.y}&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
   await page.waitForSelector('body.in-match', { timeout: 60_000 });
 

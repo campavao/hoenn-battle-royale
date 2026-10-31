@@ -47,7 +47,7 @@ async function where(page: Page): Promise<{ phase: number; seat: number; map: nu
 }
 
 async function startMatch(page: Page): Promise<void> {
-  await page.goto(`/#host&fast&seed=20261019&testmon&rom=${romHashParam()}`);
+  await page.goto(`/classic/#host&fast&seed=20261019&testmon&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as BrWindow).__br !== undefined, { timeout: 30_000 });
   // One human and the bots: START is the host's, enabled once the fill is on.
   const start = page.locator('#room-start');
@@ -137,12 +137,12 @@ test('a guest reloads and is back in, and the host never counted it out', async 
   const guestCtx = await browser.newContext();
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&fast&seed=20261020&testmon&rom=${rom}`);
+    await host.goto(`/classic/#host&fast&seed=20261020&testmon&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
+    await guest.goto(`/classic/#join=${code}&fast&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as BrWindow).__br !== undefined, { timeout: 60_000 });
     await startWith(host, 2);
     await expect(guest.locator('#match-strip')).toContainText(/SAFE: /, { timeout: 120_000 });

@@ -45,7 +45,7 @@ test('a field menu sits over the dimmed wide map, as a battle does', async ({ br
   const ctx = await browser.newContext({ viewport: DESKTOP });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${RUSTBORO.id},${LAND.x},${LAND.y}&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${RUSTBORO.id},${LAND.x},${LAND.y}&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 60_000 });
     await expect

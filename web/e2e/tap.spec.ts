@@ -48,7 +48,7 @@ test('a tap on a tile walks the trainer to it', async ({ browser }, testInfo) =>
   const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&fast&seed=${SEED}&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&fast&seed=${SEED}&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
 
     // In the Zone, with the boot's warp done: the position holds still for a moment.

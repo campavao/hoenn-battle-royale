@@ -69,6 +69,9 @@ export interface ServiceOptions {
   bots: number;
   /** Trainers at most, in all rooms; the next is told `full`. */
   cap: number;
+  /** The relay's WORLD_HASH: a join that does not carry it is told `old` (unset: no gate,
+   *  a test's service). */
+  world?: string;
   now: () => number;
   log: (line: string) => void;
   /** Seconds a ring phase lasts, for a local test (the match's 120 otherwise). */
@@ -147,6 +150,11 @@ interface Lobby {
   pass: string;
 }
 
+/** A trainer as the live relay's log lines name one (play-log.mjs NAME: no spaces). */
+function who(p: { name: string; id: number }): string {
+  return `${p.name.replace(/\s+/g, '_')}#${p.id}`;
+}
+
 export class WorldService {
   private readonly rooms = new Map<string, Lobby>();
   private readonly where = new Map<number, Lobby>();
@@ -171,6 +179,8 @@ export class WorldService {
         if (phone) phone.heard = this.opts.now();
         if (m.t === 'here') return;
         if (m.t === 'list') { this.send(link, { t: 'rooms', rooms: this.listed() }); return; }
+        // Another world than this one would replay another room, and resync forever.
+        if (m.t === 'join' && !phone && this.opts.world && m.w !== this.opts.world) { this.send(link, { t: 'old' }); return; }
         if (m.t === 'join' && !phone && m.again && typeof m.again === 'object') {
           const back = this.back(m.again, link);
           if (back) { phone = back; return; }
@@ -186,8 +196,11 @@ export class WorldService {
           phone = { id, name: name || `TRAINER ${id - FIRST_ID + 1}`.slice(0, 10), skin, link, heard: this.opts.now(), synced: -Infinity, key: Math.random().toString(36).slice(2, 12), away: 0, watching: 0, ...recOf(m.rec) };
           room.members.set(id, phone);
           this.where.set(id, room);
+          const hosted = !room.owner && !room.quick;
           if (!room.owner) room.owner = id;
           this.opts.log(`world: ${phone.name}#${id} in room ${room.code}${room.quick ? ' (quick)' : ''}, ${room.members.size} there`);
+          // The live relay's lines too, so tools/br/play-log.mjs counts these rooms (who).
+          this.opts.log(hosted ? `room ${room.code} hosted by ${who(phone)}${room.set.door === 'open' ? ' (open)' : ''}` : `room ${room.code}: ${who(phone)} ${room.quick ? 'quick-joined' : room.host ? 'spectates' : 'joined'}`);
           this.roster(room);
           // A match under way: in, to watch it until the next.
           if (room.host) {
@@ -212,8 +225,10 @@ export class WorldService {
             if (MAX_STEPS.includes(s.max as number)) room.set.max = s.max as number;
             if (s.textSpeed === 1 || s.textSpeed === 3 || s.textSpeed === 5) room.set.textSpeed = s.textSpeed;
             if (typeof s.animations === 'boolean') room.set.animations = s.animations;
+            const door = room.set.door;
             if (s.door === 'open' || s.door === 'private') room.set.door = s.door;
             else if (s.door === 'pass' && typeof s.pass === 'string' && isPass(s.pass)) { room.set.door = 'pass'; room.pass = s.pass.toUpperCase(); }
+            if (room.set.door !== door && room.set.door !== 'pass') this.opts.log(`room ${room.code} is now ${room.set.door}`);
             this.roster(room);
           }
         } else if (m.t === 'leave') {
@@ -421,6 +436,7 @@ export class WorldService {
     room.startsAt = null;
     room.t0 = this.opts.now();
     this.opts.log(`world: room ${room.code} starts, ${room.members.size} trainers and ${bots} bots, seed ${seed}`);
+    this.opts.log(`match ${room.code} started (${room.quick ? 'quick' : 'host'}) | ${room.members.size} trainer${room.members.size === 1 ? '' : 's'} | max ${room.quick ? ROOM_MAX : room.set.max}`);
     const state = r.state();
     for (const p of room.members.values()) {
       p.team = undefined;
@@ -433,6 +449,7 @@ export class WorldService {
   private finish(room: Lobby): void {
     const res = room.host?.room.results;
     this.opts.log(`world: room ${room.code} over${res?.winner ? `, ${res.entrants.find(([id]) => id === res.winner)?.[1]} wins` : ''}`);
+    if (room.host) this.opts.log(`match ${room.code} ended after ${Math.round((this.opts.now() - room.t0) / 1000)}s`);
     room.host = null;
     room.streams.clear();
     for (const p of room.members.values()) p.watching = 0;

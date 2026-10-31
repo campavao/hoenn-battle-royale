@@ -33,7 +33,7 @@ test('with the whole window, the maps two joins away are the core\'s, not stills
   const ctx = await browser.newContext({ viewport: DESKTOP });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&nobots&testmon&safari=15&seed=5376&land=MAP_ROUTE101,${LAND.x},${LAND.y}&world&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&nobots&testmon&safari=15&seed=5376&land=MAP_ROUTE101,${LAND.x},${LAND.y}&world&rom=${romHashParam()}`);
     await page.waitForSelector('body.in-match', { timeout: 60_000 });
     await expect
       .poll(async () => {

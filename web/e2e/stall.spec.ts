@@ -37,7 +37,7 @@ test.beforeAll(() => {
 /** A solo match, started and standing on the field: a round in the log to write a stop into. */
 async function soloOnField(page: Page): Promise<void> {
   const symbols = loadSymbols();
-  await page.goto(`/#solo&testmon&rom=${romHashParam()}`);
+  await page.goto(`/classic/#solo&testmon&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
   await expect(page.locator('#match-strip')).toContainText('SAFARI', { timeout: 60_000 });
   await page.waitForFunction(
@@ -50,7 +50,7 @@ async function soloOnField(page: Page): Promise<void> {
 
 test('the lobby holds the ROM still for as long as it likes, and that is no stop', async ({ page }) => {
   test.setTimeout(120_000);
-  await page.goto(`/#rom=${romHashParam()}`);
+  await page.goto(`/classic/#rom=${romHashParam()}`);
   const quick = page.locator('#lobby-rows button', { hasText: 'QUICK PLAY' });
   await expect(quick).toBeVisible({ timeout: 60_000 });
   // The boot block's hold: the core paused from the mailbox answering until a way in

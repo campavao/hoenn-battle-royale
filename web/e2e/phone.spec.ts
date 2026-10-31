@@ -25,7 +25,7 @@ test('a phone gets the screen and both thumbs, either way up', async ({ browser 
   const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
 
     const box = async (sel: string) => (await page.locator(sel).boundingBox())!;
@@ -129,7 +129,7 @@ test('on an iPhone with its insets, the band the core draws covers every row the
         document.head.appendChild(s);
       });
     }, INSETS);
-    await page.goto(`/#solo&nobots&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&nobots&rom=${romHashParam()}`);
     await page.waitForSelector('body.in-match', { timeout: 60_000 });
     // The HUD's chunk in and the dock full: the layout play has.
     await page.waitForSelector('#dock .hud-btn', { timeout: 30_000 });
@@ -161,7 +161,7 @@ test('a desktop keeps most of the window for the game, beside the docked sheet',
   const ctx = await browser.newContext({ viewport: HALF });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&rom=${romHashParam()}`);
     await page.waitForSelector('body.docked #stage[data-look="dock"]', { timeout: 90_000 });
     const box = async (sel: string) => (await page.locator(sel).boundingBox())!;
 
@@ -209,7 +209,7 @@ test('a desktop window under 600px wide is laid out as a phone', async ({ browse
   const ctx = await browser.newContext({ viewport: NARROW });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&rom=${romHashParam()}`);
     await page.waitForSelector('body.in-match', { timeout: 90_000 });
     const box = async (sel: string) => (await page.locator(sel).boundingBox())!;
     expect(await page.evaluate(() => document.body.classList.contains('docked')), 'no sheet docked beside the game').toBe(false);

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { scope } from './ci-scope.mjs';
 
 describe('ci-scope', () => {
-  it('runs nothing of the ROM or the e2e suite for a spike B change', () => {
+  it('runs the game spec and nothing of the ROM for a spike B change', () => {
     // #172's files.
     expect(
       scope([
@@ -14,7 +14,7 @@ describe('ci-scope', () => {
         'web/spike-b/shared/host.ts',
         'tools/br/bundle-world.mjs',
       ]),
-    ).toEqual({ rom: false, e2e: [] });
+    ).toEqual({ rom: false, e2e: ['spikeb.spec.ts'] });
   });
 
   it('runs nothing for words', () => {

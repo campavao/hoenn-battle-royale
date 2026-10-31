@@ -1,4 +1,4 @@
-// Every element app.ts asks for by id is in index.html (POK-330 #63).
+// Every element app.ts asks for by id is in its page, classic/index.html (POK-330 #63).
 //
 // app.ts's `$` throws on a missing element now, which names the problem; this finds it
 // before anybody runs the one mode that reaches the lookup. POK-320 took `#room-leave`
@@ -6,7 +6,7 @@
 // test that did not go through solo could have seen it.
 import { describe, expect, it } from 'vitest';
 import appSource from './app.ts?raw';
-import indexHtml from '../index.html?raw';
+import indexHtml from '../classic/index.html?raw';
 
 const ids = new Set(Array.from(indexHtml.matchAll(/\bid="([^"]+)"/g), (m) => m[1]));
 /** `$('#x')`, `$<T>('#x')` and `$(\`#x-${y}\`)`, with the id (or its literal prefix). */

@@ -47,7 +47,7 @@ test('the proxy\'s core opens no AudioContext of its own, and the page keeps its
   test.setTimeout(180_000);
   const symbols = loadSymbols();
   await page.addInitScript(countContexts);
-  await page.goto(`/#host&fast&seed=20260916&testmon&perf&rom=${romHashParam()}`);
+  await page.goto(`/classic/#host&fast&seed=20260916&testmon&perf&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
   await startWith(page, 1);
   const phase = () => page.evaluate((addr) => (window as unknown as SpeakerWindow).__br?.mailbox.ram.read(addr, 8) ?? 0, symbols.gBrMatch);
@@ -68,7 +68,7 @@ test('the proxy\'s core opens no AudioContext of its own, and the page keeps its
 test('a context that will not resume is made again at the next tap, and plays', async ({ page }) => {
   test.setTimeout(120_000);
   await page.addInitScript(countContexts);
-  await page.goto(`/#solo&perf&rom=${romHashParam()}`);
+  await page.goto(`/classic/#solo&perf&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 30_000 });
   await expect.poll(async () => (await listen(page)).heard, { timeout: 60_000 }).toBeGreaterThan(10);
 

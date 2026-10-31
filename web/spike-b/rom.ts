@@ -10,15 +10,16 @@
 // party and the bag the battle left (a catch, a used POTION, a level), so the trainer's
 // team is theirs from battle to battle (carry.ts).
 //
-// The ROM is the player's own, patched the way the game patches it (loadRom). In dev,
-// web/public/spike-rom/ (gitignored, never committed) can stand in for it.
+// The ROM is the player's own, picked on this page (import.ts) and patched the way the
+// game patches it (loadRom). In dev, `?rom=<path>` or web/public/spike-rom/ (gitignored,
+// never committed) can stand in for it.
 
 import { Emulator, type GbaKey } from '../src/emu';
 import { Mailbox, MAILBOX } from '../src/net/mailbox';
 import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from '../src/net/slots';
 import { PROTOCOL, type Dir, type Msg, type PackedMon } from '../src/net/wire';
 import { loadCheckedRelease } from '../src/release';
-import { sha1Hex } from '../src/rom/emerald';
+import { isPrePatched, sha1Hex } from '../src/rom/emerald';
 import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fameTeam, fieldOf, healed, rekey, spillOf, teamOf, withMoney, withoutItem } from './carry';
 import { startMenuTable } from '../src/touch';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
@@ -265,16 +266,23 @@ export interface RomFiles {
 /** The player's ROM, patched, and its build's symbols. Dev: web/public/spike-rom/ when it
  *  is there. Otherwise the game's own way: the ROM the player picked on the main page
  *  (stored in this browser) with the published patch applied and checked. */
-export async function loadRom(canvas: HTMLCanvasElement, say: (text: string) => void): Promise<RomFiles> {
+export async function loadRom(canvas: HTMLCanvasElement, say: (text: string) => void, pick: (emu: Emulator) => Promise<void>, devRom: string | null): Promise<RomFiles> {
   const emu = await Emulator.create(canvas);
-  const dev = !import.meta.env.DEV ? null : await fetch('/spike-rom/br-symbols.json').then((r) => (r.ok && !r.headers.get('content-type')?.includes('html') ? r.json() : null), () => null) as Record<string, string> | null;
+  const devJson = (url: string) => fetch(url).then((r) => (r.ok && !r.headers.get('content-type')?.includes('html') ? r.json() : null), () => null) as Promise<Record<string, string> | null>;
+  const dev = !import.meta.env.DEV || devRom ? null : await devJson('/spike-rom/br-symbols.json');
   if (dev) {
     const rom = new Uint8Array(await (await fetch('/spike-rom/rom.gba')).arrayBuffer());
     return { emu, rom, sym: (n) => Number(dev[n]), version: `spike B · local build · rom ${(await sha1Hex(rom)).slice(0, 7)}` };
   }
-  if (!emu.hasRom()) {
-    say('Pick your ROM on the game page first (it stays in this browser), then come back here.');
-    throw new Error('no ROM stored');
+  // No ROM on this device yet (or a dev `?rom=`, which always wins): ask for one.
+  if (!emu.hasRom() || devRom) await pick(emu);
+  // Dev: a local build stored as it is runs without a patch, on the sidecars
+  // tools/br/dev-patch.sh writes next to it (as app.ts does).
+  if (import.meta.env.DEV && isPrePatched(emu.readRom())) {
+    const sym = await devJson('/patch/br-symbols.json');
+    if (!sym) { say('A local build needs tools/br/dev-patch.sh run first.'); throw new Error('no dev sidecars'); }
+    const rom = emu.readRom();
+    return { emu, rom, sym: (n) => Number(sym[n]), version: `spike B · local build · rom ${(await sha1Hex(rom)).slice(0, 7)}` };
   }
   say('Applying the patch to your ROM…');
   const release = await loadCheckedRelease((patch) => applyPatch(emu.readRom(), patch));

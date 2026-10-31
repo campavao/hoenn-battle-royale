@@ -147,7 +147,7 @@ test('a solo match, played at the keyboard, looks right the whole way through', 
   });
 
   await test.step('boot: straight into the Safari opening', async () => {
-    await page.goto(`/#solo&safari=60&fog=20&testmon&seed=${SEED}&land=MAP_ROUTE102,${LAND.x},${LAND.y}&rom=${romHashParam()}`);
+    await page.goto(`/classic/#solo&safari=60&fog=20&testmon&seed=${SEED}&land=MAP_ROUTE102,${LAND.x},${LAND.y}&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 60_000 });
     const r = await until(page, sym, 'in the Zone', (x) => x.phase === BR_PHASE_SAFARI && x.onOverworld && x.map === SAFARI_SE, 30_000);

@@ -7,6 +7,21 @@
       "runtimeArgs": ["run", "dev", "--", "--port", "5199"],
       "cwd": "web",
       "port": 5199
+    },
+    {
+      "name": "relay-local",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["relay/server.js"],
+      "env": { "PORT": "7790" },
+      "port": 7790
+    },
+    {
+      "name": "web-local-relay",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5198"],
+      "cwd": "web",
+      "env": { "VITE_RELAY_URL": "ws://localhost:7790" },
+      "port": 5198
     }
   ]
 }

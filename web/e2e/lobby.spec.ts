@@ -25,14 +25,14 @@ test('the lobby lists a room somebody else is hosting, and joining it seats you'
     // Somebody hosts. `#noauto` holds the room open so it is still listed when the
     // other tab looks -- otherwise the director starts it and the relay locks it.
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&noauto&nobots&rom=${rom}`);
+    await host.goto(`/classic/#host&noauto&nobots&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
 
     // And somebody else opens the page with no hash at all.
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#rom=${rom}`);
+    await guest.goto(`/classic/#rom=${rom}`);
     // The profile rows come first now (POK-243), so ask for the row by its name.
     await expect(guest.locator('#lobby-rows button', { hasText: 'QUICK PLAY' })).toBeVisible({
       timeout: 60_000,
@@ -74,11 +74,11 @@ test("a host away from its tab takes the room off LOBBIES, and puts it back on r
     await host.addInitScript(() => {
       try { localStorage.setItem('hbr:career', JSON.stringify({ matches: 0, wins: 0, name: 'AWAY' })); } catch {}
     });
-    await host.goto(`/#host&noauto&nobots&away=2&rom=${rom}`);
+    await host.goto(`/classic/#host&noauto&nobots&away=2&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
 
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#rom=${rom}`);
+    await guest.goto(`/classic/#rom=${rom}`);
     await guest.locator('#lobby-rows button', { hasText: 'LOBBIES' }).click({ timeout: 60_000 });
     const room = guest.locator('#lobby-rooms button', { hasText: 'AWAY' });
     await expect(room).toBeVisible({ timeout: 30_000 });
@@ -115,7 +115,7 @@ test('a lobby in a hidden tab lets go of its socket, and browses again on return
     ws.on('close', () => { s.closed = true; });
     ws.on('framesent', (f) => { if (String(f.payload).includes('"list_rooms"')) s.asked++; });
   });
-  await page.goto(`/#rom=${romHashParam()}`);
+  await page.goto(`/classic/#rom=${romHashParam()}`);
   await expect(page.locator('#lobby-rows button', { hasText: 'QUICK PLAY' })).toBeVisible({ timeout: 60_000 });
   await expect.poll(() => sockets[0]?.asked ?? 0, { timeout: 20_000 }).toBeGreaterThan(0);
 
@@ -152,7 +152,7 @@ test('offline, QUICK PLAY is a game against bots that opens no socket', async ({
   test.setTimeout(90_000);
   // Every socket refused: the relay is down, as far as this page can tell.
   await page.routeWebSocket(/.*/, (ws) => ws.close());
-  await page.goto(`/#rom=${romHashParam()}`);
+  await page.goto(`/classic/#rom=${romHashParam()}`);
   const quick = page.locator('#lobby-rows button', { hasText: 'QUICK PLAY' });
   await expect(quick).toBeVisible({ timeout: 60_000 });
   // Gray while the socket is opening, and pressable once it is refused: no word on its
@@ -177,13 +177,13 @@ test('the host gets the room controls and START, and the guest does not', async 
   const guestCtx = await browser.newContext();
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&noauto&fast&testmon&rom=${rom}`);
+    await host.goto(`/classic/#host&noauto&fast&testmon&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
 
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&noauto&fast&testmon&rom=${rom}`);
+    await guest.goto(`/classic/#join=${code}&noauto&fast&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
 
     // The host's four controls. The seats say what START would make, so no line does (HBR-51).
@@ -236,7 +236,7 @@ test('START and LEAVE stay off the host options at MAX 30', async ({ browser }) 
   const ctx = await browser.newContext({ viewport: { width: 800, height: 720 } });
   try {
     const host = await ctx.newPage();
-    await host.goto(`/#host&noauto&fast&testmon&rom=${rom}`);
+    await host.goto(`/classic/#host&noauto&fast&testmon&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     await expect(host.locator('#room-controls')).toBeVisible({ timeout: 30_000 });
     for (let i = 0; i < 10 && !/MAX 30/.test((await host.locator('#room-max').textContent()) ?? ''); i++) {
@@ -265,12 +265,12 @@ test('FILL OFF deals a match of the people in the room and no bots', async ({ br
   const guestCtx = await browser.newContext();
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&fast&testmon&rom=${rom}`);
+    await host.goto(`/classic/#host&fast&testmon&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
+    await guest.goto(`/classic/#join=${code}&fast&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
     await expect(host.locator('#room-roster li')).toHaveCount(2, { timeout: 60_000 });
 
@@ -307,13 +307,13 @@ test('a host who leaves before START hands over the room, not a match', async ({
   const guestCtx = await browser.newContext();
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&rom=${rom}`);
+    await host.goto(`/classic/#host&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
     const guest = await guestCtx.newPage();
     const promoted = guest.waitForEvent('console', { predicate: (m) => m.text().includes('[room] promoted to host'), timeout: 60_000 });
-    await guest.goto(`/#join=${code}&rom=${rom}`);
+    await guest.goto(`/classic/#join=${code}&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
     await expect(guest.locator('#room-start')).toBeHidden();
     await hostCtx.close();
@@ -332,7 +332,7 @@ test('a host who leaves before START hands over the room, not a match', async ({
 
 test("a name in the room opens that trainer's card (POK-268)", async ({ page }) => {
   test.setTimeout(120_000);
-  await page.goto(`/#host&noauto&nobots&rom=${romHashParam()}`);
+  await page.goto(`/classic/#host&noauto&nobots&rom=${romHashParam()}`);
   await expect(page.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
   const me = page.locator('#room-roster .roster-name').first();
   await expect(me).toBeVisible({ timeout: 60_000 });
@@ -355,7 +355,7 @@ test('the host can set the opening length, and show somebody the door (POK-241)'
   const guestCtx = await browser.newContext();
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&noauto&nobots&rom=${romHashParam()}`);
+    await host.goto(`/classic/#host&noauto&nobots&rom=${romHashParam()}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
@@ -370,7 +370,7 @@ test('the host can set the opening length, and show somebody the door (POK-241)'
 
     // A guest arrives, and the host shows them the door from their card.
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&noauto&rom=${romHashParam()}`);
+    await guest.goto(`/classic/#join=${code}&noauto&rom=${romHashParam()}`);
     await expect(host.locator('#room-roster li')).toHaveCount(2, { timeout: 60_000 });
     // Both have a way out (2026-10-07 play-test: the host's room screen had START alone).
     await expect(guest.locator('#room-leave')).toBeVisible({ timeout: 30_000 });
@@ -393,7 +393,7 @@ test("another trainer's card has the record their browser keeps", async ({ brows
   const guestCtx = await browser.newContext();
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&noauto&nobots&rom=${romHashParam()}`);
+    await host.goto(`/classic/#host&noauto&nobots&rom=${romHashParam()}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
@@ -402,7 +402,7 @@ test("another trainer's card has the record their browser keeps", async ({ brows
     await guest.addInitScript(() => {
       localStorage.setItem('hbr:career', JSON.stringify({ matches: 12, wins: 3, best: 1, name: 'MAY', skin: 1 }));
     });
-    await guest.goto(`/#join=${code}&noauto&rom=${romHashParam()}`);
+    await guest.goto(`/classic/#join=${code}&noauto&rom=${romHashParam()}`);
     await expect(host.locator('#room-roster li')).toHaveCount(2, { timeout: 60_000 });
 
     await host.locator('#room-roster .roster-name').nth(1).click();
@@ -419,7 +419,7 @@ test("another trainer's card has the record their browser keeps", async ({ brows
 
 test('the lobby is where you say who you are', async ({ page }) => {
   test.setTimeout(90_000);
-  await page.goto(`/#rom=${romHashParam()}`);
+  await page.goto(`/classic/#rom=${romHashParam()}`);
   // Who you are is the strip under the ways in (POK-320); pressing it opens your rows.
   const strip = page.locator('#lobby-trainer');
   await expect(strip).toBeVisible({ timeout: 60_000 });
@@ -463,7 +463,7 @@ test('the lobby is where you say who you are', async ({ page }) => {
 
 test('the lobby offers lines and a stats toggle, and the sprites start locked (POK-243)', async ({ page }) => {
   test.setTimeout(90_000);
-  await page.goto(`/#rom=${romHashParam()}`);
+  await page.goto(`/classic/#rom=${romHashParam()}`);
   const strip = page.locator('#lobby-trainer');
   await expect(strip).toBeVisible({ timeout: 60_000 });
   await strip.click();
@@ -516,7 +516,7 @@ test('the lobby offers lines and a stats toggle, and the sprites start locked (P
 
 test('QUICK PLAY hosts a game when there is nothing to join', async ({ page }) => {
   test.setTimeout(120_000);
-  await page.goto(`/#rom=${romHashParam()}`);
+  await page.goto(`/classic/#rom=${romHashParam()}`);
   const quick = page.locator('#lobby-rows button', { hasText: 'QUICK PLAY' });
   await expect(quick).toBeVisible({ timeout: 60_000 });
   await expect(quick).toBeEnabled({ timeout: 30_000 }); // the socket came up
@@ -529,7 +529,7 @@ test('QUICK PLAY hosts a game when there is nothing to join', async ({ page }) =
 
 test('LOBBIES, empty, says so in full and HOST makes a room from there (HBR-49)', async ({ page }) => {
   test.setTimeout(120_000);
-  await page.goto(`/#rom=${romHashParam()}`);
+  await page.goto(`/classic/#rom=${romHashParam()}`);
   const lobbies = page.locator('#lobby-rows button', { hasText: 'LOBBIES' });
   await expect(lobbies).toBeVisible({ timeout: 60_000 });
   await lobbies.click();
@@ -543,7 +543,7 @@ test('LOBBIES, empty, says so in full and HOST makes a room from there (HBR-49)'
 
 test('JOIN BY CODE cannot type a code the relay could never have issued (POK-240)', async ({ page }) => {
   test.setTimeout(90_000);
-  await page.goto(`/#rom=${romHashParam()}`);
+  await page.goto(`/classic/#rom=${romHashParam()}`);
   const join = page.locator('#lobby-rows button', { hasText: 'JOIN BY CODE' });
   await expect(join).toBeVisible({ timeout: 60_000 });
   await expect(join).toBeEnabled({ timeout: 30_000 }); // the socket came up
@@ -571,7 +571,7 @@ test('a room that will not let you in offers the way back', async ({ browser }) 
     // One tab hosts and starts, which locks the room -- the state any old link points
     // at once a match has begun.
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&fast&nobots&testmon&rom=${rom}`);
+    await host.goto(`/classic/#host&fast&nobots&testmon&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
@@ -590,7 +590,7 @@ test('a room that will not let you in offers the way back', async ({ browser }) 
     // Somebody follows the old link. The door is shut, and the page says so and offers
     // a way out rather than leaving them on a dead end.
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&rom=${rom}`);
+    await guest.goto(`/classic/#join=${code}&rom=${rom}`);
     // In Kanto's words (browse.lua), drawn (POK-320).
     await expect(guest.locator('#room-code')).toHaveText('THAT GAME STARTED', { timeout: 60_000 });
     const back = guest.locator('#room-note button', { hasText: 'BACK TO LOBBY' });
@@ -610,7 +610,7 @@ test('a room that will not let you in offers the way back', async ({ browser }) 
 
 test('DEBUG: a trainer-card setting puts a tile on the menu whose rows write the hash flags', async ({ page }) => {
   test.setTimeout(120_000);
-  await page.goto(`/#rom=${romHashParam()}`);
+  await page.goto(`/classic/#rom=${romHashParam()}`);
   const strip = page.locator('#lobby-trainer');
   await expect(strip).toBeVisible({ timeout: 60_000 });
   const tile = page.locator('#lobby-debug');

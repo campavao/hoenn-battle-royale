@@ -33,7 +33,7 @@ async function watchCurtain(page: Page): Promise<void> {
 
 test('solo boots into its match under black, and the black goes on the drop map', async ({ page }) => {
   test.setTimeout(120_000);
-  await page.goto(`/#solo&fast&rom=${romHashParam()}`);
+  await page.goto(`/classic/#solo&fast&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
   await watchCurtain(page);
   await page.waitForFunction(() => (window as unknown as { __curtain: { liftedOnField: boolean | null } }).__curtain.liftedOnField !== null, undefined, { timeout: 30_000 });
@@ -44,7 +44,7 @@ test('solo boots into its match under black, and the black goes on the drop map'
 
 test("a room's START goes to the Safari under black", async ({ page }) => {
   test.setTimeout(120_000);
-  await page.goto(`/#host&noauto&fast&rom=${romHashParam()}`);
+  await page.goto(`/classic/#host&noauto&fast&rom=${romHashParam()}`);
   await expect(page.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
   await page.waitForTimeout(2_000);
   await watchCurtain(page);

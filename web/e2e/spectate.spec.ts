@@ -41,7 +41,7 @@ test('an eliminated player watches a live fight on the real battle screen', asyn
 
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&noauto&nobots&testmon&rom=${rom}`);
+    await host.goto(`/classic/#host&noauto&nobots&testmon&rom=${rom}`);
     await host.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
 
     const codeEl = host.locator('#room-code');
@@ -50,7 +50,7 @@ test('an eliminated player watches a live fight on the real battle screen', asyn
     if (!code) throw new Error('could not parse a room code');
 
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&noauto&nobots&testmon&rom=${rom}`);
+    await guest.goto(`/classic/#join=${code}&noauto&nobots&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
 
     // The eyeline is a match rule -- it does not fire in the lobby -- so put both seats
@@ -78,7 +78,7 @@ test('an eliminated player watches a live fight on the real battle screen', asyn
 
     // Now the watcher, mid-fight.
     const watcher = await watchCtx.newPage();
-    await watcher.goto(`/#join=${code}&noauto&nobots&testmon&rom=${rom}`);
+    await watcher.goto(`/classic/#join=${code}&noauto&nobots&testmon&rom=${rom}`);
     await watcher.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
     await watcher.waitForFunction(
       (addr) => (window as unknown as RamWindow).__br.mailbox.ram.read(addr, 16) === 0x4252,
