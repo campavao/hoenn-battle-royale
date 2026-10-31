@@ -8,8 +8,11 @@ import type { FameMon } from '../../src/ui/results';
 export type WorldUp =
   /** In: who I am, and which room -- a code, a new one of my own (`host`), or, with
    *  neither, quick play. Answered by `room` (or `no_room`, `full`). `w`: the page's
-   *  WORLD_HASH (tools/br/bundle-world.mjs), refused with `old` when it is not the relay's. */
-  | { t: 'join'; name: string; skin: number; code?: string; host?: boolean; again?: Again; pass?: string; rec?: CardRecord; w?: string }
+   *  WORLD_HASH (tools/br/bundle-world.mjs), refused with `old` when it is not the relay's.
+   *  `r`: the patched ROM the page battles on (its sha1, seven characters): a room plays
+   *  one, as the first in it brought, because a link battle between two patches desyncs
+   *  (CLAUDE.md). Refused with `no_room` `rom` when it is another. */
+  | { t: 'join'; name: string; skin: number; code?: string; host?: boolean; again?: Again; pass?: string; rec?: CardRecord; w?: string; r?: string }
   /** START (the room's host): the match begins for everybody in the room. */
   | { t: 'start' }
   /** The host's settings for the room's next match (the live room's options). */
@@ -104,7 +107,7 @@ export type WorldDown =
   /** The host took me out of the room: back to the menu, the socket still open. */
   | { t: 'kicked' }
   /** No room by that code (or it is full, or its passcode was wrong: `pass`). */
-  | { t: 'no_room'; code: string; pass?: boolean }
+  | { t: 'no_room'; code: string; pass?: boolean; rom?: boolean }
   /** A match: my trainer's id in it and the Room as it starts (or as it is, joining late). */
   | { t: 'hello'; id: number; state: RoomState; key?: string }
   | { t: 'state'; state: RoomState }

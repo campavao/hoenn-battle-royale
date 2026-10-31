@@ -29,6 +29,26 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it('a room battles on one patch: a page on another is refused, and quick play keeps them apart', () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
+    try {
+      const [a, b, c, d, e] = [phone(), phone(), phone(), phone(), phone()];
+      svc.open(a.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true, r: 'aaaaaaa' }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      // A link battle between two patches desyncs (CLAUDE.md): told why, not let in.
+      svc.open(b.link).onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, code: code.toLowerCase(), r: 'bbbbbbb' }));
+      expect(b.got.at(-1)).toEqual({ t: 'no_room', code, rom: true });
+      svc.open(c.link).onText(JSON.stringify({ t: 'join', name: 'cal', skin: 0, code, r: 'aaaaaaa' }));
+      expect(c.got.at(-1)!.t).toBe('room');
+      // QUICK PLAY: one room a patch.
+      svc.open(d.link).onText(JSON.stringify({ t: 'join', name: 'dee', skin: 0, r: 'aaaaaaa' }));
+      svc.open(e.link).onText(JSON.stringify({ t: 'join', name: 'eve', skin: 0, r: 'bbbbbbb' }));
+      const quick = (p: { got: { t: string }[] }) => (p.got.filter((m) => m.t === 'room').at(-1) as unknown as { code: string }).code;
+      expect(quick(d)).not.toBe(quick(e));
+    } finally {
+      svc.stop();
+    }
+  });
   it('says what happens in the live relay\'s words, so the play log counts world matches', async () => {
     const lines: string[] = [];
     const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 3, cap: 30, now: () => 0, log: (l) => lines.push(l) });
