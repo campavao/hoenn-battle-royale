@@ -16,6 +16,7 @@ import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
 import { over } from './over';
 import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, isTm, within } from './items';
+import { HURT, botKeys, centreSteps, health } from './bots';
 import { AFTER_WIN, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, WALKUP_BANG, eventPiece, makeRoom, wornParty } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
@@ -633,6 +634,28 @@ describe('item balls', () => {
     expect(wornParty(team, bot.wear).map((m) => m.hp)).toEqual([20, 0, 20, 10]);
     expect(wornParty(team, [0.001]).map((m) => m.hp)[0]).toBe(1);
     expect(wornParty(team, undefined)).toBe(team);
+  });
+
+  it('a hurt bot walks to a CENTER and comes out whole (brain.ts HURT and healHere)', () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    (room as unknown as { opening: number }).opening = 0;
+    // Oldale's CENTER door is (6,16); its doorstep is the cell below.
+    expect(centreSteps(room)).toContainEqual({ map: 'MAP_OLDALE_TOWN', x: 6, y: 17 });
+    room.apply({ c: 'join', id: 7, bot: true, name: 'BOT', skin: 0, spot: { map: 'MAP_OLDALE_TOWN', x: 10, y: 12 }, facing: 1 });
+    const bot = room.actor(7)!;
+    bot.calm = 1e9; // nobody to fight here, nothing but the walk
+    const brain = { rng: 7, wait: 0, dir: 1 };
+    const walk = (frames: number) => { for (let i = 0; i < frames && bot.wear; i++) { bot.keys = botKeys(room, bot, brain); room.step(); } };
+    // Whole, or only scratched: no CENTER.
+    bot.wear = [0.9, 0.8];
+    walk(600);
+    expect(bot.wear).toEqual([0.9, 0.8]);
+    // Under half: there, and whole again.
+    bot.wear = [0.2, 0];
+    expect(health(bot)).toBeLessThan(HURT);
+    walk(60 * 60);
+    expect(bot.wear).toBeUndefined();
+    expect(bot.m.spot).toEqual({ map: 'MAP_OLDALE_TOWN', x: 6, y: 17 });
   });
 
   it('FLY off the MAP lands where the flight did: a town of the match, a cell to stand on, not out of the Zone', () => {

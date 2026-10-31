@@ -68,11 +68,59 @@ function insideNext(room: Room): Spot[] {
   return cells;
 }
 
+/** brain.ts HURT: under this share of its team's HP, a bot goes to a CENTER. */
+export const HURT = 0.5;
+
+/** How much of a bot's team is standing, as its fights left it (room.ts wear): 1 whole. */
+export function health(a: Actor): number {
+  const w = a.wear;
+  return w?.length ? w.reduce((s, v) => s + v, 0) / w.length : 1;
+}
+
+/** Every CENTER's doorstep on the match's own outdoor maps: the cell below a door into a
+ *  map with a nurse (world.ts centre), where its trainers walk out. A bot that stands on
+ *  one has been in (brain.ts healHere: the whole team back, status gone). */
+const STEPS = new WeakMap<Room, Spot[]>();
+export function centreSteps(room: Room): Spot[] {
+  const hit = STEPS.get(room);
+  if (hit) return hit;
+  const out: Spot[] = [];
+  for (const id of room.places.keys()) {
+    for (const w of room.world.map(id)?.warps ?? []) {
+      if (room.world.map(w.to)?.centre && room.world.cell(id, w.x, w.y + 1) === 0) out.push({ map: id, x: w.x, y: w.y + 1 });
+    }
+  }
+  STEPS.set(room, out);
+  return out;
+}
+
+/** The CENTER a hurt bot walks to (brain.ts centreRoute): the doorstep fewest map
+ *  crossings away, then nearest, out of the fog; none and it goes on as it was. */
+function centreFor(room: Room, a: Actor): Spot | null {
+  const p = room.places.get(a.m.spot.map);
+  if (!p) return null;
+  let best: Spot | null = null, bestH = Infinity, bestD = Infinity;
+  for (const s of centreSteps(room)) {
+    if (room.inFog(s)) continue;
+    const h = room.world.hops(a.m.spot.map, s.map, true, true);
+    if (h === undefined || h > bestH) continue;
+    const q = room.places.get(s.map)!;
+    const d = Math.abs(q.gx + s.x - p.gx - a.m.spot.x) + Math.abs(q.gy + s.y - p.gy - a.m.spot.y);
+    if (h < bestH || d < bestD) { bestH = h; bestD = d; best = s; }
+  }
+  return best;
+}
+
 /** Where a bot goes this phase, or null to wander (Kanto's bots: into the ring before it
  *  closes, and to an event while its legendary stands, DESIGN §10). One in three heads for
  *  the newest event on the ground; the rest stay put inside the ring, and those outside
  *  it walk in to its nearest cell. */
 function goal(room: Room, a: Actor, b: Brain): Spot | null {
+  // Hurt: a CENTER first (brain.ts, HURT), as long as there is one out of the fog.
+  if (health(a) < HURT) {
+    const c = centreFor(room, a);
+    if (c) return c;
+  }
   // The hunt (brain.ts HUNT_AT, Kanto's rule): with three left, a bot aims at somebody,
   // the nearest still standing, rather than at a cell; otherwise the last three wait for
   // each other in a shrinking ring.
@@ -145,7 +193,16 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
   // One frame of the key is one tile (or one turn to face a shut way): then let go.
   if (a.m.action) return 0;
   const ring = room.ring();
-  const at = `${ring.round}:${ring.phase}:${room.events.length}`;
+  // Hurt is a plan of its own: it rethinks the moment a fight leaves it under HURT.
+  const at = `${ring.round}:${ring.phase}:${room.events.length}${health(a) < HURT ? ':hurt' : ''}`;
+  // On a CENTER's doorstep: in, and out whole (brain.ts healHere), a moment inside.
+  if (a.wear && centreSteps(room).some((s) => sameSpot(s, a.m.spot))) {
+    a.wear = undefined;
+    b.goal = null;
+    b.steps = undefined;
+    b.wait = 120;
+    return 0;
+  }
   // A new phase or event: each bot rethinks on its own frame of the next half second, so
   // sixty-four searches never land on one frame.
   // One the fog has caught with nowhere to go (its walk gave up) thinks again too.
