@@ -168,6 +168,10 @@ export interface RomBattles {
   /** I won: Emerald's Hall of Fame with my team, the live winner's parade (br_match.c's
    *  RESULT for our own seat). Resolves when it is over (or never came up). */
   fame(onStart: () => void): Promise<boolean>;
+  /** Somebody else won: Emerald's Hall of Fame with their team, under their name and
+   *  sprite (br_hof.c, POK-417's FAME: "Everyone who is still in the game should see the
+   *  hall of fame screen"). Resolves when it is over (or never came up). */
+  paradeOf(mons: PackedMon[], name: string, skin: number, onStart: () => void): Promise<boolean>;
   /** The fog's bite between battles (br_ring.c Bleed): a tenth of each mon's max HP, at
    *  least 1, a fainted one's status cleared. How many are still standing. */
   bleed(): Promise<number>;
@@ -1125,6 +1129,33 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         send({ t: 'result', seat: ME, outcome: 'win' });
         const up = await until(emu, () => { drain(() => undefined); return leaving || !onField(); }, 600);
         // leave(): cut short (the next round, or the next match, is starting).
+        if (up && !leaving) {
+          onStart();
+          await until(emu, () => { drain(() => undefined); return leaving || emu.read(match, 8) === 5 || onField(); }, 60 * 120);
+        }
+        leaving = false;
+        emu.pause();
+        if (!repark(false)) broken = true;
+        else if (carried) keep(carried);
+        return up;
+      });
+    },
+    paradeOf(mons, name, skin, onStart) {
+      return onCore(async () => {
+        if (broken || !mons.length) return false;
+        if (carried) keep(carried);
+        lay();
+        emu.resume();
+        // A FAME is heard only in a match (br_hof.c HandleFame), and DONE (5) says the
+        // parade has run.
+        emu.write(match, 2, 8);
+        leaving = false;
+        // The champion in a seat of their own, as a fight's foe is: present, in their
+        // skin (the parade's trainer picture), their team its PARTY rows, then the FAME.
+        send({ t: 'place', v: PROTOCOL, seat: FOE_SEAT, map: { group: 0, num: 9 }, x: 20, y: 8, f: 1, st: 'alive', sprite: String(skin) });
+        send({ t: 'party', seat: FOE_SEAT, mons: mons.slice(0, 6) });
+        send({ t: 'fame', seat: FOE_SEAT, name: name.slice(0, 7) });
+        const up = await until(emu, () => { drain(() => undefined); return leaving || !onField(); }, 600);
         if (up && !leaving) {
           onStart();
           await until(emu, () => { drain(() => undefined); return leaving || emu.read(match, 8) === 5 || onField(); }, 60 * 120);

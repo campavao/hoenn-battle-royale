@@ -17,6 +17,7 @@
 
 import { WorldIndex } from '../src/bots/hoenn';
 import type { PeekBag } from './shared/wire';
+import type { PackedMon } from '../src/net/wire';
 import { isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
 import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
@@ -1225,6 +1226,11 @@ function roundFrame(): void {
       const kept = structuredClone(res), bots = botIds(), during = link;
       // Not over the match's own end (PLAY AGAIN), nor into another match.
       void parade().finally(() => { if (matchOn && link === during && !endingShown) standings(false, kept, bots); });
+    } else if (rom && !battle && championTeam(res.winner).length) {
+      // Somebody else's: their Hall of Fame on my own ROM too (POK-417), after the fight a
+      // watcher has on screen, then the standings.
+      const kept = structuredClone(res), bots = botIds(), during = link, who = res.winner;
+      void paradeOf(who).finally(() => { if (matchOn && link === during && !endingShown) standings(false, kept, bots); });
     }
     else standings(false);
   }
@@ -1233,7 +1239,8 @@ function roundFrame(): void {
   if (lobby && !link.online && matchOn && !endingAt && over(link.room)) matchOver();
   // The relay said the match is over: once the frames that ended it have played here (or
   // a moment has passed), the standings and PLAY AGAIN.
-  if (endingAt && (over(link.room) || performance.now() - endingAt > 1500)) {
+  const held = romUp || watch.replaying;
+  if (endingAt && (held ? performance.now() - endingAt > SCREEN_WAIT_MS : over(link.room) || performance.now() - endingAt > 1500)) {
     endingAt = 0;
     record(res.round);
     endingShown = true;
@@ -1282,6 +1289,39 @@ function stepsFrame(): void {
 let romUp = false;
 /** The match's end standings are up (PLAY AGAIN): nothing puts the round's back over them. */
 let endingShown = false;
+/** How long the match's end waits for a Hall of Fame or a watcher's replay on screen
+ *  (classic's WIN_GRACE_MAX_MS and REPLAY_MAX_MS): a ROM that never finishes must not
+ *  strand anybody in a match that is over. */
+const SCREEN_WAIT_MS = 60_000;
+
+/** The champion's team as a parade's PARTY rows: a bot's as its fights deal it, a
+ *  trainer's as their page last told the room (with its personality, for its colours). */
+function championTeam(id: number): PackedMon[] {
+  const a = link.room.actor(id), r = link.room;
+  const name = (a?.name ?? '').slice(0, 7);
+  if (a?.bot) return dealParty(r.seed, a.id, r.ring().phase + 1, a.m.spot.map, gradeOf(r.seed, a.id)).map((m) => ({ ...m, ot: name }));
+  return (link.teams.get(id) ?? []).map((m) => ({
+    species: m.species, level: m.level, hp: m.hp ?? m.maxHp ?? 1, maxHp: m.maxHp ?? m.hp ?? 1, status: 0,
+    moves: (m.moves ?? []).map((v) => ({ id: v.id, pp: 0, ppUps: 0 })), heldItem: 0,
+    otId: m.otId ?? 0, personality: m.personality ?? 0, exp: 0,
+    nickname: m.nickname ?? speciesName(m.species), ot: name, ...(m.shiny ? { shiny: true } : {}),
+  }));
+}
+
+/** Somebody else's Hall of Fame on my ROM: after any battle of the trainer I watch,
+ *  which has the ROM first. */
+async function paradeOf(id: number): Promise<void> {
+  if (!rom) return;
+  const mons = championTeam(id), a = link.room.actor(id);
+  if (!mons.length) return;
+  const r = rom;
+  // My ROM's turns are one at a time: the replay on screen ends first.
+  romUp = true;
+  try { await r.paradeOf(mons, a?.name ?? '', a?.skin ?? 0, () => battleEl.classList.add('on')); } catch (e) { console.warn('spike fame failed', e); }
+  romUp = false;
+  battleEl.classList.remove('on');
+}
+
 /** The Hall of Fame: the ROM has the screen until it is over. */
 async function parade(): Promise<void> {
   if (!rom) return;

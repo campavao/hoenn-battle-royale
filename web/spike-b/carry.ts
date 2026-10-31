@@ -157,7 +157,7 @@ export function fameTeam(party: Uint8Array, count: number): FameMon[] {
     let nickname: string | undefined;
     try { nickname = decodeGen3(end < 0 ? raw : raw.subarray(0, end)) || undefined; } catch { nickname = undefined; }
     const shiny = ((otId >>> 16) ^ (otId & 0xffff) ^ (personality >>> 16) ^ (personality & 0xffff)) < 8;
-    out.push({ species, nickname, level: party[at + 84], hp: v.getUint16(at + 86, true), maxHp: v.getUint16(at + 88, true), shiny, moves });
+    out.push({ species, nickname, level: party[at + 84], hp: v.getUint16(at + 86, true), maxHp: v.getUint16(at + 88, true), shiny, moves, personality, otId });
   }
   return out;
 }

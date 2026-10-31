@@ -87,6 +87,8 @@ export class Watch {
   /** What has come of the watched trainer's battles, not yet replayed. */
   private queue: { from: number; m: SpMsg }[] = [];
   private mirroring = false;
+  /** A battle of the trainer watched is on my screen now (the results wait for it). */
+  get replaying(): boolean { return this.mirroring; }
   private publisher: RomBattles | null = null;
   /** Loot keys looked at already (pickedBy). */
   private seen = new Set<number>();

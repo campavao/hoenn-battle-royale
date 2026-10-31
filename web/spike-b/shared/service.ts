@@ -52,6 +52,8 @@ function teamOf(t: unknown): FameMon[] | undefined {
       ...(int(m.hp, 999) !== undefined ? { hp: m.hp as number } : {}),
       ...(int(m.maxHp, 999) !== undefined ? { maxHp: m.maxHp as number } : {}),
       ...(m.shiny === true ? { shiny: true } : {}),
+      ...(int(m.personality, 0xffffffff) !== undefined ? { personality: m.personality as number } : {}),
+      ...(int(m.otId, 0xffffffff) !== undefined ? { otId: m.otId as number } : {}),
       moves,
     });
   }
@@ -156,6 +158,9 @@ interface Lobby {
   members: Map<number, Phone>;
   /** A quick room starts itself then (ms, `now`). */
   startsAt: number | null;
+  /** A quick room back from a match: it waits for READY UP (Kanto's POK-167) rather than
+   *  counting itself into the next while people still read their results. */
+  played?: boolean;
   /** The match under way. */
   host: Host | null;
   t0: number;
@@ -221,6 +226,9 @@ export class WorldService {
           if (!room.owner) room.owner = id;
           this.opts.log(`world: ${phone.name}#${id} in room ${room.code}${room.quick ? ' (quick)' : ''}, ${room.members.size} there`);
           // The live relay's lines too, so tools/br/play-log.mjs counts these rooms (who).
+          // Somebody new, who came for a game now: the count is theirs too (classic's first
+          // lobby for a page that never played here).
+          if (this.waiting(room)) room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS);
           this.opts.log(hosted ? `room ${room.code} hosted by ${who(phone)}${room.set.door === 'open' ? ' (open)' : ''}` : `room ${room.code}: ${who(phone)} ${room.quick ? 'quick-joined' : room.host ? 'spectates' : 'joined'}`);
           this.roster(room);
           // A match under way: in, to watch it until the next.
@@ -236,7 +244,12 @@ export class WorldService {
         if (!phone || !room) return;
         const host = room.host;
         if (m.t === 'start') {
-          if (!host && phone.id === room.owner) this.start(room);
+          // READY UP: back from a match, a quick room's START arms its count, and START in
+          // that count deals at once (match/room.ts readiesUp).
+          if (!host && phone.id === room.owner) {
+            if (this.waiting(room)) { room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS); this.roster(room); }
+            else this.start(room);
+          }
         } else if (m.t === 'set') {
           if (!host && phone.id === room.owner && !room.quick && m.set && typeof m.set === 'object') {
             const s = m.set;
@@ -483,8 +496,14 @@ export class WorldService {
     room.host = null;
     room.streams.clear();
     for (const p of room.members.values()) p.watching = 0;
-    if (room.quick) room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS);
+    // A quick one waits for READY UP: the next match is the one nobody asked for yet.
+    if (room.quick) { room.played = true; room.startsAt = null; }
     this.roster(room);
+  }
+
+  /** A quick room back from a match, waiting for READY UP: no match, no count. */
+  private waiting(room: Lobby): boolean {
+    return room.quick && !!room.played && !room.host && room.startsAt === null;
   }
 
   private close(room: Lobby): void {
@@ -553,6 +572,7 @@ export class WorldService {
       this.send(p.link, {
         t: 'room', code: room.code, quick: room.quick, you: p.id, key: p.key, owner: room.owner, members, playing: !!room.host,
         ...(room.startsAt !== null ? { startsIn: Math.max(0, room.startsAt - now) } : {}),
+        ...(this.waiting(room) ? { ready: true } : {}),
         set: room.set,
         ...(p.id === room.owner && room.set.door === 'pass' ? { pass: room.pass } : {}),
       });
