@@ -21,7 +21,7 @@ import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { DIR_EAST } from './sim';
-import { ATTENDANT, DOCKS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
+import { ATTENDANT, BOATS, DOCKS, MOORINGS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
@@ -648,15 +648,16 @@ async function door(n: number, how: string, opened: boolean): Promise<void> {
   } else say('A gust of wind seems to come from inside. A Flying-type POKéMON could open it.');
 }
 
-/** The ferry (br_story.c): Lilycove's attendant sails to an island a live story is on, and
- *  its sailor sails back. Bots never take it. */
-async function ferry(to: { id: string; name: string }[], home: boolean): Promise<void> {
+/** The ferry (br_story.c): Lilycove's attendant sails to Slateport and to an island a
+ *  live story is on, and its sailor sails back; Slateport's sails to Lilycove, and
+ *  MR. BRINEY between his three stops (room.ts BOATS). Bots never take it. */
+async function ferry(to: { id: string; name: string }[], home: boolean, briney: boolean): Promise<void> {
   if (home) {
     if (await ask('Sail back to LILYCOVE CITY?', [['YES', 'y'], ['NO', '']]) === 'y') link.sail('');
     return;
   }
   if (!to.length) { say('The ferry is not sailing anywhere right now.'); return; }
-  const c = await ask('Where would you like to sail?', [...to.map((t): [string, string] => [t.name, t.id]), ['CANCEL', '']]);
+  const c = await ask(briney ? 'MR. BRINEY: Ahoy! Now, my friend, where are we bound?' : 'Where would you like to sail?', [...to.map((t): [string, string] => [t.name, t.id]), ['CANCEL', '']]);
   if (c) link.sail(c);
 }
 
@@ -708,7 +709,7 @@ function startFor(e: RoomEvent): void {
   if (e.type === 'trade') { void (e.gives ? gift(e.n, e.species) : trade(e.n, e.species)); return; }
   if (e.type === 'door') { void door(e.n, e.how, !!e.opened); return; }
   if (e.type === 'guarded') { say(`${e.name} guards it!`); return; }
-  if (e.type === 'ferry') { void ferry(e.to, !!e.home); return; }
+  if (e.type === 'ferry') { void ferry(e.to, !!e.home, !!e.briney); return; }
   if (e.type === 'gate') {
     // A story's gate (br_story.c): his own fight in the hidden ROM, past the eight gym
     // leaders (BrStory_StartGate); won, what he held is mine, and lost, it is his again.
@@ -2477,9 +2478,12 @@ function drawNurses(visible: Placed[]): void {
 /** The MARTs' clerks (marts.ts), each the way it faces: the first three frames are
  *  down, up and left; right is left turned over. */
 const clerkArt = new Map<number, HTMLCanvasElement>();
-/** OBJ_EVENT_GFX_BEAUTY at Lilycove's harbour, OBJ_EVENT_GFX_SAILOR on each dock. */
+const OBJ_EVENT_GFX_MR_BRINEYS_BOAT = 88;
+/** OBJ_EVENT_GFX_BEAUTY at both harbours, OBJ_EVENT_GFX_SAILOR on each island's dock,
+ *  MR. BRINEY (OBJ_EVENT_GFX_EXPERT_M) at each stop. */
 const FERRY_PEOPLE: [string, number, number, number][] = [
   [ATTENDANT.map, ATTENDANT.x, ATTENDANT.y, 45],
+  ...BOATS.map((b): [string, number, number, number] => [b.map, b.x, b.y, b.gfx]),
   ...[...new Map(Object.values(DOCKS).map((d) => [d.map, d])).values()].map((d): [string, number, number, number] => [d.map, d.sailor[0], d.sailor[1], 49]),
 ];
 function drawClerks(visible: Placed[]): void {
@@ -2501,6 +2505,14 @@ function drawClerks(visible: Placed[]): void {
     if (!img) clerkArt.set(gfx, (img = art.sprite(gfx, 3)));
     const w = img.width / 3;
     ctx.drawImage(img, 0, 0, w, img.height, (p.gx + x) * TILE + (TILE - w) / 2, (p.gy + y) * TILE + TILE - img.height, w, img.height);
+  }
+  // MR. BRINEY's boat at each stop, on the water (OBJ_EVENT_GFX_MR_BRINEYS_BOAT).
+  for (const m of MOORINGS) {
+    const p = placed.get(m.map);
+    if (!p || !visible.includes(p)) continue;
+    let img = clerkArt.get(OBJ_EVENT_GFX_MR_BRINEYS_BOAT);
+    if (!img) clerkArt.set(OBJ_EVENT_GFX_MR_BRINEYS_BOAT, (img = art.sprite(OBJ_EVENT_GFX_MR_BRINEYS_BOAT, 1)));
+    ctx.drawImage(img, (p.gx + m.x) * TILE + (TILE - img.width) / 2, (p.gy + m.y) * TILE + TILE - img.height);
   }
   // People at home and floor traders (br_balls.c), facing down: a gift-giver's people.
   for (const h of link.room.homes) {
