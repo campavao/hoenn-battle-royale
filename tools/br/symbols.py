@@ -142,6 +142,12 @@ ENGINE_SYMBOLS = [
     "gTilesetAnims_Pacifidlog_LogBridges", "gTilesetAnims_Pacifidlog_WaterCurrents",
     "gTilesetAnims_Sootopolis_StormyWater",
     "gTilesetAnims_BattleFrontierOutsideWest_Flag", "gTilesetAnims_BattleFrontierOutsideEast_Flag",
+    # ...and the primary tileset's (TilesetAnim_General): spike B draws every map from the
+    # ROM's tilesets and plays the water, its edges, the waterfalls and the flowers on
+    # them (web/spike-b/romart.ts).
+    "gTileset_General", "gTilesetAnims_General_Flower", "gTilesetAnims_General_Water",
+    "gTilesetAnims_General_SandWaterEdge", "gTilesetAnims_General_Waterfall",
+    "gTilesetAnims_General_LandWaterEdge",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"
