@@ -1117,6 +1117,8 @@ document.getElementById('win-ok')!.addEventListener('click', () => {
 let waiting = false;
 let seenRound = -1;
 let shownWin = false;
+/** The ROM was told this round's crown in the middle of a fight (rom.wonMatch). */
+let wonMidFight = false;
 
 /** Once a frame: a new round puts me back at the truck with a fresh team; the bench says
  *  so; the last one standing is announced, with how everybody else went out. */
@@ -1126,7 +1128,7 @@ function roundFrame(): void {
   if (res.round !== seenRound) {
     const first = seenRound < 0;
     seenRound = res.round;
-    shownWin = false;
+    shownWin = wonMidFight = false;
     // A parade still running ends with its round: the field is the new round's.
     if (romUp && !battle) rom?.leave();
     winEl.classList.remove('on');
@@ -1147,8 +1149,13 @@ function roundFrame(): void {
     waiting = true;
     watchOn();
   }
-  if (res.winner && !shownWin) {
+  // Crowned mid-fight (the fog took the last of them while I fought a wild one, a bot, a
+  // boss): the ROM leaves the fight at its next choice, "You won the match!", and the
+  // crown waits for the field. The panel opened over a fight that went on (audit, 10-30).
+  if (res.winner === link.me && battle && !(battle.foe && !battle.foe.bot) && !wonMidFight) { wonMidFight = true; rom?.wonMatch(); }
+  if (res.winner && !shownWin && !(res.winner === link.me && battle)) {
     shownWin = true;
+    wonMidFight = false;
     record(res.round);
     // Mine: the Hall of Fame first, as the live winner's ROM runs it, then the standings.
     // The parade outlasts AFTER_WIN, so the next round may have begun: these standings, kept.
