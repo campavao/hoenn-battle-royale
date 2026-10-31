@@ -3744,7 +3744,47 @@ function insideNext(room) {
   INSIDE.set(room, { at, cells });
   return cells;
 }
+var HURT = 0.5;
+function health(a) {
+  const w = a.wear;
+  return w?.length ? w.reduce((s, v) => s + v, 0) / w.length : 1;
+}
+var STEPS2 = /* @__PURE__ */ new WeakMap();
+function centreSteps(room) {
+  const hit = STEPS2.get(room);
+  if (hit) return hit;
+  const out = [];
+  for (const id of room.places.keys()) {
+    for (const w of room.world.map(id)?.warps ?? []) {
+      if (room.world.map(w.to)?.centre && room.world.cell(id, w.x, w.y + 1) === 0) out.push({ map: id, x: w.x, y: w.y + 1 });
+    }
+  }
+  STEPS2.set(room, out);
+  return out;
+}
+function centreFor(room, a) {
+  const p = room.places.get(a.m.spot.map);
+  if (!p) return null;
+  let best = null, bestH = Infinity, bestD = Infinity;
+  for (const s of centreSteps(room)) {
+    if (room.inFog(s)) continue;
+    const h = room.world.hops(a.m.spot.map, s.map, true, true);
+    if (h === void 0 || h > bestH) continue;
+    const q = room.places.get(s.map);
+    const d = Math.abs(q.gx + s.x - p.gx - a.m.spot.x) + Math.abs(q.gy + s.y - p.gy - a.m.spot.y);
+    if (h < bestH || d < bestD) {
+      bestH = h;
+      bestD = d;
+      best = s;
+    }
+  }
+  return best;
+}
 function goal(room, a, b) {
+  if (health(a) < HURT) {
+    const c = centreFor(room, a);
+    if (c) return c;
+  }
   if (hunting(room)) {
     const p2 = room.places.get(a.m.spot.map);
     let best2, bestD2 = Infinity;
@@ -3807,7 +3847,14 @@ function hunting(room) {
 function botKeys(room, a, b) {
   if (a.m.action) return 0;
   const ring = room.ring();
-  const at = `${ring.round}:${ring.phase}:${room.events.length}`;
+  const at = `${ring.round}:${ring.phase}:${room.events.length}${health(a) < HURT ? ":hurt" : ""}`;
+  if (a.wear && centreSteps(room).some((s) => sameSpot(s, a.m.spot))) {
+    a.wear = void 0;
+    b.goal = null;
+    b.steps = void 0;
+    b.wait = 120;
+    return 0;
+  }
   const hunt = hunting(room) && (!b.steps?.length || (room.tick + a.id * 7) % 240 === 0);
   const idle = !b.goal && !b.steps?.length && (room.tick + a.id * 7) % 300 === 0;
   if ((b.plan !== at || hunt || idle || !b.goal && room.inFog(a.m.spot, ring)) && (room.tick + a.id * 7) % 30 === 0) {
@@ -4650,4 +4697,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "625a94ff1881";
+export const WORLD_HASH = "e65f98b2e503";
