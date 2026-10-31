@@ -33,7 +33,7 @@ export type WorldUp =
   | { t: 'end'; fled?: boolean; won?: boolean }
   | { t: 'field'; bits: number }
   /** The two bots the room gave me to fight (a `bots` event), and who won: 0, nobody. */
-  | { t: 'bots'; a: number; b: number; w: number }
+  | { t: 'bots'; a: number; b: number; w: number; hp?: number[]; ua?: number[]; ub?: number[] }
   /** My trade with event `n`'s trader is over: I gave him `sp` (0, nothing). */
   | { t: 'traded'; n: number; sp: number }
   /** My catch with a full party let these go (room.ts `released`): species, level. */
@@ -44,7 +44,7 @@ export type WorldUp =
   | { t: 'fly'; map: string; x: number; y: number }
   /** The bot I just fought, as my ROM left its team (br_bot.c's PARTY of gEnemyParty):
    *  each slot's HP as a share of its most, for its next fight. */
-  | { t: 'wear'; bot: number; hp: number[] }
+  | { t: 'wear'; bot: number; hp: number[]; spent?: number[] }
   /** Drop me on this map when the Safari ends. */
   | { t: 'pick'; map: string }
   /** The ball or bag `k` would not go in my bag: put it back (a bag holding `rest`). */

@@ -63,7 +63,19 @@ function teamOf(t: unknown): FameMon[] | undefined {
   return out;
 }
 
-/** A bag as told for a watcher's peek: up to 120 stacks and the money, or nothing. */
+/** A bag as told for a watcher's peek: up to 120 stacks and the money, or nothing. */
+/** A team's HP as shares of its most (wire.ts wear): one to six, each 0..1. */
+function sharesOf(hp: unknown): hp is number[] {
+  return Array.isArray(hp) && hp.length >= 1 && hp.length <= 6 && hp.every((v) => typeof v === 'number' && v >= 0 && v <= 1);
+}
+
+/** The item ids a bot spent in a fight (wire.ts SpentMsg): four at most, each an item. */
+function itemsOf(ids: unknown): number[] | undefined {
+  if (!Array.isArray(ids)) return undefined;
+  const out = ids.filter((v): v is number => Number.isInteger(v) && v > 0 && v < 0x400).slice(0, 4);
+  return out.length ? out : undefined;
+}
+
 function bagOf(b: unknown): PeekBag | undefined {
   if (!b || typeof b !== 'object') return undefined;
   const { items, money } = b as { items?: unknown; money?: unknown };
@@ -296,7 +308,7 @@ export class WorldService {
         } else if (m.t === 'sail') {
           if (typeof m.to === 'string') host.sail(phone.id, m.to);
         } else if (m.t === 'wear') {
-          if (Number.isInteger(m.bot) && Array.isArray(m.hp) && m.hp.length >= 1 && m.hp.length <= 6 && m.hp.every((v) => typeof v === 'number' && v >= 0 && v <= 1)) host.wear(phone.id, m.bot, m.hp);
+          if (Number.isInteger(m.bot) && sharesOf(m.hp)) host.wear(phone.id, m.bot, m.hp, itemsOf(m.spent));
         } else if (m.t === 'fly') {
           if (typeof m.map === 'string' && Number.isInteger(m.x) && Number.isInteger(m.y)) host.fly(phone.id, m.map.slice(0, 64), m.x, m.y);
         } else if (m.t === 'open') {
@@ -306,7 +318,7 @@ export class WorldService {
         } else if (m.t === 'traded') {
           if (Number.isInteger(m.n) && Number.isInteger(m.sp)) host.traded(phone.id, m.n, m.sp);
         } else if (m.t === 'bots') {
-          if ([m.a, m.b, m.w].every(Number.isInteger)) host.bots(phone.id, m.a, m.b, m.w);
+          if ([m.a, m.b, m.w].every(Number.isInteger)) host.bots(phone.id, m.a, m.b, m.w, sharesOf(m.hp) ? m.hp : undefined, [itemsOf(m.ua), itemsOf(m.ub)]);
         } else if (m.t === 'end') {
           room.streams.delete(phone.id);
           host.end(phone.id, m.fled === true, m.won === true);

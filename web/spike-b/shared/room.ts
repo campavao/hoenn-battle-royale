@@ -32,7 +32,7 @@ import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, dra
 import { DOOR_Y, FINAL_CHANCE, STORIES, STORY_CHANCE, type Story, type StoryDoor } from '../../src/match/story';
 import { dealParty, rungForPhase } from '../../src/bots/party';
 import { gradeOf } from '../../src/bots/roster';
-import { add, carried, purse, quaff, type Stack } from '../../src/bots/bag';
+import { add, carried, purse, quaff, spend, type Stack } from '../../src/bots/bag';
 import { World, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
 import { blueTm, scatterItem } from '../../src/match/scatter';
@@ -346,7 +346,8 @@ export type Command =
   | { c: 'field'; id: number; bits: number }
   /** `id`'s page fought bots `a` and `b` (a `bots` event): `winner` beat the other, or
    *  0 for no answer (its ROM could not), and both walk on. */
-  | { c: 'bots'; id: number; a: number; b: number; winner: number }
+  /** `hp`: what the winner had left, as shares; `used`: what each side spent of its bag. */
+  | { c: 'bots'; id: number; a: number; b: number; winner: number; hp?: number[]; used?: [number[], number[]] }
   /** `id` traded event `n`'s trader the species `given` (0: thought better of it). */
   | { c: 'traded'; id: number; n: number; given: number }
   /** `id` caught one more than a party holds and let `mons` go: they lie beside them, as
@@ -357,7 +358,7 @@ export type Command =
   /** `id` flew off the MAP (FLY, br_map.c) and landed at `to`. */
   | { c: 'fly'; id: number; to: Spot }
   /** Trainer `id`'s ROM's word on the bot it is fighting: what is left of its team. */
-  | { c: 'wear'; id: number; bot: number; hp: number[] }
+  | { c: 'wear'; id: number; bot: number; hp: number[]; spent?: number[] }
   /** `id` sails to story `to`'s island, or ('') from an island back to Lilycove. */
   | { c: 'sail'; id: number; to: string }
   /** `id`'s page went (a reload), or came back. */
@@ -552,6 +553,9 @@ export class Room {
       if (!b?.bot || b.foughtBy !== cmd.id) return;
       b.foughtBy = undefined;
       b.wear = cmd.hp.slice(0, 6).map((v) => Math.min(1, Math.max(0, v)));
+      // And what it spent of the bag it fought with (br_bot.c SendSpent): gone, so not
+      // in its next fight nor on the ground when it falls.
+      if (cmd.spent && b.loot) spend(b.loot.items, cmd.spent.slice(0, 4));
     } else if (cmd.c === 'fly') {
       // To a town of the match's own Hoenn, on a cell a trainer could stand on, and not
       // out of the Zone before the drop (its gate is shut both ways).
@@ -607,6 +611,11 @@ export class Room {
       this.part(b);
       const won = cmd.winner === a.id ? a : cmd.winner === b.id ? b : undefined;
       const lost = won === a ? b : won === b ? a : undefined;
+      // Each bag spends what it used, and the winner keeps what the fight left it
+      // (brain.ts settleAnswered); then the loser goes, with what it has left.
+      if (cmd.used && a.loot) spend(a.loot.items, cmd.used[0].slice(0, 4));
+      if (cmd.used && b.loot) spend(b.loot.items, cmd.used[1].slice(0, 4));
+      if (won && cmd.hp) won.wear = cmd.hp.slice(0, 6).map((v) => Math.min(1, Math.max(0, v)));
       if (won && lost) this.botOut(lost, won.name);
     } else if (cmd.c === 'lock') {
       this.results.entrants = this.actors.map((a) => [a.id, a.name]);

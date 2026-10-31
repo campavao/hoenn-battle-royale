@@ -1921,6 +1921,9 @@ function quaff(party, bag) {
   party[worst] = { ...mon2, hp: Math.min(mon2.maxHp, mon2.hp + HEAL[best]) };
   return best;
 }
+function spend(bag, used) {
+  for (const id of used) take(bag, id);
+}
 function purse(phase, grade = 1 /* Regular */) {
   const level = rungForPhase(phase);
   const mult = grade === 2 /* Ace */ ? 3 : grade === 0 /* Rookie */ ? 1 : 2;
@@ -2517,6 +2520,7 @@ var Room = class {
       if (!b?.bot || b.foughtBy !== cmd.id) return;
       b.foughtBy = void 0;
       b.wear = cmd.hp.slice(0, 6).map((v) => Math.min(1, Math.max(0, v)));
+      if (cmd.spent && b.loot) spend(b.loot.items, cmd.spent.slice(0, 4));
     } else if (cmd.c === "fly") {
       const a = this.actor(cmd.id), t = cmd.to;
       if (!a || a.bot || a.battling || a.m.action || this.ring().safari || !this.places.has(t.map)) return;
@@ -2570,6 +2574,9 @@ var Room = class {
       this.part(b);
       const won = cmd.winner === a.id ? a : cmd.winner === b.id ? b : void 0;
       const lost = won === a ? b : won === b ? a : void 0;
+      if (cmd.used && a.loot) spend(a.loot.items, cmd.used[0].slice(0, 4));
+      if (cmd.used && b.loot) spend(b.loot.items, cmd.used[1].slice(0, 4));
+      if (won && cmd.hp) won.wear = cmd.hp.slice(0, 6).map((v) => Math.min(1, Math.max(0, v)));
       if (won && lost) this.botOut(lost, won.name);
     } else if (cmd.c === "lock") {
       this.results.entrants = this.actors.map((a) => [a.id, a.name]);
@@ -4055,8 +4062,8 @@ var Host = class {
     if (this.players.has(id)) this.pending.push({ c: "field", id, bits: bits & 7 });
   }
   /** The page fought two bots for the room (a `bots` event): who won, 0 for nobody. */
-  bots(id, a, b, winner) {
-    if (this.players.has(id)) this.pending.push({ c: "bots", id, a, b, winner });
+  bots(id, a, b, winner, hp2, used) {
+    if (this.players.has(id)) this.pending.push({ c: "bots", id, a, b, winner, ...hp2 ? { hp: hp2 } : {}, ...used?.some(Boolean) ? { used: [used[0] ?? [], used[1] ?? []] } : {} });
   }
   /** A page gone for now (`on`), or back. Back, it numbers its keys from 1 again. */
   away(id, on) {
@@ -4087,8 +4094,8 @@ var Host = class {
     if (this.players.has(id)) this.pending.push({ c: "open", id, n });
   }
   /** What trainer `id`'s fight left of bot `bot`'s team: each slot's HP share. */
-  wear(id, bot, hp2) {
-    if (this.players.has(id)) this.pending.push({ c: "wear", id, bot, hp: hp2 });
+  wear(id, bot, hp2, spent) {
+    if (this.players.has(id)) this.pending.push({ c: "wear", id, bot, hp: hp2, ...spent ? { spent } : {} });
   }
   /** FLY off the page's MAP landed it on `map` at x, y. */
   fly(id, map, x, y) {
@@ -4236,6 +4243,14 @@ function teamOf(t) {
     });
   }
   return out;
+}
+function sharesOf(hp2) {
+  return Array.isArray(hp2) && hp2.length >= 1 && hp2.length <= 6 && hp2.every((v) => typeof v === "number" && v >= 0 && v <= 1);
+}
+function itemsOf(ids) {
+  if (!Array.isArray(ids)) return void 0;
+  const out = ids.filter((v) => Number.isInteger(v) && v > 0 && v < 1024).slice(0, 4);
+  return out.length ? out : void 0;
 }
 function bagOf(b) {
   if (!b || typeof b !== "object") return void 0;
@@ -4406,7 +4421,7 @@ var WorldService = class {
         } else if (m.t === "sail") {
           if (typeof m.to === "string") host.sail(phone.id, m.to);
         } else if (m.t === "wear") {
-          if (Number.isInteger(m.bot) && Array.isArray(m.hp) && m.hp.length >= 1 && m.hp.length <= 6 && m.hp.every((v) => typeof v === "number" && v >= 0 && v <= 1)) host.wear(phone.id, m.bot, m.hp);
+          if (Number.isInteger(m.bot) && sharesOf(m.hp)) host.wear(phone.id, m.bot, m.hp, itemsOf(m.spent));
         } else if (m.t === "fly") {
           if (typeof m.map === "string" && Number.isInteger(m.x) && Number.isInteger(m.y)) host.fly(phone.id, m.map.slice(0, 64), m.x, m.y);
         } else if (m.t === "open") {
@@ -4416,7 +4431,7 @@ var WorldService = class {
         } else if (m.t === "traded") {
           if (Number.isInteger(m.n) && Number.isInteger(m.sp)) host.traded(phone.id, m.n, m.sp);
         } else if (m.t === "bots") {
-          if ([m.a, m.b, m.w].every(Number.isInteger)) host.bots(phone.id, m.a, m.b, m.w);
+          if ([m.a, m.b, m.w].every(Number.isInteger)) host.bots(phone.id, m.a, m.b, m.w, sharesOf(m.hp) ? m.hp : void 0, [itemsOf(m.ua), itemsOf(m.ub)]);
         } else if (m.t === "end") {
           room.streams.delete(phone.id);
           host.end(phone.id, m.fled === true, m.won === true);
@@ -4750,4 +4765,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "0419f893c74b";
+export const WORLD_HASH = "32e17ecb0825";
