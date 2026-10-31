@@ -1949,7 +1949,9 @@ function fogFrame(): void {
     lastPhase = ring.phase;
   }
   rom?.setPhase(ring.phase + 1);
-  rom?.setSafari(!!ring.safari);
+  // The Safari's battles are the Zone's: whoever threw their last ball and dropped early
+  // is in Hoenn while the clock still runs, and a wild one there is an ordinary fight.
+  rom?.setSafari(!!ring.safari && !!link.room.actor(link.me)?.m.spot.map.startsWith(SAFARI));
   safariFrame(ring);
   if (isOut || !rom) return;
   // The BAG screen is a menu: the fog bites on the field and in battle (BrRing_Tick).
