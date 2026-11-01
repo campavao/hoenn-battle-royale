@@ -77,6 +77,8 @@ export interface Actor {
   shunUntil: number;
   /** A step finished whose arrival has not been looked at yet (the spots). */
   arriving: boolean;
+  /** Aboard the SS TIDAL (TIDAL): where the crossing is. */
+  cruise?: Cruise;
   /** In the Zone after the Safari: the frame the fly map's answer is due by, then the drop
    *  is anywhere. A battle there pushes it on, so the fly map always gets its time. */
   pickBy?: number;
@@ -155,6 +157,10 @@ export type RoomEvent =
   /** A at the ferry's attendant (the live islands' stories, none: not sailing) or at a
    *  dock's sailor (`home`: back to Lilycove), or at a CABLE CAR's attendant (`cable`). */
   | { type: 'ferry'; tick: number; id: number; to: { id: string; name: string }[]; home?: boolean; briney?: boolean; cable?: 'up' | 'down' }
+  /** The SS TIDAL's crossing: `say` what its scripts do when it boards, reaches halfway or
+   *  makes land, after a rest in the bed (`bed`), or at its sailor (`sailor`: the way off
+   *  once in port, else the cabin to rest in). */
+  | { type: 'cruise'; tick: number; id: number; say: 'board' | 'halfway' | 'land' | 'sailor'; cruise: Cruise; bed?: boolean }
   /** A at a MART's clerk. */
   | { type: 'mart'; tick: number; id: number; map: string }
   /** A at a gym leader nobody has beaten yet: their own battle (gyms.ts). */
@@ -224,9 +230,30 @@ export const MOORINGS: Spot[] = [
   { map: 'MAP_ROUTE104', x: 12, y: 54 }, { map: 'MAP_DEWFORD_TOWN', x: 12, y: 8 }, { map: 'MAP_ROUTE109', x: 21, y: 26 },
 ];
 const boatAt = (map: string, x: number, y: number) => BOATS.find((b) => b.map === map && b.x === x && b.y === y);
-/** The ferry's people, by cell: the attendant, each dock's sailor, and the boats'. */
-export function ferryAt(map: string, x: number, y: number): 'attendant' | 'sailor' | 'boat' | undefined {
+/** The SS TIDAL's crossing (SSTidalCorridor/scripts.inc): either harbour boards you into
+ *  the corridor at 1,10. One leg passes by SS_TIDAL_MAX_STEPS steps aboard (CountSSTidalStep,
+ *  while FLAG_SYS_CRUISE_MODE is set), the other by the bed in cabin No. 2 (ProgessCruise-
+ *  AfterBed); once she has made land, the sailor at 1,11 sees you off at the far harbour. */
+export const TIDAL = { map: 'MAP_SS_TIDAL_CORRIDOR', x: 1, y: 10 };
+export const TIDAL_SAILOR = { map: 'MAP_SS_TIDAL_CORRIDOR', x: 1, y: 11 };
+const TIDAL_BEDS: Spot[] = [{ map: 'MAP_SS_TIDAL_ROOMS', x: 15, y: 11 }, { map: 'MAP_SS_TIDAL_ROOMS', x: 15, y: 12 }];
+export const TIDAL_MAPS = ['MAP_SS_TIDAL_CORRIDOR', 'MAP_SS_TIDAL_ROOMS', 'MAP_SS_TIDAL_LOWER_DECK'];
+export const SS_TIDAL_MAX_STEPS = 205;
+/** Where a crossing is: under way, halfway, or in port. */
+export interface Cruise { to: 'lilycove' | 'slateport'; leg: 'board' | 'depart' | 'halfway' | 'land'; steps: number }
+const LEGS: Cruise['leg'][] = ['board', 'depart', 'halfway', 'land'];
+/** Steps count on the leg FLAG_SYS_CRUISE_MODE is set for: out of Slateport, and the
+ *  second half out of Lilycove (SetSSTidalFlag's two callers). */
+const counting = (c: Cruise) => (c.to === 'lilycove' ? c.leg === 'depart' : c.leg === 'halfway');
+/** The bed (SSTidalRooms_EventScript_ProgessCruiseAfterBed): bound for Lilycove it lands
+ *  you from either leg; bound for Slateport, the first sleep is only halfway. */
+const afterBed = (c: Cruise): Cruise['leg'] => (c.to === 'slateport' && (c.leg === 'board' || c.leg === 'depart') ? 'halfway' : 'land');
+const bedAt = (map: string, x: number, y: number) => TIDAL_BEDS.some((b) => b.map === map && b.x === x && b.y === y);
+/** The ferry's people, by cell: the attendant, each dock's sailor, the boats', and the
+ *  SS TIDAL's sailor at its way off. */
+export function ferryAt(map: string, x: number, y: number): 'attendant' | 'sailor' | 'boat' | 'tidal' | undefined {
   if (map === ATTENDANT.map && x === ATTENDANT.x && y === ATTENDANT.y) return 'attendant';
+  if (map === TIDAL_SAILOR.map && x === TIDAL_SAILOR.x && y === TIDAL_SAILOR.y) return 'tidal';
   if (boatAt(map, x, y)) return 'boat';
   return Object.values(DOCKS).some((d) => d.map === map && d.sailor[0] === x && d.sailor[1] === y) ? 'sailor' : undefined;
 }
@@ -625,10 +652,22 @@ export class Room {
       const [x, y] = this.ahead(a);
       const who = ferryAt(a.m.spot.map, x, y);
       const boat = who === 'boat' ? boatAt(a.m.spot.map, x, y) : undefined;
-      if (cmd.to === '' && who === 'sailor') a.m = newMover(HARBOR_LANDING, 1);
+      if (who === 'tidal') {
+        // Off the SS TIDAL at the harbour it made land in (SSTidalCorridor_EventScript_ExitLilycove).
+        if (a.cruise?.leg === 'land' && cmd.to === a.cruise.to) {
+          const p = PORTS[cmd.to];
+          a.m = newMover({ ...p.land }, p.facing);
+          a.cruise = undefined;
+        }
+      } else if (cmd.to === '' && who === 'sailor') a.m = newMover(HARBOR_LANDING, 1);
       else if ((boat?.to.includes(cmd.to) || (who === 'attendant' && cmd.to === 'slateport')) && PORTS[cmd.to]) {
         const p = PORTS[cmd.to];
-        a.m = newMover({ ...p.land }, p.facing);
+        // The SS TIDAL's two harbours board you, as their attendants do (SlateportCity_Harbor's
+        // warp MAP_SS_TIDAL_CORRIDOR, 1, 10); MR. BRINEY and the CABLE CAR take you straight there.
+        if (cmd.to === 'lilycove' || cmd.to === 'slateport') {
+          a.m = newMover({ ...TIDAL }, 2);
+          a.cruise = { to: cmd.to, leg: 'board', steps: 0 };
+        } else a.m = newMover({ ...p.land }, p.facing);
       } else if (who === 'attendant' && this.sailingTo().some((s) => s.id === cmd.to)) {
         const d = DOCKS[cmd.to];
         a.m = newMover({ map: d.map, x: d.x, y: d.y }, 2);
@@ -1633,6 +1672,18 @@ export class Room {
     tick(a.m, keysOf(bits), this.stepFor(a));
     if (a.m.strides !== before) a.arriving = true;
     if (!a.m.action && !a.bot) {
+      const c = a.cruise;
+      // Aboard: the corridor's ON_FRAME scripts say she has left port, and on the leg the
+      // steps count for, the 205th is halfway (or in port) (SSTidalCorridor_EventScript_ReachedStepCount).
+      if (c?.leg === 'board') {
+        c.leg = 'depart';
+        events.push({ type: 'cruise', tick: this.tick, id: a.id, say: 'board', cruise: { ...c } });
+      }
+      if (a.arriving && c && counting(c) && ++c.steps >= SS_TIDAL_MAX_STEPS) {
+        c.leg = c.to === 'lilycove' ? 'halfway' : 'land';
+        c.steps = 0;
+        events.push({ type: 'cruise', tick: this.tick, id: a.id, say: c.leg, cruise: { ...c } });
+      }
       if (a.arriving) {
         a.arriving = false;
         const p = this.patchesOn(a.m.spot.map).find((q) => q.x === a.m.spot.x && q.y === a.m.spot.y && !this.isTaken(q.key));
@@ -1644,7 +1695,15 @@ export class Room {
       }
       const wall = !a.battling && (bits & KEY_A) && !(a.last & KEY_A) && atWall(a) ? this.events.find((e) => e.map === a.m.spot.map && e.story && DOORS[e.story] && !e.opened) : undefined;
       const ferry = !wall && !a.battling && (bits & KEY_A) && !(a.last & KEY_A) ? ferryAt(a.m.spot.map, ...this.ahead(a)) : undefined;
-      if (ferry) {
+      const bed = !wall && !ferry && c && !a.battling && (bits & KEY_A) && !(a.last & KEY_A) && bedAt(a.m.spot.map, ...this.ahead(a));
+      if (ferry === 'tidal') {
+        if (c) events.push({ type: 'cruise', tick: this.tick, id: a.id, say: 'sailor', cruise: { ...c } });
+      } else if (bed && c) {
+        // The bed in cabin No. 2: a rest heals the team and moves the crossing on.
+        c.leg = afterBed(c);
+        c.steps = 0;
+        events.push({ type: 'cruise', tick: this.tick, id: a.id, say: c.leg === 'halfway' ? 'halfway' : 'land', cruise: { ...c }, bed: true });
+      } else if (ferry) {
         const boat = ferry === 'boat' ? boatAt(a.m.spot.map, ...this.ahead(a)) : undefined;
         const to = ferry === 'attendant' ? [port('slateport'), ...this.sailingTo()] : boat ? boat.to.map(port) : [];
         events.push({ type: 'ferry', tick: this.tick, id: a.id, to, ...(ferry === 'sailor' ? { home: true } : {}), ...(boat?.briney ? { briney: true } : {}), ...(boat?.cable ? { cable: boat.cable } : {}) });
@@ -1780,7 +1839,7 @@ export class Room {
       mix(m.facing); mix(m.moveDir); mix(m.runningState); mix(m.run ? 1 : 0); mix(m.strides); mix(m.bike ? 1 + m.bikeSpeed * 4 + m.bikeCount * 16 : 0);
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
-      mix((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.bleedAt ?? 0); mix(a.boss ?? 0); mix(a.away ? 1 : 0); mix(a.pickBy ?? 0); mix(a.loot?.money ?? 0); for (const st of a.loot?.items ?? []) { mix(st.id); mix(st.n); }
+      mix((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.bleedAt ?? 0); mix(a.boss ?? 0); mix(a.away ? 1 : 0); mix(a.pickBy ?? 0); mix(a.cruise ? (a.cruise.to === 'lilycove' ? 8 : 16) + LEGS.indexOf(a.cruise.leg) : 0); mix(a.cruise?.steps ?? 0); mix(a.loot?.money ?? 0); for (const st of a.loot?.items ?? []) { mix(st.id); mix(st.n); }
       if (a.meet) { mix(a.meet.foe); mix(a.meet.since); mix((a.meet.walk ? 1 : 0) | (a.meet.duel ? 2 : 0)); }
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
@@ -1877,6 +1936,9 @@ export function makeRoom(all: readonly WorldMap[], patches: PatchTable, seed: nu
   // BrStory_Dock), Lilycove's harbour.
   const harbor = anchors.get(ATTENDANT.map);
   if (harbor) for (const m of islandMaps(all)) { maps.set(m.id, m); anchors.set(m.id, harbor); }
+  // The SS TIDAL, out between its two harbours.
+  const slateport = anchors.get(PORTS.slateport.land.map);
+  if (harbor && slateport) for (const m of all.filter((q) => TIDAL_MAPS.includes(q.id))) { maps.set(m.id, m); anchors.set(m.id, { gx: (harbor.gx + slateport.gx) / 2, gy: (harbor.gy + slateport.gy) / 2 }); }
   const room = new Room(world ?? new World(all as WorldMap[]), maps, patches, seed, places, anchors);
   // Built now, once per world (cached), not on the frame of the first drop.
   room.landing();
