@@ -122,7 +122,9 @@ export class AskBox {
 
   private message(text: string): void {
     this.c.drawMessageBox(MSG);
-    wrapText(text, MSG.w - 4 * TILE).slice(0, 2).forEach((l, i) => this.c.drawText(l, MSG.x + 2 * TILE, MSG.y + TILE + 2 + i * ROW, TEXT_DARK));
+    // A '\n' is the script's own line break, as in the message box (msgbox.ts boxLines).
+    this.el.dataset.text = text;
+    text.split('\n').flatMap((p) => wrapText(p, MSG.w - 4 * TILE)).slice(0, 2).forEach((l, i) => this.c.drawText(l, MSG.x + 2 * TILE, MSG.y + TILE + 2 + i * ROW, TEXT_DARK));
   }
 
   private moneyBox(n: number): void {

@@ -153,8 +153,8 @@ export type RoomEvent =
   /** A at a piece a gate's boss still guards. */
   | { type: 'guarded'; tick: number; id: number; name: string }
   /** A at the ferry's attendant (the live islands' stories, none: not sailing) or at a
-   *  dock's sailor (`home`: back to Lilycove). */
-  | { type: 'ferry'; tick: number; id: number; to: { id: string; name: string }[]; home?: boolean; briney?: boolean }
+   *  dock's sailor (`home`: back to Lilycove), or at a CABLE CAR's attendant (`cable`). */
+  | { type: 'ferry'; tick: number; id: number; to: { id: string; name: string }[]; home?: boolean; briney?: boolean; cable?: 'up' | 'down' }
   /** A at a MART's clerk. */
   | { type: 'mart'; tick: number; id: number; map: string }
   /** A at a gym leader nobody has beaten yet: their own battle (gyms.ts). */
@@ -202,15 +202,22 @@ export const PORTS: Record<string, { name: string; land: Spot; facing: number }>
   petalburg: { name: 'PETALBURG', land: { map: 'MAP_ROUTE104_MR_BRINEYS_HOUSE', x: 5, y: 4 }, facing: 1 },
   dewford: { name: 'DEWFORD', land: { map: 'MAP_DEWFORD_TOWN', x: 11, y: 9 }, facing: 4 },
   beach: { name: 'SLATEPORT', land: { map: 'MAP_ROUTE109', x: 20, y: 24 }, facing: 4 },
+  // The CABLE CAR (CableCarWarp lands you at 6,4; the station's ExitCableCar walks you
+  // down three, past the attendant's spot, facing out).
+  chimney: { name: 'MT. CHIMNEY', land: { map: 'MAP_MT_CHIMNEY_CABLE_CAR_STATION', x: 6, y: 7 }, facing: 1 },
+  route112: { name: 'ROUTE 112', land: { map: 'MAP_ROUTE112_CABLE_CAR_STATION', x: 6, y: 7 }, facing: 1 },
 };
 /** Who sails from where (each map.json's object): Slateport's ferry attendant, and
  *  MR. BRINEY at each of his three stops, all at once (one man in pret, VAR_BRINEY_LOCATION;
- *  a room has many trainers). Lilycove's attendant is ATTENDANT, with the islands. */
-export const BOATS: { map: string; x: number; y: number; gfx: number; to: string[]; briney?: boolean }[] = [
+ *  a room has many trainers). Lilycove's attendant is ATTENDANT, with the islands. Each
+ *  CABLE CAR station's attendant rides it the one way it goes from there. */
+export const BOATS: { map: string; x: number; y: number; gfx: number; to: string[]; briney?: boolean; cable?: 'up' | 'down' }[] = [
   { map: 'MAP_SLATEPORT_CITY_HARBOR', x: 8, y: 10, gfx: 45, to: ['lilycove'] },
   { map: 'MAP_ROUTE104_MR_BRINEYS_HOUSE', x: 5, y: 3, gfx: 21, to: ['dewford'], briney: true },
   { map: 'MAP_DEWFORD_TOWN', x: 12, y: 9, gfx: 21, to: ['petalburg', 'beach'], briney: true },
   { map: 'MAP_ROUTE109', x: 21, y: 24, gfx: 21, to: ['dewford'], briney: true },
+  { map: 'MAP_ROUTE112_CABLE_CAR_STATION', x: 6, y: 6, gfx: 45, to: ['chimney'], cable: 'up' },
+  { map: 'MAP_MT_CHIMNEY_CABLE_CAR_STATION', x: 6, y: 6, gfx: 45, to: ['route112'], cable: 'down' },
 ];
 /** MR. BRINEY's boat, moored at each stop (OBJ_EVENT_GFX_MR_BRINEYS_BOAT). */
 export const MOORINGS: Spot[] = [
@@ -1640,7 +1647,7 @@ export class Room {
       if (ferry) {
         const boat = ferry === 'boat' ? boatAt(a.m.spot.map, ...this.ahead(a)) : undefined;
         const to = ferry === 'attendant' ? [port('slateport'), ...this.sailingTo()] : boat ? boat.to.map(port) : [];
-        events.push({ type: 'ferry', tick: this.tick, id: a.id, to, ...(ferry === 'sailor' ? { home: true } : {}), ...(boat?.briney ? { briney: true } : {}) });
+        events.push({ type: 'ferry', tick: this.tick, id: a.id, to, ...(ferry === 'sailor' ? { home: true } : {}), ...(boat?.briney ? { briney: true } : {}), ...(boat?.cable ? { cable: boat.cable } : {}) });
       } else if (wall) {
         const how = DOORS[wall.story!];
         // DESERT RUINS': ROCK SMASH's crack, which anybody makes here (br_story.c).

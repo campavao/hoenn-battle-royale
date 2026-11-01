@@ -2352,13 +2352,19 @@ var PORTS = {
   lilycove: { name: "LILYCOVE CITY", land: HARBOR_LANDING, facing: 1 },
   petalburg: { name: "PETALBURG", land: { map: "MAP_ROUTE104_MR_BRINEYS_HOUSE", x: 5, y: 4 }, facing: 1 },
   dewford: { name: "DEWFORD", land: { map: "MAP_DEWFORD_TOWN", x: 11, y: 9 }, facing: 4 },
-  beach: { name: "SLATEPORT", land: { map: "MAP_ROUTE109", x: 20, y: 24 }, facing: 4 }
+  beach: { name: "SLATEPORT", land: { map: "MAP_ROUTE109", x: 20, y: 24 }, facing: 4 },
+  // The CABLE CAR (CableCarWarp lands you at 6,4; the station's ExitCableCar walks you
+  // down three, past the attendant's spot, facing out).
+  chimney: { name: "MT. CHIMNEY", land: { map: "MAP_MT_CHIMNEY_CABLE_CAR_STATION", x: 6, y: 7 }, facing: 1 },
+  route112: { name: "ROUTE 112", land: { map: "MAP_ROUTE112_CABLE_CAR_STATION", x: 6, y: 7 }, facing: 1 }
 };
 var BOATS = [
   { map: "MAP_SLATEPORT_CITY_HARBOR", x: 8, y: 10, gfx: 45, to: ["lilycove"] },
   { map: "MAP_ROUTE104_MR_BRINEYS_HOUSE", x: 5, y: 3, gfx: 21, to: ["dewford"], briney: true },
   { map: "MAP_DEWFORD_TOWN", x: 12, y: 9, gfx: 21, to: ["petalburg", "beach"], briney: true },
-  { map: "MAP_ROUTE109", x: 21, y: 24, gfx: 21, to: ["dewford"], briney: true }
+  { map: "MAP_ROUTE109", x: 21, y: 24, gfx: 21, to: ["dewford"], briney: true },
+  { map: "MAP_ROUTE112_CABLE_CAR_STATION", x: 6, y: 6, gfx: 45, to: ["chimney"], cable: "up" },
+  { map: "MAP_MT_CHIMNEY_CABLE_CAR_STATION", x: 6, y: 6, gfx: 45, to: ["route112"], cable: "down" }
 ];
 var boatAt = (map, x, y) => BOATS.find((b) => b.map === map && b.x === x && b.y === y);
 function ferryAt(map, x, y) {
@@ -3554,7 +3560,7 @@ var Room = class {
       if (ferry) {
         const boat = ferry === "boat" ? boatAt(a.m.spot.map, ...this.ahead(a)) : void 0;
         const to = ferry === "attendant" ? [port("slateport"), ...this.sailingTo()] : boat ? boat.to.map(port) : [];
-        events.push({ type: "ferry", tick: this.tick, id: a.id, to, ...ferry === "sailor" ? { home: true } : {}, ...boat?.briney ? { briney: true } : {} });
+        events.push({ type: "ferry", tick: this.tick, id: a.id, to, ...ferry === "sailor" ? { home: true } : {}, ...boat?.briney ? { briney: true } : {}, ...boat?.cable ? { cable: boat.cable } : {} });
       } else if (wall) {
         const how = DOORS[wall.story];
         if (how === "smash") wall.opened = true;
@@ -4848,4 +4854,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "03df588ed393";
+export const WORLD_HASH = "6fdde5c4c2c2";
