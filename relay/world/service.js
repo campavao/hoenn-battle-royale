@@ -2452,7 +2452,6 @@ function cellRng(seed, map, x, y) {
   };
 }
 var BALLS_TM_IN = 4;
-var REGROW = 60 * 90;
 var AFTER_WIN = 60 * 15;
 var TRUCK = 40;
 var DEALS = /* @__PURE__ */ new Map();
@@ -2711,9 +2710,16 @@ var Room = class {
     return this.steps = out;
   }
   steps = null;
+  /** A marked spot taken stays taken for the rest of its ring phase, and every one is
+   *  back on the next (br_patch.c Regrow, on each new phase's RING). */
   isTaken(key) {
     const at = this.taken.get(key);
-    return at !== void 0 && this.tick - at < REGROW;
+    return at !== void 0 && this.phaseAt(at) === this.phaseAt(this.tick);
+  }
+  /** The ring phase a frame is in, -1 for the Safari before the ring. */
+  phaseAt(tick2) {
+    const r = this.ring(tick2);
+    return r.safari ? -1 : r.phase;
   }
   /** Every item ball the seed deals, taken or not, by cell (`map:x:y`). On the room's
    *  open ground (open(): every outdoor map, none on an island or behind a ledge that only
@@ -2957,7 +2963,8 @@ var Room = class {
       const party = wornParty(dealParty(this.seed, a.id, ring.phase + 1, a.m.spot.map, gradeOf(this.seed, a.id)), a.wear);
       if (quaff(party, a.loot.items) !== null) a.wear = party.map((m) => m.maxHp > 0 ? m.hp / m.maxHp : 0);
     }
-    for (const [key, at] of this.taken) if (this.tick - at >= REGROW) this.taken.delete(key);
+    const phase = this.phaseAt(this.tick);
+    for (const [key, at] of this.taken) if (this.phaseAt(at) !== phase) this.taken.delete(key);
     const events = [];
     for (const a of this.actors) {
       if (a.bot) this.move(a, a.keys, events);
@@ -4831,4 +4838,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "c3d211827214";
+export const WORLD_HASH = "9b83a194d87e";

@@ -255,6 +255,23 @@ describe('late keys', () => {
 const pendingEnds: [number, number][] = [];
 
 describe('room battles', () => {
+  it('a taken spot grows back with the next ring phase, not on a timer (br_patch.c Regrow)', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    const key = room.patchesOn('MAP_ROUTE101')[0].key;
+    // Taken at the start of the ring's second phase.
+    room.tick = room.epoch + room.opening + room.ringPhase + 1;
+    room.taken.set(key, room.tick);
+    // Longer than the old 90 s, still in that phase: still taken.
+    room.tick += room.ringPhase - 60;
+    room.step();
+    expect(room.isTaken(key)).toBe(true);
+    // Into the next phase: back.
+    room.tick += 120;
+    room.step();
+    expect(room.isTaken(key)).toBe(false);
+    expect(room.taken.has(key)).toBe(false);
+  });
+
   it('a marked spot starts one wild battle, then is taken', () => {
     const room = makeRoom(MAPS, PATCHES, 99);
     const step = room.stepFor({ id: -1 } as never);
