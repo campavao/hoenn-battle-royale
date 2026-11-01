@@ -586,7 +586,7 @@ async function openBag(key: number, bag: Bag, who: string): Promise<void> {
   held.clear();
   let left = mons;
   try {
-    left = await rom.team(mons, who, () => battleEl.classList.add('on'));
+    left = await rom.team(mons, who, () => battleEl.classList.add('on'), () => battleEl.classList.remove('on'));
   } finally {
     swapping = false;
     battleEl.classList.remove('on');
@@ -1024,7 +1024,7 @@ async function gift(n: number, species: number): Promise<void> {
     swapping = true;
     held.clear();
     try {
-      const left = await rom.team([{ species, level: rungForPhase(link.room.ring().phase + 1) }], 'GIFT', () => battleEl.classList.add('on'));
+      const left = await rom.team([{ species, level: rungForPhase(link.room.ring().phase + 1) }], 'GIFT', () => battleEl.classList.add('on'), () => battleEl.classList.remove('on'));
       if (!left.length) taken = species;
     } finally {
       swapping = false;
