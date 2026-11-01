@@ -2,6 +2,8 @@ import type { MatchTally } from '../src/match/tally';
 import type { addTotals } from '../src/match/career';
 import HMS from '../src/data/hms.json';
 import { MOVE_CUT, MOVE_STRENGTH, MOVE_SURF } from '../src/bots/party';
+/** HM08 (include/constants/moves.h). */
+const MOVE_DIVE = 291;
 import { decodeGen3 } from '../src/text/gen3';
 import type { FameMon } from '../src/ui/results';
 
@@ -214,6 +216,7 @@ export function fieldOf(party: Uint8Array, count: number): number {
     if (moves.includes(MOVE_CUT) || has(HMS.cut, species)) bits |= 1;
     if (moves.includes(MOVE_STRENGTH) || has(HMS.strength, species)) bits |= 2;
     if (moves.includes(MOVE_SURF) || has(HMS.surf, species)) bits |= 4;
+    if (moves.includes(MOVE_DIVE) || has(HMS.dive, species)) bits |= 8;
   }
   return bits;
 }

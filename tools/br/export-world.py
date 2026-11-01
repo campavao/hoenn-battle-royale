@@ -144,6 +144,9 @@ ROCK_SMASH_GFX = "OBJ_EVENT_GFX_BREAKABLE_ROCK"
 BOULDER_GFX = "OBJ_EVENT_GFX_PUSHABLE_BOULDER"
 
 DIR_MAP = {"up": "north", "down": "south", "left": "west", "right": "east"}
+# MetatileBehavior_IsDiveable and MetatileBehavior_IsUnableToEmerge (metatile_behavior.c).
+DIVEABLE_BEHAVIORS = {"MB_INTERIOR_DEEP_WATER", "MB_DEEP_WATER", "MB_SOOTOPOLIS_DEEP_WATER"}
+NO_SURFACING_BEHAVIORS = {"MB_NO_SURFACING", "MB_SEAWEED_NO_SURFACING"}
 
 OUTDOOR_MAP_TYPES = {"MAP_TYPE_TOWN", "MAP_TYPE_CITY", "MAP_TYPE_ROUTE", "MAP_TYPE_OCEAN_ROUTE"}
 
@@ -343,6 +346,11 @@ def export():
 
         classes = [0] * (w * h)
         heights = [0] * (w * h)
+        # DIVE (br_hm.c BrHm_DiveScript, TrySetDiveWarp): down from deep water on a map
+        # with a "dive" connection, back up from anywhere below but a no-surfacing cell on
+        # one with an "emerge" connection, onto the same cell of the other map.
+        deep = [0] * (w * h)
+        nosurf = [0] * (w * h)
         cracks = []
         # Waterfalls are water, but not open water: surfing north into one climbs it and
         # anywhere on one the current carries you south (br_hm.c, ForcedMovement for
@@ -374,6 +382,10 @@ def export():
             else:
                 cls = 0
             classes[i] = cls
+            if behavior in DIVEABLE_BEHAVIORS:
+                deep[i] = 1
+            if behavior in NO_SURFACING_BEHAVIORS:
+                nosurf[i] = 1
             if cls == 2 and behavior == "MB_WATERFALL":
                 falls.append(i)
             if cls == 0 and behavior in CRACKED_BEHAVIORS:
@@ -475,6 +487,10 @@ def export():
                         centre = {"counterX": nx, "counterY": cy}
                     break
 
+        conns = mj.get("connections") or []
+        dive_to = next((c["map"] for c in conns if c["direction"] == "dive"), None)
+        emerge_to = next((c["map"] for c in conns if c["direction"] == "emerge"), None)
+
         result_maps.append({
             "id": map_id, "group": group, "num": num, "w": w, "h": h,
             "section": section, "outdoor": outdoor,
@@ -482,6 +498,8 @@ def export():
             "seams": seams, "warps": warps,
             "centre": centre,
             **({"falls": falls} if falls else {}),
+            **({"dive": dive_to, "deep": rle_encode(deep)} if dive_to and any(deep) else {}),
+            **({"emerge": emerge_to, "nosurf": rle_encode(nosurf)} if emerge_to else {}),
             "_folder": folder,  # internal use only, stripped before writing
         })
         included += 1

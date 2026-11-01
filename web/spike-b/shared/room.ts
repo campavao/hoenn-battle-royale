@@ -33,7 +33,7 @@ import { DOOR_Y, FINAL_CHANCE, STORIES, STORY_CHANCE, type Story, type StoryDoor
 import { dealParty, rungForPhase } from '../../src/bots/party';
 import { gradeOf } from '../../src/bots/roster';
 import { add, carried, purse, quaff, spend, type Stack } from '../../src/bots/bag';
-import { World, type Spot, type WorldMap } from '../../src/bots/world';
+import { World, decodeGrid, type Spot, type WorldMap } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
 import { blueTm, scatterItem } from '../../src/match/scatter';
 import roomsJson from '../data/rooms.json';
@@ -128,6 +128,27 @@ export function wornParty<T extends { hp: number; maxHp: number }>(party: T[], w
 
 /** A team with somebody who could SURF: water is walkable (and up a waterfall). */
 export const FIELD_SURF = 4;
+/** ...and DIVE: A on a dive spot goes under (br_hm.c BrHm_DiveScript). */
+export const FIELD_DIVE = 8;
+
+/** Where A takes a trainer who stands on `s` (TrySetupDiveDownScript, TrySetupDiveEmerge-
+ *  Script): from a dive spot, with a team that could DIVE (and SURF, to swim below), the
+ *  same cell of the map under the sea; from below, anywhere but a no-surfacing cell, the
+ *  same cell above, free. Only to a map this room has. */
+export function diveTo(maps: ReadonlyMap<string, WorldMap>, world: World, s: Spot, field: number): Spot | undefined {
+  const m = maps.get(s.map);
+  if (!m) return undefined;
+  const i = s.y * m.w + s.x;
+  if (m.dive && m.deep && (field & (FIELD_DIVE | FIELD_SURF)) === (FIELD_DIVE | FIELD_SURF) && maps.has(m.dive) && cellsOf(m.deep, m.w * m.h)[i]) return { map: m.dive, x: s.x, y: s.y };
+  if (m.emerge && maps.has(m.emerge) && !(m.nosurf && cellsOf(m.nosurf, m.w * m.h)[i]) && world.cell(m.emerge, s.x, s.y) === CLASS_WATER) return { map: m.emerge, x: s.x, y: s.y };
+  return undefined;
+}
+const cellCache = new Map<string, Uint8Array>();
+const cellsOf = (rle: string, n: number) => {
+  let c = cellCache.get(rle);
+  if (!c) cellCache.set(rle, (c = decodeGrid(rle, n)));
+  return c;
+};
 
 /** What a frame started: a phone starts the matching ROM battle for its own trainer. */
 export type RoomEvent =
@@ -161,6 +182,8 @@ export type RoomEvent =
    *  makes land, after a rest in the bed (`bed`), or at its sailor (`sailor`: the way off
    *  once in port, else the cabin to rest in). */
   | { type: 'cruise'; tick: number; id: number; say: 'board' | 'halfway' | 'land' | 'sailor'; cruise: Cruise; bed?: boolean }
+  /** A on a dive spot, or below the sea: the room has taken me down (`down`) or up. */
+  | { type: 'dive'; tick: number; id: number; down: boolean }
   /** A at a MART's clerk. */
   | { type: 'mart'; tick: number; id: number; map: string }
   /** A at a gym leader nobody has beaten yet: their own battle (gyms.ts). */
@@ -619,7 +642,7 @@ export class Room {
   apply(cmd: Command): void {
     if (cmd.c === 'field') {
       const a = this.actor(cmd.id);
-      if (a && !a.bot) a.field = cmd.bits & 7;
+      if (a && !a.bot) a.field = cmd.bits & 15;
     } else if (cmd.c === 'pick') {
       const a = this.actor(cmd.id);
       // The fly map's answer (br_pick.h): out of the Zone now, onto a free cell of the
@@ -1000,7 +1023,8 @@ export class Room {
   inFog(s: Spot, ring = this.ring()): boolean {
     if (ring.r === Infinity) return false;
     if (ring.r < 0) return true;
-    const p = this.places.get(s.map);
+    // Under the sea, the sea above's cell (DIVE lands you on the same one).
+    const p = this.places.get(s.map) ?? this.places.get(this.maps.get(s.map)?.emerge ?? '');
     const inside = p ? undefined : this.anchors.get(s.map);
     if (!p && !inside) return true;
     const x = p ? p.gx + s.x + 0.5 : inside!.gx, y = p ? p.gy + s.y + 0.5 : inside!.gy;
@@ -1719,6 +1743,8 @@ export class Room {
         const foe = g || b ? undefined : this.facing(a);
         const tr = foe ? undefined : this.traderAt(a.m.spot.map, x, y);
         const boss = foe || tr ? undefined : leaderAt(a.m.spot.map, x, y);
+        // Last of A's (ProcessPlayerFieldInput asks the dive after everything ahead).
+        const dive = g || b || foe || tr || boss ? undefined : diveTo(this.maps, this.world, a.m.spot, a.field ?? 0);
         if (boss && !this.bossDown(boss.n)) {
           a.battling = true;
           a.boss = boss.n + 1;
@@ -1756,6 +1782,10 @@ export class Room {
           events.push({ type: 'fight', tick: this.tick, id: a.id, foe: foe.id });
         } else if (!foe && this.clerk(a)) {
           events.push({ type: 'mart', tick: this.tick, id: a.id, map: a.m.spot.map });
+        } else if (dive) {
+          const down = this.maps.get(a.m.spot.map)?.dive === dive.map;
+          a.m = newMover(dive, a.m.facing);
+          events.push({ type: 'dive', tick: this.tick, id: a.id, down });
         } else if (!foe && a.m.facing === DIR_NORTH) {
           // The nurse, across the counter (pkmn_center_nurse.inc).
           const c = this.maps.get(a.m.spot.map)?.centre;
@@ -1939,6 +1969,18 @@ export function makeRoom(all: readonly WorldMap[], patches: PatchTable, seed: nu
   // The SS TIDAL, out between its two harbours.
   const slateport = anchors.get(PORTS.slateport.land.map);
   if (harbor && slateport) for (const m of all.filter((q) => TIDAL_MAPS.includes(q.id))) { maps.set(m.id, m); anchors.set(m.id, { gx: (harbor.gx + slateport.gx) / 2, gy: (harbor.gy + slateport.gy) / 2 }); }
+  // Under the sea (DIVE): each map below a dive spot and those its seams join, measured by
+  // the sea above them cell for cell (inFog), with the middle of it for an anchor.
+  const byId = new Map(all.map((m) => [m.id, m]));
+  const below = [...maps.values()].flatMap((m) => (m.dive ? [m.dive] : []));
+  while (below.length) {
+    const m = byId.get(below.shift()!);
+    const above = m?.emerge ? places.get(m.emerge) : undefined;
+    if (!m || !above || maps.has(m.id)) continue;
+    maps.set(m.id, m);
+    anchors.set(m.id, { gx: above.gx + m.w / 2, gy: above.gy + m.h / 2 });
+    below.push(...m.seams.map((s) => s.to));
+  }
   const room = new Room(world ?? new World(all as WorldMap[]), maps, patches, seed, places, anchors);
   // Built now, once per world (cached), not on the frame of the first drop.
   room.landing();

@@ -25,7 +25,7 @@ import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { battleItems } from '../src/bots/bag';
 import { DIR_EAST } from './sim';
-import { ATTENDANT, BOATS, DOCKS, MOORINGS, TIDAL_MAPS, TIDAL_SAILOR, islandMaps, type Cruise, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, emptyBag, interiors, makeRoom, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
+import { ATTENDANT, BOATS, DOCKS, MOORINGS, TIDAL_MAPS, TIDAL_SAILOR, islandMaps, type Cruise, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, FIELD_DIVE, diveTo, emptyBag, interiors, makeRoom, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
@@ -190,6 +190,30 @@ function layout(maps: WorldMap[]): Map<string, Placed> {
       for (const s of p.m.seams) {
         const to = byId.get(s.to);
         if (!to || !to.id.startsWith('MAP_SAFARI_ZONE_') || placed.has(to.id)) continue;
+        let gx = p.gx, gy = p.gy;
+        if (s.dir === 'north') { gx += s.offset; gy -= to.h; }
+        else if (s.dir === 'south') { gx += s.offset; gy += p.m.h; }
+        else if (s.dir === 'west') { gx -= to.w; gy += s.offset; }
+        else { gx += p.m.w; gy += s.offset; }
+        placed.set(to.id, { m: to, gx, gy, classes: decode(to.grid, to.w * to.h) });
+        q.push(to.id);
+      }
+    }
+  }
+  // Under the sea (room.ts diveTo): the maps below the dive spots, by their own seams, past
+  // the Zone.
+  for (const top of maps.filter((m) => m.dive)) {
+    const first = byId.get(top.dive!);
+    if (!first || placed.has(first.id)) continue;
+    let gx0 = right + 800;
+    for (const p of placed.values()) if (p.m.emerge) gx0 = Math.max(gx0, p.gx + p.m.w + 200);
+    placed.set(first.id, { m: first, gx: gx0, gy: y + rowH + 200, classes: decode(first.grid, first.w * first.h) });
+    const q = [first.id];
+    while (q.length) {
+      const p = placed.get(q.shift()!)!;
+      for (const s of p.m.seams) {
+        const to = byId.get(s.to);
+        if (!to?.emerge || placed.has(to.id)) continue;
         let gx = p.gx, gy = p.gy;
         if (s.dir === 'north') { gx += s.offset; gy -= to.h; }
         else if (s.dir === 'south') { gx += s.offset; gy += p.m.h; }
@@ -496,6 +520,8 @@ const FISH_MAPS = new Set((encounterData as { fish?: string[] }).fish ?? []);
 /** OBJ_EVENT_GFX_BRENDAN_FISHING, _MAY_FISHING; any other look fishes in its own standing
  *  frame (br_skin.c BrSkin_PlayerAnim). */
 const FISH_GFX = [137, 138];
+/** OBJ_EVENT_GFX_BRENDAN_UNDERWATER, _MAY_UNDERWATER. */
+const DIVE_GFX = [111, 112];
 /** My cast under way, the water it is over, and the rod. */
 let casting: { f: Fishing; rod: Rod; map: string; x: number; y: number } | null = null;
 
@@ -874,6 +900,8 @@ function startFor(e: RoomEvent): void {
   if (e.type === 'fish') { cast(e.map, e.x, e.y); return; }
   if (e.type === 'ferry') { void ferry(e.to, !!e.home, !!e.briney, e.cable); return; }
   if (e.type === 'cruise') { void cruise(e.say, e.cruise, !!e.bed); return; }
+  // The room took me under or back up; the new map draws itself.
+  if (e.type === 'dive') return;
   if (e.type === 'gate') {
     // A story's gate (br_story.c): his own fight in the hidden ROM, past the eight gym
     // leaders (BrStory_StartGate); won, what he held is mine, and lost, it is his again.
@@ -1917,7 +1945,7 @@ function wirePhoneHud(desk = false): void {
 }
 
 /** gBrHmView's bits (include/br/br_hm.h): HM n+1's move at bit n. */
-const HM_CUT = 1 << 0, HM_SURF = 1 << 2, HM_STRENGTH = 1 << 3;
+const HM_CUT = 1 << 0, HM_SURF = 1 << 2, HM_STRENGTH = 1 << 3, HM_DIVE = 1 << 7;
 
 /** The phone HUD's field moves (HBR-78) as the page knows them: the team's CUT, SURF and
  *  STRENGTH (the actor's field bits, rom.field()), each lit when the cell ahead is what
@@ -1932,11 +1960,13 @@ function aheadOf(a: Actor): Spot {
 
 function fieldChips(a: Actor): FieldMove[] {
   const bits = a.field ?? 0;
-  const can = (bits & FIELD_CUT ? HM_CUT : 0) | (bits & FIELD_SURF ? HM_SURF : 0) | (bits & FIELD_STRENGTH ? HM_STRENGTH : 0);
+  const can = (bits & FIELD_CUT ? HM_CUT : 0) | (bits & FIELD_SURF ? HM_SURF : 0) | (bits & FIELD_STRENGTH ? HM_STRENGTH : 0) | (bits & FIELD_DIVE ? HM_DIVE : 0);
   if (!can) return [];
   const ahead = classAt(aheadOf(a));
   const surfing = classAt(a.m.spot) === CLASS_WATER;
-  const ready = (ahead === CLASS_CUT ? HM_CUT : 0) | (ahead === CLASS_WATER && !surfing ? HM_SURF : 0) | (ahead === CLASS_BOULDER ? HM_STRENGTH : 0);
+  // DIVE lights over a dive spot (down) and anywhere below it may come up (br_hm.c).
+  const dive = diveTo(link.room.maps, link.room.world, a.m.spot, bits) ? HM_DIVE : 0;
+  const ready = (ahead === CLASS_CUT ? HM_CUT : 0) | (ahead === CLASS_WATER && !surfing ? HM_SURF : 0) | (ahead === CLASS_BOULDER ? HM_STRENGTH : 0) | dive;
   return fieldMoves(can, ready & can);
 }
 
@@ -3038,19 +3068,21 @@ function draw(): void {
     .filter(({ p }) => p.x > vx0 - 32 && p.x < vx1 + 32 && p.y > vy0 - 48 && p.y < vy1 + 32)
     .sort((u, v) => u.p.y - v.p.y);
   for (const { a, p } of people) {
+    // Under the sea: Brendan's and May's diving sheet, bobbing, with no blob (br_ghosts.c).
+    const under = !!placed.get(a.m.spot.map)?.m.emerge;
     // On the water: sitting on the blob, bobbing (SURF's pose, FLDEFF_SURF_BLOB's bob).
-    const surf = classAt(a.m.spot) === CLASS_WATER;
+    const surf = !under && classAt(a.m.spot) === CLASS_WATER;
     const surfGfx = a.skin === 1 ? OBJ_EVENT_GFX_MAY_SURFING : OBJ_EVENT_GFX_BRENDAN_SURFING;
     // My rod out (fish.ts), on foot or on the blob: Brendan's and May's fishing sheet,
     // nudged toward the water as AlignFishingAnimationFrames does.
     const rod = casting && a.id === link.me && a.skin < 2 ? fishPose(casting.f.anim, casting.f.animT, a.m.facing) : null;
     // On the MACH BIKE: Brendan's and May's own; any other look rides on foot (br_skin.c).
-    const gfx = rod ? FISH_GFX[a.skin] : surf ? surfGfx : a.m.bike && a.skin < 2 ? BIKE_GFX[a.skin] : SKIN_GFX[a.skin];
+    const gfx = rod ? FISH_GFX[a.skin] : under && a.skin < 2 ? DIVE_GFX[a.skin] : surf ? surfGfx : a.m.bike && a.skin < 2 ? BIKE_GFX[a.skin] : SKIN_GFX[a.skin];
     const info = SHEETS[String(gfx)];
     const s = sheet(gfx);
     if (!s) continue;
     const fr = rod ? rod.frame : surf ? FACE[a.m.facing] : frameOf(a);
-    const bob = surf ? ((frame >> 4) & 1) - 2 : 0;
+    const bob = surf || under ? ((frame >> 4) & 1) - 2 : 0;
     const dx = p.x + TILE / 2 - info.w / 2 + (rod?.dx ?? 0);
     const dy = p.y + TILE - info.h - p.lift + bob + (rod?.dy ?? 0);
     if (surf) drawBlob(surfGfx, a.m.facing, p.x + TILE / 2 - 16, p.y + TILE - 32 - p.lift + bob + 4);

@@ -39,6 +39,13 @@ export interface WorldMap {
    *  south. Surfing north into one climbs it (br_hm.c), and anywhere on one the current
    *  carries you south, so a trainer never comes onto or off one sideways (POK-390). */
   falls?: number[];
+  /** DIVE (export-world.py, TrySetDiveWarp): the map below and its dive spots (deep
+   *  water, run-length 0/1 like `grid`); under the sea, the map above and the cells you
+   *  cannot come up from (MB_NO_SURFACING). Either way you land on the same cell. */
+  dive?: string;
+  deep?: string;
+  emerge?: string;
+  nosurf?: string;
 }
 
 export interface Warp {
