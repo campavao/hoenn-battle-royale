@@ -3729,7 +3729,7 @@ var Room = class {
       const bits = a.bot ? 7 : a.field ?? 0;
       const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir) : this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
-      if (a.bot && !onWay && !this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) return null;
+      if (a.bot && !onWay && this.places.has(from.map) && !this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) return null;
       const t = r.to;
       if (r.warp && DOOR_MAPS.has(from.map) && from.y === DOOR_Y + 1 && t.y < DOOR_Y && !this.events.some((e) => e.map === from.map && e.opened)) return null;
       const bag = this.spillAt(t.map, t.x, t.y);
@@ -4980,4 +4980,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "6d1b84dd58fe";
+export const WORLD_HASH = "30b75688a3a1";

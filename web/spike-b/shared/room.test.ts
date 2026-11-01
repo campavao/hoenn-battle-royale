@@ -1890,6 +1890,23 @@ describe('the rod', () => {
   });
 });
 
+describe('a bot indoors', () => {
+  it('goes in only on its way somewhere, and once in steps about (PETALBURG WOODS)', () => {
+    const room = makeRoom(MAPS, PATCHES, 5);
+    room.apply({ c: 'join', id: 1, bot: true, name: 'B', skin: 0, spot: { map: 'MAP_PETALBURG_WOODS', x: 14, y: 5 }, facing: 1 });
+    const a = room.actor(1)!;
+    const south = (fn: ReturnType<typeof room.stepFor>) => fn({ map: 'MAP_PETALBURG_WOODS', x: 14, y: 5 }, 1);
+    // A step inside, whether or not it has somewhere to be.
+    expect(south(room.stepFor(a))?.to.map).toBe('MAP_PETALBURG_WOODS');
+    expect(south(room.stepFor(a, true))?.to.map).toBe('MAP_PETALBURG_WOODS');
+    // Into the wood from Route 104, its north door: only on its way.
+    const door = MAPS.find((m) => m.id === 'MAP_ROUTE104')!.warps!.find((w) => w.to === 'MAP_PETALBURG_WOODS' && w.toY < 10)!;
+    const from = { map: 'MAP_ROUTE104', x: door.x, y: door.y + 1 };
+    expect(room.stepFor(a)(from, 2)).toBeNull();
+    expect(room.stepFor(a, true)(from, 2)?.to.map).toBe('MAP_PETALBURG_WOODS');
+  });
+});
+
 describe('where the ring closes', () => {
   it("centres on any of Hoenn's outdoors, and deals its bots over all of it, as classic does (Cam, 11-01: always Oldale)", () => {
     const room = makeRoom(MAPS, PATCHES, 4242);
