@@ -259,6 +259,8 @@ const pressed = new Set<string>();
 const KEYMAP: Record<string, string> = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
   w: 'up', s: 'down', a: 'left', d: 'right', x: 'b', X: 'b', z: 'a', Z: 'a', Shift: 'select', Enter: 'a', ' ': 'a',
+  // Caps Lock on (or Shift held): the same keys, as the live game's take them.
+  W: 'up', S: 'down', A: 'left', D: 'right',
 };
 // A long press is a held button, never a page's selection, callout or drag (HBR-98).
 const typing = (t: EventTarget | null) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
@@ -267,7 +269,7 @@ for (const type of ['contextmenu', 'selectstart', 'dragstart']) document.addEven
 const intro = () => document.getElementById('intro') !== null;
 // The menu and the room (lobby.ts) have the keys while they are up: Emerald's, as the
 // live game's stage takes them, and a keyboard's letters for an entry.
-const STAGE_KEY: Record<string, GbaKey> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', z: 'a', x: 'b', Enter: 'start', Escape: 'b' };
+const STAGE_KEY: Record<string, GbaKey> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', z: 'a', x: 'b', Z: 'a', X: 'b', Enter: 'start', Escape: 'b' };
 addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && remap.cancel) { remap.cancel(); e.stopImmediatePropagation(); return; }
   if (!lobby?.shown) return;
