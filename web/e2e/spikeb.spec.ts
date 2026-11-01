@@ -53,6 +53,17 @@ test('a hosted room with bots plays through to its results', async ({ page }) =>
   await expect(page.locator('#results-panel')).toBeVisible({ timeout: 480_000 });
   await expect(page.locator('#results-standings')).toBeVisible();
   await expect(page.locator('#results-line')).toContainText(/of \d+/);
+  // The champion's page: a bot champion's team, as the match dealt it, as a trainer's is
+  // shown -- not its name alone (parity: "bot champions show no team").
+  const botWon = await page.evaluate(() => {
+    const s = (window as unknown as { __spike: { link: { room: { results: { winner: number }; actor(id: number): { bot: boolean } | undefined } } } }).__spike;
+    const w = s.link.room.results.winner;
+    return !!w && !!s.link.room.actor(w)?.bot;
+  });
+  if (botWon) {
+    await page.locator('#results-page').click();
+    await expect(page.locator('#results-fame')).toContainText(/: \S/, { timeout: 10_000 });
+  }
 });
 
 /** The walk to the nearest cell `goal` takes, over the room's own step function (bots

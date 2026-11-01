@@ -1469,6 +1469,14 @@ function championTeam(id: number): PackedMon[] {
   }));
 }
 
+/** The champion's team for the results' Hall of Fame: a trainer's as their page told it,
+ *  a bot's as the match deals it (championTeam), which no page tells. */
+function fameTeamOf(id: number): FameMon[] | undefined {
+  const told = link.teams.get(id);
+  if (told || !link.room.actor(id)?.bot) return told;
+  return championTeam(id).map((m) => ({ species: m.species, level: m.level, hp: m.hp, maxHp: m.maxHp, moves: m.moves.map((v) => ({ id: v.id })) }));
+}
+
 /** Somebody else's Hall of Fame on my ROM: after any battle of the trainer I watch,
  *  which has the ROM first. */
 async function paradeOf(id: number): Promise<void> {
@@ -1520,7 +1528,7 @@ function results(res: Results, waited = 0): void {
   const beaten = (id: number) => res.fallen.filter((f) => f.by && f.by === nameOf(id)).length;
   lobby!.results({
     view: resultsView({ placement: place.get(link.me), survived, winner: res.winner || undefined, ended: true }, n, link.me, nameOf),
-    fame: fameOf(res.winner || undefined, link.me, res.winner ? link.teams.get(res.winner) : undefined, nameOf, speciesName, (id) => moveInfo(romTables, id)?.name),
+    fame: fameOf(res.winner || undefined, link.me, res.winner ? fameTeamOf(res.winner) : undefined, nameOf, speciesName, (id) => moveInfo(romTables, id)?.name),
     standings: standingsOf(placed, link.me, nameOf),
     record: [
       { label: 'BEATEN', value: String(beaten(link.me)) },
