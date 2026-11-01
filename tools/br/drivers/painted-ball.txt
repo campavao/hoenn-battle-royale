@@ -1,0 +1,31 @@
+# painted-ball: a floor with item balls of its own and a trader had no cache, and Cam painted
+# one on it (room-paint.json, 2026-11-01): 24 rooms. GRANITE CAVE 1F (24:7) is sRooms[82], cache
+# key 0x8D52 at (11,10) -- (18,17) MAP_OFFSET in -- and floor trader 11, key 0x8C8B, at (37,9)
+# -- (44,16). The boot puts us above the ball, facing down at it.
+wait 30
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x1072
+pokebytes gBrMailbox+0x2018 81 00 18 07 0B 00 09 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 24
+expect u8 *gSaveBlock1Ptr+5 7
+shot room
+# Row 0 is the DAY CARE chest (0x8E00), held all match; the cache is the next, him after it.
+expect u16 gBrLoot+20 0x8D52
+expect u16 gBrLoot+22 18
+expect u16 gBrLoot+24 17
+expect u8 gBrLoot+31 3
+expect u16 gBrLoot+40 0x8C8B
+expect u16 gBrLoot+42 44
+expect u16 gBrLoot+44 16
+# A takes it, and the PICKUP goes to the room
+tap A
+wait 120
+shot taken
+tap B
+wait 60
+tap A
+wait 60
+expectmsg 10 u16 1 0x8D52
+expect u8 gBrLoot+31 0
+say painted ball ok
