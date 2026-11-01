@@ -414,9 +414,6 @@ export type Command =
   /** Drop `id` on `map` when the Safari ends. */
   | { c: 'pick'; id: number; map: string };
 
-/** The marked spots grow back: the ring's phase does it in the game; here, a while. */
-export const REGROW = 60 * 90;
-
 /** Everything a Room is, as plain data: what a phone joining late is sent. */
 export interface RoomState {
   tick: number;
@@ -759,9 +756,17 @@ export class Room {
   }
   private steps: Spot[] | null = null;
 
+  /** A marked spot taken stays taken for the rest of its ring phase, and every one is
+   *  back on the next (br_patch.c Regrow, on each new phase's RING). */
   isTaken(key: number): boolean {
     const at = this.taken.get(key);
-    return at !== undefined && this.tick - at < REGROW;
+    return at !== undefined && this.phaseAt(at) === this.phaseAt(this.tick);
+  }
+
+  /** The ring phase a frame is in, -1 for the Safari before the ring. */
+  private phaseAt(tick: number): number {
+    const r = this.ring(tick);
+    return r.safari ? -1 : r.phase;
   }
 
   /** Every item ball the seed deals, taken or not, by cell (`map:x:y`). On the room's
@@ -1044,7 +1049,8 @@ export class Room {
       const party = wornParty(dealParty(this.seed, a.id, ring.phase + 1, a.m.spot.map, gradeOf(this.seed, a.id)), a.wear);
       if (quaff(party, a.loot.items) !== null) a.wear = party.map((m) => (m.maxHp > 0 ? m.hp / m.maxHp : 0));
     }
-    for (const [key, at] of this.taken) if (this.tick - at >= REGROW) this.taken.delete(key);
+    const phase = this.phaseAt(this.tick);
+    for (const [key, at] of this.taken) if (this.phaseAt(at) !== phase) this.taken.delete(key);
     const events: RoomEvent[] = [];
     for (const a of this.actors) {
       if (a.bot) this.move(a, a.keys, events);
