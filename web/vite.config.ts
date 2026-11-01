@@ -117,6 +117,8 @@ export default defineConfig({
         main: resolve(__dirname, "index.html"),
         classic: resolve(__dirname, "classic/index.html"),
         spike: resolve(__dirname, "spike/index.html"),
+        // The room painter (spike-b/rooms-page.ts): a phone's way to place a room's ball and person.
+        rooms: resolve(__dirname, "rooms/index.html"),
       },
     },
     outDir: "dist", // Forces Vite to output to the "dist" folder
