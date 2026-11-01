@@ -15,7 +15,11 @@
 // The object palettes' table (sObjectEventSpritePalettes) is static, so it has no symbol:
 // it is found by its shape, a run of {ROM pointer, tag 0x11xx} entries.
 
+import { TMHM_MOVES } from './tmhm';
 import { ANIM_COUNTER_MAX, GENERAL_ANIMS, TILE_ANIMS, framesShown } from '../src/tile-anims';
+
+/** items.h ITEM_TM01: the first machine. */
+const ITEM_TM01 = 289;
 
 const ROM = 0x08000000;
 const TILE = 8;
@@ -298,8 +302,13 @@ export class RomArt {
   }
 
   /** An item's name as the bag shows it (gItems, struct Item: 14 bytes of name first,
-   *  44 bytes a row), in capitals and digits; '' for an id the table does not have. */
+   *  44 bytes a row), in capitals and digits; '' for an id the table does not have. A
+   *  machine is its move's name, as GetItemName has it in a match (item.c, Cam 10-31:
+   *  "when putting a TM in the bag, it doesn't say the name of the move"). */
   itemName(id: number): string {
+    const move = id >= ITEM_TM01 && id < ITEM_TM01 + TMHM_MOVES.length ? TMHM_MOVES[id - ITEM_TM01] : 0;
+    // gMoveNames: MOVE_NAME_LENGTH + 1 (13) bytes a row.
+    if (move) return text(this.letters(this.sym('gMoveNames') + move * 13, 13));
     const row = this.sym('gItems') + id * 44;
     if (this.u16(row + 14) !== id) return '';
     return text(this.letters(row, 14));
