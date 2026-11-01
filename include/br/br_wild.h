@@ -27,6 +27,12 @@
 // Spike B's drop: the fly map in pick mode (BrPick_Start) once the field is running,
 // answering FIGHTING when it is up. The choice goes out as the match's `pick`.
 #define BR_WILD_ASKED_PICK 6
+// Spike B's rod, cast facing water and bitten (web/spike-b/fish.ts runs Emerald's minigame
+// on the page): species is the rod, OLD_ROD..SUPER_ROD, with BR_WILD_FISH_SAFARI in the
+// Safari opening. The map's fishing table at that rod's odds (ChooseWildMonIndex_Fishing),
+// then as ASKED (or ASKED_SAFARI). A map with none answers DONE.
+#define BR_WILD_ASKED_FISH 7
+#define BR_WILD_FISH_SAFARI 0x80
 
 // mapGroup BR_WILD_BOSS asks for a gym leader instead (spike B, br_gym.c): mapNum is the
 // leader, BrGym's order. A leader who will not fight (TATE&LIZA with one POKeMON standing)

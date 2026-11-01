@@ -10,4 +10,7 @@ describe('the message box (HBR-99)', () => {
       'buried north, 12 steps away.',
     ]);
   });
+  it('a line break starts the second line', () => {
+    expect(boxLines('· · · ·\nOh! A bite!')).toEqual(['· · · ·', 'Oh! A bite!']);
+  });
 });

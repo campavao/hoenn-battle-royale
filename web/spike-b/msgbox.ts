@@ -9,16 +9,17 @@ export const BOX_W = 29 * TILE;
 const TEXT_X = 12;
 const LINE = 16;
 
-/** The lines `text` takes in the box (two at most: a longer message is cut, never shrunk). */
+/** The lines `text` takes in the box (two at most: a longer message is cut, never shrunk).
+ *  A line break starts the second line, as the fishing rod's bite does under its dots. */
 export function boxLines(text: string): string[] {
-  return wrapText(text, BOX_W - 2 * TEXT_X).slice(0, 2);
+  return text.split('\n').flatMap((l) => wrapText(l, BOX_W - 2 * TEXT_X)).slice(0, 2);
 }
 
 export class MessageBox {
   private readonly c: EmeraldCanvas;
   private shown = '';
   private scale = 1;
-  private wanted: { text: string; alert: boolean } | null = null;
+  private wanted: { text: string; alert: boolean; lines: number } | null = null;
 
   constructor(private readonly el: HTMLElement) {
     const canvas = document.createElement('canvas');
@@ -35,8 +36,9 @@ export class MessageBox {
     this.paint();
   }
 
-  show(text: string, alert = false): void {
-    this.wanted = { text, alert };
+  /** `lines`: as tall as this many lines even with fewer (the rod's box, before its dots). */
+  show(text: string, alert = false, lines = 0): void {
+    this.wanted = { text, alert, lines };
     this.paint();
   }
 
@@ -50,7 +52,7 @@ export class MessageBox {
   private paint(): void {
     const w = this.wanted;
     if (!w) return;
-    const key = `${w.alert}:${w.text}`;
+    const key = `${w.alert}:${w.lines}:${w.text}`;
     // Above the dock when it is up; the stylesheet's place otherwise.
     const dock = document.getElementById('pdock');
     const top = dock && !dock.hidden ? dock.getBoundingClientRect().top : 0;
@@ -58,7 +60,7 @@ export class MessageBox {
     if (key === this.shown) return;
     this.shown = key;
     const lines = boxLines(w.text);
-    const h = TILE + LINE * lines.length;
+    const h = TILE + LINE * Math.max(lines.length, w.lines);
     this.c.resize(BOX_W, h, this.scale);
     this.c.clearAll();
     this.c.drawMessageBox({ x: 0, y: 0, w: BOX_W, h });
