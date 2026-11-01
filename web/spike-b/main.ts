@@ -952,6 +952,7 @@ function seeFrame(): void {
   } else if (rom && !up) rom.seeThrough(false);
   if (keyed !== seeing) { seeing = keyed; battleEl.classList.toggle('see', keyed); }
   battleEl.classList.toggle('screen', up && !battle);
+  battleEl.classList.toggle('fight', up && !!battle);
 }
 
 /** Every few seconds, between battles: my team as it stands, told to the room when it

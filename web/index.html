@@ -144,6 +144,9 @@
       #ringfog { display: none; pointer-events: none; }
       /* BATTLE BACKDROP: OVER MAP -- the backdrop keyed out, the world dimmed under it. */
       #gba-key { display: none; }
+      /* A battle's own screens with no key (its POKeMON to switch to, its fades): over the
+         same dimmed field as the keyed battle, not black (Cam's 10-31 recording, 4:31). */
+      #battle.fight { background: #0007; }
       #battle.see { background: #0007; }
       #battle.see #gba { visibility: hidden; }
       #battle.see #gba-key { display: block; }
