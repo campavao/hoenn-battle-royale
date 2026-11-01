@@ -2367,8 +2367,18 @@ var BOATS = [
   { map: "MAP_MT_CHIMNEY_CABLE_CAR_STATION", x: 6, y: 6, gfx: 45, to: ["route112"], cable: "down" }
 ];
 var boatAt = (map, x, y) => BOATS.find((b) => b.map === map && b.x === x && b.y === y);
+var TIDAL = { map: "MAP_SS_TIDAL_CORRIDOR", x: 1, y: 10 };
+var TIDAL_SAILOR = { map: "MAP_SS_TIDAL_CORRIDOR", x: 1, y: 11 };
+var TIDAL_BEDS = [{ map: "MAP_SS_TIDAL_ROOMS", x: 15, y: 11 }, { map: "MAP_SS_TIDAL_ROOMS", x: 15, y: 12 }];
+var TIDAL_MAPS = ["MAP_SS_TIDAL_CORRIDOR", "MAP_SS_TIDAL_ROOMS", "MAP_SS_TIDAL_LOWER_DECK"];
+var SS_TIDAL_MAX_STEPS = 205;
+var LEGS = ["board", "depart", "halfway", "land"];
+var counting = (c) => c.to === "lilycove" ? c.leg === "depart" : c.leg === "halfway";
+var afterBed = (c) => c.to === "slateport" && (c.leg === "board" || c.leg === "depart") ? "halfway" : "land";
+var bedAt = (map, x, y) => TIDAL_BEDS.some((b) => b.map === map && b.x === x && b.y === y);
 function ferryAt(map, x, y) {
   if (map === ATTENDANT.map && x === ATTENDANT.x && y === ATTENDANT.y) return "attendant";
+  if (map === TIDAL_SAILOR.map && x === TIDAL_SAILOR.x && y === TIDAL_SAILOR.y) return "tidal";
   if (boatAt(map, x, y)) return "boat";
   return Object.values(DOCKS).some((d) => d.map === map && d.sailor[0] === x && d.sailor[1] === y) ? "sailor" : void 0;
 }
@@ -2579,10 +2589,19 @@ var Room = class {
       const [x, y] = this.ahead(a);
       const who2 = ferryAt(a.m.spot.map, x, y);
       const boat = who2 === "boat" ? boatAt(a.m.spot.map, x, y) : void 0;
-      if (cmd.to === "" && who2 === "sailor") a.m = newMover(HARBOR_LANDING, 1);
+      if (who2 === "tidal") {
+        if (a.cruise?.leg === "land" && cmd.to === a.cruise.to) {
+          const p = PORTS[cmd.to];
+          a.m = newMover({ ...p.land }, p.facing);
+          a.cruise = void 0;
+        }
+      } else if (cmd.to === "" && who2 === "sailor") a.m = newMover(HARBOR_LANDING, 1);
       else if ((boat?.to.includes(cmd.to) || who2 === "attendant" && cmd.to === "slateport") && PORTS[cmd.to]) {
         const p = PORTS[cmd.to];
-        a.m = newMover({ ...p.land }, p.facing);
+        if (cmd.to === "lilycove" || cmd.to === "slateport") {
+          a.m = newMover({ ...TIDAL }, 2);
+          a.cruise = { to: cmd.to, leg: "board", steps: 0 };
+        } else a.m = newMover({ ...p.land }, p.facing);
       } else if (who2 === "attendant" && this.sailingTo().some((s) => s.id === cmd.to)) {
         const d = DOCKS[cmd.to];
         a.m = newMover({ map: d.map, x: d.x, y: d.y }, 2);
@@ -3546,6 +3565,16 @@ var Room = class {
     tick(a.m, keysOf(bits), this.stepFor(a));
     if (a.m.strides !== before) a.arriving = true;
     if (!a.m.action && !a.bot) {
+      const c = a.cruise;
+      if (c?.leg === "board") {
+        c.leg = "depart";
+        events.push({ type: "cruise", tick: this.tick, id: a.id, say: "board", cruise: { ...c } });
+      }
+      if (a.arriving && c && counting(c) && ++c.steps >= SS_TIDAL_MAX_STEPS) {
+        c.leg = c.to === "lilycove" ? "halfway" : "land";
+        c.steps = 0;
+        events.push({ type: "cruise", tick: this.tick, id: a.id, say: c.leg, cruise: { ...c } });
+      }
       if (a.arriving) {
         a.arriving = false;
         const p = this.patchesOn(a.m.spot.map).find((q) => q.x === a.m.spot.x && q.y === a.m.spot.y && !this.isTaken(q.key));
@@ -3557,7 +3586,14 @@ var Room = class {
       }
       const wall = !a.battling && bits & KEY_A && !(a.last & KEY_A) && atWall(a) ? this.events.find((e) => e.map === a.m.spot.map && e.story && DOORS[e.story] && !e.opened) : void 0;
       const ferry = !wall && !a.battling && bits & KEY_A && !(a.last & KEY_A) ? ferryAt(a.m.spot.map, ...this.ahead(a)) : void 0;
-      if (ferry) {
+      const bed = !wall && !ferry && c && !a.battling && bits & KEY_A && !(a.last & KEY_A) && bedAt(a.m.spot.map, ...this.ahead(a));
+      if (ferry === "tidal") {
+        if (c) events.push({ type: "cruise", tick: this.tick, id: a.id, say: "sailor", cruise: { ...c } });
+      } else if (bed && c) {
+        c.leg = afterBed(c);
+        c.steps = 0;
+        events.push({ type: "cruise", tick: this.tick, id: a.id, say: c.leg === "halfway" ? "halfway" : "land", cruise: { ...c }, bed: true });
+      } else if (ferry) {
         const boat = ferry === "boat" ? boatAt(a.m.spot.map, ...this.ahead(a)) : void 0;
         const to = ferry === "attendant" ? [port("slateport"), ...this.sailingTo()] : boat ? boat.to.map(port) : [];
         events.push({ type: "ferry", tick: this.tick, id: a.id, to, ...ferry === "sailor" ? { home: true } : {}, ...boat?.briney ? { briney: true } : {}, ...boat?.cable ? { cable: boat.cable } : {} });
@@ -3607,8 +3643,8 @@ var Room = class {
         } else if (!foe && this.clerk(a)) {
           events.push({ type: "mart", tick: this.tick, id: a.id, map: a.m.spot.map });
         } else if (!foe && a.m.facing === DIR_NORTH) {
-          const c = this.maps.get(a.m.spot.map)?.centre;
-          if (c && a.m.spot.x === c.counterX && a.m.spot.y === c.counterY) events.push({ type: "nurse", tick: this.tick, id: a.id, map: a.m.spot.map });
+          const c2 = this.maps.get(a.m.spot.map)?.centre;
+          if (c2 && a.m.spot.x === c2.counterX && a.m.spot.y === c2.counterY) events.push({ type: "nurse", tick: this.tick, id: a.id, map: a.m.spot.map });
         }
       }
     } else if (!a.m.action) a.arriving = false;
@@ -3705,6 +3741,8 @@ var Room = class {
       mix2(a.boss ?? 0);
       mix2(a.away ? 1 : 0);
       mix2(a.pickBy ?? 0);
+      mix2(a.cruise ? (a.cruise.to === "lilycove" ? 8 : 16) + LEGS.indexOf(a.cruise.leg) : 0);
+      mix2(a.cruise?.steps ?? 0);
       mix2(a.loot?.money ?? 0);
       for (const st of a.loot?.items ?? []) {
         mix2(st.id);
@@ -3858,6 +3896,11 @@ function makeRoom(all, patches, seed, world) {
   if (harbor) for (const m of islandMaps(all)) {
     maps.set(m.id, m);
     anchors.set(m.id, harbor);
+  }
+  const slateport = anchors.get(PORTS.slateport.land.map);
+  if (harbor && slateport) for (const m of all.filter((q) => TIDAL_MAPS.includes(q.id))) {
+    maps.set(m.id, m);
+    anchors.set(m.id, { gx: (harbor.gx + slateport.gx) / 2, gy: (harbor.gy + slateport.gy) / 2 });
   }
   const room = new Room(world ?? new World(all), maps, patches, seed, places, anchors);
   room.landing();
@@ -4854,4 +4897,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "6fdde5c4c2c2";
+export const WORLD_HASH = "6ff223e61a03";

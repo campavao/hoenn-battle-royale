@@ -18,7 +18,7 @@ import { Host, play } from './host';
 import { over } from './over';
 import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, isTm, within } from './items';
 import { HURT, botKeys, health } from './bots';
-import { AFTER_WIN, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, WALKUP_BANG, CHEST, CHEST_SPECIES, ITEM_MASTER_BALL, ZONE_CELLS, ZONE_ITEMS, ZONE_TMS, eventPiece, makeRoom, zoneBalls, wornParty } from './room';
+import { AFTER_WIN, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, WALKUP_BANG, CHEST, CHEST_SPECIES, ITEM_MASTER_BALL, ZONE_CELLS, ZONE_ITEMS, ZONE_TMS, eventPiece, makeRoom, zoneBalls, wornParty, type RoomEvent } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -773,10 +773,14 @@ describe('item balls', () => {
     // Slateport's attendant: Lilycove, and nowhere else (the FRONTIER is off the menu).
     expect(at('MAP_SLATEPORT_CITY_HARBOR', 8, 11, 2)).toMatchObject({ to: [{ id: 'lilycove', name: 'LILYCOVE CITY' }] });
     expect(sail('petalburg')).toEqual({ map: 'MAP_SLATEPORT_CITY_HARBOR', x: 8, y: 11 });
-    expect(sail('lilycove')).toEqual({ map: 'MAP_LILYCOVE_CITY_HARBOR', x: 8, y: 11 });
+    // Aboard: the crossing is its own test.
+    expect(sail('lilycove')).toEqual({ map: 'MAP_SS_TIDAL_CORRIDOR', x: 1, y: 10 });
+    expect(room.actor(1000)!.cruise).toEqual({ to: 'lilycove', leg: 'board', steps: 0 });
+    room.actor(1000)!.cruise = undefined;
     // ...and back, from Lilycove's.
     expect(at('MAP_LILYCOVE_CITY_HARBOR', 8, 11, 2)).toMatchObject({ to: [{ id: 'slateport' }] });
-    expect(sail('slateport')).toEqual({ map: 'MAP_SLATEPORT_CITY_HARBOR', x: 8, y: 11 });
+    expect(sail('slateport')).toEqual({ map: 'MAP_SS_TIDAL_CORRIDOR', x: 1, y: 10 });
+    room.actor(1000)!.cruise = undefined;
     // MR. BRINEY in his cottage: Dewford; at Dewford: Petalburg or Slateport (the beach).
     expect(at('MAP_ROUTE104_MR_BRINEYS_HOUSE', 5, 4, 2)).toMatchObject({ briney: true, to: [{ id: 'dewford', name: 'DEWFORD' }] });
     expect(sail('dewford')).toEqual({ map: 'MAP_DEWFORD_TOWN', x: 11, y: 9 });
@@ -789,6 +793,75 @@ describe('item balls', () => {
     expect(sail('petalburg')).toEqual({ map: 'MAP_ROUTE104_MR_BRINEYS_HOUSE', x: 5, y: 4 });
     // He stands solid, as any townsperson.
     expect(room.stepFor(room.actor(1000)!)({ map: 'MAP_ROUTE104_MR_BRINEYS_HOUSE', x: 5, y: 4 }, 2)).toBeNull();
+  });
+
+  it("the SS TIDAL's crossing: aboard until she makes land, by 205 steps one leg and the bed the other (SSTidalCorridor)", () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const me = () => room.actor(1000)!;
+    const press = (facing: number) => {
+      me().m.facing = facing;
+      room.step(new Map([[1000, [0]]]));
+      return room.step(new Map([[1000, [KEY_A]]])).filter((e) => e.type === 'cruise');
+    };
+    room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_SLATEPORT_CITY_HARBOR', x: 8, y: 11 }, facing: 2 });
+    room.step();
+    me().calm = 0;
+    room.apply({ c: 'sail', id: 1000, to: 'lilycove' });
+    // Boarded: she leaves port on the next frame, and says so.
+    const left = room.step(new Map([[1000, [0]]])).filter((e) => e.type === 'cruise');
+    expect(left).toMatchObject([{ say: 'board', cruise: { to: 'lilycove', leg: 'depart' } }]);
+    expect(room.anchors.has('MAP_SS_TIDAL_CORRIDOR') && room.anchors.has('MAP_SS_TIDAL_ROOMS')).toBe(true);
+    // The sailor by the way off: not yet. And the way off is shut: no step onto him.
+    expect(press(1)).toMatchObject([{ say: 'sailor', cruise: { leg: 'depart' } }]);
+    room.apply({ c: 'sail', id: 1000, to: 'lilycove' });
+    expect(me().m.spot).toEqual({ map: 'MAP_SS_TIDAL_CORRIDOR', x: 1, y: 10 });
+    // 205 steps out of Slateport: halfway, and the steps stop counting.
+    let said: RoomEvent[] = [];
+    const walk = (n: number) => {
+      for (let i = 0; i < n; i++) {
+        const dir = i % 2 ? KEY_LEFT : KEY_RIGHT;
+        for (let f = 0; f < 40 && me().m.spot.x === (i % 2 ? 2 : 1); f++) said.push(...room.step(new Map([[1000, [dir]]])).filter((e) => e.type === 'cruise'));
+        for (let f = 0; f < 20; f++) said.push(...room.step(new Map([[1000, [0]]])).filter((e) => e.type === 'cruise'));
+      }
+    };
+    walk(204);
+    expect(said).toEqual([]);
+    expect(me().cruise).toMatchObject({ leg: 'depart', steps: 204 });
+    walk(1);
+    expect(said).toMatchObject([{ say: 'halfway', cruise: { leg: 'halfway', steps: 0 } }]);
+    said = [];
+    walk(300);
+    expect(said).toEqual([]);
+    // The bed in cabin No. 2: a rest, and she has made land in LILYCOVE.
+    me().m.spot = { map: 'MAP_SS_TIDAL_ROOMS', x: 14, y: 11 };
+    expect(press(4)).toMatchObject([{ say: 'land', bed: true, cruise: { to: 'lilycove', leg: 'land' } }]);
+    // The sailor sees me off at Lilycove's harbour.
+    me().m.spot = { map: 'MAP_SS_TIDAL_CORRIDOR', x: 1, y: 10 };
+    expect(press(1)).toMatchObject([{ say: 'sailor', cruise: { leg: 'land' } }]);
+    room.apply({ c: 'sail', id: 1000, to: 'slateport' }); // not where she landed
+    expect(me().m.spot.map).toBe('MAP_SS_TIDAL_CORRIDOR');
+    room.apply({ c: 'sail', id: 1000, to: 'lilycove' });
+    expect(me().m.spot).toEqual({ map: 'MAP_LILYCOVE_CITY_HARBOR', x: 8, y: 11 });
+    expect(me().cruise).toBeUndefined();
+
+    // Out of Lilycove: no steps count until a rest, which is only halfway; then either
+    // 205 steps or a second rest makes SLATEPORT.
+    me().m.facing = 2;
+    room.apply({ c: 'sail', id: 1000, to: 'slateport' });
+    room.step(new Map([[1000, [0]]]));
+    said = [];
+    walk(205);
+    expect(me().cruise).toMatchObject({ to: 'slateport', leg: 'depart', steps: 0 });
+    me().m.spot = { map: 'MAP_SS_TIDAL_ROOMS', x: 14, y: 12 };
+    expect(press(4)).toMatchObject([{ say: 'halfway', bed: true, cruise: { leg: 'halfway' } }]);
+    me().m.spot = { map: 'MAP_SS_TIDAL_CORRIDOR', x: 1, y: 10 };
+    said = [];
+    walk(205);
+    expect(said).toMatchObject([{ say: 'land', cruise: { to: 'slateport', leg: 'land' } }]);
+    me().m.spot = { map: 'MAP_SS_TIDAL_CORRIDOR', x: 1, y: 10 };
+    press(1);
+    room.apply({ c: 'sail', id: 1000, to: 'slateport' });
+    expect(me().m.spot).toEqual({ map: 'MAP_SLATEPORT_CITY_HARBOR', x: 8, y: 11 });
   });
 
   it("the CABLE CAR: each station's attendant rides it up or down, landing past her (Route112_CableCarStation)", () => {

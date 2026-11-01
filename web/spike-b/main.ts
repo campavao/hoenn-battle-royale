@@ -25,7 +25,7 @@ import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { battleItems } from '../src/bots/bag';
 import { DIR_EAST } from './sim';
-import { ATTENDANT, BOATS, DOCKS, MOORINGS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, emptyBag, interiors, makeRoom, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
+import { ATTENDANT, BOATS, DOCKS, MOORINGS, TIDAL_MAPS, TIDAL_SAILOR, islandMaps, type Cruise, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, emptyBag, interiors, makeRoom, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
@@ -167,6 +167,12 @@ function layout(maps: WorldMap[]): Map<string, Placed> {
   x = right + 200; y += rowH + GAP; rowH = 0;
   for (const m of islandMaps(maps)) {
     ISLANDS.add(m.id);
+    placed.set(m.id, { m, gx: x, gy: y, classes: decode(m.grid, m.w * m.h) });
+    x += m.w + GAP;
+    rowH = Math.max(rowH, m.h);
+  }
+  // ...and the SS TIDAL's decks (room.ts TIDAL_MAPS), which only its harbours board.
+  for (const m of maps.filter((q) => TIDAL_MAPS.includes(q.id))) {
     placed.set(m.id, { m, gx: x, gy: y, classes: decode(m.grid, m.w * m.h) });
     x += m.w + GAP;
     rowH = Math.max(rowH, m.h);
@@ -785,6 +791,33 @@ async function ferry(to: { id: string; name: string }[], home: boolean, briney: 
   if (c) link.sail(c);
 }
 
+/** The SS TIDAL's crossing (room.ts TIDAL), in SSTidalCorridor/scripts.inc's words: the
+ *  box takes two lines, so a two-page line says its last page. */
+const TIDAL_SAYS = {
+  currents: 'We hope you enjoy your voyage with us.\nFeel free to explore the ship.',
+  enjoy: 'We hope you enjoy your voyage on\nour ferry.',
+  lilycove: 'We have made land in LILYCOVE CITY.\nThank you for sailing with us.',
+  slateport: 'We have made land in SLATEPORT CITY.\nThank you for sailing with us.',
+  rest: "You can rest up in your cabin if you'd\nlike. Your cabin's No. 2.",
+};
+async function cruise(what: 'board' | 'halfway' | 'land' | 'sailor', c: Cruise, bed: boolean): Promise<void> {
+  if (bed) {
+    // SSTidalRooms_EventScript_Bed: a rest, and the team healed (OutOfCenterPartyHeal).
+    say('There\'s a bed…\nLet\'s take a rest.');
+    if (rom && !isOut) await rom.heal();
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  if (what === 'sailor') {
+    if (c.leg !== 'land') { say(TIDAL_SAYS.rest); return; }
+    say("We've arrived!");
+    link.sail(c.to);
+    return;
+  }
+  // Out of Slateport, and Lilycove's second half, are the fast currents' (SetSSTidalFlag's).
+  if (what === 'board' || what === 'halfway') say((c.to === 'lilycove') === (what === 'board') ? TIDAL_SAYS.currents : TIDAL_SAYS.enjoy);
+  else say(TIDAL_SAYS[c.to]);
+}
+
 /** A story's person (story.ts's people): STEVEN hands his over; CAPT. STERN wants the
  *  SCANNER first, out of my bag, as br_story.c's BrStory_Hands asks. */
 async function meet(key: number, bag: Bag, person: Person): Promise<void> {
@@ -835,6 +868,7 @@ function startFor(e: RoomEvent): void {
   if (e.type === 'guarded') { say(`${e.name} guards it!`); return; }
   if (e.type === 'fish') { cast(e.map, e.x, e.y); return; }
   if (e.type === 'ferry') { void ferry(e.to, !!e.home, !!e.briney, e.cable); return; }
+  if (e.type === 'cruise') { void cruise(e.say, e.cruise, !!e.bed); return; }
   if (e.type === 'gate') {
     // A story's gate (br_story.c): his own fight in the hidden ROM, past the eight gym
     // leaders (BrStory_StartGate); won, what he held is mine, and lost, it is his again.
@@ -2738,6 +2772,7 @@ const FERRY_PEOPLE: [string, number, number, number][] = [
   [ATTENDANT.map, ATTENDANT.x, ATTENDANT.y, 45],
   ...BOATS.map((b): [string, number, number, number] => [b.map, b.x, b.y, b.gfx]),
   ...[...new Map(Object.values(DOCKS).map((d) => [d.map, d])).values()].map((d): [string, number, number, number] => [d.map, d.sailor[0], d.sailor[1], 49]),
+  [TIDAL_SAILOR.map, TIDAL_SAILOR.x, TIDAL_SAILOR.y, 49],
 ];
 function drawClerks(visible: Placed[]): void {
   if (!art) return;
