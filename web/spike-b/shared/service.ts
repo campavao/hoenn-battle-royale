@@ -63,7 +63,8 @@ function teamOf(t: unknown): FameMon[] | undefined {
   return out;
 }
 
-/** A bag as told for a watcher's peek: up to 120 stacks and the money, or nothing. */
+/** A bag as told for a watcher's peek: up to 120 stacks and the money, or nothing. */
+
 /** A team's HP as shares of its most (wire.ts wear): one to six, each 0..1. */
 function sharesOf(hp: unknown): hp is number[] {
   return Array.isArray(hp) && hp.length >= 1 && hp.length <= 6 && hp.every((v) => typeof v === 'number' && v >= 0 && v <= 1);
@@ -230,6 +231,7 @@ export class WorldService {
           const room = this.pick(m);
           if (!room) { this.send(link, { t: 'no_room', code: String(m.code ?? '') }); return; }
           if (room === 'rom') { this.send(link, { t: 'no_room', code: String(m.code ?? '').toUpperCase(), rom: true }); return; }
+          if (room === 'full') { this.send(link, { t: 'no_room', code: String(m.code ?? '').toUpperCase(), full: true }); return; }
           if (room.set.door === 'pass' && String(m.pass ?? '').toUpperCase() !== room.pass) { this.send(link, { t: 'no_room', code: room.code, pass: true }); return; }
           const name = String(m.name ?? '').toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim().slice(0, 10);
           const skin = Number.isInteger(m.skin) && m.skin >= 0 && m.skin < 16 ? m.skin : 0;
@@ -446,12 +448,13 @@ export class WorldService {
   }
 
   /** The room a join goes to, or 'rom' for a room whose battles run on another patch. */
-  private pick(m: Extract<WorldUp, { t: 'join' }>): Lobby | 'rom' | null {
+  private pick(m: Extract<WorldUp, { t: 'join' }>): Lobby | 'rom' | 'full' | null {
     const rom = typeof m.r === 'string' ? m.r.slice(0, 16) : '';
     if (typeof m.code === 'string' && m.code) {
       const r = this.rooms.get(m.code.toUpperCase());
       if (r && r.rom && rom && r.rom !== rom) return 'rom';
-      return r && r.members.size < (r.quick ? ROOM_MAX : r.set.max) ? r : null;
+      if (r && r.members.size >= (r.quick ? ROOM_MAX : r.set.max)) return 'full';
+      return r ?? null;
     }
     if (m.host === true) return this.make(false, rom);
     // The fullest quick room on this patch still waiting for its start; or a new one.

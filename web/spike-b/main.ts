@@ -1639,6 +1639,8 @@ async function takeBack(r: RomBattles): Promise<void> {
 
 /** The relay's socket, from the menu on (null in ?solo). */
 let worldSock: WorldSocket | null = null;
+/** The last knock on a room carried a passcode: a `pass` refusal then means a wrong one. */
+let knockedWithPass = false;
 
 /** LEAVE: the relay takes me out (the standings say "left"), and the menu is back. */
 function leaveMatch(): void {
@@ -3129,7 +3131,11 @@ async function boot(): Promise<void> {
         // The standings stay up until PLAY AGAIN; then the room as it is by then.
         else if (!matchOn && !winEl.classList.contains('on')) lobby!.roomIs(r);
       },
-      onNoRoom: (code, pass, rom) => { forget(); unlink(); lobby!.menu(rom ? `Room ${code} is on another version of the game. Reload the page to update.` : pass ? `That is not room ${code}'s passcode.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.'); },
+      onNoRoom: (code, pass, rom, full) => {
+        forget(); unlink();
+        if (pass) { lobby!.askPass(code, knockedWithPass); return; }
+        lobby!.menu(rom ? `Room ${code} is on another version of the game. Reload the page to update.` : full ? `Room ${code} is full.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.');
+      },
       onKicked: () => { room = null; forget(); unlink(); lobby!.menu('The host took you out of the room.'); },
       onOld: () => { room = null; matchOn = false; forget(); lobby!.old(); },
       onRooms: (rooms) => lobby?.listed(rooms),
@@ -3163,6 +3169,7 @@ async function boot(): Promise<void> {
     worldSock = sock;
     sheetBtn.hidden = false;
     const joinAs = (how: { code?: string; host?: boolean; pass?: string }) => {
+      knockedWithPass = !!how.pass;
       const c = loadCareer();
       // MY VOICE goes with the card: whoever fights me hears my lines (MY LOOK's picks).
       sock.join(me().name, me().skin, { ...how, rec: { wins: c.wins, played: c.matches, ...(c.best ? { best: c.best } : {}), intro: c.intro ?? 0, win: c.win ?? 0, lose: c.lose ?? 0 } });
