@@ -19,13 +19,13 @@ import { WorldIndex } from '../src/bots/hoenn';
 import type { PeekBag } from './shared/wire';
 import { lineAt, voiceFor } from '../src/bots/lines';
 import type { PackedMon } from '../src/net/wire';
-import { isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
+import { FIELD_CUT, FIELD_STRENGTH, isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
 import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { battleItems } from '../src/bots/bag';
 import { DIR_EAST } from './sim';
-import { ATTENDANT, BOATS, DOCKS, MOORINGS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
+import { ATTENDANT, BOATS, DOCKS, MOORINGS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, emptyBag, interiors, makeRoom, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
@@ -66,7 +66,7 @@ import { BATTLE_TYPE_TRAINER, CARD_H, SidesView } from '../src/ui/sides';
 import { BAG_POSITION_POCKET, readBattleBag } from '../src/ui/bag';
 import { MENU_ACTION, TouchLayer } from '../src/touch';
 import { HUD } from '../src/net/hud';
-import { ITEM_MACH_BIKE, PhoneHud, fogPhase, signFor } from '../src/ui/phonehud';
+import { ITEM_MACH_BIKE, PhoneHud, fieldMoves, fogPhase, signFor, type FieldMove } from '../src/ui/phonehud';
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
 import { cardFields } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
@@ -259,6 +259,8 @@ const pressed = new Set<string>();
 const KEYMAP: Record<string, string> = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
   w: 'up', s: 'down', a: 'left', d: 'right', x: 'b', X: 'b', z: 'a', Z: 'a', Shift: 'select', Enter: 'a', ' ': 'a',
+  // Caps Lock on (or Shift held): the same keys, as the live game's take them.
+  W: 'up', S: 'down', A: 'left', D: 'right',
 };
 // A long press is a held button, never a page's selection, callout or drag (HBR-98).
 const typing = (t: EventTarget | null) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
@@ -267,7 +269,7 @@ for (const type of ['contextmenu', 'selectstart', 'dragstart']) document.addEven
 const intro = () => document.getElementById('intro') !== null;
 // The menu and the room (lobby.ts) have the keys while they are up: Emerald's, as the
 // live game's stage takes them, and a keyboard's letters for an entry.
-const STAGE_KEY: Record<string, GbaKey> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', z: 'a', x: 'b', Enter: 'start', Escape: 'b' };
+const STAGE_KEY: Record<string, GbaKey> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', z: 'a', x: 'b', Z: 'a', X: 'b', Enter: 'start', Escape: 'b' };
 addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && remap.cancel) { remap.cancel(); e.stopImmediatePropagation(); return; }
   if (!lobby?.shown) return;
@@ -1641,6 +1643,8 @@ async function takeBack(r: RomBattles): Promise<void> {
 
 /** The relay's socket, from the menu on (null in ?solo). */
 let worldSock: WorldSocket | null = null;
+/** The last knock on a room carried a passcode: a `pass` refusal then means a wrong one. */
+let knockedWithPass = false;
 
 /** LEAVE: the relay takes me out (the standings say "left"), and the menu is back. */
 function leaveMatch(): void {
@@ -1809,9 +1813,28 @@ function wirePhoneHud(): void {
       lead: mine && fogged ? rom?.leadHp() || null : null,
       ctx: { label: me.m.bike ? 'WALK' : 'BIKE', item: ITEM_MACH_BIKE, enabled: me.m.bike || !!link.room.stepFor(me).cycling?.(me.m.spot) },
       party: rom?.partyCount() ?? 0,
-      moves: [],
+      moves: mine && !mine.battling ? fieldChips(mine) : [],
     });
   }, 100);
+}
+
+/** gBrHmView's bits (include/br/br_hm.h): HM n+1's move at bit n. */
+const HM_CUT = 1 << 0, HM_SURF = 1 << 2, HM_STRENGTH = 1 << 3;
+
+/** The phone HUD's field moves (HBR-78) as the page knows them: the team's CUT, SURF and
+ *  STRENGTH (the actor's field bits, rom.field()), each lit when the cell ahead is what
+ *  it works on. /classic/ reads gBrHmView, which this page's hidden ROM never fills for
+ *  the page's own world. */
+function fieldChips(a: Actor): FieldMove[] {
+  const bits = a.field ?? 0;
+  const can = (bits & FIELD_CUT ? HM_CUT : 0) | (bits & FIELD_SURF ? HM_SURF : 0) | (bits & FIELD_STRENGTH ? HM_STRENGTH : 0);
+  if (!can) return [];
+  const { map, x, y } = a.m.spot;
+  const d = ({ 1: [0, 1], 2: [0, -1], 3: [-1, 0], 4: [1, 0] } as Record<number, number[]>)[a.m.facing] ?? [0, 0];
+  const ahead = classAt({ map, x: x + d[0], y: y + d[1] });
+  const surfing = classAt(a.m.spot) === CLASS_WATER;
+  const ready = (ahead === CLASS_CUT ? HM_CUT : 0) | (ahead === CLASS_WATER && !surfing ? HM_SURF : 0) | (ahead === CLASS_BOULDER ? HM_STRENGTH : 0);
+  return fieldMoves(can, ready & can);
 }
 
 /** A phone's battle menu (the live game's ui/battlemenu.ts): FIGHT, BAG, POKeMON, RUN
@@ -2800,6 +2823,14 @@ function legendArt(species: number): HTMLCanvasElement | null {
 /** The "!" over a trainer who looked (trainer_see.c's FLDEFF_EXCLAMATION_MARK_ICON, as
  *  br_walkup.c starts it): a white bubble over their head, popping up, until the walk. */
 function drawBang(x: number, y: number, t: number): void {
+  const { bx, by } = drawBubble(x, y, t);
+  ctx.fillRect(bx + 4, by + 3, 2, 5);
+  ctx.fillRect(bx + 4, by + 9, 2, 2);
+}
+
+/** The bubble the "!" and "VS" sit in, popping up over its first 6 frames; leaves the ink
+ *  colour set for the glyph. */
+function drawBubble(x: number, y: number, t: number): { bx: number; by: number } {
   const bx = Math.round(x + 3), by = Math.round(y - 24 - (t < 6 ? 6 - t : 0));
   ctx.fillStyle = '#303030';
   ctx.fillRect(bx + 1, by, 8, 14);
@@ -2807,8 +2838,20 @@ function drawBang(x: number, y: number, t: number): void {
   ctx.fillStyle = '#f8f8f8';
   ctx.fillRect(bx + 1, by + 1, 8, 12);
   ctx.fillStyle = '#303030';
-  ctx.fillRect(bx + 4, by + 3, 2, 5);
-  ctx.fillRect(bx + 4, by + 9, 2, 2);
+  return { bx, by };
+}
+
+/** "VS" as Emerald's BR icon draws it (graphics/field_effects/pics/emotion_vs.png, its
+ *  middle eight columns): # is ink. */
+const VS_GLYPH = ['#..#..##', '#..#.#..', '#..#.#..', '#..#..#.', '.##....#', '.##..##.'];
+
+/** Over a trainer in a battle, for as long as it lasts, as /classic/ holds its VS mark
+ *  (br_ghosts.c SeatMark, POK-372): somebody walking up can see they cannot take them on. */
+function drawVs(x: number, y: number): void {
+  const { bx, by } = drawBubble(x, y, 6);
+  VS_GLYPH.forEach((row, r) => {
+    for (let c = 0; c < row.length; c++) if (row[c] === '#') ctx.fillRect(bx + 1 + c, by + 4 + r, 1, 1);
+  });
 }
 
 /** The map at world pixel (x, y), or the nearest one to it: whose border fills the space
@@ -2938,6 +2981,8 @@ function draw(): void {
   drawNurses(visible);
   drawClerks(visible);
   for (const { a, p } of people) if (a.meet?.walk && link.room.tick - a.meet.since < WALKUP_BANG) drawBang(p.x, p.y - p.lift, link.room.tick - a.meet.since);
+  // Not over me, nor over whoever I watch, who I can see is fighting (br_ghosts.c SeatMark).
+  for (const { a, p } of people) if (a.battling && a.id !== link.me && a.id !== follow) drawVs(p.x, p.y - p.lift);
   drawFog(vx0, vy0, vx1, vy1, home);
   // A door: the screen fades out and back in over the followed trainer's warp.
   const going = followed?.m.action?.kind === 'warp' ? followed.m.action : null;
@@ -3170,7 +3215,11 @@ async function boot(): Promise<void> {
         // The standings stay up until PLAY AGAIN; then the room as it is by then.
         else if (!matchOn && !winEl.classList.contains('on')) lobby!.roomIs(r);
       },
-      onNoRoom: (code, pass, rom) => { forget(); unlink(); lobby!.menu(rom ? `Room ${code} is on another version of the game. Reload the page to update.` : pass ? `That is not room ${code}'s passcode.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.'); },
+      onNoRoom: (code, pass, rom, full) => {
+        forget(); unlink();
+        if (pass) { lobby!.askPass(code, knockedWithPass); return; }
+        lobby!.menu(rom ? `Room ${code} is on another version of the game. Reload the page to update.` : full ? `Room ${code} is full.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.');
+      },
       onKicked: () => { room = null; forget(); unlink(); lobby!.menu('The host took you out of the room.'); },
       onOld: () => { room = null; matchOn = false; forget(); lobby!.old(); },
       onRooms: (rooms) => lobby?.listed(rooms),
@@ -3204,6 +3253,7 @@ async function boot(): Promise<void> {
     worldSock = sock;
     sheetBtn.hidden = false;
     const joinAs = (how: { code?: string; host?: boolean; pass?: string }) => {
+      knockedWithPass = !!how.pass;
       const c = loadCareer();
       // MY VOICE goes with the card: whoever fights me hears my lines (MY LOOK's picks).
       sock.join(me().name, me().skin, { ...how, rec: { wins: c.wins, played: c.matches, ...(c.best ? { best: c.best } : {}), intro: c.intro ?? 0, win: c.win ?? 0, lose: c.lose ?? 0 } });
@@ -3235,7 +3285,7 @@ async function boot(): Promise<void> {
       lobby.menu(lobby.rewatch ? 'Too late to rejoin the match. WATCH it from here.' : '');
     }
   }
-  bootRom(files, link?.room.seed ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
+  bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
   (window as unknown as { __spike: unknown }).__spike = { get link() { return link; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; } };
 }
 

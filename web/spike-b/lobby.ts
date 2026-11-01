@@ -118,6 +118,13 @@ export class Lobby {
   }
 
   /** The main menu (with a line under it: a code nobody has, say). */
+  /** A locked room turned me away: asked for its passcode (again, if the one I typed was
+   *  not it), not sent back to the menu -- classic's words, Kanto's (browse.lua). */
+  askPass(code: string, wrong: boolean): void {
+    const note = wrong ? 'WRONG PASSCODE' : `Room ${code} is locked. Ask the host for it.`;
+    this.stage.push(this.passEntry('PASSCODE', note, (pass) => this.hooks.join({ code, pass }), wrong));
+  }
+
   menu(note = ''): void {
     this.inSheet = false;
     this.note = note;
@@ -401,12 +408,13 @@ export class Lobby {
   }));
 
   /** Four letters: a locked room's passcode, typed to come in or set by its host. */
-  private passEntry(title: string, note: string, done: (pass: string) => void): DrawnScreen {
+  private passEntry(title: string, note: string, done: (pass: string) => void, error = false): DrawnScreen {
     const state = newEntry(PASS_ENTRY);
     return entryScreen(() => ({
       title,
       state,
       note,
+      noteIsError: error,
       onDone: (pass) => { this.stage.pop(); done(pass); },
       onBack: () => this.stage.pop(),
     }));

@@ -255,7 +255,8 @@ describe('world rooms', () => {
       expect(g.got.at(-1)).toMatchObject({ t: 'room', code });
       expect((g.got.at(-1) as unknown as { pass?: string }).pass).toBeUndefined();
       svc.open(h.link).onText(JSON.stringify({ t: 'join', name: 'hal', skin: 0, code, pass: 'ABCD' }));
-      expect(h.got.at(-1)).toMatchObject({ t: 'no_room' });
+      // Told it is full, not that there is no such room.
+      expect(h.got.at(-1)).toEqual({ t: 'no_room', code, full: true });
       // KICK: only the host's, and the guest's socket can join again.
       const gus = (g.got.at(-1) as unknown as { you: number }).you;
       sg.onText(JSON.stringify({ t: 'kick', id: (a.got.at(-1) as unknown as { you: number }).you }));
