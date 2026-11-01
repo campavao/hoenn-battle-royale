@@ -74,7 +74,9 @@ import { makeJudge, type Judge } from './judge';
 import { nameBstart } from '../src/match/spectate';
 import { LEADERS } from './shared/gyms';
 import { CLERKS, priceOf, shelf } from './shared/marts';
-import type { GbaKey } from '../src/emu';
+import { KEY_BIT, type GbaKey } from '../src/emu';
+import { KeyLegend } from '../src/ui/keys';
+import { KEYMAP, legendMap } from './keys';
 import { stallLine, watch as watchRom } from '../src/emu/watchdog';
 import spritesData from '../src/data/sprites.json';
 import encounterData from '../src/data/encounters.json';
@@ -257,12 +259,14 @@ const FACE = { 1: 0, 2: 1, 3: 2, 4: 2 } as Record<number, number>;
 
 const held = new Set<string>();
 const pressed = new Set<string>();
-const KEYMAP: Record<string, string> = {
-  ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
-  w: 'up', s: 'down', a: 'left', d: 'right', x: 'b', X: 'b', z: 'a', Z: 'a', Shift: 'select', Enter: 'a', ' ': 'a',
-  // Caps Lock on (or Shift held): the same keys, as the live game's take them.
-  W: 'up', S: 'down', A: 'left', D: 'right',
-};
+// The keyboard's GBA on a desktop's field (ui/keys.ts, /classic/'s), lit while a key is
+// held; CSS shows it only where there is a mouse, and the page hides it off the field.
+const keysEl = document.getElementById('keys')!;
+const legendFrames: (() => void)[] = [];
+new KeyLegend(keysEl, {
+  onFrame: (l) => { legendFrames.push(l); return () => legendFrames.splice(legendFrames.indexOf(l), 1); },
+  keys: () => { let m = 0; for (const k of held) if (k in KEY_BIT) m |= 1 << KEY_BIT[k as GbaKey]; return m; },
+}, legendMap());
 // A long press is a held button, never a page's selection, callout or drag (HBR-98).
 const typing = (t: EventTarget | null) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
 for (const type of ['contextmenu', 'selectstart', 'dragstart']) document.addEventListener(type, (e) => { if (!typing(e.target)) e.preventDefault(); });
@@ -3085,6 +3089,8 @@ function loop(now: number): void {
     frame += 1;
     link.hurry = !!battle || swapping || romUp;
     for (const e of link.frame(myBits())) startFor(e);
+    keysEl.hidden = intro() || !!lobby?.shown;
+    for (const l of legendFrames) l();
     roundFrame();
     fieldFrame();
     teamFrame();
