@@ -18,7 +18,7 @@ import { Host, play } from './host';
 import { over } from './over';
 import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, isTm, within } from './items';
 import { HURT, botKeys, health } from './bots';
-import { AFTER_WIN, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, WALKUP_BANG, CHEST, CHEST_SPECIES, ITEM_MASTER_BALL, ZONE_CELLS, ZONE_ITEMS, ZONE_TMS, eventPiece, makeRoom, zoneBalls, wornParty } from './room';
+import { AFTER_WIN, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, WALKUP_BANG, CHEST, CHEST_SPECIES, ITEM_MASTER_BALL, ZONE_CELLS, ZONE_ITEMS, ZONE_TMS, eventPiece, makeRoom, zoneBalls, wornParty } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -1710,5 +1710,39 @@ describe('the Safari Zone loot (br_zone.c)', () => {
     expect(room.spillAt(CHEST.map, CHEST.x, CHEST.y)).toBeUndefined();
     (room as unknown as { newRound(n: number): void }).newRound(1);
     expect(room.spillAt(CHEST.map, CHEST.x, CHEST.y)?.bag.mons).toHaveLength(1);
+  });
+});
+
+describe('the rod', () => {
+  // Land with water north of it on ROUTE 103, and land south.
+  const shore = (room: ReturnType<typeof makeRoom>) => {
+    const map = 'MAP_ROUTE103';
+    for (let y = 1; y < 40; y++) for (let x = 0; x < 80; x++) {
+      if (room.world.cell(map, x, y) === 0 && room.world.cell(map, x, y - 1) === 2 && room.world.cell(map, x, y + 1) === 0) return { map, x, y };
+    }
+    throw new Error('no shore');
+  };
+
+  it('SELECT facing water casts it: the trainer stands fishing until the page ends it', () => {
+    const room = makeRoom(MAPS, PATCHES, 5);
+    const at = shore(room);
+    room.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: at, facing: 2 });
+    const a = room.actor(1)!;
+    expect(room.step(new Map([[1, [KEY_SELECT]]]))).toMatchObject([{ type: 'fish', id: 1, map: at.map, x: at.x, y: at.y - 1 }]);
+    expect(a.battling).toBe(true);
+    expect(a.m.bike).toBe(false);
+    // held, or pressed again, it casts nothing more, and the trainer stays put
+    expect(room.step(new Map([[1, [KEY_SELECT | KEY_DOWN]]]))).toEqual([]);
+    expect(a.m.spot).toEqual(at);
+    room.apply({ c: 'end', id: 1 });
+    expect(a.battling).toBe(false);
+  });
+
+  it('facing land, SELECT is still the bike', () => {
+    const room = makeRoom(MAPS, PATCHES, 5);
+    const at = shore(room);
+    room.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: at, facing: 1 });
+    expect(room.step(new Map([[1, [KEY_SELECT]]]))).toEqual([]);
+    expect(room.actor(1)!.m.bike).toBe(true);
   });
 });

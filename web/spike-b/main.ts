@@ -40,6 +40,7 @@ import { favourite } from '../src/match/tally';
 import { moveInfo, type Rom as MoveTables } from '../src/battle/movebook';
 import { OUT_BATCH_MS, event, felled, opening, outs, won } from '../src/match/ticker';
 import { MessageBox } from './msgbox';
+import { Fishing, fishPose, rodOf, type Rod } from './fish';
 import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_DOOR, SE_EXIT, SE_FIELD_POISON, SE_LEDGE, SE_SELECT, SE_SHOP, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { devRomParam, importRom } from './import';
@@ -323,7 +324,7 @@ function actors(): Actor[] {
 let selectUntil = 0;
 let toldLoading = false;
 function myBits(): number {
-  if (spectating || battle || swapping || romUp || asking || intro()) return 0;
+  if (spectating || battle || swapping || romUp || asking || casting || intro()) return 0;
   // The battle ROM still booting (a match started seconds after the page opened): a
   // marked spot or a trainer stepped into now could only say "still loading" and spend
   // the spot, so the trainer waits for it, once told why.
@@ -477,12 +478,51 @@ function say(text: string): void {
   reached = '';
 }
 
+// ---- the rod (fish.ts): SELECT facing water, as the room took it --------------------------
+
+/** Maps with a fishing table (export-encounters.py): anywhere else nothing ever bites. */
+const FISH_MAPS = new Set((encounterData as { fish?: string[] }).fish ?? []);
+/** OBJ_EVENT_GFX_BRENDAN_FISHING, _MAY_FISHING; any other look fishes in its own standing
+ *  frame (br_skin.c BrSkin_PlayerAnim). */
+const FISH_GFX = [137, 138];
+/** My cast under way, the water it is over, and the rod. */
+let casting: { f: Fishing; rod: Rod; map: string; x: number; y: number } | null = null;
+
+function cast(map: string, x: number, y: number): void {
+  const rod = rodOf(rom?.rod() ?? 0);
+  // No ROM yet, or a bag with no rod in it (an older patch): nothing to cast.
+  if (rod === -1 || !rom) { link.end(); return; }
+  casting = { f: new Fishing(rod, FISH_MAPS.has(map), () => (Math.random() * 0x10000) | 0), rod, map, x, y };
+  sayUntil = tickUntil = 0;
+  reached = '';
+}
+
+/** A frame of my cast: the box says the dots, the bite and what came of it; a POKeMON on
+ *  the hook is the map's fishing battle, and anything else gives the room the trainer back. */
+function fishFrame(): void {
+  if (!casting) return;
+  const c = casting;
+  const a = pressed.has('a'), b = pressed.has('b');
+  pressed.delete('a');
+  pressed.delete('b');
+  const end = c.f.frame(a, a || b);
+  if (c.f.boxed) msgBox.show(c.f.text, false, 2);
+  if (!end) return;
+  casting = null;
+  msgBox.hide();
+  const p = placed.get(c.map);
+  if (end !== 'hooked' || !p || !art) { link.end(); return; }
+  const fog = inFogNow();
+  const behavior = art.behavior(p.m.group, p.m.num, c.x, c.y);
+  handOff(null, (r, onStart) => r.fish(p.m.group, p.m.num, behavior, c.rod, onStart, fog));
+}
+
 /** What lies where I face, or under me, held in the box for as long as I stand there, as
  *  the live match holds it (br_loot.c HoldLineForReach, "{A} Take POTION"; Cam, 10-31:
  *  "doesn't show item description when I'm facing it"); '' for nothing to take. */
 let reached = '';
 function reachLine(): string {
-  if (!art || isOut || spectating || battle || swapping || asking) return '';
+  if (!art || isOut || spectating || battle || swapping || asking || casting) return '';
   const a = link.mine();
   if (!a) return '';
   const { map, x, y } = a.m.spot;
@@ -782,6 +822,7 @@ function startFor(e: RoomEvent): void {
   if (e.type === 'trade') { void (e.gives ? gift(e.n, e.species) : trade(e.n, e.species)); return; }
   if (e.type === 'door') { void door(e.n, e.how, !!e.opened); return; }
   if (e.type === 'guarded') { say(`${e.name} guards it!`); return; }
+  if (e.type === 'fish') { cast(e.map, e.x, e.y); return; }
   if (e.type === 'ferry') { void ferry(e.to, !!e.home, !!e.briney); return; }
   if (e.type === 'gate') {
     // A story's gate (br_story.c): his own fight in the hidden ROM, past the eight gym
@@ -1811,7 +1852,10 @@ function wirePhoneHud(): void {
       fogEverywhere: !!ring.last,
       safe: way ? `Safe ${way}` : null,
       lead: mine && fogged ? rom?.leadHp() || null : null,
-      ctx: { label: me.m.bike ? 'WALK' : 'BIKE', item: ITEM_MACH_BIKE, enabled: me.m.bike || !!link.room.stepFor(me).cycling?.(me.m.spot) },
+      // Facing water on foot (or surfing), the rod: SELECT casts it there (room.ts).
+      ctx: !me.m.bike && classAt(aheadOf(me)) === CLASS_WATER && rodOf(rom?.rod() ?? 0) >= 0
+        ? { label: 'FISH', item: rom!.rod(), enabled: true }
+        : { label: me.m.bike ? 'WALK' : 'BIKE', item: ITEM_MACH_BIKE, enabled: me.m.bike || !!link.room.stepFor(me).cycling?.(me.m.spot) },
       party: rom?.partyCount() ?? 0,
       moves: mine && !mine.battling ? fieldChips(mine) : [],
     });
@@ -1825,13 +1869,18 @@ const HM_CUT = 1 << 0, HM_SURF = 1 << 2, HM_STRENGTH = 1 << 3;
  *  STRENGTH (the actor's field bits, rom.field()), each lit when the cell ahead is what
  *  it works on. /classic/ reads gBrHmView, which this page's hidden ROM never fills for
  *  the page's own world. */
+/** The cell `a` faces, on its own map. */
+function aheadOf(a: Actor): Spot {
+  const { map, x, y } = a.m.spot;
+  const d = ({ 1: [0, 1], 2: [0, -1], 3: [-1, 0], 4: [1, 0] } as Record<number, number[]>)[a.m.facing] ?? [0, 0];
+  return { map, x: x + d[0], y: y + d[1] };
+}
+
 function fieldChips(a: Actor): FieldMove[] {
   const bits = a.field ?? 0;
   const can = (bits & FIELD_CUT ? HM_CUT : 0) | (bits & FIELD_SURF ? HM_SURF : 0) | (bits & FIELD_STRENGTH ? HM_STRENGTH : 0);
   if (!can) return [];
-  const { map, x, y } = a.m.spot;
-  const d = ({ 1: [0, 1], 2: [0, -1], 3: [-1, 0], 4: [1, 0] } as Record<number, number[]>)[a.m.facing] ?? [0, 0];
-  const ahead = classAt({ map, x: x + d[0], y: y + d[1] });
+  const ahead = classAt(aheadOf(a));
   const surfing = classAt(a.m.spot) === CLASS_WATER;
   const ready = (ahead === CLASS_CUT ? HM_CUT : 0) | (ahead === CLASS_WATER && !surfing ? HM_SURF : 0) | (ahead === CLASS_BOULDER ? HM_STRENGTH : 0);
   return fieldMoves(can, ready & can);
@@ -2097,7 +2146,7 @@ function hudFrame(): void {
     // A held line outranks the news (the live match's BrHud_Hold): the ticker waits.
     if (reach !== reached) { msgBox.show(reach); reached = reach; }
     tickUntil = 0;
-  } else if (!sayUntil && now >= tickUntil) {
+  } else if (!sayUntil && !casting && now >= tickUntil) {
     if (reached) { reached = ''; msgBox.hide(); }
     const next = ticks.shift();
     if (next) {
@@ -2935,15 +2984,20 @@ function draw(): void {
   for (const { a, p } of people) {
     // On the water: sitting on the blob, bobbing (SURF's pose, FLDEFF_SURF_BLOB's bob).
     const surf = classAt(a.m.spot) === CLASS_WATER;
+    const surfGfx = a.skin === 1 ? OBJ_EVENT_GFX_MAY_SURFING : OBJ_EVENT_GFX_BRENDAN_SURFING;
+    // My rod out (fish.ts), on foot or on the blob: Brendan's and May's fishing sheet,
+    // nudged toward the water as AlignFishingAnimationFrames does.
+    const rod = casting && a.id === link.me && a.skin < 2 ? fishPose(casting.f.anim, casting.f.animT, a.m.facing) : null;
     // On the MACH BIKE: Brendan's and May's own; any other look rides on foot (br_skin.c).
-    const gfx = surf ? (a.skin === 1 ? OBJ_EVENT_GFX_MAY_SURFING : OBJ_EVENT_GFX_BRENDAN_SURFING) : a.m.bike && a.skin < 2 ? BIKE_GFX[a.skin] : SKIN_GFX[a.skin];
+    const gfx = rod ? FISH_GFX[a.skin] : surf ? surfGfx : a.m.bike && a.skin < 2 ? BIKE_GFX[a.skin] : SKIN_GFX[a.skin];
     const info = SHEETS[String(gfx)];
     const s = sheet(gfx);
     if (!s) continue;
-    const fr = surf ? FACE[a.m.facing] : frameOf(a);
-    const dx = p.x + TILE / 2 - info.w / 2;
-    const dy = p.y + TILE - info.h - p.lift + (surf ? ((frame >> 4) & 1) - 2 : 0);
-    if (surf) drawBlob(gfx, a.m.facing, dx, dy + 4);
+    const fr = rod ? rod.frame : surf ? FACE[a.m.facing] : frameOf(a);
+    const bob = surf ? ((frame >> 4) & 1) - 2 : 0;
+    const dx = p.x + TILE / 2 - info.w / 2 + (rod?.dx ?? 0);
+    const dy = p.y + TILE - info.h - p.lift + bob + (rod?.dy ?? 0);
+    if (surf) drawBlob(surfGfx, a.m.facing, p.x + TILE / 2 - 16, p.y + TILE - 32 - p.lift + bob + 4);
     if (a.m.facing === DIR_EAST) {
       ctx.save();
       ctx.translate(dx + info.w, dy);
@@ -3043,6 +3097,7 @@ function loop(now: number): void {
     remember();
     gymFrame();
     hudFrame();
+    fishFrame();
     if (pressed.has('a')) dig();
     // Not while a box is up (the peek's): left and right are its keys then.
     if (!asking) for (const k of pressed) watch.key(k);

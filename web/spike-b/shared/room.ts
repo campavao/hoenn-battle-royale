@@ -130,6 +130,9 @@ export const FIELD_SURF = 4;
 /** What a frame started: a phone starts the matching ROM battle for its own trainer. */
 export type RoomEvent =
   | { type: 'wild'; tick: number; id: number; map: string; x: number; y: number; key: number }
+  /** SELECT facing water: the rod is out over (x, y). The page fishes (fish.ts), and ends
+   *  it as a wild battle ends: nothing bit, or what bit is beaten, caught or run from. */
+  | { type: 'fish'; tick: number; id: number; map: string; x: number; y: number }
   | { type: 'fight'; tick: number; id: number; foe: number }
   /** Two trainers saw each other: a link battle. `first` is the side that challenged
    *  (link id 0, the lower id, as the ROM's own engage has it). */
@@ -1605,6 +1608,18 @@ export class Room {
         }
         // A, from a bot on its way somewhere (bots.ts): it may jump a ledge, or SURF.
         if (!r || ((r.hop || (r.water && !this.onWater(a))) && !(bits & KEY_A))) { a.last = bits; return; }
+      }
+    }
+    // SELECT facing water, on foot or surfing, casts the rod rather than getting on the
+    // bike: a rod comes first there (br_hm.c), and every trainer holds one (br_levels.c).
+    if (!a.bot && !a.m.action && !a.m.bike && (bits & KEY_SELECT) && !a.m.sel) {
+      const [x, y] = this.ahead(a);
+      if (this.world.cell(a.m.spot.map, x, y) === CLASS_WATER) {
+        a.m.sel = true;
+        a.battling = true;
+        a.last = bits;
+        events.push({ type: 'fish', tick: this.tick, id: a.id, map: a.m.spot.map, x, y });
+        return;
       }
     }
     const before = a.m.strides;

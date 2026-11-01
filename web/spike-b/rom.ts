@@ -72,6 +72,10 @@ const WILD_ASKED_SAFARI = 4;
 const WILD_ASKED_TEACH = 5;
 /** br_wild.h's BR_WILD_ASKED_PICK: the fly map as the drop's picker (br_pick.c). */
 const WILD_ASKED_PICK = 6;
+/** br_wild.h's BR_WILD_ASKED_FISH: a hooked POKeMON, `species` the rod (BR_WILD_FISH_SAFARI
+ *  in the opening). */
+const WILD_ASKED_FISH = 7;
+const WILD_FISH_SAFARI = 0x80;
 // gBattleOutcome.
 const LOST = 2;
 // include/br/br_ring.h: BR_FOG_TICK_FRAMES.
@@ -149,6 +153,9 @@ export interface RomBattles {
   /** The wild battle a marked spot on map (group, num) starts; `behavior` is the spot's
    *  metatile behaviour (water or land, and the backdrop). */
   wild(group: number, num: number, behavior: number, onStart: () => void, fog?: boolean): Promise<Fought>;
+  /** The battle a POKeMON hooked off map (group, num) starts: the map's fishing table at
+   *  `rod`'s odds (fish.ts's OLD_ROD..SUPER_ROD), on the water's backdrop `behavior`. */
+  fish(group: number, num: number, behavior: number, rod: number, onStart: () => void, fog?: boolean): Promise<Fought>;
   /** Gym leader `n` (br_gym.c's order): their own battle, music and defeat text; won, the
    *  gym's TM and purse. Not ok when they would not fight (TATE&LIZA want two POKeMON). */
   boss(n: number, onStart: () => void, fog?: boolean): Promise<Fought>;
@@ -186,6 +193,8 @@ export interface RomBattles {
   /** The first of the party still standing, "HP 26/40" (br_hud.c LeadHp); '' with
    *  nobody standing. */
   leadHp(): string;
+  /** The rod in the bag (gBrLevels.rod: the ladder's OLD, GOOD or SUPER ROD), 0 for none. */
+  rod(): number;
   /** I won: Emerald's Hall of Fame with my team, the live winner's parade (br_match.c's
    *  RESULT for our own seat). Resolves when it is over (or never came up). */
   fame(onStart: () => void): Promise<boolean>;
@@ -920,6 +929,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       }
       return '';
     },
+    rod() {
+      const l = (carried ?? start).levels;
+      return l[4] | (l[5] << 8);
+    },
     fogNow() {
       if (fighting && !broken && emu.read(ringAt + 4, 8) !== 0xff) lay(true);
     },
@@ -1455,6 +1468,16 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         // br_wild.h's ASKED_SAFARI: the opening's roll, any first stage.
         emu.write(askAt, safari ? WILD_ASKED_SAFARI : WILD_ASKED, 8);
       }, () => ![WILD_ASKED, WILD_ASKED_SAFARI].includes(emu.read(askAt, 8)), () => emu.read(askAt, 8) === WILD_DONE, onStart,
+      () => ({ outcome: emu.read(askAt + 7, 8), species: emu.read(askAt + 4, 16), level: emu.read(askAt + 6, 8) })));
+    },
+    fish(group, num, behavior, rod, onStart, fog = false) {
+      return onCore(() => battle(fog, () => {
+        emu.write(askAt + 1, group, 8);
+        emu.write(askAt + 2, num, 8);
+        emu.write(askAt + 3, behavior, 8);
+        emu.write(askAt + 4, rod | (safari ? WILD_FISH_SAFARI : 0), 16);
+        emu.write(askAt, WILD_ASKED_FISH, 8);
+      }, () => ![WILD_ASKED, WILD_ASKED_FISH].includes(emu.read(askAt, 8)), () => emu.read(askAt, 8) === WILD_DONE, onStart,
       () => ({ outcome: emu.read(askAt + 7, 8), species: emu.read(askAt + 4, 16), level: emu.read(askAt + 6, 8) })));
     },
   };

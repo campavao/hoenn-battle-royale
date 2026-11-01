@@ -142,6 +142,7 @@ const GEN3_DISPLAY: ReadonlyMap<string, number> = new Map<string, number>([
   ["'", 0xb4],
   ['×', 0xb9],
   ['¥', 0xb7],
+  ['·', 0xaf], // the fishing rod's dots (field_player_avatar.c Fishing_ShowDots)
 ]);
 const GEN3_DISPLAY_REVERSE: ReadonlyMap<number, string> = new Map(Array.from(GEN3_DISPLAY.entries(), ([ch, byte]) => [byte, ch] as const));
 

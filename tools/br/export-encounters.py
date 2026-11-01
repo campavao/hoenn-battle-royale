@@ -13,8 +13,12 @@ Also the level-up evolutions out of `src/data/pokemon/evolution.h`, so a bot's t
 grows with the rung the way a player's does. Only EVO_LEVEL: a stone or a trade is
 something a trainer chose to do, and a bot has neither the stone nor the friend.
 
+And the maps with a fishing table, for spike B's rod (web/spike-b/fish.ts): a cast where
+there is none is never a bite (Fishing_CheckForBite's DoesCurrentMapHaveFishingMons).
+
 Writes web/src/data/encounters.json:
   { "maps": { "MAP_ROUTE101": [277, 288, 290], ... },   species ids, commonest first
+    "fish": ["MAP_ROUTE102", ...],                      maps with a fishing table
     "evolve": { "277": [16, 278], ... },                species -> [level, into]
     "names": { "277": "TREECKO", ... } }                species -> the ROM's name
 
@@ -87,6 +91,7 @@ def main():
         groups = json.load(f)["wild_encounter_groups"]
 
     out = {}
+    fish = set()
     unknown = set()
     for group in groups:
         # The Pyramid and Pike headers have no `map` -- they are the Frontier's own
@@ -94,6 +99,8 @@ def main():
         if group.get("label") != "gWildMonHeaders":
             continue
         for entry in group.get("encounters", []):
+            if entry.get("fishing_mons") and "map" in entry:
+                fish.add(entry["map"])
             land = entry.get("land_mons")
             if not land or "map" not in entry:
                 continue
@@ -122,12 +129,13 @@ def main():
 
     path = rp("web", "src", "data", "encounters.json")
     with open(path, "w", encoding="utf-8") as f:
-        json.dump({"maps": flat, "evolve": {str(k): v for k, v in sorted(evolve.items())},
+        json.dump({"maps": flat, "fish": sorted(fish), "evolve": {str(k): v for k, v in sorted(evolve.items())},
                    "names": {str(k): v for k, v in sorted(names.items())}},
                   f, separators=(",", ":"))
 
     print(json.dumps({
         "maps": len(flat),
+        "fish": len(fish),
         "species": len({s for row in flat.values() for s in row}),
         "evolutions": len(evolve),
         "names": len(names),

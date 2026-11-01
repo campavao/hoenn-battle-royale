@@ -30,6 +30,9 @@ struct BrWildAsk gBrWildAsk;
 static MainCallback sEnd;
 // The ask came as BR_WILD_ASKED_SAFARI.
 static bool8 sSafari;
+// The ask came as BR_WILD_ASKED_FISH: the rod plus one, 0 for none (zeroed, not .data:
+// the build keeps no initialised data of ours).
+static u8 sRodPlus1;
 
 // wild_encounter.c's ChooseWildMonIndex_Land and _WaterRock, which are static there.
 static u8 LandSlot(void)
@@ -72,14 +75,52 @@ static u8 WaterSlot(void)
     return i;
 }
 
-static const struct WildPokemonInfo *TableFor(u8 group, u8 num, bool8 water)
+// wild_encounter.c's ChooseWildMonIndex_Fishing: two slots for the OLD ROD, three for
+// the GOOD, five for the SUPER.
+static u8 FishingSlot(u8 rod)
+{
+    u8 rand = Random() % max(max(ENCOUNTER_CHANCE_FISHING_MONS_OLD_ROD_TOTAL, ENCOUNTER_CHANCE_FISHING_MONS_GOOD_ROD_TOTAL),
+                             ENCOUNTER_CHANCE_FISHING_MONS_SUPER_ROD_TOTAL);
+
+    switch (rod)
+    {
+    case OLD_ROD:
+        return rand < ENCOUNTER_CHANCE_FISHING_MONS_OLD_ROD_SLOT_0 ? 0 : 1;
+    case GOOD_ROD:
+        if (rand < ENCOUNTER_CHANCE_FISHING_MONS_GOOD_ROD_SLOT_2)
+            return 2;
+        if (rand < ENCOUNTER_CHANCE_FISHING_MONS_GOOD_ROD_SLOT_3)
+            return 3;
+        if (rand < ENCOUNTER_CHANCE_FISHING_MONS_GOOD_ROD_SLOT_4)
+            return 4;
+        return 0;
+    default:
+        if (rand < ENCOUNTER_CHANCE_FISHING_MONS_SUPER_ROD_SLOT_5)
+            return 5;
+        if (rand < ENCOUNTER_CHANCE_FISHING_MONS_SUPER_ROD_SLOT_6)
+            return 6;
+        if (rand < ENCOUNTER_CHANCE_FISHING_MONS_SUPER_ROD_SLOT_7)
+            return 7;
+        if (rand < ENCOUNTER_CHANCE_FISHING_MONS_SUPER_ROD_SLOT_8)
+            return 8;
+        if (rand < ENCOUNTER_CHANCE_FISHING_MONS_SUPER_ROD_SLOT_9)
+            return 9;
+        return 0;
+    }
+}
+
+static const struct WildPokemonInfo *TableFor(u8 group, u8 num, bool8 water, bool8 fishing)
 {
     u16 i;
 
     for (i = 0; gWildMonHeaders[i].mapGroup != MAP_GROUP(MAP_UNDEFINED); i++)
     {
         if (gWildMonHeaders[i].mapGroup == group && gWildMonHeaders[i].mapNum == num)
+        {
+            if (fishing)
+                return gWildMonHeaders[i].fishingMonsInfo;
             return water ? gWildMonHeaders[i].waterMonsInfo : gWildMonHeaders[i].landMonsInfo;
+        }
     }
     return NULL;
 }
@@ -94,16 +135,18 @@ static void CB2_EndWild(void)
 static void Start(void)
 {
     bool8 water = MetatileBehavior_IsSurfableWaterOrUnderwater(gBrWildAsk.behavior);
-    const struct WildPokemonInfo *info = TableFor(gBrWildAsk.mapGroup, gBrWildAsk.mapNum, water);
+    u8 rodPlus1 = sRodPlus1;
+    const struct WildPokemonInfo *info = TableFor(gBrWildAsk.mapGroup, gBrWildAsk.mapNum, water, rodPlus1 != 0);
     u16 species;
 
+    sRodPlus1 = 0;
     if (info == NULL)
     {
         gBrWildAsk.species = SPECIES_NONE;
         gBrWildAsk.state = BR_WILD_DONE;
         return;
     }
-    species = info->wildPokemon[water ? WaterSlot() : LandSlot()].species;
+    species = info->wildPokemon[rodPlus1 ? FishingSlot(rodPlus1 - 1) : water ? WaterSlot() : LandSlot()].species;
     // The opening's any-first-stage, or the route's national stand-in: CreateWildMon's.
     gBrWildAsk.species = sSafari ? BrZone_PickAny() : BrZone_Pick();
     // The opening's battle is the Zone's own: BALL / POKeBLOCK / GO NEAR / RUN, thrown
@@ -159,6 +202,14 @@ void BrWild_Tick(void)
     if (gBrWildAsk.state == BR_WILD_ASKED_SAFARI)
     {
         sSafari = TRUE;
+        gBrWildAsk.state = BR_WILD_ASKED;
+    }
+    if (gBrWildAsk.state == BR_WILD_ASKED_FISH)
+    {
+        u8 rod = gBrWildAsk.species & ~BR_WILD_FISH_SAFARI;
+
+        sRodPlus1 = (rod <= SUPER_ROD ? rod : SUPER_ROD) + 1;
+        sSafari = (gBrWildAsk.species & BR_WILD_FISH_SAFARI) != 0;
         gBrWildAsk.state = BR_WILD_ASKED;
     }
     if (gBrWildAsk.state == BR_WILD_ASKED && BrField_OverworldRunning() && !gMain.inBattle)
