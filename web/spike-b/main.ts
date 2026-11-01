@@ -41,6 +41,7 @@ import { moveInfo, type Rom as MoveTables } from '../src/battle/movebook';
 import { OUT_BATCH_MS, event, felled, opening, outs, won } from '../src/match/ticker';
 import { MessageBox } from './msgbox';
 import { Fishing, fishPose, rodOf, type Rod } from './fish';
+import { Ticks } from './ticks';
 import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_DOOR, SE_EXIT, SE_FIELD_POISON, SE_LEDGE, SE_SELECT, SE_SHOP, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { devRomParam, importRom } from './import';
@@ -1663,7 +1664,7 @@ function startMatch(l: WorldLink): void {
   tallyFrom = rom?.tally() ?? null;
   myStepsN = 0;
   mySpotWas = '';
-  ticks.length = 0;
+  ticks.clear();
   toldEvents = 0;
   toldGyms = l.room.gyms.length;
   wasInFog = false;
@@ -2101,12 +2102,13 @@ function itemfinder(): void {
 // ---- the HUD (the live match's corner and ticker: br_hud.c, ticker.ts) -----------------
 
 const cornerEl = document.getElementById('corner')!;
-/** Lines waiting their turn, and when the one showing goes. */
-const ticks: { text: string; alert: boolean }[] = [];
+/** Lines waiting their turn (never one twice running, ticks.ts), and when the one
+ *  showing goes. */
+const ticks = new Ticks();
 let tickUntil = 0;
 /** Everybody's news, one line at a time (ticker.ts): outs, the ring, a gym, the win. */
 function tick(text: string, alert = false): void {
-  if (ticks.length < 6) ticks.push({ text, alert });
+  ticks.push(text, alert);
 }
 /** Outs that land together go out as one line (POK-324). */
 let toldOuts = 0;
