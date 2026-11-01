@@ -29,6 +29,8 @@ export interface WorldLink {
   readonly key?: string;
   /** One frame: my keys in, the battles that started for me out. */
   frame(bits: number): RoomEvent[];
+  /** A battle or a ROM screen covers the field: a backlog may be played through at once. */
+  hurry?: boolean;
   /** My trainer as it is drawn (none for the frame before the room has me). */
   mine(): Actor | undefined;
   /** My battle is over (`fled`: it never got going, or was run from; `won`: I beat a bot). */
@@ -151,6 +153,8 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
 
 /** Frames the playout keeps in hand before it starts (and again after running dry). */
 const CUSHION = 3;
+/** Frames a frame the field plays when two seconds behind the relay (frame()). */
+const CATCH_UP = 4;
 
 export class Online implements WorldLink {
   room!: Room;
@@ -162,6 +166,7 @@ export class Online implements WorldLink {
   /** The buffer's depth, smoothed over about a third of a second. */
   private depth = 0;
   private ticks = 0;
+  hurry = false;
   private seq = 0;
   private acked = 0;
   private sent: { seq: number; bits: number }[] = [];
@@ -235,8 +240,12 @@ export class Online implements WorldLink {
     if (this.queue.length > 600) { this.resync(); return []; }
     // The relay answers one sync a second: one asked too soon goes unanswered, so ask again.
     if (this.syncing && performance.now() - this.syncAt > 1500) this.resync();
+    // Two seconds behind: all of it at once while a battle or a ROM screen covers the
+    // field (nobody sees it go by), and on the field CATCH_UP a frame, which is everybody
+    // walking quickly -- the whole of it in one frame was bots "teleported to me" right
+    // after a battle (Cam, 10-31), the fight having held this phone's frames down.
     const n = !this.playing ? 0
-      : this.queue.length > 120 ? this.queue.length - CUSHION - 2
+      : this.queue.length > 120 ? (this.hurry ? this.queue.length - CUSHION - 2 : CATCH_UP)
       : this.ticks % (this.depth > 20 ? 4 : 15) === 0 && this.depth > CUSHION + 3 ? 2 : 1;
     const events: RoomEvent[] = [];
     for (let i = 0; i < n && this.queue.length && !this.syncing; i++) {

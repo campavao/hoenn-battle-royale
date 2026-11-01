@@ -2982,6 +2982,7 @@ function loop(now: number): void {
     acc -= 1000 / 60;
     steps += 1;
     frame += 1;
+    link.hurry = !!battle || swapping || romUp;
     for (const e of link.frame(myBits())) startFor(e);
     roundFrame();
     fieldFrame();

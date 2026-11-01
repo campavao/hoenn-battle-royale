@@ -32,3 +32,28 @@ describe('the predicted trainer', () => {
     expect(link.mine()!.m.spot).toEqual(at);
   });
 });
+
+describe('falling behind the relay', () => {
+  // Cam's 10-31 play: "bots sort of teleported to me", right after a battle among the
+  // bags. A phone that drew few frames in the fight was seconds behind the relay after
+  // it, and the page played the whole backlog in one frame.
+  const behind = (hurry: boolean) => {
+    const room = make(5);
+    const spot = [...room.places.keys()].map((map) => ({ map, x: 5, y: 5 })).find((s) => room.world.cell(s.map, s.x, s.y) === 0)!;
+    room.apply({ c: 'join', id: 1, bot: false, name: 'ME', skin: 0, spot, facing: 1 });
+    const ws = { readyState: 1, send: () => undefined, addEventListener: () => undefined } as unknown as WebSocket;
+    const link = new Online(ws, make);
+    link.receive({ t: 'hello', id: 1, state: room.state() }, () => undefined);
+    const t0 = link.room.tick;
+    link.receive({ t: 'f', f: Array.from({ length: 300 }, (_, i) => ({ tick: t0 + 1 + i })) } as never, () => undefined);
+    (link as unknown as { hurry: boolean }).hurry = hurry;
+    link.frame(0);
+    return link.room.tick - t0;
+  };
+  it('catches up at a walk you can see on the field, never in one frame', () => {
+    expect(behind(false)).toBeLessThanOrEqual(4);
+  });
+  it('and all at once while a battle or a ROM screen covers it', () => {
+    expect(behind(true)).toBeGreaterThan(290);
+  });
+});
