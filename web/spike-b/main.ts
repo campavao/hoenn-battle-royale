@@ -763,8 +763,19 @@ async function door(n: number, how: string, opened: boolean): Promise<void> {
 
 /** The ferry (br_story.c): Lilycove's attendant sails to Slateport and to an island a
  *  live story is on, and its sailor sails back; Slateport's sails to Lilycove, and
- *  MR. BRINEY between his three stops (room.ts BOATS). Bots never take it. */
-async function ferry(to: { id: string; name: string }[], home: boolean, briney: boolean): Promise<void> {
+ *  MR. BRINEY between his three stops (room.ts BOATS), and each CABLE CAR station's
+ *  attendant the one way it goes (Route112_CableCarStation_EventScript_Attendant). Bots
+ *  never take it. */
+async function ferry(to: { id: string; name: string }[], home: boolean, briney: boolean, cable?: 'up' | 'down'): Promise<void> {
+  if (cable) {
+    if (await ask(`The CABLE CAR is ready to go ${cable}.\nWould you like to be on it?`, [['YES', 'y'], ['NO', '']]) !== 'y') {
+      say('Please ride with us another time.');
+      return;
+    }
+    say('Please step this way.');
+    link.sail(to[0].id);
+    return;
+  }
   if (home) {
     if (await ask('Sail back to LILYCOVE CITY?', [['YES', 'y'], ['NO', '']]) === 'y') link.sail('');
     return;
@@ -823,7 +834,7 @@ function startFor(e: RoomEvent): void {
   if (e.type === 'door') { void door(e.n, e.how, !!e.opened); return; }
   if (e.type === 'guarded') { say(`${e.name} guards it!`); return; }
   if (e.type === 'fish') { cast(e.map, e.x, e.y); return; }
-  if (e.type === 'ferry') { void ferry(e.to, !!e.home, !!e.briney); return; }
+  if (e.type === 'ferry') { void ferry(e.to, !!e.home, !!e.briney, e.cable); return; }
   if (e.type === 'gate') {
     // A story's gate (br_story.c): his own fight in the hidden ROM, past the eight gym
     // leaders (BrStory_StartGate); won, what he held is mine, and lost, it is his again.

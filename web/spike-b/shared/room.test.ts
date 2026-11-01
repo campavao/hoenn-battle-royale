@@ -791,6 +791,28 @@ describe('item balls', () => {
     expect(room.stepFor(room.actor(1000)!)({ map: 'MAP_ROUTE104_MR_BRINEYS_HOUSE', x: 5, y: 4 }, 2)).toBeNull();
   });
 
+  it("the CABLE CAR: each station's attendant rides it up or down, landing past her (Route112_CableCarStation)", () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const at = (map: string) => {
+      room.actor(1000)!.m.spot = { map, x: 6, y: 7 };
+      room.actor(1000)!.m.facing = 2;
+      room.step(new Map([[1000, [0]]]));
+      return room.step(new Map([[1000, [KEY_A]]])).find((e) => e.type === 'ferry');
+    };
+    const sail = (to: string) => { room.apply({ c: 'sail', id: 1000, to }); return { ...room.actor(1000)!.m.spot, facing: room.actor(1000)!.m.facing }; };
+    room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_ROUTE112_CABLE_CAR_STATION', x: 6, y: 7 }, facing: 2 });
+    room.step();
+    room.actor(1000)!.calm = 0;
+    expect(at('MAP_ROUTE112_CABLE_CAR_STATION')).toMatchObject({ cable: 'up', to: [{ id: 'chimney', name: 'MT. CHIMNEY' }] });
+    expect(sail('route112')).toMatchObject({ map: 'MAP_ROUTE112_CABLE_CAR_STATION', x: 6, y: 7 }); // not from here
+    expect(sail('chimney')).toEqual({ map: 'MAP_MT_CHIMNEY_CABLE_CAR_STATION', x: 6, y: 7, facing: 1 });
+    expect(at('MAP_MT_CHIMNEY_CABLE_CAR_STATION')).toMatchObject({ cable: 'down', to: [{ id: 'route112' }] });
+    expect(sail('route112')).toEqual({ map: 'MAP_ROUTE112_CABLE_CAR_STATION', x: 6, y: 7, facing: 1 });
+    // Both stations are in the world, and she stands solid.
+    expect(room.anchors.has('MAP_MT_CHIMNEY_CABLE_CAR_STATION') && room.anchors.has('MAP_ROUTE112_CABLE_CAR_STATION')).toBe(true);
+    expect(room.stepFor(room.actor(1000)!)({ map: 'MAP_ROUTE112_CABLE_CAR_STATION', x: 6, y: 7 }, 2)).toBeNull();
+  });
+
   it("ISLAND CAVE's wall opens by itself a phase on; ANCIENT TOMB's for the page that saw a flier", () => {
     const room = makeRoom(MAPS, PATCHES, 4242);
     const r = room as unknown as { tellStory(n: number, ring: unknown, s: unknown, rng: () => number): void };
