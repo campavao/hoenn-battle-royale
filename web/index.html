@@ -216,6 +216,43 @@
       #ui-hits li { position: static; pointer-events: none; }
       #ui-hits button, #ui-hits li > *, #ui-hits > div > * { pointer-events: auto; }
       #ui-hits button { cursor: pointer; touch-action: manipulation; }
+      /* The keyboard's GBA (ui/keys.ts, /classic/'s): small and half see-through, down the
+         field's right side, where neither the message box nor the corner is. A phone has
+         the pad instead, so this is a desktop's only. */
+      #keys { display: none; }
+      @media (hover: hover) and (pointer: fine) and (min-width: 600px) {
+        #keys:not([hidden]) {
+          display: grid;
+          position: fixed; right: 12px; top: 50%; transform: translateY(-50%); z-index: 2;
+          grid-template-columns: repeat(7, 26px);
+          grid-template-rows: 24px 26px 26px 26px 24px;
+          grid-template-areas:
+            ".     .     .     .     .     .     ."
+            ".     up    .     .     .     .     a"
+            "left  .     right .     b     .     ."
+            ".     down  .     .     .     .     ."
+            ".     .     sel   sel   start start .";
+          gap: 3px;
+          opacity: 0.5;
+          pointer-events: none;
+          font: 9px/1 ui-monospace, monospace;
+          color: #e8f1f6;
+        }
+        #keys .k {
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          background: rgba(20, 28, 34, 0.85); border: 1px solid #5d7383; border-radius: 5px;
+          white-space: nowrap;
+        }
+        #keys .k b { font-weight: 700; font-size: 11px; }
+        #keys .k i { font-style: normal; font-size: 8px; color: #9fb3c0; margin-top: 1px; }
+        #keys .k.on { background: #e8f1f6; color: #111; border-color: #fff; }
+        #keys .k.on i { color: #333; }
+        #keys .k-a, #keys .k-b { border-radius: 50%; }
+        #keys .k-up { grid-area: up; } #keys .k-down { grid-area: down; }
+        #keys .k-left { grid-area: left; } #keys .k-right { grid-area: right; }
+        #keys .k-a { grid-area: a; } #keys .k-b { grid-area: b; }
+        #keys .k-select { grid-area: sel; } #keys .k-start { grid-area: start; }
+      }
       /* The game stopped (POK-328, emu/watchdog.ts), as /classic/ says it: over everything,
          with the line a screenshot has to carry and the two ways out. */
       .stall { position: fixed; inset: 0; z-index: 999; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, 0.6); }
@@ -248,6 +285,7 @@
     </div>
     <div id="phud" hidden></div>
     <div id="pad-edit" class="pad-edit" hidden></div>
+    <div id="keys" aria-hidden="true" hidden></div>
     <div id="msg" role="status"></div>
     <canvas id="askbox" class="startmenu" hidden></canvas>
     <canvas id="startmenu" class="startmenu" hidden></canvas><canvas id="stock" class="startmenu" hidden></canvas>
