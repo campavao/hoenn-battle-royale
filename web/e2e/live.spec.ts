@@ -28,10 +28,10 @@ test('the deployed site patches a stock ROM in the browser', async ({ page }) =>
   await page.setInputFiles('#rom-input', baseRom);
 
   await expect(page.locator('#lobby-rows button', { hasText: 'QUICK PLAY' })).toBeVisible({ timeout: 120_000 });
-  const version = page.locator('#ui-hits .version');
-  await expect(version).toContainText('patch', { timeout: 30_000 });
-  await expect(version).not.toContainText('unpatched');
-  await expect(version).not.toContainText('STALE');
+  const version = () => page.evaluate(() => (window as unknown as { __spike: { version: string } }).__spike.version);
+  await expect.poll(version, { timeout: 30_000 }).toContain('patch');
+  expect(await version()).not.toContain('unpatched');
+  expect(await version()).not.toContain('STALE');
   // A production build registers a service worker and the dev server never does, so this is
   // the only place a worker that throws on install would ever show up.
   expect(failed, 'nothing failed to load').toEqual([]);

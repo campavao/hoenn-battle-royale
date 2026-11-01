@@ -24,10 +24,10 @@ test('a stock Emerald ROM is patched in the browser and boots battle royale', as
   await page.setInputFiles('#rom-input', baseRom);
   // The version line is the patcher's own verdict.
   await expect(page.locator('#lobby-rows button', { hasText: 'QUICK PLAY' })).toBeVisible({ timeout: 120_000 });
-  const version = page.locator('#ui-hits .version');
-  await expect(version).toContainText('patch', { timeout: 30_000 });
-  await expect(version).not.toContainText('unpatched');
-  await expect(version).not.toContainText('STALE');
+  const version = () => page.evaluate(() => (window as unknown as { __spike: { version: string } }).__spike.version);
+  await expect.poll(version, { timeout: 30_000 }).toContain('patch');
+  expect(await version()).not.toContain('unpatched');
+  expect(await version()).not.toContain('STALE');
   // And it really is our ROM: a retail one has no mailbox for the page to boot its battles on.
   await page.waitForFunction(() => {
     const s = (window as unknown as { __spike?: { rom?: { partyCount(): number } } }).__spike;
