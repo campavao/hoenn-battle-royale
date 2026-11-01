@@ -2798,6 +2798,14 @@ function legendArt(species: number): HTMLCanvasElement | null {
 /** The "!" over a trainer who looked (trainer_see.c's FLDEFF_EXCLAMATION_MARK_ICON, as
  *  br_walkup.c starts it): a white bubble over their head, popping up, until the walk. */
 function drawBang(x: number, y: number, t: number): void {
+  const { bx, by } = drawBubble(x, y, t);
+  ctx.fillRect(bx + 4, by + 3, 2, 5);
+  ctx.fillRect(bx + 4, by + 9, 2, 2);
+}
+
+/** The bubble the "!" and "VS" sit in, popping up over its first 6 frames; leaves the ink
+ *  colour set for the glyph. */
+function drawBubble(x: number, y: number, t: number): { bx: number; by: number } {
   const bx = Math.round(x + 3), by = Math.round(y - 24 - (t < 6 ? 6 - t : 0));
   ctx.fillStyle = '#303030';
   ctx.fillRect(bx + 1, by, 8, 14);
@@ -2805,8 +2813,20 @@ function drawBang(x: number, y: number, t: number): void {
   ctx.fillStyle = '#f8f8f8';
   ctx.fillRect(bx + 1, by + 1, 8, 12);
   ctx.fillStyle = '#303030';
-  ctx.fillRect(bx + 4, by + 3, 2, 5);
-  ctx.fillRect(bx + 4, by + 9, 2, 2);
+  return { bx, by };
+}
+
+/** "VS" as Emerald's BR icon draws it (graphics/field_effects/pics/emotion_vs.png, its
+ *  middle eight columns): # is ink. */
+const VS_GLYPH = ['#..#..##', '#..#.#..', '#..#.#..', '#..#..#.', '.##....#', '.##..##.'];
+
+/** Over a trainer in a battle, for as long as it lasts, as /classic/ holds its VS mark
+ *  (br_ghosts.c SeatMark, POK-372): somebody walking up can see they cannot take them on. */
+function drawVs(x: number, y: number): void {
+  const { bx, by } = drawBubble(x, y, 6);
+  VS_GLYPH.forEach((row, r) => {
+    for (let c = 0; c < row.length; c++) if (row[c] === '#') ctx.fillRect(bx + 1 + c, by + 4 + r, 1, 1);
+  });
 }
 
 /** The map at world pixel (x, y), or the nearest one to it: whose border fills the space
@@ -2936,6 +2956,8 @@ function draw(): void {
   drawNurses(visible);
   drawClerks(visible);
   for (const { a, p } of people) if (a.meet?.walk && link.room.tick - a.meet.since < WALKUP_BANG) drawBang(p.x, p.y - p.lift, link.room.tick - a.meet.since);
+  // Not over me, nor over whoever I watch, who I can see is fighting (br_ghosts.c SeatMark).
+  for (const { a, p } of people) if (a.battling && a.id !== link.me && a.id !== follow) drawVs(p.x, p.y - p.lift);
   drawFog(vx0, vy0, vx1, vy1, home);
   // A door: the screen fades out and back in over the followed trainer's warp.
   const going = followed?.m.action?.kind === 'warp' ? followed.m.action : null;
