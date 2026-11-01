@@ -14,6 +14,68 @@ named; when one is created later, put its id at the top of the entry and leave t
 
 ---
 
+## 2026-11-01, Cam, two narrated videos (live site, shell 0.3.69, rom e65c2fe)
+
+Desktop, spike B at `/`, quick play. Videos `C:/Users/cam95/hbr-playtests/2026-11-01-1552.mp4`
+(7:30) and `2026-11-01-1609.mp4` (15:00); times below are into each video. Whisper
+transcripts were made from them; a frame at the time is the evidence for each line.
+
+**Fixed since:**
+
+* **The safe zone was always Oldale** (1552 7:02). The ring's centre, the events and the
+  bot deal came from the cells a walk out of Littleroot reaches on foot. Now any of
+  Hoenn's outdoors, as classic (#254, Cam: "All of Hoenn, as classic").
+* **The Safari's corner box looked non-standard, and there were no HM icons on the right**
+  (1552 0:20, 4:52). The desktop now gets the phone's HUD, with the field-move strip
+  (#250).
+
+**Open, the first video (15:52):**
+
+* **Zoomed in further than classic** (0:10). Compare spike B's desktop scale with
+  `/classic/`'s at the same window size.
+* **No items in the Safari, and rocks there that should not be** (0:55, 1:01).
+* **The Pokédex registration screen after a catch** (1:23). Classic marked every species
+  as caught to skip it. The second video (2:15) shows the caught ball on a wild mon in
+  the field, so the flag may be set only in the Safari.
+* **A TM's name should show before it is picked up** (2:32), when standing next to it.
+* **Items on house tables sit on the coffee cups** (2:55). Keep them to the bare table cells.
+* **A door should walk you one step in, never stop on the mat** (3:14).
+* **Delays and map-load lag** (3:48, 4:18). Look at the map streaming as you cross a seam.
+* **Too many items, Super Potions and Revives too common** (5:10, 5:37). Swap some for TMs.
+* **The "found" box covers the item's name** (5:20).
+* **The bottom bar is too easy to miss** (6:16).
+
+**Open, the second video (16:09):**
+
+* **BAD EGG, and items and party corrupted. Serious** (8:10, 12:32). A party mon turned
+  into a BAD EGG and a ball changed. Later a corrupt item showed up, and the bag took 4 s
+  and then did not open (12:16). Cam suspects battles. First look: what writes the party
+  or bag outside the ROM's own code (the page's party sync, a gift or trade, a
+  released-mon ball picked up), and checksum the party after each.
+* **Teleporting: the map did not match where he stood** (3:45).
+* **The title screen's scrolling background should follow the game's path** (0:03):
+  Littleroot, 101, Oldale, 103, Petalburg, the woods, and so on, with only straight
+  moves. The diagonal moves show black corners.
+* **The menu moves when touched** (1:05). Anchor it and let it grow upwards.
+* **Bots should look busy, not idle** (1:27). The goal: you cannot tell a bot from a player.
+* **Dialogue should advance by itself on desktop** (2:46), as on the phone.
+* **A screen-wipe into the match** (3:37, 4:33). Perhaps Emerald's contest wipe.
+* **Some people say nothing when talked to** (4:05), and text should scroll in (4:20).
+* **The grass or dust and sand effects are not Emerald's standard sprites** (5:05).
+* **A blue screen flashes in battle transitions** (6:15). Also in classic.
+* **The ring should visibly close in, not appear on top of you** (7:11).
+* **Walked under a bridge instead of over it** (10:03). The bridge's level was wrong.
+* **"Can't escape!" from wild battles too often** (11:23).
+* **The cave needs a pass** (12:07). It was hard to get out.
+* **A watched battle: no player sprites, none in the side panels** (13:49).
+* **No way to drop into a battle mid-way** (13:59, 14:32). The relay passes on a battle's
+  start and turns, and a late watcher replays from the first turn at 8x (`rom.ts`
+  HURRY_SPEED). Cam would rather a battle be always running, with the watcher just
+  looking in. That fits the rule that the ROM never leaves the device:
+  * keep the followed trainer's battles mirrored live on the hidden ROM;
+  * catch up the rest unrendered, far faster than 8x, behind the wipe.
+* **The watched battle stopped** (14:05), and there was lag after (14:50).
+
 ## 2026-09-27, POK-329's switch: what to look at on the phone (not yet play-tested)
 
 The ROM now declares the whole ring as its picture (`gBrFieldView` 0/104/16/232): the core
