@@ -103,4 +103,21 @@ Not generators: `bots-replay.ts` and `zone-occupancy.ts` (the host's match run o
 questions: `web/src/bots/offline.ts` wires createHostBots to the Director the way a room
 does, so what they print is what a room plays -- opening, drop, the director's rings and
 its `win`), `moveset-sim.py` (eyeballs br_levels.c's move picks), `transcribe.py`
-(play-test videos), `play-log.mjs` (the relay's play log, CI).
+(play-test videos), `play-log.mjs` (the relay's play log, CI), `replay.ts` (a play-test
+recording run again: see below).
+
+## replay.ts — a play-test, frame by frame
+
+Spike B keeps the last ~10 minutes of its world link in memory (`web/spike-b/recorder.ts`):
+the room's state, every frame's inputs, my keys, the battle messages, errors, frames over
+50 ms and the version line. K on a desktop, or holding the eye on a phone, marks a moment;
+SAVE LOG (START menu, room sheet, results) saves it all as one `.json`, gzipped past 1 MB.
+Never the ROM, a save or the relay's rejoin key. `bt` link blocks are not in it.
+
+    cd web && npx vite-node ../tools/br/replay.ts -- <file.json[.gz]> [--around <seconds>]
+
+It rebuilds the room, plays each frame as a mirror does (`play`, `shared/host.ts`), holds
+the hash against the page's frame by frame, and prints what happened around each mark. It
+exits 1 if any hash differs, and warns when the file's world is not this tree's: check out
+the commit it was played on. The ROM's side of a battle does not run here; a battle's bytes
+are in the log for reading.

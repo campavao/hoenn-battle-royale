@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { capsByKey } from '../src/ui/keys';
-import { KEYMAP, MENU_KEY, legendMap } from './keys';
+import { KEYMAP, MARK_KEY, MENU_KEY, legendMap } from './keys';
 
 describe("the desktop's key legend", () => {
+  it('marks on a key no button or other command has, either case (main.ts keydown)', () => {
+    for (const k of [MARK_KEY, MARK_KEY.toUpperCase()]) expect(KEYMAP[k]).toBeUndefined();
+    expect('mfrv').not.toContain(MARK_KEY);
+    expect(legendMap()[MARK_KEY]).toBeUndefined();
+  });
+
   it('shows only keys the map presses, each as the button it presses', () => {
     for (const [k, b] of Object.entries(legendMap())) {
       if (k === MENU_KEY) expect(b).toBe('start');

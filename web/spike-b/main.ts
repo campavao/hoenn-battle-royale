@@ -77,7 +77,8 @@ import { LEADERS } from './shared/gyms';
 import { CLERKS, priceOf, shelf } from './shared/marts';
 import { KEY_BIT, type GbaKey } from '../src/emu';
 import { KeyLegend } from '../src/ui/keys';
-import { KEYMAP, legendMap } from './keys';
+import { KEYMAP, MARK_KEY, legendMap } from './keys';
+import { SPIKE_MS, recorder, saveRecording, watchPage } from './recorder';
 import { stallLine, watch as watchRom } from '../src/emu/watchdog';
 import spritesData from '../src/data/sprites.json';
 import encounterData from '../src/data/encounters.json';
@@ -298,6 +299,11 @@ new KeyLegend(keysEl, {
   onFrame: (l) => { legendFrames.push(l); return () => legendFrames.splice(legendFrames.indexOf(l), 1); },
   keys: () => { let m = 0; for (const k of held) if (k in KEY_BIT) m |= 1 << KEY_BIT[k as GbaKey]; return m; },
 }, legendMap());
+// K marks a moment for the play-test's replay: not a button of the GBA's, so a cap of its own.
+const markCap = document.createElement('div');
+markCap.className = 'k k-mark';
+markCap.innerHTML = `<b>${MARK_KEY.toUpperCase()}</b><i>MARK</i>`;
+keysEl.append(markCap);
 // A long press is a held button, never a page's selection, callout or drag (HBR-98).
 const typing = (t: EventTarget | null) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
 for (const type of ['contextmenu', 'selectstart', 'dragstart']) document.addEventListener(type, (e) => { if (!typing(e.target)) e.preventDefault(); });
@@ -320,6 +326,7 @@ addEventListener('keydown', (e) => {
   if ((e.key === 'm' || e.key === 'M' || e.key === 'Escape') && !e.repeat) { void openMenu(); return; }
   if ((e.key === 'f' || e.key === 'F') && !e.repeat) { itemfinder(); return; }
   if ((e.key === 'r' || e.key === 'R') && !e.repeat) { openSheet(); return; }
+  if (e.key.toLowerCase() === MARK_KEY && !e.repeat) { markHere('key'); return; }
   const k = KEYMAP[e.key];
   if (!k) return;
   e.preventDefault();
@@ -714,10 +721,12 @@ async function openMenu(): Promise<void> {
     ...(ringMap && !link.room.ring().safari ? [['MAP', '13'] as [string, string]] : []),
     [name, '4'],
     ...(lobby && !touchPad ? [['ROOM', 'room'] as [string, string]] : []),
+    ['SAVE LOG', 'savelog'],
     ['EXIT', ''],
   ];
   const c = await ask('MENU', rows, true);
   if (c === 'room') { openSheet(); return; }
+  if (c === 'savelog') { saveLog(); return; }
   await runMenu(c);
 }
 
@@ -736,7 +745,8 @@ async function peek(): Promise<void> {
     : link.teams.get(a.id) ?? [];
   const bag: PeekBag | undefined = a.bot ? { items: (a.loot?.items ?? []).map((s) => ({ id: s.id, n: s.n })), money: a.loot?.money ?? 0 } : link.bags.get(a.id);
   for (;;) {
-    const c = await ask(a.name, [['POKéMON', 'mons'], ['BAG', 'bag'], ['EXIT', '']], true);
+    const c = await ask(a.name, [['POKéMON', 'mons'], ['BAG', 'bag'], ['SAVE LOG', 'savelog'], ['EXIT', '']], true);
+    if (c === 'savelog') { saveLog(); return; }
     if (c === 'mons') {
       if (!team.length) { await ask(`${a.name} has not told their team yet.`, [['OK', '']]); continue; }
       for (;;) {
@@ -1859,7 +1869,7 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
     muted,
     remapping: remap.on,
     remapLine: remap.line,
-    help: ['Arrows move  Z: A  X: B  M: MENU', 'R: this sheet  V: spectate  pads too'],
+    help: ['Arrows move  Z: A  X: B  M: MENU', 'R: this sheet  V: spectate  K: mark'],
     version: versionLine,
     onSeat: (seat) => { sheetCard = seat; lobby?.stage.redraw(); },
     onKick: (seat) => { lobby?.kick(seat); sheetCard = null; lobby?.stage.redraw(); },
@@ -1874,6 +1884,7 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
     onRemap: () => { remapPad(); lobby?.stage.redraw(); },
     onResetPad: () => { resetPad(); lobby?.stage.redraw(); },
     onForget: () => { forgetRom(); },
+    onSaveLog: saveLog,
     pad: touchPad ? {
       hidden: padPrefs.hidden,
       onMove: () => { lobby?.closeSheet(); padPrefs.edit(); },
@@ -2581,6 +2592,43 @@ function toggleSpectate(): void {
   held.clear();
 }
 modeBtn.addEventListener('click', toggleSpectate);
+
+// ---- the play-test's marks and its file (recorder.ts) ---------------------------------
+
+const markToast = document.getElementById('mark-toast')!;
+let markToastOff = 0;
+function toast(text: string): void {
+  markToast.textContent = text;
+  markToast.hidden = false;
+  clearTimeout(markToastOff);
+  markToastOff = window.setTimeout(() => { markToast.hidden = true; }, 2000);
+}
+
+/** This moment, and where the camera looks, for tools/br/replay.ts. */
+function markHere(via: 'key' | 'eye'): void {
+  const p = link ? mapUnder(cam.x, cam.y) : null;
+  const where = p ? { map: p.m.id, x: Math.floor(cam.x / TILE - p.gx), y: Math.floor(cam.y / TILE - p.gy) } : { map: '', x: 0, y: 0 };
+  const n = recorder.mark(via, where);
+  buzz(30);
+  toast(`MARK ${n}  ${where.map.replace('MAP_', '')} ${where.x},${where.y}`);
+}
+
+function saveLog(): void {
+  void saveRecording().then((name) => toast(`SAVED ${name}`), (e) => { console.error('[recorder] could not save', e); toast('Could not save the log'); });
+}
+document.getElementById('save-log')!.addEventListener('click', saveLog);
+
+/** A phone's mark: hold the eye. A tap does nothing, so a thumb that strays there is safe. */
+const MARK_HOLD_MS = 500;
+const markEye = document.getElementById('mark-eye')!;
+let markHold = 0;
+markEye.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  markEye.setPointerCapture(e.pointerId);
+  markEye.classList.add('down');
+  markHold = window.setTimeout(() => { markHold = 0; markEye.classList.remove('down'); markHere('eye'); }, MARK_HOLD_MS);
+});
+for (const type of ['pointerup', 'pointercancel']) markEye.addEventListener(type, () => { clearTimeout(markHold); markEye.classList.remove('down'); });
 const watch = new Watch({
   trainers: () => (link ? actors() : []),
   me: () => link?.me ?? 0,
@@ -3172,6 +3220,7 @@ function loop(now: number): void {
   last = now;
   gaps.push(dt);
   if (gaps.length > 120) gaps.shift();
+  if (dt > SPIKE_MS && !document.hidden) recorder.spike(dt);
   acc += Math.min(dt, 100);
   const t0 = performance.now();
   let steps = 0;
@@ -3298,6 +3347,7 @@ function didNotStart(why: string): void {
 }
 
 async function boot(): Promise<void> {
+  watchPage();
   registerServiceWorker();
   void askToKeepStorage();
   const hoenn = new WorldIndex(((await import('./data/world.json')).default as { maps: WorldMap[] }).maps);
@@ -3307,6 +3357,7 @@ async function boot(): Promise<void> {
     files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; }, (emu) => importRom(emu, ''), devRomParam());
     romEmu = files.emu;
     versionLine = files.version;
+    recorder.setVersion({ line: files.version, romSha1: files.romSha, world: WORLD_HASH_SHORT });
   battlesOn(files.romSha);
     if (touchPad) { wireBattleMenu(files); wirePhoneHud(); } else wirePhoneHud(true);
   } catch (e) {

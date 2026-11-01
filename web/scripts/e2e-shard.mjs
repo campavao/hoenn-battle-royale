@@ -47,6 +47,7 @@ export const FILE_SECONDS = {
   'play.spec.ts': 300,
   'pvp-items.spec.ts': 72,
   'pwa.spec.ts': 4,
+  'recorder.spec.ts': 60,
   'refresh-rate.spec.ts': 24,
   'reload-rejoin.spec.ts': 77,
   'results-scroll.spec.ts': 5,

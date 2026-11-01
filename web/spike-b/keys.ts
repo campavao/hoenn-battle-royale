@@ -13,6 +13,10 @@ export const KEYMAP: Record<string, string> = {
 /** START is the menu here (M, main.ts openMenu), not a key of the map. */
 export const MENU_KEY = 'm';
 
+/** Marks this moment for the play-test's replay (main.ts markHere). Its cap is the legend's
+ *  one that is no GBA button. */
+export const MARK_KEY = 'k';
+
 /** What the legend shows on each button: the arrows and WASD, Z and X, SHIFT, and M for
  *  START. Enter and Space press A too, but a cap holds one key's worth. */
 export function legendMap(): Record<string, GbaKey> {
