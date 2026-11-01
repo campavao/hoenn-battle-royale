@@ -1,14 +1,16 @@
 {
-  "at": "2026-10-31T21:26:56.600Z",
+  "at": "2026-11-01T00:16:56.662Z",
   "rooms": 0,
   "roomCap": 40,
   "conns": 0,
   "connCap": 200,
   "peakRooms": 0,
-  "peakConns": 0,
-  "sent": "0B",
-  "lines": 0,
+  "peakConns": 1,
+  "statSeen": 2,
+  "statSolo": 0,
+  "sent": "122B",
+  "lines": 2,
   "deployedAt": "2026-10-31T21:06:18.999Z",
   "deploymentId": "66a9562b-3d99-4f20-b8cb-4a96d6b60fff",
-  "readAt": "2026-10-31T21:28:57.836Z"
+  "readAt": "2026-11-01T00:17:35.246Z"
 }
