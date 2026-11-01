@@ -369,7 +369,10 @@ function applyPatch(source: Uint8Array, patch: Uint8Array): Promise<Uint8Array> 
   });
 }
 
-export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promise<RomBattles> {
+/** `struct SaveBlock2` (include/global.h): the player's gender after the name. */
+const SB2_GENDER = 8;
+
+export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf: () => number = () => 0): Promise<RomBattles> {
   const startMenu = startMenuTable(rom, sym('gBrStartMenu'));
   await emu.startBytes(rom);
   const box = new Mailbox(emu, sym('gBrMailbox'));
@@ -380,7 +383,18 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   // No song until the page asks for one: Littleroot's would play on the hidden field.
   const musicAt = sym('gBrMusic');
   if (!Number.isNaN(musicAt)) emu.bytes(musicAt, 2).set([MUSIC_ASKED | MUSIC_QUIET, 0]);
-  const boot = [BOOT_MAP_SAFARIKIT, 0, 0, 9, 5, 0, 8, 0, ...gen3('YOU'), 0xff];
+  // The trainer's own look (MY LOOK), as /classic/ boots with it (app.ts writeBootBlock):
+  // gBrMySkin draws their pictures -- the battle's, the Hall of Fame's, the card's, the
+  // MAP's icon -- and the gender is May's back for the second look.
+  const mySkinAt = sym('gBrMySkin');
+  const writeLook = () => {
+    const skin = Math.max(0, Math.min(255, skinOf() | 0));
+    if (!Number.isNaN(mySkinAt)) emu.write(mySkinAt, skin, 8);
+    const sb2 = emu.read(sym('gSaveBlock2Ptr'), 32);
+    if (sb2) emu.write(sb2 + SB2_GENDER, skin % 2, 8);
+  };
+  const boot = [BOOT_MAP_SAFARIKIT, skinOf() % 2, 0, 9, 5, 0, 8, 0, ...gen3('YOU'), 0xff];
+  if (!Number.isNaN(mySkinAt)) emu.write(mySkinAt, skinOf() & 0xff, 8);
   emu.bytes(box.base + MAILBOX.OFF_BOOT, boot.length).set(boot);
   await frames(emu, 400);
   const match = sym('gBrMatch');
@@ -638,6 +652,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     const held = sound ? sounds.map(([at, n]) => emu.bytes(at, n).slice()) : [];
     if (!emu.restore(parked!)) return false;
     held.forEach((b, i) => emu.bytes(sounds[i][0], b.length).set(b));
+    writeLook();
     return true;
   };
   const hush = () => {
