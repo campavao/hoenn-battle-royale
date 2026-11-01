@@ -213,8 +213,9 @@ export interface RomBattles {
    *  the hidden trainer, POKeMON chosen, and the ROM's own BAG screen (br_swap.h) with
    *  each of theirs made fresh at its species and level (MakeTaken, BrLevels_Settle).
    *  Ours on the left, theirs on the right, picks moved across. Resolves, back on the
-   *  field, with the team left in the bag. `onStart` is when the screen is up. */
-  team(mons: TeamRow[], name: string, onStart: () => void): Promise<TeamRow[]>;
+   *  field, with the team left in the bag. `onStart` is when the screen is up, `onEnd` when
+   *  the ROM is back on its own field (the page's to cover from then on). */
+  team(mons: TeamRow[], name: string, onStart: () => void, onEnd?: () => void): Promise<TeamRow[]>;
   /** The START menu's row `action` (start_menu.c's MENU_ACTION_*: POKeMON 1, BAG 2, the
    *  trainer card 4), opened the way the match's PARTY button opens it (touch.ts): START,
    *  the cursor walked to the row, A -- all on the hidden field, the page keeping the
@@ -891,7 +892,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         carried = last = next;
       });
     },
-    team(mons, name, onStart) {
+    team(mons, name, onStart, onEnd) {
       return onCore(async () => {
         if (broken || !mons.length) return mons;
         leaving = false;
@@ -938,6 +939,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
           // B closes it; back on the field the box settles (SettleBoxes): a PICKUP for
           // each of theirs taken, a SPILL for any of ours put down.
           await backOnField();
+          // Back on its field, which is not this world's (Cam's 10-31 recording: a house, a
+          // well and "0 left 0:00" for a second after Done): the page takes the screen
+          // before the box settles, as menu() does.
+          onEnd?.();
           await frames(emu, 60);
         }
         watch();
