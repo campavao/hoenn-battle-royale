@@ -26,10 +26,9 @@ export const RULES = [
   { match: /^docs\/|\.md$|^\.claude\//, rom: false, e2e: [] },
   // The game (web/spike-b, served at /) and the relay's /world socket (world.js, and
   // service.js bundled from web/spike-b/shared): its spec, which plays a match through
-  // /world, besides the web job's unit tests and the relay job's suite. The classic page's
-  // specs never load it.
+  // /world, besides the web job's unit tests and the relay job's suite.
   { match: /^web\/spike-b\/|^relay\/world(\.js|\.test\.js|\/)|^tools\/br\/bundle-world\.mjs$/, rom: false, e2e: ['spikeb.spec.ts'] },
-  // A spec changed: that spec. Helpers beside the specs (symbols.ts, play.ts, ...) fall through
+  // A spec changed: that spec. Helpers beside the specs (symbols.ts, spike.ts, ...) fall through
   // to the web/ rule below, since every spec uses them.
   { match: /^web\/e2e\/[^/]+\.spec\.ts$/, rom: false, e2e: (path) => [basename(path)] },
   // Shell files the rom job reads too: make-patch.sh checks the BPS with the page's own

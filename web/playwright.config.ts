@@ -62,7 +62,8 @@ export default defineConfig({
       ? [
           {
             name: 'play-firefox',
-            testMatch: 'play.spec.ts',
+            testMatch: 'spikeb.spec.ts',
+            grep: /a hosted room with bots/,
             // Headless Firefox on a GPU-less runner has no WebGL (forcing it on in the
             // prefs did not take), and without it the core draws nothing at all: no
             // texture, brPicturePtr 0, emscripten's context none (2026-10-08). CI runs it
