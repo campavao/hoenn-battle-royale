@@ -85,6 +85,8 @@ const DREW = 3;
 const ROM_BASE = 0x08000000;
 /** Frames a screen off the field gets to begin its fade in (settled()). */
 const FADE_IN_WAIT = 45;
+/** How fast the hidden ROM runs a battle's start nobody sees (battle()). */
+const HURRY_SPEED = 8;
 /** How long the last fight took to start: from the TRAINER card to the battle running. */
 export let lastStart: { ms: number; frames: number } | null = null;
 
@@ -624,7 +626,12 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
     hush();
     try { return await f(); } finally { turns--; idled = true; sing(); }
   });
-  async function battle(fog: boolean, kick: () => void, going: () => boolean, over: () => boolean, onStart: () => void, after: () => Omit<Fought, 'ok'>): Promise<Fought> {
+  /** The volume the page last asked for (its MUTE), so a hurried start can go quiet and
+   *  come back to it. */
+  let volume = 100;
+  const setVolume = emu.setVolume.bind(emu);
+  emu.setVolume = (v: number) => { volume = v; setVolume(v); };
+  async function battle(fog: boolean, kick: () => void, going: () => boolean, over: () => boolean, onStart: () => void, after: () => Omit<Fought, 'ok'>, hurry = true): Promise<Fought> {
     if (broken) throw new Error('the parked ROM could not be restored');
     // Every battle from one state would roll the same: a fresh draw each time.
     emu.write(sym('gRngValue'), (Math.random() * 2 ** 32) >>> 0, 32);
@@ -662,14 +669,24 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
       else published(m);
     }));
     kick();
-    const took = await until(emu, going, 600);
+    // The card, the ask and the swirl run on the hidden field, which nobody sees: at
+    // HURRY_SPEED and quiet, so the battle is up in a beat and not a second and a half
+    // later with the player standing still (Cam, 10-31). Not a link battle: its blocks
+    // keep the other side's time.
+    if (hurry) { emu.setSpeed(HURRY_SPEED); setVolume(0); }
+    let shown = false;
+    try {
+      const took = await until(emu, going, 600);
+      // Emerald's battle loop: set once the battle screen itself runs, after the swirl
+      // that is drawn over the hidden ROM's own field.
+      // A refused ask (DONE at once: no table for that spot) never draws a battle.
+      shown = took && !over() && await until(emu, () => emu.read(mainFunc, 32) !== 0, 600);
+      if (!shown) console.warn('spike: no battle', { took, ask: [...emu.bytes(askAt, 8)], fighting: emu.read(fightAt + 2, 8), callback2: emu.read(sym('gMain') + 4, 32).toString(16) });
+    } finally {
+      if (hurry) { emu.setSpeed(1); setVolume(volume); }
+    }
     count();
     lastStart = { ms: performance.now() - t0, frames: n };
-    // Emerald's battle loop: set once the battle screen itself runs, after the swirl
-    // that is drawn over the hidden ROM's own field.
-    // A refused ask (DONE at once: no table for that spot) never draws a battle.
-    const shown = took && !over() && await until(emu, () => emu.read(mainFunc, 32) !== 0, 600);
-    if (!shown) console.warn('spike: no battle', { took, ask: [...emu.bytes(askAt, 8)], fighting: emu.read(fightAt + 2, 8), callback2: emu.read(sym('gMain') + 4, 32).toString(16) });
     let result: Fought = { ok: false, outcome: 0, species: 0, level: 0 };
     // However long it takes: a battle is never pulled out from under the player.
     if (shown) {
@@ -814,7 +831,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
             if (foeLeft) send({ t: 'out', seat: FOE_SEAT });
           }, () => emu.read(netAt, 8) === 1,
           () => emu.read(netAt, 8) === 0 && ((emu.read(mainAt + 4, 32) & ~1) >>> 0) === overworldCb, onStart,
-          () => ({ outcome: emu.read(netAt + 11, 8), species: 0, level: 0 }));
+          () => ({ outcome: emu.read(netAt + 11, 8), species: 0, level: 0 }), false);
         } finally {
           watch();
           blocksTo = null;
