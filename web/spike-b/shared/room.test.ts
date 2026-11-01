@@ -82,7 +82,7 @@ describe('shared room', () => {
     expect(moved).toBeGreaterThan(50);
     expect(wild).toBeGreaterThan(0);
     console.log(`wild ${wild}, fights ${fights}, items ${items}, steps ${moved}`);
-  });
+  }, 20_000); // 64 bots' first routes flood Hoenn's regions (World.firstCrossing): ~3.5 s here, more on CI
 });
 
 describe('bots', () => {
@@ -165,9 +165,11 @@ describe('bots with somewhere to be', () => {
     for (let f = 0; f < 120; f++) host.advance();
     const e = room.events[0];
     expect(e).toBeDefined();
-    for (let f = 0; f < 60 * 60; f++) host.advance();
-    const near = room.actors.filter((a) => a.bot && a.m.spot.map === e.map && Math.abs(a.m.spot.x - e.x) + Math.abs(a.m.spot.y - e.y) <= 6);
-    expect(near.length).toBeGreaterThan(0);
+    // Dealt over all of Hoenn, the ones it draws may be a few towns away: this one is on
+    // ROUTE 110, and they come by RUSTURF TUNNEL and MAUVILLE.
+    const near = () => room.actors.filter((a) => a.bot && a.m.spot.map === e.map && Math.abs(a.m.spot.x - e.x) + Math.abs(a.m.spot.y - e.y) <= 6);
+    for (let f = 0; f < 60 * 150 && !near().length; f++) host.advance();
+    expect(near().length).toBeGreaterThan(0);
   });
 });
 
@@ -1373,19 +1375,23 @@ describe('Cam 10-30', () => {
     const me = host.join('ME', 0, undefined, 1000);
     host.lock();
     let pend: [number, number, number][] = [];
-    const fights: number[] = [];
-    for (let f = 0; f < 60 * 60 * 6; f++) {
+    const fights: number[] = [], left: number[] = [];
+    for (let f = 0; f < 60 * 60 * 12; f++) {
       host.input(me, f + 1, [0]);
       for (const [a, b] of pend.filter(([, , at]) => f >= at)) host.bots(me, a, b, a);
       pend = pend.filter(([, , at]) => f < at);
       for (const e of host.advance().events) {
-        if (e.type === 'bots') { pend.push([e.a, e.b, f + 600]); fights.push(f); }
+        if (e.type === 'bots') { pend.push([e.a, e.b, f + 600]); fights.push(f); left.push(r.results.entrants.length - r.results.fallen.length); }
         if (e.type === 'fight') host.end(me);
       }
     }
     // Seed 7 had three bot fights in the first two minutes and none for the next five.
+    // Dealt over all of Hoenn (Cam 11-01), the first meeting waits for the ring to start
+    // closing them in; from then on, while five or more are left after a fight, the next
+    // is never long coming (with three, the hunt: 'the last three').
     expect(fights.length).toBeGreaterThanOrEqual(5);
-    for (let i = 1; i < fights.length; i++) expect(fights[i] - fights[i - 1]).toBeLessThan(60 * 120);
+    expect(fights[0]).toBeLessThan(60 * 60 * 5);
+    for (let i = 1; i < fights.length; i++) if (left[i - 1] - 1 >= 5) expect(fights[i] - fights[i - 1], `after ${fights[i - 1]}`).toBeLessThan(60 * 150);
   });
 });
 
@@ -1882,4 +1888,34 @@ describe('the rod', () => {
     expect(room.step(new Map([[1, [KEY_SELECT]]]))).toEqual([]);
     expect(room.actor(1)!.m.bike).toBe(true);
   });
+});
+
+describe('where the ring closes', () => {
+  it("centres on any of Hoenn's outdoors, and deals its bots over all of it, as classic does (Cam, 11-01: always Oldale)", () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const maps = new Set(room.landed().map((s) => s.map));
+    // The events' and the bots' ground: past the woods, over the water, and only outdoors.
+    for (const m of ['MAP_RUSTBORO_CITY', 'MAP_ROUTE110', 'MAP_LILYCOVE_CITY', 'MAP_FORTREE_CITY']) expect(maps.has(m), m).toBe(true);
+    expect([...maps].every((m) => room.places.has(m) && !m.startsWith(SAFARI))).toBe(true);
+    const host = new Host(makeRoom(MAPS, PATCHES, 4242), 29, MAPS);
+    const dealt = new Set(host.room.actors.filter((a) => a.bot).map((a) => a.m.spot.map));
+    expect(dealt.size, [...dealt].join()).toBeGreaterThan(12);
+    // Sixteen matches' first rings, on land, and most of them away from the corner
+    // Littleroot starts in (classic's director.ts: any outdoor section, each as likely).
+    const corner = new Set(['MAP_LITTLEROOT_TOWN', 'MAP_ROUTE101', 'MAP_OLDALE_TOWN', 'MAP_ROUTE102', 'MAP_ROUTE103', 'MAP_PETALBURG_CITY', 'MAP_ROUTE104']);
+    let away = 0;
+    for (let s = 1; s <= 16; s++) {
+      const r = makeRoom(MAPS, PATCHES, (s * 2654435761) >>> 0);
+      const c = r.centre(0);
+      let best = '', d = Infinity;
+      for (const [id, p] of r.places) {
+        const m = r.maps.get(id)!;
+        const dd = Math.hypot(Math.max(p.gx - c.cx, 0, c.cx - (p.gx + m.w)), Math.max(p.gy - c.cy, 0, c.cy - (p.gy + m.h)));
+        if (dd < d) { d = dd; best = id; }
+      }
+      if (!corner.has(best)) away++;
+      expect(r.landing().has(`${best}:${Math.floor(c.cx - r.places.get(best)!.gx)}:${Math.floor(c.cy - r.places.get(best)!.gy)}`) || !!c.final, `${best} land`).toBe(true);
+    }
+    expect(away).toBeGreaterThan(8);
+  }, 120_000);
 });

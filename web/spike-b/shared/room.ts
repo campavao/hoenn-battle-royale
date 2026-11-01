@@ -989,20 +989,51 @@ export class Room {
   opening = 0;
 
   private centres = new Map<number, { cx: number; cy: number; far: number; final?: string }>();
-  /** A round's centre: a cell a trainer can stand on, from the seed, or one round in four
-   *  a final story's place (story.ts's FINAL_CHANCE: SKY PILLAR), which then holds that
-   *  story for the last event; and how far the farthest reachable cell is from it. */
+  private landedBy: Spot[][] | null = null;
+  /** Hoenn's outdoors with ground to land on, by map: where /classic/ centres its rings and
+   *  deals its bots and events (director.ts beginRing: any outdoor section, each as likely).
+   *  Cam, 11-01: the walk out of Littleroot kept every ring on Routes 101-104. */
+  private landByMap(): Spot[][] {
+    if (this.landedBy) return this.landedBy;
+    const by = new Map<string, Spot[]>();
+    for (const k of this.landing()) {
+      const [map, x, y] = k.split(':');
+      let l = by.get(map);
+      if (!l) by.set(map, (l = []));
+      l.push({ map, x: Number(x), y: Number(y) });
+    }
+    return (this.landedBy = [...by.keys()].sort().map((m) => by.get(m)!));
+  }
+
+  private landedAll: readonly Spot[] | null = null;
+  private landedMaps: Map<string, readonly Spot[]> | null = null;
+  /** Those cells, every map's: what the bots aim at in the ring (bots.ts). */
+  landed(): readonly Spot[] {
+    return (this.landedAll ??= this.landByMap().flat());
+  }
+
+  /** Those cells on one map. */
+  landedOn(map: string): readonly Spot[] {
+    return (this.landedMaps ??= new Map(this.landByMap().map((l) => [l[0].map, l]))).get(map) ?? [];
+  }
+
+  /** A round's centre: a cell of Hoenn's outdoors a trainer can land on, each map as likely
+   *  (landByMap), from the seed, or one round in four a final story's place (story.ts's
+   *  FINAL_CHANCE: SKY PILLAR), which then holds that story for the last event; and how far
+   *  the farthest of those cells is from it. */
   centre(round: number): { cx: number; cy: number; far: number; final?: string } {
     const hit = this.centres.get(round);
     if (hit) return hit;
-    const cells = this.reachable();
+    const byMap = this.landByMap();
+    const cells = byMap.flat();
     let h = Math.imul((this.seed ^ 0x51ed270b) >>> 0, 0x9e3779b1) ^ Math.imul(round + 1, 0x85ebca6b);
     h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12;
-    const c = cells[(h >>> 0) % cells.length];
+    const on = byMap[(h >>> 0) % byMap.length];
+    const c = on[(Math.imul(h, 0x27d4eb2d) >>> 0) % on.length];
     const p = this.places.get(c.map)!;
     let cx = p.gx + c.x + 0.5, cy = p.gy + c.y + 0.5;
-    // Only a final story whose place the walking trainers can stand near: a ring shut on
-    // open sea (SKY PILLAR's, while the deal is the mainland's) would fog every one of them.
+    // Only a final story with land near it: a ring shut on open sea (SKY PILLAR's on its
+    // own) would fog every one of them.
     const near = (x: number, y: number) => cells.some((s) => { const q = this.places.get(s.map)!; return Math.hypot(q.gx + s.x + 0.5 - x, q.gy + s.y + 0.5 - y) <= FINAL_REACH; });
     const at = (s: Story) => { const q = this.places.get(s.map), a = this.anchors.get(s.map); return q ? { x: q.gx + s.cells[0].x + 0.5, y: q.gy + s.cells[0].y + 0.5 } : a ? { x: a.gx, y: a.gy } : undefined; };
     const finals = STORIES.filter((s) => { const p = s.final && this.maps.has(s.map) ? at(s) : undefined; return p && near(p.x, p.y); });
@@ -1146,7 +1177,8 @@ export class Room {
     const free = (s: Spot) => this.world.cell(s.map, s.x, s.y) === 0 && !this.world.warpAt(s.map, s.x, s.y)
       && !this.groundAt(s.map, s.x, s.y) && !this.spillAt(s.map, s.x, s.y)
       && !this.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y);
-    const all = this.reachable().filter(free);
+    // Anywhere on Hoenn's land, as the ring is (landByMap).
+    const all = this.landByMap().flat().filter(free);
     const plane = (s: Spot) => { const p = this.places.get(s.map)!; return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy); };
     // The last event is the final ring's: its story, when the ring is centred on one.
     const final = n === EVENT_MAX - 1 ? STORIES.find((s) => s.id === this.centre(ring.round).final) : undefined;
@@ -1475,15 +1507,13 @@ export class Room {
     let state = (this.seed ^ Math.imul(this.results.round + 1, 0x2545f491) ^ Math.imul(a.id + 1, 0x9e3779b1) ^ this.tick) >>> 0 || 1;
     const rng = () => { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return (state >>> 0) / 4294967296; };
     const used = new Set(this.actors.map((o) => `${o.m.spot.map}:${o.m.spot.x}:${o.m.spot.y}`));
-    // A bot only where a trainer could walk to it: it has no SURF, and one dropped on an
-    // island or into a pocket could never be met nor walk into the ring (a trainer may
-    // land anywhere, islands too: Cam, 2026-10-20).
-    const reach = a.bot ? new Set(this.reachable().map((s) => `${s.map}:${s.x}:${s.y}`)) : null;
+    // A bot anywhere a trainer may land, as /classic/ deals them (Cam, 11-01: all of Hoenn,
+    // as classic): the rings are anywhere too, and a bot crosses water (stepFor).
     // A trainer only on ground joined to LANDING cells (Room.landing): no walled-in pocket.
     const land = this.landing();
     let landed = LANDED.get(land);
     if (!landed) LANDED.set(land, landed = new Set([...land].map((k) => k.slice(0, k.indexOf(':')))));
-    const maps = [...new Set(reach ? this.reachable().map((s) => s.map) : this.places.keys())].filter((m) => !m.startsWith(SAFARI) && landed.has(m)).sort();
+    const maps = [...this.places.keys()].filter((m) => !m.startsWith(SAFARI) && landed.has(m)).sort();
     for (let tries = 0; tries < 4; tries++) {
       const map = tries === 0 && want ? want : maps[Math.floor(rng() * maps.length)];
       const m = this.maps.get(map);
@@ -1491,7 +1521,6 @@ export class Room {
       const cells: Spot[] = [];
       for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
         if (this.world.cell(map, x, y) !== 0 || !land.has(`${map}:${x}:${y}`) || used.has(`${map}:${x}:${y}`) || this.groundAt(map, x, y) || this.spillAt(map, x, y)) continue;
-        if (reach && !reach.has(`${map}:${x}:${y}`)) continue;
         if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
         cells.push({ map, x, y });
       }
@@ -1658,7 +1687,7 @@ export class Room {
         // direction, no turn in place as the player has); a shut way, or a ledge
         // (wanderers never jump), it only faces.
         a.m.facing = a.m.moveDir = dir;
-        const r = this.stepFor(a)(a.m.spot, dir);
+        const r = this.stepFor(a, (bits & KEY_A) !== 0)(a.m.spot, dir);
         // A bag in its way (a trainer's who went out): it picks it up, as live bots take
         // the loot they come to, and walks on. Not a story's piece, which is a fight.
         if (!r && (bits & KEY_A)) {
@@ -1693,7 +1722,7 @@ export class Room {
       }
     }
     const before = a.m.strides;
-    tick(a.m, keysOf(bits), this.stepFor(a));
+    tick(a.m, keysOf(bits), this.stepFor(a, a.bot && (bits & KEY_A) !== 0));
     if (a.m.strides !== before) a.arriving = true;
     if (!a.m.action && !a.bot) {
       const c = a.cruise;
@@ -1829,7 +1858,7 @@ export class Room {
   /** Where `a` may step: the ROM's rules, a map this room has, no item ball or bag, and nobody
    *  standing there (a step's destination is the trainer's spot from its first frame, so
    *  two can't both walk into one cell). */
-  stepFor(a: Actor): StepFn {
+  stepFor(a: Actor, onWay = false): StepFn {
     const fn: StepFn = (from, dir) => {
       // A bot can go anywhere a team could (Kanto's bots cross water): a wanderer keeps
       // to land and off ledges all the same (Room.move).
@@ -1838,8 +1867,10 @@ export class Room {
       if (!r || !this.maps.has(r.to.map)) return null;
       // A townsperson stays out in the street, or in the Zone's (live's bots wander the
       // Safari's pool through the opening, brain.ts setTargets): no Zone map is a place
-      // of the plane, so the Zone's bots stood still (Cam 10-30).
-      if (a.bot && !this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) return null;
+      // of the plane, so the Zone's bots stood still (Cam 10-30). One on its way somewhere
+      // (bots.ts leg) goes in: PETALBURG WOODS, a cave or a gatehouse is the only way
+      // between some of Hoenn's outdoors.
+      if (a.bot && !onWay && !this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) return null;
       const t = r.to;
       // A REGI chamber's wall: shut until its story opened it (and in a match without one).
       if (r.warp && DOOR_MAPS.has(from.map) && from.y === DOOR_Y + 1 && t.y < DOOR_Y && !this.events.some((e) => e.map === from.map && e.opened)) return null;
