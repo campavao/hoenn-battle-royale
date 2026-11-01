@@ -270,6 +270,42 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it("KICK keeps them out: their address can't join that room again, in a match or not (relay server.js)", () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
+    try {
+      const at = (ip: string) => { const p = phone(); return { ...p, link: { ...p.link, ip } }; };
+      const a = at('1.1.1.1'), g = at('2.2.2.2'), g2 = at('2.2.2.2'), h = at('3.3.3.3');
+      const sa = svc.open(a.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      const sg = svc.open(g.link);
+      sg.onText(JSON.stringify({ t: 'join', name: 'gus', skin: 0, code }));
+      const gus = (g.got.at(-1) as unknown as { you: number }).you;
+      sa.onText(JSON.stringify({ t: 'kick', id: gus }));
+      expect(g.got.at(-1)).toEqual({ t: 'kicked' });
+      // Back from the same address, on a new socket too: told why, and not seated.
+      sg.onText(JSON.stringify({ t: 'join', name: 'gus', skin: 0, code }));
+      expect(g.got.at(-1)).toEqual({ t: 'no_room', code, removed: true });
+      svc.open(g2.link).onText(JSON.stringify({ t: 'join', name: 'gus2', skin: 0, code }));
+      expect(g2.got.at(-1)).toEqual({ t: 'no_room', code, removed: true });
+      // Anybody else still comes in, and gus can host a room of his own.
+      const sh = svc.open(h.link);
+      sh.onText(JSON.stringify({ t: 'join', name: 'hal', skin: 0, code }));
+      expect(h.got.at(-1)).toMatchObject({ t: 'room', code });
+      sg.onText(JSON.stringify({ t: 'join', name: 'gus', skin: 0, host: true }));
+      expect(g.got.at(-1)).toMatchObject({ t: 'room', members: [{ name: 'GUS' }] });
+      // In a match: the host's KICK takes hal out of it too.
+      sa.onText(JSON.stringify({ t: 'set', set: { bots: false } }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      expect(h.got.some((m) => m.t === 'hello')).toBe(true);
+      const hal = (h.got.find((m) => m.t === 'room') as unknown as { you: number }).you;
+      sa.onText(JSON.stringify({ t: 'kick', id: hal }));
+      expect(h.got.at(-1)).toEqual({ t: 'kicked' });
+      expect(svc.players).toBe(2);
+    } finally {
+      svc.stop();
+    }
+  });
   it("a trainer's career rides their seat, whole numbers or nothing", () => {
     const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
     try {

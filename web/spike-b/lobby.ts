@@ -306,6 +306,11 @@ export class Lobby {
     return this.inSheet && this.stage.active;
   }
 
+  /** The host's KICK from the match's sheet (the room screen's card has its own). */
+  kick(seat: number): void {
+    this.hooks.kick(seat);
+  }
+
   closeSheet(): void {
     if (!this.inSheet) return;
     this.inSheet = false;
@@ -500,7 +505,7 @@ export class Lobby {
       ] : null,
       card: (() => {
         const m = this.card === null ? undefined : r.members.find((x) => x.id === this.card);
-        return m ? { seat: m.id, skin: m.skin, lines: [{ label: 'NAME', value: m.name }, ...(m.rec ? cardFields({ name: m.name, skin: m.skin, wins: m.rec.wins, played: m.rec.played, best: m.rec.best }) : [])], canKick: isHost && !r.playing && m.id !== r.you } : null;
+        return m ? { seat: m.id, skin: m.skin, lines: [{ label: 'NAME', value: m.name }, ...(m.rec ? cardFields({ name: m.name, skin: m.skin, wins: m.rec.wins, played: m.rec.played, best: m.rec.best }) : [])], canKick: isHost && m.id !== r.you } : null;
       })(),
       onStart: () => this.hooks.start(),
       onLeave: () => this.hooks.leave(),

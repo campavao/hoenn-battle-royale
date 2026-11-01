@@ -92,6 +92,7 @@ export function createWorld({ log = () => {}, now = () => performance.now() } = 
               ws.send(text);
             },
             close,
+            ip,
           });
           for (const t of early.splice(0)) session.onText(t);
         }, (err) => {

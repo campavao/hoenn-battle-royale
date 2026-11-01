@@ -127,7 +127,7 @@ export type WorldDown =
   | { t: 'kicked' }
   /** No way into the room by that code: none (no flag), every seat taken (`full`), its
    *  passcode wrong (`pass`), or on another patch (`rom`). */
-  | { t: 'no_room'; code: string; pass?: boolean; rom?: boolean; full?: boolean }
+  | { t: 'no_room'; code: string; pass?: boolean; rom?: boolean; full?: boolean; removed?: boolean }
   /** A match: my trainer's id in it and the Room as it starts (or as it is, joining late). */
   | { t: 'hello'; id: number; state: RoomState; key?: string }
   | { t: 'state'; state: RoomState }
