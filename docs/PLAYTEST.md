@@ -26,6 +26,11 @@ transcripts were made from them; a frame at the time is the evidence for each li
 
 **Fixed since:**
 
+* **BAD EGG, with a changed ball and POKeRUS** (1609 8:10). A rung's lift runs over several
+  frames on the agbcc build, and the page paused inside it and copied a mon mid-write.
+  Reproduced, fixed in #258, live in v0.3.70 (rom 0b73f11). The corrupt item (12:32) was
+  not reproduced on its own: a broken mon's held item is the likely source, so look again
+  if one turns up after this.
 * **The safe zone was always Oldale** (1552 7:02). The ring's centre, the events and the
   bot deal came from the cells a walk out of Littleroot reaches on foot. Now any of
   Hoenn's outdoors, as classic (#254, Cam: "All of Hoenn, as classic").
@@ -51,11 +56,6 @@ transcripts were made from them; a frame at the time is the evidence for each li
 
 **Open, the second video (16:09):**
 
-* **BAD EGG, and items and party corrupted. Serious** (8:10, 12:32). A party mon turned
-  into a BAD EGG and a ball changed. Later a corrupt item showed up, and the bag took 4 s
-  and then did not open (12:16). Cam suspects battles. First look: what writes the party
-  or bag outside the ROM's own code (the page's party sync, a gift or trade, a
-  released-mon ball picked up), and checksum the party after each.
 * **Teleporting: the map did not match where he stood** (3:45).
 * **The title screen's scrolling background should follow the game's path** (0:03):
   Littleroot, 101, Oldale, 103, Petalburg, the woods, and so on, with only straight
