@@ -497,7 +497,9 @@ describe('item balls', () => {
     const outdoors = g.filter((b) => one.places.has(b.map));
     for (const b of outdoors) expect(open.has(`${b.map}:${b.x}:${b.y}`), `${b.map}:${b.x}:${b.y}`).toBe(true);
     for (const b of g) {
-      expect(one.world.cell(b.map, b.x, b.y)).toBe(0);
+      // Outdoors on the ground; a house's cache on its table, as br_balls.c lays it (a
+      // wall cell, taken from the cell in front).
+      expect(one.places.has(b.map) ? [0] : [0, 1], `${b.map}:${b.x}:${b.y}`).toContain(one.world.cell(b.map, b.x, b.y));
       expect(one.patchesOn(b.map).some((q) => q.x === b.x && q.y === b.y)).toBe(false);
       expect(b.item).toBeGreaterThan(0);
     }
@@ -1622,6 +1624,30 @@ describe('after the last trainer is out', () => {
     expect(over(host.room)).toBe(true);
     expect(host.room.results.winner).toBeGreaterThan(0);
     expect(host.room.results.fallen.some((x) => x.bot && x.by)).toBe(true); // a bot beat a bot
+  });
+});
+
+describe('the balls a match deals (br_balls.c)', () => {
+  // Cam's 10-31 play: "no items in buildings" and "not enough TMs".
+  it('puts a cache in most houses, on the table where br_balls.c lays it', () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const indoors = [...room.ground().values()].filter((b) => !room.places.has(b.map) && !b.gift && !b.map.startsWith(SAFARI));
+    // br_balls.c's sRooms has 139 caches on this world's floors; 54 were dealt when a
+    // table cell (class 1) turned one away.
+    expect(indoors.length, `${indoors.length} balls indoors`).toBeGreaterThanOrEqual(120);
+  });
+  it('makes a quarter of the ground balls machines, as BR_BALLS_TM_IN is 4', () => {
+    let tms = 0, all = 0;
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const room = makeRoom(MAPS, PATCHES, seed);
+      for (const b of room.ground().values()) {
+        if (!room.places.has(b.map) || b.gift || b.map.startsWith(SAFARI)) continue;
+        all++;
+        if (b.item >= 289 && b.item <= 346) tms++;
+      }
+    }
+    expect(tms / all, `${tms} of ${all}`).toBeGreaterThan(0.2);
+    expect(tms / all, `${tms} of ${all}`).toBeLessThan(0.32);
   });
 });
 

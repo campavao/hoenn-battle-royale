@@ -38,7 +38,7 @@ import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches
 import { blueTm, scatterItem } from '../../src/match/scatter';
 import roomsJson from '../data/rooms.json';
 import { GIFTS } from '../../src/match/gifts';
-import { cableOrDoll, type BagRows } from './items';
+import { cableOrDoll, isTm, type BagRows } from './items';
 import { SIGHT_RANGE, eitherSees, type Facing } from '../../src/bots/sight';
 import { SAFARI_CELLS } from '../../src/match/safari';
 import { RING_RADII } from '../../src/match/clock';
@@ -362,6 +362,16 @@ const CHEST_KEY = 4 << 20;
 /** Item balls a map gets: the match deals two a section, and a spike map is two or three
  *  of them (Cam, POK-354: "more items all over the place"). */
 export const GROUND_PER_MAP = 6;
+/** A stream of its own for one cell's roll: xorshift off the seed, the map's name and the
+ *  cell, the same on every page. */
+function cellRng(seed: number, map: string, x: number, y: number): () => number {
+  let s = (seed ^ Math.imul(x + 1, 0x9e3779b1) ^ Math.imul(y + 1, 0x85ebca6b)) >>> 0;
+  for (let i = 0; i < map.length; i++) s = Math.imul(s ^ map.charCodeAt(i), 0x01000193) >>> 0;
+  s = s || 1;
+  return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 4294967296; };
+}
+/** br_balls.c BR_BALLS_TM_IN: one ground ball in this many is a machine. */
+export const BALLS_TM_IN = 4;
 
 /** A change that is not a key: applied at the start of its frame, before anybody moves. */
 export type Command =
@@ -783,8 +793,16 @@ export class Room {
         !(id === 'MAP_LITTLEROOT_TOWN' && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
       for (let i = 0; i < GROUND_PER_MAP && cells.length; i++) {
         const c = cells.splice(Math.floor(rng() * cells.length), 1)[0];
-        // A machine is taught there and then, as a match's is (rom.ts teach).
-        const item = cableOrDoll(scatterItem(rng), rng());
+        // A machine one ball in BALLS_TM_IN, as br_balls.c's BrBalls_Deal makes them (Cam,
+        // 10-31: "not enough TMs"; the table alone gave one in ten); the rest off the
+        // table without its machines, a cable or a doll among them. A machine is taught
+        // there and then, as a match's is (rom.ts teach).
+        // The roll is the ball's own (seed and cell, as BrBalls_Deal mixes the seed with
+        // the ball's map and id), so the match's stream draws what it always did.
+        let item = cableOrDoll(scatterItem(rng), rng());
+        const own = cellRng(this.seed ^ 0xba11, id, c.x, c.y);
+        if (Math.floor(own() * BALLS_TM_IN) === 0) item = blueTm(own);
+        else while (isTm(item)) item = cableOrDoll(scatterItem(own), own());
         out.set(`${id}:${c.x}:${c.y}`, { key: ++n, map: id, x: c.x, y: c.y, item });
       }
     }
@@ -801,11 +819,17 @@ export class Room {
     for (const [map, x, y, house, cache] of ROOMS) {
       if (!cache) continue;
       // A building this world goes into (makeRoom's interiors), on its floor.
-      if (!this.maps.has(map) || this.places.has(map) || this.world.cell(map, x, y) !== 0 || out.has(`${map}:${x}:${y}`)) continue;
+      // On its floor or on the table br_balls.c lays it on (a wall cell, taken from the
+      // cell in front, as a counter's clerk is): turning tables away left five houses in
+      // six with nothing (Cam, 10-31: "no items in buildings").
+      if (!this.maps.has(map) || this.places.has(map) || this.world.cell(map, x, y) > 1 || out.has(`${map}:${x}:${y}`)) continue;
       // The match keeps its cells off the wild patches (BrBalls_Spot); here the patch has it.
       if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
-      const gold = Math.floor(rng() * (house ? 3 : 8)) === 0;
-      out.set(`${map}:${x}:${y}`, { key: ++n, map, x, y, item: gold ? GOLD[Math.floor(rng() * GOLD.length)] : blueTm(rng) });
+      // A table's own roll, so the floors' draws (and all the match deals after them) are
+      // what they always were.
+      const r = this.world.cell(map, x, y) === 0 ? rng : cellRng(this.seed ^ 0x7ab1e, map, x, y);
+      const gold = Math.floor(r() * (house ? 3 : 8)) === 0;
+      out.set(`${map}:${x}:${y}`, { key: ++n, map, x, y, item: gold ? GOLD[Math.floor(r() * GOLD.length)] : blueTm(r) });
     }
     // A gift-giver in every town and city (gifts.ts, Cam 2026-10-13: "some gift giving
     // NPCs"): a person holding one held item, standing on a free cell. A at him takes it,
