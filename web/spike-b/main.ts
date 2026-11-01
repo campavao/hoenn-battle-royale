@@ -471,6 +471,26 @@ let giving = false;
 function say(text: string): void {
   msgBox.show(text);
   sayUntil = performance.now() + 2500;
+  reached = '';
+}
+
+/** What lies where I face, or under me, held in the box for as long as I stand there, as
+ *  the live match holds it (br_loot.c HoldLineForReach, "{A} Take POTION"; Cam, 10-31:
+ *  "doesn't show item description when I'm facing it"); '' for nothing to take. */
+let reached = '';
+function reachLine(): string {
+  if (!art || isOut || spectating || battle || swapping || asking) return '';
+  const a = link.mine();
+  if (!a) return '';
+  const { map, x, y } = a.m.spot;
+  const d = ({ 1: [0, 1], 2: [0, -1], 3: [-1, 0], 4: [1, 0] } as Record<number, number[]>)[a.m.facing] ?? [0, 0];
+  for (const [cx, cy] of [[x + d[0], y + d[1]], [x, y]]) {
+    const g = link.room.groundAt(map, cx, cy);
+    if (g && !g.gift) return `A: Take ${art.itemName(g.item) || 'the item'}`;
+    const s = link.room.spillAt(map, cx, cy);
+    if (s && !s.person) return s.bag.mons?.length && !s.bag.items.length && !s.bag.money ? `A: Take the POKéMON` : `A: Take ${s.name}'s BAG`;
+  }
+  return '';
 }
 
 function giveNext(): void {
@@ -2045,9 +2065,15 @@ function hudFrame(): void {
   const now = performance.now();
   // A battle's picture has the top of the screen: the news waits for the field, as the
   // live match's ticker does (br_hud.c drops its windows off the overworld).
+  let reach = '';
   if (battleEl.classList.contains('on')) {
-    if (tickUntil) { tickUntil = 0; msgBox.hide(); }
+    if (tickUntil || reached) { tickUntil = 0; reached = ''; msgBox.hide(); }
+  } else if (!sayUntil && (reach = reachLine())) {
+    // A held line outranks the news (the live match's BrHud_Hold): the ticker waits.
+    if (reach !== reached) { msgBox.show(reach); reached = reach; }
+    tickUntil = 0;
   } else if (!sayUntil && now >= tickUntil) {
+    if (reached) { reached = ''; msgBox.hide(); }
     const next = ticks.shift();
     if (next) {
       msgBox.show(next.text, next.alert);
