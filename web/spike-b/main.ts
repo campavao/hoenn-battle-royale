@@ -19,13 +19,13 @@ import { WorldIndex } from '../src/bots/hoenn';
 import type { PeekBag } from './shared/wire';
 import { lineAt, voiceFor } from '../src/bots/lines';
 import type { PackedMon } from '../src/net/wire';
-import { isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
+import { FIELD_CUT, FIELD_STRENGTH, isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
 import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { battleItems } from '../src/bots/bag';
 import { DIR_EAST } from './sim';
-import { ATTENDANT, BOATS, DOCKS, MOORINGS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, emptyBag, interiors, makeRoom, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
+import { ATTENDANT, BOATS, DOCKS, MOORINGS, islandMaps, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, emptyBag, interiors, makeRoom, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
@@ -66,7 +66,7 @@ import { BATTLE_TYPE_TRAINER, CARD_H, SidesView } from '../src/ui/sides';
 import { BAG_POSITION_POCKET, readBattleBag } from '../src/ui/bag';
 import { MENU_ACTION, TouchLayer } from '../src/touch';
 import { HUD } from '../src/net/hud';
-import { ITEM_MACH_BIKE, PhoneHud, fogPhase, signFor } from '../src/ui/phonehud';
+import { ITEM_MACH_BIKE, PhoneHud, fieldMoves, fogPhase, signFor, type FieldMove } from '../src/ui/phonehud';
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
 import { cardFields } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
@@ -1809,9 +1809,28 @@ function wirePhoneHud(): void {
       lead: mine && fogged ? rom?.leadHp() || null : null,
       ctx: { label: me.m.bike ? 'WALK' : 'BIKE', item: ITEM_MACH_BIKE, enabled: me.m.bike || !!link.room.stepFor(me).cycling?.(me.m.spot) },
       party: rom?.partyCount() ?? 0,
-      moves: [],
+      moves: mine && !mine.battling ? fieldChips(mine) : [],
     });
   }, 100);
+}
+
+/** gBrHmView's bits (include/br/br_hm.h): HM n+1's move at bit n. */
+const HM_CUT = 1 << 0, HM_SURF = 1 << 2, HM_STRENGTH = 1 << 3;
+
+/** The phone HUD's field moves (HBR-78) as the page knows them: the team's CUT, SURF and
+ *  STRENGTH (the actor's field bits, rom.field()), each lit when the cell ahead is what
+ *  it works on. /classic/ reads gBrHmView, which this page's hidden ROM never fills for
+ *  the page's own world. */
+function fieldChips(a: Actor): FieldMove[] {
+  const bits = a.field ?? 0;
+  const can = (bits & FIELD_CUT ? HM_CUT : 0) | (bits & FIELD_SURF ? HM_SURF : 0) | (bits & FIELD_STRENGTH ? HM_STRENGTH : 0);
+  if (!can) return [];
+  const { map, x, y } = a.m.spot;
+  const d = ({ 1: [0, 1], 2: [0, -1], 3: [-1, 0], 4: [1, 0] } as Record<number, number[]>)[a.m.facing] ?? [0, 0];
+  const ahead = classAt({ map, x: x + d[0], y: y + d[1] });
+  const surfing = classAt(a.m.spot) === CLASS_WATER;
+  const ready = (ahead === CLASS_CUT ? HM_CUT : 0) | (ahead === CLASS_WATER && !surfing ? HM_SURF : 0) | (ahead === CLASS_BOULDER ? HM_STRENGTH : 0);
+  return fieldMoves(can, ready & can);
 }
 
 /** A phone's battle menu (the live game's ui/battlemenu.ts): FIGHT, BAG, POKeMON, RUN
