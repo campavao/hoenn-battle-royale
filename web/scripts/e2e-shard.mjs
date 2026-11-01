@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // One CI shard of the e2e suite, cut by time instead of by count.
 //
-//     node scripts/e2e-shard.mjs 2/4     # -> e2e/lobby.spec.ts:18 e2e/play-again.spec.ts:32 ...
+//     node scripts/e2e-shard.mjs 2/4     # -> e2e/spikeb.spec.ts:38 e2e/spikeb-two.spec.ts:9:32 ...
 //
 // The suite runs one test at a time (playwright.config.ts: one ROM file, fixed ports),
 // and one at a time it was 44 of the rom job's 52 minutes. Each shard is its own runner
 // with its own ports and its own ROM, so four of them run side by side. Playwright's
 // own --shard cuts by test count in file order, and these tests run from a second to
-// four minutes: lobby.spec.ts's fourteen tests take less than one of play-again's four.
+// four minutes: a quick spec's few tests take less than one hosted match.
 // So this lists the suite, gives every test its file's share of FILE_SECONDS, and deals
 // the heaviest first to the lightest shard. What it prints is `file:line` filters for
 // `playwright test`. A test it does not know gets UNKNOWN_SECONDS: a new spec still runs,
@@ -22,59 +22,21 @@ import { dirname, resolve } from 'node:path';
 // it when a shard runs much longer than the others: the numbers are in the e2e step's log,
 // one line per test. e2e-shard.test.ts fails a spec file that is not in it.
 export const FILE_SECONDS = {
-  'battle-menu.spec.ts': 136,
-  'boot.spec.ts': 5,
-  'bots.spec.ts': 4,
-  'chunk-reload.spec.ts': 8,
-  'curtain.spec.ts': 12,
-  'double-target.spec.ts': 34,
-  'feedback.spec.ts': 8,
-  'howto.spec.ts': 4,
-  'lobby.spec.ts': 119,
-  'match.spec.ts': 201,
-  'menu-dim.spec.ts': 33,
-  'migration.spec.ts': 165,
-  'out-watch.spec.ts': 144,
-  'pacing.spec.ts': 78,
-  'passcode.spec.ts': 8,
   'patch.spec.ts': 1,
-  'people-past-box.spec.ts': 19,
-  'perf.spec.ts': 60,
-  'phone-hud.spec.ts': 14,
-  'phone.spec.ts': 21,
-  'picture.spec.ts': 202,
-  'play-again.spec.ts': 1161,
-  'play.spec.ts': 300,
-  'pvp-items.spec.ts': 72,
   'pwa.spec.ts': 4,
   'recorder.spec.ts': 60,
   'rooms-page.spec.ts': 15,
-  'refresh-rate.spec.ts': 24,
-  'reload-rejoin.spec.ts': 77,
   'results-scroll.spec.ts': 5,
-  'solo.spec.ts': 243,
-  'speaker.spec.ts': 21,
-  'spectate-dpad.spec.ts': 14,
-  'spectate.spec.ts': 72,
   // Measured locally (2026-10-31), not yet four CI runs: seven tests, a whole hosted match
   // and a Safari catch among them.
+  'spikeb-menu.spec.ts': 90,
+  'spikeb-room.spec.ts': 90,
   'spikeb.spec.ts': 660,
   'spikeb-two.spec.ts': 120,
   'spikeb-passcode.spec.ts': 40,
-  'stall.spec.ts': 33,
-  'tap.spec.ts': 7,
-  'walk-and-see.spec.ts': 14,
-  'watch-locked.spec.ts': 16,
-  'watch.spec.ts': 57,
-  'world-anims.spec.ts': 31,
-  'world-far.spec.ts': 31,
-  'world-moves.spec.ts': 10,
-  'world-people.spec.ts': 69,
-  'world.spec.ts': 110,
   // Skipped in CI: these need the deployed site, or HBR_SOAK.
   'live-room.spec.ts': 0,
   'live.spec.ts': 0,
-  'soak.spec.ts': 0,
 };
 export const UNKNOWN_SECONDS = 60;
 
