@@ -19,7 +19,7 @@ export const botSkin = (n: number) => 4 + (n % 12);
 /** `wait`: frames left to stand; `dir`: the way it went last. A bot with somewhere to be
  *  (inside the coming ring, or at an event) walks `steps` there; `plan` is the round and
  *  phase it last chose for, and `stuck` the frames it has pressed without moving. */
-export interface Brain { rng: number; wait: number; dir: number; plan?: string; goal?: Spot | null; steps?: { dir: SeamDir; to: Spot }[]; stuck?: number; legs?: number }
+export interface Brain { rng: number; wait: number; dir: number; plan?: string; goal?: Spot | null; steps?: { dir: SeamDir; to: Spot }[]; stuck?: number; legs?: number; avoid?: Set<number> }
 
 // B held: a match runs unless B is held (br_boot.c / field_player_avatar.c), and a
 // townsperson walks.
@@ -120,7 +120,7 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
   }
   const ev = room.events[room.events.length - 1];
   if (ev && room.spills.has(ev.key) && !room.picked.has(ev.key) && rand(b) < 1 / 3 && !room.inFog({ map: ev.map, x: ev.x, y: ev.y })) {
-    const near = room.reachable().filter((s) => s.map === ev.map && Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
+    const near = room.landed().filter((s) => s.map === ev.map && Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
     if (near.length) return near[Math.floor(rand(b) * near.length)];
   }
   const cells = insideNext(room);
@@ -130,18 +130,27 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
   const x = p.gx + a.m.spot.x, y = p.gy + a.m.spot.y;
   // The inside map fewest crossings away on foot (an island's bot stays), then its cell
   // nearest the bot.
+  // One of those within a few steps of the nearest: the bots outside, all aimed at the
+  // one cell, queued for it in the fog.
   const hops = new Map<string, number | undefined>();
-  let best: Spot | null = null, bestH = Infinity, bestD = Infinity;
+  const near: { s: Spot; h: number; d: number }[] = [];
+  let bestH = Infinity, bestD = Infinity;
   for (const s of cells) {
     if (!hops.has(s.map)) hops.set(s.map, room.world.hops(a.m.spot.map, s.map, true, true));
     const h = hops.get(s.map);
     if (h === undefined || h > bestH) continue;
     const q = room.places.get(s.map)!;
     const d = Math.abs(q.gx + s.x - x) + Math.abs(q.gy + s.y - y);
-    if (h < bestH || d < bestD) { bestH = h; bestD = d; best = s; }
+    if (h < bestH) { bestH = h; bestD = d; near.length = 0; }
+    else if (d < bestD) bestD = d;
+    if (d <= bestD + SPREAD) near.push({ s, h, d });
   }
-  return best;
+  const pool = near.filter((n) => n.h === bestH && n.d <= bestD + SPREAD);
+  return pool.length ? pool[Math.floor(rand(b) * pool.length)].s : null;
 }
+
+/** goal: how much further than the nearest cell inside the ring a bot may aim. */
+const SPREAD = 6;
 
 /** Somewhere to walk to inside the ring (brain.ts's wander: a cell of the landing pool,
  *  this map's own first, else anywhere in it). Live's bots are always on their way
@@ -150,19 +159,25 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
 function wander(room: Room, a: Actor, b: Brain): Spot | null {
   const ring = room.ring();
   if (ring.safari) return null;
-  const inside = room.reachable().filter((s) => !room.inFog(s, ring));
+  // The heart of the ring it is closing to: a wander out to its edge is a walk back into
+  // the fog, and bots dealt all over Hoenn that keep to its rim never meet.
+  const next = ring.next === undefined || ring.next < 0 ? ring.r : ring.next;
+  const to = next === Infinity ? ring : { ...ring, r: Math.max(next / 2, 1.5) };
+  const inside = room.landed().filter((s) => !room.inFog(s, to));
   const here = inside.filter((s) => s.map === a.m.spot.map);
   const pool = here.length && rand(b) < 0.5 ? here : inside;
   return pool.length ? pool[Math.floor(rand(b) * pool.length)] : null;
 }
 
-/** The next leg towards `to`: there on its own map, or over to the next outdoor map on
- *  the way (World.nextHops: a route across Hoenn is too long for one search). */
-function leg(room: Room, from: Spot, to: Spot): Path | null {
-  if (from.map === to.map) return findPath(room.world, from, to, 6000, true, true);
-  const hops = room.world.nextHops(from.map, to.map, true, true);
-  const hop = hops.find((m) => room.places.has(m));
-  return hop ? findPathToAny(room.world, from, room.world.entryCells(from.map, hop, true, true), 6000, true, true) : null;
+/** The next leg towards `to`: there, when it is in reach on this map, or the first
+ *  crossing on the way, region by region (World.firstCrossing, the live match's own): a
+ *  map's halves can be joined only through another, as Route 104's are through PETALBURG
+ *  WOODS, and a route across Hoenn is too long for one search. */
+function leg(room: Room, from: Spot, to: Spot, avoid?: ReadonlySet<number>): Path | null {
+  const w = room.world;
+  if (from.map === to.map && w.reachOnMap(from, true, true).cell(to.x, to.y)) return findPath(w, from, to, 6000, true, true, avoid);
+  const over = w.firstCrossing(from, to.map, true, true, (r) => r.cell(to.x, to.y));
+  return over?.length ? findPathToAny(w, from, over, 6000, true, true, avoid) : null;
 }
 
 /** brain.ts HUNT_AT: under this many still standing, the hunt. */
@@ -197,10 +212,11 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
     b.goal = goal(room, a, b);
     b.steps = undefined;
     b.legs = 0;
+    b.avoid = undefined;
   }
   // Between legs, on its own frame: the next one, until it is there (or has tried enough).
   if (b.goal && !b.steps?.length && (room.tick + a.id * 7) % 30 === 0) {
-    const path = !sameSpot(a.m.spot, b.goal) && (b.legs = (b.legs ?? 0) + 1) <= 24 ? leg(room, a.m.spot, b.goal) : null;
+    const path = !sameSpot(a.m.spot, b.goal) && (b.legs = (b.legs ?? 0) + 1) <= 24 ? leg(room, a.m.spot, b.goal, b.avoid) : null;
     b.steps = path?.found ? path.steps : undefined;
     // A hunt ends beside its quarry, in its eyeline, not on it.
     const end = b.steps?.[b.steps.length - 1]?.to;
@@ -224,7 +240,15 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
     // A way the room will not let it take (a ledge, a door, somebody standing there):
     // a moment's wait, then it gives the walk up for this phase.
     // Somebody in the way: a new leg round them, from its next turn.
-    else if ((b.stuck = (b.stuck ?? 0) + 1) > 90) b.steps = undefined;
+    // The world's routes know the ground, not what stands on it: a gift's ball (which a
+    // bot leaves for the trainers), a person. The cell it gave up at is gone round from
+    // then on, until it has somewhere new to be: Oldale's ball at the north exit held a
+    // hunter there for the rest of the match.
+    else if ((b.stuck = (b.stuck ?? 0) + 1) > 90) {
+      const k = room.world.key(b.steps[0].to);
+      if (k >= 0) (b.avoid ??= new Set()).add(k);
+      b.steps = undefined;
+    }
     const s = b.steps?.[0];
     // A held too: a bot on its way may jump a ledge (Room.move), a wanderer never does.
     if (s) return (b.stuck ?? 0) % 30 === 1 || b.stuck === 0 ? KEY_OF[DIR_OF[s.dir]] | KEY_A : 0;
@@ -255,10 +279,10 @@ export function botSpawns(room: Room, maps: readonly WorldMap[], count: number):
     out.push({ name, skin, spot, facing, brain: { rng: (n * 2654435761) >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
   };
   for (const [x, y] of [[7, 12], [13, 13], [11, 16]].slice(0, count)) add({ map: 'MAP_LITTLEROOT_TOWN', x, y }, 1, botSkin(out.length * 7 + 1));
-  // Only where a trainer could walk to them from the truck: a bot dealt into a pocket
-  // (north of the woods, a fenced corner, an island) could never be met, nor walk into
-  // the ring, and only ever went out to the fog.
-  const cells = room.reachable().filter((s) => {
+  // Anywhere a trainer may land, as the live match deals them (bots/host.ts: its spawns
+  // are its targets): the ring closes anywhere in Hoenn (Room.centre), and a bot SURFs
+  // and CUTs its way to it, region by region (leg).
+  const cells = room.landed().filter((s) => {
     const m = grids.get(s.map);
     const c = m?.[s.y * room.maps.get(s.map)!.w + s.x];
     return m && (c === 0 || c === 7) && !room.groundAt(s.map, s.x, s.y) &&

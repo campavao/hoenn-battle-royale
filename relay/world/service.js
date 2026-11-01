@@ -1052,7 +1052,7 @@ var World = class {
     const origin = this.regionOf(start, surf, cut);
     const left = (id) => this.hops(this.ids[this.regionList[id].map], goal2, surf, cut);
     const h0 = left(origin);
-    if (h0 === void 0 || h0 === 0) return void 0;
+    if (h0 === void 0 || h0 === 0 && (!arrive || arrive(this.flooded(origin, surf, cut).reach))) return void 0;
     const cost = /* @__PURE__ */ new Map([[origin, 0]]);
     const via = /* @__PURE__ */ new Map();
     const open = [{ id: origin, f: h0 }];
@@ -2878,18 +2878,41 @@ var Room = class {
   /** Frames of Safari each round opens with (SAFARI); 0, none (a test's room). */
   opening = 0;
   centres = /* @__PURE__ */ new Map();
-  /** A round's centre: a cell a trainer can stand on, from the seed, or one round in four
-   *  a final story's place (story.ts's FINAL_CHANCE: SKY PILLAR), which then holds that
-   *  story for the last event; and how far the farthest reachable cell is from it. */
+  landedBy = null;
+  /** Hoenn's outdoors with ground to land on, by map: where /classic/ centres its rings and
+   *  deals its bots and events (director.ts beginRing: any outdoor section, each as likely).
+   *  Cam, 11-01: the walk out of Littleroot kept every ring on Routes 101-104. */
+  landByMap() {
+    if (this.landedBy) return this.landedBy;
+    const by = /* @__PURE__ */ new Map();
+    for (const k of this.landing()) {
+      const [map, x, y] = k.split(":");
+      let l = by.get(map);
+      if (!l) by.set(map, l = []);
+      l.push({ map, x: Number(x), y: Number(y) });
+    }
+    return this.landedBy = [...by.keys()].sort().map((m) => by.get(m));
+  }
+  landedAll = null;
+  /** Those cells, every map's: what the bots aim at in the ring (bots.ts). */
+  landed() {
+    return this.landedAll ??= this.landByMap().flat();
+  }
+  /** A round's centre: a cell of Hoenn's outdoors a trainer can land on, each map as likely
+   *  (landByMap), from the seed, or one round in four a final story's place (story.ts's
+   *  FINAL_CHANCE: SKY PILLAR), which then holds that story for the last event; and how far
+   *  the farthest of those cells is from it. */
   centre(round) {
     const hit = this.centres.get(round);
     if (hit) return hit;
-    const cells = this.reachable();
+    const byMap = this.landByMap();
+    const cells = byMap.flat();
     let h = Math.imul((this.seed ^ 1374496523) >>> 0, 2654435761) ^ Math.imul(round + 1, 2246822507);
     h ^= h >>> 15;
     h = Math.imul(h, 739982445);
     h ^= h >>> 12;
-    const c = cells[(h >>> 0) % cells.length];
+    const on = byMap[(h >>> 0) % byMap.length];
+    const c = on[(Math.imul(h, 668265261) >>> 0) % on.length];
     const p = this.places.get(c.map);
     let cx = p.gx + c.x + 0.5, cy = p.gy + c.y + 0.5;
     const near = (x, y) => cells.some((s) => {
@@ -3029,7 +3052,7 @@ var Room = class {
       return (state >>> 0) / 4294967296;
     };
     const free = (s) => this.world.cell(s.map, s.x, s.y) === 0 && !this.world.warpAt(s.map, s.x, s.y) && !this.groundAt(s.map, s.x, s.y) && !this.spillAt(s.map, s.x, s.y) && !this.actors.some((a) => a.m.spot.map === s.map && a.m.spot.x === s.x && a.m.spot.y === s.y);
-    const all = this.reachable().filter(free);
+    const all = this.landByMap().flat().filter(free);
     const plane = (s) => {
       const p = this.places.get(s.map);
       return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy);
@@ -3359,11 +3382,10 @@ var Room = class {
       return (state >>> 0) / 4294967296;
     };
     const used = new Set(this.actors.map((o) => `${o.m.spot.map}:${o.m.spot.x}:${o.m.spot.y}`));
-    const reach = a.bot ? new Set(this.reachable().map((s) => `${s.map}:${s.x}:${s.y}`)) : null;
     const land = this.landing();
     let landed = LANDED.get(land);
     if (!landed) LANDED.set(land, landed = new Set([...land].map((k) => k.slice(0, k.indexOf(":")))));
-    const maps = [...new Set(reach ? this.reachable().map((s) => s.map) : this.places.keys())].filter((m) => !m.startsWith(SAFARI) && landed.has(m)).sort();
+    const maps = [...this.places.keys()].filter((m) => !m.startsWith(SAFARI) && landed.has(m)).sort();
     for (let tries = 0; tries < 4; tries++) {
       const map = tries === 0 && want ? want : maps[Math.floor(rng() * maps.length)];
       const m = this.maps.get(map);
@@ -3371,7 +3393,6 @@ var Room = class {
       const cells = [];
       for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
         if (this.world.cell(map, x, y) !== 0 || !land.has(`${map}:${x}:${y}`) || used.has(`${map}:${x}:${y}`) || this.groundAt(map, x, y) || this.spillAt(map, x, y)) continue;
-        if (reach && !reach.has(`${map}:${x}:${y}`)) continue;
         if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
         cells.push({ map, x, y });
       }
@@ -3543,7 +3564,7 @@ var Room = class {
       const dir = dirOf(keysOf(bits));
       if (dir) {
         a.m.facing = a.m.moveDir = dir;
-        const r = this.stepFor(a)(a.m.spot, dir);
+        const r = this.stepFor(a, (bits & KEY_A) !== 0)(a.m.spot, dir);
         if (!r && bits & KEY_A) {
           const [x, y] = this.ahead(a);
           const g = this.groundAt(a.m.spot.map, x, y);
@@ -3577,7 +3598,7 @@ var Room = class {
       }
     }
     const before = a.m.strides;
-    tick(a.m, keysOf(bits), this.stepFor(a));
+    tick(a.m, keysOf(bits), this.stepFor(a, a.bot && (bits & KEY_A) !== 0));
     if (a.m.strides !== before) a.arriving = true;
     if (!a.m.action && !a.bot) {
       const c = a.cruise;
@@ -3698,12 +3719,12 @@ var Room = class {
   /** Where `a` may step: the ROM's rules, a map this room has, no item ball or bag, and nobody
    *  standing there (a step's destination is the trainer's spot from its first frame, so
    *  two can't both walk into one cell). */
-  stepFor(a) {
+  stepFor(a, onWay = false) {
     const fn = (from, dir) => {
       const bits = a.bot ? 7 : a.field ?? 0;
       const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir) : this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
-      if (a.bot && !this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) return null;
+      if (a.bot && !onWay && !this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) return null;
       const t = r.to;
       if (r.warp && DOOR_MAPS.has(from.map) && from.y === DOOR_Y + 1 && t.y < DOOR_Y && !this.events.some((e) => e.map === from.map && e.opened)) return null;
       const bag = this.spillAt(t.map, t.x, t.y);
@@ -4005,22 +4026,22 @@ function goal(room, a, b) {
   }
   if (hunting(room)) {
     const p2 = room.places.get(a.m.spot.map);
-    let best2, bestD2 = Infinity;
+    let best, bestD2 = Infinity;
     for (const o of room.actors) {
       const q = room.places.get(o.m.spot.map);
       if (o === a || o.away || !p2 || !q || room.inFog(o.m.spot)) continue;
       const d = Math.abs(q.gx + o.m.spot.x - p2.gx - a.m.spot.x) + Math.abs(q.gy + o.m.spot.y - p2.gy - a.m.spot.y);
       if (d < bestD2) {
         bestD2 = d;
-        best2 = o;
+        best = o;
       }
     }
-    if (best2) return { ...best2.m.spot };
+    if (best) return { ...best.m.spot };
   }
   const ev = room.events[room.events.length - 1];
   if (ev && room.spills.has(ev.key) && !room.picked.has(ev.key) && rand(b) < 1 / 3 && !room.inFog({ map: ev.map, x: ev.x, y: ev.y })) {
-    const near = room.reachable().filter((s) => s.map === ev.map && Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
-    if (near.length) return near[Math.floor(rand(b) * near.length)];
+    const near2 = room.landed().filter((s) => s.map === ev.map && Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
+    if (near2.length) return near2[Math.floor(rand(b) * near2.length)];
   }
   const cells = insideNext(room);
   if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return wander(room, a, b);
@@ -4028,34 +4049,40 @@ function goal(room, a, b) {
   if (!p) return null;
   const x = p.gx + a.m.spot.x, y = p.gy + a.m.spot.y;
   const hops = /* @__PURE__ */ new Map();
-  let best = null, bestH = Infinity, bestD = Infinity;
+  const near = [];
+  let bestH = Infinity, bestD = Infinity;
   for (const s of cells) {
     if (!hops.has(s.map)) hops.set(s.map, room.world.hops(a.m.spot.map, s.map, true, true));
     const h = hops.get(s.map);
     if (h === void 0 || h > bestH) continue;
     const q = room.places.get(s.map);
     const d = Math.abs(q.gx + s.x - x) + Math.abs(q.gy + s.y - y);
-    if (h < bestH || d < bestD) {
+    if (h < bestH) {
       bestH = h;
       bestD = d;
-      best = s;
-    }
+      near.length = 0;
+    } else if (d < bestD) bestD = d;
+    if (d <= bestD + SPREAD) near.push({ s, h, d });
   }
-  return best;
+  const pool = near.filter((n) => n.h === bestH && n.d <= bestD + SPREAD);
+  return pool.length ? pool[Math.floor(rand(b) * pool.length)].s : null;
 }
+var SPREAD = 6;
 function wander(room, a, b) {
   const ring = room.ring();
   if (ring.safari) return null;
-  const inside = room.reachable().filter((s) => !room.inFog(s, ring));
+  const next = ring.next === void 0 || ring.next < 0 ? ring.r : ring.next;
+  const to = next === Infinity ? ring : { ...ring, r: Math.max(next / 2, 1.5) };
+  const inside = room.landed().filter((s) => !room.inFog(s, to));
   const here = inside.filter((s) => s.map === a.m.spot.map);
   const pool = here.length && rand(b) < 0.5 ? here : inside;
   return pool.length ? pool[Math.floor(rand(b) * pool.length)] : null;
 }
-function leg(room, from, to) {
-  if (from.map === to.map) return findPath(room.world, from, to, 6e3, true, true);
-  const hops = room.world.nextHops(from.map, to.map, true, true);
-  const hop = hops.find((m) => room.places.has(m));
-  return hop ? findPathToAny(room.world, from, room.world.entryCells(from.map, hop, true, true), 6e3, true, true) : null;
+function leg(room, from, to, avoid) {
+  const w = room.world;
+  if (from.map === to.map && w.reachOnMap(from, true, true).cell(to.x, to.y)) return findPath(w, from, to, 6e3, true, true, avoid);
+  const over2 = w.firstCrossing(from, to.map, true, true, (r) => r.cell(to.x, to.y));
+  return over2?.length ? findPathToAny(w, from, over2, 6e3, true, true, avoid) : null;
 }
 var HUNT_AT = 3;
 function hunting(room) {
@@ -4079,9 +4106,10 @@ function botKeys(room, a, b) {
     b.goal = goal(room, a, b);
     b.steps = void 0;
     b.legs = 0;
+    b.avoid = void 0;
   }
   if (b.goal && !b.steps?.length && (room.tick + a.id * 7) % 30 === 0) {
-    const path = !sameSpot(a.m.spot, b.goal) && (b.legs = (b.legs ?? 0) + 1) <= 24 ? leg(room, a.m.spot, b.goal) : null;
+    const path = !sameSpot(a.m.spot, b.goal) && (b.legs = (b.legs ?? 0) + 1) <= 24 ? leg(room, a.m.spot, b.goal, b.avoid) : null;
     b.steps = path?.found ? path.steps : void 0;
     const end = b.steps?.[b.steps.length - 1]?.to;
     if (end && room.actors.some((o) => o !== a && sameSpot(o.m.spot, end))) b.steps = b.steps.slice(0, -1);
@@ -4105,7 +4133,11 @@ function botKeys(room, a, b) {
     if (sameSpot(b.steps[0].to, a.m.spot)) {
       b.steps.shift();
       b.stuck = 0;
-    } else if ((b.stuck = (b.stuck ?? 0) + 1) > 90) b.steps = void 0;
+    } else if ((b.stuck = (b.stuck ?? 0) + 1) > 90) {
+      const k = room.world.key(b.steps[0].to);
+      if (k >= 0) (b.avoid ??= /* @__PURE__ */ new Set()).add(k);
+      b.steps = void 0;
+    }
     const s = b.steps?.[0];
     if (s) return (b.stuck ?? 0) % 30 === 1 || b.stuck === 0 ? KEY_OF[DIR_OF[s.dir]] | KEY_A : 0;
   }
@@ -4138,7 +4170,7 @@ function botSpawns(room, maps, count) {
     out.push({ name, skin, spot, facing, brain: { rng: n * 2654435761 >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
   };
   for (const [x, y] of [[7, 12], [13, 13], [11, 16]].slice(0, count)) add2({ map: "MAP_LITTLEROOT_TOWN", x, y }, 1, botSkin(out.length * 7 + 1));
-  const cells = room.reachable().filter((s) => {
+  const cells = room.landed().filter((s) => {
     const m = grids.get(s.map);
     const c = m?.[s.y * room.maps.get(s.map).w + s.x];
     return m && (c === 0 || c === 7) && !room.groundAt(s.map, s.x, s.y) && !(s.map === "MAP_LITTLEROOT_TOWN" && s.x >= 7 && s.x <= 13 && s.y >= 9 && s.y <= 13);
@@ -4933,4 +4965,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "63e811f7a60b";
+export const WORLD_HASH = "89b48db39adb";

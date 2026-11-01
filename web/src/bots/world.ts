@@ -1017,7 +1017,9 @@ export class World {
     const origin = this.regionOf(start, surf, cut);
     const left = (id: number) => this.hops(this.ids[this.regionList[id].map], goal, surf, cut);
     const h0 = left(origin);
-    if (h0 === undefined || h0 === 0) return undefined;
+    // On `goal` already: there, unless `arrive` wants another part of it -- Route 104's
+    // north half from its south one, through the wood.
+    if (h0 === undefined || (h0 === 0 && (!arrive || arrive(this.flooded(origin, surf, cut).reach!)))) return undefined;
     const cost = new Map<number, number>([[origin, 0]]);
     // Each region reached, by the region the way to it began with.
     const via = new Map<number, number>();
