@@ -1850,7 +1850,10 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
 const BR_HUD_FOG_FRAMES = 60;
 let hudFogged = false;
 let fogFlashTo = 0;
-function wirePhoneHud(): void {
+/** `desk`: a computer's, as /classic/ shows it in the picture (br_hud.c): the place's
+ *  sign and the fog window in Emerald's own frames in place of the plain corner, the
+ *  buttons kept, and no dock (the keyboard has PARTY, MAP and START). */
+function wirePhoneHud(desk = false): void {
   const top = document.getElementById('phud')!;
   const dock = document.getElementById('pdock')!;
   const hud = new PhoneHud({
@@ -1866,11 +1869,11 @@ function wirePhoneHud(): void {
     const s = Math.min(2, Math.max(1, innerWidth / 250));
     document.documentElement.style.setProperty('--s', String(s));
     hud.setScale(s);
-    msgBox.setScale(s);
+    if (!desk) msgBox.setScale(s);
   };
   addEventListener('resize', scale);
   scale();
-  document.body.classList.add('phone-hud');
+  document.body.classList.add(desk ? 'desk-hud' : 'phone-hud');
   setInterval(() => {
     // On the map. A trainer out has no dock (the watch strip is theirs), but keeps the
     // fog window for the one they watch, as live does: the clock and how many are left
@@ -1878,7 +1881,7 @@ function wirePhoneHud(): void {
     const mine = link?.room.actor(link.me);
     const me = mine ?? (spectating && follow ? link?.room.actor(follow) : undefined);
     top.hidden = !me;
-    dock.hidden = !mine;
+    dock.hidden = desk || !mine;
     if (!me) { hud.hide(); return; }
     const ring = link.room.ring();
     const res = link.room.results;
@@ -3262,7 +3265,7 @@ async function boot(): Promise<void> {
     romEmu = files.emu;
     versionLine = files.version;
   battlesOn(files.romSha);
-    if (touchPad) { wireBattleMenu(files); wirePhoneHud(); }
+    if (touchPad) { wireBattleMenu(files); wirePhoneHud(); } else wirePhoneHud(true);
   } catch (e) {
     console.warn('spike ROM not loaded', e);
     didNotStart(e instanceof Error ? e.message : String(e));
