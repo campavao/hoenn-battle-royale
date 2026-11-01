@@ -128,6 +128,17 @@ GRASS_BEHAVIORS = {"MB_TALL_GRASS", "MB_LONG_GRASS", "MB_LONG_GRASS_SOUTH_EDGE"}
 
 IMPASSABLE_BEHAVIORS = {name for name in MB if name.startswith("MB_IMPASSABLE")}
 
+# The ACRO BIKE's own ground: its rails and white bars, and the bumpy slope it hops up
+# (Jagged Pass). On foot they are walls -- CheckAcroBikeCollision turns all of them into
+# a collision unless the player is on the ACRO BIKE (field_player_avatar.c) -- and the
+# world has no ACRO BIKE, so a wall (Cam, 10-31: "I can walk on bike-only pathing"). Not
+# in the Safari Zone: the opening's spawn cells lie past its rails, and no bike is ridden
+# there, so its rails stay ground (safari.test.ts walks them all).
+ACRO_BEHAVIORS = {
+    "MB_BUMPY_SLOPE", "MB_ISOLATED_VERTICAL_RAIL", "MB_ISOLATED_HORIZONTAL_RAIL",
+    "MB_VERTICAL_RAIL", "MB_HORIZONTAL_RAIL",
+}
+
 CUT_TREE_GFX = "OBJ_EVENT_GFX_CUTTABLE_TREE"
 ROCK_SMASH_GFX = "OBJ_EVENT_GFX_BREAKABLE_ROCK"
 BOULDER_GFX = "OBJ_EVENT_GFX_PUSHABLE_BOULDER"
@@ -358,6 +369,8 @@ def export():
                 cls = 7
             elif behavior in IMPASSABLE_BEHAVIORS:
                 cls = 1  # approximation: directional impassables treated as fully blocked
+            elif behavior in ACRO_BEHAVIORS and not map_id.startswith("MAP_SAFARI_ZONE_"):
+                cls = 1
             else:
                 cls = 0
             classes[i] = cls
