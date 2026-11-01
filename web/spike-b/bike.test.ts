@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { DIR_EAST, newMover, tick, type Keys, type Mover, type StepFn } from './sim';
+import type { WorldMap } from '../src/bots/world';
+import type { PatchTable } from '../src/bots/patches';
+import patchJson from '../src/data/patches.json';
+import { makeRoom } from './shared/room';
+import worldJson from './data/world.json';
 
 /** An open field 0..wall-1 wide; x = wall is a wall, x = door goes indoors. */
 function field(wall = 99, door = -1): StepFn {
@@ -69,5 +74,17 @@ describe('the MACH BIKE', () => {
     tick(m, {}, f);
     tick(m, { select: true }, f);
     expect(m.bike).toBe(false);
+  });
+});
+
+describe('the ACRO BIKE ground', () => {
+  // Cam's 10-31 play: "I can walk on bike-only pathing". Route 119's white bars and Jagged
+  // Pass's bumpy slopes are a collision on foot (CheckAcroBikeCollision), and this world
+  // has no ACRO BIKE: export-world.py's ACRO_BEHAVIORS makes them walls.
+  it('is a wall to walk or ride the MACH BIKE on', () => {
+    const w = makeRoom((worldJson as { maps: WorldMap[] }).maps, patchJson as unknown as PatchTable, 1).world;
+    for (const [map, x, y] of [['MAP_ROUTE119', 8, 5], ['MAP_ROUTE119', 10, 7], ['MAP_JAGGED_PASS', 18, 8], ['MAP_JAGGED_PASS', 22, 16]] as const) {
+      expect(w.cell(map, x, y), `${map}:${x}:${y}`).toBe(1);
+    }
   });
 });
