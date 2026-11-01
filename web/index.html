@@ -216,6 +216,14 @@
       #ui-hits li { position: static; pointer-events: none; }
       #ui-hits button, #ui-hits li > *, #ui-hits > div > * { pointer-events: auto; }
       #ui-hits button { cursor: pointer; touch-action: manipulation; }
+      /* The game stopped (POK-328, emu/watchdog.ts), as /classic/ says it: over everything,
+         with the line a screenshot has to carry and the two ways out. */
+      .stall { position: fixed; inset: 0; z-index: 999; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, 0.6); }
+      .stall[hidden] { display: none; }
+      .stall-box { max-width: 420px; background: #1a2128; border: 2px solid #33424c; border-radius: 10px; padding: 14px 16px; }
+      .stall-head { margin: 0 0 6px; font-weight: 600; color: #ffe08a; letter-spacing: 0.04em; }
+      .stall-line { margin: 0 0 12px; font: 12px/1.5 ui-monospace, monospace; color: #cfe3ef; overflow-wrap: anywhere; }
+      .stall-box button { font: inherit; background: #4f6b7d; color: #fff; border: 0; border-radius: 6px; padding: 6px 14px; margin-right: 8px; cursor: pointer; }
     </style>
   </head>
   <body>
@@ -266,6 +274,16 @@
       </ul>
       <button id="intro-go" type="button">Start</button>
     </div></div>
+    <!-- The game stopped under the player: main.ts wireWatchdog fills the line in, and it
+         goes again if the game comes back. -->
+    <div id="stall" class="stall" role="alertdialog" aria-labelledby="stall-head" aria-describedby="stall-line" hidden>
+      <div class="stall-box">
+        <p id="stall-head" class="stall-head">THE GAME STOPPED</p>
+        <p id="stall-line" class="stall-line"></p>
+        <button id="stall-reload" type="button">RELOAD</button>
+        <button id="stall-leave" type="button">LEAVE</button>
+      </div>
+    </div>
     <script type="module" src="/spike-b/main.ts"></script>
   </body>
 </html>

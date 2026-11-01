@@ -74,6 +74,7 @@ import { nameBstart } from '../src/match/spectate';
 import { LEADERS } from './shared/gyms';
 import { CLERKS, priceOf, shelf } from './shared/marts';
 import type { GbaKey } from '../src/emu';
+import { stallLine, watch as watchRom } from '../src/emu/watchdog';
 import spritesData from '../src/data/sprites.json';
 import encounterData from '../src/data/encounters.json';
 
@@ -3061,6 +3062,43 @@ addEventListener('vite:preloadError', () => {
   document.body.append(b);
 });
 
+/** The game stopping under the player, said over everything with the way out, as
+ *  /classic/ says it (app.ts wireWatchdog): the page's own ROM's frames stopping, its
+ *  heartbeat stopping, or the core crashing (emu/watchdog.ts). The ROM here is paused
+ *  between its screens on purpose, which the watchdog never counts; a stop is one while
+ *  a battle or a screen is up, and a game that comes back takes it back. */
+function wireWatchdog(files: Awaited<ReturnType<typeof loadRom>>): void {
+  const box = document.getElementById('stall')!;
+  document.getElementById('stall-reload')!.addEventListener('click', () => location.reload());
+  // LEAVE: out of the match on the relay (the standings say "left"), then a fresh page,
+  // since the ROM that stopped is still this tab's.
+  document.getElementById('stall-leave')!.addEventListener('click', () => {
+    if (matchOn) leaveMatch();
+    setTimeout(() => location.reload(), 300);
+  });
+  watchRom({
+    emu: files.emu,
+    symbols: files.table,
+    onStall: (report) => {
+      const line = stallLine(report, versionLine);
+      document.getElementById('stall-line')!.textContent = line;
+      box.hidden = false;
+      console.error('[watchdog] the game stopped:', line);
+    },
+    onBack: () => { box.hidden = true; },
+  });
+}
+
+/** The game never got going (no patch for this ROM, a core that would not start): said
+ *  over the page, not only into the debug stats, with RELOAD. */
+function didNotStart(why: string): void {
+  document.getElementById('stall-head')!.textContent = "THE GAME DIDN'T START";
+  document.getElementById('stall-line')!.textContent = `${why} · ${versionLine}`;
+  document.getElementById('stall-leave')!.hidden = true;
+  document.getElementById('stall-reload')!.addEventListener('click', () => location.reload());
+  document.getElementById('stall')!.hidden = false;
+}
+
 async function boot(): Promise<void> {
   registerServiceWorker();
   void askToKeepStorage();
@@ -3075,8 +3113,10 @@ async function boot(): Promise<void> {
     if (touchPad) { wireBattleMenu(files); wirePhoneHud(); }
   } catch (e) {
     console.warn('spike ROM not loaded', e);
+    didNotStart(e instanceof Error ? e.message : String(e));
     return;
   }
+  wireWatchdog(files);
   const t0 = performance.now();
   art = new RomArt(files.rom, files.sym);
   romTables = { bytes: files.rom, sym: (n) => { const a = files.sym(n); return Number.isNaN(a) ? undefined : a; } };
