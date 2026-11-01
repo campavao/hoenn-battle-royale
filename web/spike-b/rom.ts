@@ -83,6 +83,8 @@ const FOG_TICK = 240;
 const ringBytes = (phase: number, fog: boolean) => [1, phase, 0, 0, fog ? 0xff : 0x7f, 0, 0, 0, FOG_TICK & 0xff, FOG_TICK >> 8];
 const DREW = 3;
 const ROM_BASE = 0x08000000;
+/** Frames a screen off the field gets to begin its fade in (settled()). */
+const FADE_IN_WAIT = 45;
 /** How long the last fight took to start: from the TRAINER card to the battle running. */
 export let lastStart: { ms: number; frames: number } | null = null;
 
@@ -523,6 +525,19 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
   // A screen the page opened (a menu row, a bag's team) asked to close.
   let leaving = false;
   const onField = () => ((emu.read(mainAt + 4, 32) & ~1) >>> 0) === overworldCb;
+  /** The screen the ROM went to is drawn: no fade under way and none held. Off the field
+   *  is not yet up -- Emerald fades its own (hidden) field out, then the new screen in from
+   *  black -- and the page showing it then showed a bedroom and a black box (Cam's 10-31
+   *  recording, 6:24). */
+  const paletteAt = sym('gPaletteFade');
+  const fade = () => fadeOf(emu.read(paletteAt + FADE_Y_WORD, 16), emu.read(paletteAt + FADE_COLOR_WORD, 16));
+  /** Its fade in seen through: begun (a screen sets itself up, palettes dark, with no fade
+   *  running for a few frames first) and done. One that never fades waits FADE_IN_WAIT. */
+  const settled = async () => {
+    if (Number.isNaN(paletteAt)) return;
+    await until(emu, () => fade().active, FADE_IN_WAIT);
+    await until(emu, () => { const f = fade(); return !f.active && f.y === 0; }, 90);
+  };
   /** Until the screen the player is on is closed and the field has settled: B a few times
    *  a second once leave() asks for it. */
   const backOnField = async () => {
@@ -935,6 +950,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         }
         if (!up) console.warn('spike: the team\'s screen did not open', { callback2: emu.read(mainAt + 4, 32).toString(16) });
         else {
+          await settled();
           onStart();
           // B closes it; back on the field the box settles (SettleBoxes): a PICKUP for
           // each of theirs taken, a SPILL for any of ours put down.
@@ -996,6 +1012,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
           }
         }
         if (up) {
+          await settled();
           onStart();
           await backOnField();
           // Out of the row's screen the game puts the START menu back up, on the hidden
@@ -1021,6 +1038,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
             await until(emu, () => emu.read(menuCbAt, 32) === startMenu.input || !onField(), 120);
             if (onField()) break;
             again = true;
+            await settled();
             onStart();
             await backOnField();
             onEnd();
@@ -1220,6 +1238,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number): Promis
         await until(emu, () => box.pending() === 0, 60);
         const up = await until(emu, () => { drain(() => undefined); return !onField(); }, 180);
         if (up) {
+          await settled();
           onStart();
           // leave() backs out of it with B, like a menu.
           const quiet = emu.onFrame(() => drain(() => undefined));
