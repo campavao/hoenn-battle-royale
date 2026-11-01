@@ -8,7 +8,7 @@ import ballsC from '../../../src/br/br_balls.c?raw';
 import zoneC from '../../../src/br/br_zone.c?raw';
 import roomsJson from '../data/rooms.json';
 import { describe, expect, it } from 'vitest';
-import type { WorldMap } from '../../src/bots/world';
+import { decodeGrid, type WorldMap } from '../../src/bots/world';
 import type { PatchTable } from '../../src/bots/patches';
 import worldJson from '../data/world.json';
 import sectionsJson from '../../../src/data/region_map/region_map_sections.json';
@@ -18,7 +18,7 @@ import { Host, play } from './host';
 import { over } from './over';
 import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, isTm, within } from './items';
 import { HURT, botKeys, health } from './bots';
-import { AFTER_WIN, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, WALKUP_BANG, CHEST, CHEST_SPECIES, ITEM_MASTER_BALL, ZONE_CELLS, ZONE_ITEMS, ZONE_TMS, eventPiece, makeRoom, zoneBalls, wornParty, type RoomEvent } from './room';
+import { AFTER_WIN, FIELD_DIVE, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, WALKUP_BANG, CHEST, CHEST_SPECIES, ITEM_MASTER_BALL, ZONE_CELLS, ZONE_ITEMS, ZONE_TMS, eventPiece, makeRoom, zoneBalls, wornParty, type RoomEvent } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -793,6 +793,48 @@ describe('item balls', () => {
     expect(sail('petalburg')).toEqual({ map: 'MAP_ROUTE104_MR_BRINEYS_HOUSE', x: 5, y: 4 });
     // He stands solid, as any townsperson.
     expect(room.stepFor(room.actor(1000)!)({ map: 'MAP_ROUTE104_MR_BRINEYS_HOUSE', x: 5, y: 4 }, 2)).toBeNull();
+  });
+
+  it('DIVE: A on a dive spot takes a team that could DIVE under, and A below brings it back up (br_hm.c)', () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const route = MAPS.find((m) => m.id === 'MAP_ROUTE124')!, below = MAPS.find((m) => m.id === 'MAP_UNDERWATER_ROUTE124')!;
+    const deep = decodeGrid(route.deep!, route.w * route.h), nosurf = decodeGrid(below.nosurf!, below.w * below.h);
+    // A dive spot over the sea floor (below, the floor is ground and the trenches water),
+    // with more floor east of it that is a dive spot too.
+    const i = deep.findIndex((d, j) => !!d && !!deep[j + 1] && room.world.cell(below.id, j % route.w, Math.floor(j / route.w)) === 0 && room.world.cell(below.id, (j % route.w) + 1, Math.floor(j / route.w)) === 0);
+    expect(i).toBeGreaterThan(0);
+    const at = { map: route.id, x: i % route.w, y: Math.floor(i / route.w) };
+    room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: at, facing: 4 });
+    room.step();
+    const me = () => room.actor(1000)!;
+    me().calm = 0;
+    const press = () => { room.step(new Map([[1000, [0]]])); return room.step(new Map([[1000, [KEY_A]]])).filter((e) => e.type === 'dive'); };
+    // SURF alone: the sea is deep here, and that is all.
+    room.apply({ c: 'field', id: 1000, bits: FIELD_SURF });
+    expect(press()).toEqual([]);
+    expect(me().m.spot).toEqual(at);
+    // ...and somebody who could DIVE: under, onto the same cell.
+    room.apply({ c: 'field', id: 1000, bits: FIELD_SURF | FIELD_DIVE });
+    expect(press()).toMatchObject([{ down: true }]);
+    expect(me().m.spot).toEqual({ ...at, map: below.id });
+    // The fog below is the sea above's, cell for cell.
+    for (const r of [5, 20, 60]) {
+      const ring = { ...room.ring(), cx: room.places.get(route.id)!.gx + at.x + 30, cy: room.places.get(route.id)!.gy + at.y, r };
+      expect(room.inFog(me().m.spot, ring)).toBe(room.inFog(at, ring));
+    }
+    // It swims below: a step east, and up again from there.
+    for (let f = 0; f < 40 && me().m.spot.x === at.x; f++) room.step(new Map([[1000, [KEY_RIGHT]]]));
+    for (let f = 0; f < 20; f++) room.step(new Map([[1000, [0]]]));
+    expect(me().m.spot).toEqual({ map: below.id, x: at.x + 1, y: at.y });
+    expect(press()).toMatchObject([{ down: false }]);
+    expect(me().m.spot).toEqual({ map: route.id, x: at.x + 1, y: at.y });
+    // A cell below with no way up stays below.
+    const shut = nosurf.findIndex((n) => n === 1);
+    me().m.spot = { map: below.id, x: shut % below.w, y: Math.floor(shut / below.w) };
+    expect(press()).toEqual([]);
+    expect(me().m.spot.map).toBe(below.id);
+    // And the four seas below that join each other are this room's.
+    expect(['MAP_UNDERWATER_ROUTE124', 'MAP_UNDERWATER_ROUTE126', 'MAP_UNDERWATER_ROUTE127', 'MAP_UNDERWATER_ROUTE128'].every((m) => room.maps.has(m))).toBe(true);
   });
 
   it("the SS TIDAL's crossing: aboard until she makes land, by 205 steps one leg and the bed the other (SSTidalCorridor)", () => {
