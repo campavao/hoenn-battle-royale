@@ -75,6 +75,12 @@
          trainer out and watching: the watch strip wraps short of it, not under it. */
       body.phone-hud #hud { right: calc(env(safe-area-inset-right) + var(--s, 1.5) * 128px); }
       body.phone-hud #pad .st { display: none; }
+      /* A computer's (main.ts wirePhoneHud(true), as /classic/'s picture shows br_hud.c): the
+         same sign and fog window in place of the corner, the sign under the buttons, and the
+         buttons short of the fog window. */
+      body.desk-hud #corner { display: none; }
+      body.desk-hud .hud-sign { top: calc(var(--s, 1.5) * 4px + 40px); }
+      body.desk-hud #hud { right: calc(var(--s, 1.5) * 128px); }
       body:has(#stage:not([hidden])) :is(#phud, #pdock), body:has(#battle.on:not(.screen)) #pdock { visibility: hidden; }
       /* The phone's battle menu (ui/battlemenu.ts, the live game's): FIGHT/BAG/POKeMON/RUN
          and the moves as windows under the picture, --s CSS pixels to a GBA pixel. */
