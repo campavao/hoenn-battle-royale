@@ -5,6 +5,10 @@ findings live here until there is room again. Each entry is written to be action
 its own: what was seen, what is suspected, and where to look. When a ticket exists it is
 named; when one is created later, put its id at the top of the entry and leave the rest.
 
+**Better than a narrated video:** press K (a phone: hold the eye) when something looks wrong,
+then SAVE LOG. `tools/br/replay.ts` re-runs the file exactly and prints what was happening
+at each mark (`tools/br/README.md`).
+
 # Play-test findings
 
 Linear hit its free-issue cap on 2026-09-16 (POK-279 was the last one it took), so

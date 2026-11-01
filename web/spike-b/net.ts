@@ -17,6 +17,7 @@ import type { PatchTable } from '../src/bots/patches';
 import { tick } from './sim';
 import { Host, play } from './shared/host';
 import { BOT_FILL } from '../src/match/room';
+import { recorder } from './recorder';
 import { keysOf, makeRoom, type Actor, type Bag, type Room, type RoomEvent } from './shared/room';
 import type { FameMon } from '../src/ui/results';
 import type { Again, CardRecord, Listed, PeekBag, Settings, SpMsg, WireFrame, WorldDown, WorldUp } from './shared/wire';
@@ -92,7 +93,8 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
   // The live game's offline QUICK PLAY: you and BOT_FILL bots.
   const host = new Host(room, opts.bots ?? BOT_FILL, maps, 0);
   const me = host.join(opts.name || 'YOU', opts.skin ?? 0);
-  host.advance();
+  recorder.start('solo', me, host.room);
+  recorder.frame(host.advance().frame, host.room);
   let seq = 0;
   const teams = new Map<number, FameMon[]>();
   const bags = new Map<number, PeekBag>();
@@ -112,8 +114,11 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     me,
     online: false,
     frame(bits) {
+      recorder.keys(bits);
       host.input(me, ++seq, [bits]);
-      return host.advance().events.filter((e) => e.id === me);
+      const { frame, events } = host.advance();
+      recorder.frame(frame, host.room);
+      return events.filter((e) => e.id === me);
     },
     mine: () => host.room.actor(me),
     end: (fled, won) => host.end(me, fled, won),
@@ -136,6 +141,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
       if (from !== undefined) for (const m of streams.get(from)!.sent) link.onSp?.(from, m);
     },
     sp: (m, as) => {
+      recorder.sp('out', m, as === undefined ? {} : { as });
       if (as === undefined) return;
       if (m.t === 'bstart') streams.set(as, { foe: host.room.actor(as)?.foe ?? 0, sent: [] });
       streams.get(as)?.sent.push(m);
@@ -199,9 +205,11 @@ export class Online implements WorldLink {
       this.me = m.id;
       this.key = m.key;
       this.teams.clear();
+      recorder.start('online', m.id, this.room);
       ready();
     } else if (m.t === 'state') {
       this.room.load(m.state);
+      recorder.resynced(this.room);
       this.queue = [];
       this.syncing = false;
     } else if (m.t === 'f' && this.room && !this.syncing) {
@@ -209,6 +217,7 @@ export class Online implements WorldLink {
     } else if (m.t === 'bt') {
       this.onBt?.(m.q, m.d);
     } else if (m.t === 'sp') {
+      recorder.sp('in', m.m, { from: m.from });
       this.onSp?.(m.from, m.m);
     } else if (m.t === 'eyes') {
       this.onEyes?.(m.n);
@@ -223,6 +232,7 @@ export class Online implements WorldLink {
   }
 
   frame(bits: number): RoomEvent[] {
+    recorder.keys(bits);
     this.seq += 1;
     this.sent.push({ seq: this.seq, bits });
     this.lastSend.set(this.seq, performance.now());
@@ -237,7 +247,7 @@ export class Online implements WorldLink {
     if (!this.playing && this.queue.length >= CUSHION) this.playing = true;
     // Far behind (the tab was hidden): a few seconds are played through at once; past
     // that the relay's copy of the room is cheaper than replaying it.
-    if (this.queue.length > 600) { this.resync(); return []; }
+    if (this.queue.length > 600) { recorder.net('behind', this.room.tick); this.resync(); return []; }
     // The relay answers one sync a second: one asked too soon goes unanswered, so ask again.
     if (this.syncing && performance.now() - this.syncAt > 1500) this.resync();
     // Two seconds behind: all of it at once while a battle or a ROM screen covers the
@@ -251,14 +261,15 @@ export class Online implements WorldLink {
     for (let i = 0; i < n && this.queue.length && !this.syncing; i++) {
       const f = this.queue.shift()!;
       if (f.tick <= this.room.tick) continue;
-      if (f.tick !== this.room.tick + 1) { this.resync(); break; }
+      if (f.tick !== this.room.tick + 1) { recorder.net('gap', this.room.tick, f.tick, this.room.tick + 1); this.resync(); break; }
       events.push(...play(this.room, f).filter((e) => e.id === this.me));
+      recorder.frame(f, this.room, this.queue.length);
       if (f.a !== undefined && f.a > this.acked) {
         const t = this.lastSend.get(f.a);
         if (t !== undefined) this.rtt = this.rtt ? this.rtt * 0.9 + (performance.now() - t) * 0.1 : performance.now() - t;
         this.acked = f.a;
       }
-      if (f.h !== undefined && f.h !== this.room.hash()) { this.resync(); break; }
+      if (f.h !== undefined && f.h !== this.room.hash()) { recorder.net('desync', this.room.tick, f.h, this.room.hash()); this.resync(); break; }
     }
     if (!this.queue.length) this.playing = false;
     while (this.sent.length && this.sent[0].seq <= this.acked) this.sent.shift();
@@ -329,7 +340,10 @@ export class Online implements WorldLink {
 
   watch(id: number): void { this.send({ t: 'watch', id }); }
 
-  sp(m: SpMsg, as?: number): void { this.send({ t: 'sp', m, ...(as === undefined ? {} : { as }) }); }
+  sp(m: SpMsg, as?: number): void {
+    recorder.sp('out', m, as === undefined ? {} : { as });
+    this.send({ t: 'sp', m, ...(as === undefined ? {} : { as }) });
+  }
 
   status(): string {
     if (this.closed) return 'the relay closed the connection: reload to rejoin';
