@@ -1802,7 +1802,8 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
         ...(m?.rec ? cardFields({ name: m.name, skin: m.skin, wins: m.rec.wins, played: m.rec.played, best: m.rec.best }) : []),
         { label: 'NOW', value: seat.alive ? 'IN' : fell.has(seat.seat) ? `OUT (${ordinal(placed)})` : 'OUT' },
       ],
-      canKick: false,
+      // The host's KICK holds in the match too, as /classic/'s does (service.ts "kick").
+      canKick: !!room && room.owner === room.you && !!m && seat.seat !== room.you,
       canWatch: out && seat.alive && !seat.isMe,
     };
   })();
@@ -1824,7 +1825,7 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
     help: ['Arrows move  Z: A  X: B  M: MENU', 'R: this sheet  V: spectate  pads too'],
     version: versionLine,
     onSeat: (seat) => { sheetCard = seat; lobby?.stage.redraw(); },
-    onKick: () => undefined,
+    onKick: (seat) => { lobby?.kick(seat); sheetCard = null; lobby?.stage.redraw(); },
     onCloseCard: () => { sheetCard = null; lobby?.stage.redraw(); },
     onWatch: (dir) => { watch.step(dir); lobby?.stage.redraw(); },
     onWatchSeat: (seat) => { follow = seat; if (zoom < 1) zoom = fitZoom(); sheetCard = null; lobby?.closeSheet(); },
@@ -3322,10 +3323,10 @@ async function boot(): Promise<void> {
         // The standings stay up until PLAY AGAIN; then the room as it is by then.
         else if (!matchOn && !winEl.classList.contains('on')) lobby!.roomIs(r);
       },
-      onNoRoom: (code, pass, rom, full) => {
+      onNoRoom: (code, pass, rom, full, removed) => {
         forget(); unlink();
         if (pass) { lobby!.askPass(code, knockedWithPass); return; }
-        lobby!.menu(rom ? `Room ${code} is on another version of the game. Reload the page to update.` : full ? `Room ${code} is full.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.');
+        lobby!.menu(removed ? `The host of room ${code} took you out of it.` : rom ? `Room ${code} is on another version of the game. Reload the page to update.` : full ? `Room ${code} is full.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.');
       },
       onKicked: () => { room = null; forget(); unlink(); lobby!.menu('The host took you out of the room.'); },
       onOld: () => { room = null; matchOn = false; forget(); lobby!.old(); },

@@ -4472,6 +4472,10 @@ var WorldService = class {
             this.send(link, { t: "no_room", code: String(m.code ?? "").toUpperCase(), full: true });
             return;
           }
+          if (link.ip && room2.banned.has(link.ip)) {
+            this.send(link, { t: "no_room", code: room2.code, removed: true });
+            return;
+          }
           if (room2.set.door === "pass" && String(m.pass ?? "").toUpperCase() !== room2.pass) {
             this.send(link, { t: "no_room", code: room2.code, pass: true });
             return;
@@ -4529,7 +4533,9 @@ var WorldService = class {
           phone.kicked = true;
         } else if (m.t === "kick") {
           const p = room.members.get(Number(m.id));
-          if (host || phone.id !== room.owner || !p || p === phone) return;
+          if (phone.id !== room.owner || !p || p === phone) return;
+          if (p.link.ip) room.banned.add(p.link.ip);
+          this.opts.log(`room ${room.code}: ${who(p)} removed by host`);
           this.drop(p);
           p.kicked = true;
           this.send(p.link, { t: "kicked" });
@@ -4700,7 +4706,7 @@ var WorldService = class {
     } while (this.rooms.has(code));
     const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
     const set = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: BOT_FILL, door: "open", textSpeed: 5, animations: false };
-    const room = { rom, pass: "", code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map(), set };
+    const room = { rom, pass: "", code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map(), set, banned: /* @__PURE__ */ new Set() };
     this.rooms.set(code, room);
     return room;
   }
@@ -4897,4 +4903,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "6ff223e61a03";
+export const WORLD_HASH = "32736bae693c";

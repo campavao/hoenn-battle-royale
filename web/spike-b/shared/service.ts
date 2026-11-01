@@ -91,7 +91,8 @@ function bagOf(b: unknown): PeekBag | undefined {
   return { items: out, money: money as number };
 }
 
-export interface Link { send(text: string): void; close(): void }
+/** `ip`: the address the relay saw (relay/clean.js clientIp), for a KICK's ban. */
+export interface Link { send(text: string): void; close(): void; ip?: string }
 export interface Session { onText(text: string): void; onClose(): void }
 
 export interface ServiceOptions {
@@ -189,6 +190,9 @@ interface Lobby {
   /** The patched ROM its battles run on (join's `r`), as its first member brought it; ''
    *  for a page that did not say. */
   rom: string;
+  /** The addresses the host took out: kept out for the life of the room, as /classic/'s
+   *  relay keeps them (server.js "kick"). Their way back (Again) went with their seat. */
+  banned: Set<string>;
 }
 
 /** A trainer as the live relay's log lines name one (play-log.mjs NAME: no spaces). */
@@ -232,6 +236,7 @@ export class WorldService {
           if (!room) { this.send(link, { t: 'no_room', code: String(m.code ?? '') }); return; }
           if (room === 'rom') { this.send(link, { t: 'no_room', code: String(m.code ?? '').toUpperCase(), rom: true }); return; }
           if (room === 'full') { this.send(link, { t: 'no_room', code: String(m.code ?? '').toUpperCase(), full: true }); return; }
+          if (link.ip && room.banned.has(link.ip)) { this.send(link, { t: 'no_room', code: room.code, removed: true }); return; }
           if (room.set.door === 'pass' && String(m.pass ?? '').toUpperCase() !== room.pass) { this.send(link, { t: 'no_room', code: room.code, pass: true }); return; }
           const name = String(m.name ?? '').toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim().slice(0, 10);
           const skin = Number.isInteger(m.skin) && m.skin >= 0 && m.skin < 16 ? m.skin : 0;
@@ -286,8 +291,11 @@ export class WorldService {
           this.drop(phone);
           phone.kicked = true;
         } else if (m.t === 'kick') {
+          // In the room or in a match (out of it, as a LEAVE is), and kept out after.
           const p = room.members.get(Number(m.id));
-          if (host || phone.id !== room.owner || !p || p === phone) return;
+          if (phone.id !== room.owner || !p || p === phone) return;
+          if (p.link.ip) room.banned.add(p.link.ip);
+          this.opts.log(`room ${room.code}: ${who(p)} removed by host`);
           this.drop(p);
           p.kicked = true;
           this.send(p.link, { t: 'kicked' });
@@ -474,7 +482,7 @@ export class WorldService {
     const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
     // The live room's: MAX 8 with FILL on (BOT_FILL), a quick room's the same.
     const set: Settings = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: BOT_FILL, door: 'open', textSpeed: 5, animations: false };
-    const room: Lobby = { rom, pass: '', code, quick, owner: 0, members: new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: new Map(), set };
+    const room: Lobby = { rom, pass: '', code, quick, owner: 0, members: new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: new Map(), set, banned: new Set() };
     this.rooms.set(code, room);
     return room;
   }
