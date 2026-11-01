@@ -82,7 +82,7 @@ describe('shared room', () => {
     expect(moved).toBeGreaterThan(50);
     expect(wild).toBeGreaterThan(0);
     console.log(`wild ${wild}, fights ${fights}, items ${items}, steps ${moved}`);
-  });
+  }, 20_000); // 64 bots' first routes flood Hoenn's regions (World.firstCrossing): ~3.5 s here, more on CI
 });
 
 describe('bots', () => {

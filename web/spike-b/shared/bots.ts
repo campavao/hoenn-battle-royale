@@ -120,7 +120,7 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
   }
   const ev = room.events[room.events.length - 1];
   if (ev && room.spills.has(ev.key) && !room.picked.has(ev.key) && rand(b) < 1 / 3 && !room.inFog({ map: ev.map, x: ev.x, y: ev.y })) {
-    const near = room.landed().filter((s) => s.map === ev.map && Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
+    const near = room.landedOn(ev.map).filter((s) => Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
     if (near.length) return near[Math.floor(rand(b) * near.length)];
   }
   const cells = insideNext(room);
@@ -152,6 +152,22 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
 /** goal: how much further than the nearest cell inside the ring a bot may aim. */
 const SPREAD = 6;
 
+/** The heart of the ring it is closing to: a wander out to its edge is a walk back into
+ *  the fog, and bots dealt all over Hoenn that keep to its rim never meet. Once a phase:
+ *  Hoenn's landing cells are tens of thousands. */
+const HEART = new WeakMap<Room, { at: string; cells: Spot[] }>();
+function heart(room: Room): Spot[] {
+  const ring = room.ring();
+  const at = `${ring.round}:${ring.phase}`;
+  const hit = HEART.get(room);
+  if (hit?.at === at) return hit.cells;
+  const next = ring.next === undefined || ring.next < 0 ? ring.r : ring.next;
+  const to = next === Infinity ? ring : { ...ring, r: Math.max(next / 2, 1.5) };
+  const cells = room.landed().filter((s) => !room.inFog(s, to));
+  HEART.set(room, { at, cells });
+  return cells;
+}
+
 /** Somewhere to walk to inside the ring (brain.ts's wander: a cell of the landing pool,
  *  this map's own first, else anywhere in it). Live's bots are always on their way
  *  somewhere, so they cross paths and fight; standing about waiting for the fog, the
@@ -159,11 +175,7 @@ const SPREAD = 6;
 function wander(room: Room, a: Actor, b: Brain): Spot | null {
   const ring = room.ring();
   if (ring.safari) return null;
-  // The heart of the ring it is closing to: a wander out to its edge is a walk back into
-  // the fog, and bots dealt all over Hoenn that keep to its rim never meet.
-  const next = ring.next === undefined || ring.next < 0 ? ring.r : ring.next;
-  const to = next === Infinity ? ring : { ...ring, r: Math.max(next / 2, 1.5) };
-  const inside = room.landed().filter((s) => !room.inFog(s, to));
+  const inside = heart(room);
   const here = inside.filter((s) => s.map === a.m.spot.map);
   const pool = here.length && rand(b) < 0.5 ? here : inside;
   return pool.length ? pool[Math.floor(rand(b) * pool.length)] : null;

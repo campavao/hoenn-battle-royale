@@ -1006,9 +1006,15 @@ export class Room {
   }
 
   private landedAll: readonly Spot[] | null = null;
+  private landedMaps: Map<string, readonly Spot[]> | null = null;
   /** Those cells, every map's: what the bots aim at in the ring (bots.ts). */
   landed(): readonly Spot[] {
     return (this.landedAll ??= this.landByMap().flat());
+  }
+
+  /** Those cells on one map. */
+  landedOn(map: string): readonly Spot[] {
+    return (this.landedMaps ??= new Map(this.landByMap().map((l) => [l[0].map, l]))).get(map) ?? [];
   }
 
   /** A round's centre: a cell of Hoenn's outdoors a trainer can land on, each map as likely

@@ -2894,9 +2894,14 @@ var Room = class {
     return this.landedBy = [...by.keys()].sort().map((m) => by.get(m));
   }
   landedAll = null;
+  landedMaps = null;
   /** Those cells, every map's: what the bots aim at in the ring (bots.ts). */
   landed() {
     return this.landedAll ??= this.landByMap().flat();
+  }
+  /** Those cells on one map. */
+  landedOn(map) {
+    return (this.landedMaps ??= new Map(this.landByMap().map((l) => [l[0].map, l]))).get(map) ?? [];
   }
   /** A round's centre: a cell of Hoenn's outdoors a trainer can land on, each map as likely
    *  (landByMap), from the seed, or one round in four a final story's place (story.ts's
@@ -4040,7 +4045,7 @@ function goal(room, a, b) {
   }
   const ev = room.events[room.events.length - 1];
   if (ev && room.spills.has(ev.key) && !room.picked.has(ev.key) && rand(b) < 1 / 3 && !room.inFog({ map: ev.map, x: ev.x, y: ev.y })) {
-    const near2 = room.landed().filter((s) => s.map === ev.map && Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
+    const near2 = room.landedOn(ev.map).filter((s) => Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
     if (near2.length) return near2[Math.floor(rand(b) * near2.length)];
   }
   const cells = insideNext(room);
@@ -4068,12 +4073,22 @@ function goal(room, a, b) {
   return pool.length ? pool[Math.floor(rand(b) * pool.length)].s : null;
 }
 var SPREAD = 6;
+var HEART = /* @__PURE__ */ new WeakMap();
+function heart(room) {
+  const ring = room.ring();
+  const at = `${ring.round}:${ring.phase}`;
+  const hit = HEART.get(room);
+  if (hit?.at === at) return hit.cells;
+  const next = ring.next === void 0 || ring.next < 0 ? ring.r : ring.next;
+  const to = next === Infinity ? ring : { ...ring, r: Math.max(next / 2, 1.5) };
+  const cells = room.landed().filter((s) => !room.inFog(s, to));
+  HEART.set(room, { at, cells });
+  return cells;
+}
 function wander(room, a, b) {
   const ring = room.ring();
   if (ring.safari) return null;
-  const next = ring.next === void 0 || ring.next < 0 ? ring.r : ring.next;
-  const to = next === Infinity ? ring : { ...ring, r: Math.max(next / 2, 1.5) };
-  const inside = room.landed().filter((s) => !room.inFog(s, to));
+  const inside = heart(room);
   const here = inside.filter((s) => s.map === a.m.spot.map);
   const pool = here.length && rand(b) < 0.5 ? here : inside;
   return pool.length ? pool[Math.floor(rand(b) * pool.length)] : null;
@@ -4965,4 +4980,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "89b48db39adb";
+export const WORLD_HASH = "6d1b84dd58fe";
