@@ -12,12 +12,13 @@ struct BrLevels
     /* 0 */ u8 rung;        // current level for wild mons and the party
     /* 1 */ u8 phaseSeen;   // last ring phase applied
     /* 2 */ u8 tier;        // ladder index 0..5: the Mart shelf and the rod
-    /* 3 */ u8 pad;
+    /* 3 */ u8 lifting;     // TRUE while LiftParty runs: it takes several frames (web/spike-b/rom.ts partyDone)
     /* 4 */ u16 rod;        // the rod item in the bag right now
     /* 6 */ u16 pad2;
 };
 // web/src/ui/phonehud.ts reads the rod (LEVELS_ROD): what the dock's FISH casts.
 BR_OFFSET(BrLevels, rod, 4)
+BR_OFFSET(BrLevels, lifting, 3)
 BR_SIZE(BrLevels, 8)
 
 extern struct BrLevels gBrLevels;

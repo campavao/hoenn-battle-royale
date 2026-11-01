@@ -164,6 +164,23 @@ export function fameTeam(party: Uint8Array, count: number): FameMon[] {
   return out;
 }
 
+/** Every mon's encrypted block adds up to its checksum (pokemon.c's CalculateBoxMonChecksum):
+ *  no mon of the first `count` is caught with the ROM halfway through writing it. */
+export function partyWhole(party: Uint8Array, count: number): boolean {
+  const v = new DataView(party.buffer, party.byteOffset, party.byteLength);
+  for (let i = 0; i < Math.min(count, 6); i++) {
+    const at = i * 100;
+    const key = (v.getUint32(at, true) ^ v.getUint32(at + 4, true)) >>> 0;
+    let sum = 0;
+    for (let w = 0; w < 12; w++) {
+      const x = (v.getUint32(at + 32 + w * 4, true) ^ key) >>> 0;
+      sum = (sum + (x & 0xffff) + (x >>> 16)) & 0xffff;
+    }
+    if (sum !== v.getUint16(at + 28, true)) return false;
+  }
+  return true;
+}
+
 /** The CENTER's heal on a party as rom.ts keeps it: pokemon.c's HealPlayerParty -- HP to
  *  the top, no status, every move's PP back to its most (CalculatePPWithBonus). PP lives
  *  in the encrypted Attacks substruct, so that one is decrypted, refilled, its checksum

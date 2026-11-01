@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAG_AT, BAG_LEN, arrived, fameTeam, fieldOf, healed, rekey, spillOf, tallySince, teamOf, withMoney } from './carry';
+import { BAG_AT, BAG_LEN, arrived, fameTeam, fieldOf, healed, partyWhole, rekey, spillOf, tallySince, teamOf, withMoney } from './carry';
 import HMS from '../src/data/hms.json';
 
 describe('rekey', () => {
@@ -186,5 +186,27 @@ describe('tallySince', () => {
     const now = { steps: 0, won: 5, caught: 1, items: 0, mons: { 277: 9, 280: 2 }, moves: { 1: 5, 33: 6 } };
     expect(tallySince(from, now, 40)).toEqual({ won: 3, caught: 0, items: 0, steps: 40, trainers: 0, duelsWon: 0, took: 0, mons: { 277: 4, 280: 2 }, moves: { 33: 6 } });
     expect(tallySince(null, null, 7)).toMatchObject({ won: 0, steps: 7, mons: {} });
+  });
+});
+
+describe('partyWhole', () => {
+  it('passes a mon whose block adds up, and fails one caught decrypted in place (a BAD EGG, Cam 11-01)', () => {
+    const party = new Uint8Array(600);
+    const v = new DataView(party.buffer);
+    v.setUint32(0, 0x12345678, true);
+    v.setUint32(4, 0x9abcdef0, true);
+    const key = (0x12345678 ^ 0x9abcdef0) >>> 0;
+    const plain = new Uint16Array(24);
+    plain[0] = 331;
+    plain[7] = 42;
+    v.setUint16(28, plain.reduce((a, b) => (a + b) & 0xffff, 0), true);
+    for (let w = 0; w < 12; w++) v.setUint32(32 + w * 4, ((plain[w * 2] | (plain[w * 2 + 1] << 16)) ^ key) >>> 0, true);
+    expect(partyWhole(party, 1)).toBe(true);
+    // Mid-edit: the same block with its encryption off.
+    for (let w = 0; w < 12; w++) v.setUint32(32 + w * 4, (v.getUint32(32 + w * 4, true) ^ key) >>> 0, true);
+    expect(partyWhole(party, 1)).toBe(false);
+    // Past the count is not looked at, and an empty slot adds up to nothing.
+    expect(partyWhole(party, 0)).toBe(true);
+    expect(partyWhole(new Uint8Array(600), 6)).toBe(true);
   });
 });
