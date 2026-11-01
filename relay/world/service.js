@@ -4024,18 +4024,24 @@ function centreFor(room, a) {
   }
   return best;
 }
+function planeOf(room, s) {
+  const p = room.places.get(s.map);
+  if (p) return { x: p.gx + s.x, y: p.gy + s.y };
+  const c = room.anchors.get(s.map);
+  return c ? { x: c.gx, y: c.gy } : null;
+}
 function goal(room, a, b) {
   if (health(a) < HURT) {
     const c = centreFor(room, a);
     if (c) return c;
   }
   if (hunting(room)) {
-    const p2 = room.places.get(a.m.spot.map);
+    const p2 = planeOf(room, a.m.spot);
     let best, bestD2 = Infinity;
     for (const o of room.actors) {
-      const q = room.places.get(o.m.spot.map);
+      const q = planeOf(room, o.m.spot);
       if (o === a || o.away || !p2 || !q || room.inFog(o.m.spot)) continue;
-      const d = Math.abs(q.gx + o.m.spot.x - p2.gx - a.m.spot.x) + Math.abs(q.gy + o.m.spot.y - p2.gy - a.m.spot.y);
+      const d = Math.abs(q.x - p2.x) + Math.abs(q.y - p2.y);
       if (d < bestD2) {
         bestD2 = d;
         best = o;
@@ -4050,9 +4056,9 @@ function goal(room, a, b) {
   }
   const cells = insideNext(room);
   if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return wander(room, a, b);
-  const p = room.places.get(a.m.spot.map);
+  const p = planeOf(room, a.m.spot);
   if (!p) return null;
-  const x = p.gx + a.m.spot.x, y = p.gy + a.m.spot.y;
+  const { x, y } = p;
   const hops = /* @__PURE__ */ new Map();
   const near = [];
   let bestH = Infinity, bestD = Infinity;
@@ -4980,4 +4986,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "30b75688a3a1";
+export const WORLD_HASH = "5b2321321d70";

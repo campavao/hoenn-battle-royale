@@ -144,6 +144,40 @@ test('a Safari catch, the drop on the fly map, and out of the Safari', async ({ 
   expect(await s((s) => s.rom?.partyCount() ?? 0), 'the team came with the trainer').toBe(caught);
 });
 
+test('a rung lifts the whole team, and the party is never copied halfway through (Cam 11-01: BAD EGG)', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.goto(`/?rom=${romHashParam()}#solo&nobots&safari=0&fog=900&seed=7`);
+  await page.locator('#intro-go').click({ timeout: 90_000 });
+  type Rom = { partyCount(): number; fillParty(): Promise<void>; setPhase(n: number): void; give(item: number, n: number): Promise<unknown>; fameTeam(): Promise<{ species: number; level: number }[]> };
+  type W = { __spike: { rom: Rom; swapping: boolean; link: { me: number; room: { actor(id: number): { m: { spot: unknown; facing: number }; calm: number } } } } };
+  await page.waitForFunction(() => { const s = (window as unknown as W).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 120_000 });
+  await page.waitForTimeout(4000);
+  // The DAY CARE's chest for somebody to start from, then six of them: the lift of six runs
+  // over several frames.
+  await page.evaluate(() => { const s = (window as unknown as W).__spike, a = s.link.room.actor(s.link.me); a.m = { ...a.m, spot: { map: 'MAP_ROUTE117_POKEMON_DAY_CARE', x: 5, y: 6 }, facing: 2 }; a.calm = 0; });
+  const tap = async (k: string) => { await key(page, k, true); await page.waitForTimeout(90); await key(page, k, false); };
+  await page.waitForTimeout(800);
+  await tap('z'); await page.waitForTimeout(3000);
+  await tap('z'); await page.waitForTimeout(1200);
+  await tap('Enter'); await page.waitForTimeout(2000);
+  for (let i = 0; i < 10 && (await page.evaluate(() => (window as unknown as W).__spike.swapping)); i++) { await tap('x'); await page.waitForTimeout(1500); }
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => (window as unknown as W).__spike.rom.partyCount())).toBeGreaterThan(0);
+  await page.evaluate(() => (window as unknown as W).__spike.rom.fillParty());
+  const first = (await page.evaluate(() => (window as unknown as W).__spike.rom.fameTeam()))[0].species;
+  for (const [phase, rung] of [[3, 30], [4, 50], [5, 75], [6, 100]]) {
+    const team = await page.evaluate(async (phase) => {
+      const rom = (window as unknown as W).__spike.rom;
+      rom.setPhase(phase);
+      await rom.give(13, 1);
+      return rom.fameTeam();
+    }, phase);
+    expect(team.map((m) => m.level), `phase ${phase}`).toEqual(Array(6).fill(rung));
+    // A mon copied halfway reads as noise: species 331 came back 52950.
+    for (const m of team) expect(m.species === first || m.species <= 411, `phase ${phase}: species ${m.species}`).toBe(true);
+  }
+});
+
 test('a dropped bag opens its team, and MOVES off the team opens the move screen', async ({ page }) => {
   test.setTimeout(300_000);
   // A world of the page's own with a long Safari, so nothing ends under the test.

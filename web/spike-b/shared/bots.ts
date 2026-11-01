@@ -98,6 +98,15 @@ function centreFor(room: Room, a: Actor): Spot | null {
  *  closes, and to an event while its legendary stands, DESIGN §10). One in three heads for
  *  the newest event on the ground; the rest stay put inside the ring, and those outside
  *  it walk in to its nearest cell. */
+/** Where a spot is on Hoenn's plane: its map's place, or indoors (PETALBURG WOODS, a cave
+ *  on the way) the one point the room keeps for that map. */
+function planeOf(room: Room, s: Spot): { x: number; y: number } | null {
+  const p = room.places.get(s.map);
+  if (p) return { x: p.gx + s.x, y: p.gy + s.y };
+  const c = room.anchors.get(s.map);
+  return c ? { x: c.gx, y: c.gy } : null;
+}
+
 function goal(room: Room, a: Actor, b: Brain): Spot | null {
   // Hurt: a CENTER first (brain.ts, HURT), as long as there is one out of the fog.
   if (health(a) < HURT) {
@@ -108,12 +117,12 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
   // the nearest still standing, rather than at a cell; otherwise the last three wait for
   // each other in a shrinking ring.
   if (hunting(room)) {
-    const p = room.places.get(a.m.spot.map);
+    const p = planeOf(room, a.m.spot);
     let best: Actor | undefined, bestD = Infinity;
     for (const o of room.actors) {
-      const q = room.places.get(o.m.spot.map);
+      const q = planeOf(room, o.m.spot);
       if (o === a || o.away || !p || !q || room.inFog(o.m.spot)) continue;
-      const d = Math.abs(q.gx + o.m.spot.x - p.gx - a.m.spot.x) + Math.abs(q.gy + o.m.spot.y - p.gy - a.m.spot.y);
+      const d = Math.abs(q.x - p.x) + Math.abs(q.y - p.y);
       if (d < bestD) { bestD = d; best = o; }
     }
     if (best) return { ...best.m.spot };
@@ -125,9 +134,9 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
   }
   const cells = insideNext(room);
   if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return wander(room, a, b);
-  const p = room.places.get(a.m.spot.map);
+  const p = planeOf(room, a.m.spot);
   if (!p) return null;
-  const x = p.gx + a.m.spot.x, y = p.gy + a.m.spot.y;
+  const { x, y } = p;
   // The inside map fewest crossings away on foot (an island's bot stays), then its cell
   // nearest the bot.
   // One of those within a few steps of the nearest: the bots outside, all aimed at the

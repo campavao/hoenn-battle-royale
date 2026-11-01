@@ -21,7 +21,7 @@ import { PROTOCOL, type Dir, type Lines, type Msg, type PackedMon } from '../src
 import { voice } from '../src/match/ticker';
 import { loadCheckedRelease } from '../src/release';
 import { isPrePatched, sha1Hex } from '../src/rom/emerald';
-import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fameTeam, fieldOf, healed, rekey, spillOf, teamOf, withMoney, withoutItem } from './carry';
+import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fameTeam, fieldOf, healed, partyWhole, rekey, spillOf, teamOf, withMoney, withoutItem } from './carry';
 import { startMenuTable } from '../src/touch';
 import { FADE_COLOR_WORD, FADE_Y_WORD, fadeOf } from '../src/field';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
@@ -91,6 +91,8 @@ const ROM_BASE = 0x08000000;
 const FADE_IN_WAIT = 45;
 /** How fast the hidden ROM runs a battle's start nobody sees (battle()). */
 const HURRY_SPEED = 8;
+/** gBrLevels.lifting (br_levels.h): set while the ROM lifts the party to a new rung. */
+const LEVELS_LIFTING = 3;
 /** br_event.h's BR_EVENT_MAX: the events gBrEvents has room for. */
 const BR_EVENT_MAX = 4;
 /** How long the last fight took to start: from the TRAINER card to the battle running. */
@@ -184,6 +186,8 @@ export interface RomBattles {
   /** The match's ring phase (1 the first, as the host numbers them): the level rung every
    *  battle from now on starts at. */
   setPhase(phase: number): void;
+  /** For the specs: a full team of copies of the first (a lift takes longest for six). */
+  fillParty(): Promise<void>;
   /** The Safari opening (br_zone.c): wild battles draw any first stage while it runs. */
   setSafari(on: boolean): void;
   /** ROYALe BALLs left to throw in this round's Safari (gNumSafariBalls, 30 a round). */
@@ -487,6 +491,16 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     emu.bytes(s1 + BLOCKS_AT, BLOCKS_LEN).set(k.blocks);
     emu.write(ballsAt, k.balls, 8);
   };
+  /** Before a pause that copies the party (`kept`): the ROM done with it. A rung's lift
+   *  runs over several frames (six mons' stats, evolutions and learnsets) and every field
+   *  of a mon is read and written with it decrypted in place, so a frame can end halfway.
+   *  Copied then and put back, its encrypted block is plain bytes: a BAD EGG, its ball and
+   *  POKeRUS read from noise (Cam 11-01). Cut off there, the rest of the team stayed down
+   *  a rung. The emulator must be running. */
+  const partyDone = async () => {
+    const done = () => emu.read(levelsAt + LEVELS_LIFTING, 8) === 0 && partyWhole(emu.bytes(partyAt, PARTY_LEN), emu.read(countAt, 8));
+    if (!done() && !await until(emu, done, 600)) console.warn('spike: the party is still being written after 10 s');
+  };
   const send = (msg: Parameters<typeof packSlot>[0]) => {
     for (const s of packSlot(msg)) box.push(s.type, s.payload);
   };
@@ -513,6 +527,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     send({ t: 'give', items: [{ id: item, n }] });
     await until(emu, () => box.pending() === 0, 60);
     await frames(emu, 1);
+    await partyDone();
     emu.pause();
     const after = kept();
     // Back to parked with what it left, as after a battle: a refusal's NO ROOM box and
@@ -766,6 +781,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       await until(emu, () => emu.read(catchAt, 8) === 0, Infinity);
       // A loss is a whiteout: in a match the trainer is out. Here the team goes back to
       // how it came in (the ring and elimination are the match's, later).
+      await partyDone();
       const now = kept();
       last = now;
       if (result.outcome !== LOST && result.outcome !== DREW) carried = now;
@@ -774,6 +790,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     }
     fighting = false;
     pub();
+    await partyDone();
     emu.pause();
     // A ROM that could not be put back would start the next battle from whatever this
     // one left on its field: no more battles from it.
@@ -933,6 +950,16 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       const l = (carried ?? start).levels;
       return l[4] | (l[5] << 8);
     },
+    fillParty() {
+      return inTurn(async () => {
+        const k = carried ?? kept();
+        const party = k.party.slice();
+        for (let i = k.count; i < 6; i++) party.set(party.subarray(0, 100), i * 100);
+        const next = { ...k, count: 6, party: party as typeof k.party };
+        keep(next);
+        carried = last = next;
+      });
+    },
     fogNow() {
       if (fighting && !broken && emu.read(ringAt + 4, 8) !== 0xff) lay(true);
     },
@@ -1042,6 +1069,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
           await frames(emu, 60);
         }
         watch();
+        await partyDone();
         emu.pause();
         const now = kept();
         if (!repark(true)) broken = true;
@@ -1132,6 +1160,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         }
         await frames(emu, 10);
         watch();
+        await partyDone();
         emu.pause();
         // A row that acted on the field instead of coming back to the menu (an ESCAPE
         // ROPE, a rod, FLY or DIG off the team) did it on the hidden ROM's field, which
@@ -1170,6 +1199,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
           await until(emu, () => section >= 0 || leaving || (emu.read(pickAt + 8, 16) === 0 && ++ran > 60), 40 * 60);
         }
         watch();
+        await partyDone();
         emu.pause();
         const now = kept();
         if (!repark(true)) broken = true;
@@ -1231,6 +1261,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         await until(emu, () => feed.stopped() || (shown ? onField() && !emu.read(spectAt + 5, 8) : waited > 600 || (feed.over() && !feed.peek() && waited > 60)), Infinity);
         tick();
         if (speed !== 1) pace(1);
+        await partyDone();
         emu.pause();
         if (!repark(false)) broken = true;
         else if (carried) keep(carried);
@@ -1254,6 +1285,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
           await until(emu, () => { drain(() => undefined); return leaving || emu.read(match, 8) === 5 || onField(); }, 60 * 120);
         }
         leaving = false;
+        await partyDone();
         emu.pause();
         if (!repark(false)) broken = true;
         else if (carried) keep(carried);
@@ -1281,6 +1313,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
           await until(emu, () => { drain(() => undefined); return leaving || emu.read(match, 8) === 5 || onField(); }, 60 * 120);
         }
         leaving = false;
+        await partyDone();
         emu.pause();
         if (!repark(false)) broken = true;
         else if (carried) keep(carried);
@@ -1326,6 +1359,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
           quiet();
         }
         leaving = false;
+        await partyDone();
         emu.pause();
         const after = kept();
         if (!repark(true)) broken = true;
@@ -1419,6 +1453,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
           await until(emu, () => given !== 0, 90);
         } else console.warn('spike: the trader\'s menu did not open');
         watch();
+        await partyDone();
         emu.pause();
         const now = kept();
         if (!repark(true)) broken = true;

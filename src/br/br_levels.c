@@ -629,7 +629,9 @@ void BrLevels_Tick(void)
     gBrLevels.phaseSeen = phase;
     gBrLevels.tier = TierForPhase(phase);
     gBrLevels.rung = sLadder[gBrLevels.tier];
+    gBrLevels.lifting = TRUE;
     LiftParty(gBrLevels.rung);
+    gBrLevels.lifting = FALSE;
     SwapRod(sRods[gBrLevels.tier]);
     // One line per ring move, never three: ring, level and rod are one event. And none
     // for the first ring, which keeps the rung the match already had (phase 1 is tier 0,
