@@ -58,6 +58,7 @@ export const FILE_SECONDS = {
   // and a Safari catch among them.
   'spikeb.spec.ts': 660,
   'spikeb-two.spec.ts': 120,
+  'spikeb-passcode.spec.ts': 40,
   'stall.spec.ts': 33,
   'tap.spec.ts': 7,
   'walk-and-see.spec.ts': 14,

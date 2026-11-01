@@ -4402,6 +4402,10 @@ var WorldService = class {
             this.send(link, { t: "no_room", code: String(m.code ?? "").toUpperCase(), rom: true });
             return;
           }
+          if (room2 === "full") {
+            this.send(link, { t: "no_room", code: String(m.code ?? "").toUpperCase(), full: true });
+            return;
+          }
           if (room2.set.door === "pass" && String(m.pass ?? "").toUpperCase() !== room2.pass) {
             this.send(link, { t: "no_room", code: room2.code, pass: true });
             return;
@@ -4612,7 +4616,8 @@ var WorldService = class {
     if (typeof m.code === "string" && m.code) {
       const r = this.rooms.get(m.code.toUpperCase());
       if (r && r.rom && rom && r.rom !== rom) return "rom";
-      return r && r.members.size < (r.quick ? ROOM_MAX : r.set.max) ? r : null;
+      if (r && r.members.size >= (r.quick ? ROOM_MAX : r.set.max)) return "full";
+      return r ?? null;
     }
     if (m.host === true) return this.make(false, rom);
     let best = null;
@@ -4826,4 +4831,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "8edb273564b0";
+export const WORLD_HASH = "c3d211827214";

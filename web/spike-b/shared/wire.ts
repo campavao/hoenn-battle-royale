@@ -125,8 +125,9 @@ export type WorldDown =
   | { t: 'rooms'; rooms: Listed[] }
   /** The host took me out of the room: back to the menu, the socket still open. */
   | { t: 'kicked' }
-  /** No room by that code (or it is full, or its passcode was wrong: `pass`). */
-  | { t: 'no_room'; code: string; pass?: boolean; rom?: boolean }
+  /** No way into the room by that code: none (no flag), every seat taken (`full`), its
+   *  passcode wrong (`pass`), or on another patch (`rom`). */
+  | { t: 'no_room'; code: string; pass?: boolean; rom?: boolean; full?: boolean }
   /** A match: my trainer's id in it and the Room as it starts (or as it is, joining late). */
   | { t: 'hello'; id: number; state: RoomState; key?: string }
   | { t: 'state'; state: RoomState }
