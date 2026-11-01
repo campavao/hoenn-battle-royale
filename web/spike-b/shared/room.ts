@@ -1869,8 +1869,9 @@ export class Room {
       // Safari's pool through the opening, brain.ts setTargets): no Zone map is a place
       // of the plane, so the Zone's bots stood still (Cam 10-30). One on its way somewhere
       // (bots.ts leg) goes in: PETALBURG WOODS, a cave or a gatehouse is the only way
-      // between some of Hoenn's outdoors.
-      if (a.bot && !onWay && !this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) return null;
+      // between some of Hoenn's outdoors. Once in, it may step about as anywhere: a walk-up
+      // in the wood is not "on its way", and every step of it would be shut.
+      if (a.bot && !onWay && this.places.has(from.map) && !this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) return null;
       const t = r.to;
       // A REGI chamber's wall: shut until its story opened it (and in a match without one).
       if (r.warp && DOOR_MAPS.has(from.map) && from.y === DOOR_Y + 1 && t.y < DOOR_Y && !this.events.some((e) => e.map === from.map && e.opened)) return null;

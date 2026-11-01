@@ -113,15 +113,17 @@ test('a Safari catch, the drop on the fly map, and out of the Safari', async ({ 
   // To marked spots until something is caught: A once every two seconds in a battle
   // (BALL is where the cursor starts), never a spot spent on a ROM still booting.
   let caught = 0;
-  for (let tries = 0; tries < 8 && !caught; tries++) {
+  for (let tries = 0; tries < 12 && !caught; tries++) {
     const dirs = await route(page, '(p, room) => room.patchesOn(p.map).some((q) => q.x === p.x && q.y === p.y) && !room.taken.has(room.patchKey ? room.patchKey(p) : -1)');
     expect(dirs, 'a marked spot to walk to').not.toBeNull();
     for (const d of dirs!) {
       const was = await spot();
       await key(page, KEY[d], true);
-      await expect.poll(async () => (await spot()) !== was || !!(await s((s) => s.battle)), { timeout: 15_000, intervals: [30] }).toBe(true);
+      // A bot standing on the next cell (they stand for up to 16 s in the Zone): round it,
+      // from a new route, as a player would.
+      const moved = await expect.poll(async () => (await spot()) !== was || !!(await s((s) => s.battle)), { timeout: 5_000, intervals: [30] }).toBe(true).then(() => true, () => false);
       await key(page, KEY[d], false);
-      if (await s((s) => s.battle)) break;
+      if (!moved || (await s((s) => s.battle))) break;
     }
     await expect.poll(() => s((s) => !!s.battle), { timeout: 5_000 }).toBe(true).catch(() => undefined);
     for (let t = 0; t < 45 && (await s((s) => !!s.battle)); t++) {
