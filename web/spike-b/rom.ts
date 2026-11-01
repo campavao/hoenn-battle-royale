@@ -296,6 +296,8 @@ export interface RomFiles {
   emu: Emulator;
   rom: Uint8Array;
   sym: (name: string) => number;
+  /** The same symbols as a table, for what names an address (emu/watchdog.ts). */
+  table: ReadonlyMap<string, number>;
   /** The live game's version line: which ROM is in the tab, in seven characters, and
    *  STALE when br-version.json names another (app.ts buildLine). */
   version: string;
@@ -306,6 +308,9 @@ export interface RomFiles {
 /** The player's ROM, patched, and its build's symbols. Dev: web/public/spike-rom/ when it
  *  is there. Otherwise the game's own way: the ROM the player picked on the main page
  *  (stored in this browser) with the published patch applied and checked. */
+/** A dev sidecar's br-symbols.json, its hex strings as numbers. */
+const asTable = (json: Record<string, string>) => new Map(Object.entries(json).map(([n, at]) => [n, Number(at)]));
+
 export async function loadRom(canvas: HTMLCanvasElement, say: (text: string) => void, pick: (emu: Emulator) => Promise<void>, devRom: string | null): Promise<RomFiles> {
   const emu = await Emulator.create(canvas);
   const devJson = (url: string) => fetch(url).then((r) => (r.ok && !r.headers.get('content-type')?.includes('html') ? r.json() : null), () => null) as Promise<Record<string, string> | null>;
@@ -313,7 +318,7 @@ export async function loadRom(canvas: HTMLCanvasElement, say: (text: string) => 
   if (dev) {
     const rom = new Uint8Array(await (await fetch('/spike-rom/rom.gba')).arrayBuffer());
     const romSha = (await sha1Hex(rom)).slice(0, 7);
-    return { emu, rom, sym: (n) => Number(dev[n]), version: `spike B · local build · rom ${romSha}`, romSha };
+    return { emu, rom, sym: (n) => Number(dev[n]), table: asTable(dev), version: `spike B · local build · rom ${romSha}`, romSha };
   }
   // No ROM on this device yet (or a dev `?rom=`, which always wins): ask for one.
   if (!emu.hasRom() || devRom) await pick(emu);
@@ -324,7 +329,7 @@ export async function loadRom(canvas: HTMLCanvasElement, say: (text: string) => 
     if (!sym) { say('A local build needs tools/br/dev-patch.sh run first.'); throw new Error('no dev sidecars'); }
     const rom = emu.readRom();
     const romSha = (await sha1Hex(rom)).slice(0, 7);
-    return { emu, rom, sym: (n) => Number(sym[n]), version: `spike B · local build · rom ${romSha}`, romSha };
+    return { emu, rom, sym: (n) => Number(sym[n]), table: asTable(sym), version: `spike B · local build · rom ${romSha}`, romSha };
   }
   say('Applying the patch to your ROM…');
   const release = await loadCheckedRelease((patch) => applyPatch(emu.readRom(), patch));
@@ -336,7 +341,7 @@ export async function loadRom(canvas: HTMLCanvasElement, say: (text: string) => 
   const mine = (await sha1Hex(release.rom)).slice(0, 7);
   const want = (release.info.romSha1 ?? '').slice(0, 7);
   const build = !want || mine === want ? `rom ${mine}` : `rom ${mine} — STALE, build is ${want}`;
-  return { emu, rom: release.rom, sym: (n) => symbols.get(n) ?? NaN, version: `spike B · patch ${release.info.patch} · shell ${release.info.shell.slice(0, 7)} · ${build}`, romSha: mine };
+  return { emu, rom: release.rom, sym: (n) => symbols.get(n) ?? NaN, table: symbols, version: `spike B · patch ${release.info.patch} · shell ${release.info.shell.slice(0, 7)} · ${build}`, romSha: mine };
 }
 
 function applyPatch(source: Uint8Array, patch: Uint8Array): Promise<Uint8Array> {
