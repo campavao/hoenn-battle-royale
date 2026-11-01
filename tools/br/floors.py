@@ -21,13 +21,15 @@ is placed on its low-tide layouts, the maps' own, which hold because BrStory_Tid
 the tide out: the high-tide layouts its scripts swap in put some of these cells in water.
 
 Both stand where floor.py's Pick says: on a floor tile you can walk to from a door, from
-the middle of the room outward.
+the middle of the room outward, unless Cam has put them somewhere by hand: room-paint.json,
+from the painter at /rooms/ (apply-room-paint.py), goes over what this picks.
 
   tools/br/floors.py           print the census
   tools/br/floors.py --write   rewrite sRooms in src/br/br_balls.c
   tools/br/floors.py --check   fail if sRooms is not what --write would write (CI)
 """
 import importlib.util
+import json
 import os
 import re
 import struct
@@ -37,6 +39,7 @@ from collections import deque
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 BALLS_C = os.path.join(ROOT, "src", "br", "br_balls.c")
+PAINT = os.path.join(HERE, "room-paint.json")
 
 spec = importlib.util.spec_from_file_location("export_world", os.path.join(HERE, "export-world.py"))
 ew = importlib.util.module_from_spec(spec)
@@ -410,6 +413,10 @@ def problems(table):
     for map_id, cache, trader, cells, _ in table:
         if len(cells) < (2 if trader or map_id in HOUSES else 1):
             out.append("no cell for the %s on %s" % ("trader" if trader else "cache", map_id))
+    names = {r[0] for r in table}
+    for map_id in json.load(open(PAINT, encoding="utf-8")):
+        if map_id not in names:
+            out.append("painted but not a room: %s" % map_id)
     return out
 
 
@@ -418,12 +425,18 @@ def c_table(table):
              "#define BR_ROOM_TRADERS %d" % sum(1 for r in table if r[2]),
              "static const struct BrRoom sRooms[] =", "{"]
     traders = 0
+    painted = json.load(open(PAINT, encoding="utf-8"))
     for map_id, cache, trader, cells, _ in table:
         cx, cy = cells[0] if cells else (0, 0)
         px, py = cells[1] if len(cells) > 1 else (0, 0)
         if not cache:
             # a trader alone stands on the first cell
             px, py, cx, cy = cx, cy, 0, 0
+        if map_id in painted:
+            item, (px, py) = painted[map_id]["item"], painted[map_id]["person"]
+            cache = item is not None
+            if item:
+                cx, cy = item
         lines.append("    { %s, %d, %d, %d, %d, %s, %s }," % (
             map_id, cx, cy, px, py, "TRUE" if cache else "FALSE",
             traders if trader else "BR_NO_TRADER"))
@@ -462,7 +475,7 @@ def main():
                 sys.exit("src/br/br_balls.c's sRooms is stale: run tools/br/floors.py --write")
         else:
             open(BALLS_C, "w", encoding="utf-8", newline="\n").write(new)
-        print("rooms: %d (%d houses), %d caches, %d more on tables, %d traders; every floor has something" % (
+        print("rooms: %d (%d houses), %d caches before the painting, %d more on tables, %d traders; every floor has something" % (
             len(table), len(HOUSES), sum(1 for r in table if r[1]), sum(len(r[4]) for r in table), sum(1 for r in table if r[2])))
         return
     byroom = {r[0]: r for r in table}

@@ -3,9 +3,9 @@
 # sTableBalls, written by tools/br/floors.py). Each sits on a table top and is taken by
 # pressing A at it from the floor beside it.
 #
-# DEVON CORP. 2F (map 11:1) is sRooms[143]: its cache, key 0x8D8F, on the desk at (11,4),
+# DEVON CORP. 2F (map 11:1) is sRooms[143]: its cache, key 0x8D8F, painted at (5,4),
 # and sTableBalls[18] and [19], keys 0xAC12 and 0xAC13, on the desks at (7,4) and (10,7)
-# -- MAP_OFFSET in, (18,11), (14,11) and (17,14). The boot puts us at (7,3), above the
+# -- MAP_OFFSET in, (12,11), (14,11) and (17,14). The boot puts us at (7,3), above the
 # first desk, facing down at it.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 0B 01 07 00 03 00 BD BB C7 FF
@@ -14,7 +14,7 @@ poke u8 gBrMatch 2
 poke u32 gBrMatch+8 0x1072
 wait 30
 expect u16 gBrLoot 0x8D8F
-expect u16 gBrLoot+2 18
+expect u16 gBrLoot+2 12
 expect u16 gBrLoot+4 11
 expect u16 gBrLoot+20 0xAC12
 expect u16 gBrLoot+22 14
