@@ -2440,6 +2440,18 @@ var CHEST = { map: "MAP_ROUTE117_POKEMON_DAY_CARE", x: 5, y: 5 };
 var CHEST_SPECIES = [397, 400, 334, 359, 329, 394, 366, 384, 376, 331, 343, 391, 389, 307, 338, 285, 279, 282];
 var CHEST_KEY = 4 << 20;
 var GROUND_PER_MAP = 6;
+function cellRng(seed, map, x, y) {
+  let s = (seed ^ Math.imul(x + 1, 2654435761) ^ Math.imul(y + 1, 2246822507)) >>> 0;
+  for (let i = 0; i < map.length; i++) s = Math.imul(s ^ map.charCodeAt(i), 16777619) >>> 0;
+  s = s || 1;
+  return () => {
+    s ^= s << 13;
+    s ^= s >>> 17;
+    s ^= s << 5;
+    return (s >>> 0) / 4294967296;
+  };
+}
+var BALLS_TM_IN = 4;
 var REGROW = 60 * 90;
 var AFTER_WIN = 60 * 15;
 var TRUCK = 40;
@@ -2734,7 +2746,10 @@ var Room = class {
       const cells = land.get(id2).filter((c) => !marked.has(`${c.x}:${c.y}`) && !(id2 === "MAP_LITTLEROOT_TOWN" && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
       for (let i = 0; i < GROUND_PER_MAP && cells.length; i++) {
         const c = cells.splice(Math.floor(rng() * cells.length), 1)[0];
-        const item = cableOrDoll(scatterItem(rng), rng());
+        let item = cableOrDoll(scatterItem(rng), rng());
+        const own = cellRng(this.seed ^ 47633, id2, c.x, c.y);
+        if (Math.floor(own() * BALLS_TM_IN) === 0) item = blueTm(own);
+        else while (isTm(item)) item = cableOrDoll(scatterItem(own), own());
         out.set(`${id2}:${c.x}:${c.y}`, { key: ++n, map: id2, x: c.x, y: c.y, item });
       }
     }
@@ -2744,10 +2759,11 @@ var Room = class {
     });
     for (const [map, x, y, house, cache2] of ROOMS) {
       if (!cache2) continue;
-      if (!this.maps.has(map) || this.places.has(map) || this.world.cell(map, x, y) !== 0 || out.has(`${map}:${x}:${y}`)) continue;
+      if (!this.maps.has(map) || this.places.has(map) || this.world.cell(map, x, y) > 1 || out.has(`${map}:${x}:${y}`)) continue;
       if (this.patchesOn(map).some((q) => q.x === x && q.y === y)) continue;
-      const gold = Math.floor(rng() * (house ? 3 : 8)) === 0;
-      out.set(`${map}:${x}:${y}`, { key: ++n, map, x, y, item: gold ? GOLD[Math.floor(rng() * GOLD.length)] : blueTm(rng) });
+      const r = this.world.cell(map, x, y) === 0 ? rng : cellRng(this.seed ^ 502558, map, x, y);
+      const gold = Math.floor(r() * (house ? 3 : 8)) === 0;
+      out.set(`${map}:${x}:${y}`, { key: ++n, map, x, y, item: gold ? GOLD[Math.floor(r() * GOLD.length)] : blueTm(r) });
     }
     for (const id2 of [...land.keys()].sort()) {
       if (!/^MAP_\w+_(TOWN|CITY)$/.test(id2)) continue;
@@ -4810,4 +4826,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "78f111933355";
+export const WORLD_HASH = "c3017c3aa936";
