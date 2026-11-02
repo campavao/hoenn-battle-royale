@@ -59,6 +59,7 @@ import { AskBox } from './askbox';
 import { ANIM_COUNTER_MAX } from '../src/tile-anims';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
+import { clampZoom, loadZoom, nextZoom, pickedZoom, saveZoom, wheelSteps, zoomLabel, zoomRange } from './zoom';
 import { fieldScale, FADE_COLOR_WORD, FADE_Y_WORD, FOG_EVA, FOG_EVB, fadeOf, keyPicture } from '../src/field';
 import { PadPrefsControl } from '../src/ui/padprefs';
 import { wireDpad } from './dpad';
@@ -328,6 +329,8 @@ addEventListener('keydown', (e) => {
   if ((e.key === 'f' || e.key === 'F') && !e.repeat) { itemfinder(); return; }
   if ((e.key === 'r' || e.key === 'R') && !e.repeat) { openSheet(); return; }
   if (e.key.toLowerCase() === MARK_KEY && !e.repeat) { markHere('key'); return; }
+  if (!e.ctrlKey && !e.metaKey && !e.repeat && (e.key === '+' || e.key === '=')) { zoomBy(1); return; }
+  if (!e.ctrlKey && !e.metaKey && !e.repeat && (e.key === '-' || e.key === '_')) { zoomBy(-1); return; }
   const k = KEYMAP[e.key];
   if (!k) return;
   e.preventDefault();
@@ -644,7 +647,8 @@ for (const [id, rowFor] of [['startmenu', (x: number, y: number) => startMenu.ro
 
 function askPaint(): void {
   if (!asking) return;
-  const scale = zoom / (devicePixelRatio || 1);
+  // The window's own size, not the field's: a player zoomed out still has to read and tap it.
+  const scale = fitZoom() / (devicePixelRatio || 1);
   const labels = asking.rows.map(([label]) => label);
   if (asking.start) {
     // My own SAFARI BALLs: not on a watcher's peek, which is somebody else's START.
@@ -1348,7 +1352,7 @@ function watchOn(by?: number): void {
   const others = actors().filter((a) => a.id !== link.me);
   const near = (a: Actor) => { const p = pixelOf(a); return Math.hypot(p.x - cam.x, p.y - cam.y); };
   const next = others.find((a) => a.id === by) ?? others.sort((p, q) => near(p) - near(q))[0];
-  if (next) { follow = next.id; if (zoom < 1) zoom = fitZoom(); }
+  if (next) { follow = next.id; if (zoom < 1) zoom = playZoom(); }
 }
 
 // ---- rounds (room.ts's results) --------------------------------------------------------
@@ -1881,13 +1885,15 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
     muted,
     remapping: remap.on,
     remapLine: remap.line,
-    help: ['Arrows move  Z: A  X: B  M: MENU', 'R: this sheet  V: spectate  K: mark'],
+    help: touchPad ? ['Pinch the map to zoom.'] : ['Arrows move  Z: A  X: B  M: MENU', 'R: this sheet  V: spectate  K: mark', '+ -  or the wheel: zoom'],
+    zoom: zoomLabel(playZoom(), zoomChoices()),
+    onZoom: () => { chooseZoom(nextZoom(playZoom(), zoomChoices())); lobby?.stage.redraw(); },
     version: versionLine,
     onSeat: (seat) => { sheetCard = seat; lobby?.stage.redraw(); },
     onKick: (seat) => { lobby?.kick(seat); sheetCard = null; lobby?.stage.redraw(); },
     onCloseCard: () => { sheetCard = null; lobby?.stage.redraw(); },
     onWatch: (dir) => { watch.step(dir); lobby?.stage.redraw(); },
-    onWatchSeat: (seat) => { follow = seat; if (zoom < 1) zoom = fitZoom(); sheetCard = null; lobby?.closeSheet(); },
+    onWatchSeat: (seat) => { follow = seat; if (zoom < 1) zoom = playZoom(); sheetCard = null; lobby?.closeSheet(); },
     onStopWatch: () => { follow = 0; lobby?.stage.redraw(); },
     onLeave: () => { sheetLeave = true; lobby?.stage.redraw(); },
     onStay: () => { sheetLeave = false; lobby?.stage.redraw(); },
@@ -2597,11 +2603,27 @@ function fitZoom(): number {
   return Math.max(1, Math.floor(Math.min(devW / 15, devH / 10) / TILE));
 }
 
+/** What the player chose (zoom.ts), inside this window's range. */
+let zoomSaved: number | null = null;
+try { zoomSaved = loadZoom(localStorage); } catch { /* a blocked store: the default */ }
+const zoomChoices = () => zoomRange(devW, devH, fitZoom());
+function playZoom(): number { return pickedZoom(zoomSaved, fitZoom(), zoomChoices()); }
+/** Takes a new choice, keeps it, and shows it on the field. */
+function chooseZoom(z: number): void {
+  if (z === zoomSaved && zoom === z) return;
+  zoomSaved = z;
+  try { saveZoom(localStorage, z); } catch { /* not kept */ }
+  zoom = z;
+  toast(`ZOOM ${zoomLabel(z, zoomChoices())}`);
+}
+/** Whole steps closer (+) or farther (-), stopping at the ends. */
+const zoomBy = (steps: number) => chooseZoom(clampZoom(playZoom() + steps, zoomChoices()));
+
 function resize(): void {
   const dpr = devicePixelRatio || 1;
   devW = Math.round(innerWidth * dpr);
   devH = Math.round(innerHeight * dpr);
-  if (!spectating) zoom = fitZoom();
+  if (!spectating) zoom = playZoom();
 }
 addEventListener('resize', resize);
 
@@ -2610,7 +2632,7 @@ function toggleSpectate(): void {
   spectating = !spectating;
   modeBtn.classList.toggle('on', spectating);
   modeBtn.textContent = spectating ? 'Back to my trainer (V)' : 'Spectate (V)';
-  if (!spectating) { follow = link.me; zoom = fitZoom(); }
+  if (!spectating) { follow = link.me; zoom = playZoom(); }
   held.clear();
 }
 modeBtn.addEventListener('click', toggleSpectate);
@@ -2656,7 +2678,7 @@ const watch = new Watch({
   me: () => link?.me ?? 0,
   spectating: () => spectating,
   follow: () => follow,
-  setFollow: (id) => { follow = id; if (id && zoom < 1) zoom = fitZoom(); },
+  setFollow: (id) => { follow = id; if (id && zoom < 1) zoom = playZoom(); },
   zoom: () => zoom,
   link: () => link ?? null,
   rom: () => rom,
@@ -2678,18 +2700,28 @@ let pinch0: { d: number; zoom: number } | null = null;
 let moved = 0;
 let tapAt: { x: number; y: number; t: number } | null = null;
 canvas.addEventListener('pointerdown', (e) => {
-  if (!spectating) { tapAt = { x: e.clientX, y: e.clientY, t: performance.now() }; return; }
-  canvas.setPointerCapture(e.pointerId);
+  if (spectating) canvas.setPointerCapture(e.pointerId);
+  else tapAt = { x: e.clientX, y: e.clientY, t: performance.now() };
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   moved = 0;
   if (pointers.size === 2) {
     const [a, b] = [...pointers.values()];
     pinch0 = { d: Math.hypot(a.x - b.x, a.y - b.y), zoom };
+    tapAt = null; // two fingers are a pinch, not a place to walk to
   }
 });
 canvas.addEventListener('pointermove', (e) => {
   const p = pointers.get(e.pointerId);
-  if (!p || !spectating) return;
+  if (!p) return;
+  if (!spectating) {
+    // On my own trainer a pinch is the same choice as the wheel's: whole steps, kept.
+    p.x = e.clientX; p.y = e.clientY;
+    if (pointers.size === 2 && pinch0) {
+      const [a, b] = [...pointers.values()];
+      chooseZoom(clampZoom(Math.round((pinch0.zoom * Math.hypot(a.x - b.x, a.y - b.y)) / pinch0.d), zoomChoices()));
+    }
+    return;
+  }
   const dpr = devicePixelRatio || 1;
   if (pointers.size === 1) {
     cam.x -= ((e.clientX - p.x) * dpr) / zoom;
@@ -2713,9 +2745,16 @@ const endPointer = (e: PointerEvent) => {
 };
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
+let wheelSum = 0;
 canvas.addEventListener('wheel', (e) => {
-  if (!spectating) return;
   e.preventDefault();
+  if (!spectating) {
+    // A trackpad's pinch comes as a wheel with Ctrl held, in much smaller deltas.
+    const { steps, rest } = wheelSteps(wheelSum, e.ctrlKey ? e.deltaY * 8 : e.deltaY);
+    wheelSum = rest;
+    if (steps) zoomBy(steps);
+    return;
+  }
   zoom = Math.min(8, Math.max(0.05, zoom * Math.exp(-e.deltaY * 0.0015)));
 }, { passive: false });
 
@@ -2730,7 +2769,7 @@ function followAt(clientX: number, clientY: number): void {
     const d = Math.hypot(p.x + 8 - wx, p.y - wy);
     if (d < bestD) { best = a; bestD = d; }
   }
-  if (best) { follow = best.id; if (zoom < 1) zoom = fitZoom(); }
+  if (best) { follow = best.id; if (zoom < 1) zoom = playZoom(); }
 }
 
 /** An actor's tile top-left in world pixels, mid-step included. */

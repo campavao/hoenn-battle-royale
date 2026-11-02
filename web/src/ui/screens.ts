@@ -559,6 +559,9 @@ export interface SheetModel {
   onLeaveSure?(): void;
   onClose(): void;
   onMute(): void;
+  /** ZOOM: spike B's player-chosen field zoom, where on the scale it is (spike-b/zoom.ts). */
+  zoom?: string;
+  onZoom?(): void;
   onRemap(): void;
   onResetPad(): void;
   onForget(): void;
@@ -579,6 +582,7 @@ function settingsOf(m: SheetModel): OptionSpec[] {
     { label: 'RESET PAD', id: 'remap-reset', onPress: m.onResetPad },
     { label: 'FORGET ROM', id: 'forget-rom', onPress: m.onForget },
   ];
+  if (m.onZoom) rows.push({ label: `ZOOM ${m.zoom}`, id: 'zoom', onPress: m.onZoom });
   if (m.pad) {
     rows.push({ label: 'MOVE PAD', id: 'pad-move', onPress: m.pad.onMove });
     rows.push({ label: m.pad.hidden ? 'SHOW PAD' : 'HIDE PAD', id: 'pad-hide', onPress: m.pad.onToggle });
