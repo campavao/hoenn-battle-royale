@@ -20,7 +20,7 @@ import { BATTLE_MENU, MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU
 import { EmeraldCanvas, TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_GREEN, TEXT_RED, TEXT_WHITE, fitText, measure, wrapText, type TextColor } from './emerald';
 import { ITEMS_POCKET, Win, bagHolds, drawFitted, drawIcon, drawItemFitted, drawKeycap, picture } from './phonehud';
 import { nextFocus, type Dir } from './focus';
-import { BAG_POCKETS, POCKET_BALLS, asksMove, itemEffect, itemInfo, medicineHelps, readBattleBag, usedOnOne, type Stack } from './bag';
+import { BAG_POCKETS, FIELD_POCKETS, POCKET_BALLS, asksMove, asksWhoInField, itemEffect, itemInfo, medicineHelps, readBattleBag, usableInField, usedOnOne, type Stack } from './bag';
 
 // ---- what the ROM says ---------------------------------------------------------------
 
@@ -333,6 +333,17 @@ export interface BattleMenuDeps {
     sendOut(slot: number): void;
     /** ...or its SUMMARY, and back to the question. */
     summaryOut(slot: number): void;
+    /** The same windows off a battle: PARTY and BAG on the field. */
+    field?: {
+      close(): void;
+      readBag(): Map<number, Stack[]>;
+      summary(slot: number): void;
+      moves(slot: number): void;
+      swap(a: number, b: number): Promise<void>;
+      give(slot: number, item: number): Promise<void>;
+      take(slot: number, item: number): Promise<void>;
+      use(pocket: number, item: number, slot?: number, move?: number): void;
+    };
     /** A keyboard's keys on PARTY and BAG. */
     keys?: { party: string; bag: string };
     /** Send out the party's `slot`; or open its SUMMARY. */
@@ -437,7 +448,16 @@ export class BattleMenu {
   private team: PartyMember[] = [];
   private memberAt = 0;
   /** The item that brought the party up, until a slot or BACK. */
-  private using: { pocket: number; item: number; effect: Uint8Array; name: string } | null = null;
+  private using: { pocket: number; item: number; effect: Uint8Array | null; name: string } | null = null;
+  /** Off a battle, which screen BACK leaves from; null in one. */
+  private fieldHome: 'party' | 'bag' | null = null;
+  private fieldBag: Map<number, Stack[]> | null = null;
+  /** SWITCH: the one to move, until a slot or BACK. */
+  private swapFrom: number | null = null;
+  /** GIVE: who is to hold what the bag picks. */
+  private giving: number | null = null;
+  private heldBtn!: HTMLButtonElement;
+  private movesBtn!: HTMLButtonElement;
   /** One has fainted and the ROM is asking who goes out. */
   private forced = false;
   /** The ROM's turn on its own screen: the windows stand aside whatever the menu byte says. */
@@ -585,7 +605,7 @@ export class BattleMenu {
     this.partyBox.appendChild(this.useHead);
     this.useHeadWin = new Win(this.useHead, USE_HEAD_W, USE_HEAD_H, (c) => {
       c.fillRect({ x: 0, y: 0, w: USE_HEAD_W, h: USE_HEAD_H }, 'rgba(16,20,24,0.6)');
-      c.drawTextCentred(fitText(this.forced ? 'Send out' : this.using?.name ?? '', USE_HEAD_W - 8), USE_HEAD_W / 2, 3, TEXT_WHITE);
+      c.drawTextCentred(fitText(this.forced ? 'Send out' : this.swapFrom !== null ? 'Switch with' : this.using?.name ?? '', USE_HEAD_W - 8), USE_HEAD_W / 2, 3, TEXT_WHITE);
       c.drawTextCentred('Which POKeMON?', USE_HEAD_W / 2, 18, TEXT_WHITE);
     });
     for (let i = 0; i < 6; i++) {
@@ -594,8 +614,14 @@ export class BattleMenu {
       this.partyCells.push({ b, w });
       b.addEventListener('click', () => {
         if (!this.team[i] || b.getAttribute('aria-disabled') === 'true') return;
+        if (this.swapFrom !== null) {
+          const from = this.swapFrom;
+          this.swapFrom = null;
+          void this.deps.firstMoves?.field?.swap(from, i).then(() => this.openParty());
+          return;
+        }
         const using = this.using;
-        if (using && asksMove(using.effect)) {
+        if (using?.effect && asksMove(using.effect)) {
           this.memberAt = i;
           this.setMode('usemove');
           this.useMoveWins.forEach(({ b, w }, n) => {
@@ -605,6 +631,10 @@ export class BattleMenu {
             w.show(`${i}|${JSON.stringify(v)}`);
           });
           this.settleFocus(true);
+          return;
+        }
+        if (using && this.fieldHome) {
+          this.deps.firstMoves?.field?.use(using.pocket, using.item, i);
           return;
         }
         if (using) {
@@ -630,6 +660,10 @@ export class BattleMenu {
         const using = this.using;
         if (!using || b.getAttribute('aria-disabled') === 'true') return;
         const slot = this.memberAt;
+        if (this.fieldHome) {
+          this.deps.firstMoves?.field?.use(using.pocket, using.item, slot, n);
+          return;
+        }
         this.using = null;
         this.mode = 'action';
         this.send(() => this.deps.firstMoves?.useOn(using.pocket, using.item, slot, n));
@@ -659,16 +693,35 @@ export class BattleMenu {
     const mrow = doc.createElement('div');
     mrow.className = 'bm-m-row';
     this.memberBox.appendChild(mrow);
-    const rowButton = (word: string, color: () => TextColor, icon: (c: EmeraldCanvas, cx: number, cy: number, redo: () => void) => void, press: () => void) => {
+    const rowButton = (word: string | (() => string), color: () => TextColor, icon: (c: EmeraldCanvas, cx: number, cy: number, redo: () => void) => void, press: () => void) => {
       const b = button('bm-m-btn', mrow);
-      b.setAttribute('aria-label', word);
-      this.memberWins.push({ w: new Win(b, ACTION_W, BACK_H, (c, redo) => iconButton(c, ACTION_W, BACK_H, (cx, cy) => icon(c, cx, cy, redo), word, color())), ww: ACTION_W, hh: BACK_H });
+      const says = typeof word === 'string' ? () => word : word;
+      b.setAttribute('aria-label', says());
+      this.memberWins.push({ w: new Win(b, ACTION_W, BACK_H, (c, redo) => iconButton(c, ACTION_W, BACK_H, (cx, cy) => icon(c, cx, cy, redo), says(), color())), ww: ACTION_W, hh: BACK_H });
       b.addEventListener('click', () => { if (b.getAttribute('aria-disabled') !== 'true') press(); });
       return b;
     };
     rowButton('BACK', () => TEXT_DARK, (c, cx, cy) => drawBackArrow(c, cx, cy), () => this.setMode('party'));
-    rowButton('SUMMARY', () => TEXT_DARK, (c, cx, cy, redo) => drawItemFitted(c, ITEM_TM_CASE, cx, cy, ICON_BOX, redo), () => this.send(() => (this.forced ? first?.summaryOut(this.memberAt) : first?.summary(this.memberAt))));
-    this.selectBtn = rowButton('SELECT', () => (this.canSelect() ? TEXT_BLUE : TEXT_GRAY), (c, cx, cy, redo) => drawItemFitted(c, ITEM_POKE_BALL, cx, cy, ICON_BOX, redo), () => this.send(() => (this.forced ? first?.sendOut(this.memberAt) : first?.switchTo(this.memberAt))));
+    rowButton('SUMMARY', () => TEXT_DARK, (c, cx, cy, redo) => drawItemFitted(c, ITEM_TM_CASE, cx, cy, ICON_BOX, redo), () => {
+      if (this.fieldHome) first?.field?.summary(this.memberAt);
+      else this.send(() => (this.forced ? first?.summaryOut(this.memberAt) : first?.summary(this.memberAt)));
+    });
+    this.selectBtn = rowButton(() => (this.fieldHome ? 'SWITCH' : 'SELECT'), () => (this.canSelect() ? TEXT_BLUE : TEXT_GRAY), (c, cx, cy, redo) => drawItemFitted(c, ITEM_POKE_BALL, cx, cy, ICON_BOX, redo), () => {
+      if (this.fieldHome) { this.swapFrom = this.memberAt; this.openParty(); return; }
+      this.send(() => (this.forced ? first?.sendOut(this.memberAt) : first?.switchTo(this.memberAt)));
+    });
+    // Off a battle: what they hold, and the rung's free moves.
+    this.heldBtn = rowButton(() => (this.team[this.memberAt]?.item ? 'TAKE' : 'GIVE'), () => TEXT_DARK, (c, cx, cy, redo) => drawItemFitted(c, this.team[this.memberAt]?.item || ITEM_POKE_BALL, cx, cy, ICON_BOX, redo), () => {
+      const m = this.team[this.memberAt];
+      if (!m) return;
+      if (m.item) { void first?.field?.take(this.memberAt, m.item).then(() => this.refreshTeam()); return; }
+      this.giving = this.memberAt;
+      this.fieldBag = first?.field?.readBag() ?? null;
+      this.pocketAt = 0;
+      this.picked = 0;
+      this.setMode('bag');
+    });
+    this.movesBtn = rowButton('MOVES', () => TEXT_DARK, (c, cx, cy, redo) => drawItemFitted(c, ITEM_TM_CASE, cx, cy, ICON_BOX, redo), () => first?.field?.moves(this.memberAt));
     this.setPartyHidden();
     if (first?.keys) {
       // The keys, by the windows they drive: the keyboard's and a pad's.
@@ -709,8 +762,65 @@ export class BattleMenu {
     return v ? actionLabels(v)[SLOT_RUN] ?? null : null;
   }
 
+  // ---- the same windows off a battle -----------------------------------------------------
+
+  /** PARTY or BAG on the field. No battle runs under them: the page's own reads and writes,
+   *  and a walk of the ROM's screens only for what has to be the ROM's. */
+  openField(home: 'party' | 'bag', keep = false): void {
+    this.fieldHome = home;
+    this.view = null;
+    this.lastMenu = 0;
+    this.sent = 0;
+    if (!keep) { this.pocketAt = 0; this.picked = 0; this.using = null; this.swapFrom = null; this.giving = null; }
+    this.setShown(true);
+    if (home === 'party') this.openParty();
+    else {
+      this.fieldBag = this.deps.firstMoves?.field?.readBag() ?? null;
+      this.setMode('bag');
+      this.layout();
+    }
+    this.settleFocus(true);
+  }
+
+  /** Stood aside for a screen that is the ROM's; openField or reshow brings them back. */
+  hideField(): void {
+    this.setShown(false);
+  }
+
+  /** Back where they were, with what the ROM's screen changed. */
+  reshowField(): void {
+    this.using = null;
+    this.setShown(true);
+    this.fieldBag = this.deps.firstMoves?.field?.readBag() ?? null;
+    if (this.fieldHome === 'bag') { this.mode = 'bag'; this.layout(); }
+    else if (this.mode === 'member') this.refreshTeam();
+    else this.openParty();
+    this.settleFocus(true);
+  }
+
+  closeField(): void {
+    this.fieldHome = null;
+    this.using = null;
+    this.swapFrom = null;
+    this.giving = null;
+    this.useHead.hidden = true;
+    this.mode = 'action';
+    this.setShown(false);
+  }
+
+  private refreshTeam(): void {
+    const first = this.deps.firstMoves;
+    if (first) this.team = first.readParty();
+    this.layout();
+  }
+
+  private pockets(): { pocket: number; label: string }[] {
+    return this.fieldHome ? FIELD_POCKETS : BAG_POCKETS;
+  }
+
   /** Whether `mode` shows the moves first, here, for this battle (the Safari has no moves). */
   private home(): Mode {
+    if (this.fieldHome) return this.fieldHome;
     return this.deps.firstMoves && this.view?.menu !== MENU_SAFARI && this.lastShown !== MENU_SAFARI ? 'moves' : 'action';
   }
 
@@ -719,21 +829,22 @@ export class BattleMenu {
     if (!first) return;
     this.using = using;
     this.team = first.readParty();
-    this.useHead.hidden = !using && !this.forced;
-    this.useHeadWin.show(this.forced ? 'send' : using?.name ?? '');
+    this.useHead.hidden = !using && !this.forced && this.swapFrom === null;
+    this.useHeadWin.show(this.forced ? 'send' : this.swapFrom !== null ? 'swap' : using?.name ?? '');
     this.partyCells.forEach(({ b }, i) => b.setAttribute('aria-disabled', String(!this.slotHelps(i))));
     this.setMode('party');
-    this.partyCells.forEach(({ w }, i) => w.show(JSON.stringify([this.team[i] ?? null, using?.item])));
+    this.partyCells.forEach(({ w }, i) => w.show(JSON.stringify([this.team[i] ?? null, using?.item, this.swapFrom])));
   }
 
   /** Whether this slot can be pressed: with an item in hand, only who it would help. */
   private slotHelps(i: number): boolean {
     const m = this.team[i];
-    return !!m && (!this.using || medicineHelps(this.using.effect, m));
+    return !!m && (!this.using?.effect || !usedOnOne(this.using.effect) || medicineHelps(this.using.effect, m));
   }
 
   private canSelect(): boolean {
     const m = this.team[this.memberAt];
+    if (this.fieldHome) return this.team.length > 1;
     return !!m && !m.active && m.hp > 0;
   }
 
@@ -829,6 +940,7 @@ export class BattleMenu {
       return true;
     }
     if (k === 'a') { this.focused?.click(); return true; }
+    if (k === 'b' && this.fieldHome) { this.goBack(); return true; }
     if (k === 'b') {
       if (this.mode === 'info') this.setMode('moves');
       else if (this.mode === 'item') this.setMode('bag');
@@ -875,7 +987,8 @@ export class BattleMenu {
   // ---- the bag -------------------------------------------------------------------------
 
   private stacks(): Stack[] {
-    return this.view?.bag.get(BAG_POCKETS[this.pocketAt].pocket) ?? [];
+    const bag = this.fieldHome ? this.fieldBag : this.view?.bag;
+    return bag?.get(this.pockets()[this.pocketAt].pocket) ?? [];
   }
 
   /** The stack the cursor is on: the picked item, or the pocket's first. */
@@ -887,11 +1000,12 @@ export class BattleMenu {
   /** Why USE cannot go: a ball against a trainer. Null when it can. */
   private refusal(stack: Stack | undefined): string | null {
     if (!stack) return null;
+    if (this.fieldHome) return this.giving === null && this.deps.rom && !usableInField(this.deps.rom, stack.item) ? "That can't be used here." : null;
     return BAG_POCKETS[this.pocketAt].pocket === POCKET_BALLS && this.view?.trainer ? "You can't catch a TRAINER's POKéMON." : null;
   }
 
   private stepPocket(dir: 1 | -1): void {
-    const n = BAG_POCKETS.length;
+    const n = this.pockets().length;
     this.pocketAt = (this.pocketAt + dir + n) % n;
     this.picked = 0;
     this.bagList.scrollTop = 0;
@@ -929,9 +1043,23 @@ export class BattleMenu {
 
   private useItem(): void {
     const stack = this.pickedStack();
-    if (!stack || this.refusal(stack) || !this.deps.useItem) return;
-    const pocket = BAG_POCKETS[this.pocketAt].pocket;
+    if (!stack || this.refusal(stack)) return;
+    const pocket = this.pockets()[this.pocketAt].pocket;
     const effect = this.deps.rom ? itemEffect(this.deps.rom, stack.item) : null;
+    const field = this.fieldHome ? this.deps.firstMoves?.field : undefined;
+    if (field && this.giving !== null) {
+      const slot = this.giving;
+      this.giving = null;
+      void field.give(slot, stack.item).then(() => { this.refreshTeam(); this.setMode('member'); });
+      return;
+    }
+    if (field) {
+      if (this.deps.rom && asksWhoInField(this.deps.rom, stack.item, effect)) {
+        this.openParty({ pocket, item: stack.item, effect, name: itemInfo(this.deps.rom, stack.item)?.name || '' });
+      } else field.use(pocket, stack.item);
+      return;
+    }
+    if (!this.deps.useItem) return;
     if (this.deps.firstMoves && effect && usedOnOne(effect)) {
       this.openParty({ pocket, item: stack.item, effect, name: (this.deps.rom && itemInfo(this.deps.rom, stack.item)?.name) || '' });
       return;
@@ -977,8 +1105,8 @@ export class BattleMenu {
     };
     arrow(BAG_ARROW_W / 2 - 4, -1);
     arrow(MENU_W - BAG_ARROW_W / 2 - 4, 1);
-    c.drawTextCentred(BAG_POCKETS[this.pocketAt].label, MENU_W / 2, 5, TEXT_DARK);
-    const n = BAG_POCKETS.length;
+    c.drawTextCentred(this.pockets()[this.pocketAt].label, MENU_W / 2, 5, TEXT_DARK);
+    const n = this.pockets().length;
     const x0 = MENU_W / 2 - (n * 8 - 2) / 2;
     for (let k = 0; k < n; k++) c.fillRect({ x: x0 + k * 8, y: 21, w: 6, h: 4 }, k === this.pocketAt ? DOT_ON : DOT_OFF);
   }
@@ -1024,8 +1152,8 @@ export class BattleMenu {
     const w = MENU_W - BAG_BACK_W - GAP;
     c.drawFrame({ x: 0, y: 0, w, h: BACK_H });
     const stack = this.pickedStack();
-    const label = !stack ? 'NOTHING HERE' : this.refusal(stack) ? "CAN'T USE" : 'USE';
-    c.drawTextCentred(label, w / 2, 9, label === 'USE' ? TEXT_BLUE : TEXT_GRAY);
+    const label = !stack ? 'NOTHING HERE' : this.refusal(stack) ? "CAN'T USE" : this.giving !== null ? 'GIVE' : 'USE';
+    c.drawTextCentred(label, w / 2, 9, label === 'USE' || label === 'GIVE' ? TEXT_BLUE : TEXT_GRAY);
   }
 
   private moveInfoAt(slot: number): MoveInfo | null {
@@ -1110,6 +1238,16 @@ export class BattleMenu {
   }
 
   private goBack(): void {
+    if (this.fieldHome) {
+      if (this.mode === 'usemove') this.setMode('party');
+      else if (this.mode === 'item') this.setMode('bag');
+      else if (this.mode === 'party' && this.using) this.dropItem();
+      else if (this.mode === 'party' && this.swapFrom !== null) { this.swapFrom = null; this.openParty(); this.setMode('member'); }
+      else if (this.mode === 'bag' && this.giving !== null) { this.giving = null; this.refreshTeam(); this.setMode('member'); }
+      else if (this.mode === 'member') this.setMode('party');
+      else this.deps.firstMoves?.field?.close();
+      return;
+    }
     if (this.mode === 'usemove') { this.setMode('party'); return; }
     if (this.mode === 'party' && this.using) { this.dropItem(); return; }
     if (this.home() === 'moves') {
@@ -1140,7 +1278,7 @@ export class BattleMenu {
 
   /** Whether the page's bag is open, so the frame's read wants the pockets. */
   get wantsBag(): boolean {
-    return this.mode === 'bag' || this.mode === 'item' || !!this.using;
+    return !this.fieldHome && (this.mode === 'bag' || this.mode === 'item' || !!this.using);
   }
 
   private setMode(mode: Mode): void {
@@ -1191,6 +1329,7 @@ export class BattleMenu {
 
   /** Each frame, from the ROM. */
   update(v: BattleView | null): void {
+    if (this.fieldHome) return;
     // /classic/ has only the ROM's party screen for it.
     const menu = v?.menu === MENU_PARTY && !this.deps.firstMoves ? 0 : v?.menu ?? 0;
     this.view = v;
@@ -1264,7 +1403,7 @@ export class BattleMenu {
     const info = this.mode === 'info';
     const party = this.mode === 'party';
     const member = this.mode === 'member';
-    const first = this.home() === 'moves';
+    const first = this.home() === 'moves' || !!this.fieldHome;
     const v = this.view;
     const labels = v ? actionLabels(v) : [];
     this.actions.hidden = !(first && moves && !info);
@@ -1282,7 +1421,7 @@ export class BattleMenu {
     }
     if (party) this.partyCells.forEach(({ b }, i) => { b.hidden = !this.team[i]; b.setAttribute('aria-label', this.team[i]?.name ?? ''); });
     if (member) {
-      const key = `${this.memberAt}|${JSON.stringify(this.team[this.memberAt])}|${v?.foe.types}`;
+      const key = `${this.memberAt}|${JSON.stringify(this.team[this.memberAt])}|${v?.foe.types}|${!!this.fieldHome}`;
       for (const { w } of this.memberWins) w.show(key);
       this.selectBtn?.setAttribute('aria-disabled', String(!this.canSelect()));
     }
@@ -1296,6 +1435,7 @@ export class BattleMenu {
       w.show(moves ? `m|${slot?.id}|${slot?.pp}|${slot?.maxPp}|${v?.foe.types}` : `a|${JSON.stringify(labels[i] ?? null)}`);
     });
     this.backBtn.hidden = this.forced ? true : first ? !(bag || party || usemove) : (!moves || info) && !bag;
+    this.heldBtn.hidden = this.movesBtn.hidden = !this.fieldHome;
     (this.hint.el as HTMLElement).hidden = first || !moves || info;
     this.sheet.hidden = !info;
     for (const el of [this.bagHead, this.bagList]) el.hidden = !bag;
@@ -1306,7 +1446,7 @@ export class BattleMenu {
       const box = `${this.bagListBox() * this.scale}px`;
       if (this.bagList.style.height !== box) this.bagList.style.height = box;
       this.bagHeadWin.show(String(this.pocketAt));
-      this.bagHead.setAttribute('aria-label', BAG_POCKETS[this.pocketAt].label);
+      this.bagHead.setAttribute('aria-label', this.pockets()[this.pocketAt].label);
       this.bagListWin.show(`${this.pocketAt}|${this.picked}|${JSON.stringify(this.stacks())}`);
     }
     if (item) {

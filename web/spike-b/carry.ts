@@ -216,6 +216,20 @@ export function teamMembers(party: Uint8Array, count: number, nameOf: (species: 
   return out;
 }
 
+/** `party` with this one holding `item` (0 for nothing): the encrypted word and the checksum. */
+export function withHeld(party: Uint8Array, slot: number, item: number): Uint8Array {
+  const out = party.slice();
+  const v = new DataView(out.buffer, out.byteOffset, out.byteLength);
+  const at = slot * 100;
+  const personality = v.getUint32(at, true);
+  const key = (personality ^ v.getUint32(at + 4, true)) >>> 0;
+  const off = at + 32 + 12 * ORDERS[personality % 24].indexOf('G');
+  const g = (v.getUint32(off, true) ^ key) >>> 0;
+  v.setUint32(off, ((g & 0xffff) | (item << 16)) ^ key, true);
+  v.setUint16(at + 28, (v.getUint16(at + 28, true) - (g >>> 16) + item) & 0xffff, true);
+  return out;
+}
+
 /** Every mon's encrypted block adds up to its checksum (pokemon.c's CalculateBoxMonChecksum):
  *  no mon of the first `count` is caught with the ROM halfway through writing it. */
 export function partyWhole(party: Uint8Array, count: number): boolean {

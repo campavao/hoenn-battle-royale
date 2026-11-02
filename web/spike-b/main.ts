@@ -70,7 +70,7 @@ import { wireDpad } from './dpad';
 import { StartMenu } from './startmenu';
 import { BACK_H, BATTLE_TYPE_RECORDED, BattleMenu, CELL_H, battleWantsNoPad, ppWithBonus, readBattleView } from '../src/ui/battlemenu';
 import { BATTLE_TYPE_TRAINER, CARD_H, SidesView } from '../src/ui/sides';
-import { BAG_POSITION_POCKET, readBattleBag } from '../src/ui/bag';
+import { BAG_POSITION_POCKET, readBattleBag, readFieldBag, readPocket } from '../src/ui/bag';
 import { BATTLE_MENU, MENU_ACTION, MENU_PARTY, TouchLayer } from '../src/touch';
 import { HUD } from '../src/net/hud';
 import { ITEM_MACH_BIKE, MINI_MAP, PhoneHud, fieldMoves, fogPhase, signFor, type FieldMove } from '../src/ui/phonehud';
@@ -887,6 +887,53 @@ async function openMenu(): Promise<void> {
   await runMenu(c);
 }
 
+// ---- PARTY and BAG on the field, on the battle's own windows ------------------------------
+let panelUp = false;
+function openPanel(home: 'party' | 'bag'): void {
+  if (!battleMenu) return;
+  swapping = true;
+  panelUp = true;
+  held.clear();
+  battleEl.classList.remove('screen', 'see', 'fight');
+  battleEl.classList.add('on', 'panel');
+  dispatchEvent(new Event('resize'));
+  battleMenu.openField(home);
+}
+function closePanel(): void {
+  if (!panelUp) return;
+  panelUp = false;
+  battleMenu?.closeField();
+  battleEl.classList.remove('on', 'panel');
+  swapping = false;
+  held.clear();
+  pressed.clear();
+  calmUntil = frame + 30;
+}
+/** What is the ROM's alone: the windows stand aside, and come back with what it changed. */
+async function panelWalk(run: (r: RomBattles) => Promise<unknown>): Promise<void> {
+  if (!rom || !battleMenu) return;
+  battleMenu.hideField();
+  battleEl.classList.remove('panel', 'on');
+  try {
+    await run(rom);
+  } finally {
+    battleEl.classList.remove('on', 'screen', 'see', 'fight');
+    if (panelUp) {
+      battleEl.classList.add('on', 'panel');
+      battleMenu.reshowField();
+    }
+    held.clear();
+    pressed.clear();
+  }
+}
+const panelShow = () => { if (panelUp) battleEl.classList.add('on'); };
+const panelHide = () => battleEl.classList.remove('on');
+/** Whatever screen is open closes: a menu is no hiding place. */
+function leaveScreen(): void {
+  closePanel();
+  rom?.leave();
+}
+
 /** START while watching (Kanto's peek): the trainer watched's POKéMON and BAG, read-only
  *  -- their team with levels, HP and moves, their bag and money. A player's is what their
  *  page last told the room (refreshed every few seconds, `team`); a bot's is dealt from
@@ -926,6 +973,11 @@ async function peek(): Promise<void> {
  *  MENU picked, or the phone dock's PARTY and MAP straight away. */
 async function runMenu(c: string): Promise<void> {
   if (!c || !rom || isOut || battle || swapping || asking || spectating) return;
+  if ((c === '1' || c === '2') && battleMenu) {
+    if (c === '1' && rom.partyCount() === 0) { say('You have no POKeMON yet.'); return; }
+    openPanel(c === '1' ? 'party' : 'bag');
+    return;
+  }
   const me = link.room.actor(link.me);
   const look = c === '13' && me && ringMap ? ringMap.look(me.m.spot) : undefined;
   let uncover = () => {};
@@ -1072,7 +1124,7 @@ function startFor(e: RoomEvent): void {
   if (e.type === 'gate') {
     // A story's gate (br_story.c): his own fight in the hidden ROM, past the eight gym
     // leaders (BrStory_StartGate); won, what he held is mine, and lost, it is his again.
-    if (swapping) rom?.leave();
+    if (swapping) leaveScreen();
     asking?.done('');
     const l = link, key = e.key, fog = inFogNow();
     handOff(null, (r, onStart) => r.boss(LEADERS.length + e.gate, onStart, fog).then((f) => {
@@ -1088,7 +1140,7 @@ function startFor(e: RoomEvent): void {
   if (e.type === 'legend') {
     // Its own battle; caught, it is mine, and anything else puts it back where it stood
     // for the next trainer (Cam: losing to one puts you out, and it goes back for retries).
-    if (swapping) rom?.leave();
+    if (swapping) leaveScreen();
     asking?.done('');
     const l = link, key = e.key, fog = inFogNow();
     handOff(null, (r, onStart) => r.legend(e.species, e.level, onStart, fog).then((f) => {
@@ -1100,7 +1152,7 @@ function startFor(e: RoomEvent): void {
   if (e.type === 'bots') { void judgeBots(e.a, e.b); return; }
   if (e.type === 'boss') {
     // A gym leader (gyms.ts): their own battle in the hidden ROM; won, the gym's TM and purse.
-    if (swapping) rom?.leave();
+    if (swapping) leaveScreen();
     asking?.done('');
     const leader = LEADERS[e.n], fog = inFogNow();
     handOff(null, (r, onStart) => r.boss(e.n, onStart, fog).then((f) => {
@@ -1117,7 +1169,7 @@ function startFor(e: RoomEvent): void {
   }
   if (e.type === 'fight') {
     // A bot can come at me now (it saw me): a menu is no hiding place here either.
-    if (swapping) rom?.leave();
+    if (swapping) leaveScreen();
     asking?.done('');
     const foe = link.room.actor(e.foe);
     if (!foe) { link.end(); return; }
@@ -1139,7 +1191,7 @@ function startFor(e: RoomEvent): void {
   } else if (e.type === 'duel') {
     // Another trainer: both ROMs fight it out as a link battle, the blocks through the relay.
     // A menu is no hiding place: whatever screen I have open closes, a question goes unanswered.
-    if (swapping) rom?.leave();
+    if (swapping) leaveScreen();
     asking?.done('');
     const foe = link.room.actor(e.foe);
     const me = link.room.actor(link.me);
@@ -1235,6 +1287,7 @@ function romFading(): boolean {
   return !!rom && at !== undefined && fadeOf(rom.emu.read(at + FADE_Y_WORD, 16), rom.emu.read(at + FADE_COLOR_WORD, 16)).active;
 }
 function seeFrame(): void {
+  if (panelUp && battleEl.classList.contains('panel')) return;
   const up = !!rom && battleEl.classList.contains('on');
   const keyed = up && rom!.seeThrough(seeThrough()) && rom!.picture(keyImage.data);
   // USE in the page's bag is the ROM's own BAG doing it (br_bag.h): its screen, and the
@@ -1310,7 +1363,7 @@ async function trade(n: number, species: number): Promise<void> {
   let given = 0;
   try {
     if (!rom || isOut || battle || swapping) return;
-    if (swapping) rom.leave();
+    if (swapping) leaveScreen();
     asking?.done('');
     const name = speciesName(species);
     const c = await ask(`I'll trade you my ${name} for one of yours. Which one?`, [['CHOOSE', 'y'], ['NO, THANKS', '']]);
@@ -2322,7 +2375,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
           moves: m.moves.map((v, n) => ({ ...v, maxPp: ppWithBonus(moveInfo(tables, v.id)?.pp ?? 0, m.ppBonuses, n) })),
           itemName: art?.itemName(m.item) ?? '',
           ability: art?.abilityName(m.species, m.ability) ?? '',
-          active: partyId(i) === lead,
+          active: !panelUp && partyId(i) === lead,
         }));
       },
       icon: (species) => monIconOf(species),
@@ -2333,6 +2386,22 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       useOn,
       sendOut: (slot) => { walk = { slot, summary: false, step: 0, frames: 0, item: false, forced: true }; },
       summaryOut: (slot) => { walk = { slot, summary: true, step: 0, frames: 0, item: false, forced: true }; partyHold = false; },
+      field: {
+        close: closePanel,
+        readBag: () => readFieldBag(emu, sym),
+        summary: (slot) => void panelWalk((r) => r.menu(1, panelShow, panelHide, undefined, { to: 'summary', slot })),
+        moves: (slot) => void panelWalk((r) => r.menu(1, panelShow, panelHide, undefined, { to: 'moves', slot })),
+        swap: async (a, b) => { await rom?.reorder(a, b); },
+        give: async (slot, item) => { if (await rom?.take(item)) await rom?.setHeld(slot, item); },
+        take: async (slot, item) => { await rom?.setHeld(slot, 0); await rom?.give(item, 1); },
+        use: (pocket, item, slot, move) => {
+          const count = () => readPocket(emu, sym, pocket).find((x) => x.item === item)?.n ?? 0;
+          const was = count();
+          void panelWalk((r) => r.menu(2, panelShow, panelHide, undefined, { to: 'use', pocket, item, slot, move })).then(() => {
+            if (count() >= was && panelUp) say("It won't have any effect.");
+          });
+        },
+      },
     },
     onShown: (on) => document.body.classList.toggle('battle-menu', on),
     readBag: () => readBattleBag(emu, sym, tables),

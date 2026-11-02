@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAG_AT, BAG_LEN, arrived, fameTeam, fieldOf, healed, partyWhole, rekey, spillOf, tallySince, teamOf, withMoney } from './carry';
+import { BAG_AT, BAG_LEN, arrived, fameTeam, fieldOf, healed, partyWhole, rekey, spillOf, tallySince, teamOf, withMoney, withHeld, teamMembers } from './carry';
 import HMS from '../src/data/hms.json';
 
 describe('rekey', () => {
@@ -208,5 +208,41 @@ describe('partyWhole', () => {
     // Past the count is not looked at, and an empty slot adds up to nothing.
     expect(partyWhole(party, 0)).toBe(true);
     expect(partyWhole(new Uint8Array(600), 6)).toBe(true);
+  });
+});
+
+describe('what one of them holds', () => {
+  /** One mon: personality 0 (order GAEM), OT id 0x1234, a checksum that adds up. */
+  const one = () => {
+    const party = new Uint8Array(600);
+    const v = new DataView(party.buffer);
+    v.setUint32(4, 0x1234, true);
+    const key = 0x1234;
+    const plain = new Uint32Array(12);
+    plain[0] = 25 | (13 << 16);
+    let sum = 0;
+    plain.forEach((x, w) => {
+      v.setUint32(32 + w * 4, (x ^ key) >>> 0, true);
+      sum = (sum + (x & 0xffff) + (x >>> 16)) & 0xffff;
+    });
+    v.setUint16(28, sum, true);
+    return party;
+  };
+  it('changes it and keeps the checksum whole', () => {
+    const had = one();
+    expect(partyWhole(had, 1)).toBe(true);
+    expect(teamMembers(had, 1, () => 'X')[0].item).toBe(13);
+    const taken = withHeld(had, 0, 0);
+    expect(teamMembers(taken, 1, () => 'X')[0].item).toBe(0);
+    expect(teamMembers(taken, 1, () => 'X')[0].species).toBe(25);
+    expect(partyWhole(taken, 1)).toBe(true);
+    const given = withHeld(taken, 0, 500);
+    expect(teamMembers(given, 1, () => 'X')[0].item).toBe(500);
+    expect(partyWhole(given, 1)).toBe(true);
+  });
+  it('leaves the party it was given alone', () => {
+    const had = one();
+    withHeld(had, 0, 0);
+    expect(teamMembers(had, 1, () => 'X')[0].item).toBe(13);
   });
 });

@@ -27,6 +27,9 @@ s8 BrBag_PickUse(s8 selection);
 // A new action menu: whatever the last one's BAG press left waiting is let go. The page
 // writes its pick as that press goes down; a bag that then never opened (the shot clock
 // on the same frame, the battle over) must not USE it in the next one the player opens.
+// The field's own BAG, for the page's: its context menu has more rows, and USE is not always
+// the first. TRUE once, for the row the pick just took.
+bool8 BrBag_PickUseField(void);
 void BrBag_Forget(void);
 
 #endif // GUARD_BR_BAG_H
