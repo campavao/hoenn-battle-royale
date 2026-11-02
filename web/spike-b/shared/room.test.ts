@@ -498,6 +498,27 @@ describe('trainer against trainer', () => {
   });
 });
 
+describe('the ring', () => {
+  it('closes in over the end of a phase, not all at once (Cam, 11-01)', () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const start = room.epoch + room.opening + 2 * room.ringPhase;
+    const r1 = room.ring(start - 1), r2 = room.ring(start);
+    expect(r2.phase).toBe(r1.phase + 1);
+    expect(r2.r).toBeGreaterThan(0);
+    // a frame before the new phase it is all but there, no jump
+    expect(r1.r - r2.r).toBeLessThan(0.1);
+    // half a phase before, it has not started, and in between it only gets smaller
+    const fixed = room.ring(start - Math.floor(room.ringPhase / 2) - 1).r;
+    expect(fixed).toBe(r1.next === undefined ? fixed : room.ring(start - room.ringPhase).r);
+    let last = fixed;
+    for (let t = start - room.ringPhase / 2; t < start; t += 60) {
+      const r = room.ring(t).r;
+      expect(r).toBeLessThanOrEqual(last);
+      last = r;
+    }
+  });
+});
+
 describe('item balls', () => {
   it("never lie in a heap (Cam, 11-01: seven on a dock, \"why are there so many items right here\")", () => {
     for (const seed of [4242, 7, 99]) {

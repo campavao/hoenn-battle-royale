@@ -2503,6 +2503,7 @@ var LANDING = 200;
 var RING_PHASE = 60 * 120;
 var SECTION_TILES = 27;
 var RING_STEPS = RING_RADII.map((r, i) => i === 0 ? Infinity : r < 0 ? r : Math.max(r, 0.5) * SECTION_TILES);
+var RING_CLOSE = 30 * 60;
 var FINAL_REACH = 24;
 var SAFARI = "MAP_SAFARI_ZONE_";
 var PICK_WAIT = 35 * 60;
@@ -2897,13 +2898,21 @@ var Room = class {
     const len = this.ringPhase;
     const round = this.results.round;
     let t = tick2 - this.epoch;
-    const { cx, cy } = this.centre(round);
+    const { cx, cy, far } = this.centre(round);
     if (t < this.opening) return { round, phase: 0, last: false, cx, cy, r: Infinity, next: Infinity, left: this.opening - t, safari: true };
     t -= this.opening;
     const phase = Math.min(RING_STEPS.length - 1, Math.floor(t / len));
     const at = (i) => RING_STEPS[i];
     const last = phase === RING_STEPS.length - 1;
-    return { round, phase, last, cx, cy, r: at(phase), next: last ? void 0 : at(phase + 1), left: last ? 0 : len - (t - phase * len) };
+    const left = last ? 0 : len - (t - phase * len);
+    let r = at(phase);
+    const closing = Math.min(RING_CLOSE, len / 2);
+    if (!last && left < closing) {
+      const to = Math.max(at(phase + 1), 0);
+      const from = r === Infinity ? Math.max(far, to) : r;
+      r = to + (from - to) * (left / closing);
+    }
+    return { round, phase, last, cx, cy, r, next: last ? void 0 : at(phase + 1), left };
   }
   /** The frame this round is over from, for the next to start AFTER_WIN on: its win;
    *  everybody in it out with nobody left standing; or, with nobody in it at all (a world
@@ -5034,4 +5043,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "1164cc687015";
+export const WORLD_HASH = "ab1951d04b08";

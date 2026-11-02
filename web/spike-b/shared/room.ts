@@ -549,6 +549,8 @@ export const SECTION_TILES = 27;
  *  out of Littleroot, a few sections across, so the first shrink fogged most of Hoenn
  *  (Cam 2026-10-29, as on 09-18 with Mossdeep). */
 const RING_STEPS = RING_RADII.map((r, i) => (i === 0 ? Infinity : r < 0 ? r : Math.max(r, 0.5) * SECTION_TILES));
+/** Frames the ring takes to close in at the end of a phase, half a phase at most. */
+const RING_CLOSE = 30 * 60;
 /** How near a walking trainer must be able to stand to a final story's place for the ring
  *  to centre on it (FINAL_CHANCE). */
 const FINAL_REACH = 24;
@@ -1002,7 +1004,7 @@ export class Room {
     const len = this.ringPhase;
     const round = this.results.round;
     let t = tick - this.epoch;
-    const { cx, cy } = this.centre(round);
+    const { cx, cy, far } = this.centre(round);
     // The Safari: phase 0's no-fog, before it.
     if (t < this.opening) return { round, phase: 0, last: false, cx, cy, r: Infinity, next: Infinity, left: this.opening - t, safari: true };
     t -= this.opening;
@@ -1011,7 +1013,17 @@ export class Room {
     const phase = Math.min(RING_STEPS.length - 1, Math.floor(t / len));
     const at = (i: number) => RING_STEPS[i];
     const last = phase === RING_STEPS.length - 1;
-    return { round, phase, last, cx, cy, r: at(phase), next: last ? undefined : at(phase + 1), left: last ? 0 : len - (t - phase * len) };
+    const left = last ? 0 : len - (t - phase * len);
+    let r = at(phase);
+    // It closes in over the end of the phase, to where the next one holds (Cam, 11-01: "you
+    // actually see the circle slowly close in"), rather than landing on you at its start.
+    const closing = Math.min(RING_CLOSE, len / 2);
+    if (!last && left < closing) {
+      const to = Math.max(at(phase + 1), 0);
+      const from = r === Infinity ? Math.max(far, to) : r;
+      r = to + (from - to) * (left / closing);
+    }
+    return { round, phase, last, cx, cy, r, next: last ? undefined : at(phase + 1), left };
   }
 
   /** The frame this round is over from, for the next to start AFTER_WIN on: its win;
