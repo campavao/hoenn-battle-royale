@@ -105,11 +105,15 @@ transcripts were made from them; a frame at the time is the evidence for each li
 * **A screen-wipe into the match** (3:37, 4:33). Perhaps Emerald's contest wipe.
 * **The grass or dust and sand effects are not Emerald's standard sprites** (5:05).
 * **The cave needs a pass** (12:07). It was hard to get out.
-* **A watched battle: no player sprites, none in the side panels** (13:49).
-* **No way to drop into a battle mid-way** (13:59, 14:32). The relay passes on a battle's
-  start and turns, and a late watcher replays from the first turn at 8x (`rom.ts`
-  HURRY_SPEED). Cam would rather a battle be always running, with the watcher just
-  looking in. That fits the rule that the ROM never leaves the device:
+* **A watched battle: no player sprites, none in the side panels** (13:49). The bstart's seats
+  were the fighter's numbers (`12,14`, seats 5 and 6) and the watcher had the looks under 0 and
+  31, so both drew as the default: `seatBstart` fixes the bytes, pinned by a unit test. The
+  side panels were wired for a phone only; a desktop has them now. Neither has been seen on
+  screen in a whole watched fight yet: look at the next one.
+* **No way to drop into a battle mid-way** (13:59, 14:32). A late watcher's catch-up at 8x is
+  hidden now, up to about 5 s, and they arrive in the fight as it stands. Cam would rather a
+  battle be always running, with the watcher just looking in. That fits the rule that the
+  ROM never leaves the device:
   * keep the followed trainer's battles mirrored live on the hidden ROM;
   * catch up the rest unrendered, far faster than 8x, behind the wipe.
 * **The watched battle stopped** (14:05), and there was lag after (14:50). The replay drops
