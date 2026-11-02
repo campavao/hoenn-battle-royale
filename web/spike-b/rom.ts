@@ -249,7 +249,7 @@ export interface RomBattles {
   /** A TM or a held item off the ground, as a match's pickup takes it (br_loot.c): into
    *  the bag, then the party screen to teach it (the bag's GIVE screen to hold it) on
    *  the ROM's own field, from `onStart` until it is back. What it made of it, as give. */
-  teach(item: number, onStart: () => void, slot?: number): Promise<Given | null>;
+  teach(item: number, onStart: () => void): Promise<Given | null>;
   /** What the trainer carries, as a bag left on the ground when they are out (POK-232):
    *  read in turn, after whatever was already going in. */
   spill(): Promise<{ items: { id: number; n: number }[]; money: number; mons: TeamRow[] }>;
@@ -706,7 +706,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     const partyCb = partyScreen();
     let sent = slot === undefined, moves = move ?? -1, n = 0, settledFor = 0, was = 0, showing = false;
     const forgetAt = sym('gBrForgetMove');
-    let forgetting = false, script: GbaKey[] = [], pressedKey: GbaKey | null = null;
+    let forgetting = false, script: GbaKey[] = [], pressedKey: GbaKey | null = null, aInBag = 0;
     const press = (k: GbaKey, every: number) => {
       if (n % every === 0) emu.press(k);
       else if (n % every === 3) emu.release(k);
@@ -750,7 +750,14 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
           if (moves > 0 && n % 12 === 3) moves--;
           if (moves === 0) { press('a', 30); if (n % 30 === 3) moves = -1; }
         } else if (sent && moves < 0) press('a', 30);
-      } else if (n > 60 && !emu.read(sym('gBrBag')!, 16)) press('b', 30);
+      } else if (n > 60 && !emu.read(sym('gBrBag')!, 16)) {
+        // A TM has its "Booted up a TM" and "Contains..." in the bag before it asks who: pressed
+        // past, though not for ever. Back from the party, or an item the bag refused, B shuts it.
+        if (!sent && aInBag < 8) {
+          if (n % 30 === 0) aInBag++;
+          press('a', 30);
+        } else press('b', 30);
+      }
       return false;
     }, 3000);
     for (const k of ['a', 'b', 'down'] as GbaKey[]) emu.release(k);
@@ -1548,7 +1555,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     give(item, n) {
       return onCore(() => giveNow(item, n));
     },
-    teach(item, onStart, slot) {
+    teach(item, onStart) {
       return onCore(async () => {
         if (broken) return null;
         const before = kept();
@@ -1563,15 +1570,11 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         await until(emu, () => box.pending() === 0, 60);
         const up = await until(emu, () => { drain(() => undefined); return !onField(); }, 180);
         if (up) {
+          await settled();
+          onStart();
+          // leave() backs out of it with B, like a menu.
           const quiet = emu.onFrame(() => drain(() => undefined));
-          // The page's windows asked who: the ROM's party is walked unseen.
-          if (slot !== undefined) await pickLoop(slot, undefined, onStart, () => {});
-          else {
-            await settled();
-            onStart();
-            // leave() backs out of it with B, like a menu.
-            await backOnField();
-          }
+          await backOnField();
           quiet();
         }
         leaving = false;

@@ -70,7 +70,7 @@ import { wireDpad } from './dpad';
 import { StartMenu } from './startmenu';
 import { BACK_H, BATTLE_TYPE_RECORDED, BattleMenu, CELL_H, battleWantsNoPad, ppWithBonus, readBattleView, type PartyMember } from '../src/ui/battlemenu';
 import { BATTLE_TYPE_TRAINER, CARD_H, SidesView } from '../src/ui/sides';
-import { BAG_POSITION_POCKET, isMachine, learnsMachine, readBattleBag, readFieldBag, readPocket } from '../src/ui/bag';
+import { BAG_POSITION_POCKET, POCKET_TMHM, isMachine, learnsMachine, readBattleBag, readFieldBag, readPocket } from '../src/ui/bag';
 import type { Rom } from '../src/battle/movebook';
 import { BATTLE_MENU, MENU_ACTION, MENU_PARTY, TouchLayer } from '../src/touch';
 import { romAsks, type TeamRow } from './rom';
@@ -721,7 +721,20 @@ function giveNext(): void {
   // Who gets it is the windows'; BACK keeps it in the bag.
   const who = () => askParty(name(item), isMachine(item) ? (m, tables) => !tables || learnsMachine(tables, m.species, item) : undefined);
   const took = screen
-    ? said.then(who).then((slot) => (slot === null ? r.give(item, 1) : r.teach(item, () => battleEl.classList.add('on'), slot))).finally(() => { romUp = false; battleEl.classList.remove('on'); })
+    ? said.then(who).then(async (slot) => {
+      // Into the bag first, and from there it is what the BAG's USE or GIVE does: the ROM's own
+      // opening of its party for a thing just given did not always come (about half the time on
+      // the agbcc build), and then it went in the bag after the player had already said who.
+      const got = await r.give(item, 1);
+      if (slot === null || !got?.items.some((g) => g.id === item)) return got;
+      if (isMachine(item)) await r.menu(2, () => battleEl.classList.add('on'), () => battleEl.classList.remove('on'), undefined, { to: 'use', pocket: POCKET_TMHM, item, slot });
+      else {
+        const was = battleMenu?.heldBy(slot) ?? 0;
+        if (await r.take(item)) await r.setHeld(slot, item);
+        if (was) await r.give(was, 1);
+      }
+      return { ...got, items: readPocket(r.emu, romTables.sym, isMachine(item) ? POCKET_TMHM : 0).some((x) => x.item === item) ? got.items : [] };
+    }).finally(() => { romUp = false; battleEl.classList.remove('on'); })
     : r.give(item, groundCount(item));
   took.then((got) => {
     // What the ROM made of it (br_items.c's Apply), not what was on the ground.

@@ -13,6 +13,7 @@ const ROM_BASE = 0x08000000;
  *  them. The ones a battle has anything in. */
 export const POCKET_ITEMS = 0;
 export const POCKET_BALLS = 1;
+export const POCKET_TMHM = 2;
 export const POCKET_BERRIES = 3;
 export const BAG_POCKETS: { pocket: number; label: string }[] = [
   { pocket: POCKET_ITEMS, label: 'ITEMS' },
@@ -24,7 +25,7 @@ export const BAG_POCKETS: { pocket: number; label: string }[] = [
 export const FIELD_POCKETS: { pocket: number; label: string }[] = [
   { pocket: POCKET_ITEMS, label: 'ITEMS' },
   { pocket: POCKET_BALLS, label: 'POKé BALLS' },
-  { pocket: 2, label: 'TMs & HMs' },
+  { pocket: POCKET_TMHM, label: 'TMs & HMs' },
   { pocket: POCKET_BERRIES, label: 'BERRIES' },
   { pocket: 4, label: 'KEY ITEMS' },
 ];

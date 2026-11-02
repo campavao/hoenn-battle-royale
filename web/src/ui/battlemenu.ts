@@ -845,6 +845,11 @@ export class BattleMenu {
     this.settleFocus(true);
   }
 
+  /** What this one of the party holds now. */
+  heldBy(slot: number): number {
+    return this.deps.firstMoves?.readParty()[slot]?.item ?? 0;
+  }
+
   /** A new move and four known: which goes. BACK keeps the four. */
   openForget(slot: number, name: string, done: (row: number | null) => void): void {
     this.fieldHome = 'party';
