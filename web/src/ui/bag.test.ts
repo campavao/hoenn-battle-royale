@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ITEM_SIZE, POCKET_BALLS, POCKET_ITEMS, itemInfo, readBattleBag, readPocket } from './bag';
+import { ITEM_SIZE, POCKET_BALLS, POCKET_ITEMS, itemInfo, medicineHelps, readBattleBag, readPocket, usedOnOne } from './bag';
 import { POCKET_CAPACITY, POCKET_SIZE, SLOT_SIZE } from './phonehud';
 import { encodeGen3 } from '../text/gen3';
 
@@ -69,5 +69,38 @@ describe("the phone's bag", () => {
     const bag = readBattleBag(emu, (n) => SYM[n], fakeRom());
     expect(bag.get(POCKET_ITEMS)).toEqual([{ item: 1, n: 5 }]);
     expect(readBattleBag(emu, (n) => SYM[n], null).get(POCKET_ITEMS)).toEqual([]);
+  });
+});
+
+describe('who a medicine would help', () => {
+  const fx = (status: number, more: number) => Uint8Array.from([0, 0, 0, status, more, 0]);
+  const POTION = fx(0, 0x4), REVIVE = fx(0, 0x44), ANTIDOTE = fx(0x10, 0), FULL_RESTORE = fx(0x3f, 0x4), ETHER = fx(0, 0x18), ELIXIR = fx(0, 0x8), X_ATTACK = fx(0, 0);
+  const mon = (hp: number, status = 0, active = false) => ({ hp, maxHp: 20, status, active });
+
+  it('asks on the party for what is simply given to one', () => {
+    for (const e of [POTION, REVIVE, ANTIDOTE, FULL_RESTORE]) expect(usedOnOne(e)).toBe(true);
+    for (const e of [ETHER, ELIXIR, X_ATTACK, null]) expect(usedOnOne(e)).toBe(false);
+  });
+  it('a revive is for the fainted, and nothing else is', () => {
+    expect(medicineHelps(REVIVE, mon(0))).toBe(true);
+    expect(medicineHelps(REVIVE, mon(5))).toBe(false);
+    expect(medicineHelps(POTION, mon(0))).toBe(false);
+    expect(medicineHelps(FULL_RESTORE, mon(0, 0x10))).toBe(false);
+  });
+  it('a potion is for the hurt', () => {
+    expect(medicineHelps(POTION, mon(5))).toBe(true);
+    expect(medicineHelps(POTION, mon(20))).toBe(false);
+  });
+  it('a cure is for what it cures, sleep and bad poison included', () => {
+    expect(medicineHelps(ANTIDOTE, mon(20, 0x8))).toBe(true);
+    expect(medicineHelps(ANTIDOTE, mon(20, 0x80))).toBe(true);
+    expect(medicineHelps(ANTIDOTE, mon(20, 0x10))).toBe(false);
+    expect(medicineHelps(FULL_RESTORE, mon(20, 0x3))).toBe(true);
+    expect(medicineHelps(FULL_RESTORE, mon(20))).toBe(false);
+  });
+  it('confusion is only known of the one out', () => {
+    const PERSIM = fx(0x1, 0);
+    expect(medicineHelps(PERSIM, mon(20, 0, true))).toBe(true);
+    expect(medicineHelps(PERSIM, mon(20))).toBe(false);
   });
 });

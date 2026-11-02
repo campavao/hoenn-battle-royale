@@ -74,6 +74,45 @@ function text(rom: Rom, addr: number, max: number): string {
   }
 }
 
+/** ITEM_POTION and ITEM_ENIGMA_BERRY: the ends of gItemEffectTable. */
+const FIRST_EFFECT = 13, LAST_EFFECT = 175;
+const EFFECT_STATUS = 3, EFFECT_MORE = 4;
+/** include/constants/item_effects.h. */
+const ITEM3_CONFUSION = 0x1, ITEM3_PARALYSIS = 0x2, ITEM3_FREEZE = 0x4, ITEM3_BURN = 0x8, ITEM3_POISON = 0x10, ITEM3_SLEEP = 0x20;
+const ITEM3_ANY = ITEM3_CONFUSION | ITEM3_PARALYSIS | ITEM3_FREEZE | ITEM3_BURN | ITEM3_POISON | ITEM3_SLEEP;
+const ITEM4_HEAL_HP = 0x4, ITEM4_HEAL_PP = 0x8, ITEM4_HEAL_PP_ONE = 0x10, ITEM4_REVIVE = 0x40;
+/** struct Pokemon's status: sleep's turns, then a bit each. */
+const STATUS_SLEEP = 0x7, STATUS_POISON = 0x8, STATUS_BURN = 0x10, STATUS_FREEZE = 0x20, STATUS_PARALYSIS = 0x40, STATUS_TOXIC = 0x80;
+
+/** An item's gItemEffectTable row, or null for one without any. */
+export function itemEffect(rom: Rom, id: number): Uint8Array | null {
+  const table = rom.sym('gItemEffectTable');
+  if (table === undefined || id < FIRST_EFFECT || id > LAST_EFFECT) return null;
+  const at = u32(rom, table + (id - FIRST_EFFECT) * 4);
+  return at >= ROM_BASE ? rom.bytes.subarray(at - ROM_BASE, at - ROM_BASE + 6) : null;
+}
+
+/** A medicine the ROM asks "on which POKeMON?" of and then just gives. An ETHER goes on to ask
+ *  which move, so the PP ones keep the ROM's own screen. */
+export function usedOnOne(effect: Uint8Array | null): boolean {
+  if (!effect) return false;
+  const more = effect[EFFECT_MORE], status = effect[EFFECT_STATUS] & ITEM3_ANY;
+  return !(more & (ITEM4_HEAL_PP | ITEM4_HEAL_PP_ONE)) && (status !== 0 || (more & (ITEM4_HEAL_HP | ITEM4_REVIVE)) !== 0);
+}
+
+/** Whether the ROM would take it for this one, as ExecuteTableBasedItemEffect goes. Who is
+ *  confused is the battle's to know, so a cure for it counts for the one out. */
+export function medicineHelps(effect: Uint8Array, m: { hp: number; maxHp: number; status: number; active: boolean }): boolean {
+  const more = effect[EFFECT_MORE], cures = effect[EFFECT_STATUS];
+  if (m.hp === 0) return (more & ITEM4_REVIVE) !== 0;
+  if (more & ITEM4_REVIVE) return false;
+  if ((more & ITEM4_HEAL_HP) && m.hp < m.maxHp) return true;
+  const s = m.status;
+  return !!((cures & ITEM3_SLEEP && s & STATUS_SLEEP) || (cures & ITEM3_POISON && s & (STATUS_POISON | STATUS_TOXIC))
+    || (cures & ITEM3_BURN && s & STATUS_BURN) || (cures & ITEM3_FREEZE && s & STATUS_FREEZE)
+    || (cures & ITEM3_PARALYSIS && s & STATUS_PARALYSIS) || (cures & ITEM3_CONFUSION && m.active));
+}
+
 const infos = new WeakMap<Uint8Array, Map<number, ItemInfo | null>>();
 
 /** An item as gItems has it, read once a ROM. Null without the table. */

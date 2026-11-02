@@ -100,7 +100,12 @@
       .bm-cell[data-slot="2"] { grid-area: 2 / 1; }
       .bm-cell[data-slot="3"] { grid-area: 2 / 2; }
       .bm-actions { grid-column: 1 / -1; display: flex; justify-content: space-between; }
-      .bm-actions[hidden], .bm-party[hidden], .bm-member[hidden] { display: none; }
+      .bm-actions[hidden], .bm-party[hidden], .bm-member[hidden], .bm-use-head[hidden] { display: none; }
+      .bm-use-head { grid-column: 1 / -1; justify-self: center; pointer-events: none; }
+      .bm-use-head canvas { display: block; }
+      /* A desktop's windows fill the height under the picture, so it stands beside them. */
+      body.desk-hud .bm-party { position: relative; }
+      body.desk-hud .bm-use-head { position: absolute; right: calc(100% + 8px); top: 0; }
       .bm-party { grid-column: 1 / -1; display: grid; grid-template-columns: auto auto; gap: calc(var(--s, 1.5) * 8px); }
       .bm-member { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: calc(var(--s, 1.5) * 8px); }
       .bm-m-moves { display: grid; grid-template-columns: auto auto; gap: calc(var(--s, 1.5) * 8px); }
