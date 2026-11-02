@@ -45,6 +45,9 @@ void BrMoves_Spend(u16 move);
 // A trainer's mon can come with a TM's move (a gym party's, spilled as loot when it is
 // beaten): its TM comes back as well, the trainer's machine come with the mon. From the
 // MOVES list, a TM used from the bag, and a move learnt on evolving.
+// The move waiting on the forget screen, MOVE_NONE otherwise: the page's windows ask, and walk
+// the ROM's screen unseen.
+extern u16 gBrForgetMove;
 void BrMoves_Forgetting(struct Pokemon *mon, u8 slot);
 
 // A TM off the ground (Cam, 2026-10-14: "moves that are picked up should immediately go

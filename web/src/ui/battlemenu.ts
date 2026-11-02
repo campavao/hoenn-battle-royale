@@ -20,7 +20,7 @@ import { BATTLE_MENU, MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU
 import { EmeraldCanvas, TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_GREEN, TEXT_RED, TEXT_WHITE, fitText, measure, wrapText, type TextColor } from './emerald';
 import { ITEMS_POCKET, Win, bagHolds, drawFitted, drawIcon, drawItemFitted, drawKeycap, picture } from './phonehud';
 import { nextFocus, type Dir } from './focus';
-import { BAG_POCKETS, FIELD_POCKETS, POCKET_BALLS, asksMove, asksWhoInField, itemEffect, itemInfo, medicineHelps, readBattleBag, usableInField, usedOnOne, type Stack } from './bag';
+import { BAG_POCKETS, FIELD_POCKETS, POCKET_BALLS, asksMove, asksWhoInField, isMachine, itemEffect, itemInfo, learnsMachine, medicineHelps, readBattleBag, usableInField, usedOnOne, type Stack } from './bag';
 
 // ---- what the ROM says ---------------------------------------------------------------
 
@@ -449,6 +449,13 @@ export class BattleMenu {
   private memberAt = 0;
   /** The item that brought the party up, until a slot or BACK. */
   private using: { pocket: number; item: number; effect: Uint8Array | null; name: string } | null = null;
+  /** A dropped team on the windows, and the one of theirs picked while choosing one of ours. */
+  private drop: { who: string; rows: PartyMember[]; take(at: number, give?: number): void; close(): void; pick: boolean } | null = null;
+  private dropCan: ((m: PartyMember) => boolean) | null = null;
+  private dropAt: number | null = null;
+  private forgetting: { name: string; done(row: number | null): void } | null = null;
+  private readonly forgetHead: HTMLElement;
+  private readonly forgetHeadWin: Win;
   /** Off a battle, which screen BACK leaves from; null in one. */
   private fieldHome: 'party' | 'bag' | null = null;
   private fieldBag: Map<number, Stack[]> | null = null;
@@ -606,7 +613,8 @@ export class BattleMenu {
     this.partyBox.appendChild(this.useHead);
     this.useHeadWin = new Win(this.useHead, USE_HEAD_W, USE_HEAD_H, (c) => {
       c.fillRect({ x: 0, y: 0, w: USE_HEAD_W, h: USE_HEAD_H }, 'rgba(16,20,24,0.6)');
-      c.drawTextCentred(fitText(this.forced ? 'Send out' : this.swapFrom !== null ? 'Switch with' : this.using?.name ?? '', USE_HEAD_W - 8), USE_HEAD_W / 2, 3, TEXT_WHITE);
+      const top = this.forced ? 'Send out' : this.swapFrom !== null ? 'Switch with' : this.drop ? (this.dropAt !== null ? 'Swap for' : this.drop.who) : this.using?.name ?? '';
+      c.drawTextCentred(fitText(top, USE_HEAD_W - 8), USE_HEAD_W / 2, 3, TEXT_WHITE);
       c.drawTextCentred('Which POKeMON?', USE_HEAD_W / 2, 18, TEXT_WHITE);
     });
     for (let i = 0; i < 6; i++) {
@@ -615,6 +623,21 @@ export class BattleMenu {
       this.partyCells.push({ b, w });
       b.addEventListener('click', () => {
         if (!this.team[i] || b.getAttribute('aria-disabled') === 'true') return;
+        if (this.drop) {
+          const first = this.deps.firstMoves;
+          if (this.drop.pick) {
+            this.drop.take(i);
+          } else if (this.dropAt !== null) {
+            this.drop.take(this.dropAt, i);
+          } else if (first && first.readParty().length >= 6) {
+            // A full party trades one for one.
+            this.dropAt = i;
+            this.team = first.readParty();
+            this.paintDrop();
+            this.settleFocus(true);
+          } else this.drop.take(i);
+          return;
+        }
         if (this.swapFrom !== null) {
           const from = this.swapFrom;
           this.swapFrom = null;
@@ -649,15 +672,24 @@ export class BattleMenu {
       });
     }
 
-    // Which of their moves, for an ETHER.
+    // Which of their moves, for an ETHER, or to make room for a new one.
     this.useMoveBox = doc.createElement('div');
     this.useMoveBox.className = 'bm-m-moves bm-usemove';
     deps.root.insertBefore(this.useMoveBox, this.backBtn);
+    this.forgetHead = doc.createElement('div');
+    this.forgetHead.className = 'bm-forget-head';
+    this.forgetHead.hidden = true;
+    this.useMoveBox.appendChild(this.forgetHead);
+    this.forgetHeadWin = new Win(this.forgetHead, MENU_W, 18, (c) => {
+      c.fillRect({ x: 0, y: 0, w: MENU_W, h: 18 }, 'rgba(16,20,24,0.6)');
+      c.drawTextCentred(fitText(`Forget one for ${this.forgetting?.name ?? ''}?`, MENU_W - 8), MENU_W / 2, 3, TEXT_WHITE);
+    });
     for (let n = 0; n < 4; n++) {
       const b = button('bm-pick-move', this.useMoveBox);
       const w = new Win(b, CELL_W, PARTY_H, (c) => this.paintUseMove(c, n));
       this.useMoveWins.push({ b, w });
       b.addEventListener('click', () => {
+        if (this.forgetting && b.getAttribute('aria-disabled') !== 'true') { this.forgetting.done(n); return; }
         const using = this.using;
         if (!using || b.getAttribute('aria-disabled') === 'true') return;
         const slot = this.memberAt;
@@ -783,6 +815,79 @@ export class BattleMenu {
     this.settleFocus(true);
   }
 
+  /** A dropped team on the party's windows: who to take, and when the party is full, for whom.
+   *  The rows stand in as members: an icon, a name and a whole HP bar. */
+  openDrop(who: string, rows: PartyMember[], take: (at: number, give?: number) => void, close: () => void, can?: (m: PartyMember) => boolean): void {
+    this.fieldHome = 'party';
+    this.view = null;
+    this.lastMenu = 0;
+    this.sent = 0;
+    this.using = null;
+    this.swapFrom = null;
+    this.giving = null;
+    this.drop = { who, rows, take, close, pick: false };
+    this.dropCan = can ?? null;
+    this.dropAt = null;
+    this.team = rows;
+    this.setShown(true);
+    this.mode = 'party';
+    this.paintDrop();
+    this.layout();
+    this.settleFocus(true);
+  }
+
+  /** Which of the party: the windows ask for the page, for what the ROM will then be told. */
+  openPick(title: string, take: (at: number) => void, close: () => void, can?: (m: PartyMember, rom: Rom | null) => boolean): void {
+    const rows = this.deps.firstMoves?.readParty() ?? [];
+    this.openDrop(title, rows, take, close, can ? (m) => can(m, this.deps.rom) : undefined);
+    if (this.drop) this.drop.pick = true;
+    this.paintDrop();
+    this.settleFocus(true);
+  }
+
+  /** What this one of the party holds now. */
+  heldBy(slot: number): number {
+    return this.deps.firstMoves?.readParty()[slot]?.item ?? 0;
+  }
+
+  /** A new move and four known: which goes. BACK keeps the four. */
+  openForget(slot: number, name: string, done: (row: number | null) => void): void {
+    this.fieldHome = 'party';
+    this.view = null;
+    this.lastMenu = 0;
+    this.sent = 0;
+    this.using = null;
+    this.swapFrom = null;
+    this.giving = null;
+    this.drop = null;
+    this.forgetting = { name, done };
+    this.team = this.deps.firstMoves?.readParty() ?? [];
+    this.memberAt = slot;
+    this.forgetHead.hidden = false;
+    this.forgetHeadWin.show(name);
+    this.setShown(true);
+    this.mode = 'usemove';
+    this.layout();
+    this.useMoveWins.forEach(({ b, w }, n) => {
+      const v = this.team[slot]?.moves[n];
+      b.hidden = !v;
+      b.setAttribute('aria-disabled', String(!v));
+      w.show(`f${slot}|${JSON.stringify(v)}|${name}`);
+    });
+    this.settleFocus(true);
+  }
+
+  private paintDrop(): void {
+    this.useHead.hidden = false;
+    this.useHeadWin.show(`${this.drop?.who}|${this.dropAt}`);
+    this.partyCells.forEach(({ b, w }, i) => {
+      const m = this.team[i];
+      b.setAttribute('aria-disabled', String(!m || (this.dropCan ? !this.dropCan(m) : false)));
+      w.show(`d${JSON.stringify([m ?? null, this.dropAt, this.dropCan ? !!m && this.dropCan(m) : true])}`);
+    });
+    this.layout();
+  }
+
   /** Stood aside for a screen that is the ROM's; openField or reshow brings them back. */
   hideField(): void {
     this.setShown(false);
@@ -800,6 +905,11 @@ export class BattleMenu {
   }
 
   closeField(): void {
+    this.forgetting = null;
+    this.forgetHead.hidden = true;
+    this.dropCan = null;
+    this.drop = null;
+    this.dropAt = null;
     this.fieldHome = null;
     this.using = null;
     this.swapFrom = null;
@@ -840,7 +950,9 @@ export class BattleMenu {
   /** Whether this slot can be pressed: with an item in hand, only who it would help. */
   private slotHelps(i: number): boolean {
     const m = this.team[i];
-    return !!m && (!this.using?.effect || !usedOnOne(this.using.effect) || medicineHelps(this.using.effect, m));
+    if (!m) return false;
+    if (this.using && isMachine(this.using.item) && this.deps.rom) return learnsMachine(this.deps.rom, m.species, this.using.item);
+    return !this.using?.effect || !usedOnOne(this.using.effect) || medicineHelps(this.using.effect, m);
   }
 
   private canSelect(): boolean {
@@ -855,7 +967,7 @@ export class BattleMenu {
     c.drawFrame({ x: 0, y: 0, w: CELL_W, h: PARTY_H });
     const icon = this.deps.firstMoves?.icon(m.species);
     if (icon) c.drawImageTo(icon, 0, 0, 32, 32, 5, 6, 32, 32);
-    const dim = this.using ? !this.slotHelps(i) : m.hp === 0;
+    const dim = this.dropCan ? !this.dropCan(m) : this.using ? !this.slotHelps(i) : m.hp === 0;
     c.drawText(fitText(m.name, CELL_W - 48), 40, 9, dim ? TEXT_GRAY : m.active ? TEXT_BLUE : TEXT_DARK);
     drawHp(c, 40, 28, CELL_W - 50, m.maxHp ? m.hp / m.maxHp : 0);
   }
@@ -888,7 +1000,7 @@ export class BattleMenu {
     const slot = this.team[this.memberAt]?.moves[i];
     const info = slot && this.deps.rom ? moveInfo(this.deps.rom, slot.id) : null;
     if (!slot || !info) return;
-    const full = slot.pp >= slot.maxPp;
+    const full = !this.forgetting && slot.pp >= slot.maxPp;
     c.drawText(fitText(info.name, CELL_W - 16), 8, 6, full ? TEXT_GRAY : TEXT_DARK);
     c.drawText(`PP ${slot.pp}/${slot.maxPp}`, 8, 22, slot.pp === 0 ? TEXT_RED : TEXT_GRAY);
   }
@@ -1239,6 +1351,16 @@ export class BattleMenu {
   }
 
   private goBack(): void {
+    if (this.forgetting) { this.forgetting.done(null); return; }
+    if (this.drop) {
+      if (this.dropAt !== null) {
+        this.dropAt = null;
+        this.team = this.drop.rows;
+        this.paintDrop();
+        this.settleFocus(true);
+      } else this.drop.close();
+      return;
+    }
     if (this.fieldHome) {
       if (this.mode === 'usemove') this.setMode('party');
       else if (this.mode === 'item') this.setMode('bag');
@@ -1315,6 +1437,7 @@ export class BattleMenu {
     for (const w of this.actionWins) w.size(this.actionW, this.actionH, scale);
     if (this.keysWin) { this.keysWin.size(118, this.keysH, scale); this.keysWin.show('keys'); }
     this.useHeadWin.size(USE_HEAD_W, USE_HEAD_H, scale);
+    this.forgetHeadWin.size(MENU_W, 18, scale);
     for (const { w } of this.useMoveWins) w.size(CELL_W, PARTY_H, scale);
     for (const { w } of this.partyCells) w.size(CELL_W, PARTY_H, scale);
     for (const { w, ww, hh } of this.memberWins) w.size(ww, hh, scale);

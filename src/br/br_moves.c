@@ -125,6 +125,8 @@ static bool8 LearnsByNow(struct Pokemon *mon, u16 move)
     return FALSE;
 }
 
+EWRAM_DATA u16 gBrForgetMove = MOVE_NONE;
+
 void BrMoves_Forgetting(struct Pokemon *mon, u8 slot)
 {
     u16 move, item;

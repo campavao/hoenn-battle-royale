@@ -131,6 +131,12 @@ ENGINE_SYMBOLS = [
     "gItemEffectTable",
     # ...what cannot be used from the field's BAG, and the party's own screen, walked unseen.
     "ItemUseOutOfBattle_CannotUse", "gBrPartyScreen",
+    # ...and a drop's screen, answered by the page's windows.
+    "gBrSwapPick",
+    # ...and who can learn a machine, for the party's windows to grey the rest.
+    "gTMHMLearnsets",
+    # ...and which move is waiting on one being forgotten.
+    "gBrForgetMove",
     # ...and the ROM's own BAG running: spike B holds the battle's picture over it while it
     # USEs what the page's bag picked, and the battle's redraw after it (web/spike-b/main.ts
     # trackBag, HBR-110).

@@ -13,6 +13,7 @@ const ROM_BASE = 0x08000000;
  *  them. The ones a battle has anything in. */
 export const POCKET_ITEMS = 0;
 export const POCKET_BALLS = 1;
+export const POCKET_TMHM = 2;
 export const POCKET_BERRIES = 3;
 export const BAG_POCKETS: { pocket: number; label: string }[] = [
   { pocket: POCKET_ITEMS, label: 'ITEMS' },
@@ -24,7 +25,7 @@ export const BAG_POCKETS: { pocket: number; label: string }[] = [
 export const FIELD_POCKETS: { pocket: number; label: string }[] = [
   { pocket: POCKET_ITEMS, label: 'ITEMS' },
   { pocket: POCKET_BALLS, label: 'POKé BALLS' },
-  { pocket: 2, label: 'TMs & HMs' },
+  { pocket: POCKET_TMHM, label: 'TMs & HMs' },
   { pocket: POCKET_BERRIES, label: 'BERRIES' },
   { pocket: 4, label: 'KEY ITEMS' },
 ];
@@ -135,6 +136,20 @@ export function asksWhoInField(rom: Rom, id: number, effect: Uint8Array | null):
   if (items === undefined || u8(rom, items + id * ITEM_SIZE + ITEM_TYPE) !== ITEM_USE_PARTY_MENU) return false;
   if (!effect || !usedOnOne(effect)) return true;
   return (effect[EFFECT_MORE] & (ITEM4_REVIVE | ITEM4_HEAL_PP)) !== 0;
+}
+
+/** A TM or an HM: ITEM_TM01 to ITEM_HM08 (include/constants/items.h). */
+const ITEM_TM01 = 289, ITEM_HM08 = 346;
+export function isMachine(id: number): boolean {
+  return id >= ITEM_TM01 && id <= ITEM_HM08;
+}
+
+/** pokemon.c CanMonLearnTMHM: a bit per machine, two words a species. */
+export function learnsMachine(rom: Rom, species: number, id: number): boolean {
+  const table = rom.sym('gTMHMLearnsets');
+  if (table === undefined) return true;
+  const n = id - ITEM_TM01;
+  return (u32(rom, table + species * 8 + (n < 32 ? 0 : 4)) >>> (n % 32) & 1) === 1;
 }
 
 /** Whether the field's BAG says "not now" of it: a ball, say. */

@@ -19,11 +19,20 @@ async function withTeam(page: Page, fog = 900): Promise<void> {
   const tap = async (k: string) => { await key(page, k, true); await page.waitForTimeout(90); await key(page, k, false); };
   await spike(page, (s) => { const a = s.link.room.actor(s.link.me); a.m = { ...a.m, spot: { map: 'MAP_ROUTE117_POKEMON_DAY_CARE', x: 5, y: 6 }, facing: 2 }; a.calm = 0; });
   await page.waitForTimeout(800);
-  await tap('z'); await page.waitForTimeout(3000);
-  await tap('z'); await page.waitForTimeout(1200);
-  await tap('Enter'); await page.waitForTimeout(2000);
-  for (let i = 0; i < 10 && (await spike(page, (s) => s.swapping)); i++) { await tap('x'); await page.waitForTimeout(1500); }
-  await page.waitForTimeout(1500);
+  // The chest: A on it, POKeMON if it asks, and a mon off the windows. Each once it is up, on a
+  // machine of any speed: a key pressed on a timer found the wrong screen on CI, and no team.
+  const party = () => spike(page, (s) => s.rom.partyCount());
+  for (let i = 0; i < 40 && !(await party()); i++) {
+    if (await page.locator('.bm-slot').first().isVisible()) {
+      await page.locator('.bm-slot').first().click();
+      await page.waitForTimeout(1500);
+    } else if (!(await spike(page, (s) => s.swapping))) {
+      await tap('z');
+      await page.waitForTimeout(800);
+    } else await page.waitForTimeout(500);
+  }
+  expect(await party(), 'a mon out of the chest').toBeGreaterThan(0);
+  await expect.poll(() => spike(page, (s) => s.swapping), { timeout: 30_000 }).toBe(false);
   await spike(page, (s) => s.rom.fillParty());
 }
 
@@ -253,10 +262,12 @@ test('one faints: who goes out is the party windows, with no way back and the RO
   await spike(page, (s) => {
     const emu = s.rom.emu, at = s.art.sym('gPlayerParty'), mons = s.art.sym('gBattleMons');
     emu.write(at + 86, 1, 16); emu.write(mons + 0x28, 1, 16); emu.write(at + 100 + 86, 0, 16);
+    // ...and nothing but TACKLE for the foe to answer with (struct BattlePokemon: 0x58, moves at 0xC).
+    for (const m of [0x64, 0x66, 0x68, 0x6a]) emu.write(mons + m, 33, 16);
   });
   // A move each time the windows ask, and A through "Use next POKeMON?", until the party asks.
   const asked = () => page.locator('.bm-use-head').isVisible();
-  for (let i = 0; i < 60 && !(await asked()); i++) { await page.keyboard.press('z'); await page.waitForTimeout(700); }
+  for (let i = 0; i < 60 && !(await asked()); i++) { await page.keyboard.press('z', { delay: 120 }); await page.waitForTimeout(600); }
   await expect(page.locator('.bm-use-head')).toBeVisible();
   await shot(page, 'desk-forced');
   await expect(page.locator('.bm-slot')).toHaveCount(6);
@@ -379,6 +390,8 @@ test('PARTY and BAG on a phone: the dock opens the windows, and everything fits'
   await page.locator('#battle-menu .bm-back').click();
   await expect(page.locator('.bm-slot').first()).toBeHidden();
   await expect(page.locator('#hud-bag')).toBeVisible();
+  // The dock's own view of the field comes round on a timer.
+  await page.waitForTimeout(700);
   await page.locator('#hud-bag').click();
   await expect(page.locator('.bm-bag-head')).toBeVisible();
   await expect(page.locator('#battle-menu .bm-back')).toBeInViewport({ ratio: 1 });
@@ -407,6 +420,11 @@ test('on a small phone every window a battle opens fits on the glass (Cam, 11-02
   await expect(page.locator('.bm-member')).toBeVisible();
   await page.waitForTimeout(200);
   await shot(page, 'mini-member');
+  // The band behind them is dimmed, and only that: the top of the glass isn't.
+  const dim = await page.locator('#battle-menu').evaluate((el) => { const s = getComputedStyle(el, '::before'); return { content: s.content, bg: s.backgroundColor, top: el.getBoundingClientRect().top }; });
+  expect(dim.content).not.toBe('none');
+  expect(dim.bg).not.toBe('rgba(0, 0, 0, 0)');
+  expect(dim.top, 'the picture still has the top of the glass').toBeGreaterThan(100);
   await fits('one of them', '#battle-menu button');
   await page.locator('.bm-m-btn').first().click();
   await page.locator('#battle-menu .bm-back').click();
@@ -440,6 +458,92 @@ test('the big MAP shows the fog, as the minimap does (Cam, 11-02)', async ({ bro
   expect(fog.on, 'the fog canvas is on').toBe(true);
   expect(fog.painted, 'and has fog on it').toBeGreaterThan(0);
   expect(fog.w).toBeCloseTo(fog.gba[2], 0);
+  // WebKit (Cam's iPhone) drew the ROM's picture over it without this: painted, and not seen.
+  // Only a local WebKit run saw that, so the rule itself is what CI holds to.
+  expect(await page.locator('#ringfog').evaluate((c) => getComputedStyle(c).zIndex)).toBe('1');
+  await ctx.close();
+});
+
+test('a full party trades a dropped POKeMON one for one, on the windows', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await withTeam(page);
+  const team = () => spike(page, (s) => s.battleMenu.deps.firstMoves.readParty().map((m: any) => m.species)) as Promise<number[]>;
+  const before = await team();
+  expect(before.length).toBe(6);
+  await spike(page, (s) => s.startFor({ type: 'bag', tick: 0, id: s.link.me, key: 0x7e0005, name: 'DRAKE', bag: { items: [], money: 0, mons: [{ species: 25, level: 30 }] } }));
+  await expect(page.locator('.bm-slot').first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.bm-use-head')).toBeVisible();
+  await shot(page, 'phone-drop');
+  await page.locator('.bm-slot').first().click();
+  await expect(page.locator('.bm-slot')).toHaveCount(6);
+  await expect(page.locator('.bm-slot').nth(5)).toBeVisible();
+  await shot(page, 'phone-drop-swap');
+  await page.locator('.bm-slot').nth(2).click();
+  await expect.poll(team, { timeout: 20_000 }).toContain(25);
+  expect((await team()).length).toBe(6);
+  // Theirs went on the end; ours is in the bag now, and it is the windows' to take back.
+  await expect(page.locator('.bm-slot').first()).toBeVisible({ timeout: 15_000 });
+  await page.locator('#battle-menu .bm-back').click();
+  await expect.poll(() => spike(page, (s) => s.swapping)).toBe(false);
+  await ctx.close();
+});
+
+test('a TM off the ground and a trader ask on the windows', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await withTeam(page);
+  const team = () => spike(page, (s) => s.battleMenu.deps.firstMoves.readParty()) as Promise<{ species: number; moves: { id: number }[] }[]>;
+  // TM46 THIEF: SHARPEDO can learn it, and knows four moves, so the ROM's own forget screen shows.
+  await spike(page, (s) => s.give(334));
+  await expect(page.locator('.bm-use-head')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.bm-slot').first()).not.toHaveAttribute('aria-disabled', 'true');
+  await expect(page.locator('#gba')).toBeHidden();
+  await shot(page, 'phone-tm');
+  await page.locator('.bm-slot').first().click();
+  // Four known: which goes is the windows' too, and the ROM's screen never shows.
+  await expect(page.locator('.bm-forget-head')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.bm-pick-move')).toHaveCount(4);
+  await expect(page.locator('#gba')).toBeHidden();
+  await shot(page, 'phone-tm-forget');
+  // Forgetting nothing: BACK, and it is not learned.
+  await page.locator('#battle-menu .bm-back').click();
+  await expect(page.locator('.bm-forget-head')).toBeHidden();
+  await expect.poll(() => spike(page, (s) => s.swapping || s.battleMenu.isShown), { timeout: 20_000 }).toBe(false);
+  expect((await team())[0].moves.map((m) => m.id)).not.toContain(168);
+  // Again, and BITE goes for it.
+  await spike(page, (s) => s.give(334));
+  await expect(page.locator('.bm-use-head')).toBeVisible({ timeout: 15_000 });
+  await page.locator('.bm-slot').first().click();
+  await expect(page.locator('.bm-pick-move').nth(1)).toBeVisible({ timeout: 20_000 });
+  await page.locator('.bm-pick-move').nth(1).click();
+  await expect.poll(async () => (await team())[0].moves.map((m) => m.id), { timeout: 20_000, message: 'THIEF for BITE' }).toContain(168);
+  expect((await team())[0].moves.map((m) => m.id)).not.toContain(44);
+  await expect(page.locator('#gba')).toBeHidden();
+
+  await expect.poll(() => spike(page, (s) => s.swapping), { timeout: 20_000 }).toBe(false);
+  await spike(page, (s) => s.startFor({ type: 'trade', tick: 0, n: 0, species: 25 }));
+  await expect.poll(() => spike(page, (s) => s.asking), { timeout: 10_000 }).toBe(true);
+  await key(page, 'z', true); await page.waitForTimeout(150); await key(page, 'z', false);
+  await expect(page.locator('.bm-use-head')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.bm-slot')).toHaveCount(6);
+  await shot(page, 'phone-trade');
+  await page.locator('.bm-slot').nth(2).click();
+  await expect.poll(async () => (await team()).some((m) => m.species === 25), { timeout: 30_000, message: 'traded' }).toBe(true);
+
+  // Somebody's gift, with a full party: theirs, then which of ours for it, on the windows.
+  await expect.poll(() => spike(page, (s) => s.swapping), { timeout: 20_000 }).toBe(false);
+  await spike(page, (s) => s.startFor({ type: 'trade', tick: 0, n: 0, species: 280, gives: true }));
+  await expect.poll(() => spike(page, (s) => s.asking), { timeout: 10_000 }).toBe(true);
+  await key(page, 'z', true); await page.waitForTimeout(150); await key(page, 'z', false);
+  await expect(page.locator('.bm-use-head')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('#gba')).toBeHidden();
+  await page.locator('.bm-slot').first().click();
+  await expect(page.locator('.bm-slot').nth(5)).toBeVisible();
+  await page.locator('.bm-slot').nth(1).click();
+  await expect.poll(async () => (await team()).some((m) => m.species === 280), { timeout: 30_000, message: 'gift taken' }).toBe(true);
   await ctx.close();
 });
 

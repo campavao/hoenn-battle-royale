@@ -2799,6 +2799,7 @@ static void Task_HandleSelectionMenuInput(u8 taskId)
 // tutor and a RARE CANDY's level come through here (a lift asks nothing, br_levels.c).
 static void BrForgetWhich(u8 taskId)
 {
+    gBrForgetMove = gPartyMenu.data[0]; // the page asks on its own windows (web/spike-b/rom.ts)
     gTasks[taskId].func = Task_ShowSummaryScreenToForgetMove;
 }
 
@@ -2818,6 +2819,7 @@ static void BrNotLearned(u8 taskId)
 // to "learned"; none picked is BrNotLearned.
 static void BrReturnFromForget(u8 taskId)
 {
+    gBrForgetMove = MOVE_NONE;
     if (GetMoveSlotToReplace() != MAX_MON_MOVES)
         Task_PartyMenuReplaceMove(taskId);
     else

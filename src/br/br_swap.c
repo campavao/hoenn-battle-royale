@@ -61,6 +61,7 @@ struct BrSwap
 };
 
 static struct BrSwap *sSwap;
+EWRAM_DATA u8 gBrSwapPick[2] = {0};
 
 static void CB2_BrSwapRun(void);
 
@@ -473,7 +474,18 @@ static void CB2_BrSwapRun(void)
             SetMainCallback2(CB2_ReturnToField);
             return;
         }
-        if (sSwap->state == 2)
+        // The page's windows asked who: the same MOVE, and the screen shuts unseen.
+        if (sSwap->state == 0 && (gBrSwapPick[SIDE_PARTY] | gBrSwapPick[SIDE_DROP]))
+        {
+            sSwap->marked[SIDE_PARTY] = gBrSwapPick[SIDE_PARTY];
+            sSwap->marked[SIDE_DROP] = gBrSwapPick[SIDE_DROP];
+            gBrSwapPick[SIDE_PARTY] = 0;
+            gBrSwapPick[SIDE_DROP] = 0;
+            MovePicked();
+            BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
+            sSwap->state = 1;
+        }
+        else if (sSwap->state == 2)
         {
             if (JOY_NEW(B_BUTTON))
             {

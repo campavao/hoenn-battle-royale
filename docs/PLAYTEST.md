@@ -110,7 +110,9 @@ transcripts were made from them; a frame at the time is the evidence for each li
   battle is its four in the same windows. PARTY and BAG on the field are those windows too: SWITCH and
   GIVE or TAKE by the page alone, an item through the ROM's BAG unseen (`bag-pick-field`), SUMMARY
   and MOVES the ROM's on purpose, an evolution or a move to forget shown when it comes up.
-  Not as drawn yet: a dropped POKeMON's TAKE or SWAP is still the ROM's swap screen; a forced
+  A dropped team is those windows too, taken through its screen unseen (`swap-pick`); a TM off the
+  ground and a trader ask who on them. A move to make room for a TM's is asked on them too (`tm-teach-full`).
+  Not as drawn yet: a forced
   switch after a faint and SUMMARY are the ROM's own; the field's PARTY and BAG open the ROM's.
   The minimap's fog is a near colour, not the ROM's palette's.
 
@@ -128,10 +130,9 @@ transcripts were made from them; a frame at the time is the evidence for each li
 * **A dropped bag vanished while it was open** (Cam, 11-02): the field drew no piece anybody had taken
   up. It stays for the one who has it open. Other trainers still see it go.
 
-**Not reproduced:**
-
-* **No fog on the big MAP** (Cam, iPhone 13 mini, 11-02, his screenshot at 1:11, "Safe: ROUTE 116"). The
-  minimap has it. On dev in Chromium, solo, the MAP's fog paints (`spikeb-windows.spec.ts`).
+* **No fog on the big MAP** (Cam, iPhone 13 mini, 11-02). In WebKit the fog canvas was painted but not seen:
+  272 purple pixels on the glass where Chromium has thousands, 7,376 with `#ringfog` stacked above the ROM's
+  picture. Measured on desktop WebKit, solo, not on the handset.
 
 **Partly fixed:**
 

@@ -147,6 +147,10 @@ export type MenuWalk =
   | { to: 'summary' | 'moves'; slot: number }
   | { to: 'use'; pocket: number; item: number; slot?: number; move?: number };
 
+/** What a walk needs the page to ask. `forget`: a new move and four known, which goes, by the
+ *  row; null keeps the four. */
+export const romAsks: { forget: ((slot: number, move: number) => Promise<number | null>) | null } = { forget: null };
+
 export interface MirrorFeed {
   /** The next message not yet handed to the ROM, or null. */
   peek(): SpMsg | null;
@@ -183,7 +187,7 @@ export interface RomBattles {
   /** An event's trader (br_event.c), stood before the hidden trainer: A on him, through
    *  his line, and the party menu on the page (`onStart`) to pick which one he gets for
    *  `species` at the rung. The species he was given, or 0 for none. */
-  trade(species: number, onStart: () => void): Promise<number>;
+  trade(species: number, onStart: () => void, slot?: number): Promise<number>;
   /** A link battle with another trainer (br_netlink.c): this ROM's side of it, the blocks
    *  out through `link.send` and theirs in through `link.recv`. `first` is the side that
    *  challenged (link id 0). Resolves when the ROM is back on the field. */
@@ -255,7 +259,7 @@ export interface RomBattles {
    *  Ours on the left, theirs on the right, picks moved across. Resolves, back on the
    *  field, with the team left in the bag. `onStart` is when the screen is up, `onEnd` when
    *  the ROM is back on its own field (the page's to cover from then on). */
-  team(mons: TeamRow[], name: string, onStart: () => void, onEnd?: () => void): Promise<TeamRow[]>;
+  team(mons: TeamRow[], name: string, onStart: () => void, onEnd?: () => void, pick?: { take: number; give?: number }): Promise<TeamRow[]>;
   /** The START menu's row `action` (start_menu.c's MENU_ACTION_*: POKeMON 1, BAG 2, the
    *  trainer card 4), opened the way the match's PARTY button opens it (touch.ts): START,
    *  the cursor walked to the row, A -- all on the hidden field, the page keeping the
@@ -692,9 +696,17 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       onEnd();
       return;
     }
+    await pickLoop(walk.slot, walk.move, onStart, onEnd);
+  };
+  /** The ROM's BAG and party, unseen, until the field: who gets it, which move, and each line
+   *  pressed past. A screen that is the ROM's alone is shown once it has come to rest. */
+  const pickLoop = async (slot: number | undefined, move: number | undefined, onStart: () => void, onEnd: () => void) => {
+    hurryOn();
     const bagCb = sym('CB2_BagMenuRun');
     const partyCb = partyScreen();
-    let sent = walk.slot === undefined, moves = walk.move ?? -1, n = 0, settledFor = 0, was = 0, showing = false;
+    let sent = slot === undefined, moves = move ?? -1, n = 0, settledFor = 0, was = 0, showing = false;
+    const forgetAt = sym('gBrForgetMove');
+    let forgetting = false, script: GbaKey[] = [], pressedKey: GbaKey | null = null, aInBag = 0;
     const press = (k: GbaKey, every: number) => {
       if (n % every === 0) emu.press(k);
       else if (n % every === 3) emu.release(k);
@@ -704,18 +716,31 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       if (onField()) return true;
       const inBag = screenIs(bagCb), inParty = screenIs(partyCb);
       if (!inBag && !inParty) {
-        // An evolution, a move to forget: the ROM's alone, once it has come to rest.
+        // A move to forget: the windows' to ask, and the ROM's screen walked on their answer.
+        const forget = forgetAt === undefined ? 0 : emu.read(forgetAt, 16);
+        if (forget && !forgetting && romAsks.forget && !fade().active) {
+          forgetting = true;
+          hurryOff();
+          void romAsks.forget(emu.read(partyMenuAt + 9, 8), forget).then((row) => { script = row === null ? ['b'] : [...Array(row).fill('down'), 'a']; n = 0; });
+        }
+        if (forgetting) {
+          if (script.length && n % 12 === 0 && !fade().active) { const k = script.shift()!; emu.press(k); pressedKey = k; n = 1; }
+          else if (pressedKey && n === 4) { emu.release(pressedKey); pressedKey = null; }
+          return false;
+        }
+        // An evolution, say: the ROM's alone, once it has come to rest.
         const cb = emu.read(sym('gMain')! + 4, 32);
         settledFor = cb === was && !fade().active ? settledFor + 1 : 0;
         was = cb;
         if (!showing && settledFor > 40) { showing = true; hurryOff(); onStart(); }
         return false;
       }
+      if (forgetting) { forgetting = false; hurryOn(); }
       if (showing) { showing = false; onEnd(); hurryOn(); }
       settledFor = 0;
       if (inParty) {
         if (!sent && choosing() && !fade().active) {
-          emu.write(partyMenuAt + 9, walk.slot!, 8);
+          emu.write(partyMenuAt + 9, slot!, 8);
           sent = true;
           n = 0;
           emu.press('a');
@@ -725,7 +750,14 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
           if (moves > 0 && n % 12 === 3) moves--;
           if (moves === 0) { press('a', 30); if (n % 30 === 3) moves = -1; }
         } else if (sent && moves < 0) press('a', 30);
-      } else if (n > 60 && !emu.read(sym('gBrBag')!, 16)) press('b', 30);
+      } else if (n > 60 && !emu.read(sym('gBrBag')!, 16)) {
+        // A TM has its "Booted up a TM" and "Contains..." in the bag before it asks who: pressed
+        // past, though not for ever. Back from the party, or an item the bag refused, B shuts it.
+        if (!sent && aInBag < 8) {
+          if (n % 30 === 0) aInBag++;
+          press('a', 30);
+        } else press('b', 30);
+      }
       return false;
     }, 3000);
     for (const k of ['a', 'b', 'down'] as GbaKey[]) emu.release(k);
@@ -1151,7 +1183,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         carried = last = next;
       });
     },
-    team(mons, name, onStart, onEnd) {
+    team(mons, name, onStart, onEnd, pick) {
       return onCore(async () => {
         if (broken || !mons.length) return mons;
         leaving = false;
@@ -1193,7 +1225,16 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
           up = await until(emu, off, 90);
         }
         if (!up) console.warn('spike: the team\'s screen did not open', { callback2: emu.read(mainAt + 4, 32).toString(16) });
-        else {
+        else if (pick) {
+          // The page's windows asked: the screen does it and shuts, nobody sees it.
+          const at = sym('gBrSwapPick')!;
+          hurryOn();
+          emu.write(at, pick.give === undefined ? 0 : 1 << pick.give, 8);
+          emu.write(at + 1, 1 << pick.take, 8);
+          await until(emu, onField, 300);
+          await frames(emu, 60);
+          hurryOff();
+        } else {
           await settled();
           onStart();
           // B closes it; back on the field the box settles (SettleBoxes): a PICKUP for
@@ -1595,7 +1636,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         return took;
       });
     },
-    trade(species, onStart) {
+    trade(species, onStart, slot) {
       return onCore(async () => {
         if (broken) return 0;
         leaving = false;
@@ -1625,8 +1666,11 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         }, 400);
         emu.release('a');
         if (up) {
-          onStart();
-          await backOnField();
+          if (slot !== undefined) await pickLoop(slot, undefined, onStart, () => {});
+          else {
+            onStart();
+            await backOnField();
+          }
           // The claim, its answer and the swap, on the field after the menu.
           await until(emu, () => given !== 0, 90);
         } else console.warn('spike: the trader\'s menu did not open');
