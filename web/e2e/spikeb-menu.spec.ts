@@ -113,6 +113,55 @@ async function hosted(page: Page): Promise<void> {
   await onField(page);
 }
 
+test("a desktop's message bar reads at a glance, and names what is in reach", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 }, screen: { width: 1920, height: 1080 } });
+  const page = await ctx.newPage();
+  await inMatch(page);
+  await page.waitForTimeout(2000);
+  const named = await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s = (window as any).__spike, room = s.link.room, a = room.actor(s.link.me);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const g = ([...room.ground().values()] as any[]).find((g) => !g.gift && g.y > 0 && room.stepFor(a)({ map: g.map, x: g.x, y: g.y + 1 }, 3));
+    const spot = { map: g.map, x: g.x, y: g.y + 1 };
+    a.m = { ...a.m, spot, prev: spot, facing: 2, moveDir: 2, action: null, px: 0, py: 0 };
+    return s.art.itemName(g.item) as string;
+  });
+  await expect(page.locator('#msg')).toHaveAttribute('data-text', `A: Take ${named}`, { timeout: 5000 });
+  const box = (await boxOf(page, '#msg canvas'))!;
+  expect(box.width, '29 tiles at 3 pixels a pixel').toBe(29 * 8 * 3);
+  await page.screenshot({ path: test.info().outputPath('bar.png') });
+  await ctx.close();
+});
+
+test('the curtain goes up over the field as a match starts', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  await page.goto(`/?rom=${romHashParam()}`);
+  await page.locator('#lobby-rows button', { hasText: 'HOST A ROOM' }).click({ timeout: 90_000 });
+  await page.locator('#room-start').click({ timeout: 30_000 });
+  // Every frame's look at it, from before the match starts.
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as unknown as { curtainSeen: string[] }).curtainSeen = seen;
+    const look = () => { const c = document.getElementById('curtain'); if (c) seen.push(c.style.transform); requestAnimationFrame(look); };
+    look();
+  });
+  await onField(page);
+  const seen = () => page.evaluate(() => (window as unknown as { curtainSeen: string[] }).curtainSeen);
+  await expect.poll(async () => (await seen()).length, { timeout: 30_000 }).toBeGreaterThan(0);
+  await expect(page.locator('#curtain'), 'and it is gone').toHaveCount(0, { timeout: 5000 });
+  const rises = (await seen()).filter((t) => t.startsWith('translateY'));
+  expect(new Set(rises).size, 'it rose, it did not vanish').toBeGreaterThan(5);
+  // A reload back into the match is not a new one.
+  await page.reload();
+  await onField(page);
+  await expect(page.locator('#curtain')).toHaveCount(0);
+  await ctx.close();
+});
+
 const zoomOf = (page: Page) => page.evaluate(() => (window as unknown as { __spike: { zoom: number } }).__spike.zoom);
 
 test('a desktop player picks how close the map sits: wheel, keys, the sheet, and it is kept', async ({ browser }) => {

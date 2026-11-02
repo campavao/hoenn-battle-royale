@@ -313,6 +313,36 @@ export class RomArt {
     return this.frames(this.u32(this.u32(template + 0xc)), count, 16, h, this.palette(this.u32(this.sym(palSym))));
   }
 
+  /** The contest's curtain as its tilemap has it, 32 x 20 tiles (contest.c
+   *  SetBgForCurtainDrop: gContestCurtainTilemap in the interface's tiles); null on a patch
+   *  whose symbols predate it. */
+  contestCurtain(): HTMLCanvasElement | null {
+    const at = ['gContestCurtainTilemap', 'gContestInterfaceGfx', 'gContestInterfaceAudiencePalette'].map((n) => this.sym(n));
+    if (!at.every(Number.isFinite)) return null;
+    const map = lz77(this.rom, at[0] - ROM), tiles = lz77(this.rom, at[1] - ROM), pal = lz77(this.rom, at[2] - ROM);
+    const dvMap = new DataView(map.buffer, map.byteOffset, map.byteLength), dvPal = new DataView(pal.buffer, pal.byteOffset, pal.byteLength);
+    const cv = document.createElement('canvas');
+    cv.width = 32 * TILE;
+    cv.height = 20 * TILE;
+    const ctx = cv.getContext('2d')!;
+    const id = ctx.createImageData(cv.width, cv.height);
+    const px = new Uint32Array(id.data.buffer);
+    for (let i = 0; i < 32 * 20; i++) {
+      const e = dvMap.getUint16(i * 2, true);
+      const line = (e >> 12) & 0xf, off = (e & 0x3ff) * 32, hf = e & 0x400, vf = e & 0x800;
+      for (let y = 0; y < TILE; y++) {
+        const row = off + (vf ? TILE - 1 - y : y) * 4;
+        for (let x = 0; x < TILE; x++) {
+          const sx = hf ? TILE - 1 - x : x;
+          const c = (tiles[row + (sx >> 1)] >> ((sx & 1) * 4)) & 0xf;
+          if (c) px[(Math.floor(i / 32) * TILE + y) * cv.width + (i % 32) * TILE + x] = rgba(dvPal.getUint16((line * 16 + c) * 2, true));
+        }
+      }
+    }
+    ctx.putImageData(id, 0, 0);
+    return cv;
+  }
+
   /** `count` frames of w x h 4bpp tiles from `at`, row by row, colour 0 clear. */
   private frames(at: number, count: number, w: number, h: number, pal: number[]): HTMLCanvasElement {
     const cv = document.createElement('canvas');

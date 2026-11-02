@@ -29,7 +29,7 @@ export const FILE_SECONDS = {
   'results-scroll.spec.ts': 5,
   // Measured locally (2026-10-31), not yet four CI runs: seven tests, a whole hosted match
   // and a Safari catch among them.
-  'spikeb-menu.spec.ts': 90,
+  'spikeb-menu.spec.ts': 150,
   'spikeb-room.spec.ts': 90,
   'spikeb.spec.ts': 660,
   'spikeb-two.spec.ts': 120,

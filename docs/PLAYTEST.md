@@ -78,6 +78,25 @@ transcripts were made from them; a frame at the time is the evidence for each li
   A new rung lifts the party the moment the ROM runs, and START does nothing over it: the walk
   to the row timed out with the screen never up. Reproduced 4 times in 5, now 0 in 5.
 
+* **Could not read which TM it was, and the bottom bar feels hidden** (1552 2:32, 6:16). One
+  problem: "A: Take SHOCK WAVE" was there, in a bar one pixel a pixel on a desktop. Three on
+  1080p now, by the window's height (`spikeb-menu.spec.ts` pins the size and the name).
+* **The dust should show, and the black symbols should be grass** (1609 5:05). That was Route
+  113's ash. A step now puffs it off and leaves plain grass, as field_tasks.c does, and a marked
+  spot on ash wears the grass's rustle (`fieldfx.ts`). The same steps rustle tall and long grass,
+  print sand, track a bike, splash a puddle and land a ledge in dust, in the ROM's own frames
+  and timings, for anybody in view. Ash is kept per browser, not shared: two players can see
+  different cells cleared. Not yet: a jump into grass's own splash, ripples, reflections.
+* **A screen wipe into the match** (1609 3:37, 4:33). The contest's curtain, as he guessed: its
+  tilemap stretched across the window, hanging 0.35 s, then up at 7 pixels a frame with the
+  contest's sound (`curtain.ts`). Not when a reload comes back into a match.
+* **Could not get out of the cave** (1609 12:12). Not reproduced as he met it: see below.
+  What the scan found instead, `world-exits.test.ts`: from anywhere a match can land you, with any
+  set of field moves, you could walk into three places and never out. Terra Cave's mirage warps
+  lie on plain rock on Routes 113 to 118, a warp the ROM only fires once a script lays a warp
+  tile, and its way out is MAP_DYNAMIC; the same for Lilycove's elevator. Those and Altering
+  Cave are shut (`export-world.py` SHUT_WARPS). Red before, 5 of 5; green after.
+
 **Partly fixed:**
 
 * **Teleporting: the map did not match where he stood** (1609 3:45). A resync replayed keys
@@ -94,11 +113,6 @@ transcripts were made from them; a frame at the time is the evidence for each li
   the page's big window and the ROM's own box. The roll's u8 wraps, so the sixth try off a
   speed just under the foe's really is about 8%. Whether to soften the roll is still open.
 
-**Open, the first video (15:52):**
-
-* **A TM's name should show before it is picked up** (2:32), when standing next to it.
-* **The bottom bar is too easy to miss** (6:16).
-
 **Open, the second video (16:09):**
 
 * **The title screen's scrolling background should follow the game's path** (0:03). It does now:
@@ -109,9 +123,10 @@ transcripts were made from them; a frame at the time is the evidence for each li
   cells seen in a minute. They go from grass to grass and ball to ball now. Bot fights over 12
   minutes across six seeds are about what they were: 5.5 from 5.8, worst gap 2.3 min from
   3.2. The goal, that you cannot tell a bot from a player, is further off than this.
-* **A screen-wipe into the match** (3:37, 4:33). Perhaps Emerald's contest wipe.
-* **The grass or dust and sand effects are not Emerald's standard sprites** (5:05).
-* **The cave needs a pass** (12:07). It was hard to get out.
+* **The cave needs a pass** (12:07). He was in the fog, at 6 pixels a pixel, in a cave with
+  ladders and water. No one-way pocket explains it (above), so "get out" may be out of the fog,
+  or the cave's look: he did not say which cave or what was wrong, and a frame does not tell.
+  A recording (K at the moment) names the map. Still open.
 * **A watched battle: no player sprites, none in the side panels** (13:49). The bstart's seats
   were the fighter's numbers (`12,14`, seats 5 and 6) and the watcher had the looks under 0 and
   31, so both drew as the default: `seatBstart` fixes the bytes, pinned by a unit test. The

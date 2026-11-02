@@ -32,6 +32,8 @@ ENGINE_SYMBOLS = [
     "gWildMonHeaders", "gSpritePalette_GeneralFieldEffect1",
     # What a step leaves on the ground (web/spike-b/fieldfx.ts).
     "gFieldEffectObjectTemplatePointers", "gSpritePalette_GeneralFieldEffect0",
+    # The curtain into a match (web/spike-b/curtain.ts).
+    "gContestCurtainTilemap", "gContestInterfaceGfx", "gContestInterfaceAudiencePalette",
     "gBattleTypeFlags", "gBattleWeather", "gBattleEnvironment", "gBattleOutcome", "gBattleMainFunc", "gBattlerControllerFuncs",
     "gLinkPlayers", "gBlockRecvBuffer", "gBlockSendBuffer", "gWirelessCommType",
     "gRngValue", "gSaveBlock1", "gSaveBlock2", "gNumSafariBalls",

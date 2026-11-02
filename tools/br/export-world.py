@@ -268,6 +268,15 @@ def base_building_name(folder):
     return re.sub(r"_(B?\d+F)$", "", folder)
 
 
+# Warp events a match never opens. A warp fires only on a warp tile
+# (field_control_avatar.c IsWarpMetatileBehavior), and these lie on plain rock until a script
+# lays one there: the mirage's Terra Cave on six routes, and Altering Cave. Taken as doors they
+# made a rock face a way in, and Terra Cave's way out is MAP_DYNAMIC, the warp you came by,
+# which a stateless step cannot answer: nobody came back. The store's elevator is the same
+# dead end, with stairs beside it. The scan in web/spike-b/shared/world-exits.test.ts holds this.
+SHUT_WARPS = {"MAP_TERRA_CAVE_ENTRANCE", "MAP_ALTERING_CAVE", "MAP_LILYCOVE_CITY_DEPARTMENT_STORE_ELEVATOR"}
+
+
 def classify_warp_kind(src_folder, dest_map_id, maps_by_id):
     if dest_map_id in ("MAP_DYNAMIC", "MAP_NONE", "MAP_UNDEFINED"):
         return "other"
@@ -427,9 +436,11 @@ def export():
         warps = []
         for we in mj.get("warp_events") or []:
             wx, wy = we["x"], we["y"]
+            dest_map = we.get("dest_map")
+            if dest_map in SHUT_WARPS and map_id != "MAP_TERRA_CAVE_END":
+                continue
             if 0 <= wx < w and 0 <= wy < h:
                 classes[wy * w + wx] = 8
-            dest_map = we.get("dest_map")
             dest_warp_id = we.get("dest_warp_id")
             to_x = to_y = None
             if dest_map in maps_meta:
