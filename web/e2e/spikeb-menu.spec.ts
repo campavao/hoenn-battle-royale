@@ -61,14 +61,19 @@ test("a chunk that won't load: one tap-to-reload line, and the tap reloads", asy
   await ctx.close();
 });
 
-/** A match of the page's own, on the field. */
-async function inMatch(page: Page): Promise<void> {
-  await page.goto(`/?rom=${romHashParam()}#solo&nobots&safari=600&seed=7`);
-  await page.locator('#intro-go').click({ timeout: 90_000 });
+/** The ROM is up and my trainer is on the field. */
+async function onField(page: Page): Promise<void> {
   await page.waitForFunction(() => {
     const s = (window as unknown as { __spike?: { rom?: unknown; link?: { me: number; room: { actor(id: number): unknown } } } }).__spike;
     return !!s?.rom && !!s.link?.room.actor(s.link.me);
   }, undefined, { timeout: 120_000 });
+}
+
+/** A match of the page's own, on the field. */
+async function inMatch(page: Page): Promise<void> {
+  await page.goto(`/?rom=${romHashParam()}#solo&nobots&safari=600&seed=7`);
+  await page.locator('#intro-go').click({ timeout: 90_000 });
+  await onField(page);
 }
 
 const boxOf = (page: Page, sel: string) => page.locator(sel).boundingBox();
@@ -97,4 +102,109 @@ test('a phone gets the map and both thumbs, either way up; a desktop gets the ke
   await expect(dp.locator('#keys'), 'the key legend').toBeVisible();
   await expect(dp.locator('#dpad-surface'), 'no pad').toBeHidden();
   await desk.close();
+});
+
+/** The way a player gets a match: a hosted room with bots, on the field (the room's sheet
+ *  is only there). */
+async function hosted(page: Page): Promise<void> {
+  await page.goto(`/?rom=${romHashParam()}`);
+  await page.locator('#lobby-rows button', { hasText: 'HOST A ROOM' }).click({ timeout: 90_000 });
+  await page.locator('#room-start').click({ timeout: 30_000 });
+  await onField(page);
+}
+
+const zoomOf = (page: Page) => page.evaluate(() => (window as unknown as { __spike: { zoom: number } }).__spike.zoom);
+
+test('a desktop player picks how close the map sits: wheel, keys, the sheet, and it is kept', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  await hosted(page);
+  await expect.poll(() => zoomOf(page), 'the default, the farthest here').toBe(2);
+  await page.mouse.move(640, 360);
+  await page.mouse.wheel(0, -100);
+  await expect.poll(() => zoomOf(page), 'a notch forward').toBe(3);
+  await page.keyboard.press('=');
+  await expect.poll(() => zoomOf(page)).toBe(4);
+  await page.keyboard.press('=');
+  expect(await zoomOf(page), 'the GBA fills the window: no closer').toBe(4);
+
+  // The menu is the window's size, whatever the field's.
+  await page.keyboard.press('m');
+  await expect(page.locator('#startmenu')).toBeVisible();
+  const close = await boxOf(page, '#startmenu');
+  await page.keyboard.press('x');
+  await expect(page.locator('#startmenu')).toBeHidden();
+  await page.keyboard.press('-');
+  await page.keyboard.press('-');
+  await expect.poll(() => zoomOf(page)).toBe(2);
+  await page.keyboard.press('-');
+  expect(await zoomOf(page), 'no farther').toBe(2);
+  await page.keyboard.press('m');
+  await expect(page.locator('#startmenu')).toBeVisible();
+  const far = await boxOf(page, '#startmenu');
+  expect({ w: far!.width, h: far!.height }).toEqual({ w: close!.width, h: close!.height });
+  await page.keyboard.press('x');
+  await expect(page.locator('#startmenu')).toBeHidden();
+
+  // The sheet's row steps round.
+  await page.keyboard.press('r');
+  await expect(page.locator('#zoom')).toHaveText('ZOOM 1/3');
+  await page.locator('#zoom').click();
+  await expect(page.locator('#zoom')).toHaveText('ZOOM 2/3');
+  expect(await zoomOf(page)).toBe(3);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#zoom')).toHaveCount(0);
+
+  // Spectating has its own free zoom, and the camera comes back to the choice.
+  await page.keyboard.press('v');
+  await page.mouse.wheel(0, 300);
+  await expect.poll(() => zoomOf(page), 'free').toBeLessThan(3);
+  await page.keyboard.press('v');
+  await expect.poll(() => zoomOf(page)).toBe(3);
+
+  // The next visit (back into the same match), a resize.
+  await page.reload();
+  await onField(page);
+  await expect.poll(() => zoomOf(page), 'kept').toBe(3);
+  await page.setViewportSize({ width: 1000, height: 600 });
+  await expect.poll(() => zoomOf(page), 'still fits').toBe(3);
+  await page.setViewportSize({ width: 500, height: 320 });
+  await expect.poll(() => zoomOf(page), 'held inside a small window').toBeLessThan(3);
+  await ctx.close();
+});
+
+test('a phone player pinches the map: whole steps, kept, and no walk', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await inMatch(page);
+  await expect.poll(() => zoomOf(page), "the GBA's 15 tiles across the glass").toBe(4);
+  const spot = () => page.evaluate(() => { const s = (window as unknown as { __spike: { link: { me: number; room: { actor(id: number): { m: { spot: { map: string; x: number; y: number } } } } } } }).__spike; return JSON.stringify(s.link.room.actor(s.link.me).m.spot); });
+  const at = await spot();
+  const pinch = (from: number, to: number) => page.evaluate(({ from, to }) => {
+    const c = document.getElementById('world')!;
+    const ev = (type: string, id: number, x: number) => c.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', clientX: x, clientY: 300, bubbles: true }));
+    ev('pointerdown', 11, 195 - from / 2);
+    ev('pointerdown', 12, 195 + from / 2);
+    ev('pointermove', 11, 195 - to / 2);
+    ev('pointermove', 12, 195 + to / 2);
+    ev('pointerup', 11, 195 - to / 2);
+    ev('pointerup', 12, 195 + to / 2);
+  }, { from, to });
+  await pinch(200, 100);
+  await expect.poll(() => zoomOf(page), 'fingers together: farther').toBe(3);
+  await pinch(100, 40);
+  expect(await zoomOf(page), 'no farther than a desktop sees').toBe(3);
+  await page.waitForTimeout(800);
+  expect(await spot(), 'a pinch is not a tap to walk').toBe(at);
+  await pinch(100, 200);
+  await expect.poll(() => zoomOf(page), 'fingers apart: closer').toBe(4);
+  await pinch(100, 40);
+  await expect.poll(() => zoomOf(page)).toBe(3);
+  await page.reload();
+  await page.locator('#intro-go').click({ timeout: 90_000 });
+  await onField(page);
+  await expect.poll(() => zoomOf(page), 'kept').toBe(3);
+  await ctx.close();
 });
