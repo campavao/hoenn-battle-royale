@@ -1909,6 +1909,8 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
     onResetPad: () => { resetPad(); lobby?.stage.redraw(); },
     onForget: () => { forgetRom(); },
     onSaveLog: saveLog,
+    // A phone has no K: the sheet's row, and the sheet shuts so the line is seen.
+    onMark: touchPad ? () => { markHere('sheet'); lobby?.closeSheet(); } : undefined,
     pad: touchPad ? {
       hidden: padPrefs.hidden,
       onMove: () => { lobby?.closeSheet(); padPrefs.edit(); },
@@ -2657,7 +2659,7 @@ function toast(text: string): void {
 }
 
 /** This moment, and where the camera looks, for tools/br/replay.ts. */
-function markHere(via: 'key' | 'eye'): void {
+function markHere(via: 'key' | 'sheet'): void {
   const p = link ? mapUnder(cam.x, cam.y) : null;
   const where = p ? { map: p.m.id, x: Math.floor(cam.x / TILE - p.gx), y: Math.floor(cam.y / TILE - p.gy) } : { map: '', x: 0, y: 0 };
   const n = recorder.mark(via, where);
@@ -2670,17 +2672,6 @@ function saveLog(): void {
 }
 document.getElementById('save-log')!.addEventListener('click', saveLog);
 
-/** A phone's mark: hold the eye. A tap does nothing, so a thumb that strays there is safe. */
-const MARK_HOLD_MS = 500;
-const markEye = document.getElementById('mark-eye')!;
-let markHold = 0;
-markEye.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  markEye.setPointerCapture(e.pointerId);
-  markEye.classList.add('down');
-  markHold = window.setTimeout(() => { markHold = 0; markEye.classList.remove('down'); markHere('eye'); }, MARK_HOLD_MS);
-});
-for (const type of ['pointerup', 'pointercancel']) markEye.addEventListener(type, () => { clearTimeout(markHold); markEye.classList.remove('down'); });
 const watch = new Watch({
   trainers: () => (link ? actors() : []),
   me: () => link?.me ?? 0,

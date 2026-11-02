@@ -1,5 +1,5 @@
-// The play-test recorder (spike-b/recorder.ts) on the page: K and a held eye mark the moment,
-// a tap on the eye does not, and SAVE LOG hands over a file that holds the match.
+// The play-test recorder (spike-b/recorder.ts) on the page: K and the room sheet's MARK mark
+// the moment, and SAVE LOG hands over a file that holds the match.
 import { test, expect, type Page } from '@playwright/test';
 import fs from 'node:fs';
 import { romExists, romHashParam, romPath } from './symbols';
@@ -12,6 +12,15 @@ async function intoSolo(page: Page): Promise<void> {
   await page.goto(`/?solo&rom=${romHashParam()}#seed=777&fog=600&safari=600`);
   await page.waitForFunction(() => { const s = (window as unknown as { __spike?: { link?: unknown; rom?: unknown } }).__spike; return !!s?.link && !!s?.rom; }, undefined, { timeout: 120_000 });
   await page.locator('#intro-go').click();
+}
+
+/** A hosted room, on the field: the sheet is a room's. */
+async function intoHosted(page: Page): Promise<void> {
+  await page.goto(`/?rom=${romHashParam()}`);
+  await page.locator('#lobby-rows button', { hasText: 'HOST A ROOM' }).click({ timeout: 90_000 });
+  await page.locator('#room-start').click({ timeout: 30_000 });
+  await page.waitForFunction(() => { const s = (window as unknown as { __spike?: { rom?: unknown; link?: { me: number; room: { actor(id: number): unknown } } } }).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 120_000 });
+  await page.waitForTimeout(2000);
 }
 
 /** SAVE LOG, the row above EXIT, off the menu's first row. */
@@ -51,22 +60,12 @@ test.describe('on a desktop', () => {
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-  test('holding the eye marks, a tap does not, and the share sheet gets the file', async ({ page, context }) => {
+  test("the sheet's MARK marks, there is no eye, and the share sheet gets the file", async ({ page }) => {
     test.setTimeout(180_000);
-    await intoSolo(page);
-    const eye = page.locator('#mark-eye');
-    await expect(eye).toBeVisible();
-    const box = (await eye.boundingBox())!;
-    const cdp = await context.newCDPSession(page);
-    const touch = (type: 'touchStart' | 'touchEnd') => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x: box.x + box.width / 2, y: box.y + box.height / 2 }] });
-    await touch('touchStart');
-    await page.waitForTimeout(100);
-    await touch('touchEnd');
-    await page.waitForTimeout(700);
-    await expect(page.locator('#mark-toast')).toBeHidden();
-    await touch('touchStart');
-    await page.waitForTimeout(700);
-    await touch('touchEnd');
+    await intoHosted(page);
+    await expect(page.locator('#mark-eye'), 'Cam, 11-02: it looked out of place').toHaveCount(0);
+    await page.locator('#hud-menu').click();
+    await page.locator('#mark').click();
     await expect(page.locator('#mark-toast')).toContainText('MARK 1');
     // A phone that can share a file does (recorder.ts saveRecording).
     await page.evaluate(() => {
