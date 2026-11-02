@@ -123,6 +123,62 @@ test('by the keys alone: moves first, PARTY and one of them, sent out, BAG, a mo
   await ctx.close();
 });
 
+test('a medicine asks on the party windows: a Revive for the fainted, a Potion for the hurt', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 }, screen: { width: 1920, height: 1080 } });
+  const page = await ctx.newPage();
+  await withTeam(page);
+  await spike(page, (s) => s.startFor({ type: 'bag', tick: 0, id: s.link.me, key: 0x7e0002, name: 'DRAKE', bag: { items: [{ id: 24, n: 1 }, { id: 13, n: 2 }], money: 0, mons: [{ species: 373, level: 30 }] } }));
+  await expect(page.locator('#bag-panel button')).toHaveCount(3);
+  await page.locator('#bag-panel button').nth(1).click();
+  await page.locator('#bag-panel button').first().click();
+  await expect(page.locator('#bag-panel')).toBeHidden();
+  // The third fainted, the fourth hurt.
+  const hp = (slot: number) => spike(page, new Function('s', `return s.rom.emu.read(s.art.sym('gPlayerParty') + ${slot} * 100 + 86, 16)`) as (s: any) => number);
+  await spike(page, (s) => { const at = s.art.sym('gPlayerParty'); s.rom.emu.write(at + 2 * 100 + 86, 0, 16); s.rom.emu.write(at + 3 * 100 + 86, 1, 16); });
+  await intoBattle(page);
+
+  /** E, down the pocket to `item`, Z, and USE. */
+  const use = async (item: number) => {
+    await page.keyboard.press('e');
+    await expect(page.locator('.bm-bag-head')).toBeVisible();
+    const row = await spike(page, new Function('s', `return s.battleMenu.stacks().findIndex((x) => x.item === ${item})`) as (s: any) => number);
+    expect(row, `item ${item} in the pocket`).toBeGreaterThanOrEqual(0);
+    for (let i = 0; i < row; i++) await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('z');
+    await page.locator('.bm-bag-use').click();
+  };
+
+  await use(24);
+  await expect(page.locator('.bm-use-head')).toBeVisible();
+  await expect(page.locator('.bm-slot')).toHaveCount(6);
+  await shot(page, 'desk-use');
+  await expect(page.locator('#battle-menu .bm-back')).toBeInViewport({ ratio: 1 });
+  const shut = await page.locator('.bm-slot').evaluateAll((all) => all.map((b) => b.getAttribute('aria-disabled')));
+  expect(shut, 'a Revive only for the fainted').toEqual(['true', 'true', 'false', 'true', 'true', 'true']);
+  // BACK is the item again, and nothing has gone near the ROM.
+  await page.keyboard.press('x');
+  await expect(page.locator('.bm-bag-use')).toBeVisible();
+  await page.locator('.bm-bag-use').click();
+  await expect(page.locator('.bm-use-head')).toBeVisible();
+  // The keys land on the one who can take it.
+  await expect(page.locator('.bm-slot').nth(2)).toHaveClass(/bm-focus/);
+  await page.keyboard.press('z');
+  await expect.poll(() => hp(2), { timeout: 30_000, message: 'revived' }).toBeGreaterThan(0);
+  await page.waitForTimeout(600);
+  await shot(page, 'desk-use-walk');
+  await page.waitForFunction(() => (window as any).__spike.battleMenu?.isShown, undefined, { timeout: 40_000 });
+  await expect(page.locator('.bm-use-head')).toBeHidden();
+
+  const before = await hp(3);
+  await use(13);
+  await expect(page.locator('.bm-slot').nth(3)).not.toHaveAttribute('aria-disabled', 'true');
+  await page.locator('.bm-slot').nth(3).click();
+  await expect.poll(() => hp(3), { timeout: 30_000, message: 'healed' }).toBeGreaterThan(before);
+  await page.waitForFunction(() => (window as any).__spike.battleMenu?.isShown, undefined, { timeout: 40_000 });
+  await ctx.close();
+});
+
 test('by a thumb: moves first, RUN says its odds, and a dropped bag asks with windows', async ({ browser }) => {
   test.setTimeout(240_000);
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
@@ -155,6 +211,19 @@ test('by a thumb: moves first, RUN says its odds, and a dropped bag asks with wi
   await expect(page.locator('.bm-cell').first()).toBeVisible();
   await expect(page.locator('.bm-act-run')).toBeVisible();
   await shot(page, 'phone-battle');
+  // A POTION with nobody hurt: the party asks, nobody can take it, and BACK is the item again.
+  await page.locator('.bm-act-bag').click();
+  await page.locator('.bm-bag-list').click({ position: { x: 60, y: 24 } });
+  await page.locator('.bm-bag-use').click();
+  await expect(page.locator('.bm-use-head')).toBeVisible();
+  await expect(page.locator('#battle-menu .bm-back')).toBeInViewport({ ratio: 1 });
+  await shot(page, 'phone-use');
+  await expect(page.locator('.bm-slot[aria-disabled="false"]')).toHaveCount(0);
+  await page.locator('#battle-menu .bm-back').click();
+  await expect(page.locator('.bm-bag-use')).toBeVisible();
+  await page.locator('.bm-bag-back').click();
+  await page.locator('#battle-menu .bm-back').click();
+  await expect(page.locator('.bm-act-party')).toBeVisible();
   await page.locator('.bm-act-party').click();
   await expect(page.locator('.bm-slot').first()).toBeVisible();
   await page.locator('.bm-slot').nth(2).click();

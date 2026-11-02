@@ -171,6 +171,8 @@ export interface TeamMember {
   level: number;
   hp: number;
   maxHp: number;
+  /** struct Pokemon's status: asleep, poisoned... */
+  status: number;
   item: number;
   /** Which of the species' two abilities. */
   ability: number;
@@ -201,6 +203,7 @@ export function teamMembers(party: Uint8Array, count: number, nameOf: (species: 
       level: party[at + 84],
       hp: v.getUint16(at + 86, true),
       maxHp: v.getUint16(at + 88, true),
+      status: v.getUint32(at + 80, true),
       item: g >>> 16,
       // struct PokemonSubstruct3's top bit (abilityNum).
       ability: word('M', 4) >>> 31,

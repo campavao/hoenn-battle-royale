@@ -20,7 +20,7 @@ import { BATTLE_MENU, MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU
 import { EmeraldCanvas, TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_GREEN, TEXT_RED, TEXT_WHITE, fitText, measure, wrapText, type TextColor } from './emerald';
 import { ITEMS_POCKET, Win, bagHolds, drawFitted, drawIcon, drawItemFitted, drawKeycap, picture } from './phonehud';
 import { nextFocus, type Dir } from './focus';
-import { BAG_POCKETS, POCKET_BALLS, itemInfo, readBattleBag, type Stack } from './bag';
+import { BAG_POCKETS, POCKET_BALLS, itemEffect, itemInfo, medicineHelps, readBattleBag, usedOnOne, type Stack } from './bag';
 
 // ---- what the ROM says ---------------------------------------------------------------
 
@@ -261,6 +261,7 @@ export interface PartyMember {
   level: number;
   hp: number;
   maxHp: number;
+  status: number;
   item: number;
   itemName: string;
   ability: string;
@@ -278,6 +279,7 @@ const MEMBER_MOVE_H = 56;
 const ITEM_POKE_BALL = 4, ITEM_ESCAPE_ROPE = 85, ITEM_TM_CASE = 364;
 const ICON_BOX = 15;
 const SLOT_MENU_PARTY = 2, SLOT_RUN = 3;
+const USE_HEAD_W = 100, USE_HEAD_H = 34;
 
 /** A button's icon and word, side by side and centred. A long word (RUN 100%) has a smaller
  *  icon rather than be cut. */
@@ -325,6 +327,8 @@ export interface BattleMenuDeps {
     readParty(): PartyMember[];
     icon(species: number): CanvasImageSource | null;
     bag(): CanvasImageSource | null;
+    /** USE on one of them: `item` out of `pocket`, the ROM's BAG and party walked unseen. */
+    useOn(pocket: number, item: number, slot: number): void;
     /** A keyboard's keys on PARTY and BAG. */
     keys?: { party: string; bag: string };
     /** Send out the party's `slot`; or open its SUMMARY. */
@@ -428,6 +432,10 @@ export class BattleMenu {
   private readonly memberWins: { w: Win; ww: number; hh: number }[] = [];
   private team: PartyMember[] = [];
   private memberAt = 0;
+  /** The item that brought the party up, until a slot or BACK. */
+  private using: { pocket: number; item: number; effect: Uint8Array; name: string } | null = null;
+  private readonly useHead: HTMLElement;
+  private readonly useHeadWin: Win;
   /** Which button the keys are on, among those on show. */
   private focused: HTMLElement | null = null;
   private showFocus = false;
@@ -560,11 +568,32 @@ export class BattleMenu {
     this.partyBox = doc.createElement('div');
     this.partyBox.className = 'bm-party';
     deps.root.insertBefore(this.partyBox, this.backBtn);
+    // Over them, when it is an item that brought them up: the item, and the question.
+    this.useHead = doc.createElement('div');
+    this.useHead.className = 'bm-use-head';
+    this.useHead.hidden = true;
+    this.partyBox.appendChild(this.useHead);
+    this.useHeadWin = new Win(this.useHead, USE_HEAD_W, USE_HEAD_H, (c) => {
+      c.fillRect({ x: 0, y: 0, w: USE_HEAD_W, h: USE_HEAD_H }, 'rgba(16,20,24,0.6)');
+      c.drawTextCentred(fitText(this.using?.name ?? '', USE_HEAD_W - 8), USE_HEAD_W / 2, 3, TEXT_WHITE);
+      c.drawTextCentred('Which POKeMON?', USE_HEAD_W / 2, 18, TEXT_WHITE);
+    });
     for (let i = 0; i < 6; i++) {
       const b = button('bm-slot', this.partyBox);
       const w = new Win(b, CELL_W, PARTY_H, (c) => this.paintSlot(c, i));
       this.partyCells.push({ b, w });
-      b.addEventListener('click', () => { if (this.team[i]) { this.memberAt = i; this.setMode('member'); } });
+      b.addEventListener('click', () => {
+        if (!this.team[i] || b.getAttribute('aria-disabled') === 'true') return;
+        const using = this.using;
+        if (using) {
+          this.using = null;
+          this.mode = 'action';
+          this.send(() => this.deps.firstMoves?.useOn(using.pocket, using.item, i));
+          return;
+        }
+        this.memberAt = i;
+        this.setMode('member');
+      });
     }
 
     // One of them: who, what they hold, their moves against this foe, and what to do.
@@ -645,12 +674,22 @@ export class BattleMenu {
     return this.deps.firstMoves && this.view?.menu !== MENU_SAFARI && this.lastShown !== MENU_SAFARI ? 'moves' : 'action';
   }
 
-  private openParty(): void {
+  private openParty(using: BattleMenu['using'] = null): void {
     const first = this.deps.firstMoves;
     if (!first) return;
+    this.using = using;
     this.team = first.readParty();
+    this.useHead.hidden = !using;
+    if (using) this.useHeadWin.show(using.name);
+    this.partyCells.forEach(({ b }, i) => b.setAttribute('aria-disabled', String(!this.slotHelps(i))));
     this.setMode('party');
-    this.partyCells.forEach(({ w }, i) => w.show(JSON.stringify(this.team[i] ?? null)));
+    this.partyCells.forEach(({ w }, i) => w.show(JSON.stringify([this.team[i] ?? null, using?.item])));
+  }
+
+  /** Whether this slot can be pressed: with an item in hand, only who it would help. */
+  private slotHelps(i: number): boolean {
+    const m = this.team[i];
+    return !!m && (!this.using || medicineHelps(this.using.effect, m));
   }
 
   private canSelect(): boolean {
@@ -664,7 +703,8 @@ export class BattleMenu {
     c.drawFrame({ x: 0, y: 0, w: CELL_W, h: PARTY_H });
     const icon = this.deps.firstMoves?.icon(m.species);
     if (icon) c.drawImageTo(icon, 0, 0, 32, 32, 5, 6, 32, 32);
-    c.drawText(fitText(m.name, CELL_W - 48), 40, 9, m.hp > 0 ? (m.active ? TEXT_BLUE : TEXT_DARK) : TEXT_GRAY);
+    const dim = this.using ? !this.slotHelps(i) : m.hp === 0;
+    c.drawText(fitText(m.name, CELL_W - 48), 40, 9, dim ? TEXT_GRAY : m.active ? TEXT_BLUE : TEXT_DARK);
     drawHp(c, 40, 28, CELL_W - 50, m.maxHp ? m.hp / m.maxHp : 0);
   }
 
@@ -743,6 +783,7 @@ export class BattleMenu {
       if (this.mode === 'info') this.setMode('moves');
       else if (this.mode === 'item') this.setMode('bag');
       else if (this.mode === 'member') this.setMode('party');
+      else if (this.mode === 'party' && this.using) this.dropItem();
       else if (this.mode !== this.home()) this.goBack();
       return true;
     }
@@ -838,6 +879,11 @@ export class BattleMenu {
     const stack = this.pickedStack();
     if (!stack || this.refusal(stack) || !this.deps.useItem) return;
     const pocket = BAG_POCKETS[this.pocketAt].pocket;
+    const effect = this.deps.rom ? itemEffect(this.deps.rom, stack.item) : null;
+    if (this.deps.firstMoves && effect && usedOnOne(effect)) {
+      this.openParty({ pocket, item: stack.item, effect, name: (this.deps.rom && itemInfo(this.deps.rom, stack.item)?.name) || '' });
+      return;
+    }
     this.mode = 'action';
     this.send(() => this.deps.useItem!(pocket, stack.item));
   }
@@ -1005,7 +1051,14 @@ export class BattleMenu {
     else if (v.menu === MENU_ACTION) this.sendChained(() => this.deps.choose(MENU_ACTION, 0, slot));
   }
 
+  /** BACK from "which POKeMON?": the item again, and nothing has reached the ROM. */
+  private dropItem(): void {
+    this.using = null;
+    this.setMode('item');
+  }
+
   private goBack(): void {
+    if (this.mode === 'party' && this.using) { this.dropItem(); return; }
     if (this.home() === 'moves') {
       this.setMode(this.mode === 'member' ? 'party' : 'moves');
       return;
@@ -1034,7 +1087,7 @@ export class BattleMenu {
 
   /** Whether the page's bag is open, so the frame's read wants the pockets. */
   get wantsBag(): boolean {
-    return this.mode === 'bag' || this.mode === 'item';
+    return this.mode === 'bag' || this.mode === 'item' || !!this.using;
   }
 
   private setMode(mode: Mode): void {
@@ -1069,6 +1122,7 @@ export class BattleMenu {
     this.bagUseWin.size(MENU_W - BAG_BACK_W - GAP, BACK_H, scale);
     for (const w of this.actionWins) w.size(this.actionW, this.actionH, scale);
     if (this.keysWin) { this.keysWin.size(118, this.keysH, scale); this.keysWin.show('keys'); }
+    this.useHeadWin.size(USE_HEAD_W, USE_HEAD_H, scale);
     for (const { w } of this.partyCells) w.size(CELL_W, PARTY_H, scale);
     for (const { w, ww, hh } of this.memberWins) w.size(ww, hh, scale);
     if (this.mode === 'bag' || this.mode === 'item') this.layout();

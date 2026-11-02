@@ -2228,13 +2228,26 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     return false;
   };
   const PARTY_SLOT_ID = 9;
-  let walk: { slot: number; summary: boolean; step: number; frames: number } | null = null;
+  let walk: { slot: number; summary: boolean; step: number; frames: number; item: boolean } | null = null;
   const walkParty = (slot: number, summary: boolean) => {
-    walk = { slot, summary, step: 0, frames: 0 };
+    walk = { slot, summary, step: 0, frames: 0, item: false };
     partyHold = !summary;
     partyGone = false;
     partyHeld = 0;
     touch.chooseBattle(MENU_ACTION, 2);
+  };
+  // A medicine on one of them: the ROM's BAG USEs it and its party asks, both unseen. The page
+  // has asked already.
+  const pickFromBag = (pocket: number, item: number) => touch.chooseBattle(MENU_ACTION, 1, undefined, () => {
+    emu.write(sym('gBagPosition')! + BAG_POSITION_POCKET, pocket, 8);
+    emu.write(sym('gBrBag')!, item, 16);
+  });
+  const useOn = (pocket: number, item: number, slot: number) => {
+    walk = { slot, summary: false, step: 0, frames: 0, item: true };
+    partyHold = true;
+    partyGone = false;
+    partyHeld = 0;
+    pickFromBag(pocket, item);
   };
   emu.onFrame(() => {
     if (!walk) return;
@@ -2243,7 +2256,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       if (choosing()) {
         emu.write(partyMenu! + PARTY_SLOT_ID, walk.slot, 8);
         touch.tapKey('a');
-        walk.step = 1;
+        walk.step = walk.item ? 5 : 1;
         walk.frames = 0;
       } else if (walk.frames > 400) { walk = null; partyHold = false; }
     } else if (walk.step === 1 && walk.frames > 40) {
@@ -2267,6 +2280,14 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     } else if (walk.step === 4) {
       // The SUMMARY is the player's until it shuts; then the party, which B leaves.
       if (walk.frames > 60 && choosing()) { touch.tapKey('b'); walk = null; }
+    } else if (walk.step === 5 && walk.frames % 30 === 0) {
+      // Its line on the party's own screen is pressed past, until the battle is back. The bag
+      // again means the ROM would not have it (nothing to cure, say): out, the turn still ours.
+      const main = sym('gMain'), fight = sym('BattleMainCB2'), bag = sym('CB2_BagMenuRun');
+      const cb2 = main === undefined ? 0 : emu.read(main + 4, 32);
+      if (fight !== undefined && ((cb2 ^ fight) & ~1) === 0) walk = null;
+      else if ((bag !== undefined && ((cb2 ^ bag) & ~1) === 0) || walk.frames > 400) { touch.tapKey('b'); walk = null; }
+      else touch.tapKey('a');
     }
   });
   const menu = new BattleMenu({
@@ -2293,14 +2314,12 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       keys: touchPad ? undefined : { party: 'Q', bag: 'E' },
       switchTo: (slot) => walkParty(slot, false),
       summary: (slot) => walkParty(slot, true),
+      useOn,
     },
     onShown: (on) => document.body.classList.toggle('battle-menu', on),
     readBag: () => readBattleBag(emu, sym, tables),
     useItem: sym('gBrBag') !== undefined && sym('gBagPosition') !== undefined
-      ? (pocket, item) => touch.chooseBattle(MENU_ACTION, 1, undefined, () => {
-        emu.write(sym('gBagPosition')! + BAG_POSITION_POCKET, pocket, 8);
-        emu.write(sym('gBrBag')!, item, 16);
-      })
+      ? pickFromBag
       : undefined,
   });
   battleMenu = menu;
