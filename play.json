@@ -1,7 +1,85 @@
 {
- "readAt": "2026-11-01T18:39:42.508Z",
+ "readAt": "2026-11-02T01:37:56.331Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "AEW8EV",
+   "at": "2026-11-02T01:35:05.298Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-02T01:35:06.695Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "D6GRHR",
+   "at": "2026-11-02T01:13:07.612Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-02T01:13:13.547Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "7F56SP",
+   "at": "2026-11-02T00:32:38.510Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-02T00:32:45.034Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": 972
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "S9PHJ9",
    "at": "2026-11-01T17:37:43.437Z",
@@ -3244,18 +3322,19 @@
   {
    "id": "6144a717",
    "first": "2026-10-17T02:37:29.310Z",
-   "last": "2026-11-01T17:37:40.560Z",
+   "last": "2026-11-02T01:35:03.950Z",
    "since": "2026-10-15",
    "versions": [
     "2",
     "3",
     "world-e109cf93",
     "world-625a94ff",
-    "world-9b83a194"
+    "world-9b83a194",
+    "world-8ba64750"
    ],
    "solo": 2,
-   "checkins": 17,
-   "v": "world-9b83a194"
+   "checkins": 21,
+   "v": "world-8ba64750"
   }
  ],
  "solo": [
