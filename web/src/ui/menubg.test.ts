@@ -18,6 +18,24 @@ describe("the main menu's pan over Hoenn (HBR-30)", () => {
     }
   });
 
+  it('follows the road in straight lines (Cam, 11-01: the diagonals show black corners)', () => {
+    for (let i = 1; i < pan.path.length; i++) {
+      const [ax, ay] = pan.path[i - 1], [bx, by] = pan.path[i];
+      expect(ax === bx || ay === by, `${ax},${ay} to ${bx},${by}`).toBe(true);
+    }
+    const maps = pan.maps as [string, number, number, number, number][];
+    const on = (x: number, y: number, id: string) => maps.some(([n, mx, my, mw, mh]) => n === id && x >= mx && x < mx + mw && y >= my && y < my + mh);
+    const start = maps.find(([n]) => n === 'LITTLEROOT_TOWN')!;
+    expect(on(pan.path[0][0], pan.path[0][1], start[0])).toBe(true);
+    // Littleroot, 101, Oldale, 103: the game's own first steps.
+    const seen: string[] = [];
+    for (const [x, y] of pan.path) {
+      const m = maps.find(([, mx, my, mw, mh]) => x >= mx && x < mx + mw && y >= my && y < my + mh)?.[0];
+      if (m && seen[seen.length - 1] !== m) seen.push(m);
+    }
+    expect(seen.slice(0, 4)).toEqual(['LITTLEROOT_TOWN', 'ROUTE101', 'OLDALE_TOWN', 'ROUTE103']);
+  });
+
   it('only stops over maps it has pictures of', () => {
     const maps = pan.maps as [string, number, number, number, number][];
     for (const [x, y] of pan.path) {

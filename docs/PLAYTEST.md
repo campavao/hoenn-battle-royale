@@ -97,9 +97,9 @@ transcripts were made from them; a frame at the time is the evidence for each li
 
 **Open, the second video (16:09):**
 
-* **The title screen's scrolling background should follow the game's path** (0:03):
-  Littleroot, 101, Oldale, 103, Petalburg, the woods, and so on, with only straight
-  moves. The diagonal moves show black corners.
+* **The title screen's scrolling background should follow the game's path** (0:03). It does now:
+  Littleroot, 101, Oldale, 103, back through Oldale, 102, Petalburg and on, in straight lines
+  through each seam. The woods have no place on the map's own layout, so it goes by Route 104.
 * **The menu moves when touched** (1:05). Anchor it and let it grow upwards.
 * **Bots should look busy, not idle** (1:27). In the Safari they stood about: a median of 18
   cells seen in a minute. They go from grass to grass and ball to ball now. Bot fights over 12
