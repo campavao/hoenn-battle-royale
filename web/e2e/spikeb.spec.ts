@@ -149,6 +149,14 @@ test('a rung lifts the whole team, and the party is never copied halfway through
     // A mon copied halfway reads as noise: species 331 came back 52950.
     for (const m of team) expect(m.species === first || m.species <= 411, `phase ${phase}: species ${m.species}`).toBe(true);
   }
+  // The BAG asked for on the frame a rung moves still opens (Cam 11-01, 12:20: "it just did
+  // not open"): START does nothing over the lift. Four times in five, before.
+  await page.evaluate(() => {
+    const s = (window as unknown as { __spike: { rom: Rom; runMenu(c: string): Promise<void> } }).__spike;
+    s.rom.setPhase(7);
+    void s.runMenu('2');
+  });
+  await expect(page.locator('#battle.on')).toBeVisible({ timeout: 3_000 });
 });
 
 test('a dropped bag opens its team, and MOVES off the team opens the move screen', async ({ page }) => {

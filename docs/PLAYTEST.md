@@ -74,6 +74,10 @@ transcripts were made from them; a frame at the time is the evidence for each li
   The rocks there (1:01) were left: the North and Northeast areas' are Emerald's own objects.
   Which ones he meant is not known.
 
+* **"This is taking four seconds... it just did not open"** (1609 12:20), the BAG from the menu.
+  A new rung lifts the party the moment the ROM runs, and START does nothing over it: the walk
+  to the row timed out with the screen never up. Reproduced 4 times in 5, now 0 in 5.
+
 **Partly fixed:**
 
 * **Teleporting: the map did not match where he stood** (1609 3:45). A resync replayed keys
