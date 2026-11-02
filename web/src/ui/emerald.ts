@@ -371,6 +371,14 @@ export class EmeraldCanvas {
     this.ctx.drawImage(img, sx, sy, w, h, x + this.origin, y, w, h);
   }
 
+  /** A picture the page made itself (off the ROM), to a size. `smooth` for an icon shrunk. */
+  drawImageTo(src: CanvasImageSource, sx: number, sy: number, sw: number, sh: number, x: number, y: number, w: number, h: number, smooth = false): void {
+    const was = this.ctx.imageSmoothingEnabled;
+    this.ctx.imageSmoothingEnabled = smooth;
+    this.ctx.drawImage(src, sx, sy, sw, sh, x + this.origin, y, w, h);
+    this.ctx.imageSmoothingEnabled = was;
+  }
+
   /** A CSS filter over what is drawn next (the menu's soft backdrop); 'none' ends it. */
   setFilter(filter: string): void {
     this.ctx.filter = filter;

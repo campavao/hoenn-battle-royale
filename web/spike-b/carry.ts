@@ -164,6 +164,52 @@ export function fameTeam(party: Uint8Array, count: number): FameMon[] {
   return out;
 }
 
+/** A team member as the page's own windows show it: more than fameTeam needs. */
+export interface TeamMember {
+  species: number;
+  name: string;
+  level: number;
+  hp: number;
+  maxHp: number;
+  item: number;
+  /** Which of the species' two abilities. */
+  ability: number;
+  moves: { id: number; pp: number }[];
+}
+
+/** The party's members, in its order, from the same bytes as fameTeam. */
+export function teamMembers(party: Uint8Array, count: number, nameOf: (species: number) => string): TeamMember[] {
+  const v = new DataView(party.buffer, party.byteOffset, party.byteLength);
+  const out: TeamMember[] = [];
+  for (let i = 0; i < Math.min(count, 6); i++) {
+    const at = i * 100;
+    const personality = v.getUint32(at, true), otId = v.getUint32(at + 4, true);
+    const key = (personality ^ otId) >>> 0;
+    const order = ORDERS[personality % 24];
+    const word = (sub: string, off: number) => (v.getUint32(at + 32 + 12 * order.indexOf(sub) + off, true) ^ key) >>> 0;
+    const g = word('G', 0), species = g & 0xffff;
+    if (!species) continue;
+    const a = word('A', 0), b = word('A', 4), pp = word('A', 8);
+    const ids = [a & 0xffff, a >>> 16, b & 0xffff, b >>> 16];
+    const raw = party.subarray(at + 8, at + 18);
+    const end = raw.indexOf(0xff);
+    let nick = '';
+    try { nick = decodeGen3(end < 0 ? raw : raw.subarray(0, end)); } catch { nick = ''; }
+    out.push({
+      species,
+      name: nick || nameOf(species),
+      level: party[at + 84],
+      hp: v.getUint16(at + 86, true),
+      maxHp: v.getUint16(at + 88, true),
+      item: g >>> 16,
+      // struct PokemonSubstruct3's top bit (abilityNum).
+      ability: word('M', 4) >>> 31,
+      moves: ids.map((id, n) => ({ id, pp: (pp >>> (n * 8)) & 0xff })).filter((m) => m.id > 0),
+    });
+  }
+  return out;
+}
+
 /** Every mon's encrypted block adds up to its checksum (pokemon.c's CalculateBoxMonChecksum):
  *  no mon of the first `count` is caught with the ROM halfway through writing it. */
 export function partyWhole(party: Uint8Array, count: number): boolean {

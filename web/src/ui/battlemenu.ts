@@ -18,7 +18,8 @@ import { MAIN_CALLBACK2 } from '../field';
 import { effectWords, effectiveness, moveInfo, type MoveInfo, type Rom } from '../battle/movebook';
 import { BATTLE_MENU, MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU_MOVE, MENU_SAFARI, MENU_TARGET, localBattler } from '../touch';
 import { EmeraldCanvas, TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_GREEN, TEXT_RED, TEXT_WHITE, fitText, measure, wrapText, type TextColor } from './emerald';
-import { ITEMS_POCKET, Win, bagHolds, drawIcon, picture } from './phonehud';
+import { ITEMS_POCKET, Win, bagHolds, drawFitted, drawIcon, drawItemFitted, drawKeycap, picture } from './phonehud';
+import { nextFocus, type Dir } from './focus';
 import { BAG_POCKETS, POCKET_BALLS, itemInfo, readBattleBag, type Stack } from './bag';
 
 // ---- what the ROM says ---------------------------------------------------------------
@@ -251,7 +252,57 @@ const RULE = '#d0d0c8';
 /** The page's view of the menu: the actions, the moves, or a move's details over them.
  *  FIGHT is pressed in the ROM too, so its shot clock picks a move, as a thumb's would,
  *  rather than RUN (a forfeit, in a link battle). */
-type Mode = 'action' | 'moves' | 'info' | 'bag' | 'item';
+type Mode = 'action' | 'moves' | 'info' | 'bag' | 'item' | 'party' | 'member';
+
+/** A team member as the party windows show it. */
+export interface PartyMember {
+  species: number;
+  name: string;
+  level: number;
+  hp: number;
+  maxHp: number;
+  item: number;
+  itemName: string;
+  ability: string;
+  moves: { id: number; pp: number }[];
+  /** Out in the battle now. */
+  active: boolean;
+}
+
+/** The buttons under the moves (Cam's sketch, 11-01), three across MENU_W. */
+const ACTION_W = 72;
+const PARTY_H = 44;
+const MEMBER_CARD_H = 56;
+const MEMBER_HELD_H = 32;
+const MEMBER_MOVE_H = 56;
+const ITEM_POKE_BALL = 4, ITEM_ESCAPE_ROPE = 85, ITEM_TM_CASE = 364;
+const ICON_BOX = 15;
+const SLOT_MENU_PARTY = 2, SLOT_RUN = 3;
+
+/** A button's icon and word, side by side and centred. A long word (RUN 100%) has a smaller
+ *  icon rather than be cut. */
+function iconButton(c: EmeraldCanvas, w: number, h: number, icon: (cx: number, cy: number, box: number) => void, word: string, color: TextColor): void {
+  c.drawFrame({ x: 0, y: 0, w, h });
+  const tw = measure(word);
+  const box = tw + ICON_BOX + 4 > w - 8 ? 10 : ICON_BOX;
+  const left = Math.round((w - tw - box - 4) / 2);
+  icon(left + box / 2, h / 2, box);
+  c.drawText(fitText(word, w - box - 8), left + box + 4, Math.floor((h - 14) / 2), color);
+}
+
+/** BACK's red arrow. */
+function drawBackArrow(c: EmeraldCanvas, cx: number, cy: number): void {
+  for (let i = 0; i < 5; i++) c.fillRect({ x: Math.round(cx) - 2 + i, y: Math.round(cy) - i, w: 1, h: 2 * i + 1 }, ARROW_RED);
+}
+
+function hpColor(frac: number): string {
+  return frac > 0.5 ? '#38d060' : frac > 0.2 ? '#f0c000' : '#e03820';
+}
+
+function drawHp(c: EmeraldCanvas, x: number, y: number, w: number, frac: number): void {
+  c.fillRect({ x, y, w, h: 4 }, '#626262');
+  if (frac > 0) c.fillRect({ x: x + 1, y: y + 1, w: Math.max(1, Math.round((w - 2) * frac)), h: 2 }, hpColor(frac));
+}
 
 export interface BattleMenuDeps {
   /** Where the windows go: under the picture, over the pad. */
@@ -268,6 +319,20 @@ export interface BattleMenuDeps {
   useItem?(pocket: number, item: number): void;
   /** The bag's pockets now, for the frame BAG is tapped (readBattleView reads them after). */
   readBag?(): Map<number, Stack[]>;
+  /** The moves up first, with PARTY, BAG and RUN under them and the page's own party screens
+   *  (Cam's sketches, 11-01). /classic/ keeps its FIGHT/BAG/POKeMON/RUN. */
+  firstMoves?: {
+    readParty(): PartyMember[];
+    icon(species: number): CanvasImageSource | null;
+    bag(): CanvasImageSource | null;
+    /** A keyboard's keys on PARTY and BAG. */
+    keys?: { party: string; bag: string };
+    /** Send out the party's `slot`; or open its SUMMARY. */
+    switchTo(slot: number): void;
+    summary(slot: number): void;
+  };
+  /** Has the focus show from the start: nothing here is touched. */
+  focusFirst?: boolean;
 }
 
 /** The bag's windows, GBA pixels: the pocket bar, the list and BACK under it. A tap on
@@ -355,6 +420,17 @@ export class BattleMenu {
   private readonly bagBackWin: Win;
   private readonly bagUseBtn: HTMLButtonElement;
   private readonly bagUseWin: Win;
+  private readonly actions: HTMLElement;
+  private readonly actionWins: Win[] = [];
+  private readonly partyBox: HTMLElement;
+  private readonly partyCells: { b: HTMLButtonElement; w: Win }[] = [];
+  private readonly memberBox: HTMLElement;
+  private readonly memberWins: { w: Win; ww: number; hh: number }[] = [];
+  private team: PartyMember[] = [];
+  private memberAt = 0;
+  /** Which button the keys are on, among those on show. */
+  private focused: HTMLElement | null = null;
+  private showFocus = false;
 
   constructor(private readonly deps: BattleMenuDeps) {
     const doc = deps.root.ownerDocument;
@@ -379,6 +455,7 @@ export class BattleMenu {
     this.backBtn.setAttribute('aria-label', 'Back');
     this.backWin = new Win(this.backBtn, MENU_W, BACK_H, (c) => {
       c.drawFrame({ x: 0, y: 0, w: MENU_W, h: BACK_H });
+      if (this.deps.firstMoves) drawBackArrow(c, MENU_W / 2 - 24, BACK_H / 2);
       c.drawTextCentred('BACK', MENU_W / 2, 9, TEXT_DARK);
     });
     this.backBtn.addEventListener('click', () => this.goBack());
@@ -446,7 +523,260 @@ export class BattleMenu {
     this.bagUseBtn = button('bm-bag-use', this.bagRow);
     this.bagUseWin = new Win(this.bagUseBtn, MENU_W - BAG_BACK_W - GAP, BACK_H, (c) => this.paintBagUse(c));
     this.bagUseBtn.addEventListener('click', () => this.useItem());
+    this.showFocus = !!deps.focusFirst;
+
+    // PARTY, BAG and RUN under the moves.
+    this.actions = doc.createElement('div');
+    this.actions.className = 'bm-actions';
+    deps.root.insertBefore(this.actions, this.backBtn);
+    const first = deps.firstMoves;
+    const WORDS = ['PARTY', 'BAG', 'RUN'];
+    // With a keyboard they stand in a column beside the moves, wider, for the keys' caps.
+    this.actionW = first?.keys ? 88 : ACTION_W;
+    this.actionH = first?.keys ? 40 : BACK_H;
+    WORDS.forEach((word, i) => {
+      const b = button(`bm-act bm-act-${word.toLowerCase()}`, this.actions);
+      b.setAttribute('aria-label', word);
+      const w = new Win(b, this.actionW, this.actionH, (c, redo) => {
+        const run = i === 2 ? this.runLabel() : null;
+        const label = run?.label ?? word;
+        const color = run && !run.enabled ? TEXT_GRAY : TEXT_DARK;
+        iconButton(c, this.actionW, this.actionH, (cx, cy, box) => {
+          if (i === 1) { const bag = first?.bag(); if (bag) drawFitted(c, 'bag', bag, 0, 0, 64, 64, cx, cy, box); }
+          else drawItemFitted(c, i === 0 ? ITEM_POKE_BALL : ITEM_ESCAPE_ROPE, cx, cy, box, redo);
+        }, label, color);
+        const key = i === 0 ? first?.keys?.party : i === 1 ? first?.keys?.bag : undefined;
+        if (key) drawKeycap(c, key, this.actionW - 3, 3);
+      });
+      this.actionWins.push(w);
+      b.addEventListener('click', () => {
+        if (b.getAttribute('aria-disabled') === 'true') return;
+        if (i === 0) this.openParty();
+        else this.act(i === 1 ? 1 : SLOT_RUN);
+      });
+    });
+
+    // The party: an icon, a name and HP for each, in place of the moves.
+    this.partyBox = doc.createElement('div');
+    this.partyBox.className = 'bm-party';
+    deps.root.insertBefore(this.partyBox, this.backBtn);
+    for (let i = 0; i < 6; i++) {
+      const b = button('bm-slot', this.partyBox);
+      const w = new Win(b, CELL_W, PARTY_H, (c) => this.paintSlot(c, i));
+      this.partyCells.push({ b, w });
+      b.addEventListener('click', () => { if (this.team[i]) { this.memberAt = i; this.setMode('member'); } });
+    }
+
+    // One of them: who, what they hold, their moves against this foe, and what to do.
+    this.memberBox = doc.createElement('div');
+    this.memberBox.className = 'bm-member';
+    deps.root.appendChild(this.memberBox);
+    const part = (cls: string, ww: number, hh: number, paint: (c: EmeraldCanvas, redo: () => void) => void) => {
+      const el = doc.createElement('div');
+      el.className = cls;
+      this.memberBox.appendChild(el);
+      this.memberWins.push({ w: new Win(el, ww, hh, paint), ww, hh });
+    };
+    part('bm-m-card', MENU_W, MEMBER_CARD_H, (c) => this.paintCard(c));
+    part('bm-m-held', MENU_W - 16, MEMBER_HELD_H, (c, redo) => this.paintHeld(c, redo));
+    const moves = doc.createElement('div');
+    moves.className = 'bm-m-moves';
+    this.memberBox.appendChild(moves);
+    for (let i = 0; i < 4; i++) {
+      const el = doc.createElement('div');
+      moves.appendChild(el);
+      this.memberWins.push({ w: new Win(el, CELL_W, MEMBER_MOVE_H, (c) => this.paintMemberMove(c, i)), ww: CELL_W, hh: MEMBER_MOVE_H });
+    }
+    const mrow = doc.createElement('div');
+    mrow.className = 'bm-m-row';
+    this.memberBox.appendChild(mrow);
+    const rowButton = (word: string, color: () => TextColor, icon: (c: EmeraldCanvas, cx: number, cy: number, redo: () => void) => void, press: () => void) => {
+      const b = button('bm-m-btn', mrow);
+      b.setAttribute('aria-label', word);
+      this.memberWins.push({ w: new Win(b, ACTION_W, BACK_H, (c, redo) => iconButton(c, ACTION_W, BACK_H, (cx, cy) => icon(c, cx, cy, redo), word, color())), ww: ACTION_W, hh: BACK_H });
+      b.addEventListener('click', () => { if (b.getAttribute('aria-disabled') !== 'true') press(); });
+      return b;
+    };
+    rowButton('BACK', () => TEXT_DARK, (c, cx, cy) => drawBackArrow(c, cx, cy), () => this.setMode('party'));
+    rowButton('SUMMARY', () => TEXT_DARK, (c, cx, cy, redo) => drawItemFitted(c, ITEM_TM_CASE, cx, cy, ICON_BOX, redo), () => this.send(() => first?.summary(this.memberAt)));
+    this.selectBtn = rowButton('SELECT', () => (this.canSelect() ? TEXT_BLUE : TEXT_GRAY), (c, cx, cy, redo) => drawItemFitted(c, ITEM_POKE_BALL, cx, cy, ICON_BOX, redo), () => this.send(() => first?.switchTo(this.memberAt)));
+    this.setPartyHidden();
+    if (first?.keys) {
+      // The keys, by the windows they drive: the keyboard's and a pad's.
+      const el = doc.createElement('div');
+      el.className = 'bm-keys';
+      deps.root.appendChild(el);
+      const rows: [string, string][] = [['ARROWS', 'move'], ['Z  A', 'choose'], ['X  B', 'back'], ['Q  L', 'PARTY'], ['E  R', 'BAG'], ['SHIFT', 'details']];
+      const h = rows.length * 17 + 8;
+      this.keysWin = new Win(el, 118, h, (c) => {
+        c.fillRect({ x: 0, y: 0, w: 118, h }, 'rgba(16,20,24,0.6)');
+        rows.forEach(([k, what], i) => {
+          drawKeycap(c, k, 6 + measure(k) + 5, 5 + i * 17);
+          c.drawText(what, 62, 4 + i * 17, TEXT_WHITE);
+        });
+      });
+      this.keysH = h;
+    }
+    deps.root.addEventListener('pointerdown', () => {
+      if (deps.focusFirst) return;
+      this.showFocus = false;
+      this.paintFocus();
+    });
     deps.root.hidden = true;
+  }
+
+  private selectBtn: HTMLButtonElement | null = null;
+  private keysWin: Win | null = null;
+  private keysH = 0;
+  private actionW = ACTION_W;
+  private actionH = BACK_H;
+
+  private setPartyHidden(): void {
+    this.actions.hidden = this.partyBox.hidden = this.memberBox.hidden = true;
+  }
+
+  private runLabel(): { label: string; enabled: boolean } | null {
+    const v = this.view;
+    return v ? actionLabels(v)[SLOT_RUN] ?? null : null;
+  }
+
+  /** Whether `mode` shows the moves first, here, for this battle (the Safari has no moves). */
+  private home(): Mode {
+    return this.deps.firstMoves && this.view?.menu !== MENU_SAFARI && this.lastShown !== MENU_SAFARI ? 'moves' : 'action';
+  }
+
+  private openParty(): void {
+    const first = this.deps.firstMoves;
+    if (!first) return;
+    this.team = first.readParty();
+    this.setMode('party');
+    this.partyCells.forEach(({ w }, i) => w.show(JSON.stringify(this.team[i] ?? null)));
+  }
+
+  private canSelect(): boolean {
+    const m = this.team[this.memberAt];
+    return !!m && !m.active && m.hp > 0;
+  }
+
+  private paintSlot(c: EmeraldCanvas, i: number): void {
+    const m = this.team[i];
+    if (!m) return;
+    c.drawFrame({ x: 0, y: 0, w: CELL_W, h: PARTY_H });
+    const icon = this.deps.firstMoves?.icon(m.species);
+    if (icon) c.drawImageTo(icon, 0, 0, 32, 32, 5, 6, 32, 32);
+    c.drawText(fitText(m.name, CELL_W - 48), 40, 9, m.hp > 0 ? (m.active ? TEXT_BLUE : TEXT_DARK) : TEXT_GRAY);
+    drawHp(c, 40, 28, CELL_W - 50, m.maxHp ? m.hp / m.maxHp : 0);
+  }
+
+  private paintCard(c: EmeraldCanvas): void {
+    const m = this.team[this.memberAt];
+    c.drawFrame({ x: 0, y: 0, w: MENU_W, h: MEMBER_CARD_H });
+    if (!m) return;
+    const icon = this.deps.firstMoves?.icon(m.species);
+    if (icon) c.drawImageTo(icon, 0, 0, 32, 32, 10, 12, 32, 32);
+    c.drawText(fitText(m.name, 120), 50, 8, TEXT_DARK);
+    const lv = `Lv${m.level}`;
+    c.drawText(lv, MENU_W - 10 - measure(lv), 8, TEXT_GRAY);
+    c.drawText(fitText(m.ability, MENU_W - 60), 50, 22, TEXT_BLUE);
+    drawHp(c, 50, 40, 110, m.maxHp ? m.hp / m.maxHp : 0);
+    const hp = `${m.hp}/${m.maxHp}`;
+    c.drawText(hp, MENU_W - 10 - measure(hp), 36, TEXT_DARK);
+  }
+
+  private paintHeld(c: EmeraldCanvas, redo: () => void): void {
+    const m = this.team[this.memberAt];
+    c.drawFrame({ x: 0, y: 0, w: MENU_W - 16, h: MEMBER_HELD_H });
+    if (!m) return;
+    if (m.item) drawIcon(c, m.item, 8, 4, redo);
+    c.drawText(m.item ? m.itemName : 'Holds nothing', m.item ? 36 : 12, 9, m.item ? TEXT_DARK : TEXT_GRAY);
+  }
+
+  private paintMemberMove(c: EmeraldCanvas, i: number): void {
+    c.drawFrame({ x: 0, y: 0, w: CELL_W, h: MEMBER_MOVE_H });
+    const slot = this.team[this.memberAt]?.moves[i];
+    const info = slot && this.deps.rom ? moveInfo(this.deps.rom, slot.id) : null;
+    if (!slot || !info) { c.drawTextCentred('-', CELL_W / 2, 20, TEXT_GRAY); return; }
+    c.drawText(fitText(info.name, CELL_W - 16), 8, 7, TEXT_DARK);
+    c.drawText(`PP ${slot.pp}/${ppWithBonus(info.pp, 0, 0)}`, 8, 21, slot.pp === 0 ? TEXT_RED : TEXT_GRAY);
+    if (this.view) drawEffect(c, moveEffect(this.deps.rom, info, this.view.foe.types), '', 6, 37, CELL_W - 12);
+  }
+
+  // ---- the keys and a pad --------------------------------------------------------------
+
+  get isShown(): boolean {
+    return this.shown;
+  }
+
+  private targets(): HTMLElement[] {
+    return [...this.deps.root.querySelectorAll<HTMLElement>('button.bm-btn')].filter((b) => b.offsetParent !== null && b.getAttribute('aria-disabled') !== 'true' && !b.className.includes('bm-bag-prev') && !b.className.includes('bm-bag-next'));
+  }
+
+  private paintFocus(): void {
+    for (const b of this.deps.root.querySelectorAll('.bm-focus')) b.classList.remove('bm-focus');
+    if (this.showFocus && this.focused?.isConnected) this.focused.classList.add('bm-focus');
+  }
+
+  /** Back on the first button of whatever is on show, or kept where it was. */
+  private settleFocus(reset = false): void {
+    if (!this.shown) return;
+    const list = this.targets();
+    if (reset || !this.focused || !list.includes(this.focused)) this.focused = list[0] ?? null;
+    this.paintFocus();
+  }
+
+  /** A key of the keyboard or a pad, while the windows are up: up, down, left, right, a, b, l,
+   *  r, select. False when it is nobody's here, for the ROM. */
+  key(k: string): boolean {
+    if (!this.shown) return false;
+    if (!this.showFocus) { this.showFocus = true; this.settleFocus(true); if (k !== 'a' && k !== 'b') return true; }
+    if (this.mode === 'bag') return this.bagKey(k);
+    if (k === 'up' || k === 'down' || k === 'left' || k === 'right') {
+      const list = this.targets();
+      const at = this.focused ? list.indexOf(this.focused) : -1;
+      const boxes = list.map((b) => { const r = b.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
+      this.focused = list[nextFocus(boxes, at, k as Dir)] ?? null;
+      this.paintFocus();
+      return true;
+    }
+    if (k === 'a') { this.focused?.click(); return true; }
+    if (k === 'b') {
+      if (this.mode === 'info') this.setMode('moves');
+      else if (this.mode === 'item') this.setMode('bag');
+      else if (this.mode === 'member') this.setMode('party');
+      else if (this.mode !== this.home()) this.goBack();
+      return true;
+    }
+    if (this.deps.firstMoves && this.mode === 'moves') {
+      if (k === 'l') { this.openParty(); return true; }
+      if (k === 'r') { this.act(1); return true; }
+      if (k === 'select' && this.focused) {
+        const i = this.cells.findIndex((x) => x.b === this.focused);
+        if (i >= 0 && this.view?.moves[i]?.id) { this.info = i; this.setMode('info'); }
+        return true;
+      }
+    }
+    return true;
+  }
+
+  private bagKey(k: string): boolean {
+    const list = this.stacks();
+    const at = Math.max(0, list.findIndex((s) => s.item === this.pickedStack()?.item));
+    if (k === 'left' || k === 'right') this.stepPocket(k === 'left' ? -1 : 1);
+    else if (k === 'up' || k === 'down') {
+      const to = list[at + (k === 'up' ? -1 : 1)];
+      if (to) {
+        this.picked = to.item;
+        const y = (at + (k === 'up' ? -1 : 1)) * BAG_ROW_H * this.scale;
+        const h = this.bagList.clientHeight;
+        if (y < this.bagList.scrollTop) this.bagList.scrollTop = y;
+        else if (y + BAG_ROW_H * this.scale + 8 * this.scale > this.bagList.scrollTop + h) this.bagList.scrollTop = y + (BAG_ROW_H + 16) * this.scale - h;
+        this.layout();
+      }
+    } else if (k === 'a' && list.length) {
+      this.picked = list[at].item;
+      this.setMode('item');
+    } else if (k === 'b') this.goBack();
+    return true;
   }
 
   // ---- the bag -------------------------------------------------------------------------
@@ -676,6 +1006,10 @@ export class BattleMenu {
   }
 
   private goBack(): void {
+    if (this.home() === 'moves') {
+      this.setMode(this.mode === 'member' ? 'party' : 'moves');
+      return;
+    }
     if (this.view?.menu === MENU_MOVE) {
       this.deps.back();
       // ...and the action menu is the one coming back.
@@ -704,8 +1038,10 @@ export class BattleMenu {
   }
 
   private setMode(mode: Mode): void {
+    const changed = mode !== this.mode;
     this.mode = mode;
     this.layout();
+    if (changed) this.settleFocus(true);
   }
 
   private setShown(shown: boolean): void {
@@ -713,6 +1049,7 @@ export class BattleMenu {
     this.shown = shown;
     this.deps.root.hidden = !shown;
     this.deps.onShown(shown);
+    if (shown) { this.layout(); this.settleFocus(true); }
   }
 
   /** CSS pixels per GBA pixel: the field's. */
@@ -730,6 +1067,10 @@ export class BattleMenu {
     this.bagDescWin.size(MENU_W, this.itemHeight(), scale);
     this.bagBackWin.size(BAG_BACK_W, BACK_H, scale);
     this.bagUseWin.size(MENU_W - BAG_BACK_W - GAP, BACK_H, scale);
+    for (const w of this.actionWins) w.size(this.actionW, this.actionH, scale);
+    if (this.keysWin) { this.keysWin.size(118, this.keysH, scale); this.keysWin.show('keys'); }
+    for (const { w } of this.partyCells) w.size(CELL_W, PARTY_H, scale);
+    for (const { w, ww, hh } of this.memberWins) w.size(ww, hh, scale);
     if (this.mode === 'bag' || this.mode === 'item') this.layout();
   }
 
@@ -774,7 +1115,7 @@ export class BattleMenu {
         this.sent = 0;
         if (menu === MENU_MOVE) this.mode = this.mode === 'info' ? 'info' : 'moves';
         // A new turn's actions; but not over the moves FIGHT was just tapped for.
-        else if ((this.lastMenu === 0 || this.lastMenu === MENU_MOVE) && this.opening === 0) this.mode = 'action';
+        else if ((this.lastMenu === 0 || this.lastMenu === MENU_MOVE) && this.opening === 0) { this.lastShown = menu; this.mode = this.home(); }
       }
     }
     this.lastMenu = menu;
@@ -794,10 +1135,30 @@ export class BattleMenu {
     const item = this.mode === 'item';
     const moves = this.mode === 'moves' || this.mode === 'info';
     const info = this.mode === 'info';
+    const party = this.mode === 'party';
+    const member = this.mode === 'member';
+    const first = this.home() === 'moves';
     const v = this.view;
     const labels = v ? actionLabels(v) : [];
+    this.actions.hidden = !(first && moves && !info);
+    this.partyBox.hidden = !party;
+    this.memberBox.hidden = !member;
+    if (first && moves && !info) {
+      const run = labels[SLOT_RUN];
+      const runB = this.actions.children[2] as HTMLElement;
+      runB.setAttribute('aria-disabled', String(!(run?.enabled ?? true)));
+      this.actionWins[2].show(JSON.stringify(run ?? null));
+      this.actionWins[0].show('p');
+      this.actionWins[1].show('b');
+    }
+    if (party) this.partyCells.forEach(({ b }, i) => { b.hidden = !this.team[i]; b.setAttribute('aria-label', this.team[i]?.name ?? ''); });
+    if (member) {
+      const key = `${this.memberAt}|${JSON.stringify(this.team[this.memberAt])}|${v?.foe.types}`;
+      for (const { w } of this.memberWins) w.show(key);
+      this.selectBtn?.setAttribute('aria-disabled', String(!this.canSelect()));
+    }
     this.cells.forEach(({ b, w }, i) => {
-      b.hidden = info || bag || item;
+      b.hidden = info || bag || item || party || member;
       const slot = v?.moves[i];
       const enabled = moves ? !!slot?.id : (labels[i]?.enabled ?? false);
       b.setAttribute('aria-disabled', String(!enabled));
@@ -805,8 +1166,8 @@ export class BattleMenu {
       b.setAttribute('aria-label', moves ? (m ? `${m.name}, ${m.typeName}, PP ${slot!.pp}/${slot!.maxPp}` : 'No move') : (labels[i]?.label ?? ''));
       w.show(moves ? `m|${slot?.id}|${slot?.pp}|${slot?.maxPp}|${v?.foe.types}` : `a|${JSON.stringify(labels[i] ?? null)}`);
     });
-    this.backBtn.hidden = (!moves || info) && !bag;
-    (this.hint.el as HTMLElement).hidden = !moves || info;
+    this.backBtn.hidden = first ? !(bag || party) : (!moves || info) && !bag;
+    (this.hint.el as HTMLElement).hidden = first || !moves || info;
     this.sheet.hidden = !info;
     for (const el of [this.bagHead, this.bagList]) el.hidden = !bag;
     for (const el of [this.bagDesc, this.bagRow]) el.hidden = !item;

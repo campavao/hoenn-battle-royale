@@ -182,6 +182,23 @@ export class RingMap {
     };
   }
 
+  /** Where a trainer on `at` is on the MAP's picture, in its pixels: the middle of the cell. */
+  pixelOf(at: Spot): { x: number; y: number } {
+    const l = this.look(at);
+    const s = [...this.sections.values()].find((q) => q.id === l.mapsec);
+    return { x: GRID_X + ((s?.x ?? 0) + l.cellX) * CELL + CELL / 2, y: GRID_Y + ((s?.y ?? 0) + l.cellY) * CELL + CELL / 2 };
+  }
+
+  /** Whether the MAP's pixel (x, y) lies in the fog of `ring`. */
+  fogAt(x: number, y: number, ring = this.room.ring()): boolean {
+    if (ring.last) return true;
+    if (ring.r < 0 || ring.r === Infinity) return false;
+    const W = GRID_W * CELL, gx = x - GRID_X, gy = y - GRID_Y;
+    if (gx < 0 || gy < 0 || gx >= W || gy >= GRID_H * CELL) return false;
+    const i = gy * W + gx;
+    return Math.hypot(this.plane[i * 2] - ring.cx, this.plane[i * 2 + 1] - ring.cy) > ring.r;
+  }
+
   /** The match's marks for the MAP (rom.ts MapLook): the leaders the room has seen
    *  beaten, and where this round's events dropped, grey once their legendary is taken. */
   marks(): NonNullable<MapLook['marks']> {

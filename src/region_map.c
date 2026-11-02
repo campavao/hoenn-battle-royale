@@ -2129,3 +2129,8 @@ static void CB_ExitFlyMap(void)
         break;
     }
 }
+
+#if BR
+// The MAP's picture, for the page's minimap (web/spike-b/romart.ts regionMap).
+const void *const gBrRegionMapArt[] = {sRegionMapBg_GfxLZ, sRegionMapBg_TilemapLZ, sRegionMapBg_Pal};
+#endif

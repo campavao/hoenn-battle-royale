@@ -567,6 +567,8 @@ export interface SheetModel {
   onForget(): void;
   /** SAVE LOG: spike B's play-test recording, as a file (spike-b/recorder.ts). */
   onSaveLog?(): void;
+  /** TRAINER CARD, where START's row is not to hand. */
+  onCard?(): void;
   /** MARK: this moment, for the play-test's replay, where there is no K to press. */
   onMark?(): void;
   /** FEEDBACK: a note to the developers (POK-428). */
@@ -589,6 +591,7 @@ function settingsOf(m: SheetModel): OptionSpec[] {
     rows.push({ label: 'MOVE PAD', id: 'pad-move', onPress: m.pad.onMove });
     rows.push({ label: m.pad.hidden ? 'SHOW PAD' : 'HIDE PAD', id: 'pad-hide', onPress: m.pad.onToggle });
   }
+  if (m.onCard) rows.push({ label: 'TRAINER CARD', id: 'card', onPress: m.onCard });
   if (m.onMark) rows.push({ label: 'MARK', id: 'mark', onPress: m.onMark });
   if (m.onSaveLog) rows.push({ label: 'SAVE LOG', id: 'save-log-row', onPress: m.onSaveLog });
   rows.push({ label: 'FEEDBACK', id: 'feedback', onPress: m.onFeedback });

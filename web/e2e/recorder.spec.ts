@@ -74,16 +74,14 @@ test.describe('on a phone', () => {
       navigator.canShare = () => true;
       navigator.share = async (d) => { w.shared.push(d!.files![0].name); };
     });
-    await page.locator('#hud-start').click();
-    await saveFromMenu(page);
+    // SAVE LOG, the room sheet's row.
+    await page.locator('#hud-menu').click();
+    await page.locator('#save-log-row').click();
     await expect.poll(() => page.evaluate(() => (window as unknown as { shared: string[] }).shared[0])).toMatch(/^hoenn-playtest-/);
     // One that refuses it gets the download instead.
     await page.evaluate(() => { navigator.share = async () => { throw new DOMException('no', 'NotAllowedError'); }; });
-    // The dock takes START again once it has seen the menu close.
-    await page.waitForTimeout(1500);
     const download = page.waitForEvent('download');
-    await page.locator('#hud-start').click();
-    await saveFromMenu(page);
+    await page.locator('#save-log-row').click();
     expect((await download).suggestedFilename()).toMatch(/^hoenn-playtest-/);
   });
 });

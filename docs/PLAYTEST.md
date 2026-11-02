@@ -97,6 +97,17 @@ transcripts were made from them; a frame at the time is the evidence for each li
   tile, and its way out is MAP_DYNAMIC; the same for Lilycove's elevator. Those and Altering
   Cave are shut (`export-world.py` SHUT_WARPS). Red before, 5 of 5; green after.
 
+* **The windows Cam drew** (sketches of 11-01, mocks of 11-02). Field: a minimap of the MAP's own
+  picture with the fog and the trainer on it, which opens the MAP; the name in a tag by the item,
+  bag or POKeMON, on hover or facing it, where the bottom bar said it; PARTY, the room and BAG with
+  icons. Battle: the moves first, PARTY, BAG and RUN under them, the party's icons, one of them
+  in full, sending one out by walking the ROM's party screen unseen. A dropped bag: POKeMON and
+  BAG side by side, TAKE ALL. A window with a mouse has all of it, by arrows, Z, X, Q, E and SHIFT
+  or a pad's D-pad, A, B, L and R, with a focus frame (`spikeb-windows.spec.ts`).
+  Not as drawn yet: a dropped POKeMON's TAKE or SWAP is still the ROM's swap screen; a forced
+  switch after a faint and SUMMARY are the ROM's own; the field's PARTY and BAG open the ROM's.
+  The minimap's fog is a near colour, not the ROM's palette's.
+
 **Partly fixed:**
 
 * **Teleporting: the map did not match where he stood** (1609 3:45). A resync replayed keys
