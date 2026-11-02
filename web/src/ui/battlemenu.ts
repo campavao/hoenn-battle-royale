@@ -458,6 +458,7 @@ export class BattleMenu {
   private giving: number | null = null;
   private heldBtn!: HTMLButtonElement;
   private movesBtn!: HTMLButtonElement;
+  private fitKey = '';
   /** One has fainted and the ROM is asking who goes out. */
   private forced = false;
   /** The ROM's turn on its own screen: the windows stand aside whatever the menu byte says. */
@@ -1467,6 +1468,19 @@ export class BattleMenu {
     }
     // Only on a change: a write each frame dirties style for app.ts's read of the HUD.
     if (this.deps.root.dataset.mode !== this.mode) this.deps.root.dataset.mode = this.mode;
+    this.fitGlass();
+  }
+
+  /** Windows taller than the glass leaves under the picture (a small phone, a trainer's cards
+   *  above it: Cam, 11-02, iPhone 13 mini) stand on the bottom of the glass instead, over the
+   *  picture, so SELECT and BACK can always be reached. Measured only when something changed. */
+  private fitGlass(): void {
+    const key = `${this.mode}|${this.room}|${this.scale}|${this.useHead.hidden}|${this.shown}|${innerHeight}`;
+    if (key === this.fitKey || !this.shown) return;
+    this.fitKey = key;
+    const root = this.deps.root;
+    root.classList.remove('bm-lift');
+    if (root.getBoundingClientRect().bottom > innerHeight) root.classList.add('bm-lift');
   }
 
   private paintCell(c: EmeraldCanvas, i: number, redo: () => void): void {

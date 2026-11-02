@@ -230,6 +230,14 @@ export function withHeld(party: Uint8Array, slot: number, item: number): Uint8Ar
   return out;
 }
 
+/** Whether a piece on the ground is drawn. One somebody has taken up is not; a bag I have open
+ *  still lies there while I look in it (Cam, 11-02: "seems to disappear while interacting with
+ *  it"), but not a legendary or a person, who are in the fight the taking started. */
+export function spillShows(s: { legend?: boolean; person?: unknown }, pickedBy: number | undefined, me: number): boolean {
+  if (pickedBy === undefined) return true;
+  return pickedBy === me && !s.legend && !s.person;
+}
+
 /** Every mon's encrypted block adds up to its checksum (pokemon.c's CalculateBoxMonChecksum):
  *  no mon of the first `count` is caught with the ROM halfway through writing it. */
 export function partyWhole(party: Uint8Array, count: number): boolean {

@@ -121,6 +121,18 @@ transcripts were made from them; a frame at the time is the evidence for each li
   on a real wild battle (`spikeb-windows.spec.ts`) and on Sound off, on, and a watcher's catching
   up (`spikeb-room.spec.ts`). Nobody has listened to it: the specs read the volume, not the speaker.
 
+* **Windows past the bottom of a small phone** (Cam, iPhone 13 mini, 11-02). One of the party, the party and
+  a forced switch ran under the glass, SELECT and BACK with them. Taller than what the picture leaves,
+  they stand on the bottom of the glass over it (`spikeb-windows.spec.ts`). Seen on dev at 375x600, not
+  on the handset.
+* **A dropped bag vanished while it was open** (Cam, 11-02): the field drew no piece anybody had taken
+  up. It stays for the one who has it open. Other trainers still see it go.
+
+**Not reproduced:**
+
+* **No fog on the big MAP** (Cam, iPhone 13 mini, 11-02, his screenshot at 1:11, "Safe: ROUTE 116"). The
+  minimap has it. On dev in Chromium, solo, the MAP's fog paints (`spikeb-windows.spec.ts`).
+
 **Partly fixed:**
 
 * **Teleporting: the map did not match where he stood** (1609 3:45). A resync replayed keys
