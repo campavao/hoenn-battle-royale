@@ -2390,7 +2390,10 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
         close: closePanel,
         readBag: () => readFieldBag(emu, sym),
         summary: (slot) => void panelWalk((r) => r.menu(1, panelShow, panelHide, undefined, { to: 'summary', slot })),
-        moves: (slot) => void panelWalk((r) => r.menu(1, panelShow, panelHide, undefined, { to: 'moves', slot })),
+        moves: (slot) => void panelWalk(async (r) => {
+          const { said } = await r.menu(1, panelShow, panelHide, undefined, { to: 'moves', slot });
+          if (said) say(said);
+        }),
         swap: async (a, b) => { await rom?.reorder(a, b); },
         give: async (slot, item) => { if (await rom?.take(item)) await rom?.setHeld(slot, item); },
         take: async (slot, item) => { await rom?.setHeld(slot, 0); await rom?.give(item, 1); },

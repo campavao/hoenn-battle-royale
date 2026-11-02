@@ -665,7 +665,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       await tap('a');
       // Its little menu takes keys once "Do what with this" has printed.
       await frames(emu, 45);
-      if (walk.to === 'moves') await tap('down');
+      // MOVES says so for a frame (gBrCatch.movesSlot): at full speed, or the page misses it.
+      if (walk.to === 'moves') { await tap('down'); hurryOff(); }
       const partyCb = partyScreen();
       for (let i = 0; i < 8 && screenIs(partyCb); i++) {
         await tap('a');
