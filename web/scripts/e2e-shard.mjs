@@ -16,45 +16,62 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-// Seconds per spec file: each test's median passing time over four green PR runs of BR CI
-// (40754464100, 40762489570, 40804525756, 40808358087, 2026-10-28/29), summed per file.
-// A first try that timed out is left out: the retry is what a run usually pays for. Refresh
-// it when a shard runs much longer than the others: the numbers are in the e2e step's log,
-// one line per test. e2e-shard.test.ts fails a spec file that is not in it.
+// Seconds per spec file: each test's median first-try passing time over 10 runs of BR CI
+// (41497767868 to 41534774892, 2026-11-02), summed per file. A first try that timed out is
+// left out, and a retry is not counted: the shard pays for those on the day. Refresh it when
+// a shard runs much longer than the others: the numbers are in the e2e step's log, one line
+// per test. e2e-shard.test.ts fails a spec file that is not in it.
 export const FILE_SECONDS = {
-  'patch.spec.ts': 1,
+  'patch.spec.ts': 9,
   'pwa.spec.ts': 4,
-  'recorder.spec.ts': 60,
-  'rooms-page.spec.ts': 15,
-  'results-scroll.spec.ts': 5,
-  // Measured locally (2026-10-31), not yet four CI runs: seven tests, a whole hosted match
-  // and a Safari catch among them.
-  'spikeb-menu.spec.ts': 150,
-  'spikeb-windows.spec.ts': 620,
-  'spikeb-room.spec.ts': 90 + 150,
-  'spikeb.spec.ts': 660,
-  'spikeb-two.spec.ts': 120,
-  'spikeb-passcode.spec.ts': 40,
+  'recorder.spec.ts': 23,
+  'rooms-page.spec.ts': 2,
+  'results-scroll.spec.ts': 2,
+  'spikeb-menu.spec.ts': 149,
+  'spikeb-windows.spec.ts': 452,
+  'spikeb-room.spec.ts': 81,
+  'spikeb.spec.ts': 568,
+  'spikeb-two.spec.ts': 102,
+  'spikeb-passcode.spec.ts': 9,
   // Skipped in CI: these need the deployed site, or HBR_SOAK.
   'live-room.spec.ts': 0,
   'live.spec.ts': 0,
 };
+// The tests far from their file's average, by title (a line moves with every edit above it).
+// These seconds come out of the file's total; the rest of its tests share what is left. A
+// whole match counted as one seventeenth of spikeb.spec.ts is why one shard ran twice as
+// long as two others (9.1 / 3.7 / 6.3 / 3.6 min, run 41526520443).
+export const SLOW_TESTS = {
+  'a hosted room with bots plays through to its results': 288,
+  'a Safari catch, the drop on the fly map, and out of the Safari': 126,
+};
 export const UNKNOWN_SECONDS = 60;
 
 /**
- * Deals tests ({ file, line }, one entry per test; perf.spec.ts's two share a line) into
+ * Deals tests ({ file, line, title }, one entry per test; perf.spec.ts's two share a line) into
  * `total` shards of about equal time. A shard is its `file:line` filters, sorted.
  */
 export function cut(tests, total) {
+  const slowOf = (t) => (FILE_SECONDS[t.file] === undefined ? undefined : SLOW_TESTS[t.title]);
   const perFile = new Map();
-  for (const t of tests) perFile.set(t.file, (perFile.get(t.file) ?? 0) + 1);
+  for (const t of tests) {
+    const f = perFile.get(t.file) ?? { rest: 0, slow: new Map() };
+    const slow = slowOf(t);
+    // By title: a test listed under two projects is still one time.
+    if (slow === undefined) f.rest += 1;
+    else f.slow.set(t.title, slow);
+    perFile.set(t.file, f);
+  }
   // One unit per file:line, since that is the finest filter the CLI takes.
   const units = new Map();
   for (const t of tests) {
     const key = `${t.file}:${t.line}`;
     const known = FILE_SECONDS[t.file];
-    const each = known === undefined ? UNKNOWN_SECONDS : known / perFile.get(t.file);
-    units.set(key, { file: t.file, line: t.line, seconds: (units.get(key)?.seconds ?? 0) + each });
+    const f = perFile.get(t.file);
+    const slowSum = [...f.slow.values()].reduce((a, b) => a + b, 0);
+    const each = known === undefined ? UNKNOWN_SECONDS : Math.max(0, known - slowSum) / f.rest;
+    const slow = slowOf(t);
+    units.set(key, { file: t.file, line: t.line, seconds: slow ?? (units.get(key)?.seconds ?? 0) + each });
   }
   const order = [...units.values()].sort(
     (a, b) => b.seconds - a.seconds || a.file.localeCompare(b.file) || a.line - b.line,
@@ -88,7 +105,7 @@ function listTests(web) {
   const walk = (suite) => {
     // One spec is one test: a local run lists play.spec.ts under play-firefox too, as a
     // second entry in the same spec's `tests`, and the filter is the same one.
-    for (const spec of suite.specs ?? []) tests.push({ file: spec.file, line: spec.line });
+    for (const spec of suite.specs ?? []) tests.push({ file: spec.file, line: spec.line, title: spec.title });
     for (const child of suite.suites ?? []) walk(child);
   };
   for (const suite of JSON.parse(out).suites) walk(suite);

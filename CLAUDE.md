@@ -82,9 +82,9 @@ call a fix done:
   *and* on the live site after a deploy (`br-version.json`'s `romSha1`, docs/DEPLOY.md).
 - Say which ROM sha you verified on. "Fixed" without one is unverified.
 
-A release needs no local suite: its CI run plays the whole e2e, in shards with a real ROM, and
-the `release` job deploys only if `rom`, `e2e`, `web`, `relay` and `pret` pass. Check the relay
-shows no live match (`docs/DEPLOY.md`), and run a whole-suite pass locally only when chasing a
+A release needs no local suite: the whole e2e has passed on its tree in shards with a real ROM,
+in its own CI run or an earlier one (`docs/DEPLOY.md`), and the `release` job deploys only if
+`green`, `rom` and `pret` pass and the relay shows no live match. Run a whole-suite pass locally only when chasing a
 failure. The e2e is the new game's alone since 2026-11-01: `/classic/` takes blocker fixes by
 hand until it goes. Run all of `npx vitest run` before a PR that changes shared code, and give
 a new spec a time in `web/scripts/e2e-shard.mjs`. A PR only needs the specs its change touches.

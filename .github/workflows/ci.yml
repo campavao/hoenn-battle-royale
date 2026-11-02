@@ -32,6 +32,16 @@ on:
         type: boolean
         required: false
         default: false
+      full:
+        description: 'Replay the whole suite even if a green run already covered this tree'
+        type: boolean
+        required: false
+        default: false
+      ignore_match:
+        description: 'Release even if the relay shows a match or players (or does not answer)'
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   # A release never shares the branch's group: a push landing mid-release would
@@ -47,34 +57,74 @@ jobs:
   # the files it changes can reach (web/scripts/ci-scope.mjs, which says why), so a spike B
   # or docs change does not wait on the ROM and the whole e2e suite (Cam, 2026-10-29). The
   # merge commit's first parent is the base as it stands, so the diff is what merging adds.
+  #
+  # Except what an earlier run has already passed on this exact tree (the `green` job's
+  # stamps, tools/br/green-stamp.sh). A push skips it. A release skips it too but still
+  # builds the ROM and the patch, and the rom job fails if that ROM is not the one the
+  # stamped run drove. `full` on a dispatch replays everything.
   scope:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # the stamps
     outputs:
       rom: ${{ steps.scope.outputs.rom }}
       e2e: ${{ steps.scope.outputs.e2e }}
+      # 'false': guards, wasm, web, relay and the e2e passed on this tree in an earlier run.
+      checks: ${{ steps.scope.outputs.checks }}
+      # The ROM sha1 an earlier run drove on this tree; empty when the drivers have to run.
+      driven-rom: ${{ steps.scope.outputs.driven-rom }}
+      tree: ${{ steps.scope.outputs.tree }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 2
 
       - id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FULL: ${{ inputs.full }}
+          RELEASE: ${{ github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' }}
         run: |
           set -o pipefail
+          tree="$(git rev-parse 'HEAD^{tree}')"
+          checks=true
+          driven=
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             # --no-renames: a file moved out of src/ must count where it came from too.
             git diff -z --no-renames --name-only HEAD^1 HEAD > changed
             node web/scripts/ci-scope.mjs < changed > scope.txt
           else
-            printf 'rom=true\ne2e=all\n' > scope.txt
+            rom=true e2e=all
+            if [ "$FULL" != true ]; then
+              read -r _ run <<< "$(tools/br/green-stamp.sh checks "$tree")"
+              if [ -n "${run:-}" ]; then
+                checks=false e2e=none
+                echo "### checks and e2e: reused from run $run" >> "$GITHUB_STEP_SUMMARY"
+              fi
+              read -r id run <<< "$(tools/br/green-stamp.sh rom "$tree")"
+              if [ -n "${id:-}" ]; then
+                gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > stamp.zip
+                driven="$(unzip -p stamp.zip rom-sha1)"
+                [[ "$driven" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::stamp $id holds no sha1"; exit 1; }
+                echo "### drivers: reused from run $run, on rom $driven" >> "$GITHUB_STEP_SUMMARY"
+                # A release still builds the ROM it ships; a push has nothing to build it for.
+                if [ "$RELEASE" != true ]; then rom=false; fi
+              fi
+            fi
+            printf 'rom=%s\ne2e=%s\n' "$rom" "$e2e" > scope.txt
           fi
           cat scope.txt
           grep -q '^rom=' scope.txt && grep -q '^e2e=' scope.txt
           cat scope.txt >> "$GITHUB_OUTPUT"
+          printf 'checks=%s\ndriven-rom=%s\ntree=%s\n' "$checks" "$driven" "$tree" | tee -a "$GITHUB_OUTPUT"
 
   # Every BR touch in a pret file sits under `#if BR` / `.if BR` (docs/C-STYLE.md), so a
   # pret merge only ever meets our lines in guarded blocks. Seconds, no toolchain.
   guards:
+    needs: scope
+    if: needs.scope.outputs.checks == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -153,6 +203,20 @@ jobs:
         id: fork-rom
         run: echo "sha1=$(sha1sum pokeemerald.gba | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
+      # What goes out must be what was driven. The same tree has built the same ROM on a
+      # pull request, its push and its release so far (dc179db99d, runs 41524281077,
+      # 41526459709, 41526520443), so a difference is a toolchain that moved. `full` replays.
+      - name: The ROM is the one the reused run drove
+        if: needs.scope.outputs.driven-rom != ''
+        env:
+          DRIVEN: ${{ needs.scope.outputs.driven-rom }}
+          BUILT: ${{ steps.fork-rom.outputs.sha1 }}
+        run: |
+          if [ "$DRIVEN" != "$BUILT" ]; then
+            echo "::error::this tree's drivers passed on rom $DRIVEN, but it built $BUILT. Dispatch again with full."
+            exit 1
+          fi
+
       # Before the patch: make-patch.sh checks what flips wrote with the page's own BPS
       # decoder (tools/br/make-bps.ts, under vite-node).
       - uses: actions/setup-node@v7
@@ -209,6 +273,7 @@ jobs:
           key: libmgba-harness-0.10.5-v2-${{ runner.os }}
 
       - name: Drive the fork ROM
+        if: needs.scope.outputs.driven-rom == ''
         # Every driver, not just `smoke`. The drivers ARE the ROM's test suite -- each
         # one boots the real thing, pokes the mailbox and asserts on RAM -- and running
         # one of them was running 3% of it.
@@ -333,7 +398,18 @@ jobs:
           filters="$(node scripts/e2e-shard.mjs "$SHARD")"
           # Only on a PR's few specs: this shard was dealt none of them.
           if [ -z "$filters" ]; then echo "no tests in shard $SHARD"; exit 0; fi
-          npm run e2e -- $filters
+          set -o pipefail
+          npm run e2e -- $filters 2>&1 | tee e2e.log
+          # A pass that needed a retry is a pass, but not one a later run should lean on: see
+          # the `green` job.
+          if grep -qE '^[[:space:]]*[0-9]+ flaky' e2e.log; then touch e2e-flaky; fi
+
+      - uses: actions/upload-artifact@v7
+        if: env.RUN_E2E == 'true' && hashFiles('web/e2e-flaky') != ''
+        with:
+          name: e2e-flaky-${{ matrix.shard }}
+          path: web/e2e-flaky
+          if-no-files-found: error
 
       - uses: actions/upload-artifact@v7
         if: always() && env.RUN_E2E == 'true'
@@ -361,6 +437,71 @@ jobs:
         run: |
           echo "e2e shards: $RESULT (specs: $SPECS)"
           [ "$RESULT" = success ]
+
+  # Everything a release or a later run needs to know passed, in one place. It stamps what
+  # really ran here, so a later run on this tree can skip it (tools/br/green-stamp.sh), then
+  # fails unless every job passed or was skipped for a stamp. Only a whole e2e earns the
+  # checks stamp: a pull request's few specs say nothing about the rest. Nor does a run where
+  # a test passed only on a retry: replays are what caught the BAD EGG (v0.3.82, run
+  # 41528717240), an intermittent bug that had retried on its way through, so a shaky pass
+  # gets the replay it always had. `e2e done` stays the ruleset's check; this one is not
+  # required, so a pull request is gated as before.
+  green:
+    if: always()
+    needs: [scope, guards, rom, e2e, wasm, web, relay]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # this run's artifact list
+    steps:
+      - name: Write the stamps
+        id: stamps
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ROM_SHA1: ${{ needs.rom.outputs.rom-sha1 }}
+        run: |
+          mkdir stamp
+          echo "$GITHUB_RUN_ID" > stamp/run
+          echo "$ROM_SHA1" > stamp/rom-sha1
+          # On an API error, shaky: the stamp is only ever a shortcut.
+          flaky="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
+            --jq '[.artifacts[].name | select(startswith("e2e-flaky-"))] | length' 2>/dev/null || echo error)"
+          echo "shards with a retried pass: $flaky"
+          if [ "$flaky" = 0 ]; then echo "steady=true" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: actions/upload-artifact@v7
+        if: needs.rom.result == 'success' && needs.scope.outputs.driven-rom == ''
+        with:
+          name: green-rom-${{ needs.scope.outputs.tree }}
+          path: stamp/rom-sha1
+          retention-days: 14
+          overwrite: true
+
+      - uses: actions/upload-artifact@v7
+        if: >-
+          needs.scope.outputs.checks == 'true' && needs.scope.outputs.e2e == 'all'
+          && needs.guards.result == 'success' && needs.e2e.result == 'success'
+          && needs.wasm.result == 'success' && needs.web.result == 'success'
+          && needs.relay.result == 'success' && steps.stamps.outputs.steady == 'true'
+        with:
+          name: green-checks-${{ needs.scope.outputs.tree }}
+          path: stamp/run
+          retention-days: 14
+          overwrite: true
+
+      - name: Every job passed, or an earlier run passed it on this tree
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          CHECKS: ${{ needs.scope.outputs.checks }}
+          ROM: ${{ needs.scope.outputs.rom }}
+        run: |
+          printf '%s' "$NEEDS" | jq -e --arg checks "$CHECKS" --arg rom "$ROM" '
+            to_entries | map(
+              . as $j | $j.value.result == "success"
+              or ($j.value.result == "skipped"
+                  and (if $j.key == "rom" then $rom == "false" else $checks == "false" end)))
+            | all' || { printf '%s\n' "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'; exit 1; }
 
   # A release only (a tag or a dispatch): the match played in Firefox (POK-327). The e2e job plays it in Chromium
   # on every push; Firefox is where Cam's 2026-09-18 video had the picture squashed, and
@@ -431,6 +572,8 @@ jobs:
   # the git state mGBA stamps into the core, from a full detached clone here and a
   # depth-1 branch clone there, and build.sh now checks out the same shape on both.
   wasm:
+    needs: scope
+    if: needs.scope.outputs.checks == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -485,6 +628,8 @@ jobs:
   # them in September -- meant the 576 unit tests never ran at all. The one build
   # output it does need, map_groups.h, it makes itself (the step before the tests).
   web:
+    needs: scope
+    if: needs.scope.outputs.checks == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -532,6 +677,8 @@ jobs:
   # The relay's own suite: room protocol, the version gate, the flood disconnect, the
   # idle sweep, /health.
   relay:
+    needs: scope
+    if: needs.scope.outputs.checks == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -618,12 +765,19 @@ jobs:
   # Nothing here runs on a branch push; a broken tag can be deleted and re-pushed. A
   # dispatched run (see `on:`) makes its tag here, first, so the rest reads the same.
   release:
-    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
-    needs: [rom, e2e, web, relay, pret]
+    # Spelled out because a job skipped for a stamp would otherwise skip this one, through
+    # `green`, whatever `green` said.
+    if: >-
+      !cancelled() && (github.ref_type == 'tag' || github.event_name == 'workflow_dispatch')
+      && needs.green.result == 'success' && needs.rom.result == 'success'
+      && needs.pret.result == 'success'
+    needs: [green, rom, pret]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # A half hour's wait for a match to end, then the deploys.
+    timeout-minutes: 50
     permissions:
       contents: write
+      actions: read # which run last released, for the relay step
     env:
       TAG: ${{ inputs.version || github.ref_name }}
       SITE: https://hoenn-battle-royale.vercel.app
@@ -634,6 +788,21 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with: { name: patch, path: web/public/patch }
+
+      # Asked again here: the build took minutes, and auto-release.yml asked before it.
+      # `locked` is the old rooms alone; a match of the game itself is on /world, whose
+      # trainers are `world`. Before the tag: a run that gives up has published nothing.
+      - name: No match is live
+        if: inputs.ignore_match != true
+        run: |
+          for _ in $(seq 60); do
+            health="$(curl -fsS --max-time 15 https://hoenn-relay-production.up.railway.app/health || true)"
+            if printf '%s' "$health" | jq -e '.locked == 0 and .world == 0' >/dev/null 2>&1; then exit 0; fi
+            echo "waiting: ${health:-no answer}"
+            sleep 30
+          done
+          echo "::error::the relay still shows players after 30 minutes: ${health:-no answer}. Nothing was published."
+          exit 1
 
       - name: Tag the commit this run built (dispatched release)
         if: github.event_name == 'workflow_dispatch'
@@ -700,8 +869,9 @@ jobs:
           want="$(python3 -c 'import json;print(json.load(open("web/public/patch/br-version.json"))["romSha1"])')"
           tools/br/verify-site.sh "$SITE" "$want"
 
-      - name: Relay to Railway, if relay/ changed since the previous tag
+      - name: Relay to Railway, if relay/ changed since the last release that finished
         env:
+          GH_TOKEN: ${{ github.token }}
           # The project token first (production only; the play log reads with it), the
           # account token if there is none -- Railway answers the account one with Not
           # Authorized for this project. To the CLI a project token is RAILWAY_TOKEN and
@@ -709,11 +879,16 @@ jobs:
           # is set at all, even empty, so the run exports exactly one of them.
           PROJECT_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
           ACCOUNT_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          # A tag whose release failed before this step (v0.3.62) still counts as the
-          # previous tag, so the next release would skip a relay that never deployed.
+          # By hand, for what the check below cannot see.
           FORCE_RELAY: ${{ inputs.relay }}
         run: |
-          prev="$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)"
+          # Not the previous tag: a tag whose release failed before this step (v0.3.62) would
+          # skip a relay that never deployed, with nobody watching to say `relay`. The last
+          # green dispatch, or the previous tag if there is none. A green run is one whose
+          # Firefox passed too, so a red Firefox can only mean deploying when in doubt.
+          prev="$(gh run list --workflow ci.yml --event workflow_dispatch --status success --limit 1 \
+            --json headSha --jq '.[0].headSha // empty' || true)"
+          if [ -z "$prev" ]; then prev="$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)"; fi
           if [ "$FORCE_RELAY" != "true" ] && [ -n "$prev" ] && git diff --quiet "$prev" "$TAG" -- relay/; then
             echo "relay/ unchanged since $prev; the relay stays up"
             exit 0
