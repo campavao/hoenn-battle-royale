@@ -1994,9 +1994,10 @@ var ITEM_SITRUS_BERRY = 142;
 var ITEM_TM01 = 289;
 var ITEM_HM01 = 339;
 var SCATTER_TABLE = [
-  { id: ITEM_SUPER_POTION, w: 6 },
+  // Fewer of these two than there were (Cam, 2026-11-01: "Super Potions and Revives").
+  { id: ITEM_SUPER_POTION, w: 3 },
   { id: ITEM_HYPER_POTION, w: 4 },
-  { id: ITEM_REVIVE, w: 3 },
+  { id: ITEM_REVIVE, w: 2 },
   { id: ITEM_FULL_HEAL, w: 2 },
   { id: ITEM_POKE_BALL, w: 5 },
   { id: ITEM_ETHER, w: 2 },
@@ -2477,6 +2478,7 @@ var CHEST = { map: "MAP_ROUTE117_POKEMON_DAY_CARE", x: 5, y: 5 };
 var CHEST_SPECIES = [397, 400, 334, 359, 329, 394, 366, 384, 376, 331, 343, 391, 389, 307, 338, 285, 279, 282];
 var CHEST_KEY = 4 << 20;
 var GROUND_PER_MAP = 6;
+var GROUND_APART = 6;
 function cellRng(seed, map, x, y) {
   let s = (seed ^ Math.imul(x + 1, 2654435761) ^ Math.imul(y + 1, 2246822507)) >>> 0;
   for (let i = 0; i < map.length; i++) s = Math.imul(s ^ map.charCodeAt(i), 16777619) >>> 0;
@@ -2488,7 +2490,7 @@ function cellRng(seed, map, x, y) {
     return (s >>> 0) / 4294967296;
   };
 }
-var BALLS_TM_IN = 4;
+var BALLS_TM_IN = 3;
 var AFTER_WIN = 60 * 15;
 var TRUCK = 40;
 var DEALS = /* @__PURE__ */ new Map();
@@ -2798,6 +2800,9 @@ var Room = class {
       const cells = land.get(id2).filter((c) => !marked.has(`${c.x}:${c.y}`) && !(id2 === "MAP_LITTLEROOT_TOWN" && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
       for (let i = 0; i < GROUND_PER_MAP && cells.length; i++) {
         const c = cells.splice(Math.floor(rng() * cells.length), 1)[0];
+        for (let k = cells.length - 1; k >= 0; k--) {
+          if (Math.max(Math.abs(cells[k].x - c.x), Math.abs(cells[k].y - c.y)) < GROUND_APART) cells.splice(k, 1);
+        }
         let item = cableOrDoll(scatterItem(rng), rng());
         const own = cellRng(this.seed ^ 47633, id2, c.x, c.y);
         if (Math.floor(own() * BALLS_TM_IN) === 0) item = blueTm(own);
@@ -4996,4 +5001,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "75271896672f";
+export const WORLD_HASH = "f0240f6be93c";

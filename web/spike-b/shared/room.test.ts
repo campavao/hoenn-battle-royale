@@ -18,7 +18,7 @@ import { Host, play } from './host';
 import { over } from './over';
 import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, isTm, within } from './items';
 import { HURT, botKeys, health } from './bots';
-import { AFTER_WIN, FIELD_DIVE, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, WALKUP_BANG, CHEST, CHEST_SPECIES, ITEM_MASTER_BALL, ZONE_CELLS, ZONE_ITEMS, ZONE_TMS, eventPiece, makeRoom, zoneBalls, wornParty, type RoomEvent } from './room';
+import { AFTER_WIN, FIELD_DIVE, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_APART, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, WALKUP_BANG, CHEST, CHEST_SPECIES, ITEM_MASTER_BALL, ZONE_CELLS, ZONE_ITEMS, ZONE_TMS, eventPiece, makeRoom, zoneBalls, wornParty, type RoomEvent } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -499,6 +499,15 @@ describe('trainer against trainer', () => {
 });
 
 describe('item balls', () => {
+  it("never lie in a heap (Cam, 11-01: seven on a dock, \"why are there so many items right here\")", () => {
+    for (const seed of [4242, 7, 99]) {
+      const g = [...makeRoom(MAPS, PATCHES, seed).ground().values()].filter((b) => !b.gift && !b.map.startsWith(SAFARI) && /^MAP_(ROUTE\d+|\w+_(TOWN|CITY))$/.test(b.map));
+      for (const a of g) for (const b of g) {
+        if (a === b || a.map !== b.map) continue;
+        expect(Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)), `${a.map} ${a.x},${a.y} ${b.x},${b.y}`).toBeGreaterThanOrEqual(GROUND_APART);
+      }
+    }
+  });
   it('are dealt from the seed on plain ground a trainer can reach, a few a map', () => {
     const one = makeRoom(MAPS, PATCHES, 4242), two = makeRoom(MAPS, PATCHES, 4242), other = makeRoom(MAPS, PATCHES, 7);
     // The field's (the Zone's six are br_zone.c's, below).

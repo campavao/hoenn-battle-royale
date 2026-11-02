@@ -422,6 +422,9 @@ const CHEST_KEY = 4 << 20;
 /** Item balls a map gets: the match deals two a section, and a spike map is two or three
  *  of them (Cam, POK-354: "more items all over the place"). */
 export const GROUND_PER_MAP = 6;
+/** How far apart they lie: on a sea route's little dock six at random were a heap of six
+ *  (Cam, 2026-11-01, "why are there so many items right here"). */
+export const GROUND_APART = 6;
 /** A stream of its own for one cell's roll: xorshift off the seed, the map's name and the
  *  cell, the same on every page. */
 function cellRng(seed: number, map: string, x: number, y: number): () => number {
@@ -430,8 +433,9 @@ function cellRng(seed: number, map: string, x: number, y: number): () => number 
   s = s || 1;
   return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 4294967296; };
 }
-/** br_balls.c BR_BALLS_TM_IN: one ground ball in this many is a machine. */
-export const BALLS_TM_IN = 4;
+/** One ground ball in this many is a machine: br_balls.c BR_BALLS_TM_IN's 4 once, and more
+ *  of them for the potions Cam found too common (2026-11-01). */
+export const BALLS_TM_IN = 3;
 
 /** A change that is not a key: applied at the start of its frame, before anybody moves. */
 export type Command =
@@ -870,6 +874,9 @@ export class Room {
         !(id === 'MAP_LITTLEROOT_TOWN' && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
       for (let i = 0; i < GROUND_PER_MAP && cells.length; i++) {
         const c = cells.splice(Math.floor(rng() * cells.length), 1)[0];
+        for (let k = cells.length - 1; k >= 0; k--) {
+          if (Math.max(Math.abs(cells[k].x - c.x), Math.abs(cells[k].y - c.y)) < GROUND_APART) cells.splice(k, 1);
+        }
         // A machine one ball in BALLS_TM_IN, as br_balls.c's BrBalls_Deal makes them (Cam,
         // 10-31: "not enough TMs"; the table alone gave one in ten); the rest off the
         // table without its machines, a cable or a doll among them. A machine is taught
