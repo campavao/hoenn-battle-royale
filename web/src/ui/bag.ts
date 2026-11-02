@@ -137,6 +137,20 @@ export function asksWhoInField(rom: Rom, id: number, effect: Uint8Array | null):
   return (effect[EFFECT_MORE] & (ITEM4_REVIVE | ITEM4_HEAL_PP)) !== 0;
 }
 
+/** A TM or an HM: ITEM_TM01 to ITEM_HM08 (include/constants/items.h). */
+const ITEM_TM01 = 289, ITEM_HM08 = 346;
+export function isMachine(id: number): boolean {
+  return id >= ITEM_TM01 && id <= ITEM_HM08;
+}
+
+/** pokemon.c CanMonLearnTMHM: a bit per machine, two words a species. */
+export function learnsMachine(rom: Rom, species: number, id: number): boolean {
+  const table = rom.sym('gTMHMLearnsets');
+  if (table === undefined) return true;
+  const n = id - ITEM_TM01;
+  return (u32(rom, table + species * 8 + (n < 32 ? 0 : 4)) >>> (n % 32) & 1) === 1;
+}
+
 /** Whether the field's BAG says "not now" of it: a ball, say. */
 export function usableInField(rom: Rom, id: number): boolean {
   const items = rom.sym('gItems'), cannot = rom.sym('ItemUseOutOfBattle_CannotUse');

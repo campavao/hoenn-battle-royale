@@ -14,6 +14,9 @@
 // Nothing is held anywhere but the party and the box, so a battle that starts from here
 // loses nothing.
 void CB2_BrSwap(void);
+// The page's windows answer for it (web/spike-b/rom.ts team): a bit per slot, ours then the
+// drop's. Nonzero, the screen moves those across and shuts by itself.
+extern u8 gBrSwapPick[2];
 // The screen is up now (br_netlink.c settles it before a battle starts from it).
 bool8 BrSwap_Up(void);
 // The heap is the next battle's (BrHeapReset): a battle from the screen leaves it.
