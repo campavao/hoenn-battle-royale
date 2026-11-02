@@ -102,10 +102,9 @@ transcripts were made from them; a frame at the time is the evidence for each li
   moves. The diagonal moves show black corners.
 * **The menu moves when touched** (1:05). Anchor it and let it grow upwards.
 * **Bots should look busy, not idle** (1:27). In the Safari they stood about: a median of 18
-  cells seen in a minute. They go from grass to grass and ball to ball now, and over 12
-  minutes across six seeds the first bot fight comes sooner, mean 2.5 min from 3.7, at much
-  the same count, 5.7 from 5.8. The goal, that you cannot tell a bot from a player, is
-  further off than this.
+  cells seen in a minute. They go from grass to grass and ball to ball now. Bot fights over 12
+  minutes across six seeds are about what they were: 5.5 from 5.8, worst gap 2.3 min from
+  3.2. The goal, that you cannot tell a bot from a player, is further off than this.
 * **A screen-wipe into the match** (3:37, 4:33). Perhaps Emerald's contest wipe.
 * **The grass or dust and sand effects are not Emerald's standard sprites** (5:05).
 * **The cave needs a pass** (12:07). It was hard to get out.

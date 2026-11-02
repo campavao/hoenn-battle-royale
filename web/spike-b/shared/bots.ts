@@ -9,7 +9,7 @@ import { decodeGrid, sameSpot, type SeamDir, type Spot, type WorldMap } from '..
 import { findPath, findPathToAny, type Path } from '../../src/bots/path';
 import { NAMES } from '../../src/bots/roster';
 import { mulberry32, pickIndex } from '../../src/match/clock';
-import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, type Actor, type Room } from './room';
+import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, type Actor, type Room } from './room';
 
 // The wardrobe (br_ghosts.c sSkinGraphics, career.ts SKINS): a bot wears a skin so the
 // trainer you walk up to is the trainer the ROM puts in the battle.
@@ -232,7 +232,12 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
   if (a.m.action) return 0;
   const ring = room.ring();
   // Hurt is a plan of its own: it rethinks the moment a fight leaves it under HURT.
-  const at = `${ring.round}:${ring.phase}:${room.events.length}${health(a) < HURT ? ':hurt' : ''}${ring.safari ? ':safari' : ''}`;
+  const at = `${ring.round}:${ring.phase}:${room.events.length}${health(a) < HURT ? ':hurt' : ''}`;
+  // Dropped out of the Zone: its grass is no goal now, and a walk to it would hold them there.
+  if (!ring.safari && b.goal && b.goal.map !== a.m.spot.map && b.goal.map.startsWith(SAFARI)) {
+    b.goal = null;
+    b.steps = undefined;
+  }
   // Healed on a CENTER's doorstep (Room.step): a moment inside before it goes on.
   if (b.goal && !a.wear && sameSpot(a.m.spot, b.goal) && room.centreSteps().some((s) => sameSpot(s, a.m.spot))) {
     b.goal = null;

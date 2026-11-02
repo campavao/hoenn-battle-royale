@@ -4177,7 +4177,11 @@ function hunting(room) {
 function botKeys(room, a, b) {
   if (a.m.action) return 0;
   const ring = room.ring();
-  const at = `${ring.round}:${ring.phase}:${room.events.length}${health(a) < HURT ? ":hurt" : ""}${ring.safari ? ":safari" : ""}`;
+  const at = `${ring.round}:${ring.phase}:${room.events.length}${health(a) < HURT ? ":hurt" : ""}`;
+  if (!ring.safari && b.goal && b.goal.map !== a.m.spot.map && b.goal.map.startsWith(SAFARI)) {
+    b.goal = null;
+    b.steps = void 0;
+  }
   if (b.goal && !a.wear && sameSpot(a.m.spot, b.goal) && room.centreSteps().some((s) => sameSpot(s, a.m.spot))) {
     b.goal = null;
     b.steps = void 0;
@@ -5054,4 +5058,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "c5c05675a52e";
+export const WORLD_HASH = "7e2d61e537d5";
