@@ -4083,7 +4083,18 @@ function planeOf(room, s) {
   const c = room.anchors.get(s.map);
   return c ? { x: c.gx, y: c.gy } : null;
 }
+function safariGoal(room, a, b) {
+  const { map, x, y } = a.m.spot;
+  const reach = room.world.reachOnMap(a.m.spot, true, true);
+  const spots = [...room.patchesOn(map)];
+  for (const g of room.ground().values()) if (g.map === map && !g.gift && !room.picked.has(g.key)) spots.push(g);
+  const near = spots.filter((s2) => (s2.x !== x || s2.y !== y) && reach.cell(s2.x, s2.y)).map((s2) => ({ s: s2, d: Math.abs(s2.x - x) + Math.abs(s2.y - y) })).sort((p, q) => p.d - q.d).slice(0, 5);
+  if (!near.length) return null;
+  const { s } = near[Math.floor(rand(b) * near.length)];
+  return { map, x: s.x, y: s.y };
+}
 function goal(room, a, b) {
+  if (room.ring().safari) return safariGoal(room, a, b);
   if (health(a) < HURT) {
     const c = centreFor(room, a);
     if (c) return c;
@@ -4166,7 +4177,7 @@ function hunting(room) {
 function botKeys(room, a, b) {
   if (a.m.action) return 0;
   const ring = room.ring();
-  const at = `${ring.round}:${ring.phase}:${room.events.length}${health(a) < HURT ? ":hurt" : ""}`;
+  const at = `${ring.round}:${ring.phase}:${room.events.length}${health(a) < HURT ? ":hurt" : ""}${ring.safari ? ":safari" : ""}`;
   if (b.goal && !a.wear && sameSpot(a.m.spot, b.goal) && room.centreSteps().some((s) => sameSpot(s, a.m.spot))) {
     b.goal = null;
     b.steps = void 0;
@@ -4174,7 +4185,7 @@ function botKeys(room, a, b) {
     return 0;
   }
   const hunt = hunting(room) && (!b.steps?.length || (room.tick + a.id * 7) % 240 === 0);
-  const idle = !b.goal && !b.steps?.length && (room.tick + a.id * 7) % 300 === 0;
+  const idle = !b.goal && !b.steps?.length && (room.tick + a.id * 7) % (ring.safari ? 60 : 300) === 0;
   if ((b.plan !== at || hunt || idle || !b.goal && room.inFog(a.m.spot, ring)) && (room.tick + a.id * 7) % 30 === 0) {
     b.plan = at;
     b.goal = goal(room, a, b);
@@ -5043,4 +5054,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "ab1951d04b08";
+export const WORLD_HASH = "c5c05675a52e";

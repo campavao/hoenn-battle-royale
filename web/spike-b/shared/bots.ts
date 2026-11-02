@@ -107,7 +107,26 @@ function planeOf(room: Room, s: Spot): { x: number; y: number } | null {
   return c ? { x: c.gx, y: c.gy } : null;
 }
 
+/** The Safari: the next marked grass or ball on this map, one of the nearest it can walk to,
+ *  as somebody catching what they can would (Cam, 11-01: "they should look like they're
+ *  actually doing something"). */
+function safariGoal(room: Room, a: Actor, b: Brain): Spot | null {
+  const { map, x, y } = a.m.spot;
+  const reach = room.world.reachOnMap(a.m.spot, true, true);
+  const spots: { x: number; y: number }[] = [...room.patchesOn(map)];
+  for (const g of room.ground().values()) if (g.map === map && !g.gift && !room.picked.has(g.key)) spots.push(g);
+  const near = spots
+    .filter((s) => (s.x !== x || s.y !== y) && reach.cell(s.x, s.y))
+    .map((s) => ({ s, d: Math.abs(s.x - x) + Math.abs(s.y - y) }))
+    .sort((p, q) => p.d - q.d)
+    .slice(0, 5);
+  if (!near.length) return null;
+  const { s } = near[Math.floor(rand(b) * near.length)];
+  return { map, x: s.x, y: s.y };
+}
+
 function goal(room: Room, a: Actor, b: Brain): Spot | null {
+  if (room.ring().safari) return safariGoal(room, a, b);
   // Hurt: a CENTER first (brain.ts, HURT), as long as there is one out of the fog.
   if (health(a) < HURT) {
     const c = centreFor(room, a);
@@ -213,7 +232,7 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
   if (a.m.action) return 0;
   const ring = room.ring();
   // Hurt is a plan of its own: it rethinks the moment a fight leaves it under HURT.
-  const at = `${ring.round}:${ring.phase}:${room.events.length}${health(a) < HURT ? ':hurt' : ''}`;
+  const at = `${ring.round}:${ring.phase}:${room.events.length}${health(a) < HURT ? ':hurt' : ''}${ring.safari ? ':safari' : ''}`;
   // Healed on a CENTER's doorstep (Room.step): a moment inside before it goes on.
   if (b.goal && !a.wear && sameSpot(a.m.spot, b.goal) && room.centreSteps().some((s) => sameSpot(s, a.m.spot))) {
     b.goal = null;
@@ -227,7 +246,7 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
   // A hunter's quarry moves: it looks again whenever its walk runs out, and every 4 s.
   const hunt = hunting(room) && (!b.steps?.length || (room.tick + a.id * 7) % 240 === 0);
   // There, or given up: on somewhere else after a few seconds (brain.ts's next wander).
-  const idle = !b.goal && !b.steps?.length && (room.tick + a.id * 7) % 300 === 0;
+  const idle = !b.goal && !b.steps?.length && (room.tick + a.id * 7) % (ring.safari ? 60 : 300) === 0;
   if ((b.plan !== at || hunt || idle || (!b.goal && room.inFog(a.m.spot, ring))) && (room.tick + a.id * 7) % 30 === 0) {
     b.plan = at;
     b.goal = goal(room, a, b);
