@@ -118,8 +118,9 @@
       body.desk-hud .bm-m-row { grid-area: 3 / 1; }
       body.desk-hud .bm-m-moves { grid-area: 1 / 2 / 4 / 3; }
       .bm-keys { display: none; }
-      body.desk-hud .bm-keys { display: block; position: fixed; left: 8px; bottom: 8px; pointer-events: none; }
-      body.desk-hud #battle-menu[data-mode="bag"], body.desk-hud #battle-menu[data-mode="item"], body.desk-hud #battle-menu[data-mode="info"] { position: fixed; left: 50%; bottom: 8px; transform: translateX(-50%); }
+      body.desk-hud .bm-keys { display: block; position: fixed; left: 8px; top: 8px; pointer-events: none; }
+      @media (max-width: 1099px) { body.desk-hud .bm-keys { display: none; } }
+      body.desk-hud #battle-menu[data-mode="bag"], body.desk-hud #battle-menu[data-mode="item"], body.desk-hud #battle-menu[data-mode="info"] { position: fixed; left: 0; right: 0; width: fit-content; margin-inline: auto; bottom: 8px; }
       body.desk-hud #battle-menu[data-mode="bag"], body.desk-hud #battle-menu[data-mode="item"], body.desk-hud #battle-menu[data-mode="info"] { grid-template-columns: auto auto; }
       .hud-mini { pointer-events: auto; cursor: pointer; }
       .hud-moves { top: calc(var(--s, 1.5) * 108px); }
@@ -277,6 +278,8 @@
          the pad instead, so this is a desktop's only. */
       #keys { display: none; }
       @media (hover: hover) and (pointer: fine) and (min-width: 600px) {
+        body.desk-hud #keys:not([hidden]) { right: auto; left: 12px; }
+        body.battle-menu #keys:not([hidden]) { display: none; }
         #keys:not([hidden]) {
           display: grid;
           position: fixed; right: 12px; top: 50%; transform: translateY(-50%); z-index: 2;

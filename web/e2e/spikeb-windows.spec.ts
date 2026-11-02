@@ -41,6 +41,15 @@ async function intoBattle(page: Page): Promise<void> {
 }
 
 const shot = (page: Page, name: string) => page.screenshot({ path: test.info().outputPath(`${name}.png`) });
+/** The keys' hints sit on no window of the battle's, in whichever of them is up. */
+const keysClear = (page: Page) => page.evaluate(() => {
+  const keys = document.querySelector('.bm-keys')!.getBoundingClientRect();
+  return [...document.querySelectorAll('#battle canvas')]
+    .filter((c) => !c.closest('.bm-keys'))
+    .map((c) => ({ c, b: c.getBoundingClientRect() }))
+    .filter(({ b }) => b.width > 0 && b.left < keys.right && keys.left < b.right && b.top < keys.bottom && keys.top < b.bottom)
+    .map(({ c, b }) => `${c.parentElement!.className} ${Math.round(b.left)},${Math.round(b.top)} ${Math.round(b.width)}x${Math.round(b.height)}`);
+});
 const leadIndex = (page: Page) => spike(page, (s) => s.rom.emu.read(s.art.sym('gBattlerPartyIndexes'), 16));
 
 test('by the keys alone: moves first, PARTY and one of them, sent out, BAG, a move', async ({ browser }) => {
@@ -55,6 +64,7 @@ test('by the keys alone: moves first, PARTY and one of them, sent out, BAG, a mo
   await shot(page, 'desk-field');
   await intoBattle(page);
   await shot(page, 'desk-battle');
+  expect(await keysClear(page), 'the moves').toEqual([]);
 
   // The moves are up, with the focus on the first.
   await expect(page.locator('.bm-cell')).toHaveCount(4);
@@ -74,10 +84,12 @@ test('by the keys alone: moves first, PARTY and one of them, sent out, BAG, a mo
   await expect(page.locator('.bm-slot')).toHaveCount(6);
   await expect(page.locator('.bm-slot').first()).toBeVisible();
   await shot(page, 'desk-party');
+  expect(await keysClear(page), 'the party').toEqual([]);
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('z');
   await expect(page.locator('.bm-member')).toBeVisible();
   await shot(page, 'desk-member');
+  expect(await keysClear(page), 'one of them').toEqual([]);
   expect(await leadIndex(page)).toBe(0);
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('ArrowRight');
@@ -98,6 +110,8 @@ test('by the keys alone: moves first, PARTY and one of them, sent out, BAG, a mo
   // E is the BAG, and X back from it.
   await page.keyboard.press('e');
   await expect(page.locator('.bm-bag-head')).toBeVisible();
+  await shot(page, 'desk-bag');
+  expect(await keysClear(page), 'the bag').toEqual([]);
   await page.keyboard.press('x');
   await expect(page.locator('.bm-cell').first()).toBeVisible();
 
