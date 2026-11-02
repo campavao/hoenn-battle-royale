@@ -640,3 +640,41 @@ test('taking a ball off the ground says nothing, and a buried one its name (POK-
   expect((await seen()).filter((t) => /Found/.test(t))).toEqual([]);
   await ctx.close();
 });
+
+test('any mon takes any machine, off the ground and from the BAG (Cam 10-17: only who knows it is greyed)', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await withTeam(page);
+  const team = () => spike(page, (s) => s.battleMenu.deps.firstMoves.readParty()) as Promise<{ moves: { id: number }[] }[]>;
+  const shut = () => page.locator('.bm-slot').evaluateAll((all) => all.map((b) => b.getAttribute('aria-disabled') === 'true'));
+  // TM22 SOLARBEAM: vanilla's table says no to SHARPEDO. The ROM says yes (CanMonLearnTMHM).
+  await spike(page, (s) => s.give(310));
+  await expect(page.locator('.bm-use-head')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.bm-slot')).toHaveCount(6);
+  expect(await shut(), 'nobody greyed').toEqual(Array(6).fill(false));
+  await page.locator('.bm-slot').first().click();
+  await expect(page.locator('.bm-pick-move').nth(1)).toBeVisible({ timeout: 20_000 });
+  await page.locator('.bm-pick-move').nth(1).click();
+  await expect.poll(async () => (await team())[0].moves.map((m) => m.id), { timeout: 20_000, message: 'SOLARBEAM learned' }).toContain(76);
+  await expect.poll(() => spike(page, (s) => s.swapping), { timeout: 20_000 }).toBe(false);
+  // Again: now the first knows it, and only the first is greyed. BACK keeps it in the bag.
+  await spike(page, (s) => s.give(310));
+  await expect(page.locator('.bm-use-head')).toBeVisible({ timeout: 15_000 });
+  expect(await shut()).toEqual([true, false, false, false, false, false]);
+  await page.locator('#battle-menu .bm-back').click();
+  await expect.poll(() => spike(page, (s) => s.swapping || s.battleMenu.isShown), { timeout: 20_000 }).toBe(false);
+  // The same from the BAG.
+  await page.waitForTimeout(700);
+  await page.locator('#hud-bag').click();
+  await expect(page.locator('.bm-bag-head')).toBeVisible();
+  const row = () => spike(page, (s) => s.battleMenu.stacks().findIndex((x: any) => x.item === 310)) as Promise<number>;
+  for (let i = 0; i < 4 && (await row()) < 0; i++) { await page.getByLabel('Next pocket').click(); await page.waitForTimeout(200); }
+  expect(await row(), 'TM22 in its pocket').toBeGreaterThanOrEqual(0);
+  for (let i = await row(); i > 0; i--) await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('z');
+  await page.locator('.bm-bag-use').click();
+  await expect(page.locator('.bm-use-head')).toBeVisible();
+  expect(await shut()).toEqual([true, false, false, false, false, false]);
+  await ctx.close();
+});

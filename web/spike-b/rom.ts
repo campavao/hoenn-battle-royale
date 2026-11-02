@@ -21,7 +21,7 @@ import { PROTOCOL, type Dir, type Lines, type Msg, type PackedMon } from '../src
 import { voice } from '../src/match/ticker';
 import { loadCheckedRelease } from '../src/release';
 import { isPrePatched, sha1Hex } from '../src/rom/emerald';
-import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fameTeam, fieldOf, healed, partyWhole, rekey, spillOf, teamOf, withMoney, withoutItem } from './carry';
+import { type PartySeen, BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fameTeam, fieldOf, healed, partySettled, rekey, spillOf, teamOf, withMoney, withoutItem } from './carry';
 import { startMenuTable } from '../src/touch';
 import { FADE_COLOR_WORD, FADE_Y_WORD, fadeOf } from '../src/field';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
@@ -521,7 +521,13 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
    *  POKeRUS read from noise (Cam 11-01). Cut off there, the rest of the team stayed down
    *  a rung. The emulator must be running. */
   const partyDone = async () => {
-    const done = () => emu.read(levelsAt + LEVELS_LIFTING, 8) === 0 && partyWhole(emu.bytes(partyAt, PARTY_LEN), emu.read(countAt, 8));
+    let was: PartySeen | null = null;
+    const done = () => {
+      const party = emu.bytes(partyAt, PARTY_LEN), count = emu.read(countAt, 8);
+      const settled = partySettled(was, party, count);
+      was = { party: party.slice(), count };
+      return settled && emu.read(levelsAt + LEVELS_LIFTING, 8) === 0;
+    };
     if (!done() && !await until(emu, done, 600)) console.warn('spike: the party is still being written after 10 s');
   };
   const send = (msg: Parameters<typeof packSlot>[0]) => {

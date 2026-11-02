@@ -255,6 +255,19 @@ export function partyWhole(party: Uint8Array, count: number): boolean {
   return true;
 }
 
+/** The party the frame before, to see whether it has come to rest (partySettled). */
+export type PartySeen = { party: Uint8Array; count: number };
+
+/** Whole, and just as it was a frame ago. Whole alone is not enough: the count can lie.
+ *  CalculatePlayerPartyCount counts up in place, reading each mon decrypted, so a frame ending
+ *  inside it shows count 1, every counted mon whole, and the next mon half done. Copied and put
+ *  back, that is a BAD EGG or a team cut to the count. It is gone a frame later; a count truly
+ *  short of what lies past it (a team that lost some) stays as it is, and is settled. */
+export function partySettled(was: PartySeen | null, party: Uint8Array, count: number): boolean {
+  if (!was || was.count !== count || !partyWhole(party, count)) return false;
+  return party.every((b, i) => b === was.party[i]);
+}
+
 /** The CENTER's heal on a party as rom.ts keeps it: pokemon.c's HealPlayerParty -- HP to
  *  the top, no status, every move's PP back to its most (CalculatePPWithBonus). PP lives
  *  in the encrypted Attacks substruct, so that one is decrypted, refilled, its checksum

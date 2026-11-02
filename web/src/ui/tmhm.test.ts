@@ -1,7 +1,7 @@
 // The machines' moves, against the headers they come from.
 import { describe, expect, it } from 'vitest';
-import tmsH from '../../include/constants/tms_hms.h?raw';
-import movesH from '../../include/constants/moves.h?raw';
+import tmsH from '../../../include/constants/tms_hms.h?raw';
+import movesH from '../../../include/constants/moves.h?raw';
 import { TMHM_MOVES } from './tmhm';
 
 describe('TMHM_MOVES', () => {

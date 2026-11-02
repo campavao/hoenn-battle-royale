@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAG_AT, BAG_LEN, arrived, fameTeam, fieldOf, healed, partyWhole, rekey, spillOf, tallySince, teamOf, withMoney, withHeld, teamMembers, spillShows } from './carry';
+import { BAG_AT, BAG_LEN, arrived, fameTeam, fieldOf, healed, partySettled, partyWhole, rekey, spillOf, tallySince, teamOf, withMoney, withHeld, teamMembers, spillShows } from './carry';
 import HMS from '../src/data/hms.json';
 
 describe('rekey', () => {
@@ -208,6 +208,18 @@ describe('partyWhole', () => {
     // Past the count is not looked at, and an empty slot adds up to nothing.
     expect(partyWhole(party, 0)).toBe(true);
     expect(partyWhole(new Uint8Array(600), 6)).toBe(true);
+    // Settled: whole, and as it was a frame ago. The ROM counting up (a short count and the
+    // next mon half done) is a different frame from the next; a team that really is short of
+    // what lies past its count is the same, and must not wait.
+    const half = party.slice();
+    for (let w = 0; w < 12; w++) v.setUint32(32 + w * 4, (v.getUint32(32 + w * 4, true) ^ key) >>> 0, true);
+    const whole = party.slice();
+    expect(partySettled(null, whole, 1), 'nothing to compare with').toBe(false);
+    expect(partySettled({ party: half, count: 0 }, whole, 1), 'it moved').toBe(false);
+    expect(partySettled({ party: whole, count: 0 }, whole, 1), 'the count moved').toBe(false);
+    expect(partySettled({ party: half, count: 1 }, half, 1), 'still halfway').toBe(false);
+    expect(partySettled({ party: whole, count: 1 }, whole, 1)).toBe(true);
+    expect(partySettled({ party: whole, count: 0 }, whole, 0), 'a short count that stays').toBe(true);
   });
 });
 
