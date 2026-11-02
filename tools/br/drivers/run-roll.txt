@@ -22,6 +22,8 @@ poke u16 gBrMailbox+0x0C 1
 # the walk-up (POK-373) puts the fight a step later
 wait 1000
 expect u16 gBrBattle+4 0
+# no doll, no way out, and RUN's window says so (br_battle.c BrBattle_RunChance)
+expect u8 gBrBattle+12 0
 tap DOWN
 wait 10
 tap RIGHT

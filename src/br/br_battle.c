@@ -35,6 +35,7 @@
 #include "br/br_netlink.h"
 #include "br/br_battle.h"
 #include "constants/abilities.h"
+#include "constants/hold_effects.h"
 #include "constants/moves.h"
 #include "br/br_match.h"
 #include "br/br_bag.h"
@@ -54,6 +55,9 @@ struct BrSides gBrSides;
 // (an evolution) would otherwise be keyed for as long as it is up. The flash was 8 frames.
 #define SEE_THROUGH_HOLD_MAX 30
 static EWRAM_DATA u8 sSeeThroughHeld = 0;
+static EWRAM_DATA u8 sActionMenuText[48] = {0};
+static const u8 sText_RunOdds[] = _("{FONT_NARROW} ");  // 100% has 40 pixels, RUN included
+static const u8 sText_Percent[] = _("%");
 
 // The opponent's three lines, for the one seat they are about (BrBattle_SetVoice).
 struct BrVoice
@@ -463,6 +467,57 @@ u8 BrBattle_ChooseRun(void)
         return BR_RUN_DOLL;
     }
     return BR_RUN_ROLL;
+}
+
+// The odds of the next RUN, in whole percent, for RUN's window to say (Cam, 2026-11-01).
+// pret's own sums from TryRunFromBattle, truncation to a u8 included, so the sixth try off
+// a speed just under the foe's really is about 8%; a trainer is the doll rule above. The
+// check for being trapped is pret's too, and it leaves words for a message it is not
+// printing here: put back, since only this ROM of a link battle ran it.
+u8 BrBattle_RunChance(void)
+{
+    u8 battler = gActiveBattler;
+    u8 foe = BATTLE_OPPOSITE(battler);
+    u8 itemBattler = gPotentialItemEffectBattler;
+    u8 scripted = gBattleScripting.battler;
+    u8 ability = gLastUsedAbility;
+    u8 chooser = gBattleCommunication[MULTISTRING_CHOOSER];
+    u8 trapped = IsRunningFromBattleImpossible();
+    u8 holdEffect;
+    u8 speedVar;
+
+    gPotentialItemEffectBattler = itemBattler;
+    gBattleScripting.battler = scripted;
+    gLastUsedAbility = ability;
+    gBattleCommunication[MULTISTRING_CHOOSER] = chooser;
+
+    if (trapped != BATTLE_RUN_SUCCESS)
+        return 0;
+    if (gBattleTypeFlags & (BATTLE_TYPE_TRAINER | BATTLE_TYPE_LINK))
+        return CheckBagHasItem(ITEM_POKE_DOLL, 1) ? 100 : 0;
+    if (gBattleMons[battler].item == ITEM_ENIGMA_BERRY)
+        holdEffect = gEnigmaBerries[battler].holdEffect;
+    else
+        holdEffect = GetItemHoldEffect(gBattleMons[battler].item);
+    if (holdEffect == HOLD_EFFECT_CAN_ALWAYS_RUN || gBattleMons[battler].ability == ABILITY_RUN_AWAY)
+        return 100;
+    if (gBattleTypeFlags & BATTLE_TYPE_DOUBLE)
+        return 0;
+    if (gBattleMons[battler].speed >= gBattleMons[foe].speed)
+        return 100;
+    speedVar = (gBattleMons[battler].speed * 128) / (gBattleMons[foe].speed) + (gBattleStruct->runTries * 30);
+    return (speedVar * 100 + 128) / 256; // the roll is speedVar > Random() & 0xFF
+}
+
+const u8 *BrBattle_ActionMenuText(void)
+{
+    u8 *end = StringCopy(sActionMenuText, gText_BattleMenu);
+
+    gBrBattle.runChance = BrBattle_RunChance();
+    end = StringCopy(end, sText_RunOdds);
+    end = ConvertIntToDecimalStringN(end, gBrBattle.runChance, STR_CONV_MODE_LEFT_ALIGN, 3);
+    StringCopy(end, sText_Percent);
+    return sActionMenuText;
 }
 
 bool8 BrBattle_HandleRun(void)

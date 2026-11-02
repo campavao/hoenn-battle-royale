@@ -123,6 +123,7 @@ describe('the action windows', () => {
     menu: MENU_ACTION,
     trainer: false,
     dolls: false,
+    runChance: 44,
     safariBalls: 0,
     moves: [{ id: 1, pp: 1, maxPp: 1 }, { id: 2, pp: 1, maxPp: 1 }, { id: 0, pp: 0, maxPp: 0 }, { id: 0, pp: 0, maxPp: 0 }],
     foe: { name: 'WOOPER', types: [WATER, GROUND] },
@@ -130,10 +131,10 @@ describe('the action windows', () => {
     ...over,
   });
 
-  it('a word each; RUN grey only in a fight with somebody and no POKé DOLL', () => {
-    expect(actionLabels(view())).toEqual(['FIGHT', 'BAG', 'POKéMON', 'RUN'].map((label) => ({ label, enabled: true })));
-    expect(actionLabels(view({ trainer: true, dolls: true }))[3].enabled).toBe(true);
-    expect(actionLabels(view({ trainer: true }))[3]).toEqual({ label: 'RUN', enabled: false });
+  it("a word each, RUN with the ROM's odds; grey only in a fight with somebody and no POKé DOLL", () => {
+    expect(actionLabels(view())).toEqual(['FIGHT', 'BAG', 'POKéMON', 'RUN 44%'].map((label) => ({ label, enabled: true })));
+    expect(actionLabels(view({ trainer: true, dolls: true, runChance: 100 }))[3]).toEqual({ label: 'RUN 100%', enabled: true });
+    expect(actionLabels(view({ trainer: true, runChance: 0 }))[3]).toEqual({ label: 'RUN 0%', enabled: false });
   });
 
   it("the Safari's four", () => {
