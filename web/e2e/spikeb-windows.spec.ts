@@ -379,6 +379,8 @@ test('PARTY and BAG on a phone: the dock opens the windows, and everything fits'
   await page.locator('#battle-menu .bm-back').click();
   await expect(page.locator('.bm-slot').first()).toBeHidden();
   await expect(page.locator('#hud-bag')).toBeVisible();
+  // The dock's own view of the field comes round on a timer.
+  await page.waitForTimeout(700);
   await page.locator('#hud-bag').click();
   await expect(page.locator('.bm-bag-head')).toBeVisible();
   await expect(page.locator('#battle-menu .bm-back')).toBeInViewport({ ratio: 1 });
@@ -440,6 +442,61 @@ test('the big MAP shows the fog, as the minimap does (Cam, 11-02)', async ({ bro
   expect(fog.on, 'the fog canvas is on').toBe(true);
   expect(fog.painted, 'and has fog on it').toBeGreaterThan(0);
   expect(fog.w).toBeCloseTo(fog.gba[2], 0);
+test('a full party trades a dropped POKeMON one for one, on the windows', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await withTeam(page);
+  const team = () => spike(page, (s) => s.battleMenu.deps.firstMoves.readParty().map((m: any) => m.species)) as Promise<number[]>;
+  const before = await team();
+  expect(before.length).toBe(6);
+  await spike(page, (s) => s.startFor({ type: 'bag', tick: 0, id: s.link.me, key: 0x7e0005, name: 'DRAKE', bag: { items: [], money: 0, mons: [{ species: 25, level: 30 }] } }));
+  await expect(page.locator('.bm-slot').first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.bm-use-head')).toBeVisible();
+  await shot(page, 'phone-drop');
+  await page.locator('.bm-slot').first().click();
+  await expect(page.locator('.bm-slot')).toHaveCount(6);
+  await expect(page.locator('.bm-slot').nth(5)).toBeVisible();
+  await shot(page, 'phone-drop-swap');
+  await page.locator('.bm-slot').nth(2).click();
+  await expect.poll(team, { timeout: 20_000 }).toContain(25);
+  expect((await team()).length).toBe(6);
+  // Theirs went on the end; ours is in the bag now, and it is the windows' to take back.
+  await expect(page.locator('.bm-slot').first()).toBeVisible({ timeout: 15_000 });
+  await page.locator('#battle-menu .bm-back').click();
+  await expect.poll(() => spike(page, (s) => s.swapping)).toBe(false);
+  await ctx.close();
+});
+
+test('a TM off the ground and a trader ask on the windows', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await withTeam(page);
+  const team = () => spike(page, (s) => s.battleMenu.deps.firstMoves.readParty()) as Promise<{ species: number; moves: { id: number }[] }[]>;
+  // TM46 THIEF: SHARPEDO can learn it, and knows four moves, so the ROM's own forget screen shows.
+  await spike(page, (s) => s.give(334));
+  await expect(page.locator('.bm-use-head')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.bm-slot').first()).not.toHaveAttribute('aria-disabled', 'true');
+  await expect(page.locator('#gba')).toBeHidden();
+  await shot(page, 'phone-tm');
+  await page.locator('.bm-slot').first().click();
+  await expect(page.locator('#gba')).toBeVisible({ timeout: 20_000 });
+  await page.waitForTimeout(1500);
+  await shot(page, 'phone-tm-forget');
+  // Not forgetting anything: B twice, and it went in the BAG.
+  for (let i = 0; i < 8 && (await page.locator('#gba').isVisible()); i++) { await key(page, 'x', true); await page.waitForTimeout(150); await key(page, 'x', false); await page.waitForTimeout(800); }
+  await expect(page.locator('#gba')).toBeHidden({ timeout: 15_000 });
+
+  await expect.poll(() => spike(page, (s) => s.swapping), { timeout: 20_000 }).toBe(false);
+  await spike(page, (s) => s.startFor({ type: 'trade', tick: 0, n: 0, species: 25 }));
+  await expect.poll(() => spike(page, (s) => s.asking), { timeout: 10_000 }).toBe(true);
+  await key(page, 'z', true); await page.waitForTimeout(150); await key(page, 'z', false);
+  await expect(page.locator('.bm-use-head')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.bm-slot')).toHaveCount(6);
+  await shot(page, 'phone-trade');
+  await page.locator('.bm-slot').nth(2).click();
+  await expect.poll(async () => (await team()).some((m) => m.species === 25), { timeout: 30_000, message: 'traded' }).toBe(true);
   await ctx.close();
 });
 

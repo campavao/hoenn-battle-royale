@@ -68,10 +68,12 @@ import { fieldScale, FADE_COLOR_WORD, FADE_Y_WORD, FOG_EVA, FOG_EVB, fadeOf, key
 import { PadPrefsControl } from '../src/ui/padprefs';
 import { wireDpad } from './dpad';
 import { StartMenu } from './startmenu';
-import { BACK_H, BATTLE_TYPE_RECORDED, BattleMenu, CELL_H, battleWantsNoPad, ppWithBonus, readBattleView } from '../src/ui/battlemenu';
+import { BACK_H, BATTLE_TYPE_RECORDED, BattleMenu, CELL_H, battleWantsNoPad, ppWithBonus, readBattleView, type PartyMember } from '../src/ui/battlemenu';
 import { BATTLE_TYPE_TRAINER, CARD_H, SidesView } from '../src/ui/sides';
-import { BAG_POSITION_POCKET, readBattleBag, readFieldBag, readPocket } from '../src/ui/bag';
+import { BAG_POSITION_POCKET, isMachine, learnsMachine, readBattleBag, readFieldBag, readPocket } from '../src/ui/bag';
+import type { Rom } from '../src/battle/movebook';
 import { BATTLE_MENU, MENU_ACTION, MENU_PARTY, TouchLayer } from '../src/touch';
+import type { TeamRow } from './rom';
 import { HUD } from '../src/net/hud';
 import { ITEM_MACH_BIKE, MINI_MAP, PhoneHud, fieldMoves, fogPhase, signFor, type FieldMove } from '../src/ui/phonehud';
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
@@ -716,8 +718,10 @@ function giveNext(): void {
   if (screen) { if (gift) say(line); romUp = true; }
   const said = screen && gift ? new Promise((done) => setTimeout(done, GIFT_LINE_MS)) : Promise.resolve();
   const r = rom;
+  // Who gets it is the windows'; BACK keeps it in the bag.
+  const who = () => askParty(name(item), isMachine(item) ? (m, tables) => !tables || learnsMachine(tables, m.species, item) : undefined);
   const took = screen
-    ? said.then(() => r.teach(item, () => battleEl.classList.add('on'))).finally(() => { romUp = false; battleEl.classList.remove('on'); })
+    ? said.then(who).then((slot) => (slot === null ? r.give(item, 1) : r.teach(item, () => battleEl.classList.add('on'), slot))).finally(() => { romUp = false; battleEl.classList.remove('on'); })
     : r.give(item, groundCount(item));
   took.then((got) => {
     // What the ROM made of it (br_items.c's Apply), not what was on the ground.
@@ -846,18 +850,7 @@ async function openBag(key: number, bag: Bag, who: string): Promise<void> {
   const c = mons.length && !things ? 'mons' : await askBag(who, bag, mons[0]?.species);
   if (c === 'items') return takeBag(key, bag, who);
   if (c !== 'mons' || isOut || !rom) { link.drop(key, bag); return; }
-  swapping = true;
-  held.clear();
-  let left = mons;
-  try {
-    left = await rom.team(mons, who, () => battleEl.classList.add('on'), () => battleEl.classList.remove('on'));
-  } finally {
-    swapping = false;
-    battleEl.classList.remove('on');
-    held.clear();
-    pressed.clear();
-    calmUntil = frame + 30;
-  }
+  const left = await dropPanel(who, mons);
   const rest: Bag = { items: bag.items, money: bag.money, mons: left };
   if (!emptyBag(rest)) link.drop(key, rest);
 }
@@ -908,6 +901,49 @@ function closePanel(): void {
   held.clear();
   pressed.clear();
   calmUntil = frame + 30;
+  panelDone?.();
+}
+/** A dropped team on the windows: taken one at a time, each through the ROM's own screen unseen.
+ *  What is still on the ground comes back. */
+let panelDone: (() => void) | null = null;
+function dropPanel(who: string, mons: TeamRow[]): Promise<TeamRow[]> {
+  let left = mons;
+  const rows = () => left.map((m) => ({ species: m.species, name: speciesName(m.species), level: m.level, hp: 1, maxHp: 1, status: 0, item: 0, itemName: '', ability: '', moves: [], active: false }));
+  return new Promise((resolve) => {
+    if (!battleMenu || !rom) { resolve(left); return; }
+    swapping = true;
+    panelUp = true;
+    held.clear();
+    battleEl.classList.remove('screen', 'see', 'fight');
+    battleEl.classList.add('on', 'panel');
+    dispatchEvent(new Event('resize'));
+    panelDone = () => { panelDone = null; resolve(left); };
+    const show = () => battleMenu!.openDrop(who, rows(), take, closePanel);
+    const take = (at: number, give?: number) => {
+      battleMenu!.hideField();
+      void rom!.team(left, who, () => {}, () => {}, { take: at, give }).then((rest) => {
+        left = rest;
+        if (!panelUp) return;
+        if (left.length) show(); else closePanel();
+      });
+    };
+    show();
+  });
+}
+/** Which of the party, on the windows; null for BACK. */
+function askParty(title: string, can?: (m: PartyMember, rom: Rom | null) => boolean): Promise<number | null> {
+  return new Promise((resolve) => {
+    if (!battleMenu || !rom || !rom.partyCount()) { resolve(null); return; }
+    let slot: number | null = null;
+    swapping = true;
+    panelUp = true;
+    held.clear();
+    battleEl.classList.remove('screen', 'see', 'fight');
+    battleEl.classList.add('on', 'panel');
+    dispatchEvent(new Event('resize'));
+    panelDone = () => { panelDone = null; resolve(slot); };
+    battleMenu.openPick(title, (at) => { slot = at; closePanel(); }, closePanel, can);
+  });
 }
 /** What is the ROM's alone: the windows stand aside, and come back with what it changed. */
 async function panelWalk(run: (r: RomBattles) => Promise<unknown>): Promise<void> {
@@ -1371,10 +1407,12 @@ async function trade(n: number, species: number): Promise<void> {
     // BrLoot_HomeTrade); an event's trader's does not (br_event.c's Swap).
     const got = n >= HOME_N ? tradedInto(species) : species;
     if (c !== 'y' || !rom || isOut) return;
+    const slot = await askParty(`For ${name}`);
+    if (slot === null || !rom || isOut) return;
     swapping = true;
     held.clear();
     try {
-      given = await rom.trade(got, () => battleEl.classList.add('on'));
+      given = await rom.trade(got, () => battleEl.classList.add('on'), slot);
     } finally {
       swapping = false;
       battleEl.classList.remove('on');
@@ -2417,6 +2455,14 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
   // they leave. A phone's follow its picture.
   const DESK_MENU_H = 136;
   const resize = () => {
+    // The windows alone: no picture for them to follow, on a phone either.
+    if (touchPad && battleEl.classList.contains('panel')) {
+      const s = windowScale();
+      battleEl.style.setProperty('--s', String(s));
+      menu.setScale(s);
+      menu.setRoom(Infinity);
+      return;
+    }
     if (!touchPad) {
       const s = windowScale();
       battleEl.style.setProperty('--s', String(s));
@@ -4038,7 +4084,7 @@ async function boot(): Promise<void> {
     }
   }
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { get link() { return link; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; } };
+  (window as unknown as { __spike: unknown }).__spike = { get link() { return link; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; } };
 }
 
 void boot();

@@ -171,20 +171,21 @@ test('a dropped bag opens its team, and MOVES off the team opens the move screen
   const shown = () => page.locator('#battle').evaluate((el) => el.classList.contains('on'));
   const idle = () => expect.poll(() => s((s) => s.swapping), { timeout: 20_000 }).toBe(false);
 
-  // A beaten trainer's bag at my feet: POKeMON is the ROM's team screen (HBR-82). It
-  // opened nothing (Cam, 10-30): the page waited on a BUSY the ROM sends 120 frames late.
+  // A beaten trainer's bag at my feet: POKeMON is their team on the page's windows, each taken
+  // through the ROM's own screen unseen. It opened nothing (Cam, 10-30): the page waited on a
+  // BUSY the ROM sends 120 frames late.
   // TREECKO at 30 has forgotten moves to relearn; TORCHIC at 11 knows all it has learned.
   await s((s) => s.startFor({ type: 'bag', tick: 0, id: s.link.me, key: 0x7e0001, name: 'MAY', bag: { items: [{ id: 13, n: 3 }], money: 300, mons: [{ species: 277, level: 30 }, { species: 280, level: 11 }] } }));
   await expect.poll(() => s((s) => s.asking), { timeout: 10_000 }).toBe(true);
   await press('z');
   await expect.poll(shown, { timeout: 15_000 }).toBe(true);
-  await page.waitForTimeout(1000);
-  // A marks a mon of theirs, START moves the marked across, B is done.
-  await press('z');
-  await press('ArrowRight');
-  await press('z');
-  await press('Enter');
-  await press('x');
+  await expect(page.locator('.bm-slot').first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.bm-use-head')).toBeVisible();
+  await expect(page.locator('#gba')).toBeHidden();
+  await page.locator('.bm-slot').first().click();
+  await expect.poll(() => s((s) => s.rom!.partyCount()), { timeout: 15_000 }).toBe(1);
+  await expect(page.locator('.bm-slot').first()).toBeVisible({ timeout: 15_000 });
+  await page.locator('.bm-slot').first().click();
   await idle();
   expect(await s((s) => s.rom!.partyCount()), 'both mons taken out of the bag').toBe(2);
 

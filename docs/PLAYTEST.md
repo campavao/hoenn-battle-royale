@@ -110,7 +110,9 @@ transcripts were made from them; a frame at the time is the evidence for each li
   battle is its four in the same windows. PARTY and BAG on the field are those windows too: SWITCH and
   GIVE or TAKE by the page alone, an item through the ROM's BAG unseen (`bag-pick-field`), SUMMARY
   and MOVES the ROM's on purpose, an evolution or a move to forget shown when it comes up.
-  Not as drawn yet: a dropped POKeMON's TAKE or SWAP is still the ROM's swap screen; a forced
+  A dropped team is those windows too, taken through its screen unseen (`swap-pick`); a TM off the
+  ground and a trader ask who on them.
+  Not as drawn yet: a forced
   switch after a faint and SUMMARY are the ROM's own; the field's PARTY and BAG open the ROM's.
   The minimap's fog is a near colour, not the ROM's palette's.
 

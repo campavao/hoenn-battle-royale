@@ -1,0 +1,22 @@
+# swap-pick: a dropped POKeMON taken on the page's windows (Cam, 11-02: no old ROM screens). The
+# page opens the same screen unseen and writes who goes across into gBrSwapPick; the screen
+# moves them and shuts itself.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x1018 0B 26 23 00 00 03 00 09 02 00 03 0C 00 11 00 18 01 05 01 03 0C 00 11 00 20 01 05 01 FF 03 0C 00 11 00 00 64 00 00 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+tap A
+wait 40
+# POKeMON: the screen, and the page's answer for it: the drop's first.
+tap A
+wait 150
+expectne u32 gMain+4 CB2_Overworld+1
+poke u8 gBrSwapPick+1 1
+wait 120
+expect u32 gMain+4 CB2_Overworld+1
+expect u8 gPlayerPartyCount 2
+expect u8 gBrSwapPick+1 0
+say swap pick ok
