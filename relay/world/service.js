@@ -2179,6 +2179,7 @@ function tick(m, keys, step) {
     m.px = 0;
     m.py = 0;
     m.lift = 0;
+    if (a.kind === "warp") m.walkOn = a.dir;
   }
 }
 var BIKE_PX = [1, 2, 4];
@@ -2192,8 +2193,13 @@ function begin(m, keys, step) {
     m.runningState = NOT_MOVING;
     return;
   }
-  if (m.bike) return bikeBegin(m, dirOf(keys), step);
-  const dir = dirOf(keys);
+  const on = m.walkOn ?? 0;
+  m.walkOn = 0;
+  const walking = on ? step(m.spot, on) : null;
+  const going = walking && !walking.warp && !walking.hop && !walking.water;
+  if (m.bike) return bikeBegin(m, going ? on : dirOf(keys), step);
+  const dir = going ? on : dirOf(keys);
+  if (going) m.moveDir = on;
   if (!dir) {
     m.runningState = NOT_MOVING;
     return;
@@ -4254,6 +4260,10 @@ var Host = class {
   backlog(id) {
     return this.players.get(id)?.queue.length ?? 0;
   }
+  /** The number of the last of a phone's inputs a frame has used. */
+  acked(id) {
+    return this.players.get(id)?.seq ?? 0;
+  }
   /** A phone's keys for its next frames, numbered: `first` is the number of k[0]. */
   input(id, first, k) {
     const p = this.players.get(id);
@@ -4681,7 +4691,7 @@ var WorldService = class {
           const now = this.opts.now();
           if (now - phone.synced < SYNC_MS) return;
           phone.synced = now;
-          this.send(link, { t: "state", state: host.room.state() });
+          this.send(link, { t: "state", state: host.room.state(), a: host.acked(phone.id) });
         }
       },
       onClose: () => {
@@ -4986,4 +4996,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "8ba64750427a";
+export const WORLD_HASH = "75271896672f";

@@ -10121,8 +10121,9 @@ static void Cmd_trysetcaughtmondexflags(void)
     u32 personality = GetMonData(&gEnemyParty[0], MON_DATA_PERSONALITY, NULL);
 
 #if BR
-    // ...nor the watcher's POKeDEX, whose page would sit there waiting on an A press.
-    if (GetSetPokedexFlag(SpeciesToNationalPokedexNum(species), FLAG_GET_CAUGHT) || RecordedBattle_IsSpectateLive())
+    // A match never stops for the POKeDEX's page, whatever the flags say (Cam's 2026-11-01
+    // play-test, catch-no-dex.txt), and a watcher's would sit there waiting on an A press.
+    if (TRUE)
 #else
     if (GetSetPokedexFlag(SpeciesToNationalPokedexNum(species), FLAG_GET_CAUGHT))
 #endif
