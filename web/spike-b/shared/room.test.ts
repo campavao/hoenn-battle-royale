@@ -1838,6 +1838,16 @@ describe('the balls a match deals (br_balls.c)', () => {
 });
 
 describe('the Safari Zone loot (br_zone.c)', () => {
+  it('has more than one ball an area, on ground joined to its own (Cam, 11-01: "there definitely should be")', () => {
+    for (const seed of [4242, 7]) {
+      const room = makeRoom(MAPS, PATCHES, seed);
+      for (const c of ZONE_CELLS) {
+        const here = [...room.ground().values()].filter((g) => g.map === c.map);
+        expect(here.length, c.map).toBeGreaterThanOrEqual(3);
+        for (const a of here) for (const o of here) if (a !== o) expect(Math.max(Math.abs(a.x - o.x), Math.abs(a.y - o.y))).toBeGreaterThanOrEqual(GROUND_APART);
+      }
+    }
+  });
   it("six balls, one an area on br_zone.c's own cells, and about one match in eight has the MASTER BALL", () => {
     // The C's sSafariItemCells, by area: the room's cells are the ROM's, not a copy.
     const names: Record<string, string> = { 0: 'NORTHWEST', 1: 'NORTH', 12: 'NORTHEAST', 2: 'SOUTHWEST', 3: 'SOUTH', 13: 'SOUTHEAST' };

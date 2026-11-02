@@ -2479,6 +2479,7 @@ var CHEST_SPECIES = [397, 400, 334, 359, 329, 394, 366, 384, 376, 331, 343, 391,
 var CHEST_KEY = 4 << 20;
 var GROUND_PER_MAP = 6;
 var GROUND_APART = 6;
+var ZONE_EXTRA = 2;
 function cellRng(seed, map, x, y) {
   let s = (seed ^ Math.imul(x + 1, 2654435761) ^ Math.imul(y + 1, 2246822507)) >>> 0;
   for (let i = 0; i < map.length; i++) s = Math.imul(s ^ map.charCodeAt(i), 16777619) >>> 0;
@@ -2814,6 +2815,38 @@ var Room = class {
     ZONE_CELLS.forEach((c, i) => {
       if (this.maps.has(c.map) && !out.has(`${c.map}:${c.x}:${c.y}`)) out.set(`${c.map}:${c.x}:${c.y}`, { key: ++n, map: c.map, x: c.x, y: c.y, item: zone[i] });
     });
+    for (const c of ZONE_CELLS) {
+      const m = this.maps.get(c.map);
+      if (!m) continue;
+      const marked = new Set(this.patchesOn(c.map).map((q) => `${q.x}:${q.y}`));
+      const seen = /* @__PURE__ */ new Set();
+      let plain = [];
+      for (let y0 = 0; y0 < m.h; y0++) for (let x0 = 0; x0 < m.w; x0++) {
+        if (seen.has(`${x0}:${y0}`) || this.world.cell(c.map, x0, y0) !== 0) continue;
+        seen.add(`${x0}:${y0}`);
+        const here = [];
+        for (const q = [{ x: x0, y: y0 }]; q.length; ) {
+          const p = q.pop();
+          if (!marked.has(`${p.x}:${p.y}`) && !this.world.warpAt(c.map, p.x, p.y)) here.push(p);
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const x = p.x + dx, y = p.y + dy, k = `${x}:${y}`;
+            if (seen.has(k) || x < 0 || y < 0 || x >= m.w || y >= m.h || this.world.cell(c.map, x, y) !== 0) continue;
+            seen.add(k);
+            q.push({ x, y });
+          }
+        }
+        if (here.length > plain.length) plain = here;
+      }
+      const r = cellRng(this.seed ^ 5962257, c.map, c.x, c.y);
+      const taken = [c];
+      for (let i = 0; i < ZONE_EXTRA && plain.length; ) {
+        const at = plain.splice(Math.floor(r() * plain.length), 1)[0];
+        if (taken.some((t) => Math.max(Math.abs(t.x - at.x), Math.abs(t.y - at.y)) < GROUND_APART)) continue;
+        taken.push(at);
+        i++;
+        out.set(`${c.map}:${at.x}:${at.y}`, { key: ++n, map: c.map, x: at.x, y: at.y, item: ZONE_ITEMS[Math.floor(r() * ZONE_ITEMS.length)] });
+      }
+    }
     for (const [map, x, y, house, cache2] of ROOMS) {
       if (!cache2) continue;
       if (!this.maps.has(map) || this.places.has(map) || this.world.cell(map, x, y) > 1 || out.has(`${map}:${x}:${y}`)) continue;
@@ -5001,4 +5034,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "f0240f6be93c";
+export const WORLD_HASH = "1164cc687015";
