@@ -59,7 +59,7 @@ import { AskBox } from './askbox';
 import { ANIM_COUNTER_MAX } from '../src/tile-anims';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
-import { FADE_COLOR_WORD, FADE_Y_WORD, FOG_EVA, FOG_EVB, fadeOf, keyPicture } from '../src/field';
+import { fieldScale, FADE_COLOR_WORD, FADE_Y_WORD, FOG_EVA, FOG_EVB, fadeOf, keyPicture } from '../src/field';
 import { PadPrefsControl } from '../src/ui/padprefs';
 import { wireDpad } from './dpad';
 import { StartMenu } from './startmenu';
@@ -515,9 +515,9 @@ msgBox.setScale(Math.min(2, Math.max(1, innerWidth / 250)));
 const toGive: ({ key: number; item: number; gift?: boolean; hidden?: string } | { key: number; bag: Bag; name: string; person?: Person })[] = [];
 let giving = false;
 
-function say(text: string): void {
+function say(text: string, ms = 2500): void {
   msgBox.show(text);
-  sayUntil = performance.now() + 2500;
+  sayUntil = performance.now() + ms;
   reached = '';
 }
 
@@ -581,6 +581,9 @@ function reachLine(): string {
   return '';
 }
 
+/** How long "Found X!" holds the box, before "A: Take" for the ball beside it (Cam, 11-01:
+ *  "the found covers over what you're picking up"). */
+const FOUND_MS = 1000;
 /** How long a gift's line is up before its screen. */
 const GIFT_LINE_MS = 900;
 
@@ -617,7 +620,7 @@ function giveNext(): void {
       if (kept) say(`${name(item)} went in the BAG.`);
       else if (!gift) say(`Taught ${name(item)}!`);
     }
-    else if (got.items.length) rom?.sound(MUS_OBTAIN_ITEM), say(gift ? line : `Found ${got.items.map((g) => `${g.n > 1 ? `${g.n} ` : ''}${name(g.id)}`).join(', ')}!`);
+    else if (got.items.length) rom?.sound(MUS_OBTAIN_ITEM), say(gift ? line : `Found ${got.items.map((g) => `${g.n > 1 ? `${g.n} ` : ''}${name(g.id)}`).join(', ')}!`, FOUND_MS);
     else if (got.money) say(`Sold ${name(item)} for ¥${got.money}.`);
     else say(`${name(item)}! Your team got stronger.`);
   }, (e) => console.warn('spike give failed', e)).finally(() => { giving = false; giveNext(); });
@@ -2578,6 +2581,12 @@ let devW = 1, devH = 1;
 const modeBtn = document.getElementById('mode')!;
 
 function fitZoom(): number {
+  // A window with a mouse: a phone's pixel size, as /classic/ has it (field.ts fieldScale),
+  // and more map rather than a bigger one (Cam, 11-01: "we're really zoomed in").
+  if (matchMedia('(pointer: fine)').matches) {
+    const dpr = devicePixelRatio || 1;
+    return Math.max(1, Math.floor(fieldScale(innerWidth, innerHeight, dpr, Math.min(screen.width, screen.height)) * dpr));
+  }
   // The game's own view: the GBA's 15 x 10 tiles fit the window, the way the game
   // scales its picture (portrait phones get 15 across, not 15 tall: Cam found that
   // "more zoomed in than normal").
