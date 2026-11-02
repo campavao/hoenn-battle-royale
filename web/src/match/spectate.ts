@@ -37,6 +37,11 @@ interface LiveFight {
 /** How often a spectator re-asks while watching (Kanto's `Peek.SECONDS`). */
 export const PEEK_INTERVAL_MS = 3000;
 
+/** Where a bstart's data has its two gender bytes (after the names), and their seat bits
+ *  (br_spectate.c BR_BSTART_SEAT_MASK). */
+const BSTART_GENDERS = 24;
+const BSTART_SEAT_MASK = 0x7e;
+
 /** A bstart names its two trainers in bytes 8..23 of its data, straight out of
  *  gLinkPlayers -- which the proxy duel instance never fills (POK-300). The bots' names
  *  are the page's, so they go in here: seven Gen 3 characters and an EOS, side A first,
@@ -48,6 +53,18 @@ export function nameBstart(msg: BstartMsg, nameOf: (seat: number) => string, sid
   for (let i = 0; i < 2; i++) {
     const name = encodeGen3(nameOf(sides[i]).toUpperCase(), 7);
     for (let j = 0; j < 8; j++) data[8 + 8 * i + j] = j < name.length ? name[j] : 0xff;
+  }
+  return { ...msg, data };
+}
+/** A bstart's two sides as seats on the watcher's ROM (br_spectate.c BrSpectate_SideSkin): the
+ *  gender bytes carry a seat in their upper bits, the fighter's numbering, and the watcher
+ *  has the two looks under its own. Not matching, both trainers drew as the default (Cam,
+ *  2026-11-01, 13:49: "their player sprites are not working"). A wild side has no seat. */
+export function seatBstart(msg: BstartMsg, seats: [number, number]): BstartMsg {
+  const data = msg.data.slice();
+  for (let i = 0; i < 2; i++) {
+    const at = BSTART_GENDERS + i;
+    if (data[at] & BSTART_SEAT_MASK) data[at] = (data[at] & ~BSTART_SEAT_MASK) | ((seats[i] + 1) << 1);
   }
   return { ...msg, data };
 }

@@ -25,7 +25,7 @@ import { BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_
 import { startMenuTable } from '../src/touch';
 import { FADE_COLOR_WORD, FADE_Y_WORD, fadeOf } from '../src/field';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
-import { CATCH_UP_SPEED, spectatePace } from '../src/match/spectate';
+import { CATCH_UP_SPEED, seatBstart, spectatePace } from '../src/match/spectate';
 import type { SpMsg } from './shared/wire';
 import { readTally, type MatchTally } from '../src/match/tally';
 import type { FameMon } from '../src/ui/results';
@@ -91,6 +91,8 @@ const ROM_BASE = 0x08000000;
 const FADE_IN_WAIT = 45;
 /** How fast the hidden ROM runs a battle's start nobody sees (battle()). */
 const HURRY_SPEED = 8;
+/** Frames of a late watcher's catch-up the page hides, at most: about 5 s at CATCH_UP_SPEED. */
+const CATCH_UP_HIDDEN = 2400;
 /** `gBrBattle.hurry` (include/br/br_battle.h): no transition, a quick intro. */
 const BATTLE_HURRY = 13;
 /** `gBrBattle.autoText`: a battle's text turns its own pages, on a desktop too (Cam, 11-01:
@@ -1265,7 +1267,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         // Side 1 followed: the replay turned round (WatchingSideOne).
         if (feed.turned) emu.write(spectAt + 8, FOE_SEAT, 8);
         emu.write(mainFunc, 0, 32);
-        let shown = false, ended = false, speed = 1, waited = 0, battle = -1;
+        let shown = false, seen = false, hid = 0, ended = false, speed = 1, waited = 0, battle = -1;
         const pace = (to: number) => {
           speed = to;
           emu.setSpeed(to);
@@ -1274,16 +1276,19 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         const tick = emu.onFrame(() => {
           drain(() => undefined);
           for (let m = feed.peek(); m; m = feed.peek()) {
-            const slots = packSlot(m);
+            const slots = packSlot(m.t === 'bstart' ? seatBstart(m as Extract<Msg, { t: 'bstart' }>, [0, FOE_SEAT]) : m);
             if (MAILBOX.RING_SLOTS - box.pending() < slots.length) break;
             for (const sl of slots) box.push(sl.type, sl.payload);
             if (m.t === 'bstart') battle = m.battle;
             feed.shift();
           }
-          if (!shown && emu.read(spectAt + 5, 8) && emu.read(mainFunc, 32) !== 0) { shown = true; onStart(); }
+          if (!shown && emu.read(spectAt + 5, 8) && emu.read(mainFunc, 32) !== 0) shown = true;
           if (!shown) waited++;
           const want = shown ? spectatePace(emu.read(spectAt + 15, 8), () => false) : 1;
           if (want !== speed) pace(want);
+          // A late watcher's catching up is nobody's to see: dropped into the fight as it
+          // stands (Cam, 11-01, 13:59: "there's no way to just drop us in mid battle").
+          if (shown && !seen && (want !== CATCH_UP_SPEED || ++hid > CATCH_UP_HIDDEN)) { seen = true; onStart(); }
           // The fight is over and everything of it is in: the replay finishes what it has.
           if (shown && !ended && battle >= 0 && feed.over() && !feed.peek() && box.pending() === 0) {
             ended = true;
