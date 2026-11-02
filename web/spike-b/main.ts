@@ -33,7 +33,7 @@ import { over } from './shared/over';
 import { Lobby, me, seeThrough, type RoomInfo } from './lobby';
 import { loadCareer, ordinal, recordMatch } from '../src/match/career';
 import type { MatchTally } from '../src/match/tally';
-import { tallySince, teamMembers, PARTY_LEN } from './carry';
+import { tallySince, teamMembers, PARTY_LEN, spillShows } from './carry';
 import { BagPanel } from './bagpanel';
 import { Tag } from './tag';
 import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, startStickLearn, stickKeys, stickLearnStep, type AxisSense, type StickMap } from '../src/pad';
@@ -3469,7 +3469,7 @@ function drawGround(x0: number, y0: number, x1: number, y1: number): void {
   };
   for (const g of link.room.ground().values()) if (!link.room.picked.has(g.key)) put(g.gift ? giftArt(g.key) : tinted(g.item), g.map, g.x, g.y);
   for (const b of link.room.spills.values()) {
-    if (link.room.picked.has(b.key)) continue;
+    if (!spillShows(b, link.room.picked.get(b.key), link.me)) continue;
     // An event's legendary stands as itself (br_legend.c's sLegends); a piece with one mon
     // or one item in it is a ball (br_loot.c), anything more a bag.
     const legend = b.legend && art ? legendArt(b.bag.mons![0].species) : b.person ? personArt(b.person.gfx) : null;

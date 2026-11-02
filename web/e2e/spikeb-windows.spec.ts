@@ -11,8 +11,8 @@ test.skip(!romExists(), `no ROM at ${romPath()} -- set HBR_ROM or place pokeemer
 const spike = <T>(page: Page, f: (s: any) => T) => page.evaluate((src) => new Function('s', `return (${src})(s)`)((window as any).__spike), f.toString()) as Promise<T>;
 
 /** Into a match of the page's own with a team of six, a little way from anything. */
-async function withTeam(page: Page): Promise<void> {
-  await page.goto(`/?rom=${romHashParam()}#solo&nobots&safari=0&fog=900&seed=7`);
+async function withTeam(page: Page, fog = 900): Promise<void> {
+  await page.goto(`/?rom=${romHashParam()}#solo&nobots&safari=0&fog=${fog}&seed=7`);
   await page.locator('#intro-go').click({ timeout: 90_000 });
   await page.waitForFunction(() => { const s = (window as any).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 120_000 });
   await page.waitForTimeout(4000);
@@ -385,6 +385,61 @@ test('PARTY and BAG on a phone: the dock opens the windows, and everything fits'
   await shot(page, 'phone-field-bag');
   await page.locator('#battle-menu .bm-back').click();
   await expect(page.locator('.bm-bag-head')).toBeHidden();
+  await ctx.close();
+});
+
+test('on a small phone every window a battle opens fits on the glass (Cam, 11-02, iPhone 13 mini)', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 600 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await withTeam(page);
+  await intoBattle(page);
+  const fits = async (what: string, selector: string) => {
+    const off = await page.locator(selector).evaluateAll((all) => all.filter((b) => (b as HTMLElement).offsetParent !== null && b.getBoundingClientRect().bottom > innerHeight).length);
+    expect(off, `${what}: nothing past the bottom of the glass`).toBe(0);
+  };
+  await fits('the moves', '#battle-menu button');
+  await page.locator('.bm-act-party').click();
+  await expect(page.locator('.bm-slot').first()).toBeVisible();
+  await page.waitForTimeout(200);
+  await fits('the party', '#battle-menu button');
+  await page.locator('.bm-slot').first().click();
+  await expect(page.locator('.bm-member')).toBeVisible();
+  await page.waitForTimeout(200);
+  await shot(page, 'mini-member');
+  await fits('one of them', '#battle-menu button');
+  await page.locator('.bm-m-btn').first().click();
+  await page.locator('#battle-menu .bm-back').click();
+  await page.locator('.bm-act-bag').click();
+  await expect(page.locator('.bm-bag-head')).toBeVisible();
+  await page.waitForTimeout(200);
+  await fits('the bag', '#battle-menu button');
+  await ctx.close();
+});
+
+test('the big MAP shows the fog, as the minimap does (Cam, 11-02)', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  // A short first phase: the ring is in by the time there is a team to see the MAP with.
+  await withTeam(page, 40);
+  await expect.poll(() => spike(page, (s) => s.link.room.ring().r), { timeout: 60_000 }).toBeLessThan(1000);
+  await page.locator('.hud-mini').click(); 
+  await expect(page.locator('#gba')).toBeVisible({ timeout: 20_000 });
+  await page.waitForTimeout(2000);
+  await shot(page, 'phone-map');
+  const fog = await page.evaluate(() => {
+    const c = document.getElementById('ringfog') as HTMLCanvasElement;
+    const r = c.getBoundingClientRect(), z = getComputedStyle(c);
+    const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+    let painted = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i]) painted++;
+    const g = document.getElementById('gba')!.getBoundingClientRect();
+    return { on: c.classList.contains('on'), display: z.display, w: r.width, h: r.height, x: r.left, y: r.top, painted, gba: [g.left, g.top, g.width, g.height], z: z.zIndex, pos: z.position };
+  });
+  expect(fog.on, 'the fog canvas is on').toBe(true);
+  expect(fog.painted, 'and has fog on it').toBeGreaterThan(0);
+  expect(fog.w).toBeCloseTo(fog.gba[2], 0);
   await ctx.close();
 });
 

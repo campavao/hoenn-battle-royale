@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAG_AT, BAG_LEN, arrived, fameTeam, fieldOf, healed, partyWhole, rekey, spillOf, tallySince, teamOf, withMoney, withHeld, teamMembers } from './carry';
+import { BAG_AT, BAG_LEN, arrived, fameTeam, fieldOf, healed, partyWhole, rekey, spillOf, tallySince, teamOf, withMoney, withHeld, teamMembers, spillShows } from './carry';
 import HMS from '../src/data/hms.json';
 
 describe('rekey', () => {
@@ -244,5 +244,17 @@ describe('what one of them holds', () => {
     const had = one();
     withHeld(had, 0, 0);
     expect(teamMembers(had, 1, () => 'X')[0].item).toBe(13);
+  });
+});
+
+describe('a piece on the ground while it is taken up', () => {
+  it('a bag I have open stays, nobody else\'s does', () => {
+    expect(spillShows({}, undefined, 1)).toBe(true);
+    expect(spillShows({}, 1, 1)).toBe(true);
+    expect(spillShows({}, 2, 1)).toBe(false);
+  });
+  it('a legendary or a person I am fighting does not stand there too', () => {
+    expect(spillShows({ legend: true }, 1, 1)).toBe(false);
+    expect(spillShows({ person: {} }, 1, 1)).toBe(false);
   });
 });
