@@ -33,7 +33,9 @@ import { over } from './shared/over';
 import { Lobby, me, seeThrough, type RoomInfo } from './lobby';
 import { loadCareer, ordinal, recordMatch } from '../src/match/career';
 import type { MatchTally } from '../src/match/tally';
-import { tallySince } from './carry';
+import { tallySince, teamMembers, PARTY_LEN } from './carry';
+import { BagPanel } from './bagpanel';
+import { Tag } from './tag';
 import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, startStickLearn, stickKeys, stickLearnStep, type AxisSense, type StickMap } from '../src/pad';
 import { fameOf, resultsView, standingsOf, tallyLines, type FameMon } from '../src/ui/results';
 import { favourite } from '../src/match/tally';
@@ -71,7 +73,7 @@ import { BATTLE_TYPE_TRAINER, CARD_H, SidesView } from '../src/ui/sides';
 import { BAG_POSITION_POCKET, readBattleBag } from '../src/ui/bag';
 import { MENU_ACTION, TouchLayer } from '../src/touch';
 import { HUD } from '../src/net/hud';
-import { ITEM_MACH_BIKE, PhoneHud, fieldMoves, fogPhase, signFor, type FieldMove } from '../src/ui/phonehud';
+import { ITEM_MACH_BIKE, MINI_MAP, PhoneHud, fieldMoves, fogPhase, signFor, type FieldMove } from '../src/ui/phonehud';
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
 import { cardFields } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
@@ -233,6 +235,68 @@ function layout(maps: WorldMap[]): Map<string, Placed> {
 }
 
 let art: RomArt | null = null;
+const monIcons = new Map<number, HTMLCanvasElement | null>();
+function monIconOf(species: number): HTMLCanvasElement | null {
+  if (!monIcons.has(species) && art) monIcons.set(species, art.monIcon(species));
+  return monIcons.get(species) ?? null;
+}
+let bagSpriteArt: HTMLCanvasElement | null = null;
+function bagArtOf(): HTMLCanvasElement | null {
+  return (bagSpriteArt ??= art?.bagSprite() ?? null);
+}
+/** A window's size on this screen, CSS pixels to a GBA pixel: a phone's from its width, a
+ *  window with a mouse's whole, by its height. */
+function windowScale(): number {
+  return touchPad ? Math.min(2, Math.max(1, innerWidth / 250)) : Math.max(2, Math.min(4, Math.floor(innerHeight / 360)));
+}
+
+// The minimap: the MAP's own picture round where the trainer is, the fog on it, the trainer on
+// that (Cam, 11-02: "this should be a minimap ... which is what indicates that you can click
+// to open the map too").
+const miniCanvas = document.createElement('canvas');
+miniCanvas.width = miniCanvas.height = MINI_MAP;
+let regionPixels: ImageData | null | undefined;
+let miniKey = '';
+const FOG_TINT = [152, 96, 200], FOG_MIX = 0.62;
+function miniFrame(a: Actor | undefined): string {
+  if (!a || !ringMap || !art) return miniKey;
+  if (regionPixels === undefined) {
+    const cv = art.regionMap();
+    regionPixels = cv ? cv.getContext('2d')!.getImageData(0, 0, 240, 160) : null;
+  }
+  if (!regionPixels) return miniKey;
+  const ring = link.room.ring();
+  const at = ringMap.pixelOf(a.m.spot);
+  const key = `${at.x}|${at.y}|${a.skin}|${ring.last}|${ring.r.toFixed(1)}|${ring.cx.toFixed(0)}|${ring.cy.toFixed(0)}`;
+  if (key === miniKey) return key;
+  miniKey = key;
+  const n = MINI_MAP;
+  const sx = Math.max(6, Math.min(234 - n, at.x - n / 2)), sy = Math.max(14, Math.min(138 - n, at.y - n / 2));
+  const c = miniCanvas.getContext('2d')!;
+  const img = c.createImageData(n, n);
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const from = ((sy + y) * 240 + sx + x) * 4, to = (y * n + x) * 4;
+      const fog = ringMap.fogAt(sx + x, sy + y, ring);
+      for (let j = 0; j < 3; j++) {
+        const v = regionPixels.data[from + j];
+        img.data[to + j] = fog ? v * (1 - FOG_MIX) + FOG_TINT[j] * FOG_MIX : v;
+      }
+      img.data[to + 3] = 255;
+    }
+  }
+  c.putImageData(img, 0, 0);
+  // The trainer's head, on their cell.
+  const gfx = SKIN_GFX[a.skin] ?? SKIN_GFX[0];
+  const s = sheet(gfx);
+  if (s) {
+    c.imageSmoothingEnabled = false;
+    const w = SHEETS[String(gfx)].w;
+    c.drawImage(s, 0, 0, w, 16, Math.round(at.x - sx - w / 2), Math.round(at.y - sy - 8), w, 16);
+  }
+  return key;
+}
+
 /** METATILE_Cave_SealedChamberEntrance_* (metatile_labels.h), where Open lays them. */
 const SEALED_CHAMBER: [number, number, number][] = [[7, 19, 0x22a], [8, 19, 0x22b], [9, 19, 0x22c], [7, 20, 0x232], [8, 20, 0x233], [9, 20, 0x234]];
 /** METATILE_Cave_EntranceCover over SealedChamberBraille_Mid: the wall before it opens. */
@@ -325,6 +389,16 @@ addEventListener('keydown', (e) => {
   const k = STAGE_KEY[e.key];
   if (k) { e.preventDefault(); if (!e.repeat) lobby.stage.key(k); }
 }, true);
+// The windows over a battle have the keys while they are up, as a pad's L and R: Q and E.
+const windowKey = (key: string): string | undefined => (key === 'q' || key === 'Q' ? 'l' : key === 'e' || key === 'E' ? 'r' : KEYMAP[key]);
+addEventListener('keydown', (e) => {
+  if (lobby?.shown || e.ctrlKey || e.metaKey || !battleMenu?.isShown) return;
+  const k = windowKey(e.key);
+  if (!k) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  if (!e.repeat) battleMenu.key(k);
+}, true);
 addEventListener('keydown', (e) => {
   if (intro()) return;
   if (e.key === 'v' || e.key === 'V') { toggleSpectate(); return; }
@@ -332,6 +406,8 @@ addEventListener('keydown', (e) => {
   if ((e.key === 'f' || e.key === 'F') && !e.repeat) { itemfinder(); return; }
   if ((e.key === 'r' || e.key === 'R') && !e.repeat) { openSheet(); return; }
   if (e.key.toLowerCase() === MARK_KEY && !e.repeat) { markHere('key'); return; }
+  if ((e.key === 'q' || e.key === 'Q') && !e.repeat && !asking) { void runMenu('1'); return; }
+  if ((e.key === 'e' || e.key === 'E') && !e.repeat && !asking) { void runMenu('2'); return; }
   if (!e.ctrlKey && !e.metaKey && !e.repeat && (e.key === '+' || e.key === '=')) { zoomBy(1); return; }
   if (!e.ctrlKey && !e.metaKey && !e.repeat && (e.key === '-' || e.key === '_')) { zoomBy(-1); return; }
   const k = KEYMAP[e.key];
@@ -524,7 +600,6 @@ let giving = false;
 function say(text: string, ms = 2500): void {
   msgBox.show(text);
   sayUntil = performance.now() + ms;
-  reached = '';
 }
 
 // ---- the rod (fish.ts): SELECT facing water, as the room took it --------------------------
@@ -545,7 +620,6 @@ function cast(map: string, x: number, y: number): void {
   if (rod === -1 || !rom) { link.end(); return; }
   casting = { f: new Fishing(rod, FISH_MAPS.has(map), () => (Math.random() * 0x10000) | 0), rod, map, x, y };
   sayUntil = tickUntil = 0;
-  reached = '';
 }
 
 /** A frame of my cast: the box says the dots, the bite and what came of it; a POKeMON on
@@ -568,23 +642,54 @@ function fishFrame(): void {
   handOff(null, (r, onStart) => r.fish(p.m.group, p.m.num, behavior, c.rod, onStart, fog));
 }
 
-/** What lies where I face, or under me, held in the box for as long as I stand there, as
- *  the live match holds it (br_loot.c HoldLineForReach, "{A} Take POTION"; Cam, 10-31:
- *  "doesn't show item description when I'm facing it"); '' for nothing to take. */
-let reached = '';
-function reachLine(): string {
-  if (!art || isOut || spectating || battle || swapping || asking || casting) return '';
-  const a = link.mine();
-  if (!a) return '';
-  const { map, x, y } = a.m.spot;
-  const d = ({ 1: [0, 1], 2: [0, -1], 3: [-1, 0], 4: [1, 0] } as Record<number, number[]>)[a.m.facing] ?? [0, 0];
-  for (const [cx, cy] of [[x + d[0], y + d[1]], [x, y]]) {
-    const g = link.room.groundAt(map, cx, cy);
-    if (g && !g.gift) return `A: Take ${art.itemName(g.item) || 'the item'}`;
-    const s = link.room.spillAt(map, cx, cy);
-    if (s && !s.person) return s.bag.mons?.length && !s.bag.items.length && !s.bag.money ? `A: Take the POKéMON` : `A: Take ${s.name}'s BAG`;
-  }
+const itemTag = new Tag(document.getElementById('item-tag') as HTMLCanvasElement);
+/** What is on a cell, as its tag says it. */
+function nameOn(map: string, x: number, y: number): string {
+  if (!art) return '';
+  const g = link.room.groundAt(map, x, y);
+  if (g && !g.gift) return art.itemName(g.item) || '';
+  const s = link.room.spillAt(map, x, y);
+  if (s && !s.person) return s.bag.mons?.length && !s.bag.items.length && !s.bag.money ? 'POKéMON' : `${s.name}'s BAG`;
   return '';
+}
+/** Where the mouse is, for the tag over what it rests on. */
+let hover: { x: number; y: number } | null = null;
+if (matchMedia('(pointer: fine)').matches) {
+  const world = document.getElementById('world')!;
+  world.addEventListener('pointermove', (e) => { hover = { x: e.clientX, y: e.clientY }; });
+  world.addEventListener('pointerleave', () => { hover = null; });
+}
+/** The name by the thing (Cam, 11-02): over what I face or stand on, as the live match holds
+ *  its line (br_loot.c HoldLineForReach; Cam, 10-31: "doesn't show item description when I'm
+ *  facing it"), or what the mouse rests on anywhere in view. */
+function tagFrame(): void {
+  const blocked = !art || !link || battle || swapping || asking || casting || battleEl.classList.contains('on');
+  let hit: { text: string; map: string; x: number; y: number } | null = null;
+  if (!blocked) {
+    const dpr = devicePixelRatio || 1;
+    if (hover) {
+      const wx = cam.x + (hover.x * dpr - devW / 2) / zoom, wy = cam.y + (hover.y * dpr - devH / 2) / zoom;
+      const p = mapUnder(wx, wy);
+      if (p) {
+        const x = Math.floor(wx / TILE) - p.gx, y = Math.floor(wy / TILE) - p.gy;
+        const text = nameOn(p.m.id, x, y);
+        if (text) hit = { text, map: p.m.id, x, y };
+      }
+    }
+    const a = isOut || spectating ? undefined : link.mine();
+    if (!hit && a) {
+      const { map, x, y } = a.m.spot;
+      const d = ({ 1: [0, 1], 2: [0, -1], 3: [-1, 0], 4: [1, 0] } as Record<number, number[]>)[a.m.facing] ?? [0, 0];
+      for (const [cx, cy] of [[x + d[0], y + d[1]], [x, y]]) {
+        const text = nameOn(map, cx, cy);
+        if (text) { hit = { text, map, x: cx, y: cy }; break; }
+      }
+    }
+  }
+  const g = hit && global({ map: hit.map, x: hit.x, y: hit.y });
+  if (!hit || !g) { itemTag.hide(); return; }
+  const dpr = devicePixelRatio || 1;
+  itemTag.show(hit.text, ((g.gx * TILE + TILE / 2 - cam.x) * zoom) / dpr + innerWidth / 2, ((g.gy * TILE - cam.y) * zoom) / dpr + innerHeight / 2);
 }
 
 /** How long "Found X!" holds the box, before "A: Take" for the ball beside it (Cam, 11-01:
@@ -649,7 +754,7 @@ for (const [id, rowFor] of [['startmenu', (x: number, y: number) => startMenu.ro
 }
 
 function askPaint(): void {
-  if (!asking) return;
+  if (!asking || bagPanel) return;
   // The window's own size, not the field's: a player zoomed out still has to read and tap it.
   const scale = fitZoom() / (devicePixelRatio || 1);
   const labels = asking.rows.map(([label]) => label);
@@ -667,6 +772,7 @@ function askPaint(): void {
 
 function askKey(k: string): void {
   if (!asking) return;
+  if (bagPanel) { bagPanel.key(k); return; }
   const r = asking.roller;
   if (r) {
     if (k !== 'b' && k !== 'start') rom?.sound(SE_SELECT);
@@ -700,12 +806,44 @@ function ask(title: string, rows: [string, string][], start = false, more: { pic
 
 /** A at a dropped bag: what it holds, the way the match asks (br_loot.c's TryTake). What
  *  is left goes back down as the bag, for somebody else (POK-294: nothing leaves). */
+let bagPanel: BagPanel | null = null;
+/** The windows over the map for a dropped bag (bagpanel.ts): the keys and a pad go to them
+ *  through `asking`, which also shuts them when a fight comes. */
+function askBag(who: string, bag: Bag, species: number | undefined): Promise<string> {
+  return new Promise((resolve) => {
+    const a = art;
+    held.clear();
+    document.body.classList.add('panel-up');
+    asking = {
+      pick: 0, start: false, title: '', rows: [],
+      done: (c) => {
+        asking = null;
+        bagPanel?.close();
+        bagPanel = null;
+        document.body.classList.remove('panel-up');
+        calmUntil = frame + 30;
+        resolve(c);
+      },
+    };
+    bagPanel = new BagPanel(document.getElementById('bag-panel')!, {
+      who,
+      mons: species !== undefined,
+      items: bag.items.map((s) => ({ id: s.id, n: s.n, name: a?.itemName(s.id) || `item ${s.id}` })),
+      money: bag.money,
+      bag: () => bagArtOf(),
+      icon: () => (species !== undefined ? monIconOf(species) : null),
+      done: (c) => asking?.done(c),
+      scale: windowScale(),
+    }, !touchPad);
+  });
+}
+
 async function openBag(key: number, bag: Bag, who: string): Promise<void> {
   // Level 0 is the DAY CARE's chest (room.ts placeChest): the rung the match is at now.
   const rung = rungForPhase(link.room.ring().phase + 1);
   const mons = (bag.mons ?? []).map((m) => (m.level > 0 ? m : { ...m, level: rung }));
   const things = bag.items.length > 0 || bag.money > 0;
-  const c = mons.length && things ? await ask(`What will you take from ${who}'s BAG?`, [['POKéMON', 'mons'], ['BAG', 'items'], ['CANCEL', '']]) : mons.length ? 'mons' : 'items';
+  const c = mons.length && !things ? 'mons' : await askBag(who, bag, mons[0]?.species);
   if (c === 'items') return takeBag(key, bag, who);
   if (c !== 'mons' || isOut || !rom) { link.drop(key, bag); return; }
   swapping = true;
@@ -1069,6 +1207,12 @@ let seeing = false;
  *  until the battle is back and done fading in). A bag that closes onto anything else (a
  *  POTION's party screen) is not held, nor one up longer than BAG_HOLD: the player's. */
 let romBag: 'bag' | 'reshow' | 'free' | null = null;
+let partyHold = false;
+let partyGone = false;
+let partyHeld = 0;
+/** Frames the picture waits on the party's unseen walk, at most. */
+const PARTY_HOLD = 900;
+let battleMenu: BattleMenu | null = null;
 let bagFrames = 0;
 const BAG_HOLD = 150;
 function trackBag(): void {
@@ -1096,7 +1240,16 @@ function seeFrame(): void {
   // USE in the page's bag is the ROM's own BAG doing it (br_bag.h): its screen, and the
   // battle's redraw after it, have no key and showed bare -- black, the bag, a blue fade
   // (HBR-110). The battle's last picture stays up over them (trackBag).
-  if (up && seeing && (romBag === 'bag' || romBag === 'reshow')) return;
+  if (up && seeing && (romBag === 'bag' || romBag === 'reshow' || partyHold)) {
+    // Sending one out is the ROM's own party screen, walked unseen: back when its battle is.
+    const main = romTables.sym('gMain'), fight = romTables.sym('BattleMainCB2');
+    if (partyHold && main !== undefined && fight !== undefined) {
+      const inFight = ((rom!.emu.read(main + 4, 32) ^ fight) & ~1) === 0;
+      if (!inFight) partyGone = true;
+      if ((partyGone && inFight && !romFading()) || ++partyHeld > PARTY_HOLD) partyHold = false;
+    }
+    return;
+  }
   if (keyed) {
     keyPicture(keyImage.data);
     keyCanvas.getContext('2d')?.putImageData(keyImage, 0, 0);
@@ -1909,6 +2062,9 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
     onResetPad: () => { resetPad(); lobby?.stage.redraw(); },
     onForget: () => { forgetRom(); },
     onSaveLog: saveLog,
+    onCard: () => { lobby?.closeSheet(); void runMenu('4'); },
+    // A phone has no K: the sheet's row, and the sheet shuts so the line is seen.
+    onMark: touchPad ? () => { markHere('sheet'); lobby?.closeSheet(); } : undefined,
     pad: touchPad ? {
       hidden: padPrefs.hidden,
       onMove: () => { lobby?.closeSheet(); padPrefs.edit(); },
@@ -1936,15 +2092,25 @@ function wirePhoneHud(desk = false): void {
     onMap: () => void runMenu('13'),
     onStart: () => void openMenu(),
     onUse: () => { selectUntil = frame + 40; },
+    mini: {
+      draw: (c, x, y, size) => c.drawImageTo(miniCanvas, 0, 0, MINI_MAP, MINI_MAP, x, y, size, size),
+      key: () => miniFrame(link?.room.actor(link.me) ?? (spectating && follow ? link?.room.actor(follow) : undefined)),
+    },
+    bumpers: {
+      onBag: () => void runMenu('2'),
+      bag: () => bagArtOf(),
+      keys: desk ? { party: 'Q', bag: 'E' } : undefined,
+    },
   });
   document.getElementById('hud-menu')!.addEventListener('click', () => openSheet());
   const scale = () => {
-    const s = Math.min(2, Math.max(1, innerWidth / 250));
-    document.documentElement.style.setProperty('--s', String(s));
-    hud.setScale(s);
     // A window with a mouse: whole pixels, by its height (Cam, 11-01: the bar "feels very
     // sort of hidden", and a TM's name in it went unread).
-    msgBox.setScale(desk ? Math.max(2, Math.min(4, Math.floor(innerHeight / 360))) : s);
+    const s = windowScale();
+    document.documentElement.style.setProperty('--s', String(s));
+    hud.setScale(s);
+    msgBox.setScale(s);
+    itemTag.setScale(s);
   };
   addEventListener('resize', scale);
   scale();
@@ -1956,7 +2122,7 @@ function wirePhoneHud(desk = false): void {
     const mine = link?.room.actor(link.me);
     const me = mine ?? (spectating && follow ? link?.room.actor(follow) : undefined);
     top.hidden = !me;
-    dock.hidden = desk || !mine;
+    dock.hidden = !mine;
     if (!me) { hud.hide(); return; }
     const ring = link.room.ring();
     const res = link.room.results;
@@ -2043,11 +2209,91 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
   const touch = new TouchLayer({ emu, canvas: gbaCanvas, surface: gbaCanvas, symbols, rom: files.rom });
   touch.attach();
   const root = document.getElementById('battle-menu')!;
+  // The party's slot on the ROM's own screen (party_menu.c GetPartyIdFromBattleSlot): which is
+  // out, and sending another out by walking that screen, unseen.
+  const partyAt = sym('gPlayerParty'), countAt = sym('gPlayerPartyCount');
+  const partyId = (slot: number) => {
+    const at = sym('gBattlePartyCurrentOrder');
+    if (at === undefined) return slot;
+    const b = emu.read(at + (slot >> 1), 8);
+    return slot & 1 ? b & 0xf : b >> 4;
+  };
+  const task = sym('Task_HandleChooseMonInput'), tasks = sym('gTasks'), partyMenu = sym('gPartyMenu');
+  /** struct Task: 16 of them, 40 bytes, func first and isActive after it. */
+  const choosing = () => {
+    if (task === undefined || tasks === undefined) return false;
+    for (let i = 0; i < 16; i++) {
+      if (emu.read(tasks + i * 40 + 4, 8) && ((emu.read(tasks + i * 40, 32) ^ task) & ~1) === 0) return true;
+    }
+    return false;
+  };
+  const PARTY_SLOT_ID = 9;
+  let walk: { slot: number; summary: boolean; step: number; frames: number } | null = null;
+  const walkParty = (slot: number, summary: boolean) => {
+    walk = { slot, summary, step: 0, frames: 0 };
+    partyHold = !summary;
+    partyGone = false;
+    partyHeld = 0;
+    touch.chooseBattle(MENU_ACTION, 2);
+  };
+  emu.onFrame(() => {
+    if (!walk) return;
+    walk.frames++;
+    if (walk.step === 0) {
+      if (choosing()) {
+        emu.write(partyMenu! + PARTY_SLOT_ID, walk.slot, 8);
+        touch.tapKey('a');
+        walk.step = 1;
+        walk.frames = 0;
+      } else if (walk.frames > 400) { walk = null; partyHold = false; }
+    } else if (walk.step === 1 && walk.frames > 40) {
+      // Its little menu: SHIFT, SUMMARY, CANCEL.
+      touch.tapKey(walk.summary ? 'down' : 'a');
+      walk.step = walk.summary ? 2 : 3;
+      walk.frames = 0;
+    } else if (walk.step === 2 && walk.frames > 12) {
+      touch.tapKey('a');
+      walk.step = 4;
+      walk.frames = 0;
+    } else if (walk.step === 3 && walk.frames % 30 === 0) {
+      // SHIFT is taken once its question has printed: pressed again until the party is gone.
+      // Back on the party's list means the ROM said no (trapped, say): its line, then out.
+      const main = sym('gMain'), fight = sym('BattleMainCB2');
+      const inFight = main !== undefined && fight !== undefined && ((emu.read(main + 4, 32) ^ fight) & ~1) === 0;
+      if (inFight) walk = null;
+      else if (choosing()) { touch.tapKey('b'); walk = null; }
+      else if (walk.frames > 400) { touch.tapKey('b'); walk = null; }
+      else touch.tapKey('a');
+    } else if (walk.step === 4) {
+      // The SUMMARY is the player's until it shuts; then the party, which B leaves.
+      if (walk.frames > 60 && choosing()) { touch.tapKey('b'); walk = null; }
+    }
+  });
   const menu = new BattleMenu({
     root,
     rom: tables,
     choose: (which, slot, move) => touch.chooseBattle(which, slot, move),
     back: () => touch.tapKey('b'),
+    focusFirst: !touchPad,
+    firstMoves: {
+      readParty: () => {
+        if (partyAt === undefined || countAt === undefined) return [];
+        const out = sym('gBattlerPartyIndexes');
+        const lead = out === undefined ? 0 : emu.read(out, 16);
+        const count = emu.read(countAt, 8);
+        return teamMembers(emu.bytes(partyAt, PARTY_LEN).slice(), count, speciesName).map((m, i) => ({
+          ...m,
+          itemName: art?.itemName(m.item) ?? '',
+          ability: art?.abilityName(m.species, m.ability) ?? '',
+          active: partyId(i) === lead,
+        }));
+      },
+      icon: (species) => monIconOf(species),
+      bag: () => bagArtOf(),
+      keys: touchPad ? undefined : { party: 'Q', bag: 'E' },
+      switchTo: (slot) => walkParty(slot, false),
+      summary: (slot) => walkParty(slot, true),
+    },
     onShown: (on) => document.body.classList.toggle('battle-menu', on),
     readBag: () => readBattleBag(emu, sym, tables),
     useItem: sym('gBrBag') !== undefined && sym('gBagPosition') !== undefined
@@ -2057,7 +2303,19 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       })
       : undefined,
   });
+  battleMenu = menu;
+  // A window with a mouse: the windows at their whole-pixel size, under a picture fitted to what
+  // they leave. A phone's follow its picture.
+  const DESK_MENU_H = 136;
   const resize = () => {
+    if (!touchPad) {
+      const s = windowScale();
+      battleEl.style.setProperty('--s', String(s));
+      battleEl.style.setProperty('--pic', String(Math.max(2, Math.floor((innerHeight - (DESK_MENU_H + 8) * s - 8) / 160))));
+      menu.setScale(s);
+      menu.setRoom(Infinity);
+      return;
+    }
     const box = gbaCanvas.getBoundingClientRect();
     if (!box.width) return;
     const s = box.width / 240;
@@ -2072,6 +2330,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
   const flagsAt = sym('gBattleTypeFlags');
   const trainerFight = () => flagsAt !== undefined && (emu.read(flagsAt, 32) & (BATTLE_TYPE_TRAINER | BATTLE_TYPE_RECORDED)) === BATTLE_TYPE_TRAINER;
   const cards = () => {
+    if (!touchPad) return;
     const s = gbaCanvas.getBoundingClientRect().width / 240;
     const fits = s > 0 && innerHeight / s >= CARDS_ROOM + 160 + MENU_ROOM;
     battleEl.classList.toggle('cards', fits && innerHeight > innerWidth && trainerFight());
@@ -2273,15 +2532,9 @@ function hudFrame(): void {
   const now = performance.now();
   // A battle's picture has the top of the screen: the news waits for the field, as the
   // live match's ticker does (br_hud.c drops its windows off the overworld).
-  let reach = '';
   if (battleEl.classList.contains('on')) {
-    if (tickUntil || reached) { tickUntil = 0; reached = ''; msgBox.hide(); }
-  } else if (!sayUntil && (reach = reachLine())) {
-    // A held line outranks the news (the live match's BrHud_Hold): the ticker waits.
-    if (reach !== reached) { msgBox.show(reach); reached = reach; }
-    tickUntil = 0;
+    if (tickUntil) { tickUntil = 0; msgBox.hide(); }
   } else if (!sayUntil && !casting && now >= tickUntil) {
-    if (reached) { reached = ''; msgBox.hide(); }
     const next = ticks.shift();
     if (next) {
       msgBox.show(next.text, next.alert);
@@ -2455,19 +2708,24 @@ addEventListener('keyup', (e) => { const k = romKey(e.key); if (rom && k) rom.re
 // (hbr.padstick), else the standard layout: face bottom/left A, right/top B, START, the
 // D-pad, the stick and a DirectInput hat. Polled on a timer, as the Gamepad API has no
 // button events: a press is a change since the last poll, sent where a key would go.
-const PAD_DEFAULT: Record<number, string> = { 0: 'a', 1: 'b', 2: 'b', 3: 'a', 8: 'select', 9: 'start', 12: 'up', 13: 'down', 14: 'left', 15: 'right' };
+const PAD_DEFAULT: Record<number, string> = { 0: 'a', 1: 'b', 2: 'b', 3: 'a', 4: 'l', 5: 'r', 8: 'select', 9: 'start', 12: 'up', 13: 'down', 14: 'left', 15: 'right' };
 const PAD_HAT: string[][] = [['up'], ['up', 'right'], ['right'], ['down', 'right'], ['down'], ['down', 'left'], ['left'], ['up', 'left']];
 function padMap(): Record<number, string> {
   try {
     const saved = JSON.parse(localStorage.getItem('hbr.padmap') ?? 'null') as Record<string, string> | null;
     const out: Record<number, string> = {};
-    for (const [i, k] of Object.entries(saved ?? {})) if (GBA_KEY[k]) out[Number(i)] = k;
+    for (const [i, k] of Object.entries(saved ?? {})) if (GBA_KEY[k] || k === 'l' || k === 'r') out[Number(i)] = k;
     return Object.keys(out).length ? { ...out, 12: 'up', 13: 'down', 14: 'left', 15: 'right' } : PAD_DEFAULT;
   } catch { return PAD_DEFAULT; }
 }
 function padDown(k: string): void {
   if (intro()) return;
-  if (lobby?.shown) { lobby.stage.key(GBA_KEY[k]); return; }
+  if (lobby?.shown) { if (GBA_KEY[k]) lobby.stage.key(GBA_KEY[k]); return; }
+  if (battleMenu?.isShown) { battleMenu.key(k); return; }
+  if (k === 'l' || k === 'r') {
+    if (!asking && !battle && !swapping && !romUp) void runMenu(k === 'l' ? '1' : '2');
+    return;
+  }
   if (!held.has(k)) pressed.add(k);
   held.add(k);
   if (asking) askKey(k);
@@ -2476,7 +2734,7 @@ function padDown(k: string): void {
 }
 function padUp(k: string): void {
   held.delete(k);
-  rom?.release(GBA_KEY[k]);
+  if (GBA_KEY[k]) rom?.release(GBA_KEY[k]);
 }
 // The touch pad: the live game's D-pad, A, B and START, the same as a controller's.
 /** A short tap of haptic feedback as a pad button goes down (the live game's buzz, POK-245).
@@ -2657,7 +2915,7 @@ function toast(text: string): void {
 }
 
 /** This moment, and where the camera looks, for tools/br/replay.ts. */
-function markHere(via: 'key' | 'eye'): void {
+function markHere(via: 'key' | 'sheet'): void {
   const p = link ? mapUnder(cam.x, cam.y) : null;
   const where = p ? { map: p.m.id, x: Math.floor(cam.x / TILE - p.gx), y: Math.floor(cam.y / TILE - p.gy) } : { map: '', x: 0, y: 0 };
   const n = recorder.mark(via, where);
@@ -2670,17 +2928,6 @@ function saveLog(): void {
 }
 document.getElementById('save-log')!.addEventListener('click', saveLog);
 
-/** A phone's mark: hold the eye. A tap does nothing, so a thumb that strays there is safe. */
-const MARK_HOLD_MS = 500;
-const markEye = document.getElementById('mark-eye')!;
-let markHold = 0;
-markEye.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  markEye.setPointerCapture(e.pointerId);
-  markEye.classList.add('down');
-  markHold = window.setTimeout(() => { markHold = 0; markEye.classList.remove('down'); markHere('eye'); }, MARK_HOLD_MS);
-});
-for (const type of ['pointerup', 'pointercancel']) markEye.addEventListener(type, () => { clearTimeout(markHold); markEye.classList.remove('down'); });
 const watch = new Watch({
   trainers: () => (link ? actors() : []),
   me: () => link?.me ?? 0,
@@ -3288,6 +3535,7 @@ function draw(): void {
   if (!far) drawGround(vx0, vy0, vx1, vy1);
   if (!far) drawProps(visible, all);
   stepFrame(all);
+  tagFrame();
   if (!far) drawEffects((e) => isFloor(e.kind), vx0, vy0, vx1, vy1);
   const people = all
     .map((a) => ({ a, p: pixelOf(a) }))
@@ -3546,10 +3794,10 @@ async function boot(): Promise<void> {
     versionLine = files.version;
     recorder.setVersion({ line: files.version, romSha1: files.romSha, world: WORLD_HASH_SHORT });
   battlesOn(files.romSha);
-    if (touchPad) { wireBattleMenu(files); wirePhoneHud(); }
+    wireBattleMenu(files);
+    if (touchPad) wirePhoneHud();
     else {
       wirePhoneHud(true);
-      wireSides(files.emu, (n) => { const a = files.sym(n); return Number.isNaN(a) ? undefined : a; });
     }
   } catch (e) {
     console.warn('spike ROM not loaded', e);
@@ -3681,7 +3929,7 @@ async function boot(): Promise<void> {
     }
   }
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { get link() { return link; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; } };
+  (window as unknown as { __spike: unknown }).__spike = { get link() { return link; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; } };
 }
 
 void boot();

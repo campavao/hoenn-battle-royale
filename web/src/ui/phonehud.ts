@@ -17,6 +17,7 @@ import regionData from '../data/regionmap.json';
 import type { WorldMap } from '../bots/world';
 import { decodeGen3 } from '../text/gen3';
 import { FIELD_ICONS, ICON_COLORS, ICON_SIZE } from './fieldicons';
+import { TEXT_WHITE } from './emerald';
 import { HUD } from '../net/hud';
 import { MAP_OFFSET } from '../net/cells';
 import { MAIN_CALLBACK2 } from '../field';
@@ -285,6 +286,8 @@ export const SIGN_H = 40;
 export const SIGN_PAD = 6;
 export const DOCK_W = 96;
 export const DOCK_H = 40;
+/** The context button as the thumbs' third, a round one with its icon. */
+export const CTX_ROUND = 36;
 const LINE = 14;
 /** The field moves' column: a chip a move, its symbol inside, one under the other. */
 export const MOVE_CHIP = ICON_SIZE + 6;
@@ -421,6 +424,68 @@ export interface PhoneHudDeps {
   onMap(): void;
   onStart(): void;
   onUse(item: number): void;
+  /** The field's windows as Cam drew them (11-01): a minimap in place of the fog window, and
+   *  PARTY and BAG for the dock. /classic/ passes neither. */
+  mini?: { draw(c: EmeraldCanvas, x: number, y: number, size: number): void; key(): string };
+  bumpers?: { onBag(): void; bag(): CanvasImageSource | null; keys?: { party: string; bag: string } };
+}
+
+/** The opaque part of a picture's cell, for fitting an icon by what is drawn. */
+const opaque = new Map<string, { x: number; y: number; w: number; h: number }>();
+function opaqueBox(id: string, src: CanvasImageSource, sx: number, sy: number, sw: number, sh: number): { x: number; y: number; w: number; h: number } {
+  let b = opaque.get(id);
+  if (b) return b;
+  const cut = document.createElement('canvas');
+  cut.width = sw;
+  cut.height = sh;
+  const c = cut.getContext('2d', { willReadFrequently: true })!;
+  c.drawImage(src, sx, sy, sw, sh, 0, 0, sw, sh);
+  const d = c.getImageData(0, 0, sw, sh).data;
+  let x0 = sw, y0 = sh, x1 = -1, y1 = -1;
+  for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) if (d[(y * sw + x) * 4 + 3]) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  b = x1 < 0 ? { x: sx, y: sy, w: sw, h: sh } : { x: sx + x0, y: sy + y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+  opaque.set(id, b);
+  return b;
+}
+
+/** A picture centred in a `box` x `box` square, its proportions kept (Cam, 11-02: "not pressed
+ *  up against the borders or squished"). */
+export function drawFitted(c: EmeraldCanvas, id: string, src: CanvasImageSource, sx: number, sy: number, sw: number, sh: number, cx: number, cy: number, box: number): void {
+  const b = opaqueBox(id, src, sx, sy, sw, sh);
+  const k = Math.min(box / b.w, box / b.h);
+  const w = Math.round(b.w * k), h = Math.round(b.h * k);
+  c.drawImageTo(src, b.x, b.y, b.w, b.h, Math.round(cx - w / 2), Math.round(cy - h / 2), w, h, true);
+}
+
+/** An item's icon, fitted. */
+export function drawItemFitted(c: EmeraldCanvas, item: number, cx: number, cy: number, box: number, redo: () => void): void {
+  const img = picture('/ui/items.png', redo);
+  if (!img.complete || img.naturalWidth === 0) return;
+  const n = ICONS.cell;
+  drawFitted(c, `item${item}`, img, (item % ICONS.cols) * n, Math.floor(item / ICONS.cols) * n, n, n, cx, cy, box);
+}
+
+/** A key's cap on a button, top right. */
+export function drawKeycap(c: EmeraldCanvas, key: string, right: number, y: number): void {
+  const w = measure(key) + 5;
+  c.fillRect({ x: right - w, y, w, h: 13 }, '#3a4650');
+  c.drawText(key, right - w + 2, y - 1, TEXT_WHITE);
+}
+
+/** The minimap's window: the map, then the count and clock, then what the fog says. */
+export const MINI_W = 64;
+export const MINI_MAP = 48;
+export function miniLines(v: HudView): Line[] {
+  const inner = MINI_W - 16;
+  const clock: Line['right'] =
+    v.flash === 2 ? { text: 'Fog!', color: TEXT_RED } : v.flash === 1 ? undefined : { text: clockText(v.clock), color: v.clock <= 30 ? TEXT_RED : TEXT_DARK };
+  const lines: Line[] = [{ left: { text: String(v.left), color: TEXT_BLUE }, right: clock }];
+  if (v.safe) lines.push({ left: { text: fitText(v.safe, inner), color: TEXT_RED } });
+  if (v.lead) lines.push({ left: { text: fitText(v.lead, inner), color: TEXT_RED } });
+  return lines;
+}
+function miniHeight(lines: number): number {
+  return MINI_MAP + 16 + lines * LINE + 2;
 }
 
 /** When the sign comes up: on a section it was not last showing. Forgotten when the HUD
@@ -491,10 +556,11 @@ export class PhoneHud {
   private readonly sign: Win;
   private readonly fog: Win;
   private readonly moves: MovesWindow;
-  private readonly party: Win;
+  private party: Win;
+  private bag: Win | null = null;
   private readonly map: Win;
   private readonly start: Win;
-  private readonly ctx: Win;
+  private ctx: Win;
   readonly buttons: Record<'party' | 'map' | 'start' | 'ctx', HTMLButtonElement>;
 
   constructor(private readonly deps: PhoneHudDeps) {
@@ -533,9 +599,21 @@ export class PhoneHud {
     });
     // Every plate up front, so a new section's sign is whole on its first frame.
     for (const theme of new Set(['wood', ...Object.values(THEMES)])) picture(`/ui/popup-${theme}.png`, () => undefined);
-    this.fog = new Win(box('hud-fog'), FOG_W, fogHeight(3), (c) => {
+    const mini = deps.mini;
+    this.fog = new Win(box('hud-fog'), mini ? MINI_W : FOG_W, mini ? miniHeight(1) : fogHeight(3), (c) => {
       const v = this.view;
       if (!v) return;
+      if (mini) {
+        const rows = miniLines(v);
+        c.drawFrame({ x: 0, y: 0, w: MINI_W, h: miniHeight(rows.length) });
+        mini.draw(c, 8, 8, MINI_MAP);
+        rows.forEach((l, i) => {
+          const y = 8 + MINI_MAP + 1 + i * LINE;
+          if (l.left) c.drawText(l.left.text, 8, y, l.left.color);
+          if (l.right) c.drawText(l.right.text, MINI_W - 8 - measure(l.right.text), y, l.right.color);
+        });
+        return;
+      }
       const lines = fogLines(v);
       c.drawFrame({ x: 0, y: 0, w: FOG_W, h: fogHeight(lines.length) });
       lines.forEach((l, i) => {
@@ -544,6 +622,13 @@ export class PhoneHud {
         if (l.right) c.drawText(l.right.text, FOG_W - 8 - measure(l.right.text), y, l.right.color);
       });
     });
+    if (mini) {
+      const el = this.fog.el as HTMLElement;
+      el.classList.add('hud-mini');
+      el.setAttribute('role', 'button');
+      el.setAttribute('aria-label', 'Open the map');
+      el.addEventListener('click', () => { if (this.view?.onField && this.view.ring !== null) deps.onMap(); });
+    }
     this.moves = new MovesWindow(box('hud-moves gone'));
     const dockWin = (b: HTMLButtonElement, item: () => number | null, label: () => string, sub: () => string | null) =>
       new Win(b, DOCK_W, DOCK_H, (c, redo) => {
@@ -574,6 +659,33 @@ export class PhoneHud {
     this.map = dockWin(this.buttons.map, () => ITEM_TOWN_MAP, () => 'MAP', () => null);
     this.start = dockWin(this.buttons.start, () => null, () => 'START', () => null);
     this.ctx = dockWin(this.buttons.ctx, () => this.view?.ctx.item ?? ITEM_MACH_BIKE, () => this.view?.ctx.label ?? 'BIKE', () => 'SELECT');
+    const bump = deps.bumpers;
+    if (bump) {
+      // PARTY and BAG either side of the room's button, and the context button by the thumbs.
+      deps.dock.classList.add('hud-bumpers');
+      this.buttons.map.hidden = this.buttons.start.hidden = true;
+      // These two draw themselves anew: the dock's own windows come off them.
+      this.party.canvas.remove();
+      this.ctx.canvas.remove();
+      this.party = new Win(this.buttons.party, DOCK_W, DOCK_H, (c, redo) => {
+        c.drawFrame({ x: 0, y: 0, w: DOCK_W, h: DOCK_H });
+        drawItemFitted(c, ITEM_POKE_BALL, 20, DOCK_H / 2, 18, redo);
+        c.drawText('PARTY', 34, 13, this.buttons.party.getAttribute('aria-disabled') === 'true' ? TEXT_GRAY : TEXT_DARK);
+        if (bump.keys) drawKeycap(c, bump.keys.party, DOCK_W - 4, 4);
+      });
+      const bagBtn = button('hud-bag', 'Bag', field(() => bump.onBag()));
+      this.bag = new Win(bagBtn, DOCK_W, DOCK_H, (c) => {
+        c.drawFrame({ x: 0, y: 0, w: DOCK_W, h: DOCK_H });
+        const b = bump.bag();
+        if (b) drawFitted(c, 'bag', b, 0, 0, 64, 64, 20, DOCK_H / 2, 18);
+        c.drawText('BAG', 34, 13, TEXT_DARK);
+        if (bump.keys) drawKeycap(c, bump.keys.bag, DOCK_W - 4, 4);
+      });
+      this.ctx = new Win(this.buttons.ctx, CTX_ROUND, CTX_ROUND, (c, redo) => {
+        drawItemFitted(c, this.view?.ctx.item ?? ITEM_MACH_BIKE, CTX_ROUND / 2, CTX_ROUND / 2, 22, redo);
+      });
+      this.buttons.ctx.classList.add('hud-ctx-round');
+    }
   }
 
   /** CSS pixels per GBA pixel: the field's. */
@@ -581,9 +693,12 @@ export class PhoneHud {
     if (!(scale > 0) || scale === this.scale) return;
     this.scale = scale;
     this.sign.size(SIGN_W, SIGN_H, scale);
-    this.fog.size(FOG_W, this.fog.c.height, scale);
+    this.fog.size(this.deps.mini ? MINI_W : FOG_W, this.fog.c.height, scale);
     this.moves.setScale(scale);
-    for (const w of [this.party, this.map, this.start, this.ctx]) w.size(DOCK_W, DOCK_H, scale);
+    for (const w of [this.party, this.map, this.start]) w.size(DOCK_W, DOCK_H, scale);
+    this.bag?.size(DOCK_W, DOCK_H, scale);
+    if (this.deps.bumpers) this.ctx.size(CTX_ROUND, CTX_ROUND, scale);
+    else this.ctx.size(DOCK_W, DOCK_H, scale);
   }
 
   private grey(b: HTMLButtonElement, w: Win, off: boolean): void {
@@ -611,10 +726,11 @@ export class PhoneHud {
       // asked whether it should fade after three seconds: "keep it on screen").
       this.sign.el.classList.toggle('gone', !v.place);
     }
-    const lines = fogLines(v);
-    const h = fogHeight(lines.length);
-    if (this.fog.c.height !== h) this.fog.size(FOG_W, h, this.scale);
-    this.fog.show(JSON.stringify(lines.map((l) => [l.left?.text, l.left?.color.fg, l.right?.text, l.right?.color.fg])));
+    const mini = this.deps.mini;
+    const lines = mini ? miniLines(v) : fogLines(v);
+    const h = mini ? miniHeight(lines.length) : fogHeight(lines.length);
+    if (this.fog.c.height !== h) this.fog.size(mini ? MINI_W : FOG_W, h, this.scale);
+    this.fog.show((mini?.key() ?? '') + JSON.stringify(lines.map((l) => [l.left?.text, l.left?.color.fg, l.right?.text, l.right?.color.fg])));
     this.moves.update(v.moves);
     // The start menu has a POKeMON row once there is a party, and MAP once the ring is
     // up (start_menu.c): before that each is grey, not a START that opens and shuts.

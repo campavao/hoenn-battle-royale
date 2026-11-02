@@ -110,7 +110,7 @@ recording run again: see below).
 
 Spike B keeps the last ~10 minutes of its world link in memory (`web/spike-b/recorder.ts`):
 the room's state, every frame's inputs, my keys, the battle messages, errors, frames over
-50 ms and the version line. K on a desktop, or holding the eye on a phone, marks a moment;
+50 ms and the version line. K on a desktop, or the MARK row in a phone's room sheet, marks a moment;
 SAVE LOG (START menu, room sheet, results) saves it all as one `.json`, gzipped past 1 MB.
 Never the ROM, a save or the relay's rejoin key. `bt` link blocks are not in it.
 

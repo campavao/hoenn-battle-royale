@@ -91,6 +91,57 @@
       .bm-btn:active:not([aria-disabled="true"]) { filter: brightness(0.9); }
       .bm-btn[aria-disabled="true"] { cursor: not-allowed; }
       .bm-btn[hidden], .bm-hint[hidden], .bm-info[hidden] { display: none; }
+      /* The windows as Cam drew them (11-01): moves first, PARTY, BAG and RUN under them, the
+         party's icons, one of them in full, over the map. A window with a mouse has them under
+         a smaller picture, the three beside the moves. */
+      .bm-focus { outline: calc(var(--s, 1.5) * 2px) solid #e8a020; outline-offset: calc(var(--s, 1.5) * -3px); }
+      .bm-cell[data-slot="0"] { grid-area: 1 / 1; }
+      .bm-cell[data-slot="1"] { grid-area: 1 / 2; }
+      .bm-cell[data-slot="2"] { grid-area: 2 / 1; }
+      .bm-cell[data-slot="3"] { grid-area: 2 / 2; }
+      .bm-actions { grid-column: 1 / -1; display: flex; justify-content: space-between; }
+      .bm-actions[hidden], .bm-party[hidden], .bm-member[hidden] { display: none; }
+      .bm-party { grid-column: 1 / -1; display: grid; grid-template-columns: auto auto; gap: calc(var(--s, 1.5) * 8px); }
+      .bm-member { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: calc(var(--s, 1.5) * 8px); }
+      .bm-m-moves { display: grid; grid-template-columns: auto auto; gap: calc(var(--s, 1.5) * 8px); }
+      .bm-m-row { display: flex; gap: calc(var(--s, 1.5) * 8px); }
+      .bm-m-card canvas, .bm-m-held canvas, .bm-m-moves canvas, .bm-actions canvas { display: block; }
+      body.desk-hud #battle.on:not(.screen) { place-items: start center; align-content: start; padding-top: 0; }
+      body.desk-hud #battle.on:not(.screen) canvas { width: calc(var(--pic, 4) * 240px); }
+      body.desk-hud #battle-menu:not([hidden]) { grid-template-columns: auto auto auto; margin-top: 8px; }
+      body.desk-hud .bm-actions { grid-column: 3; grid-row: 1 / 3; flex-direction: column; }
+      body.desk-hud .bm-party { grid-template-columns: auto auto auto; }
+      body.desk-hud .bm-back { grid-column: 1 / -1; justify-self: center; }
+      body.desk-hud .bm-member:not([hidden]) { display: grid; grid-template-columns: auto auto; column-gap: calc(var(--s, 3) * 8px); row-gap: calc(var(--s, 3) * 8px); justify-items: center; }
+      body.desk-hud .bm-m-card { grid-area: 1 / 1; }
+      body.desk-hud .bm-m-held { grid-area: 2 / 1; }
+      body.desk-hud .bm-m-row { grid-area: 3 / 1; }
+      body.desk-hud .bm-m-moves { grid-area: 1 / 2 / 4 / 3; }
+      .bm-keys { display: none; }
+      body.desk-hud .bm-keys { display: block; position: fixed; left: 8px; top: 8px; pointer-events: none; }
+      @media (max-width: 1099px) { body.desk-hud .bm-keys { display: none; } }
+      body.desk-hud #battle-menu[data-mode="bag"], body.desk-hud #battle-menu[data-mode="item"], body.desk-hud #battle-menu[data-mode="info"] { position: fixed; left: 0; right: 0; width: fit-content; margin-inline: auto; bottom: 8px; }
+      body.desk-hud #battle-menu[data-mode="bag"], body.desk-hud #battle-menu[data-mode="item"], body.desk-hud #battle-menu[data-mode="info"] { grid-template-columns: auto auto; }
+      .hud-mini { pointer-events: auto; cursor: pointer; }
+      .hud-moves { top: calc(var(--s, 1.5) * 108px); }
+      #item-tag { position: fixed; left: 0; top: 0; z-index: 2; pointer-events: none; image-rendering: pixelated; }
+      #item-tag[hidden] { display: none; }
+      #bag-panel { position: fixed; z-index: 4; left: 50%; bottom: calc(env(safe-area-inset-bottom) + var(--s, 1.5) * 56px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: calc(var(--s, 1.5) * 8px); }
+      #bag-panel[hidden] { display: none; }
+      #bag-panel canvas { display: block; image-rendering: pixelated; }
+      .bag-row { display: flex; gap: calc(var(--s, 1.5) * 8px); }
+      body.panel-up #pad .dpad, body.panel-up #pad .ab, body.panel-up #pdock { visibility: hidden; }
+      #pdock.hud-bumpers:not([hidden]) { grid-template-columns: auto auto auto; grid-template-rows: auto; align-items: center; }
+      #pdock.hud-bumpers #hud-party { grid-area: 1 / 1; }
+      #pdock.hud-bumpers .hud-menu { grid-area: 1 / 2; }
+      #pdock.hud-bumpers #hud-bag { grid-area: 1 / 3; }
+      #pdock.hud-bumpers .hud-btn[hidden] { display: none; }
+      .hud-ctx-round { position: fixed; right: calc(env(safe-area-inset-right) + 24px); bottom: calc(env(safe-area-inset-bottom) + var(--s, 1.5) * 52px + 88px); width: calc(var(--s, 1.5) * 36px); height: calc(var(--s, 1.5) * 36px); border-radius: 50%; background: rgba(32, 38, 44, 0.45) !important; }
+      .hud-ctx-round[aria-disabled="true"] { opacity: 0.45; }
+      body.desk-hud #pad { display: grid; pointer-events: none; }
+      body.desk-hud #pad .dpad, body.desk-hud #pad .ab, body.desk-hud #pad .st, body.desk-hud .hud-ctx-round { display: none; }
+      body.desk-hud #hud > button { display: none; }
+      body.desk-hud .hud-sign { top: calc(var(--s, 1.5) * 4px); }
       .bm-hold { position: absolute; inset: calc(var(--s, 1.5) * 3px); background: #b8d8f8; mix-blend-mode: multiply; transform-origin: left; transform: scaleX(0); pointer-events: none; }
       .bm-back, .bm-hint, .bm-info { grid-column: 1 / -1; }
       .bm-hint { display: flex; justify-content: center; pointer-events: none; }
@@ -227,6 +278,8 @@
          the pad instead, so this is a desktop's only. */
       #keys { display: none; }
       @media (hover: hover) and (pointer: fine) and (min-width: 600px) {
+        body.desk-hud #keys:not([hidden]) { right: auto; left: 12px; }
+        body.battle-menu #keys:not([hidden]) { display: none; }
         #keys:not([hidden]) {
           display: grid;
           position: fixed; right: 12px; top: 50%; transform: translateY(-50%); z-index: 2;
@@ -260,14 +313,9 @@
         #keys .k-select { grid-area: sel; } #keys .k-start { grid-area: start; }
         #keys .k-mark { grid-area: mark; }
       }
-      /* The play-test's marks and its file (spike-b/recorder.ts): a phone holds the eye, over
-         a battle too, and the results have the file's button. The eye stands in the gap
-         between the place's sign and the fog window, which in a portrait battle is the
-         gutter over the picture. */
-      #mark-eye { display: none; position: fixed; z-index: 3; left: calc(env(safe-area-inset-left) + var(--s, 1.5) * 103px); top: calc(env(safe-area-inset-top) + var(--s, 1.5) * 6px); width: calc(var(--s, 1.5) * 20px); height: calc(var(--s, 1.5) * 20px); padding: 0; border: 0; border-radius: 50%; background: rgba(0, 0, 0, 0.35); opacity: 0.6; font-size: calc(var(--s, 1.5) * 10px); line-height: calc(var(--s, 1.5) * 20px); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-      body.phone-hud #mark-eye { display: block; }
+      /* The play-test's marks and its file (spike-b/recorder.ts): K, or the room sheet's MARK
+         on a phone, and the results have the file's button. */
       body.phone-hud #eyes { display: none; }
-      #mark-eye.down { background: #ffe08a; opacity: 1; }
       #mark-toast { position: fixed; z-index: 1000; top: calc(env(safe-area-inset-top) + 8px); left: 50%; transform: translateX(-50%); max-width: 92vw; padding: 4px 10px; border-radius: 6px; background: #000c; color: #ffe08a; font: 700 12px/1.3 ui-monospace, monospace; pointer-events: none; overflow-wrap: anywhere; }
       #mark-toast[hidden] { display: none; }
       #save-log { display: none; position: fixed; z-index: 11; top: calc(env(safe-area-inset-top) + 6px); right: calc(env(safe-area-inset-right) + 6px); padding: 4px 8px; background: #26313aee; color: #e8eef2; border: 1px solid #4c7a99; border-radius: 6px; font: 11px/1.2 ui-monospace, monospace; }
@@ -296,7 +344,6 @@
     </div>
     <div id="watch-label" hidden></div>
     <div id="corner"></div>
-    <button id="mark-eye" type="button" aria-label="Hold to mark this moment">👁</button>
     <div id="mark-toast" role="status" hidden></div>
     <button id="save-log" type="button">SAVE LOG</button>
     <div id="pad">
@@ -309,6 +356,8 @@
     <div id="pad-edit" class="pad-edit" hidden></div>
     <div id="keys" aria-hidden="true" hidden></div>
     <div id="msg" role="status"></div>
+    <canvas id="item-tag" hidden></canvas>
+    <div id="bag-panel" hidden></div>
     <canvas id="askbox" class="startmenu" hidden></canvas>
     <canvas id="startmenu" class="startmenu" hidden></canvas><canvas id="stock" class="startmenu" hidden></canvas>
     <div id="win"><b id="win-title"></b><ol id="win-list"></ol><button id="win-ok" type="button">OK</button></div>

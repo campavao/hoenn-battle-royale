@@ -54,7 +54,8 @@ export interface Mark {
   t: number;
   /** The room's frame when it was marked, and whose camera. */
   tick: number;
-  via: 'key' | 'eye';
+  /** 'eye' in a file from before the sheet's row. */
+  via: 'key' | 'sheet' | 'eye';
   map: string;
   x: number;
   y: number;
@@ -183,7 +184,7 @@ export class Recorder {
   }
 
   /** This moment, for the replay to print what was around it. Returns its number. */
-  mark(via: 'key' | 'eye', where: { map: string; x: number; y: number }): number {
+  mark(via: 'key' | 'sheet', where: { map: string; x: number; y: number }): number {
     const n = (this.marks.at(-1)?.n ?? 0) + 1;
     this.marks.push({ n, t: this.stamp(), tick: this.lastTick, via, map: where.map, x: where.x, y: where.y });
     if (this.marks.length > MARKS_MAX) this.marks.shift();

@@ -313,6 +313,74 @@ export class RomArt {
     return this.frames(this.u32(this.u32(template + 0xc)), count, 16, h, this.palette(this.u32(this.sym(palSym))));
   }
 
+  /** The MAP's picture as the ROM lays it down (region_map.c LoadRegionMapGfx): 64 x 64 cells
+   *  of 8bpp tiles, in BG palettes 7 on. Null on a patch that does not say where it is. */
+  regionMap(): HTMLCanvasElement | null {
+    const at = this.sym('gBrRegionMapArt');
+    if (!Number.isFinite(at)) return null;
+    const tiles = lz77(this.rom, this.u32(at) - ROM), map = lz77(this.rom, this.u32(at + 4) - ROM), pal = this.u32(at + 8);
+    const FIRST = 7 * 16, CELLS = 64;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = CELLS * TILE;
+    const ctx = cv.getContext('2d')!;
+    const id = ctx.createImageData(cv.width, cv.height);
+    const px = new Uint32Array(id.data.buffer);
+    const colours = new Map<number, number>();
+    const colour = (i: number) => {
+      let c = colours.get(i);
+      if (c === undefined) colours.set(i, (c = i >= FIRST ? rgba(this.u16(pal + (i - FIRST) * 2)) : 0));
+      return c;
+    };
+    for (let i = 0; i < CELLS * CELLS; i++) {
+      const off = map[i] * 64, X = (i % CELLS) * TILE, Y = Math.floor(i / CELLS) * TILE;
+      for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) px[(Y + y) * cv.width + X + x] = colour(tiles[off + y * TILE + x]);
+    }
+    ctx.putImageData(id, 0, 0);
+    return cv;
+  }
+
+  /** A species' party icon, its first frame (gMonIconTable, 32 x 32, in one of the three icon
+   *  palettes); null on a patch whose symbols predate it. */
+  monIcon(species: number): HTMLCanvasElement | null {
+    const table = this.sym('gMonIconTable');
+    if (!Number.isFinite(table) || !species) return null;
+    const index = this.u8(this.sym('gMonIconPaletteIndices') + species);
+    return this.frames(this.u32(table + species * 4), 1, 32, 32, this.palette(this.u32(this.sym('gMonIconPaletteTable') + index * 8)));
+  }
+
+  /** The BAG's own sprite, its first frame: 64 x 64 tiles, compressed, on their palette. */
+  bagSprite(): HTMLCanvasElement | null {
+    const at = this.sym('gBagMaleTiles'), palAt = this.sym('gBagPalette');
+    if (!Number.isFinite(at) || !Number.isFinite(palAt)) return null;
+    const tiles = lz77(this.rom, at - ROM), pal = lz77(this.rom, palAt - ROM);
+    const colours: number[] = [];
+    for (let c = 0; c < 16; c++) colours.push(rgba(pal[c * 2] | (pal[c * 2 + 1] << 8)));
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 64;
+    const ctx = cv.getContext('2d')!;
+    const id = ctx.createImageData(64, 64);
+    const px = new Uint32Array(id.data.buffer);
+    for (let y = 0; y < 64; y++) {
+      for (let x = 0; x < 64; x++) {
+        const b = tiles[((y >> 3) * 8 + (x >> 3)) * 32 + (y & 7) * 4 + ((x & 7) >> 1)];
+        const c = (b >> ((x & 1) * 4)) & 0xf;
+        if (c) px[y * 64 + x] = colours[c];
+      }
+    }
+    ctx.putImageData(id, 0, 0);
+    return cv;
+  }
+
+  /** A species' ability, by which of its two (gSpeciesInfo's abilities, gAbilityNames). */
+  abilityName(species: number, which: number): string {
+    const info = this.sym('gSpeciesInfo'), names = this.sym('gAbilityNames');
+    if (!Number.isFinite(info) || !Number.isFinite(names)) return '';
+    const SPECIES_INFO = 0x1c, ABILITIES = 0x16, ABILITY_NAME = 13;
+    const row = info + species * SPECIES_INFO + ABILITIES;
+    const id = this.u8(row + (which ? 1 : 0)) || this.u8(row);
+    return text(this.letters(names + id * ABILITY_NAME, ABILITY_NAME));
+  }
+
   /** The contest's curtain as its tilemap has it, 32 x 20 tiles (contest.c
    *  SetBgForCurtainDrop: gContestCurtainTilemap in the interface's tiles); null on a patch
    *  whose symbols predate it. */

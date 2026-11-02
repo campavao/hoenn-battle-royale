@@ -113,7 +113,7 @@ async function hosted(page: Page): Promise<void> {
   await onField(page);
 }
 
-test("a desktop's message bar reads at a glance, and names what is in reach", async ({ browser }) => {
+test("a desktop's name tag reads at a glance, and names what is in reach", async ({ browser }) => {
   test.setTimeout(180_000);
   const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 }, screen: { width: 1920, height: 1080 } });
   const page = await ctx.newPage();
@@ -128,9 +128,9 @@ test("a desktop's message bar reads at a glance, and names what is in reach", as
     a.m = { ...a.m, spot, prev: spot, facing: 2, moveDir: 2, action: null, px: 0, py: 0 };
     return s.art.itemName(g.item) as string;
   });
-  await expect(page.locator('#msg')).toHaveAttribute('data-text', `A: Take ${named}`, { timeout: 5000 });
-  const box = (await boxOf(page, '#msg canvas'))!;
-  expect(box.width, '29 tiles at 3 pixels a pixel').toBe(29 * 8 * 3);
+  await expect(page.locator('#item-tag')).toHaveAttribute('data-text', named, { timeout: 5000 });
+  const box = (await boxOf(page, '#item-tag'))!;
+  expect(box.height, 'its window and its point, at 3 pixels a pixel').toBe(28 * 3);
   await page.screenshot({ path: test.info().outputPath('bar.png') });
   await ctx.close();
 });

@@ -134,12 +134,12 @@ describe('the recording', () => {
 
   it('keeps a mark past the ring, and says it fell outside', () => {
     const link = soloLink(MAPS, PATCHES, undefined as never, SEED, { bots: 2, name: 'CAM' });
-    recorder.mark('eye', { map: 'MAP_ROUTE101', x: 1, y: 2 });
+    recorder.mark('sheet', { map: 'MAP_ROUTE101', x: 1, y: 2 });
     const step = (RECORD_MS * 1.5) / 3000;
     for (let i = 0; i < 3000; i++) { clock += step; link.frame(0); }
     const r = replay(saved(recorder), make);
     expect(r.marks[0].inLog).toBe(false);
-    expect(r.marks[0].mark.via).toBe('eye');
+    expect(r.marks[0].mark.via).toBe('sheet');
   });
 
   it('takes errors and spikes and battle messages in order, the version with them', () => {

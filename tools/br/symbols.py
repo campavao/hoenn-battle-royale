@@ -32,6 +32,9 @@ ENGINE_SYMBOLS = [
     "gWildMonHeaders", "gSpritePalette_GeneralFieldEffect1",
     # What a step leaves on the ground (web/spike-b/fieldfx.ts).
     "gFieldEffectObjectTemplatePointers", "gSpritePalette_GeneralFieldEffect0",
+    # The windows over the field and the battle: party icons, the bag, a team member's
+    # ability, which of them is out (web/spike-b/romart.ts, web/src/ui/battlemenu.ts).
+    "gMonIconTable", "gMonIconPaletteIndices", "gMonIconPaletteTable", "gBagMaleTiles", "gBagPalette", "gSpeciesInfo", "gAbilityNames", "gBattlerPartyIndexes", "gBattlePartyCurrentOrder", "gTasks",
     # The curtain into a match (web/spike-b/curtain.ts).
     "gContestCurtainTilemap", "gContestInterfaceGfx", "gContestInterfaceAudiencePalette",
     "gBattleTypeFlags", "gBattleWeather", "gBattleEnvironment", "gBattleOutcome", "gBattleMainFunc", "gBattlerControllerFuncs",
