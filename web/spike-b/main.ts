@@ -68,10 +68,10 @@ import { fieldScale, FADE_COLOR_WORD, FADE_Y_WORD, FOG_EVA, FOG_EVB, fadeOf, key
 import { PadPrefsControl } from '../src/ui/padprefs';
 import { wireDpad } from './dpad';
 import { StartMenu } from './startmenu';
-import { BACK_H, BATTLE_TYPE_RECORDED, BattleMenu, CELL_H, battleWantsNoPad, readBattleView } from '../src/ui/battlemenu';
+import { BACK_H, BATTLE_TYPE_RECORDED, BattleMenu, CELL_H, battleWantsNoPad, ppWithBonus, readBattleView } from '../src/ui/battlemenu';
 import { BATTLE_TYPE_TRAINER, CARD_H, SidesView } from '../src/ui/sides';
 import { BAG_POSITION_POCKET, readBattleBag } from '../src/ui/bag';
-import { MENU_ACTION, TouchLayer } from '../src/touch';
+import { BATTLE_MENU, MENU_ACTION, MENU_PARTY, TouchLayer } from '../src/touch';
 import { HUD } from '../src/net/hud';
 import { ITEM_MACH_BIKE, MINI_MAP, PhoneHud, fieldMoves, fogPhase, signFor, type FieldMove } from '../src/ui/phonehud';
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
@@ -2228,7 +2228,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     return false;
   };
   const PARTY_SLOT_ID = 9;
-  let walk: { slot: number; summary: boolean; step: number; frames: number; item: boolean } | null = null;
+  let walk: { slot: number; summary: boolean; step: number; frames: number; item: boolean; move?: number; forced?: boolean } | null = null;
   const walkParty = (slot: number, summary: boolean) => {
     walk = { slot, summary, step: 0, frames: 0, item: false };
     partyHold = !summary;
@@ -2242,21 +2242,27 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     emu.write(sym('gBagPosition')! + BAG_POSITION_POCKET, pocket, 8);
     emu.write(sym('gBrBag')!, item, 16);
   });
-  const useOn = (pocket: number, item: number, slot: number) => {
-    walk = { slot, summary: false, step: 0, frames: 0, item: true };
+  const useOn = (pocket: number, item: number, slot: number, move?: number) => {
+    walk = { slot, summary: false, step: 0, frames: 0, item: true, move };
     partyHold = true;
     partyGone = false;
     partyHeld = 0;
     pickFromBag(pocket, item);
   };
   emu.onFrame(() => {
+    // One has fainted: the ROM's fade and party stay behind the picture until it is answered.
+    const brAt = sym('gBrBattle');
+    if (brAt !== undefined && emu.read(brAt + BATTLE_MENU, 8) === MENU_PARTY) {
+      if (!walk?.summary) { partyHold = true; partyGone = true; partyHeld = 0; }
+    }
+    menu.away = !!walk;
     if (!walk) return;
     walk.frames++;
     if (walk.step === 0) {
       if (choosing()) {
         emu.write(partyMenu! + PARTY_SLOT_ID, walk.slot, 8);
         touch.tapKey('a');
-        walk.step = walk.item ? 5 : 1;
+        walk.step = walk.item ? (walk.move === undefined ? 5 : 6) : 1;
         walk.frames = 0;
       } else if (walk.frames > 400) { walk = null; partyHold = false; }
     } else if (walk.step === 1 && walk.frames > 40) {
@@ -2279,7 +2285,16 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       else touch.tapKey('a');
     } else if (walk.step === 4) {
       // The SUMMARY is the player's until it shuts; then the party, which B leaves.
-      if (walk.frames > 60 && choosing()) { touch.tapKey('b'); walk = null; }
+      if (walk.frames > 60 && choosing()) {
+        // Who goes out is still the question: nothing to leave, and the picture held again.
+        if (walk.forced) partyHold = true; else touch.tapKey('b');
+        walk = null;
+      }
+    } else if (walk.step === 6) {
+      // An ETHER's "restore which move?": down to it, and A.
+      if (walk.frames > 40 && walk.frames % 12 === 0) {
+        if (walk.move! > 0) { touch.tapKey('down'); walk.move!--; } else { touch.tapKey('a'); walk.step = 5; walk.frames = 0; }
+      }
     } else if (walk.step === 5 && walk.frames % 30 === 0) {
       // Its line on the party's own screen is pressed past, until the battle is back. The bag
       // again means the ROM would not have it (nothing to cure, say): out, the turn still ours.
@@ -2304,6 +2319,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
         const count = emu.read(countAt, 8);
         return teamMembers(emu.bytes(partyAt, PARTY_LEN).slice(), count, speciesName).map((m, i) => ({
           ...m,
+          moves: m.moves.map((v, n) => ({ ...v, maxPp: ppWithBonus(moveInfo(tables, v.id)?.pp ?? 0, m.ppBonuses, n) })),
           itemName: art?.itemName(m.item) ?? '',
           ability: art?.abilityName(m.species, m.ability) ?? '',
           active: partyId(i) === lead,
@@ -2315,6 +2331,8 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       switchTo: (slot) => walkParty(slot, false),
       summary: (slot) => walkParty(slot, true),
       useOn,
+      sendOut: (slot) => { walk = { slot, summary: false, step: 0, frames: 0, item: false, forced: true }; },
+      summaryOut: (slot) => { walk = { slot, summary: true, step: 0, frames: 0, item: false, forced: true }; partyHold = false; },
     },
     onShown: (on) => document.body.classList.toggle('battle-menu', on),
     readBag: () => readBattleBag(emu, sym, tables),

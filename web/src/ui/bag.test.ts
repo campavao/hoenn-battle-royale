@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ITEM_SIZE, POCKET_BALLS, POCKET_ITEMS, itemInfo, medicineHelps, readBattleBag, readPocket, usedOnOne } from './bag';
+import { ITEM_SIZE, POCKET_BALLS, POCKET_ITEMS, asksMove, itemInfo, medicineHelps, readBattleBag, readPocket, usedOnOne } from './bag';
 import { POCKET_CAPACITY, POCKET_SIZE, SLOT_SIZE } from './phonehud';
 import { encodeGen3 } from '../text/gen3';
 
@@ -78,8 +78,8 @@ describe('who a medicine would help', () => {
   const mon = (hp: number, status = 0, active = false) => ({ hp, maxHp: 20, status, active });
 
   it('asks on the party for what is simply given to one', () => {
-    for (const e of [POTION, REVIVE, ANTIDOTE, FULL_RESTORE]) expect(usedOnOne(e)).toBe(true);
-    for (const e of [ETHER, ELIXIR, X_ATTACK, null]) expect(usedOnOne(e)).toBe(false);
+    for (const e of [POTION, REVIVE, ANTIDOTE, FULL_RESTORE, ETHER, ELIXIR]) expect(usedOnOne(e)).toBe(true);
+    for (const e of [X_ATTACK, null]) expect(usedOnOne(e)).toBe(false);
   });
   it('a revive is for the fainted, and nothing else is', () => {
     expect(medicineHelps(REVIVE, mon(0))).toBe(true);
@@ -97,6 +97,13 @@ describe('who a medicine would help', () => {
     expect(medicineHelps(ANTIDOTE, mon(20, 0x10))).toBe(false);
     expect(medicineHelps(FULL_RESTORE, mon(20, 0x3))).toBe(true);
     expect(medicineHelps(FULL_RESTORE, mon(20))).toBe(false);
+  });
+  it('PP is for who has spent some, and an ETHER goes on to ask which move', () => {
+    const spent = { ...mon(20), moves: [{ pp: 3, maxPp: 10 }] }, full = { ...mon(20), moves: [{ pp: 10, maxPp: 10 }] };
+    expect(medicineHelps(ETHER, spent)).toBe(true);
+    expect(medicineHelps(ELIXIR, full)).toBe(false);
+    expect(asksMove(ETHER)).toBe(true);
+    expect(asksMove(ELIXIR)).toBe(false);
   });
   it('confusion is only known of the one out', () => {
     const PERSIM = fx(0x1, 0);
