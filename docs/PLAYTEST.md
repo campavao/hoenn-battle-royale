@@ -93,7 +93,11 @@ transcripts were made from them; a frame at the time is the evidence for each li
   looking in. That fits the rule that the ROM never leaves the device:
   * keep the followed trainer's battles mirrored live on the hidden ROM;
   * catch up the rest unrendered, far faster than 8x, behind the wipe.
-* **The watched battle stopped** (14:05), and there was lag after (14:50).
+* **The watched battle stopped** (14:05), and there was lag after (14:50). The replay drops
+  to the field with the two still in their fight, and comes back. Not reproduced: a whole
+  dev match with three watched bot fights ran to their ends with no drift. A recording now
+  logs `mirror-end` with why (1 who was watched changed, 2 a new match, 3 not idle, 4 the
+  fight was over, 5 the ROM ended it itself, a drift among those), so the next one says.
 
 ## 2026-09-27, POK-329's switch: what to look at on the phone (not yet play-tested)
 
