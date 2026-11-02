@@ -17,6 +17,7 @@ import type { Actor } from './shared/room';
 import type { WorldLink } from './net';
 import type { MirrorFeed, RomBattles } from './rom';
 import type { SpMsg } from './shared/wire';
+import { recorder } from './recorder';
 
 /** screens.ts's cycleWatch (not imported: it would bring the match's UI sheets along):
  *  round the list from `on`, or from an end when `on` is not in it. */
@@ -232,6 +233,8 @@ export class Watch {
     this.mirroring = true;
     void rom.mirror(feed, () => this.battleEl.classList.add('on')).finally(() => {
       this.mirroring = false;
+      // Why a replay ended, for a recording of one that stopped mid-fight (Cam 11-01, 14:05).
+      recorder.net('mirror-end', this.told !== watched ? 1 : this.host.link() !== link ? 2 : !this.host.idle() ? 3 : feed.over() ? 4 : 5, from, this.queue.length);
       this.battleEl.classList.remove('on');
       // Whatever is left of that fight goes with it (its BSTART too, when the ROM never
       // took it).

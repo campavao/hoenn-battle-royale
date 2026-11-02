@@ -43,7 +43,7 @@ export type Entry =
   | { k: 'sp'; t: number; dir: 'in' | 'out'; from?: number; as?: number; m: SpMsg }
   /** The link gave up on the frames in hand: `gap` the next was not the next, `desync` the
    *  relay's hash `want` was not mine, `behind` too far back to play through. */
-  | { k: 'net'; t: number; what: 'gap' | 'desync' | 'behind'; tick: number; want?: number; got?: number }
+  | { k: 'net'; t: number; what: 'gap' | 'desync' | 'behind' | 'mirror-end'; tick: number; want?: number; got?: number }
   | { k: 'err'; t: number; what: 'console' | 'error' | 'rejection'; msg: string }
   | { k: 'spike'; t: number; ms: number }
   | { k: 'vis'; t: number; hidden: boolean };
@@ -166,7 +166,7 @@ export class Recorder {
     this.push({ k: 'sp', t: this.stamp(), dir, ...who, m });
   }
 
-  net(what: 'gap' | 'desync' | 'behind', tick: number, want?: number, got?: number): void {
+  net(what: 'gap' | 'desync' | 'behind' | 'mirror-end', tick: number, want?: number, got?: number): void {
     this.push({ k: 'net', t: this.stamp(), what, tick, ...(want === undefined ? {} : { want, got }) });
   }
 

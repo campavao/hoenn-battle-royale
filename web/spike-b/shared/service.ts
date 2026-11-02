@@ -362,7 +362,7 @@ export class WorldService {
           const now = this.opts.now();
           if (now - phone.synced < SYNC_MS) return;
           phone.synced = now;
-          this.send(link, { t: 'state', state: host.room.state() });
+          this.send(link, { t: 'state', state: host.room.state(), a: host.acked(phone.id) });
         }
       },
       onClose: () => {

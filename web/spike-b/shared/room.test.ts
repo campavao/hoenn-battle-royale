@@ -1420,7 +1420,9 @@ describe('the last three', () => {
       const last = r.fallen.filter((x) => (x.at ?? 0) > three);
       expect(last.length).toBe(2);
       expect(last.every((x) => x.by)).toBe(true);
-      expect(last[1].at! - three).toBeLessThan(60 * 90);
+      // Not left standing apart until the fog takes one. Which seed is slow moves with any
+      // change to a walk: six seeds ran 31 to 98 s before doors walked you on, 29 to 108 s after.
+      expect(last[1].at! - three).toBeLessThan(60 * 110);
     }
   });
 });
@@ -1451,6 +1453,21 @@ describe('doors', () => {
     for (let i = 0; i < 200 && a.m.spot.map === PC; i++) walk(room, 1, KEY_DOWN, 1);
     expect(a.m.spot).toEqual({ map: O, x: 6, y: 16 });
     expect(a.m.action?.kind).toBe('warp');
+  });
+
+  it('a door walks you on: never left standing on the mat, nor on the door (Cam 11-01, 3:14)', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: { map: O, x: 6, y: 17 }, facing: 2 });
+    const a = room.actor(1)!;
+    room.step(new Map([[1, [KEY_UP]]]));
+    walk(room, 1, 0, 60);
+    expect(a.m.spot).toEqual({ map: PC, x: 7, y: 7 });
+    expect(a.m.action).toBeNull();
+    for (let i = 0; i < 60 && a.m.spot.map === PC; i++) walk(room, 1, KEY_DOWN, 1);
+    expect(a.m.spot).toEqual({ map: O, x: 6, y: 16 });
+    walk(room, 1, 0, 60);
+    expect(a.m.spot).toEqual({ map: O, x: 6, y: 17 });
+    expect(a.m.action).toBeNull();
   });
 
   it('the fog inside is the fog at the door; a closed door stays shut; bots stay outside', () => {

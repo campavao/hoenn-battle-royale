@@ -1,0 +1,186 @@
+# catch-no-dex: a catch never stops for the POKeDEX page, whatever the flags say (Cam's
+# 2026-11-01 play-test, 1:23: "it should not show this registration screen"). catch-pages.txt
+# is the same walk with the dex filled at boot, as it always is here. This one empties the
+# caught flags before each throw: the page the video showed comes up on a ROM that asks them.
+
+wait 30
+poke u32 gBrMatch+8 0x00000C00
+pokebytes gBrMailbox+0x2018 02 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+expect u8 gBrMatch 1
+expect u8 gPlayerPartyCount 0
+# every species already seen and caught, which is the page that does not happen
+expect u8 gBrMatch+1 0
+poke u8 gBrMatch+1 1
+poke u16 gBrMatch+12 240
+# into the grass
+hold DOWN 140
+hold LEFT 100
+# Two patches either side of where that leaves us, (7,23) and (8,23) on this Safari map
+# (wild header 0x48): a step in grass meets nothing now (br_patch.h). Before each walk
+# below they grow back -- the map's byte of gBrPatchTaken cleared -- so every walk meets
+# the next mon one step along.
+pokebytes gBrPatch+16 0E 00 0F 00
+pokebytes gBrPatch+32 1E 00 1E 00
+poke u8 gBrPatch+4 2
+# and the mon they deal: the battle draws from gRngValue, which the walk leaves wherever
+# the boot did; 3 is a Safari mon the ball count below catches (it was 2 while the Zone
+# dealt from a pool of twelve commons; any first stage in the dex now, so the catch rate moves)
+poke u32 gRngValue 3
+# find something
+poke u8 gBrPatchTaken+72 0
+hold RIGHT 70
+hold LEFT 70
+hold RIGHT 70
+hold LEFT 70
+wait 40
+# through its intro, then throw
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+# The ball's luck, pinned: what a throw does is the RNG of the frame it lands in, and
+# a few cycles more or less of work anywhere on the field shifts the walk in by a lag
+# frame and turns a catch into a flee (2026-10-13: a 20-cycle per-frame check in
+# br_loot.c flipped both catch drivers). The values are the ones this script always met.
+pokebytes *gSaveBlock2Ptr+0x28 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+poke u32 gRngValue 0x7C27817E
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+shot try1
+tap A
+wait 30
+# find something
+poke u8 gBrPatchTaken+72 0
+hold RIGHT 70
+hold LEFT 70
+hold RIGHT 70
+hold LEFT 70
+wait 40
+# through its intro, then throw
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+pokebytes *gSaveBlock2Ptr+0x28 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+poke u32 gRngValue 0x16BF1D26
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+shot try2
+tap A
+wait 30
+# find something
+poke u8 gBrPatchTaken+72 0
+hold RIGHT 70
+hold LEFT 70
+hold RIGHT 70
+hold LEFT 70
+wait 40
+# through its intro, then throw
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+pokebytes *gSaveBlock2Ptr+0x28 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+poke u32 gRngValue 0xB40460D1
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+shot try3
+tap A
+wait 30
+# find something
+poke u8 gBrPatchTaken+72 0
+hold RIGHT 70
+hold LEFT 70
+hold RIGHT 70
+hold LEFT 70
+wait 40
+# through its intro, then throw
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+pokebytes *gSaveBlock2Ptr+0x28 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+poke u32 gRngValue 2
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+shot try4
+tap A
+# The shakes, the Gotcha! and the mon reaching the party. Thirty frames a press is enough
+# on agbcc and nowhere near it on the modern build, where the same catch runs several
+# seconds slower -- the driver was asserting while the ball was still in the air, which
+# reads exactly like a catch that failed.
+wait 300
+tap A
+wait 300
+tap A
+wait 180
+shot caught
+expectge u8 gPlayerPartyCount 1
+expect u8 gBrMatch 1
+expect u32 gMain+4 CB2_Overworld+1
+say catch no dex ok

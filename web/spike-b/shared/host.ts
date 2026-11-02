@@ -97,6 +97,11 @@ export class Host {
     return this.players.get(id)?.queue.length ?? 0;
   }
 
+  /** The number of the last of a phone's inputs a frame has used. */
+  acked(id: number): number {
+    return this.players.get(id)?.seq ?? 0;
+  }
+
   /** A phone's keys for its next frames, numbered: `first` is the number of k[0]. */
   input(id: number, first: number, k: number[]): void {
     const p = this.players.get(id);

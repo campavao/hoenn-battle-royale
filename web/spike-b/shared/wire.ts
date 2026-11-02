@@ -130,7 +130,7 @@ export type WorldDown =
   | { t: 'no_room'; code: string; pass?: boolean; rom?: boolean; full?: boolean; removed?: boolean }
   /** A match: my trainer's id in it and the Room as it starts (or as it is, joining late). */
   | { t: 'hello'; id: number; state: RoomState; key?: string }
-  | { t: 'state'; state: RoomState }
+  | { t: 'state'; state: RoomState; a?: number }
   | { t: 'f'; f: WireFrame[] }
   /** A link block from the trainer I am fighting. */
   | { t: 'bt'; q: number; d: number[] }
