@@ -24,12 +24,15 @@ tap A
 wait 150
 shot forget-which
 expect u16 gPartyMenu+14 92
+# ...and says so for the page's windows, until it comes back (web/spike-b/rom.ts)
+expect u16 gBrForgetMove 92
 # A on TACKLE (the first move, 0x21 at +0x2C in the unencrypted attacks substruct)
 tap A
 wait 150
 shot learned
 # TOXIC (92) where TACKLE was, and the TM spent
 expect u16 gPlayerParty+0x2C 92
+expect u16 gBrForgetMove 0
 expect u16 gPlayerParty+0x2E 45
 expect u16 *gSaveBlock1Ptr+0x690 0
 # A past the line once its fanfare is over, and back on the field

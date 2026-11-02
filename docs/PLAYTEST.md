@@ -111,7 +111,7 @@ transcripts were made from them; a frame at the time is the evidence for each li
   GIVE or TAKE by the page alone, an item through the ROM's BAG unseen (`bag-pick-field`), SUMMARY
   and MOVES the ROM's on purpose, an evolution or a move to forget shown when it comes up.
   A dropped team is those windows too, taken through its screen unseen (`swap-pick`); a TM off the
-  ground and a trader ask who on them.
+  ground and a trader ask who on them. A move to make room for a TM's is asked on them too (`tm-teach-full`).
   Not as drawn yet: a forced
   switch after a faint and SUMMARY are the ROM's own; the field's PARTY and BAG open the ROM's.
   The minimap's fog is a near colour, not the ROM's palette's.

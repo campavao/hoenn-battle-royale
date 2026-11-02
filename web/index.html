@@ -106,6 +106,9 @@
       .bm-use-head canvas { display: block; }
       .bm-usemove[hidden] { display: none; }
       .bm-usemove { grid-column: 1 / -1; justify-content: center; }
+      .bm-forget-head { grid-column: 1 / -1; justify-self: center; pointer-events: none; }
+      .bm-forget-head[hidden] { display: none; }
+      .bm-forget-head canvas { display: block; }
       /* A desktop's windows fill the height under the picture, so it stands beside them. */
       body.desk-hud .bm-party { position: relative; }
       body.desk-hud .bm-use-head { position: absolute; right: calc(100% + 8px); top: 0; }

@@ -135,6 +135,8 @@ ENGINE_SYMBOLS = [
     "gBrSwapPick",
     # ...and who can learn a machine, for the party's windows to grey the rest.
     "gTMHMLearnsets",
+    # ...and which move is waiting on one being forgotten.
+    "gBrForgetMove",
     # ...and the ROM's own BAG running: spike B holds the battle's picture over it while it
     # USEs what the page's bag picked, and the battle's redraw after it (web/spike-b/main.ts
     # trackBag, HBR-110).

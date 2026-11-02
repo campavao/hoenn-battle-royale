@@ -453,6 +453,9 @@ export class BattleMenu {
   private drop: { who: string; rows: PartyMember[]; take(at: number, give?: number): void; close(): void; pick: boolean } | null = null;
   private dropCan: ((m: PartyMember) => boolean) | null = null;
   private dropAt: number | null = null;
+  private forgetting: { name: string; done(row: number | null): void } | null = null;
+  private readonly forgetHead: HTMLElement;
+  private readonly forgetHeadWin: Win;
   /** Off a battle, which screen BACK leaves from; null in one. */
   private fieldHome: 'party' | 'bag' | null = null;
   private fieldBag: Map<number, Stack[]> | null = null;
@@ -669,15 +672,24 @@ export class BattleMenu {
       });
     }
 
-    // Which of their moves, for an ETHER.
+    // Which of their moves, for an ETHER, or to make room for a new one.
     this.useMoveBox = doc.createElement('div');
     this.useMoveBox.className = 'bm-m-moves bm-usemove';
     deps.root.insertBefore(this.useMoveBox, this.backBtn);
+    this.forgetHead = doc.createElement('div');
+    this.forgetHead.className = 'bm-forget-head';
+    this.forgetHead.hidden = true;
+    this.useMoveBox.appendChild(this.forgetHead);
+    this.forgetHeadWin = new Win(this.forgetHead, MENU_W, 18, (c) => {
+      c.fillRect({ x: 0, y: 0, w: MENU_W, h: 18 }, 'rgba(16,20,24,0.6)');
+      c.drawTextCentred(fitText(`Forget one for ${this.forgetting?.name ?? ''}?`, MENU_W - 8), MENU_W / 2, 3, TEXT_WHITE);
+    });
     for (let n = 0; n < 4; n++) {
       const b = button('bm-pick-move', this.useMoveBox);
       const w = new Win(b, CELL_W, PARTY_H, (c) => this.paintUseMove(c, n));
       this.useMoveWins.push({ b, w });
       b.addEventListener('click', () => {
+        if (this.forgetting && b.getAttribute('aria-disabled') !== 'true') { this.forgetting.done(n); return; }
         const using = this.using;
         if (!using || b.getAttribute('aria-disabled') === 'true') return;
         const slot = this.memberAt;
@@ -833,6 +845,33 @@ export class BattleMenu {
     this.settleFocus(true);
   }
 
+  /** A new move and four known: which goes. BACK keeps the four. */
+  openForget(slot: number, name: string, done: (row: number | null) => void): void {
+    this.fieldHome = 'party';
+    this.view = null;
+    this.lastMenu = 0;
+    this.sent = 0;
+    this.using = null;
+    this.swapFrom = null;
+    this.giving = null;
+    this.drop = null;
+    this.forgetting = { name, done };
+    this.team = this.deps.firstMoves?.readParty() ?? [];
+    this.memberAt = slot;
+    this.forgetHead.hidden = false;
+    this.forgetHeadWin.show(name);
+    this.setShown(true);
+    this.mode = 'usemove';
+    this.layout();
+    this.useMoveWins.forEach(({ b, w }, n) => {
+      const v = this.team[slot]?.moves[n];
+      b.hidden = !v;
+      b.setAttribute('aria-disabled', String(!v));
+      w.show(`f${slot}|${JSON.stringify(v)}|${name}`);
+    });
+    this.settleFocus(true);
+  }
+
   private paintDrop(): void {
     this.useHead.hidden = false;
     this.useHeadWin.show(`${this.drop?.who}|${this.dropAt}`);
@@ -861,6 +900,8 @@ export class BattleMenu {
   }
 
   closeField(): void {
+    this.forgetting = null;
+    this.forgetHead.hidden = true;
     this.dropCan = null;
     this.drop = null;
     this.dropAt = null;
@@ -954,7 +995,7 @@ export class BattleMenu {
     const slot = this.team[this.memberAt]?.moves[i];
     const info = slot && this.deps.rom ? moveInfo(this.deps.rom, slot.id) : null;
     if (!slot || !info) return;
-    const full = slot.pp >= slot.maxPp;
+    const full = !this.forgetting && slot.pp >= slot.maxPp;
     c.drawText(fitText(info.name, CELL_W - 16), 8, 6, full ? TEXT_GRAY : TEXT_DARK);
     c.drawText(`PP ${slot.pp}/${slot.maxPp}`, 8, 22, slot.pp === 0 ? TEXT_RED : TEXT_GRAY);
   }
@@ -1305,6 +1346,7 @@ export class BattleMenu {
   }
 
   private goBack(): void {
+    if (this.forgetting) { this.forgetting.done(null); return; }
     if (this.drop) {
       if (this.dropAt !== null) {
         this.dropAt = null;
@@ -1390,6 +1432,7 @@ export class BattleMenu {
     for (const w of this.actionWins) w.size(this.actionW, this.actionH, scale);
     if (this.keysWin) { this.keysWin.size(118, this.keysH, scale); this.keysWin.show('keys'); }
     this.useHeadWin.size(USE_HEAD_W, USE_HEAD_H, scale);
+    this.forgetHeadWin.size(MENU_W, 18, scale);
     for (const { w } of this.useMoveWins) w.size(CELL_W, PARTY_H, scale);
     for (const { w } of this.partyCells) w.size(CELL_W, PARTY_H, scale);
     for (const { w, ww, hh } of this.memberWins) w.size(ww, hh, scale);

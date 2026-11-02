@@ -73,7 +73,7 @@ import { BATTLE_TYPE_TRAINER, CARD_H, SidesView } from '../src/ui/sides';
 import { BAG_POSITION_POCKET, isMachine, learnsMachine, readBattleBag, readFieldBag, readPocket } from '../src/ui/bag';
 import type { Rom } from '../src/battle/movebook';
 import { BATTLE_MENU, MENU_ACTION, MENU_PARTY, TouchLayer } from '../src/touch';
-import type { TeamRow } from './rom';
+import { romAsks, type TeamRow } from './rom';
 import { HUD } from '../src/net/hud';
 import { ITEM_MACH_BIKE, MINI_MAP, PhoneHud, fieldMoves, fogPhase, signFor, type FieldMove } from '../src/ui/phonehud';
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
@@ -930,6 +930,26 @@ function dropPanel(who: string, mons: TeamRow[]): Promise<TeamRow[]> {
     show();
   });
 }
+/** A new move and four known: which goes, on the windows, over the ROM's screen unseen. */
+function askForget(slot: number, move: number): Promise<number | null> {
+  return new Promise((resolve) => {
+    if (!battleMenu) { resolve(null); return; }
+    const wasOn = battleEl.classList.contains('on');
+    battleEl.classList.remove('screen', 'see', 'fight');
+    battleEl.classList.add('on', 'panel');
+    const up = panelUp;
+    panelUp = true;
+    dispatchEvent(new Event('resize'));
+    battleMenu.openForget(slot, moveInfo(romTables, move)?.name ?? '', (row) => {
+      battleMenu!.closeField();
+      panelUp = up;
+      battleEl.classList.remove('panel');
+      if (!wasOn) battleEl.classList.remove('on');
+      resolve(row);
+    });
+  });
+}
+romAsks.forget = askForget;
 /** Which of the party, on the windows; null for BACK. */
 function askParty(title: string, can?: (m: PartyMember, rom: Rom | null) => boolean): Promise<number | null> {
   return new Promise((resolve) => {

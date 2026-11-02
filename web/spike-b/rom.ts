@@ -147,6 +147,10 @@ export type MenuWalk =
   | { to: 'summary' | 'moves'; slot: number }
   | { to: 'use'; pocket: number; item: number; slot?: number; move?: number };
 
+/** What a walk needs the page to ask. `forget`: a new move and four known, which goes, by the
+ *  row; null keeps the four. */
+export const romAsks: { forget: ((slot: number, move: number) => Promise<number | null>) | null } = { forget: null };
+
 export interface MirrorFeed {
   /** The next message not yet handed to the ROM, or null. */
   peek(): SpMsg | null;
@@ -701,6 +705,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     const bagCb = sym('CB2_BagMenuRun');
     const partyCb = partyScreen();
     let sent = slot === undefined, moves = move ?? -1, n = 0, settledFor = 0, was = 0, showing = false;
+    const forgetAt = sym('gBrForgetMove');
+    let forgetting = false, script: GbaKey[] = [], pressedKey: GbaKey | null = null;
     const press = (k: GbaKey, every: number) => {
       if (n % every === 0) emu.press(k);
       else if (n % every === 3) emu.release(k);
@@ -710,13 +716,26 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       if (onField()) return true;
       const inBag = screenIs(bagCb), inParty = screenIs(partyCb);
       if (!inBag && !inParty) {
-        // An evolution, a move to forget: the ROM's alone, once it has come to rest.
+        // A move to forget: the windows' to ask, and the ROM's screen walked on their answer.
+        const forget = forgetAt === undefined ? 0 : emu.read(forgetAt, 16);
+        if (forget && !forgetting && romAsks.forget && !fade().active) {
+          forgetting = true;
+          hurryOff();
+          void romAsks.forget(emu.read(partyMenuAt + 9, 8), forget).then((row) => { script = row === null ? ['b'] : [...Array(row).fill('down'), 'a']; n = 0; });
+        }
+        if (forgetting) {
+          if (script.length && n % 12 === 0 && !fade().active) { const k = script.shift()!; emu.press(k); pressedKey = k; n = 1; }
+          else if (pressedKey && n === 4) { emu.release(pressedKey); pressedKey = null; }
+          return false;
+        }
+        // An evolution, say: the ROM's alone, once it has come to rest.
         const cb = emu.read(sym('gMain')! + 4, 32);
         settledFor = cb === was && !fade().active ? settledFor + 1 : 0;
         was = cb;
         if (!showing && settledFor > 40) { showing = true; hurryOff(); onStart(); }
         return false;
       }
+      if (forgetting) { forgetting = false; hurryOn(); }
       if (showing) { showing = false; onEnd(); hurryOn(); }
       settledFor = 0;
       if (inParty) {

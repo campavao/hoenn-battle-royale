@@ -481,12 +481,25 @@ test('a TM off the ground and a trader ask on the windows', async ({ browser }) 
   await expect(page.locator('#gba')).toBeHidden();
   await shot(page, 'phone-tm');
   await page.locator('.bm-slot').first().click();
-  await expect(page.locator('#gba')).toBeVisible({ timeout: 20_000 });
-  await page.waitForTimeout(1500);
+  // Four known: which goes is the windows' too, and the ROM's screen never shows.
+  await expect(page.locator('.bm-forget-head')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.bm-pick-move')).toHaveCount(4);
+  await expect(page.locator('#gba')).toBeHidden();
   await shot(page, 'phone-tm-forget');
-  // Not forgetting anything: B twice, and it went in the BAG.
-  for (let i = 0; i < 8 && (await page.locator('#gba').isVisible()); i++) { await key(page, 'x', true); await page.waitForTimeout(150); await key(page, 'x', false); await page.waitForTimeout(800); }
-  await expect(page.locator('#gba')).toBeHidden({ timeout: 15_000 });
+  // Forgetting nothing: BACK, and it is not learned.
+  await page.locator('#battle-menu .bm-back').click();
+  await expect(page.locator('.bm-forget-head')).toBeHidden();
+  await expect.poll(() => spike(page, (s) => s.swapping || s.battleMenu.isShown), { timeout: 20_000 }).toBe(false);
+  expect((await team())[0].moves.map((m) => m.id)).not.toContain(168);
+  // Again, and BITE goes for it.
+  await spike(page, (s) => s.give(334));
+  await expect(page.locator('.bm-use-head')).toBeVisible({ timeout: 15_000 });
+  await page.locator('.bm-slot').first().click();
+  await expect(page.locator('.bm-pick-move').nth(1)).toBeVisible({ timeout: 20_000 });
+  await page.locator('.bm-pick-move').nth(1).click();
+  await expect.poll(async () => (await team())[0].moves.map((m) => m.id), { timeout: 20_000, message: 'THIEF for BITE' }).toContain(168);
+  expect((await team())[0].moves.map((m) => m.id)).not.toContain(44);
+  await expect(page.locator('#gba')).toBeHidden();
 
   await expect.poll(() => spike(page, (s) => s.swapping), { timeout: 20_000 }).toBe(false);
   await spike(page, (s) => s.startFor({ type: 'trade', tick: 0, n: 0, species: 25 }));
