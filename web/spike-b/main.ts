@@ -1457,18 +1457,8 @@ async function gift(n: number, species: number): Promise<void> {
     const name = speciesName(species);
     const c = await ask(`Will you look after my ${name} for me?`, [['YES', 'y'], ['NO, THANKS', '']]);
     if (c !== 'y' || !rom || isOut) return;
-    swapping = true;
-    held.clear();
-    try {
-      const left = await rom.team([{ species, level: rungForPhase(link.room.ring().phase + 1) }], 'GIFT', () => battleEl.classList.add('on'), () => battleEl.classList.remove('on'));
-      if (!left.length) taken = species;
-    } finally {
-      swapping = false;
-      battleEl.classList.remove('on');
-      held.clear();
-      pressed.clear();
-      calmUntil = frame + 30;
-    }
+    const left = await dropPanel('GIFT', [{ species, level: rungForPhase(link.room.ring().phase + 1) }]);
+    if (!left.some((m) => m.species === species)) taken = species;
     // The team screen takes it across as somebody else's, so a trade evolution goes off.
     if (taken) say(`Took the ${speciesName(tradedInto(species))}!`);
   } finally {

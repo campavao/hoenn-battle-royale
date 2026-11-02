@@ -510,6 +510,18 @@ test('a TM off the ground and a trader ask on the windows', async ({ browser }) 
   await shot(page, 'phone-trade');
   await page.locator('.bm-slot').nth(2).click();
   await expect.poll(async () => (await team()).some((m) => m.species === 25), { timeout: 30_000, message: 'traded' }).toBe(true);
+
+  // Somebody's gift, with a full party: theirs, then which of ours for it, on the windows.
+  await expect.poll(() => spike(page, (s) => s.swapping), { timeout: 20_000 }).toBe(false);
+  await spike(page, (s) => s.startFor({ type: 'trade', tick: 0, n: 0, species: 280, gives: true }));
+  await expect.poll(() => spike(page, (s) => s.asking), { timeout: 10_000 }).toBe(true);
+  await key(page, 'z', true); await page.waitForTimeout(150); await key(page, 'z', false);
+  await expect(page.locator('.bm-use-head')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('#gba')).toBeHidden();
+  await page.locator('.bm-slot').first().click();
+  await expect(page.locator('.bm-slot').nth(5)).toBeVisible();
+  await page.locator('.bm-slot').nth(1).click();
+  await expect.poll(async () => (await team()).some((m) => m.species === 280), { timeout: 30_000, message: 'gift taken' }).toBe(true);
   await ctx.close();
 });
 
