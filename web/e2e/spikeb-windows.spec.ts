@@ -19,11 +19,20 @@ async function withTeam(page: Page, fog = 900): Promise<void> {
   const tap = async (k: string) => { await key(page, k, true); await page.waitForTimeout(90); await key(page, k, false); };
   await spike(page, (s) => { const a = s.link.room.actor(s.link.me); a.m = { ...a.m, spot: { map: 'MAP_ROUTE117_POKEMON_DAY_CARE', x: 5, y: 6 }, facing: 2 }; a.calm = 0; });
   await page.waitForTimeout(800);
-  await tap('z'); await page.waitForTimeout(3000);
-  await tap('z'); await page.waitForTimeout(1200);
-  await tap('Enter'); await page.waitForTimeout(2000);
-  for (let i = 0; i < 10 && (await spike(page, (s) => s.swapping)); i++) { await tap('x'); await page.waitForTimeout(1500); }
-  await page.waitForTimeout(1500);
+  // The chest: A on it, POKeMON if it asks, and a mon off the windows. Each once it is up, on a
+  // machine of any speed: a key pressed on a timer found the wrong screen on CI, and no team.
+  const party = () => spike(page, (s) => s.rom.partyCount());
+  for (let i = 0; i < 40 && !(await party()); i++) {
+    if (await page.locator('.bm-slot').first().isVisible()) {
+      await page.locator('.bm-slot').first().click();
+      await page.waitForTimeout(1500);
+    } else if (!(await spike(page, (s) => s.swapping))) {
+      await tap('z');
+      await page.waitForTimeout(800);
+    } else await page.waitForTimeout(500);
+  }
+  expect(await party(), 'a mon out of the chest').toBeGreaterThan(0);
+  await expect.poll(() => spike(page, (s) => s.swapping), { timeout: 30_000 }).toBe(false);
   await spike(page, (s) => s.rom.fillParty());
 }
 
@@ -253,10 +262,12 @@ test('one faints: who goes out is the party windows, with no way back and the RO
   await spike(page, (s) => {
     const emu = s.rom.emu, at = s.art.sym('gPlayerParty'), mons = s.art.sym('gBattleMons');
     emu.write(at + 86, 1, 16); emu.write(mons + 0x28, 1, 16); emu.write(at + 100 + 86, 0, 16);
+    // ...and nothing but TACKLE for the foe to answer with (struct BattlePokemon: 0x58, moves at 0xC).
+    for (const m of [0x64, 0x66, 0x68, 0x6a]) emu.write(mons + m, 33, 16);
   });
   // A move each time the windows ask, and A through "Use next POKeMON?", until the party asks.
   const asked = () => page.locator('.bm-use-head').isVisible();
-  for (let i = 0; i < 60 && !(await asked()); i++) { await page.keyboard.press('z'); await page.waitForTimeout(700); }
+  for (let i = 0; i < 60 && !(await asked()); i++) { await page.keyboard.press('z', { delay: 120 }); await page.waitForTimeout(600); }
   await expect(page.locator('.bm-use-head')).toBeVisible();
   await shot(page, 'desk-forced');
   await expect(page.locator('.bm-slot')).toHaveCount(6);
@@ -447,6 +458,9 @@ test('the big MAP shows the fog, as the minimap does (Cam, 11-02)', async ({ bro
   expect(fog.on, 'the fog canvas is on').toBe(true);
   expect(fog.painted, 'and has fog on it').toBeGreaterThan(0);
   expect(fog.w).toBeCloseTo(fog.gba[2], 0);
+  // WebKit (Cam's iPhone) drew the ROM's picture over it without this: painted, and not seen.
+  // Only a local WebKit run saw that, so the rule itself is what CI holds to.
+  expect(await page.locator('#ringfog').evaluate((c) => getComputedStyle(c).zIndex)).toBe('1');
   await ctx.close();
 });
 

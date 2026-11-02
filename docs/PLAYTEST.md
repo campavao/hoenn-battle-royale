@@ -130,10 +130,9 @@ transcripts were made from them; a frame at the time is the evidence for each li
 * **A dropped bag vanished while it was open** (Cam, 11-02): the field drew no piece anybody had taken
   up. It stays for the one who has it open. Other trainers still see it go.
 
-**Not reproduced:**
-
-* **No fog on the big MAP** (Cam, iPhone 13 mini, 11-02, his screenshot at 1:11, "Safe: ROUTE 116"). The
-  minimap has it. On dev in Chromium, solo, the MAP's fog paints (`spikeb-windows.spec.ts`).
+* **No fog on the big MAP** (Cam, iPhone 13 mini, 11-02). In WebKit the fog canvas was painted but not seen:
+  272 purple pixels on the glass where Chromium has thousands, 7,376 with `#ringfog` stacked above the ROM's
+  picture. Measured on desktop WebKit, solo, not on the handset.
 
 **Partly fixed:**
 
