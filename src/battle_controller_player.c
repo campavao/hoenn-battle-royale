@@ -2795,6 +2795,10 @@ static void PlayerHandleChoosePokemon(void)
         *(&gBattleStruct->battlerPreventingSwitchout) = gBattleBufferA[gActiveBattler][1] >> 4;
         *(&gBattleStruct->prevSelectedPartySlot) = gBattleBufferA[gActiveBattler][2];
         *(&gBattleStruct->abilityPreventingSwitchout) = gBattleBufferA[gActiveBattler][3];
+#if BR
+        if ((gBattleBufferA[gActiveBattler][1] & 0xF) == PARTY_ACTION_SEND_OUT)
+            gBrBattle.menu = BR_MENU_PARTY;
+#endif
         BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 0x10, RGB_BLACK);
         gBattlerControllerFuncs[gActiveBattler] = OpenPartyMenuToChooseMon;
         gBattlerInMenuId = gActiveBattler;

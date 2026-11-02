@@ -1,0 +1,73 @@
+# forced-party: one has fainted and the ROM is asking who goes out (Cam, 11-02: no old ROM
+# screens). PlayerHandleChoosePokemon says so in gBrBattle.menu before its fade, so the page's
+# party is up with the battle's picture held. FIGHT and POKeMON's own party never set it.
+#
+# The wild battle is run-wild-keeps-doll.txt's: ROUTE 102 under match seed 4.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 4
+wait 30
+tap LEFT
+wait 4
+tap LEFT
+wait 250
+tap LEFT
+wait 250
+expect u16 gBattleTypeFlags 4
+wait 300
+tap B
+wait 300
+tap B
+wait 300
+expect u8 gBrBattle+8 1
+# A second to send out, and the lead on its last point.
+copy gPlayerParty+100 gPlayerParty 100
+poke u8 gPlayerPartyCount 2
+poke u16 gPlayerParty+86 1
+poke u16 gBattleMons+0x28 1
+# ...and nothing but TACKLE for the foe to answer with (struct BattlePokemon: 0x58, moves at 0xC).
+poke u16 gBattleMons+0x64 33
+poke u16 gBattleMons+0x66 33
+poke u16 gBattleMons+0x68 33
+poke u16 gBattleMons+0x6A 33
+# POKeMON (down, right of FIGHT's column): the player's own choice does not count.
+tap DOWN
+wait 10
+tap A
+wait 150
+expect u8 gBrBattle+8 0
+tap B
+waitfor u8 gBrBattle+8 1 300
+wait 30
+tap UP
+wait 10
+# FIGHT, the first move: the foe's hit is the lead's last.
+tap A
+waitfor u8 gBrBattle+8 2 120
+wait 10
+tap A
+waitfor u16 gPlayerParty+86 0 900
+wait 240
+shot use-next
+# "Use next POKeMON?" YES, and the ROM says who it is asking before it fades.
+tap A
+wait 120
+tap A
+waitfor u8 gBrBattle+8 5 120
+shot asked
+wait 100
+expect u8 gBrBattle+8 5
+expectne u32 gMain+4 BattleMainCB2+1
+# Its party: down to the second, A, SHIFT, and the menu byte goes with the choice.
+tap DOWN
+wait 10
+tap A
+wait 30
+tap A
+wait 30
+tap A
+waitfor u8 gBrBattle+8 0 300
+waitfor u16 gBattlerPartyIndexes 1 400
+say forced party ok

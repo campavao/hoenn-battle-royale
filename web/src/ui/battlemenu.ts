@@ -16,11 +16,11 @@ import uiData from '../data/ui.json';
 import { decodeGen3Display } from '../text/gen3';
 import { MAIN_CALLBACK2 } from '../field';
 import { effectWords, effectiveness, moveInfo, type MoveInfo, type Rom } from '../battle/movebook';
-import { BATTLE_MENU, MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU_MOVE, MENU_SAFARI, MENU_TARGET, localBattler } from '../touch';
+import { BATTLE_MENU, MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU_MOVE, MENU_PARTY, MENU_SAFARI, MENU_TARGET, localBattler } from '../touch';
 import { EmeraldCanvas, TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_GREEN, TEXT_RED, TEXT_WHITE, fitText, measure, wrapText, type TextColor } from './emerald';
 import { ITEMS_POCKET, Win, bagHolds, drawFitted, drawIcon, drawItemFitted, drawKeycap, picture } from './phonehud';
 import { nextFocus, type Dir } from './focus';
-import { BAG_POCKETS, POCKET_BALLS, itemEffect, itemInfo, medicineHelps, readBattleBag, usedOnOne, type Stack } from './bag';
+import { BAG_POCKETS, POCKET_BALLS, asksMove, itemEffect, itemInfo, medicineHelps, readBattleBag, usedOnOne, type Stack } from './bag';
 
 // ---- what the ROM says ---------------------------------------------------------------
 
@@ -252,7 +252,7 @@ const RULE = '#d0d0c8';
 /** The page's view of the menu: the actions, the moves, or a move's details over them.
  *  FIGHT is pressed in the ROM too, so its shot clock picks a move, as a thumb's would,
  *  rather than RUN (a forfeit, in a link battle). */
-type Mode = 'action' | 'moves' | 'info' | 'bag' | 'item' | 'party' | 'member';
+type Mode = 'action' | 'moves' | 'info' | 'bag' | 'item' | 'party' | 'member' | 'usemove';
 
 /** A team member as the party windows show it. */
 export interface PartyMember {
@@ -265,7 +265,7 @@ export interface PartyMember {
   item: number;
   itemName: string;
   ability: string;
-  moves: { id: number; pp: number }[];
+  moves: { id: number; pp: number; maxPp: number }[];
   /** Out in the battle now. */
   active: boolean;
 }
@@ -276,7 +276,7 @@ const PARTY_H = 44;
 const MEMBER_CARD_H = 56;
 const MEMBER_HELD_H = 32;
 const MEMBER_MOVE_H = 56;
-const ITEM_POKE_BALL = 4, ITEM_ESCAPE_ROPE = 85, ITEM_TM_CASE = 364;
+const ITEM_POKE_BALL = 4, ITEM_ESCAPE_ROPE = 85, ITEM_POKEBLOCK_CASE = 273, ITEM_TM_CASE = 364;
 const ICON_BOX = 15;
 const SLOT_MENU_PARTY = 2, SLOT_RUN = 3;
 const USE_HEAD_W = 100, USE_HEAD_H = 34;
@@ -328,7 +328,11 @@ export interface BattleMenuDeps {
     icon(species: number): CanvasImageSource | null;
     bag(): CanvasImageSource | null;
     /** USE on one of them: `item` out of `pocket`, the ROM's BAG and party walked unseen. */
-    useOn(pocket: number, item: number, slot: number): void;
+    useOn(pocket: number, item: number, slot: number, move?: number): void;
+    /** One has fainted: the party's own screen, already asking, has this one go out. */
+    sendOut(slot: number): void;
+    /** ...or its SUMMARY, and back to the question. */
+    summaryOut(slot: number): void;
     /** A keyboard's keys on PARTY and BAG. */
     keys?: { party: string; bag: string };
     /** Send out the party's `slot`; or open its SUMMARY. */
@@ -434,6 +438,12 @@ export class BattleMenu {
   private memberAt = 0;
   /** The item that brought the party up, until a slot or BACK. */
   private using: { pocket: number; item: number; effect: Uint8Array; name: string } | null = null;
+  /** One has fainted and the ROM is asking who goes out. */
+  private forced = false;
+  /** The ROM's turn on its own screen: the windows stand aside whatever the menu byte says. */
+  away = false;
+  private readonly useMoveBox: HTMLElement;
+  private readonly useMoveWins: { b: HTMLButtonElement; w: Win }[] = [];
   private readonly useHead: HTMLElement;
   private readonly useHeadWin: Win;
   /** Which button the keys are on, among those on show. */
@@ -575,7 +585,7 @@ export class BattleMenu {
     this.partyBox.appendChild(this.useHead);
     this.useHeadWin = new Win(this.useHead, USE_HEAD_W, USE_HEAD_H, (c) => {
       c.fillRect({ x: 0, y: 0, w: USE_HEAD_W, h: USE_HEAD_H }, 'rgba(16,20,24,0.6)');
-      c.drawTextCentred(fitText(this.using?.name ?? '', USE_HEAD_W - 8), USE_HEAD_W / 2, 3, TEXT_WHITE);
+      c.drawTextCentred(fitText(this.forced ? 'Send out' : this.using?.name ?? '', USE_HEAD_W - 8), USE_HEAD_W / 2, 3, TEXT_WHITE);
       c.drawTextCentred('Which POKeMON?', USE_HEAD_W / 2, 18, TEXT_WHITE);
     });
     for (let i = 0; i < 6; i++) {
@@ -585,6 +595,18 @@ export class BattleMenu {
       b.addEventListener('click', () => {
         if (!this.team[i] || b.getAttribute('aria-disabled') === 'true') return;
         const using = this.using;
+        if (using && asksMove(using.effect)) {
+          this.memberAt = i;
+          this.setMode('usemove');
+          this.useMoveWins.forEach(({ b, w }, n) => {
+            const v = this.team[i]?.moves[n];
+            b.hidden = !v;
+            b.setAttribute('aria-disabled', String(!v || v.pp >= v.maxPp));
+            w.show(`${i}|${JSON.stringify(v)}`);
+          });
+          this.settleFocus(true);
+          return;
+        }
         if (using) {
           this.using = null;
           this.mode = 'action';
@@ -593,6 +615,24 @@ export class BattleMenu {
         }
         this.memberAt = i;
         this.setMode('member');
+      });
+    }
+
+    // Which of their moves, for an ETHER.
+    this.useMoveBox = doc.createElement('div');
+    this.useMoveBox.className = 'bm-m-moves bm-usemove';
+    deps.root.insertBefore(this.useMoveBox, this.backBtn);
+    for (let n = 0; n < 4; n++) {
+      const b = button('bm-pick-move', this.useMoveBox);
+      const w = new Win(b, CELL_W, PARTY_H, (c) => this.paintUseMove(c, n));
+      this.useMoveWins.push({ b, w });
+      b.addEventListener('click', () => {
+        const using = this.using;
+        if (!using || b.getAttribute('aria-disabled') === 'true') return;
+        const slot = this.memberAt;
+        this.using = null;
+        this.mode = 'action';
+        this.send(() => this.deps.firstMoves?.useOn(using.pocket, using.item, slot, n));
       });
     }
 
@@ -627,8 +667,8 @@ export class BattleMenu {
       return b;
     };
     rowButton('BACK', () => TEXT_DARK, (c, cx, cy) => drawBackArrow(c, cx, cy), () => this.setMode('party'));
-    rowButton('SUMMARY', () => TEXT_DARK, (c, cx, cy, redo) => drawItemFitted(c, ITEM_TM_CASE, cx, cy, ICON_BOX, redo), () => this.send(() => first?.summary(this.memberAt)));
-    this.selectBtn = rowButton('SELECT', () => (this.canSelect() ? TEXT_BLUE : TEXT_GRAY), (c, cx, cy, redo) => drawItemFitted(c, ITEM_POKE_BALL, cx, cy, ICON_BOX, redo), () => this.send(() => first?.switchTo(this.memberAt)));
+    rowButton('SUMMARY', () => TEXT_DARK, (c, cx, cy, redo) => drawItemFitted(c, ITEM_TM_CASE, cx, cy, ICON_BOX, redo), () => this.send(() => (this.forced ? first?.summaryOut(this.memberAt) : first?.summary(this.memberAt))));
+    this.selectBtn = rowButton('SELECT', () => (this.canSelect() ? TEXT_BLUE : TEXT_GRAY), (c, cx, cy, redo) => drawItemFitted(c, ITEM_POKE_BALL, cx, cy, ICON_BOX, redo), () => this.send(() => (this.forced ? first?.sendOut(this.memberAt) : first?.switchTo(this.memberAt))));
     this.setPartyHidden();
     if (first?.keys) {
       // The keys, by the windows they drive: the keyboard's and a pad's.
@@ -661,7 +701,7 @@ export class BattleMenu {
   private actionH = BACK_H;
 
   private setPartyHidden(): void {
-    this.actions.hidden = this.partyBox.hidden = this.memberBox.hidden = true;
+    this.actions.hidden = this.partyBox.hidden = this.memberBox.hidden = this.useMoveBox.hidden = true;
   }
 
   private runLabel(): { label: string; enabled: boolean } | null {
@@ -679,8 +719,8 @@ export class BattleMenu {
     if (!first) return;
     this.using = using;
     this.team = first.readParty();
-    this.useHead.hidden = !using;
-    if (using) this.useHeadWin.show(using.name);
+    this.useHead.hidden = !using && !this.forced;
+    this.useHeadWin.show(this.forced ? 'send' : using?.name ?? '');
     this.partyCells.forEach(({ b }, i) => b.setAttribute('aria-disabled', String(!this.slotHelps(i))));
     this.setMode('party');
     this.partyCells.forEach(({ w }, i) => w.show(JSON.stringify([this.team[i] ?? null, using?.item])));
@@ -731,13 +771,23 @@ export class BattleMenu {
     c.drawText(m.item ? m.itemName : 'Holds nothing', m.item ? 36 : 12, 9, m.item ? TEXT_DARK : TEXT_GRAY);
   }
 
+  private paintUseMove(c: EmeraldCanvas, i: number): void {
+    c.drawFrame({ x: 0, y: 0, w: CELL_W, h: PARTY_H });
+    const slot = this.team[this.memberAt]?.moves[i];
+    const info = slot && this.deps.rom ? moveInfo(this.deps.rom, slot.id) : null;
+    if (!slot || !info) return;
+    const full = slot.pp >= slot.maxPp;
+    c.drawText(fitText(info.name, CELL_W - 16), 8, 6, full ? TEXT_GRAY : TEXT_DARK);
+    c.drawText(`PP ${slot.pp}/${slot.maxPp}`, 8, 22, slot.pp === 0 ? TEXT_RED : TEXT_GRAY);
+  }
+
   private paintMemberMove(c: EmeraldCanvas, i: number): void {
     c.drawFrame({ x: 0, y: 0, w: CELL_W, h: MEMBER_MOVE_H });
     const slot = this.team[this.memberAt]?.moves[i];
     const info = slot && this.deps.rom ? moveInfo(this.deps.rom, slot.id) : null;
     if (!slot || !info) { c.drawTextCentred('-', CELL_W / 2, 20, TEXT_GRAY); return; }
     c.drawText(fitText(info.name, CELL_W - 16), 8, 7, TEXT_DARK);
-    c.drawText(`PP ${slot.pp}/${ppWithBonus(info.pp, 0, 0)}`, 8, 21, slot.pp === 0 ? TEXT_RED : TEXT_GRAY);
+    c.drawText(`PP ${slot.pp}/${slot.maxPp}`, 8, 21, slot.pp === 0 ? TEXT_RED : TEXT_GRAY);
     if (this.view) drawEffect(c, moveEffect(this.deps.rom, info, this.view.foe.types), '', 6, 37, CELL_W - 12);
   }
 
@@ -783,7 +833,9 @@ export class BattleMenu {
       if (this.mode === 'info') this.setMode('moves');
       else if (this.mode === 'item') this.setMode('bag');
       else if (this.mode === 'member') this.setMode('party');
+      else if (this.mode === 'usemove') this.setMode('party');
       else if (this.mode === 'party' && this.using) this.dropItem();
+      else if (this.mode === 'party' && this.forced) return true;
       else if (this.mode !== this.home()) this.goBack();
       return true;
     }
@@ -1058,6 +1110,7 @@ export class BattleMenu {
   }
 
   private goBack(): void {
+    if (this.mode === 'usemove') { this.setMode('party'); return; }
     if (this.mode === 'party' && this.using) { this.dropItem(); return; }
     if (this.home() === 'moves') {
       this.setMode(this.mode === 'member' ? 'party' : 'moves');
@@ -1123,6 +1176,7 @@ export class BattleMenu {
     for (const w of this.actionWins) w.size(this.actionW, this.actionH, scale);
     if (this.keysWin) { this.keysWin.size(118, this.keysH, scale); this.keysWin.show('keys'); }
     this.useHeadWin.size(USE_HEAD_W, USE_HEAD_H, scale);
+    for (const { w } of this.useMoveWins) w.size(CELL_W, PARTY_H, scale);
     for (const { w } of this.partyCells) w.size(CELL_W, PARTY_H, scale);
     for (const { w, ww, hh } of this.memberWins) w.size(ww, hh, scale);
     if (this.mode === 'bag' || this.mode === 'item') this.layout();
@@ -1137,9 +1191,11 @@ export class BattleMenu {
 
   /** Each frame, from the ROM. */
   update(v: BattleView | null): void {
-    const menu = v?.menu ?? 0;
+    // /classic/ has only the ROM's party screen for it.
+    const menu = v?.menu === MENU_PARTY && !this.deps.firstMoves ? 0 : v?.menu ?? 0;
     this.view = v;
     if (!v) {
+      this.forced = false;
       this.sent = 0;
       this.chained = false;
       this.opening = 0;
@@ -1149,6 +1205,23 @@ export class BattleMenu {
       this.lastMenu = 0;
       this.setShown(false);
       return;
+    }
+    // One has fainted: who goes out, on the page's party, with the ROM's own unseen behind it.
+    if (menu === MENU_PARTY) {
+      if (!this.forced) {
+        this.forced = true;
+        this.sent = 0;
+        this.openParty();
+      }
+      this.lastMenu = menu;
+      this.setShown(!this.away);
+      if (!this.away) this.layout();
+      return;
+    }
+    if (this.forced) {
+      this.forced = false;
+      this.useHead.hidden = true;
+      this.setShown(false);
     }
     // A double battle's target (POK-383): the pad picks it and B backs out, so the page
     // steps aside with the moves kept. B lands back in the move menu, which follows below.
@@ -1197,6 +1270,8 @@ export class BattleMenu {
     this.actions.hidden = !(first && moves && !info);
     this.partyBox.hidden = !party;
     this.memberBox.hidden = !member;
+    const usemove = this.mode === 'usemove';
+    this.useMoveBox.hidden = !usemove;
     if (first && moves && !info) {
       const run = labels[SLOT_RUN];
       const runB = this.actions.children[2] as HTMLElement;
@@ -1212,7 +1287,7 @@ export class BattleMenu {
       this.selectBtn?.setAttribute('aria-disabled', String(!this.canSelect()));
     }
     this.cells.forEach(({ b, w }, i) => {
-      b.hidden = info || bag || item || party || member;
+      b.hidden = info || bag || item || party || member || usemove;
       const slot = v?.moves[i];
       const enabled = moves ? !!slot?.id : (labels[i]?.enabled ?? false);
       b.setAttribute('aria-disabled', String(!enabled));
@@ -1220,7 +1295,7 @@ export class BattleMenu {
       b.setAttribute('aria-label', moves ? (m ? `${m.name}, ${m.typeName}, PP ${slot!.pp}/${slot!.maxPp}` : 'No move') : (labels[i]?.label ?? ''));
       w.show(moves ? `m|${slot?.id}|${slot?.pp}|${slot?.maxPp}|${v?.foe.types}` : `a|${JSON.stringify(labels[i] ?? null)}`);
     });
-    this.backBtn.hidden = first ? !(bag || party) : (!moves || info) && !bag;
+    this.backBtn.hidden = this.forced ? true : first ? !(bag || party || usemove) : (!moves || info) && !bag;
     (this.hint.el as HTMLElement).hidden = first || !moves || info;
     this.sheet.hidden = !info;
     for (const el of [this.bagHead, this.bagList]) el.hidden = !bag;
@@ -1261,7 +1336,15 @@ export class BattleMenu {
     if (this.mode === 'action') {
       const l = actionLabels(v)[i];
       if (!l) return;
-      c.drawTextCentred(l.label, CELL_W / 2, 24, l.enabled ? TEXT_DARK : TEXT_GRAY);
+      if (!this.deps.firstMoves) {
+        c.drawTextCentred(l.label, CELL_W / 2, 24, l.enabled ? TEXT_DARK : TEXT_GRAY);
+        return;
+      }
+      // The Safari's four, in the windows' own look: BALL, POKeBLOCK, GO NEAR, RUN.
+      iconButton(c, CELL_W, CELL_H, (cx, cy, box) => {
+        if (i === 2) { c.fillRect({ x: cx - 6, y: cy - 1, w: 8, h: 3 }, ARROW_RED); for (let n = 0; n < 5; n++) c.fillRect({ x: cx + 6 - n, y: cy - n, w: 1, h: 2 * n + 1 }, ARROW_RED); }
+        else drawItemFitted(c, i === 0 ? ITEM_POKE_BALL : i === 1 ? ITEM_POKEBLOCK_CASE : ITEM_ESCAPE_ROPE, cx, cy, box, redo);
+      }, l.label, l.enabled ? TEXT_DARK : TEXT_GRAY);
       return;
     }
     const slot = v.moves[i];

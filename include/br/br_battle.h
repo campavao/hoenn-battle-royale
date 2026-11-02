@@ -84,6 +84,7 @@ extern struct BrSides gBrSides;
 #define BR_MENU_MOVE   2 // the four moves, bottom left, 2x2
 #define BR_MENU_SAFARI 3 // BALL / POKeBLOCK / GO NEAR / RUN, bottom right, 2x2
 #define BR_MENU_TARGET 4 // a double battle's target: the bouncing healthbox, picked with the pad
+#define BR_MENU_PARTY  5 // one has fainted: who goes out next, set before the party's fade
 
 void BrBattle_Init(void);
 // The player controller: reset when a choice opens, tick each frame it is open.

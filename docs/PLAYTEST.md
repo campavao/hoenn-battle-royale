@@ -105,8 +105,9 @@ transcripts were made from them; a frame at the time is the evidence for each li
   BAG side by side, TAKE ALL. A window with a mouse has all of it, by arrows, Z, X, Q, E and SHIFT
   or a pad's D-pad, A, B, L and R, with a focus frame (`spikeb-windows.spec.ts`).
   A medicine in a battle asks on those same windows, greying who it would not help (Cam, 11-02),
-  walking the ROM's BAG and party unseen. An ETHER, ELIXIR or LEPPA BERRY keeps the ROM's own
-  screen, since it goes on to ask which move, and the field's BAG still opens the ROM's.
+  walking the ROM's BAG and party unseen. An ETHER or LEPPA BERRY goes on to ask which move on
+  windows too. One fainted: who goes out is the same party with no BACK (\orced-party\). A Safari
+  battle is its four in the same windows. The field's BAG still opens the ROM's.
   Not as drawn yet: a dropped POKeMON's TAKE or SWAP is still the ROM's swap screen; a forced
   switch after a faint and SUMMARY are the ROM's own; the field's PARTY and BAG open the ROM's.
   The minimap's fog is a near colour, not the ROM's palette's.

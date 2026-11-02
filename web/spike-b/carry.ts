@@ -177,6 +177,8 @@ export interface TeamMember {
   /** Which of the species' two abilities. */
   ability: number;
   moves: { id: number; pp: number }[];
+  /** struct PokemonSubstruct0's ppBonuses: two bits a move. */
+  ppBonuses: number;
 }
 
 /** The party's members, in its order, from the same bytes as fameTeam. */
@@ -208,6 +210,7 @@ export function teamMembers(party: Uint8Array, count: number, nameOf: (species: 
       // struct PokemonSubstruct3's top bit (abilityNum).
       ability: word('M', 4) >>> 31,
       moves: ids.map((id, n) => ({ id, pp: (pp >>> (n * 8)) & 0xff })).filter((m) => m.id > 0),
+      ppBonuses: word('G', 8) & 0xff,
     });
   }
   return out;

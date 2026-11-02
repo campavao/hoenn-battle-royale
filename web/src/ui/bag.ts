@@ -92,21 +92,25 @@ export function itemEffect(rom: Rom, id: number): Uint8Array | null {
   return at >= ROM_BASE ? rom.bytes.subarray(at - ROM_BASE, at - ROM_BASE + 6) : null;
 }
 
-/** A medicine the ROM asks "on which POKeMON?" of and then just gives. An ETHER goes on to ask
- *  which move, so the PP ones keep the ROM's own screen. */
+/** A medicine the ROM asks "on which POKeMON?" of. */
 export function usedOnOne(effect: Uint8Array | null): boolean {
   if (!effect) return false;
-  const more = effect[EFFECT_MORE], status = effect[EFFECT_STATUS] & ITEM3_ANY;
-  return !(more & (ITEM4_HEAL_PP | ITEM4_HEAL_PP_ONE)) && (status !== 0 || (more & (ITEM4_HEAL_HP | ITEM4_REVIVE)) !== 0);
+  return (effect[EFFECT_STATUS] & ITEM3_ANY) !== 0 || (effect[EFFECT_MORE] & (ITEM4_HEAL_HP | ITEM4_REVIVE | ITEM4_HEAL_PP)) !== 0;
+}
+
+/** An ETHER or a LEPPA BERRY: and then, which of their moves. */
+export function asksMove(effect: Uint8Array): boolean {
+  return (effect[EFFECT_MORE] & ITEM4_HEAL_PP_ONE) !== 0;
 }
 
 /** Whether the ROM would take it for this one, as ExecuteTableBasedItemEffect goes. Who is
  *  confused is the battle's to know, so a cure for it counts for the one out. */
-export function medicineHelps(effect: Uint8Array, m: { hp: number; maxHp: number; status: number; active: boolean }): boolean {
+export function medicineHelps(effect: Uint8Array, m: { hp: number; maxHp: number; status: number; active: boolean; moves?: { pp: number; maxPp: number }[] }): boolean {
   const more = effect[EFFECT_MORE], cures = effect[EFFECT_STATUS];
   if (m.hp === 0) return (more & ITEM4_REVIVE) !== 0;
   if (more & ITEM4_REVIVE) return false;
   if ((more & ITEM4_HEAL_HP) && m.hp < m.maxHp) return true;
+  if ((more & ITEM4_HEAL_PP) && m.moves?.some((v) => v.pp < v.maxPp)) return true;
   const s = m.status;
   return !!((cures & ITEM3_SLEEP && s & STATUS_SLEEP) || (cures & ITEM3_POISON && s & (STATUS_POISON | STATUS_TOXIC))
     || (cures & ITEM3_BURN && s & STATUS_BURN) || (cures & ITEM3_FREEZE && s & STATUS_FREEZE)

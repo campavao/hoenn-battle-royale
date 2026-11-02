@@ -40,6 +40,17 @@ async function intoBattle(page: Page): Promise<void> {
   await page.waitForTimeout(300);
 }
 
+/** E, down the pocket to `item`, Z, and USE. */
+async function useFromBag(page: Page, item: number): Promise<void> {
+  await page.keyboard.press('e');
+  await expect(page.locator('.bm-bag-head')).toBeVisible();
+  const row = await spike(page, new Function('s', `return s.battleMenu.stacks().findIndex((x) => x.item === ${item})`) as (s: any) => number);
+  expect(row, `item ${item} in the pocket`).toBeGreaterThanOrEqual(0);
+  for (let i = 0; i < row; i++) await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('z');
+  await page.locator('.bm-bag-use').click();
+}
+
 const shot = (page: Page, name: string) => page.screenshot({ path: test.info().outputPath(`${name}.png`) });
 /** The keys' hints sit on no window of the battle's, in whichever of them is up. */
 const keysClear = (page: Page) => page.evaluate(() => {
@@ -138,16 +149,7 @@ test('a medicine asks on the party windows: a Revive for the fainted, a Potion f
   await spike(page, (s) => { const at = s.art.sym('gPlayerParty'); s.rom.emu.write(at + 2 * 100 + 86, 0, 16); s.rom.emu.write(at + 3 * 100 + 86, 1, 16); });
   await intoBattle(page);
 
-  /** E, down the pocket to `item`, Z, and USE. */
-  const use = async (item: number) => {
-    await page.keyboard.press('e');
-    await expect(page.locator('.bm-bag-head')).toBeVisible();
-    const row = await spike(page, new Function('s', `return s.battleMenu.stacks().findIndex((x) => x.item === ${item})`) as (s: any) => number);
-    expect(row, `item ${item} in the pocket`).toBeGreaterThanOrEqual(0);
-    for (let i = 0; i < row; i++) await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('z');
-    await page.locator('.bm-bag-use').click();
-  };
+  const use = (item: number) => useFromBag(page, item);
 
   await use(24);
   await expect(page.locator('.bm-use-head')).toBeVisible();
@@ -176,6 +178,99 @@ test('a medicine asks on the party windows: a Revive for the fainted, a Potion f
   await page.locator('.bm-slot').nth(3).click();
   await expect.poll(() => hp(3), { timeout: 30_000, message: 'healed' }).toBeGreaterThan(before);
   await page.waitForFunction(() => (window as any).__spike.battleMenu?.isShown, undefined, { timeout: 40_000 });
+  await ctx.close();
+});
+
+test('an Ether asks who and then which move, on the windows', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 }, screen: { width: 1920, height: 1080 } });
+  const page = await ctx.newPage();
+  await withTeam(page);
+  await spike(page, (s) => s.startFor({ type: 'bag', tick: 0, id: s.link.me, key: 0x7e0003, name: 'DRAKE', bag: { items: [{ id: 34, n: 1 }], money: 0, mons: [{ species: 373, level: 30 }] } }));
+  await page.locator('#bag-panel button').nth(1).click();
+  await page.locator('#bag-panel button').first().click();
+  await expect(page.locator('#bag-panel')).toBeHidden();
+  await intoBattle(page);
+  const first = () => spike(page, (s) => s.battleMenu.deps.firstMoves.readParty()[0].moves[0]) as Promise<{ pp: number; maxPp: number }>;
+  // A move spent, so there is a point to restore.
+  await page.keyboard.press('z');
+  await expect.poll(async () => { const m = await first(); return m.pp < m.maxPp; }, { timeout: 30_000 }).toBe(true);
+  await page.waitForFunction(() => (window as any).__spike.battleMenu?.isShown, undefined, { timeout: 40_000 });
+  const spent = (await first()).pp;
+
+  await useFromBag(page, 34);
+  await expect(page.locator('.bm-use-head')).toBeVisible();
+  await page.locator('.bm-slot').first().click();
+  await expect(page.locator('.bm-pick-move').first()).toBeVisible();
+  await shot(page, 'desk-ether');
+  await expect(page.locator('#battle-menu .bm-back')).toBeInViewport({ ratio: 1 });
+  await expect(page.locator('.bm-pick-move').nth(1), 'the full ones are no use').toHaveAttribute('aria-disabled', 'true');
+  // BACK is who again, and a slot the question again.
+  await page.keyboard.press('x');
+  await expect(page.locator('.bm-slot').first()).toBeVisible();
+  await page.locator('.bm-slot').first().click();
+  await page.locator('.bm-pick-move').first().click();
+  await expect.poll(async () => (await first()).pp, { timeout: 30_000, message: 'restored' }).toBeGreaterThan(spent);
+  await page.waitForFunction(() => (window as any).__spike.battleMenu?.isShown, undefined, { timeout: 40_000 });
+  await ctx.close();
+});
+
+test('a Safari battle is the windows too, with its four', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await page.goto(`/?rom=${romHashParam()}#solo&nobots&fog=900&seed=7`);
+  await page.locator('#intro-go').click({ timeout: 90_000 });
+  await page.waitForFunction(() => { const s = (window as any).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 120_000 });
+  await page.waitForTimeout(4000);
+  await spike(page, (s) => {
+    const room = s.link.room, a = room.actor(s.link.me);
+    const map = a.m.spot.map;
+    const q = room.patchesOn(map).find((q: any) => !room.isTaken(q.key) && room.stepFor(a)({ map, x: q.x - 1, y: q.y }, 4));
+    const spot = { map, x: q.x - 1, y: q.y };
+    a.m = { ...a.m, spot, prev: spot, facing: 4, moveDir: 4, action: null, px: 0, py: 0 };
+  });
+  await page.waitForTimeout(1000);
+  await key(page, 'ArrowRight', true); await page.waitForTimeout(150); await key(page, 'ArrowRight', false);
+  await page.waitForFunction(() => (window as any).__spike.battleMenu?.isShown, undefined, { timeout: 30_000 });
+  await page.waitForTimeout(500);
+  await expect(page.locator('.bm-cell')).toHaveCount(4);
+  await expect(page.locator('#battle-menu')).toHaveAttribute('data-mode', 'action');
+  await shot(page, 'phone-safari');
+  // BALL throws.
+  await page.locator('.bm-cell').first().click();
+  await page.waitForFunction(() => !(window as any).__spike.battleMenu?.isShown, undefined, { timeout: 5000 });
+  await ctx.close();
+});
+
+test('one faints: who goes out is the party windows, with no way back and the ROM unseen', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 }, screen: { width: 1920, height: 1080 } });
+  const page = await ctx.newPage();
+  await withTeam(page);
+  await intoBattle(page);
+  // The lead on its last point, and the second already gone.
+  await spike(page, (s) => {
+    const emu = s.rom.emu, at = s.art.sym('gPlayerParty'), mons = s.art.sym('gBattleMons');
+    emu.write(at + 86, 1, 16); emu.write(mons + 0x28, 1, 16); emu.write(at + 100 + 86, 0, 16);
+  });
+  // A move each time the windows ask, and A through "Use next POKeMON?", until the party asks.
+  const asked = () => page.locator('.bm-use-head').isVisible();
+  for (let i = 0; i < 60 && !(await asked()); i++) { await page.keyboard.press('z'); await page.waitForTimeout(700); }
+  await expect(page.locator('.bm-use-head')).toBeVisible();
+  await shot(page, 'desk-forced');
+  await expect(page.locator('.bm-slot')).toHaveCount(6);
+  await expect(page.locator('#battle-menu .bm-back')).toBeHidden();
+  // X goes nowhere: somebody has to go out.
+  await page.keyboard.press('x');
+  await expect(page.locator('.bm-use-head')).toBeVisible();
+  await page.locator('.bm-slot').nth(2).click();
+  await expect(page.locator('.bm-member')).toBeVisible();
+  await page.locator('.bm-m-btn').nth(2).click();
+  await expect.poll(() => leadIndex(page), { timeout: 30_000 }).toBe(2);
+  await shot(page, 'desk-forced-out');
+  await page.waitForFunction(() => (window as any).__spike.battleMenu?.isShown, undefined, { timeout: 40_000 });
+  await expect(page.locator('.bm-cell').first()).toBeVisible();
   await ctx.close();
 });
 
