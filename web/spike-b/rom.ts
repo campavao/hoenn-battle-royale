@@ -660,7 +660,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     hurryOn();
     if (walk.to !== 'use') {
       // The party's row: SUMMARY first, then MOVES (party_menu.c SetPartyMonFieldSelectionActions).
-      await until(emu, choosing, 240);
+      // Its task is up before its screen is, and takes no keys until the fade is done.
+      await until(emu, () => choosing() && screenIs(partyScreen()) && !fade().active, 240);
       emu.write(partyMenuAt + 9, walk.slot, 8);
       await tap('a');
       // Its little menu takes keys once "Do what with this" has printed.
@@ -713,7 +714,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       if (showing) { showing = false; onEnd(); hurryOn(); }
       settledFor = 0;
       if (inParty) {
-        if (!sent && choosing()) {
+        if (!sent && choosing() && !fade().active) {
           emu.write(partyMenuAt + 9, walk.slot!, 8);
           sent = true;
           n = 0;
