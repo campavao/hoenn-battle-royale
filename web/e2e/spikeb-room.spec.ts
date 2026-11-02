@@ -58,6 +58,57 @@ test('out of the match, the strip names who is watched, and the D-pad steps to t
   await ctx.close();
 });
 
+/** Into a match of the page's own, its sound as it was left. */
+async function solo(page: Page, muted: boolean): Promise<() => Promise<number>> {
+  await page.addInitScript((m) => { localStorage.setItem('hbr:muted', m ? '1' : '0'); }, muted);
+  await page.goto(`/?rom=${romHashParam()}#solo&nobots&safari=0&fog=900&seed=7`);
+  await page.locator('#intro-go').click({ timeout: 90_000 });
+  await page.waitForFunction(() => { const s = (window as any).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 120_000 });
+  await page.waitForTimeout(4000);
+  // The core's own reading (a multiplier: 1 is full, and it ignores anything over 2).
+  return () => page.evaluate(() => (window as any).__spike.rom.emu.m.getVolume());
+}
+
+test('Sound off, then on: the core goes quiet and comes back', async ({ page }) => {
+  test.setTimeout(240_000);
+  const volume = await solo(page, false);
+  const flip = () => page.evaluate(() => document.getElementById('sound')!.click());
+  await expect.poll(volume).toBe(1);
+  await flip();
+  await expect.poll(volume).toBe(0);
+  await flip();
+  await expect.poll(volume).toBe(1);
+});
+
+for (const muted of [true, false]) {
+  test(`a ${muted ? 'muted' : 'listening'} watcher keeps their sound through a replay's catching up`, async ({ page }) => {
+    test.setTimeout(240_000);
+    const volume = await solo(page, muted);
+    const left = muted ? 0 : 1;
+    await expect.poll(volume).toBe(left);
+    // The replay itself takes a real fight's feed; what is under test is what the page does on
+    // the ROM's word that it is behind, so the ROM's word is all that is stood in for.
+    await page.evaluate(() => {
+      const s = (window as any).__spike, emu = s.rom.emu, read = emu.read.bind(emu), w = window as any;
+      const at = s.art.sym('gBrSpectate'), main = s.art.sym('gBattleMainFunc');
+      w.__behind = 2;
+      w.__stop = false;
+      emu.read = (a: number, bits: number) => (a === at + 5 ? 1 : a === at + 15 ? w.__behind : a === main ? 1 : read(a, bits));
+      w.__mirror = s.rom.mirror({ peek: () => null, shift() {}, over: () => false, stopped: () => w.__stop, turned: false, skins: [0, 0] }, () => {});
+    });
+    const behind = (n: number) => page.evaluate((n) => { (window as any).__behind = n; }, n);
+    await page.waitForTimeout(1500);
+    expect(await volume(), 'lagging, at twice the speed').toBe(left);
+    await behind(1);
+    await expect.poll(volume, { message: 'catching up, at eight times: quiet' }).toBe(0);
+    await behind(0);
+    await expect.poll(volume, { message: 'level with the fight' }).toBe(left);
+    await page.waitForTimeout(500);
+    expect(await volume(), 'and it stays').toBe(left);
+    await page.evaluate(() => { (window as any).__stop = true; });
+  });
+}
+
 test("a phone's battle is the battle menu, with the pad off the glass", async ({ browser }) => {
   test.setTimeout(240_000);
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });

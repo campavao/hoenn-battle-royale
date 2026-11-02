@@ -64,6 +64,8 @@ test('by the keys alone: moves first, PARTY and one of them, sent out, BAG, a mo
   await shot(page, 'desk-field');
   await intoBattle(page);
   await shot(page, 'desk-battle');
+  // The hidden ROM's card and swirl run quiet and fast; the sound comes back for the fight.
+  await expect.poll(() => spike(page, (s) => s.rom.emu.m.getVolume()), { message: "the battle's sound" }).toBe(1);
   expect(await keysClear(page), 'the moves').toEqual([]);
 
   // The moves are up, with the focus on the first.

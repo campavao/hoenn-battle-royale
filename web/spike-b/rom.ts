@@ -1275,7 +1275,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         const pace = (to: number) => {
           speed = to;
           emu.setSpeed(to);
-          emu.setVolume(to === CATCH_UP_SPEED ? 0 : 100);
+          // The inner one: quiet for the catching up, then what the page asked for (its MUTE).
+          setVolume(to === CATCH_UP_SPEED ? 0 : volume);
         };
         const tick = emu.onFrame(() => {
           drain(() => undefined);

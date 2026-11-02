@@ -31,7 +31,7 @@ export const FILE_SECONDS = {
   // and a Safari catch among them.
   'spikeb-menu.spec.ts': 150,
   'spikeb-windows.spec.ts': 90,
-  'spikeb-room.spec.ts': 90,
+  'spikeb-room.spec.ts': 90 + 150,
   'spikeb.spec.ts': 660,
   'spikeb-two.spec.ts': 120,
   'spikeb-passcode.spec.ts': 40,

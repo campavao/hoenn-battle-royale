@@ -881,7 +881,9 @@ export class Emulator {
   }
 
   setVolume(percent: number): void {
-    this.m.setVolume(percent);
+    // The core takes a multiplier and ignores anything over 2 (platform/wasm/main.c setVolume):
+    // handed 100 it kept whatever it had, so sound once off stayed off.
+    this.m.setVolume(percent / 100);
   }
 
   saveState(slot = 1): boolean {

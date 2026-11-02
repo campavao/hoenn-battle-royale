@@ -108,6 +108,13 @@ transcripts were made from them; a frame at the time is the evidence for each li
   switch after a faint and SUMMARY are the ROM's own; the field's PARTY and BAG open the ROM's.
   The minimap's fog is a near colour, not the ROM's palette's.
 
+* **No sound after the first battle, and Sound on did nothing.** The page has passed the core
+  percent since it was written, and the core takes a multiplier and ignores anything over 2. It
+  went unseen while nothing asked for 0 and back; since #232 (10-31) every wild battle and every
+  ROM screen does, so all sound stopped there until a reload. Read off the core's own `getVolume`
+  on a real wild battle (`spikeb-windows.spec.ts`) and on Sound off, on, and a watcher's catching
+  up (`spikeb-room.spec.ts`). Nobody has listened to it: the specs read the volume, not the speaker.
+
 **Partly fixed:**
 
 * **Teleporting: the map did not match where he stood** (1609 3:45). A resync replayed keys
