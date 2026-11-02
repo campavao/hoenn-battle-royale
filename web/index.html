@@ -103,6 +103,8 @@
       .bm-actions[hidden], .bm-party[hidden], .bm-member[hidden], .bm-use-head[hidden] { display: none; }
       .bm-use-head { grid-column: 1 / -1; justify-self: center; pointer-events: none; }
       #battle-menu.bm-lift:not([hidden]) { position: fixed; left: 0; right: 0; width: fit-content; margin: 0 auto; bottom: calc(env(safe-area-inset-bottom) + 6px); z-index: 3; }
+      /* Dim behind them, only the band they stand in (Cam, 11-02): the picture above stays clear. */
+      #battle-menu.bm-lift:not([hidden])::before { content: ''; position: absolute; top: -6px; bottom: -100vh; left: -100vw; right: -100vw; background: #000b; z-index: -1; pointer-events: none; }
       .bm-use-head canvas { display: block; }
       .bm-usemove[hidden] { display: none; }
       .bm-usemove { grid-column: 1 / -1; justify-content: center; }

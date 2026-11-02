@@ -409,6 +409,11 @@ test('on a small phone every window a battle opens fits on the glass (Cam, 11-02
   await expect(page.locator('.bm-member')).toBeVisible();
   await page.waitForTimeout(200);
   await shot(page, 'mini-member');
+  // The band behind them is dimmed, and only that: the top of the glass isn't.
+  const dim = await page.locator('#battle-menu').evaluate((el) => { const s = getComputedStyle(el, '::before'); return { content: s.content, bg: s.backgroundColor, top: el.getBoundingClientRect().top }; });
+  expect(dim.content).not.toBe('none');
+  expect(dim.bg).not.toBe('rgba(0, 0, 0, 0)');
+  expect(dim.top, 'the picture still has the top of the glass').toBeGreaterThan(100);
   await fits('one of them', '#battle-menu button');
   await page.locator('.bm-m-btn').first().click();
   await page.locator('#battle-menu .bm-back').click();
@@ -442,6 +447,9 @@ test('the big MAP shows the fog, as the minimap does (Cam, 11-02)', async ({ bro
   expect(fog.on, 'the fog canvas is on').toBe(true);
   expect(fog.painted, 'and has fog on it').toBeGreaterThan(0);
   expect(fog.w).toBeCloseTo(fog.gba[2], 0);
+  await ctx.close();
+});
+
 test('a full party trades a dropped POKeMON one for one, on the windows', async ({ browser }) => {
   test.setTimeout(180_000);
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
