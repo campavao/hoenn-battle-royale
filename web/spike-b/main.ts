@@ -2008,6 +2008,17 @@ function fieldChips(a: Actor): FieldMove[] {
 const CARDS_ROOM = CARD_H + 8;
 /** What the battle menu wants under the picture at its tallest (four moves, BACK, the hint). */
 const MENU_ROOM = 2 * CELL_H + BACK_H + 48;
+/** Both trainers beside a trainer battle (ui/sides.ts), a phone's or a desktop's. */
+function wireSides(emu: Awaited<ReturnType<typeof loadRom>>['emu'], sym: (n: string) => number | undefined): void {
+  new SidesView(document.getElementById('sides')!, emu, sym, () => {
+    const box = gbaCanvas.getBoundingClientRect();
+    const s = box.width / 240;
+    return s > 0 && battleEl.classList.contains('on')
+      ? { scale: s, cols: innerWidth / s, rows: innerHeight / s, lcdCol: box.left / s, lcdRow: box.top / s }
+      : { scale: 0, cols: 0, rows: 0, lcdCol: 0, lcdRow: 0 };
+  }).attach();
+}
+
 function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
   const { emu } = files;
   const symbols = new (class extends Map<string, number> {
@@ -2051,14 +2062,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     const fits = s > 0 && innerHeight / s >= CARDS_ROOM + 160 + MENU_ROOM;
     battleEl.classList.toggle('cards', fits && innerHeight > innerWidth && trainerFight());
   };
-  const sidesEl = document.getElementById('sides')!;
-  new SidesView(sidesEl, emu, sym, () => {
-    const box = gbaCanvas.getBoundingClientRect();
-    const s = box.width / 240;
-    return s > 0 && battleEl.classList.contains('on')
-      ? { scale: s, cols: innerWidth / s, rows: innerHeight / s, lcdCol: box.left / s, lcdRow: box.top / s }
-      : { scale: 0, cols: 0, rows: 0, lcdCol: 0, lcdRow: 0 };
-  }).attach();
+  wireSides(emu, sym);
   let noPad = false;
   let wasUp = false;
   const hudBase = sym('gBrHud');
@@ -3382,7 +3386,11 @@ async function boot(): Promise<void> {
     versionLine = files.version;
     recorder.setVersion({ line: files.version, romSha1: files.romSha, world: WORLD_HASH_SHORT });
   battlesOn(files.romSha);
-    if (touchPad) { wireBattleMenu(files); wirePhoneHud(); } else wirePhoneHud(true);
+    if (touchPad) { wireBattleMenu(files); wirePhoneHud(); }
+    else {
+      wirePhoneHud(true);
+      wireSides(files.emu, (n) => { const a = files.sym(n); return Number.isNaN(a) ? undefined : a; });
+    }
   } catch (e) {
     console.warn('spike ROM not loaded', e);
     didNotStart(e instanceof Error ? e.message : String(e));

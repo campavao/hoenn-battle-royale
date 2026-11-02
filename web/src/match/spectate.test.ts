@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { encodeGen3 } from '../text/gen3';
 import { fitText } from '../ui/emerald';
 import { W } from '../ui/screens';
-import { battleId, battleSeats, CACHE_MAX_BYTES, cutTo, EYE_WINDOW_MS, nameBstart, PEEK_INTERVAL_MS, NO_SEAT, romReplaying, Spectate, spectatePace, watchName, BOT_DUEL_SPEED, CATCH_UP_LAG, CATCH_UP_SPEED, CATCH_UP_TURNS, LAG_SPEED } from './spectate';
+import { battleId, battleSeats, CACHE_MAX_BYTES, cutTo, EYE_WINDOW_MS, seatBstart, nameBstart, PEEK_INTERVAL_MS, NO_SEAT, romReplaying, Spectate, spectatePace, watchName, BOT_DUEL_SPEED, CATCH_UP_LAG, CATCH_UP_SPEED, CATCH_UP_TURNS, LAG_SPEED } from './spectate';
 import type { Msg } from '../net/wire';
 
 const bstart = (battle: number): Msg => ({ t: 'bstart', battle, data: [1, 2, 3] });
@@ -167,6 +167,19 @@ describe("a proxy duel's bstart (POK-300)", () => {
     expect(data[8]).toBe(0); // and the original was not written on
   });
 
+  it("puts a fight's two sides on the watcher's seats, gender kept, a wild side left alone", () => {
+    const data = new Array(30).fill(0);
+    data[24] = (5 + 1) << 1;
+    data[25] = ((6 + 1) << 1) | 1;
+    const m = { t: 'bstart', battle: 1, data } as unknown as Parameters<typeof seatBstart>[0];
+    const out = seatBstart(m, [0, 31]).data;
+    expect(out[24]).toBe(2);
+    expect(out[25]).toBe((32 << 1) | 1);
+    expect(data[24]).toBe(12);
+    const wild = new Array(30).fill(0);
+    wild[24] = 2;
+    expect(seatBstart({ ...m, data: wild }, [0, 31]).data[25]).toBe(0);
+  });
   // POK-368: TATE (seat 9) on side A beat LIZA (seat 3), and the replay read "Player
   // defeated TATE!" -- the low seat's name had gone over TATE's party.
   it('names side A first when side A is the high seat', () => {
