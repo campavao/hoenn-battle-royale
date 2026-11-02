@@ -37,18 +37,36 @@ transcripts were made from them; a frame at the time is the evidence for each li
 * **The Safari's corner box looked non-standard, and there were no HM icons on the right**
   (1552 0:20, 4:52). The desktop now gets the phone's HUD, with the field-move strip
   (#250).
+* **Walked under a bridge instead of over it** (1609 10:03). Everybody was drawn under the
+  map's cover; the ROM goes by height, and a bridge cell keeps the height you came on
+  (`spike-b/heights.ts`). The real ROM on Meteor Falls' bridge is the reference.
+* **A door should walk you one step in, never stop on the mat** (1552 3:14). Both ways now:
+  in off the mat, out off the door.
+* **The Pokedex registration screen after a catch** (1552 1:23). A catch never asks now
+  (`catch-no-dex.txt`). Why the flags were empty on that run was not reproduced: on a later
+  ROM a full Safari catch kept all 386 set.
+* **Items on house tables sit on the coffee cups** (1552 2:55). Cam painted the rooms by hand
+  (#263). Not yet looked at in play.
+
+**Partly fixed:**
+
+* **Teleporting: the map did not match where he stood** (1609 3:45). A resync replayed keys
+  the relay's state had already used, so the page drew you ahead and then snapped back; that
+  is fixed (`net.test.ts`, "a resync"). What made that run resync is not known. The play-test
+  recorder logs `desync` and `gap`, so a recording of the next one will say.
+
+**Asked, not a bug:**
+
+* **"Can't escape!" from wild battles too often** (1609 11:23). Emerald's own roll, untouched:
+  (speed x 128 / their speed + 30 per try) out of 256. His GOLEM against a SOLROCK is about
+  32%, 44%, 56%. Whether a match should be kinder is Cam's call.
 
 **Open, the first video (15:52):**
 
 * **Zoomed in further than classic** (0:10). Compare spike B's desktop scale with
   `/classic/`'s at the same window size.
 * **No items in the Safari, and rocks there that should not be** (0:55, 1:01).
-* **The Pokédex registration screen after a catch** (1:23). Classic marked every species
-  as caught to skip it. The second video (2:15) shows the caught ball on a wild mon in
-  the field, so the flag may be set only in the Safari.
 * **A TM's name should show before it is picked up** (2:32), when standing next to it.
-* **Items on house tables sit on the coffee cups** (2:55). Keep them to the bare table cells.
-* **A door should walk you one step in, never stop on the mat** (3:14).
 * **Delays and map-load lag** (3:48, 4:18). Look at the map streaming as you cross a seam.
 * **Too many items, Super Potions and Revives too common** (5:10, 5:37). Swap some for TMs.
 * **The "found" box covers the item's name** (5:20).
@@ -56,7 +74,6 @@ transcripts were made from them; a frame at the time is the evidence for each li
 
 **Open, the second video (16:09):**
 
-* **Teleporting: the map did not match where he stood** (3:45).
 * **The title screen's scrolling background should follow the game's path** (0:03):
   Littleroot, 101, Oldale, 103, Petalburg, the woods, and so on, with only straight
   moves. The diagonal moves show black corners.
@@ -68,8 +85,6 @@ transcripts were made from them; a frame at the time is the evidence for each li
 * **The grass or dust and sand effects are not Emerald's standard sprites** (5:05).
 * **A blue screen flashes in battle transitions** (6:15). Also in classic.
 * **The ring should visibly close in, not appear on top of you** (7:11).
-* **Walked under a bridge instead of over it** (10:03). The bridge's level was wrong.
-* **"Can't escape!" from wild battles too often** (11:23).
 * **The cave needs a pass** (12:07). It was hard to get out.
 * **A watched battle: no player sprites, none in the side panels** (13:49).
 * **No way to drop into a battle mid-way** (13:59, 14:32). The relay passes on a battle's
