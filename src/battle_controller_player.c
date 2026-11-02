@@ -2685,7 +2685,11 @@ static void PlayerHandleChooseAction(void)
 #endif
     gBattlerControllerFuncs[gActiveBattler] = HandleChooseActionAfterDma3;
     BattleTv_ClearExplosionFaintCause();
+#if BR
+    BrBattle_PutActionMenu();
+#else
     BattlePutTextOnWindow(gText_BattleMenu, B_WIN_ACTION_MENU);
+#endif
 
     for (i = 0; i < 4; i++)
         ActionSelectionDestroyCursorAt(i);

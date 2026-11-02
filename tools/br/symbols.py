@@ -33,7 +33,7 @@ ENGINE_SYMBOLS = [
     "gBattleTypeFlags", "gBattleWeather", "gBattleEnvironment", "gBattleOutcome", "gBattleMainFunc", "gBattlerControllerFuncs",
     "gLinkPlayers", "gBlockRecvBuffer", "gBlockSendBuffer", "gWirelessCommType",
     "gRngValue", "gSaveBlock1", "gSaveBlock2", "gNumSafariBalls",
-    "gBattleCommunication", "gBattleControllerExecFlags", "gBattlersCount", "gBattleBufferA", "gBattleBufferB", "gBattleMons",
+    "gBattleCommunication", "gBattleControllerExecFlags", "gBattlersCount", "gBattleBufferA", "gBattleBufferB", "gBattleMons", "gBattleStruct",
     "gBattlerByTurnOrder", "gCurrentTurnActionNumber", "gBagPockets",
     # The turn counter at +0x13 (battleTurnCounter): the turn checks (POK-376).
     "gBattleResults",

@@ -40,6 +40,8 @@ export const BATTLE_TYPE_SAFARI = 1 << 7;
 /** A replay: a spectator's, whose D-pad still flips who they watch (app.ts watchStepKey). */
 export const BATTLE_TYPE_RECORDED = 1 << 24;
 export const ITEM_POKE_DOLL = 80;
+/** `gBrBattle.runChance` (include/br/br_battle.h): the odds of the next RUN, whole percent. */
+export const BATTLE_RUN_CHANCE = 12;
 const MAX_MON_MOVES = 4;
 
 export interface MoveSlot {
@@ -54,6 +56,8 @@ export interface BattleView {
   /** A fight with somebody (a trainer, a bot, another player): RUN needs a POKe DOLL. */
   trainer: boolean;
   dolls: boolean;
+  /** The odds of the next RUN, in percent: the ROM works them out (BrBattle_RunChance). */
+  runChance: number;
   safariBalls: number;
   moves: MoveSlot[];
   foe: { name: string; types: [number, number] };
@@ -125,6 +129,7 @@ export function readBattleView(
     menu: emu.read(br + BATTLE_MENU, 8),
     trainer: (flags & (BATTLE_TYPE_TRAINER | BATTLE_TYPE_LINK)) !== 0 && !(flags & BATTLE_TYPE_SAFARI),
     dolls,
+    runChance: emu.read(br + BATTLE_RUN_CHANCE, 8),
     safariBalls: balls === undefined ? 0 : emu.read(balls, 8),
     moves,
     foe: { name: foeName, types: [emu.read(foe + MON_TYPES, 8), emu.read(foe + MON_TYPES + 1, 8)] },
@@ -201,15 +206,16 @@ function drawMark(c: EmeraldCanvas, tone: Tone, x: number, y: number, color: str
   });
 }
 
-/** The action windows: a word each (Cam, 2026-10-14: nothing under it). RUN is grey
- *  where it cannot work: a fight with somebody and no POKe DOLL (br_battle.c). */
+/** The action windows: a word each (Cam, 2026-10-14: nothing under it), and RUN's odds
+ *  (Cam, 2026-11-01). RUN is grey where it cannot work: a fight with somebody and no
+ *  POKe DOLL (br_battle.c). The Safari's RUN always works, so it has no odds to give. */
 export function actionLabels(v: BattleView): { label: string; enabled: boolean }[] {
   if (v.menu === MENU_SAFARI) return ['BALL', 'POKéBLOCK', 'GO NEAR', 'RUN'].map((label) => ({ label, enabled: true }));
   return [
     { label: 'FIGHT', enabled: true },
     { label: 'BAG', enabled: true },
     { label: 'POKéMON', enabled: true },
-    { label: 'RUN', enabled: !v.trainer || v.dolls },
+    { label: `RUN ${v.runChance}%`, enabled: !v.trainer || v.dolls },
   ];
 }
 

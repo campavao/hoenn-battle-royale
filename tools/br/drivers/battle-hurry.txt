@@ -1,0 +1,32 @@
+# battle-hurry: gBrBattle.hurry (PAGE WRITES, not over a link) takes the transition off the
+# hidden field and runs the intro at BR_INTRO_SPEED, so a wild battle is at its first menu
+# in under half the frames (Cam, 2026-11-01: "there is always a delay before a battle").
+# The same step as menu-byte.txt, which at normal speed is still in the intro at this
+# point. Then the fight is an ordinary fight: the flag is gone and a move goes in.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrHud+0x17B 1
+pokebytes gBrPatch+16 1A 00
+pokebytes gBrPatch+32 10 00
+poke u8 gBrPatch+4 1
+poke u8 gBrBattle+13 1
+tap LEFT
+wait 4
+tap LEFT
+wait 250
+expectge u8 gBattlersCount 2
+shot mid
+expect u8 gBrBattle+8 1
+expect u8 gBrBattle+13 0
+shot menu
+expect u16 gBattle_BG0_Y 0
+tap A
+wait 30
+expect u8 gBrBattle+8 2
+tap A
+wait 700
+expect u8 gBrBattle+8 1
+shot next-turn
+say battle hurry ok

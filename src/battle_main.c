@@ -1882,6 +1882,9 @@ static void CB2_HandleStartMultiBattle(void)
 
 void BattleMainCB2(void)
 {
+#if BR
+    BrBattle_HurryIntro();
+#endif
     AnimateSprites();
     BuildOamBuffer();
     RunTextPrinters();

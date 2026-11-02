@@ -1,0 +1,86 @@
+# run-chance: RUN's window says the odds of the next RUN (Cam, 2026-11-01), and they are
+# the roll's own: speed * 128 / foe's speed + 30 per try, in a u8, over 256. The number is
+# worked out as the menu opens, and RUN while trapped brings the menu back with no roll and
+# no turn spent, so that is how each case below gets a fresh one. gBattleMons[0] is ours,
+# +6 speed, +0x50 status2 (1 << 26 ESCAPE_PREVENTION); gBattleStruct+0x6C is runTries.
+wait 30
+# BR_BOOT_MAP | TESTMON, male, Route 102 (0, 17), x=20 y=9 -- the middle grass patch
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gBrPatch+16 1A 00
+pokebytes gBrPatch+32 10 00
+poke u8 gBrPatch+4 1
+tap LEFT
+wait 4
+tap LEFT
+wait 600
+expectge u8 gBattlersCount 2
+# 30 against 47: 81 of 256
+poke u16 gBattleMons+6 30
+poke u16 gBattleMons+0x5E 47
+poke u16 gBattleMons+0x28 999
+tap B
+wait 30
+tap B
+wait 200
+tap B
+wait 60
+expect u8 gBrBattle+8 1
+expect u8 gBrBattle+12 32
+shot odds-32
+
+# RUN from 1 against 255 rolls 0 and cannot get away: a real try, spent, moves the odds
+poke u16 gBattleMons+6 1
+poke u16 gBattleMons+0x5E 255
+poke u8 gBrHud+0x17B 1
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 900
+expect u8 gBrBattle+8 1
+expect u8 *gBattleStruct+0x6C 1
+# 30 of 256
+expect u8 gBrBattle+12 12
+# the sixth try off a speed just under the foe's: 127 + 150 wraps in pret's u8, to 21 of 256
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+6 127
+poke u16 gBattleMons+0x5E 128
+poke u8 *gBattleStruct+0x6C 5
+poke u32 gBattleMons+0x50 0x04000000
+tap A
+wait 20
+poke u32 gBattleMons+0x50 0
+wait 300
+expect u8 gBrBattle+8 1
+expect u8 *gBattleStruct+0x6C 5
+expect u8 gBrBattle+12 8
+# trapped: 0, whatever the speeds, and the tap still says why
+poke u16 gBattleMons+6 200
+poke u16 gBattleMons+0x5E 10
+poke u32 gBattleMons+0x50 0x04000000
+tap A
+wait 300
+expect u8 gBrBattle+8 1
+expect u8 gBrBattle+12 0
+poke u8 gBrHud+0x17B 0
+wait 4
+shot odds-0
+poke u8 gBrHud+0x17B 1
+# faster: certain, and it is
+tap A
+wait 20
+poke u32 gBattleMons+0x50 0
+wait 300
+expect u8 gBrBattle+8 1
+expect u8 gBrBattle+12 100
+poke u8 gBrHud+0x17B 0
+wait 4
+shot odds-100
+poke u8 gBrHud+0x17B 1
+tap A
+wait 120
+expect u8 gBattleOutcome 4
+say run chance ok

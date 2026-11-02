@@ -60,6 +60,9 @@ transcripts were made from them; a frame at the time is the evidence for each li
 * **"Can't escape!" from wild battles too often** (1609 11:23). Emerald's own roll, untouched:
   (speed x 128 / their speed + 30 per try) out of 256. His GOLEM against a SOLROCK is about
   32%, 44%, 56%. Whether a match should be kinder is Cam's call.
+  RUN's window now says the odds of the next try (`BrBattle_RunChance`, driver `run-chance`):
+  the page's big window and the ROM's own box. The roll's u8 wraps, so the sixth try off a
+  speed just under the foe's really is about 8%. Whether to soften the roll is still open.
 
 **Open, the first video (15:52):**
 

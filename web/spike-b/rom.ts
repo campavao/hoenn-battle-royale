@@ -91,6 +91,8 @@ const ROM_BASE = 0x08000000;
 const FADE_IN_WAIT = 45;
 /** How fast the hidden ROM runs a battle's start nobody sees (battle()). */
 const HURRY_SPEED = 8;
+/** `gBrBattle.hurry` (include/br/br_battle.h): no transition, a quick intro. */
+const BATTLE_HURRY = 13;
 /** gBrLevels.lifting (br_levels.h): set while the ROM lifts the party to a new rung. */
 const LEVELS_LIFTING = 3;
 /** br_event.h's BR_EVENT_MAX: the events gBrEvents has room for. */
@@ -586,19 +588,38 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
   const fade = () => fadeOf(emu.read(paletteAt + FADE_Y_WORD, 16), emu.read(paletteAt + FADE_COLOR_WORD, 16));
   /** Its fade in seen through: begun (a screen sets itself up, palettes dark, with no fade
    *  running for a few frames first) and done. One that never fades waits FADE_IN_WAIT. */
+  // A screen's fades, and all that comes before the page shows it, run at HURRY_SPEED and
+  // quiet: from a tap to the PARTY was 1.46 s (Cam, 2026-11-01, "there is always a delay").
+  const hurryOn = () => { emu.setSpeed(HURRY_SPEED); setVolume(0); };
+  const hurryOff = () => { emu.setSpeed(1); setVolume(volume); };
   const settled = async () => {
     if (Number.isNaN(paletteAt)) return;
+    hurryOn();
     await until(emu, () => fade().active, FADE_IN_WAIT);
     await until(emu, () => { const f = fade(); return !f.active && f.y === 0; }, 90);
+    hurryOff();
+  };
+  /** Any fade from here until the call it returns: at HURRY_SPEED and quiet. */
+  const briskFades = () => {
+    let on = false;
+    const off = emu.onFrame(() => {
+      const f = fade().active;
+      if (f === on) return;
+      on = f;
+      if (f) hurryOn(); else hurryOff();
+    });
+    return () => { off(); if (on) hurryOff(); };
   };
   /** Until the screen the player is on is closed and the field has settled: B a few times
    *  a second once leave() asks for it. */
   const backOnField = async () => {
     let n = 0;
+    const calm = briskFades();
     await until(emu, () => {
       if (leaving && !(n++ % 12)) { emu.press('b'); } else if (leaving && n % 12 === 4) emu.release('b');
       return onField();
     }, Infinity);
+    calm();
     emu.release('b');
   };
   /** The parked field made to stand where `look` says, for the MAP's player icon
@@ -742,11 +763,14 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       else if (m.t === 'spent' && m.seat === FOE_SEAT) spent = m.items;
       else published(m);
     }));
+    // The swirl is off the hidden field, nobody sees it, and the intro is quick (br_battle.c
+    // BrBattle_HurryIntro): the first menu was 7.7 s after the step (Cam, 11-01).
+    if (hurry) emu.write(sym('gBrBattle') + BATTLE_HURRY, 1, 8);
     kick();
-    // The card, the ask and the swirl run on the hidden field, which nobody sees: at
-    // HURRY_SPEED and quiet, so the battle is up in a beat and not a second and a half
-    // later with the player standing still (Cam, 10-31). Not a link battle: its blocks
-    // keep the other side's time.
+    // The card and the ask run on the hidden field, which nobody sees: at HURRY_SPEED and
+    // quiet, so the battle is up in a beat and not a second and a half later with the
+    // player standing still (Cam, 10-31). Not a link battle: its blocks keep the other
+    // side's time.
     if (hurry) { emu.setSpeed(HURRY_SPEED); setVolume(0); }
     let shown = false;
     try {
@@ -765,7 +789,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     // However long it takes: a battle is never pulled out from under the player.
     if (shown) {
       onStart();
+      const calm = hurry ? briskFades() : () => undefined;
       await until(emu, over, Infinity);
+      calm();
       if (buzzed) { emu.write(match, BR_PHASE_PLAY, 8); buzzed = false; }
       // The ring is the battle's: back on the field nothing of it is left to bleed the
       // hidden ROM's party while a catch prompt waits.
@@ -1102,6 +1128,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         let back = true;
         let said = '';
         const before = kept();
+        // Walking START to the row is nobody's to see; settled() lets go of it, or below.
+        hurryOn();
         await tap('start');
         // Taking keys once its handler is in gMenuCallback and its text is drawn.
         if (await until(emu, () => emu.read(menuCbAt, 32) === startMenu.input, 90)) {
@@ -1119,6 +1147,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
             up = !leaving && await until(emu, () => !onField(), 120);
           }
         }
+        hurryOff();
         if (up) {
           await settled();
           onStart();

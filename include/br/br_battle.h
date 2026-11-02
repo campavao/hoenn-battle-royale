@@ -32,8 +32,10 @@ struct BrBattle
                               // made (was autoMove until POK-313).
     /* 9 */ u8 stalled;       // a sub-screen already ran this turn's clock out
     /* 10 */ u16 stallFrames; // frames a screen the battle put up has held the clock
+    /* 12 */ u8 runChance;    // BrBattle_RunChance, as of the action menu opening
+    /* 13 */ u8 hurry;        // PAGE WRITES: no transition, BR_INTRO_SPEED until the first menu
 };
-// web/src/touch.ts reads `menu` (BATTLE_MENU).
+// web/src/touch.ts reads `menu` (BATTLE_MENU), web/src/ui/battlemenu.ts `runChance`.
 BR_OFFSET(BrBattle, shotFrames, 0)
 BR_OFFSET(BrBattle, timedOut, 2)
 BR_OFFSET(BrBattle, runRolls, 4)
@@ -41,9 +43,16 @@ BR_OFFSET(BrBattle, runEscapes, 6)
 BR_OFFSET(BrBattle, menu, 8)
 BR_OFFSET(BrBattle, stalled, 9)
 BR_OFFSET(BrBattle, stallFrames, 10)
-BR_SIZE(BrBattle, 12)
+BR_OFFSET(BrBattle, runChance, 12)
+BR_OFFSET(BrBattle, hurry, 13)
+BR_SIZE(BrBattle, 16)
 
 extern struct BrBattle gBrBattle;
+
+// A wild or bot battle's intro runs this many steps a frame (BrBattle_HurryIntro).
+#define BR_INTRO_SPEED 3
+// BattleMainCB2, first thing: the intro's extra steps, while gBrBattle.hurry.
+void BrBattle_HurryIntro(void);
 
 // Who is fighting, for the page to park both trainers beside the battle with their names
 // and the balls they have left (Cam's 2026-10-19 play-test, #18; web/src/ui/sides.ts).
@@ -86,6 +95,8 @@ void BrBattle_TickStall(void);
 // ChooseRun: the player's controller, RUN chosen: spends a doll if there is one and
 // returns the BR_RUN_* the action carries.
 u8 BrBattle_ChooseRun(void);
+// The odds of the next RUN, in whole percent.
+u8 BrBattle_RunChance(void);
 // HandleRun: HandleAction_Run, first thing. TRUE when it decided the RUN (got away, or
 // "Can't escape!"), from what the action carried, the same on both ROMs of a link
 // battle; FALSE leaves it to pret: a forfeit, a wild battle, the AI's side.
@@ -102,6 +113,8 @@ void BrBattle_HideClock(void);
 // the page draws the menu under the picture (gBrHud.noBattleBox), so the screen keeps the
 // plain message box -- with the prompt in it, when `prompt` (the action menu's).
 void BrBattle_MenuBoxOff(bool8 prompt);
+// The action menu's words, with RUN's odds on it (BrBattle_RunChance).
+void BrBattle_PutActionMenu(void);
 // ...and every frame the menu is up, so a page that comes or goes mid-menu (the phone
 // turned on its side) takes the box off or puts it back: bg0 at `menuY`, or at the top
 // with `prompt` put in the message box.

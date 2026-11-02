@@ -46,6 +46,7 @@
 #include "constants/map_types.h"
 #include "constants/trainers.h"
 #if BR
+#include "br/br_battle.h"
 #include "br/br_loot.h"
 #include "br/br_patch.h"
 #include "br/br_gym.h"
@@ -362,13 +363,20 @@ static void Task_BattleStart(u8 taskId)
     case 0:
         if (!FldEffPoison_IsActive()) // is poison not active?
         {
+#if BR
+            if (!gBrBattle.hurry) // the page's hidden field: nobody would see it
+#endif
             BattleTransition_StartOnField(tTransition);
             ClearMirageTowerPulseBlendEffect();
             tState++; // go to case 1.
         }
         break;
     case 1:
+#if BR
+        if (gBrBattle.hurry || IsBattleTransitionDone() == TRUE)
+#else
         if (IsBattleTransitionDone() == TRUE)
+#endif
         {
             CleanupOverworldWindowsAndTilemaps();
             SetMainCallback2(CB2_InitBattle);

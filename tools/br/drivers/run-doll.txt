@@ -7,6 +7,10 @@ drain gBrMailbox
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
+# a POKe DOLL in the bag: zero the save encryption key, then POKe DOLL (item 0x50) x1 in slot 0
+poke u32 *gSaveBlock2Ptr+0xAC 0
+poke u16 *gSaveBlock1Ptr+0x560 0x50
+poke u16 *gSaveBlock1Ptr+0x562 1
 # the eyeline only fires in a started match (gBrMatch.phase = BR_PHASE_PLAY)
 poke u8 gBrMatch 2
 poke u8 gBrNetlink+8 1
@@ -18,10 +22,8 @@ poke u16 gBrMailbox+0x0C 1
 # the walk-up (POK-373) puts the fight a step later
 wait 1000
 expect u16 gBrBattle+4 0
-# a POKe DOLL in the bag: zero the save encryption key, then POKe DOLL (item 0x50) x1 in slot 0
-poke u32 *gSaveBlock2Ptr+0xAC 0
-poke u16 *gSaveBlock1Ptr+0x560 0x50
-poke u16 *gSaveBlock1Ptr+0x562 1
+# RUN's window says it is certain (br_battle.c BrBattle_RunChance)
+expect u8 gBrBattle+12 100
 tap DOWN
 wait 10
 tap RIGHT
