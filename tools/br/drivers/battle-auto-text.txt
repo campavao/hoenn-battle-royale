@@ -1,0 +1,18 @@
+# battle-auto-text: gBrBattle.autoText (PAGE WRITES) has a desktop's battle text turn its own
+# pages, as a phone's does (battle-box-off.txt), with the ROM's own menus still on screen
+# (Cam, 2026-11-01: "dialogue boxes should automatically progress"). No A anywhere here.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrBattle+14 1
+pokebytes gBrPatch+16 1A 00
+pokebytes gBrPatch+32 10 00
+poke u8 gBrPatch+4 1
+tap LEFT
+wait 4
+tap LEFT
+wait 840
+expect u8 gBrBattle+8 1
+expect u16 gBattle_BG0_Y 160
+say battle auto text ok

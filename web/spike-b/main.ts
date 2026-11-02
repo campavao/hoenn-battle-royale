@@ -581,6 +581,9 @@ function reachLine(): string {
   return '';
 }
 
+/** How long a gift's line is up before its screen. */
+const GIFT_LINE_MS = 900;
+
 function giveNext(): void {
   if (giving || !rom || !toGive.length) return;
   giving = true;
@@ -593,10 +596,15 @@ function giveNext(): void {
   const { key, item, gift, hidden } = next;
   // A TM is taught and a held item given, there and then, on the ROM's own screens.
   const screen = isTm(item) || GIFTS.includes(item);
-  if (screen) { if (gift) say(`A gift: ${name(item)}!`); romUp = true; }
+  // Somebody says so first, and it can be read before their screen comes up (Cam, 11-01:
+  // "there should be a dialogue box when I talk to somebody").
+  const line = `Here, take this ${name(item)}!`;
+  if (screen) { if (gift) say(line); romUp = true; }
+  const said = screen && gift ? new Promise((done) => setTimeout(done, GIFT_LINE_MS)) : Promise.resolve();
+  const r = rom;
   const took = screen
-    ? rom.teach(item, () => battleEl.classList.add('on')).finally(() => { romUp = false; battleEl.classList.remove('on'); })
-    : rom.give(item, groundCount(item));
+    ? said.then(() => r.teach(item, () => battleEl.classList.add('on'))).finally(() => { romUp = false; battleEl.classList.remove('on'); })
+    : r.give(item, groundCount(item));
   took.then((got) => {
     // What the ROM made of it (br_items.c's Apply), not what was on the ground.
     if (!got) {
@@ -609,7 +617,7 @@ function giveNext(): void {
       if (kept) say(`${name(item)} went in the BAG.`);
       else if (!gift) say(`Taught ${name(item)}!`);
     }
-    else if (got.items.length) rom?.sound(MUS_OBTAIN_ITEM), say(`Found ${got.items.map((g) => `${g.n > 1 ? `${g.n} ` : ''}${name(g.id)}`).join(', ')}!`);
+    else if (got.items.length) rom?.sound(MUS_OBTAIN_ITEM), say(gift ? line : `Found ${got.items.map((g) => `${g.n > 1 ? `${g.n} ` : ''}${name(g.id)}`).join(', ')}!`);
     else if (got.money) say(`Sold ${name(item)} for ¥${got.money}.`);
     else say(`${name(item)}! Your team got stronger.`);
   }, (e) => console.warn('spike give failed', e)).finally(() => { giving = false; giveNext(); });

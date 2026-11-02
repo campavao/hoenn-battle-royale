@@ -93,6 +93,9 @@ const FADE_IN_WAIT = 45;
 const HURRY_SPEED = 8;
 /** `gBrBattle.hurry` (include/br/br_battle.h): no transition, a quick intro. */
 const BATTLE_HURRY = 13;
+/** `gBrBattle.autoText`: a battle's text turns its own pages, on a desktop too (Cam, 11-01:
+ *  "dialogue boxes should automatically progress"). */
+const BATTLE_AUTO_TEXT = 14;
 /** gBrLevels.lifting (br_levels.h): set while the ROM lifts the party to a new rung. */
 const LEVELS_LIFTING = 3;
 /** br_event.h's BR_EVENT_MAX: the events gBrEvents has room for. */
@@ -603,7 +606,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
   const briskFades = () => {
     let on = false;
     const off = emu.onFrame(() => {
-      const f = fade().active;
+      const now = fade();
+      const f = now.active || now.y > 0; // and a screen held black while the next one loads
       if (f === on) return;
       on = f;
       if (f) hurryOn(); else hurryOff();
@@ -766,6 +770,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     // The swirl is off the hidden field, nobody sees it, and the intro is quick (br_battle.c
     // BrBattle_HurryIntro): the first menu was 7.7 s after the step (Cam, 11-01).
     if (hurry) emu.write(sym('gBrBattle') + BATTLE_HURRY, 1, 8);
+    emu.write(sym('gBrBattle') + BATTLE_AUTO_TEXT, 1, 8);
     kick();
     // The card and the ask run on the hidden field, which nobody sees: at HURRY_SPEED and
     // quiet, so the battle is up in a beat and not a second and a half later with the

@@ -147,13 +147,13 @@ void BrBattle_MenuBoxFollow(u16 menuY, const u8 *prompt)
 // (BrBattle_AutoScrollFrames), then turns.
 void BrBattle_PhoneAutoScroll(void)
 {
-    if (gBrHud.noBattleBox)
+    if (gBrHud.noBattleBox || gBrBattle.autoText)
         gTextFlags.autoScroll = TRUE;
 }
 
 bool8 BrBattle_PhoneTextPace(void)
 {
-    return gBrHud.noBattleBox && gMain.inBattle && !(gBattleTypeFlags & BATTLE_TYPE_LINK);
+    return (gBrHud.noBattleBox || gBrBattle.autoText) && gMain.inBattle && !(gBattleTypeFlags & BATTLE_TYPE_LINK);
 }
 
 void BrBattle_DrawClock(void)
