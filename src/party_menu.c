@@ -6533,3 +6533,8 @@ void IsLastMonThatKnowsSurf(void)
             gSpecialVar_Result = TRUE;
     }
 }
+#if BR
+
+// The party's screen, for the page walking it unseen (web/spike-b/rom.ts).
+void (*const gBrPartyScreen)(void) = CB2_UpdatePartyMenu;
+#endif

@@ -1722,6 +1722,21 @@ static void Task_ItemContext_SingleRow(u8 taskId)
 
 static void Task_ItemContext_MultipleRows(u8 taskId)
 {
+#if BR
+    if (BrBag_PickUseField())
+    {
+        u8 row;
+
+        for (row = 0; row < gBagMenu->contextMenuNumItems; row++)
+        {
+            if (gBagMenu->contextMenuItemsPtr[row] == ACTION_USE)
+            {
+                sItemMenuActions[ACTION_USE].func.void_u8(taskId);
+                return;
+            }
+        }
+    }
+#endif
     if (MenuHelpers_ShouldWaitForLinkRecv() != TRUE)
     {
         s8 cursorPos = Menu_GetCursorPos();

@@ -274,6 +274,120 @@ test('one faints: who goes out is the party windows, with no way back and the RO
   await ctx.close();
 });
 
+test('PARTY and BAG on the field are the windows: switch, hold, summary, and use', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 }, screen: { width: 1920, height: 1080 } });
+  const page = await ctx.newPage();
+  await withTeam(page);
+  await spike(page, (s) => s.startFor({ type: 'bag', tick: 0, id: s.link.me, key: 0x7e0004, name: 'DRAKE', bag: { items: [{ id: 24, n: 1 }, { id: 13, n: 3 }], money: 0, mons: [{ species: 373, level: 30 }] } }));
+  await page.locator('#bag-panel button').nth(1).click();
+  await page.locator('#bag-panel button').first().click();
+  await expect(page.locator('#bag-panel')).toBeHidden();
+  await page.waitForTimeout(800);
+  const hp = (slot: number) => spike(page, new Function('s', `return s.rom.emu.read(s.art.sym('gPlayerParty') + ${slot} * 100 + 86, 16)`) as (s: any) => number);
+  const team = () => spike(page, (s) => s.battleMenu.deps.firstMoves.readParty()) as Promise<{ hp: number; item: number }[]>;
+  const stacks = () => spike(page, (s) => s.battleMenu.stacks()) as Promise<{ item: number; n: number }[]>;
+
+  // PARTY: no ROM screen comes up for it, and the keys drive it.
+  await page.keyboard.press('q');
+  await expect(page.locator('.bm-slot')).toHaveCount(6);
+  await expect(page.locator('.bm-slot').first()).toBeVisible();
+  await expect(page.locator('#battle.panel')).toHaveCount(1);
+  await expect(page.locator('#gba')).toBeHidden();
+  await shot(page, 'desk-field-party');
+  // GIVE the fourth a POTION from the field's own bag.
+  await page.locator('.bm-slot').nth(3).click();
+  await expect(page.locator('.bm-member')).toBeVisible();
+  await shot(page, 'desk-field-member');
+  await page.locator('.bm-m-btn').nth(3).click();
+  await expect(page.locator('.bm-bag-head')).toBeVisible();
+  const potion = (await stacks()).find((x) => x.item === 13)!;
+  const row = (await stacks()).findIndex((x) => x.item === 13);
+  for (let i = 0; i < row; i++) await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('z');
+  await page.locator('.bm-bag-use').click();
+  await expect(page.locator('.bm-member')).toBeVisible();
+  await expect.poll(async () => (await team())[3].item).toBe(13);
+  expect(potion.n).toBe(3);
+  // SWITCH it with the first, by the page alone: the POTION goes with it.
+  await page.locator('.bm-m-btn').nth(2).click();
+  await expect(page.locator('.bm-use-head')).toBeVisible();
+  await page.locator('.bm-slot').first().click();
+  await expect.poll(async () => (await team())[0].item).toBe(13);
+  await expect(page.locator('.bm-use-head')).toBeHidden();
+  // TAKE it back.
+  await page.locator('.bm-slot').first().click();
+  await page.locator('.bm-m-btn').nth(3).click();
+  await expect.poll(async () => (await team())[0].item, { timeout: 15_000 }).toBe(0);
+  // SUMMARY is the ROM's own, and comes back to the windows.
+  await page.locator('.bm-m-btn').nth(1).click();
+  await expect(page.locator('#gba')).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(1500);
+  await shot(page, 'desk-field-summary');
+  await page.keyboard.press('x', { delay: 150 });
+  await expect(page.locator('.bm-member')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('#gba')).toBeHidden();
+  // BACK, BACK: the field, and walking again.
+  await page.keyboard.press('x');
+  await expect(page.locator('.bm-slot').first()).toBeVisible();
+  await page.keyboard.press('x');
+  await expect(page.locator('.bm-slot').first()).toBeHidden();
+  await expect.poll(() => spike(page, (s) => s.swapping)).toBe(false);
+
+  // BAG: a REVIVE asks, and only the fainted can take it.
+  await spike(page, (s) => { const at = s.art.sym('gPlayerParty'); s.rom.emu.write(at + 86, 5, 16); s.rom.emu.write(at + 2 * 100 + 86, 0, 16); });
+  await page.keyboard.press('e');
+  await expect(page.locator('.bm-bag-head')).toBeVisible();
+  await shot(page, 'desk-field-bag');
+  const revive = (await stacks()).findIndex((x) => x.item === 24);
+  for (let i = 0; i < revive; i++) await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('z');
+  await page.locator('.bm-bag-use').click();
+  await expect(page.locator('.bm-use-head')).toBeVisible();
+  const shut = await page.locator('.bm-slot').evaluateAll((all) => all.map((b) => b.getAttribute('aria-disabled')));
+  expect(shut, 'a Revive only for the fainted').toEqual(['true', 'true', 'false', 'true', 'true', 'true']);
+  await shot(page, 'desk-field-use');
+  await page.locator('.bm-slot').nth(2).click();
+  await expect.poll(() => hp(2), { timeout: 30_000, message: 'revived' }).toBeGreaterThan(0);
+  await expect(page.locator('.bm-bag-head')).toBeVisible({ timeout: 20_000 });
+  // A POTION asks nothing in a match: all of them at once.
+  const potionRow = (await stacks()).findIndex((x) => x.item === 13);
+  for (let i = 0; i < potionRow; i++) await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('z');
+  await page.locator('.bm-bag-use').click();
+  await expect.poll(() => hp(0), { timeout: 30_000, message: 'healed' }).toBeGreaterThan(5);
+  await expect(page.locator('.bm-bag-head')).toBeVisible({ timeout: 20_000 });
+  await page.keyboard.press('x');
+  await expect.poll(() => spike(page, (s) => s.swapping)).toBe(false);
+  await ctx.close();
+});
+
+test('PARTY and BAG on a phone: the dock opens the windows, and everything fits', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await withTeam(page);
+  await page.locator('#hud-party').click();
+  await expect(page.locator('.bm-slot')).toHaveCount(6);
+  await expect(page.locator('#battle-menu .bm-back')).toBeInViewport({ ratio: 1 });
+  await shot(page, 'phone-field-party');
+  await page.locator('.bm-slot').first().click();
+  await expect(page.locator('.bm-member')).toBeVisible();
+  for (let i = 0; i < 5; i++) await expect(page.locator('.bm-m-btn').nth(i)).toBeInViewport({ ratio: 1 });
+  await shot(page, 'phone-field-member');
+  await page.locator('.bm-m-btn').first().click();
+  await page.locator('#battle-menu .bm-back').click();
+  await expect(page.locator('.bm-slot').first()).toBeHidden();
+  await expect(page.locator('#hud-bag')).toBeVisible();
+  await page.locator('#hud-bag').click();
+  await expect(page.locator('.bm-bag-head')).toBeVisible();
+  await expect(page.locator('#battle-menu .bm-back')).toBeInViewport({ ratio: 1 });
+  await shot(page, 'phone-field-bag');
+  await page.locator('#battle-menu .bm-back').click();
+  await expect(page.locator('.bm-bag-head')).toBeHidden();
+  await ctx.close();
+});
+
 test('by a thumb: moves first, RUN says its odds, and a dropped bag asks with windows', async ({ browser }) => {
   test.setTimeout(240_000);
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });

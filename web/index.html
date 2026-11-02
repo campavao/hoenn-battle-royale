@@ -81,7 +81,7 @@
       body.desk-hud #corner { display: none; }
       body.desk-hud .hud-sign { top: calc(var(--s, 1.5) * 4px + 40px); }
       body.desk-hud #hud { right: calc(var(--s, 1.5) * 128px); }
-      body:has(#stage:not([hidden])) :is(#phud, #pdock), body:has(#battle.on:not(.screen)) #pdock { visibility: hidden; }
+      body:has(#stage:not([hidden])) :is(#phud, #pdock), body:has(#battle.on) #pdock { visibility: hidden; }
       /* The phone's battle menu (ui/battlemenu.ts, the live game's): FIGHT/BAG/POKeMON/RUN
          and the moves as windows under the picture, --s CSS pixels to a GBA pixel. */
       #battle-menu:not([hidden]) { grid-area: 2 / 1; margin-top: calc(var(--s, 1.5) * 4px); display: grid; grid-template-columns: auto auto; justify-content: center; gap: calc(var(--s, 1.5) * 8px); align-content: start; }
@@ -111,7 +111,13 @@
       .bm-party { grid-column: 1 / -1; display: grid; grid-template-columns: auto auto; gap: calc(var(--s, 1.5) * 8px); }
       .bm-member { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: calc(var(--s, 1.5) * 8px); }
       .bm-m-moves { display: grid; grid-template-columns: auto auto; gap: calc(var(--s, 1.5) * 8px); }
-      .bm-m-row { display: flex; gap: calc(var(--s, 1.5) * 8px); }
+      .bm-m-row { display: flex; flex-wrap: wrap; justify-content: center; gap: calc(var(--s, 1.5) * 8px); }
+      .bm-m-row [hidden] { display: none; }
+      /* PARTY and BAG on the field: the windows alone, over the world. */
+      body #battle.on.panel, body.desk-hud #battle.on.panel:not(.screen) { background: #0007; place-items: center; align-content: center; padding-top: 0; }
+      body.desk-hud #battle.panel .bm-m-row { max-width: calc(var(--s, 3) * 240px); }
+      body.desk-hud #battle.panel .bm-keys { top: auto; bottom: 8px; }
+      #battle.panel #gba, #battle.panel #gba-key, #battle.panel .note { display: none; }
       .bm-m-card canvas, .bm-m-held canvas, .bm-m-moves canvas, .bm-actions canvas { display: block; }
       body.desk-hud #battle.on:not(.screen) { place-items: start center; align-content: start; padding-top: 0; }
       body.desk-hud #battle.on:not(.screen) canvas { width: calc(var(--pic, 4) * 240px); }

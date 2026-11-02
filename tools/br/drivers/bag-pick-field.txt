@@ -1,0 +1,32 @@
+# bag-pick-field: the field's BAG takes the page's pick too (Cam, 11-02: no old ROM screens).
+# The page writes the pocket and the item and goes to BAG on the START menu unseen; the bag
+# opens on that pocket, takes the row and USE by itself, whatever row USE is in its context
+# menu. A match's POTION heals the whole party with no one to pick (br_items.c).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# A SUPER POTION in ITEMS behind a POTION, key zeroed, and the lead hurt.
+poke u32 *gSaveBlock2Ptr+0xAC 0
+poke u16 *gSaveBlock1Ptr+0x560 0x0D
+poke u16 *gSaveBlock1Ptr+0x562 2
+poke u16 *gSaveBlock1Ptr+0x564 0x16
+poke u16 *gSaveBlock1Ptr+0x566 3
+poke u16 gPlayerParty+86 1
+# START, down to BAG (POKeMON, BAG), the pick, and A.
+tap START
+wait 30
+tap DOWN
+wait 10
+poke u8 gBagPosition+5 0
+poke u16 gBrBag 0x16
+tap A
+waitfor u32 gMain+4 CB2_BagMenuRun+1 200
+wait 120
+shot used
+# One SUPER POTION gone, the POTION untouched, the pick spent, the lead healed.
+expect u16 *gSaveBlock1Ptr+0x566 2
+expect u16 *gSaveBlock1Ptr+0x562 2
+expect u16 gBrBag 0
+expectge u16 gPlayerParty+86 2
+say bag pick field ok

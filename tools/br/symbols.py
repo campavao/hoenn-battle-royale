@@ -129,6 +129,8 @@ ENGINE_SYMBOLS = [
     "gBagPosition", "gItems",
     # ...and what a medicine does, so the page's party can grey who it would not help.
     "gItemEffectTable",
+    # ...what cannot be used from the field's BAG, and the party's own screen, walked unseen.
+    "ItemUseOutOfBattle_CannotUse", "gBrPartyScreen",
     # ...and the ROM's own BAG running: spike B holds the battle's picture over it while it
     # USEs what the page's bag picked, and the battle's redraw after it (web/spike-b/main.ts
     # trackBag, HBR-110).

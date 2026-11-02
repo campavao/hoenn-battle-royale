@@ -26,6 +26,8 @@ import { startMenuTable } from '../src/touch';
 import { FADE_COLOR_WORD, FADE_Y_WORD, fadeOf } from '../src/field';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 import { CATCH_UP_SPEED, seatBstart, spectatePace } from '../src/match/spectate';
+import { BAG_POSITION_POCKET } from '../src/ui/bag';
+import { withHeld } from './carry';
 import type { SpMsg } from './shared/wire';
 import { readTally, type MatchTally } from '../src/match/tally';
 import type { FameMon } from '../src/ui/results';
@@ -139,6 +141,12 @@ export interface MapLook {
 
 /** Somebody else's battle, as the page hands it to a mirror (watch.ts): what their ROM
  *  published, in order, from its BSTART. */
+/** The page has asked already: the ROM's BAG and party are gone through unseen. A screen that
+ *  is the ROM's alone (an evolution, the SUMMARY) is shown when it settles. */
+export type MenuWalk =
+  | { to: 'summary' | 'moves'; slot: number }
+  | { to: 'use'; pocket: number; item: number; slot?: number; move?: number };
+
 export interface MirrorFeed {
   /** The next message not yet handed to the ROM, or null. */
   peek(): SpMsg | null;
@@ -254,7 +262,11 @@ export interface RomBattles {
    *  screen until the row's own screen is up (`onStart`). Resolves back on the field, with
    *  whatever was used or moved kept: `up` false when the row would not open, and `said`
    *  what the hidden field told the player instead of a screen, for the page to say. */
-  menu(action: number, onStart: () => void, onEnd: () => void, look?: MapLook): Promise<{ up: boolean; said: string; flew?: { group: number; num: number; x: number; y: number } }>;
+  /** A row of the team's own, its screen walked unseen as far as `screen`. */
+  reorder(a: number, b: number): Promise<void>;
+  /** This one holds `item` now, 0 for nothing: what it held is not the bag's business here. */
+  setHeld(slot: number, item: number): Promise<void>;
+  menu(action: number, onStart: () => void, onEnd: () => void, look?: MapLook, walk?: MenuWalk): Promise<{ up: boolean; said: string; flew?: { group: number; num: number; x: number; y: number } }>;
   /** The drop (br_pick.c): the fly map, "Drop where?", opened on `look`, every section a
    *  choice, its own twenty seconds. The section chosen, or 0 when the clock ran out on
    *  none. `onStart` when the map is up. */
@@ -627,6 +639,98 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     }, Infinity);
     calm();
     emu.release('b');
+  };
+  const taskFn = sym('Task_HandleChooseMonInput'), tasksAt = sym('gTasks');
+  /** struct Task: 16 of them, 40 bytes, func first and isActive after it. */
+  const choosing = () => {
+    if (taskFn === undefined || tasksAt === undefined) return false;
+    for (let i = 0; i < 16; i++) {
+      if (emu.read(tasksAt + i * 40 + 4, 8) && ((emu.read(tasksAt + i * 40, 32) ^ taskFn) & ~1) === 0) return true;
+    }
+    return false;
+  };
+  /** gBrPartyScreen: a pointer in the ROM to the party screen's callback. */
+  const partyScreen = () => {
+    const at = sym('gBrPartyScreen');
+    return at === undefined ? undefined : new DataView(rom.buffer, rom.byteOffset).getUint32(at - 0x08000000, true);
+  };
+  const screenIs = (cb: number | undefined) => cb !== undefined && ((emu.read(sym('gMain')! + 4, 32) ^ cb) & ~1) === 0;
+  const walkMenu = async (walk: MenuWalk, onStart: () => void, onEnd: () => void) => {
+    const tap = async (k: GbaKey) => { emu.press(k); await frames(emu, 3); emu.release(k); await frames(emu, 3); };
+    hurryOn();
+    if (walk.to !== 'use') {
+      // The party's row: SUMMARY first, then MOVES (party_menu.c SetPartyMonFieldSelectionActions).
+      // Its task is up before its screen is, and takes no keys until the fade is done.
+      await until(emu, () => choosing() && screenIs(partyScreen()) && !fade().active, 240);
+      emu.write(partyMenuAt + 9, walk.slot, 8);
+      await tap('a');
+      // Its little menu takes keys once "Do what with this" has printed.
+      await frames(emu, 45);
+      // MOVES says so for a frame (gBrCatch.movesSlot): at full speed, or the page misses it.
+      if (walk.to === 'moves') { await tap('down'); hurryOff(); }
+      const partyCb = partyScreen();
+      for (let i = 0; i < 8 && screenIs(partyCb); i++) {
+        await tap('a');
+        await frames(emu, 30);
+      }
+      if (walk.to === 'moves') {
+        // Back on the field first: the relearner opens from there (BrCatch_Tick).
+        await until(emu, onField, 300);
+        hurryOff();
+        return;
+      }
+      hurryOff();
+      await settled();
+      onStart();
+      // Out of it, the party comes back with B: the page has that, so it goes on unseen.
+      const summary = emu.read(sym('gMain')! + 4, 32);
+      const off = emu.onFrame(() => {
+        if (emu.read(sym('gMain')! + 4, 32) !== summary) { off(); onEnd(); leaving = true; }
+      });
+      await backOnField();
+      off();
+      onEnd();
+      return;
+    }
+    const bagCb = sym('CB2_BagMenuRun');
+    const partyCb = partyScreen();
+    let sent = walk.slot === undefined, moves = walk.move ?? -1, n = 0, settledFor = 0, was = 0, showing = false;
+    const press = (k: GbaKey, every: number) => {
+      if (n % every === 0) emu.press(k);
+      else if (n % every === 3) emu.release(k);
+    };
+    await until(emu, () => {
+      n++;
+      if (onField()) return true;
+      const inBag = screenIs(bagCb), inParty = screenIs(partyCb);
+      if (!inBag && !inParty) {
+        // An evolution, a move to forget: the ROM's alone, once it has come to rest.
+        const cb = emu.read(sym('gMain')! + 4, 32);
+        settledFor = cb === was && !fade().active ? settledFor + 1 : 0;
+        was = cb;
+        if (!showing && settledFor > 40) { showing = true; hurryOff(); onStart(); }
+        return false;
+      }
+      if (showing) { showing = false; onEnd(); hurryOn(); }
+      settledFor = 0;
+      if (inParty) {
+        if (!sent && choosing() && !fade().active) {
+          emu.write(partyMenuAt + 9, walk.slot!, 8);
+          sent = true;
+          n = 0;
+          emu.press('a');
+        } else if (sent && moves >= 0 && n > 40) {
+          // An ETHER's "restore which move?": down to it, and on with A below.
+          if (moves > 0) press('down', 12);
+          if (moves > 0 && n % 12 === 3) moves--;
+          if (moves === 0) { press('a', 30); if (n % 30 === 3) moves = -1; }
+        } else if (sent && moves < 0) press('a', 30);
+      } else if (n > 60 && !emu.read(sym('gBrBag')!, 16)) press('b', 30);
+      return false;
+    }, 3000);
+    for (const k of ['a', 'b', 'down'] as GbaKey[]) emu.release(k);
+    if (showing) onEnd();
+    hurryOff();
   };
   /** The parked field made to stand where `look` says, for the MAP's player icon
    *  (region_map.c InitMapBasedOnPlayerLocation): the section, and a spot on the parked
@@ -1111,7 +1215,29 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         return [...mons.filter((_, i) => !taken.has(keys[i])), ...put];
       });
     },
-    menu(action, onStart, onEnd, look) {
+    reorder(a, b) {
+      return inTurn(async () => {
+        if (broken) return;
+        const k = carried ?? kept();
+        const party = k.party.slice();
+        const held = party.slice(a * 100, (a + 1) * 100);
+        party.copyWithin(a * 100, b * 100, (b + 1) * 100);
+        party.set(held, b * 100);
+        const next = { ...k, party: party as typeof k.party };
+        keep(next);
+        carried = last = next;
+      });
+    },
+    setHeld(slot, item) {
+      return inTurn(async () => {
+        if (broken) return;
+        const k = carried ?? kept();
+        const next = { ...k, party: withHeld(k.party, slot, item) as typeof k.party };
+        keep(next);
+        carried = last = next;
+      });
+    },
+    menu(action, onStart, onEnd, look, walk) {
       return onCore(async () => {
         if (broken || !startMenu) return { up: false, said: '' };
         leaving = false;
@@ -1125,6 +1251,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         // names the bird in gPartyMenu.slotId, which nothing else on a look writes.
         let moves = false;
         if (look) emu.write(partyMenuAt + 9, 0xff, 8);
+        if (walk?.to === 'use') {
+          emu.write(sym('gBagPosition')! + BAG_POSITION_POCKET, walk.pocket, 8);
+          emu.write(sym('gBrBag')!, walk.item, 16);
+        }
         const watch = emu.onFrame(() => {
           drain(() => undefined);
           if (!Number.isNaN(catchAt) && emu.read(catchAt + 2, 8) !== 0xff) moves = true;
@@ -1160,12 +1290,16 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         }
         hurryOff();
         if (up) {
-          await settled();
-          onStart();
-          await backOnField();
-          // Out of the row's screen the game puts the START menu back up, on the hidden
-          // field: the page takes the screen now, and B shuts the menu out of sight.
-          onEnd();
+          if (walk) {
+            await walkMenu(walk, onStart, onEnd);
+          } else {
+            await settled();
+            onStart();
+            await backOnField();
+            // Out of the row's screen the game puts the START menu back up, on the hidden
+            // field: the page takes the screen now, and B shuts the menu out of sight.
+            onEnd();
+          }
           // A flight: the bird, then the warp, on the hidden field. Where it lands (the
           // town's heal location) is where the page's trainer goes; the hidden ROM is
           // parked again after, as after any row.

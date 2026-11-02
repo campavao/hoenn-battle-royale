@@ -19,7 +19,7 @@ s32 BrBag_PickRow(s32 listPosition)
 
     // A bag with no pick in it, or not a battle's, owes no USE: a pick whose bag was
     // torn down before its context menu (the shot clock's backout) is let go here.
-    if (item == ITEM_NONE || gBagPosition.location != ITEMMENULOCATION_BATTLE)
+    if (item == ITEM_NONE || (gBagPosition.location != ITEMMENULOCATION_BATTLE && gBagPosition.location != ITEMMENULOCATION_FIELD))
     {
         sUsing = FALSE;
         return listPosition;
@@ -48,6 +48,15 @@ s8 BrBag_PickUse(s8 selection)
         return selection;
     sUsing = FALSE;
     return 0;
+}
+
+bool8 BrBag_PickUseField(void)
+{
+    bool8 using = sUsing && gBagPosition.location == ITEMMENULOCATION_FIELD;
+
+    if (using)
+        sUsing = FALSE;
+    return using;
 }
 
 void BrBag_Forget(void)

@@ -20,6 +20,15 @@ export const BAG_POCKETS: { pocket: number; label: string }[] = [
   { pocket: POCKET_BERRIES, label: 'BERRIES' },
 ];
 
+/** Every pocket, for the field's own BAG. */
+export const FIELD_POCKETS: { pocket: number; label: string }[] = [
+  { pocket: POCKET_ITEMS, label: 'ITEMS' },
+  { pocket: POCKET_BALLS, label: 'POKé BALLS' },
+  { pocket: 2, label: 'TMs & HMs' },
+  { pocket: POCKET_BERRIES, label: 'BERRIES' },
+  { pocket: 4, label: 'KEY ITEMS' },
+];
+
 /** `struct Item` (include/item.h): the name, the description pointer, and how a battle
  *  uses it. 44 bytes under both compilers. */
 export const ITEM_SIZE = 44;
@@ -74,6 +83,8 @@ function text(rom: Rom, addr: number, max: number): string {
   }
 }
 
+/** struct Item's type and fieldUseFunc, and ITEM_USE_PARTY_MENU (include/constants/item.h). */
+const ITEM_TYPE = 27, ITEM_FIELD_FUNC = 28, ITEM_USE_PARTY_MENU = 1;
 /** ITEM_POTION and ITEM_ENIGMA_BERRY: the ends of gItemEffectTable. */
 const FIRST_EFFECT = 13, LAST_EFFECT = 175;
 const EFFECT_STATUS = 3, EFFECT_MORE = 4;
@@ -117,6 +128,23 @@ export function medicineHelps(effect: Uint8Array, m: { hp: number; maxHp: number
     || (cures & ITEM3_PARALYSIS && s & STATUS_PARALYSIS) || (cures & ITEM3_CONFUSION && m.active));
 }
 
+/** Used on one of the party, as gItems[].type has it, and a match's medicine that does not ask
+ *  (src/br/br_items.c: all of them at once, but a revive and PP). */
+export function asksWhoInField(rom: Rom, id: number, effect: Uint8Array | null): boolean {
+  const items = rom.sym('gItems');
+  if (items === undefined || u8(rom, items + id * ITEM_SIZE + ITEM_TYPE) !== ITEM_USE_PARTY_MENU) return false;
+  if (!effect || !usedOnOne(effect)) return true;
+  return (effect[EFFECT_MORE] & (ITEM4_REVIVE | ITEM4_HEAL_PP)) !== 0;
+}
+
+/** Whether the field's BAG says "not now" of it: a ball, say. */
+export function usableInField(rom: Rom, id: number): boolean {
+  const items = rom.sym('gItems'), cannot = rom.sym('ItemUseOutOfBattle_CannotUse');
+  if (items === undefined) return true;
+  const fn = u32(rom, items + id * ITEM_SIZE + ITEM_FIELD_FUNC);
+  return fn !== 0 && (cannot === undefined || ((fn ^ cannot) & ~1) !== 0);
+}
+
 const infos = new WeakMap<Uint8Array, Map<number, ItemInfo | null>>();
 
 /** An item as gItems has it, read once a ROM. Null without the table. */
@@ -138,6 +166,11 @@ export function itemInfo(rom: Rom, id: number): ItemInfo | null {
   }
   m.set(id, info);
   return info;
+}
+
+/** All of it, for the field's own BAG. */
+export function readFieldBag(emu: BagRead, sym: (name: string) => number | undefined): Map<number, Stack[]> {
+  return new Map(FIELD_POCKETS.map(({ pocket }) => [pocket, readPocket(emu, sym, pocket)]));
 }
 
 /** A pocket's stacks, in the bag's order, with their counts. Empty without the symbols. */
