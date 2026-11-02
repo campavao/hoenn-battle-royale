@@ -694,8 +694,8 @@ function tagFrame(): void {
   itemTag.show(hit.text, ((g.gx * TILE + TILE / 2 - cam.x) * zoom) / dpr + innerWidth / 2, ((g.gy * TILE - cam.y) * zoom) / dpr + innerHeight / 2);
 }
 
-/** How long "Found X!" holds the box, before "A: Take" for the ball beside it (Cam, 11-01:
- *  "the found covers over what you're picking up"). */
+/** How long a dug-up item's name holds the box (Cam, 11-01: "the found covers over what
+ *  you're picking up"). */
 const FOUND_MS = 1000;
 /** How long a gift's line is up before its screen. */
 const GIFT_LINE_MS = 900;
@@ -748,7 +748,13 @@ function giveNext(): void {
       if (kept) say(`${name(item)} went in the BAG.`);
       else if (!gift) say(`Taught ${name(item)}!`);
     }
-    else if (got.items.length) rom?.sound(MUS_OBTAIN_ITEM), say(gift ? line : `Found ${got.items.map((g) => `${g.n > 1 ? `${g.n} ` : ''}${name(g.id)}`).join(', ')}!`, FOUND_MS);
+    else if (got.items.length) {
+      rom?.sound(MUS_OBTAIN_ITEM);
+      // A ball's tag named it and the jingle says it was taken: no "Found X" (POK-440, Cam:
+      // "we're saying a little too much at the bottom"). Dug up, nothing named it first.
+      if (gift) say(line, FOUND_MS);
+      else if (hidden) say(`${got.items.map((g) => `${g.n > 1 ? `${g.n} ` : ''}${name(g.id)}`).join(', ')} went in the BAG.`, FOUND_MS);
+    }
     else if (got.money) say(`Sold ${name(item)} for ¥${got.money}.`);
     else say(`${name(item)}! Your team got stronger.`);
   }, (e) => console.warn('spike give failed', e)).finally(() => { giving = false; giveNext(); });

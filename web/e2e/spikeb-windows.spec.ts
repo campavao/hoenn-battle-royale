@@ -1,6 +1,7 @@
 // The windows Cam drew (11-01 sketches, 11-02 notes): the minimap and the name by the thing on the
 // field, a dropped bag's windows, and a battle's moves first with PARTY, BAG and RUN, its party
 // and one of them, by a thumb and by the keys alone.
+import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { key } from './spike';
 import { romExists, romHashParam, romPath } from './symbols';
@@ -597,5 +598,45 @@ test('by a thumb: moves first, RUN says its odds, and a dropped bag asks with wi
   await page.locator('.bm-slot').nth(2).click();
   await page.locator('.bm-m-btn').nth(2).click();
   await expect.poll(() => leadIndex(page), { timeout: 30_000 }).toBe(2);
+  await ctx.close();
+});
+
+test('taking a ball off the ground says nothing, and a buried one its name (POK-440)', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  await withTeam(page);
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as any).msgSeen = seen;
+    new MutationObserver(() => seen.push(document.getElementById('msg')!.getAttribute('data-text') ?? '')).observe(document.getElementById('msg')!, { attributes: true, attributeFilter: ['data-text'] });
+  });
+  const seen = () => page.evaluate(() => (window as any).msgSeen as string[]);
+  // Off the ground: its tag named it, and the jingle says it was taken.
+  const ball = await spike(page, (s) => {
+    const room = s.link.room, a = room.actor(s.link.me);
+    const g = [...room.ground().values()].find((g: any) => !g.gift && g.item < 100 && /^MAP_ROUTE1/.test(g.map) && s.placed.get(g.map) && room.stepFor(a)({ map: g.map, x: g.x, y: g.y + 1 }, 3)) as any;
+    const spot = { map: g.map, x: g.x, y: g.y + 1 };
+    a.m = { ...a.m, spot, prev: spot, facing: 2, moveDir: 2, action: null, px: 0, py: 0 };
+    return g.key as number;
+  });
+  await page.waitForTimeout(800);
+  await page.keyboard.press('z', { delay: 150 });
+  await expect.poll(() => page.evaluate((k) => (window as any).__spike.link.room.ground().has(k), ball), { timeout: 10_000, message: 'it was taken' }).toBe(false);
+  await page.waitForTimeout(1500);
+  expect((await seen()).filter((t) => /Found/.test(t))).toEqual([]);
+  // Dug up, nothing named it first.
+  const hidden = JSON.parse(readFileSync('spike-b/data/hidden.json', 'utf8')) as [string, number, number, number][];
+  const [map, x, y, item] = hidden.find(([m, , , i]) => /^MAP_ROUTE1/.test(m) && i < 100)!;
+  const named = await page.evaluate(([map, x, y, item]) => {
+    const s = (window as any).__spike, a = s.link.room.actor(s.link.me);
+    const spot = { map, x, y: (y as number) + 1 };
+    a.m = { ...a.m, spot, prev: spot, facing: 2, moveDir: 2, action: null, px: 0, py: 0 };
+    return s.art.itemName(item) as string;
+  }, [map, x, y, item] as const);
+  await page.waitForTimeout(800);
+  await page.keyboard.press('z', { delay: 150 });
+  await expect.poll(seen, { timeout: 10_000 }).toContain(`${named} went in the BAG.`);
+  expect((await seen()).filter((t) => /Found/.test(t))).toEqual([]);
   await ctx.close();
 });
