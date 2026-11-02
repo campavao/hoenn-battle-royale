@@ -1,0 +1,30 @@
+# see-through-reshow: shutting a menu in a see-through battle comes straight back. pret's
+# way back is a hardware fade, which dims the key off pure blue along with everything else,
+# and the page keys only pure blue: a blue battle for the length of the fade, every time a
+# BAG or the POKeMON shut (Cam, 2026-11-01 video, 6:15, "a blue screen that comes up").
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrSeeThrough 1
+poke u8 gBrBattle+14 1
+pokebytes gBrPatch+16 1A 00
+pokebytes gBrPatch+32 10 00
+poke u8 gBrPatch+4 1
+tap LEFT
+wait 4
+tap LEFT
+wait 840
+expect u8 gBrBattle+8 1
+# BAG. With the fade it took 74 frames to come back from B, and 57 without.
+tap RIGHT
+wait 6
+tap A
+wait 90
+expect u8 gBrBattle+8 0
+tap B
+waitfor u8 gBrBattle+8 1 65
+# the battle's back, and no fade over it
+expectbits u16 gPaletteFade+6 0x8000 0
+shot back
+say see-through reshow ok

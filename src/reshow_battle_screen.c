@@ -17,6 +17,9 @@
 #include "data.h"
 #if BR
 #include "br/br_skin.h"
+#if BR
+#include "br/br_battle.h"
+#endif
 #endif
 
 // this file's functions
@@ -162,6 +165,11 @@ static void CB2_ReshowBattleScreenAfterMenu(void)
     default:
         SetVBlankCallback(VBlankCB_Battle);
         ClearBattleBgCntBaseBlocks();
+#if BR
+        // A hardware fade dims the see-through key off pure blue with the rest: a blue
+        // battle for its length, each time a menu shut (Cam, 2026-11-01 video, 6:15).
+        if (!gBrSeeThrough[0])
+#endif
         BeginHardwarePaletteFade(0xFF, 0, 0x10, 0, 1);
         gPaletteFade.bufferTransferDisabled = 0;
         SetMainCallback2(BattleMainCB2);

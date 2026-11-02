@@ -34,6 +34,7 @@ struct BrBattle
     /* 10 */ u16 stallFrames; // frames a screen the battle put up has held the clock
     /* 12 */ u8 runChance;    // BrBattle_RunChance, as of the action menu opening
     /* 13 */ u8 hurry;        // PAGE WRITES: no transition, BR_INTRO_SPEED until the first menu
+    /* 14 */ u8 autoText;     // PAGE WRITES: a desktop's text runs on by itself too (noBattleBox)
 };
 // web/src/touch.ts reads `menu` (BATTLE_MENU), web/src/ui/battlemenu.ts `runChance`.
 BR_OFFSET(BrBattle, shotFrames, 0)
@@ -45,6 +46,7 @@ BR_OFFSET(BrBattle, stalled, 9)
 BR_OFFSET(BrBattle, stallFrames, 10)
 BR_OFFSET(BrBattle, runChance, 12)
 BR_OFFSET(BrBattle, hurry, 13)
+BR_OFFSET(BrBattle, autoText, 14)
 BR_SIZE(BrBattle, 16)
 
 extern struct BrBattle gBrBattle;
