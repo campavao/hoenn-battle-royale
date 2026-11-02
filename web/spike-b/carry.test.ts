@@ -205,8 +205,14 @@ describe('partyWhole', () => {
     // Mid-edit: the same block with its encryption off.
     for (let w = 0; w < 12; w++) v.setUint32(32 + w * 4, (v.getUint32(32 + w * 4, true) ^ key) >>> 0, true);
     expect(partyWhole(party, 1)).toBe(false);
-    // Past the count is not looked at, and an empty slot adds up to nothing.
-    expect(partyWhole(party, 0)).toBe(true);
+    // Past the count too: pokemon.c's CalculatePlayerPartyCount counts up in place, so a frame
+    // ending inside it shows a short count with the next mon decrypted (a BAD EGG, put back).
+    expect(partyWhole(party, 0)).toBe(false);
+    // ...or a short count between two mons, every block whole: a team cut to that count.
+    for (let w = 0; w < 12; w++) v.setUint32(32 + w * 4, (v.getUint32(32 + w * 4, true) ^ key) >>> 0, true);
+    expect(partyWhole(party, 1)).toBe(true);
+    expect(partyWhole(party, 0)).toBe(false);
+    // An empty slot adds up to nothing.
     expect(partyWhole(new Uint8Array(600), 6)).toBe(true);
   });
 });

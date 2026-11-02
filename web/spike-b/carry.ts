@@ -238,21 +238,28 @@ export function spillShows(s: { legend?: boolean; person?: unknown }, pickedBy: 
   return pickedBy === me && !s.legend && !s.person;
 }
 
-/** Every mon's encrypted block adds up to its checksum (pokemon.c's CalculateBoxMonChecksum):
- *  no mon of the first `count` is caught with the ROM halfway through writing it. */
+/** Every mon's encrypted block adds up to its checksum (pokemon.c's CalculateBoxMonChecksum),
+ *  and the count is not short of them: no mon is caught with the ROM halfway through writing
+ *  it. All six, whatever the count says: CalculatePlayerPartyCount counts up in place, reading
+ *  each mon decrypted, so a frame ending inside it shows count 1 and the next mon half done. */
 export function partyWhole(party: Uint8Array, count: number): boolean {
   const v = new DataView(party.buffer, party.byteOffset, party.byteLength);
-  for (let i = 0; i < Math.min(count, 6); i++) {
+  let filled = 0, leading = true;
+  for (let i = 0; i < 6; i++) {
     const at = i * 100;
-    const key = (v.getUint32(at, true) ^ v.getUint32(at + 4, true)) >>> 0;
+    const personality = v.getUint32(at, true);
+    const key = (personality ^ v.getUint32(at + 4, true)) >>> 0;
     let sum = 0;
     for (let w = 0; w < 12; w++) {
       const x = (v.getUint32(at + 32 + w * 4, true) ^ key) >>> 0;
       sum = (sum + (x & 0xffff) + (x >>> 16)) & 0xffff;
     }
     if (sum !== v.getUint16(at + 28, true)) return false;
+    const species = ((v.getUint32(at + 32 + 12 * ORDERS[personality % 24].indexOf('G'), true) ^ key) >>> 0) & 0xffff;
+    if (species && leading) filled++;
+    else leading = false;
   }
-  return true;
+  return count >= filled;
 }
 
 /** The CENTER's heal on a party as rom.ts keeps it: pokemon.c's HealPlayerParty -- HP to
