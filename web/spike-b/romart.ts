@@ -15,7 +15,7 @@
 // The object palettes' table (sObjectEventSpritePalettes) is static, so it has no symbol:
 // it is found by its shape, a run of {ROM pointer, tag 0x11xx} entries.
 
-import { TMHM_MOVES } from './tmhm';
+import { TMHM_MOVES } from '../src/ui/tmhm';
 import { ANIM_COUNTER_MAX, GENERAL_ANIMS, TILE_ANIMS, framesShown } from '../src/tile-anims';
 
 /** items.h ITEM_TM01: the first machine. */

@@ -20,7 +20,7 @@ import { BATTLE_MENU, MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU
 import { EmeraldCanvas, TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_GREEN, TEXT_RED, TEXT_WHITE, fitText, measure, wrapText, type TextColor } from './emerald';
 import { ITEMS_POCKET, Win, bagHolds, drawFitted, drawIcon, drawItemFitted, drawKeycap, picture } from './phonehud';
 import { nextFocus, type Dir } from './focus';
-import { BAG_POCKETS, FIELD_POCKETS, POCKET_BALLS, asksMove, asksWhoInField, isMachine, itemEffect, itemInfo, learnsMachine, medicineHelps, readBattleBag, usableInField, usedOnOne, type Stack } from './bag';
+import { BAG_POCKETS, FIELD_POCKETS, POCKET_BALLS, asksMove, asksWhoInField, isMachine, itemEffect, itemInfo, medicineHelps, takesMachine, readBattleBag, usableInField, usedOnOne, type Stack } from './bag';
 
 // ---- what the ROM says ---------------------------------------------------------------
 
@@ -837,9 +837,9 @@ export class BattleMenu {
   }
 
   /** Which of the party: the windows ask for the page, for what the ROM will then be told. */
-  openPick(title: string, take: (at: number) => void, close: () => void, can?: (m: PartyMember, rom: Rom | null) => boolean): void {
+  openPick(title: string, take: (at: number) => void, close: () => void, can?: (m: PartyMember) => boolean): void {
     const rows = this.deps.firstMoves?.readParty() ?? [];
-    this.openDrop(title, rows, take, close, can ? (m) => can(m, this.deps.rom) : undefined);
+    this.openDrop(title, rows, take, close, can);
     if (this.drop) this.drop.pick = true;
     this.paintDrop();
     this.settleFocus(true);
@@ -951,7 +951,7 @@ export class BattleMenu {
   private slotHelps(i: number): boolean {
     const m = this.team[i];
     if (!m) return false;
-    if (this.using && isMachine(this.using.item) && this.deps.rom) return learnsMachine(this.deps.rom, m.species, this.using.item);
+    if (this.using && isMachine(this.using.item)) return takesMachine(m, this.using.item);
     return !this.using?.effect || !usedOnOne(this.using.effect) || medicineHelps(this.using.effect, m);
   }
 

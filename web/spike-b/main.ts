@@ -70,7 +70,7 @@ import { wireDpad } from './dpad';
 import { StartMenu } from './startmenu';
 import { BACK_H, BATTLE_TYPE_RECORDED, BattleMenu, CELL_H, battleWantsNoPad, ppWithBonus, readBattleView, type PartyMember } from '../src/ui/battlemenu';
 import { BATTLE_TYPE_TRAINER, CARD_H, SidesView } from '../src/ui/sides';
-import { BAG_POSITION_POCKET, POCKET_TMHM, isMachine, learnsMachine, readBattleBag, readFieldBag, readPocket } from '../src/ui/bag';
+import { BAG_POSITION_POCKET, POCKET_TMHM, isMachine, readBattleBag, readFieldBag, readPocket, takesMachine } from '../src/ui/bag';
 import type { Rom } from '../src/battle/movebook';
 import { BATTLE_MENU, MENU_ACTION, MENU_PARTY, TouchLayer } from '../src/touch';
 import { romAsks, type TeamRow } from './rom';
@@ -719,7 +719,7 @@ function giveNext(): void {
   const said = screen && gift ? new Promise((done) => setTimeout(done, GIFT_LINE_MS)) : Promise.resolve();
   const r = rom;
   // Who gets it is the windows'; BACK keeps it in the bag.
-  const who = () => askParty(name(item), isMachine(item) ? (m, tables) => !tables || learnsMachine(tables, m.species, item) : undefined);
+  const who = () => askParty(name(item), isMachine(item) ? (m) => takesMachine(m, item) : undefined);
   const took = screen
     ? said.then(who).then(async (slot) => {
       // Into the bag first, and from there it is what the BAG's USE or GIVE does: the ROM's own
@@ -970,7 +970,7 @@ function askForget(slot: number, move: number): Promise<number | null> {
 }
 romAsks.forget = askForget;
 /** Which of the party, on the windows; null for BACK. */
-function askParty(title: string, can?: (m: PartyMember, rom: Rom | null) => boolean): Promise<number | null> {
+function askParty(title: string, can?: (m: PartyMember) => boolean): Promise<number | null> {
   return new Promise((resolve) => {
     if (!battleMenu || !rom || !rom.partyCount()) { resolve(null); return; }
     let slot: number | null = null;

@@ -3,6 +3,7 @@
 // what a battle can use (gItems[].battleUsage), with the game's own name, description
 // and icon. A USE is the ROM's BAG doing it (src/br/br_bag.c): the page writes the
 // pocket into gBagPosition and the item into gBrBag, and presses BAG.
+import { TMHM_MOVES } from './tmhm';
 import { decodeGen3Display } from '../text/gen3';
 import type { Rom } from '../battle/movebook';
 import { POCKET_CAPACITY, POCKET_SIZE, SLOT_SIZE } from './phonehud';
@@ -144,12 +145,10 @@ export function isMachine(id: number): boolean {
   return id >= ITEM_TM01 && id <= ITEM_HM08;
 }
 
-/** pokemon.c CanMonLearnTMHM: a bit per machine, two words a species. */
-export function learnsMachine(rom: Rom, species: number, id: number): boolean {
-  const table = rom.sym('gTMHMLearnsets');
-  if (table === undefined) return true;
-  const n = id - ITEM_TM01;
-  return (u32(rom, table + species * 8 + (n < 32 ? 0 : 4)) >>> (n % 32) & 1) === 1;
+/** Whether a machine goes on this mon: anyone (pokemon.c's CanMonLearnTMHM, Cam 2026-10-17)
+ *  but one who knows its move already (party_menu.c's ALREADY_KNOWS_MOVE). */
+export function takesMachine(m: { moves: readonly { id: number }[] }, id: number): boolean {
+  return !m.moves.some((x) => x.id === TMHM_MOVES[id - ITEM_TM01]);
 }
 
 /** Whether the field's BAG says "not now" of it: a ball, say. */
