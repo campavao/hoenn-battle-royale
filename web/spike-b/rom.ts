@@ -1134,9 +1134,13 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         let up = false;
         let back = true;
         let said = '';
+        // A new rung lifts the party the moment the ROM runs, and START does nothing over it:
+        // "this is taking four seconds... it just did not open" (Cam, 11-01, 12:20).
+        hurryOn();
+        await frames(emu, 2);
+        await partyDone();
         const before = kept();
         // Walking START to the row is nobody's to see; settled() lets go of it, or below.
-        hurryOn();
         await tap('start');
         // Taking keys once its handler is in gMenuCallback and its text is drawn.
         if (await until(emu, () => emu.read(menuCbAt, 32) === startMenu.input, 90)) {
