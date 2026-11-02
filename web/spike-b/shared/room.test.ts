@@ -18,7 +18,7 @@ import { Host, play } from './host';
 import { over } from './over';
 import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, isTm, within } from './items';
 import { HURT, botKeys, health } from './bots';
-import { AFTER_WIN, FIELD_DIVE, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, WALKUP_BANG, CHEST, CHEST_SPECIES, ITEM_MASTER_BALL, ZONE_CELLS, ZONE_ITEMS, ZONE_TMS, eventPiece, makeRoom, zoneBalls, wornParty, type RoomEvent } from './room';
+import { AFTER_WIN, FIELD_DIVE, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_APART, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, WALKUP_BANG, CHEST, CHEST_SPECIES, ITEM_MASTER_BALL, ZONE_CELLS, ZONE_ITEMS, ZONE_TMS, eventPiece, makeRoom, zoneBalls, wornParty, type RoomEvent } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -498,7 +498,37 @@ describe('trainer against trainer', () => {
   });
 });
 
+describe('the ring', () => {
+  it('closes in over the end of a phase, not all at once (Cam, 11-01)', () => {
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    const start = room.epoch + room.opening + 2 * room.ringPhase;
+    const r1 = room.ring(start - 1), r2 = room.ring(start);
+    expect(r2.phase).toBe(r1.phase + 1);
+    expect(r2.r).toBeGreaterThan(0);
+    // a frame before the new phase it is all but there, no jump
+    expect(r1.r - r2.r).toBeLessThan(0.1);
+    // half a phase before, it has not started, and in between it only gets smaller
+    const fixed = room.ring(start - Math.floor(room.ringPhase / 2) - 1).r;
+    expect(fixed).toBe(r1.next === undefined ? fixed : room.ring(start - room.ringPhase).r);
+    let last = fixed;
+    for (let t = start - room.ringPhase / 2; t < start; t += 60) {
+      const r = room.ring(t).r;
+      expect(r).toBeLessThanOrEqual(last);
+      last = r;
+    }
+  });
+});
+
 describe('item balls', () => {
+  it("never lie in a heap (Cam, 11-01: seven on a dock, \"why are there so many items right here\")", () => {
+    for (const seed of [4242, 7, 99]) {
+      const g = [...makeRoom(MAPS, PATCHES, seed).ground().values()].filter((b) => !b.gift && !b.map.startsWith(SAFARI) && /^MAP_(ROUTE\d+|\w+_(TOWN|CITY))$/.test(b.map));
+      for (const a of g) for (const b of g) {
+        if (a === b || a.map !== b.map) continue;
+        expect(Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)), `${a.map} ${a.x},${a.y} ${b.x},${b.y}`).toBeGreaterThanOrEqual(GROUND_APART);
+      }
+    }
+  });
   it('are dealt from the seed on plain ground a trainer can reach, a few a map', () => {
     const one = makeRoom(MAPS, PATCHES, 4242), two = makeRoom(MAPS, PATCHES, 4242), other = makeRoom(MAPS, PATCHES, 7);
     // The field's (the Zone's six are br_zone.c's, below).
@@ -1829,6 +1859,16 @@ describe('the balls a match deals (br_balls.c)', () => {
 });
 
 describe('the Safari Zone loot (br_zone.c)', () => {
+  it('has more than one ball an area, on ground joined to its own (Cam, 11-01: "there definitely should be")', () => {
+    for (const seed of [4242, 7]) {
+      const room = makeRoom(MAPS, PATCHES, seed);
+      for (const c of ZONE_CELLS) {
+        const here = [...room.ground().values()].filter((g) => g.map === c.map);
+        expect(here.length, c.map).toBeGreaterThanOrEqual(3);
+        for (const a of here) for (const o of here) if (a !== o) expect(Math.max(Math.abs(a.x - o.x), Math.abs(a.y - o.y))).toBeGreaterThanOrEqual(GROUND_APART);
+      }
+    }
+  });
   it("six balls, one an area on br_zone.c's own cells, and about one match in eight has the MASTER BALL", () => {
     // The C's sSafariItemCells, by area: the room's cells are the ROM's, not a copy.
     const names: Record<string, string> = { 0: 'NORTHWEST', 1: 'NORTH', 12: 'NORTHEAST', 2: 'SOUTHWEST', 3: 'SOUTH', 13: 'SOUTHEAST' };

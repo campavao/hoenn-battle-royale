@@ -1994,9 +1994,10 @@ var ITEM_SITRUS_BERRY = 142;
 var ITEM_TM01 = 289;
 var ITEM_HM01 = 339;
 var SCATTER_TABLE = [
-  { id: ITEM_SUPER_POTION, w: 6 },
+  // Fewer of these two than there were (Cam, 2026-11-01: "Super Potions and Revives").
+  { id: ITEM_SUPER_POTION, w: 3 },
   { id: ITEM_HYPER_POTION, w: 4 },
-  { id: ITEM_REVIVE, w: 3 },
+  { id: ITEM_REVIVE, w: 2 },
   { id: ITEM_FULL_HEAL, w: 2 },
   { id: ITEM_POKE_BALL, w: 5 },
   { id: ITEM_ETHER, w: 2 },
@@ -2477,6 +2478,8 @@ var CHEST = { map: "MAP_ROUTE117_POKEMON_DAY_CARE", x: 5, y: 5 };
 var CHEST_SPECIES = [397, 400, 334, 359, 329, 394, 366, 384, 376, 331, 343, 391, 389, 307, 338, 285, 279, 282];
 var CHEST_KEY = 4 << 20;
 var GROUND_PER_MAP = 6;
+var GROUND_APART = 6;
+var ZONE_EXTRA = 2;
 function cellRng(seed, map, x, y) {
   let s = (seed ^ Math.imul(x + 1, 2654435761) ^ Math.imul(y + 1, 2246822507)) >>> 0;
   for (let i = 0; i < map.length; i++) s = Math.imul(s ^ map.charCodeAt(i), 16777619) >>> 0;
@@ -2488,7 +2491,7 @@ function cellRng(seed, map, x, y) {
     return (s >>> 0) / 4294967296;
   };
 }
-var BALLS_TM_IN = 4;
+var BALLS_TM_IN = 3;
 var AFTER_WIN = 60 * 15;
 var TRUCK = 40;
 var DEALS = /* @__PURE__ */ new Map();
@@ -2500,6 +2503,7 @@ var LANDING = 200;
 var RING_PHASE = 60 * 120;
 var SECTION_TILES = 27;
 var RING_STEPS = RING_RADII.map((r, i) => i === 0 ? Infinity : r < 0 ? r : Math.max(r, 0.5) * SECTION_TILES);
+var RING_CLOSE = 30 * 60;
 var FINAL_REACH = 24;
 var SAFARI = "MAP_SAFARI_ZONE_";
 var PICK_WAIT = 35 * 60;
@@ -2798,6 +2802,9 @@ var Room = class {
       const cells = land.get(id2).filter((c) => !marked.has(`${c.x}:${c.y}`) && !(id2 === "MAP_LITTLEROOT_TOWN" && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
       for (let i = 0; i < GROUND_PER_MAP && cells.length; i++) {
         const c = cells.splice(Math.floor(rng() * cells.length), 1)[0];
+        for (let k = cells.length - 1; k >= 0; k--) {
+          if (Math.max(Math.abs(cells[k].x - c.x), Math.abs(cells[k].y - c.y)) < GROUND_APART) cells.splice(k, 1);
+        }
         let item = cableOrDoll(scatterItem(rng), rng());
         const own = cellRng(this.seed ^ 47633, id2, c.x, c.y);
         if (Math.floor(own() * BALLS_TM_IN) === 0) item = blueTm(own);
@@ -2809,6 +2816,38 @@ var Room = class {
     ZONE_CELLS.forEach((c, i) => {
       if (this.maps.has(c.map) && !out.has(`${c.map}:${c.x}:${c.y}`)) out.set(`${c.map}:${c.x}:${c.y}`, { key: ++n, map: c.map, x: c.x, y: c.y, item: zone[i] });
     });
+    for (const c of ZONE_CELLS) {
+      const m = this.maps.get(c.map);
+      if (!m) continue;
+      const marked = new Set(this.patchesOn(c.map).map((q) => `${q.x}:${q.y}`));
+      const seen = /* @__PURE__ */ new Set();
+      let plain = [];
+      for (let y0 = 0; y0 < m.h; y0++) for (let x0 = 0; x0 < m.w; x0++) {
+        if (seen.has(`${x0}:${y0}`) || this.world.cell(c.map, x0, y0) !== 0) continue;
+        seen.add(`${x0}:${y0}`);
+        const here = [];
+        for (const q = [{ x: x0, y: y0 }]; q.length; ) {
+          const p = q.pop();
+          if (!marked.has(`${p.x}:${p.y}`) && !this.world.warpAt(c.map, p.x, p.y)) here.push(p);
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const x = p.x + dx, y = p.y + dy, k = `${x}:${y}`;
+            if (seen.has(k) || x < 0 || y < 0 || x >= m.w || y >= m.h || this.world.cell(c.map, x, y) !== 0) continue;
+            seen.add(k);
+            q.push({ x, y });
+          }
+        }
+        if (here.length > plain.length) plain = here;
+      }
+      const r = cellRng(this.seed ^ 5962257, c.map, c.x, c.y);
+      const taken = [c];
+      for (let i = 0; i < ZONE_EXTRA && plain.length; ) {
+        const at = plain.splice(Math.floor(r() * plain.length), 1)[0];
+        if (taken.some((t) => Math.max(Math.abs(t.x - at.x), Math.abs(t.y - at.y)) < GROUND_APART)) continue;
+        taken.push(at);
+        i++;
+        out.set(`${c.map}:${at.x}:${at.y}`, { key: ++n, map: c.map, x: at.x, y: at.y, item: ZONE_ITEMS[Math.floor(r() * ZONE_ITEMS.length)] });
+      }
+    }
     for (const [map, x, y, house, cache2] of ROOMS) {
       if (!cache2) continue;
       if (!this.maps.has(map) || this.places.has(map) || this.world.cell(map, x, y) > 1 || out.has(`${map}:${x}:${y}`)) continue;
@@ -2859,13 +2898,21 @@ var Room = class {
     const len = this.ringPhase;
     const round = this.results.round;
     let t = tick2 - this.epoch;
-    const { cx, cy } = this.centre(round);
+    const { cx, cy, far } = this.centre(round);
     if (t < this.opening) return { round, phase: 0, last: false, cx, cy, r: Infinity, next: Infinity, left: this.opening - t, safari: true };
     t -= this.opening;
     const phase = Math.min(RING_STEPS.length - 1, Math.floor(t / len));
     const at = (i) => RING_STEPS[i];
     const last = phase === RING_STEPS.length - 1;
-    return { round, phase, last, cx, cy, r: at(phase), next: last ? void 0 : at(phase + 1), left: last ? 0 : len - (t - phase * len) };
+    const left = last ? 0 : len - (t - phase * len);
+    let r = at(phase);
+    const closing = Math.min(RING_CLOSE, len / 2);
+    if (!last && left < closing) {
+      const to = Math.max(at(phase + 1), 0);
+      const from = r === Infinity ? Math.max(far, to) : r;
+      r = to + (from - to) * (left / closing);
+    }
+    return { round, phase, last, cx, cy, r, next: last ? void 0 : at(phase + 1), left };
   }
   /** The frame this round is over from, for the next to start AFTER_WIN on: its win;
    *  everybody in it out with nobody left standing; or, with nobody in it at all (a world
@@ -4996,4 +5043,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "75271896672f";
+export const WORLD_HASH = "ab1951d04b08";

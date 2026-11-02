@@ -422,6 +422,11 @@ const CHEST_KEY = 4 << 20;
 /** Item balls a map gets: the match deals two a section, and a spike map is two or three
  *  of them (Cam, POK-354: "more items all over the place"). */
 export const GROUND_PER_MAP = 6;
+/** How far apart they lie: on a sea route's little dock six at random were a heap of six
+ *  (Cam, 2026-11-01, "why are there so many items right here"). */
+export const GROUND_APART = 6;
+/** Balls an area of the Zone gets past br_zone.c's one. */
+const ZONE_EXTRA = 2;
 /** A stream of its own for one cell's roll: xorshift off the seed, the map's name and the
  *  cell, the same on every page. */
 function cellRng(seed: number, map: string, x: number, y: number): () => number {
@@ -430,8 +435,9 @@ function cellRng(seed: number, map: string, x: number, y: number): () => number 
   s = s || 1;
   return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 4294967296; };
 }
-/** br_balls.c BR_BALLS_TM_IN: one ground ball in this many is a machine. */
-export const BALLS_TM_IN = 4;
+/** One ground ball in this many is a machine: br_balls.c BR_BALLS_TM_IN's 4 once, and more
+ *  of them for the potions Cam found too common (2026-11-01). */
+export const BALLS_TM_IN = 3;
 
 /** A change that is not a key: applied at the start of its frame, before anybody moves. */
 export type Command =
@@ -543,6 +549,8 @@ export const SECTION_TILES = 27;
  *  out of Littleroot, a few sections across, so the first shrink fogged most of Hoenn
  *  (Cam 2026-10-29, as on 09-18 with Mossdeep). */
 const RING_STEPS = RING_RADII.map((r, i) => (i === 0 ? Infinity : r < 0 ? r : Math.max(r, 0.5) * SECTION_TILES));
+/** Frames the ring takes to close in at the end of a phase, half a phase at most. */
+const RING_CLOSE = 30 * 60;
 /** How near a walking trainer must be able to stand to a final story's place for the ring
  *  to centre on it (FINAL_CHANCE). */
 const FINAL_REACH = 24;
@@ -870,6 +878,9 @@ export class Room {
         !(id === 'MAP_LITTLEROOT_TOWN' && c.x >= 7 && c.x <= 13 && c.y >= 9 && c.y <= 13));
       for (let i = 0; i < GROUND_PER_MAP && cells.length; i++) {
         const c = cells.splice(Math.floor(rng() * cells.length), 1)[0];
+        for (let k = cells.length - 1; k >= 0; k--) {
+          if (Math.max(Math.abs(cells[k].x - c.x), Math.abs(cells[k].y - c.y)) < GROUND_APART) cells.splice(k, 1);
+        }
         // A machine one ball in BALLS_TM_IN, as br_balls.c's BrBalls_Deal makes them (Cam,
         // 10-31: "not enough TMs"; the table alone gave one in ten); the rest off the
         // table without its machines, a cable or a doll among them. A machine is taught
@@ -890,6 +901,41 @@ export class Room {
     ZONE_CELLS.forEach((c, i) => {
       if (this.maps.has(c.map) && !out.has(`${c.map}:${c.x}:${c.y}`)) out.set(`${c.map}:${c.x}:${c.y}`, { key: ++n, map: c.map, x: c.x, y: c.y, item: zone[i] });
     });
+    // ...and a couple more an area than br_zone.c has, on the area's widest stretch of plain
+    // ground (a ball of its own can sit on an island) (Cam, 11-01: no items in the Safari,
+    // "they definitely should be"). Off their own stream: the match's deals stay as they were.
+    for (const c of ZONE_CELLS) {
+      const m = this.maps.get(c.map);
+      if (!m) continue;
+      const marked = new Set(this.patchesOn(c.map).map((q) => `${q.x}:${q.y}`));
+      const seen = new Set<string>();
+      let plain: { x: number; y: number }[] = [];
+      for (let y0 = 0; y0 < m.h; y0++) for (let x0 = 0; x0 < m.w; x0++) {
+        if (seen.has(`${x0}:${y0}`) || this.world.cell(c.map, x0, y0) !== 0) continue;
+        seen.add(`${x0}:${y0}`);
+        const here: { x: number; y: number }[] = [];
+        for (const q = [{ x: x0, y: y0 }]; q.length;) {
+          const p = q.pop()!;
+          if (!marked.has(`${p.x}:${p.y}`) && !this.world.warpAt(c.map, p.x, p.y)) here.push(p);
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const x = p.x + dx, y = p.y + dy, k = `${x}:${y}`;
+            if (seen.has(k) || x < 0 || y < 0 || x >= m.w || y >= m.h || this.world.cell(c.map, x, y) !== 0) continue;
+            seen.add(k);
+            q.push({ x, y });
+          }
+        }
+        if (here.length > plain.length) plain = here;
+      }
+      const r = cellRng(this.seed ^ 0x5afa11, c.map, c.x, c.y);
+      const taken = [c as { x: number; y: number }];
+      for (let i = 0; i < ZONE_EXTRA && plain.length;) {
+        const at = plain.splice(Math.floor(r() * plain.length), 1)[0];
+        if (taken.some((t) => Math.max(Math.abs(t.x - at.x), Math.abs(t.y - at.y)) < GROUND_APART)) continue;
+        taken.push(at);
+        i++;
+        out.set(`${c.map}:${at.x}:${at.y}`, { key: ++n, map: c.map, x: at.x, y: at.y, item: ZONE_ITEMS[Math.floor(r() * ZONE_ITEMS.length)] });
+      }
+    }
     // A cache in every house and on every other floor that had nothing (br_balls.c's
     // sRooms, Cam 2026-10-18: "an item, trader, or both on every floor"): a machine, or
     // gold one time in three in a house and one in eight on a floor.
@@ -958,7 +1004,7 @@ export class Room {
     const len = this.ringPhase;
     const round = this.results.round;
     let t = tick - this.epoch;
-    const { cx, cy } = this.centre(round);
+    const { cx, cy, far } = this.centre(round);
     // The Safari: phase 0's no-fog, before it.
     if (t < this.opening) return { round, phase: 0, last: false, cx, cy, r: Infinity, next: Infinity, left: this.opening - t, safari: true };
     t -= this.opening;
@@ -967,7 +1013,17 @@ export class Room {
     const phase = Math.min(RING_STEPS.length - 1, Math.floor(t / len));
     const at = (i: number) => RING_STEPS[i];
     const last = phase === RING_STEPS.length - 1;
-    return { round, phase, last, cx, cy, r: at(phase), next: last ? undefined : at(phase + 1), left: last ? 0 : len - (t - phase * len) };
+    const left = last ? 0 : len - (t - phase * len);
+    let r = at(phase);
+    // It closes in over the end of the phase, to where the next one holds (Cam, 11-01: "you
+    // actually see the circle slowly close in"), rather than landing on you at its start.
+    const closing = Math.min(RING_CLOSE, len / 2);
+    if (!last && left < closing) {
+      const to = Math.max(at(phase + 1), 0);
+      const from = r === Infinity ? Math.max(far, to) : r;
+      r = to + (from - to) * (left / closing);
+    }
+    return { round, phase, last, cx, cy, r, next: last ? undefined : at(phase + 1), left };
   }
 
   /** The frame this round is over from, for the next to start AFTER_WIN on: its win;

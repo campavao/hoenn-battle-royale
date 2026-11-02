@@ -48,6 +48,32 @@ transcripts were made from them; a frame at the time is the evidence for each li
 * **Items on house tables sit on the coffee cups** (1552 2:55). Cam painted the rooms by hand
   (#263). Not yet looked at in play.
 
+* **Delays before a battle, an encounter, a screen** (1552 3:48, 4:18; 11-01 message). Timed on
+  the dev page, phone size: the step to the first menu was 7.7 s, 7.15 s of it Emerald's intro
+  at normal speed; a party 1.46 s. Now 3.0 s and 0.2 s (#265). The ROM is not the slow part: the
+  map holds 60 fps with it running, at 4x CPU too, and an item's turn on it is 65 ms. "The map
+  took a while to load" was the black after a ROM screen, in the frames at 4:18: its fades
+  and the black between run at 8x now. Not timed on a handset.
+* **A blue screen in battle transitions** (1609 6:15). The hardware fade back from a BAG or
+  POKeMON dims the see-through key off pure blue. 5 dark blue frames a trip, sampled off the
+  picture; 0 now.
+* **Dialogue should advance by itself on desktop** (1609 2:46). `gBrBattle.autoText`.
+* **Some people say nothing, and text should scroll in** (1609 4:05, 4:20). A person giving a
+  TM or a held item opened their screen unannounced; they say so first, and the box prints a
+  character at a time.
+* **Too many items, Super Potions and Revives too common** (1552 5:10, 5:37). Seven balls lay
+  on one dock. No two within 6 cells now; the two potions are about half as common and a
+  machine is one ball in 3.
+* **The "found" box covers the item's name** (1552 5:20). "Found X!" held the box 2.5 s over
+  the next ball's "A: Take"; 1 s now.
+* **Zoomed in further than classic** (1552 0:10). A 1080p window had 6 pixels a GBA pixel where
+  `/classic/` has 2. A window with a mouse has classic's now, and more map; a battle's picture
+  keeps its size. Cam to say if that is too far out.
+* **The ring should visibly close in** (1609 7:11). It closes over the last 30 s of a phase.
+* **No items in the Safari** (1552 0:55). One an area, as `br_zone.c`, is easy to miss: three.
+  The rocks there (1:01) were left: the North and Northeast areas' are Emerald's own objects.
+  Which ones he meant is not known.
+
 **Partly fixed:**
 
 * **Teleporting: the map did not match where he stood** (1609 3:45). A resync replayed keys
@@ -66,13 +92,7 @@ transcripts were made from them; a frame at the time is the evidence for each li
 
 **Open, the first video (15:52):**
 
-* **Zoomed in further than classic** (0:10). Compare spike B's desktop scale with
-  `/classic/`'s at the same window size.
-* **No items in the Safari, and rocks there that should not be** (0:55, 1:01).
 * **A TM's name should show before it is picked up** (2:32), when standing next to it.
-* **Delays and map-load lag** (3:48, 4:18). Look at the map streaming as you cross a seam.
-* **Too many items, Super Potions and Revives too common** (5:10, 5:37). Swap some for TMs.
-* **The "found" box covers the item's name** (5:20).
 * **The bottom bar is too easy to miss** (6:16).
 
 **Open, the second video (16:09):**
@@ -82,12 +102,8 @@ transcripts were made from them; a frame at the time is the evidence for each li
   moves. The diagonal moves show black corners.
 * **The menu moves when touched** (1:05). Anchor it and let it grow upwards.
 * **Bots should look busy, not idle** (1:27). The goal: you cannot tell a bot from a player.
-* **Dialogue should advance by itself on desktop** (2:46), as on the phone.
 * **A screen-wipe into the match** (3:37, 4:33). Perhaps Emerald's contest wipe.
-* **Some people say nothing when talked to** (4:05), and text should scroll in (4:20).
 * **The grass or dust and sand effects are not Emerald's standard sprites** (5:05).
-* **A blue screen flashes in battle transitions** (6:15). Also in classic.
-* **The ring should visibly close in, not appear on top of you** (7:11).
 * **The cave needs a pass** (12:07). It was hard to get out.
 * **A watched battle: no player sprites, none in the side panels** (13:49).
 * **No way to drop into a battle mid-way** (13:59, 14:32). The relay passes on a battle's

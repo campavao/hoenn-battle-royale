@@ -44,9 +44,10 @@ const ITEM_HM01 = 339;
  *  No RARE CANDY (Cam, 2026-10-13: it lifts a mon past the ring's rung). A status heal
  *  is a FULL RESTORE when it is picked up (br_items.h). */
 export const SCATTER_TABLE: readonly { id: number | 'tm'; w: number }[] = [
-  { id: ITEM_SUPER_POTION, w: 6 },
+  // Fewer of these two than there were (Cam, 2026-11-01: "Super Potions and Revives").
+  { id: ITEM_SUPER_POTION, w: 3 },
   { id: ITEM_HYPER_POTION, w: 4 },
-  { id: ITEM_REVIVE, w: 3 },
+  { id: ITEM_REVIVE, w: 2 },
   { id: ITEM_FULL_HEAL, w: 2 },
   { id: ITEM_POKE_BALL, w: 5 },
   { id: ITEM_ETHER, w: 2 },
