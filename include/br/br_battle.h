@@ -107,7 +107,7 @@ void BrBattle_HideClock(void);
 // plain message box -- with the prompt in it, when `prompt` (the action menu's).
 void BrBattle_MenuBoxOff(bool8 prompt);
 // The action menu's words, with RUN's odds on it (BrBattle_RunChance).
-const u8 *BrBattle_ActionMenuText(void);
+void BrBattle_PutActionMenu(void);
 // ...and every frame the menu is up, so a page that comes or goes mid-menu (the phone
 // turned on its side) takes the box off or puts it back: bg0 at `menuY`, or at the top
 // with `prompt` put in the message box.

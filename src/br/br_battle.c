@@ -55,7 +55,6 @@ struct BrSides gBrSides;
 // (an evolution) would otherwise be keyed for as long as it is up. The flash was 8 frames.
 #define SEE_THROUGH_HOLD_MAX 30
 static EWRAM_DATA u8 sSeeThroughHeld = 0;
-static EWRAM_DATA u8 sActionMenuText[48] = {0};
 static const u8 sText_RunOdds[] = _("{FONT_NARROW} ");  // 100% has 40 pixels, RUN included
 static const u8 sText_Percent[] = _("%");
 
@@ -509,15 +508,18 @@ u8 BrBattle_RunChance(void)
     return (speedVar * 100 + 128) / 256; // the roll is speedVar > Random() & 0xFF
 }
 
-const u8 *BrBattle_ActionMenuText(void)
+// On the stack, since EWRAM has no room for it: this window's text speed is 0, so it is
+// all drawn before BattlePutTextOnWindow returns.
+void BrBattle_PutActionMenu(void)
 {
-    u8 *end = StringCopy(sActionMenuText, gText_BattleMenu);
+    u8 text[48];
+    u8 *end = StringCopy(text, gText_BattleMenu);
 
     gBrBattle.runChance = BrBattle_RunChance();
     end = StringCopy(end, sText_RunOdds);
     end = ConvertIntToDecimalStringN(end, gBrBattle.runChance, STR_CONV_MODE_LEFT_ALIGN, 3);
     StringCopy(end, sText_Percent);
-    return sActionMenuText;
+    BattlePutTextOnWindow(text, B_WIN_ACTION_MENU);
 }
 
 bool8 BrBattle_HandleRun(void)
