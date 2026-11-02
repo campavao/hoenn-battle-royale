@@ -29,4 +29,4 @@ hold A 4
 wait 150
 # the first TURN: our FIGHT and move, then the wild POKeMON's action, its move and target
 expect u16 gBrSpectate 1
-expectmsg 19 u8 10 1
+expectmsg 19 u8 10 0
