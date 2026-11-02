@@ -42,7 +42,7 @@ import { OUT_BATCH_MS, event, felled, opening, outs, won } from '../src/match/ti
 import { MessageBox } from './msgbox';
 import { Fishing, fishPose, rodOf, type Rod } from './fish';
 import { Ticks } from './ticks';
-import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_DOOR, SE_EXIT, SE_FIELD_POISON, SE_LEDGE, SE_SELECT, SE_SHOP, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
+import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_CONTEST_CURTAIN_RISE, SE_DOOR, SE_EXIT, SE_FIELD_POISON, SE_LEDGE, SE_SELECT, SE_SHOP, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { devRomParam, importRom } from './import';
 import { askToKeepStorage, registerServiceWorker } from '../src/pwa';
@@ -59,6 +59,8 @@ import { AskBox } from './askbox';
 import { ANIM_COUNTER_MAX } from '../src/tile-anims';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
+import { raiseCurtain } from './curtain';
+import { frameOf as fxFrame, grassUnderAsh, isFloor, MB_ASHGRASS, SHEETS as FX_SHEETS, stepEffects, type Effect, type FxKind } from './fieldfx';
 import { clampZoom, loadZoom, nextZoom, pickedZoom, saveZoom, wheelSteps, zoomLabel, zoomRange } from './zoom';
 import { fieldScale, FADE_COLOR_WORD, FADE_Y_WORD, FOG_EVA, FOG_EVB, fadeOf, keyPicture } from '../src/field';
 import { PadPrefsControl } from '../src/ui/padprefs';
@@ -254,7 +256,8 @@ function paint(p: Placed): boolean {
   // A REGI wall: shut as the map's OnLoad hides it (HideRegiEntrance), or open, the
   // sealed chamber's entrance on its six cells (br_story.c's Open).
   const wall = !DOOR_MAPS.has(p.m.id) ? undefined : p.open ? SEALED_CHAMBER : HIDDEN_CHAMBER;
-  const over = wall && new Map(wall.map(([x, y, block]) => [y * p.m.w + x, block]));
+  const over = wall ? new Map(wall.map(([x, y, block]) => [y * p.m.w + x, block])) : new Map<number, number>();
+  for (const i of ashGone.get(p.m.id) ?? []) over.set(i, grassUnderAsh(art.blockAt(p.m.group, p.m.num, i % p.m.w, Math.floor(i / p.m.w))));
   const a = art.map(p.m.group, p.m.num, over);
   p.ground = a.ground;
   p.cover = a.cover;
@@ -1757,6 +1760,9 @@ function startMatch(l: WorldLink): void {
   endingShown = false;
   if (romUp && !battle) rom?.leave();
   lobby?.hide();
+  // Into a match, not back into one after a reload.
+  const curtain = l.online && token()?.id === l.me ? null : art?.contestCurtain();
+  if (curtain) raiseCurtain(curtain, document.body, () => rom?.sound(SE_CONTEST_CURTAIN_RISE));
   isOut = waiting = shownWin = false;
   // Every match's rounds count from 0: what was told or recorded of the last one is not.
   seenRound = lastPhase = recordedRound = dropRound = hudRound = dugRound = toldOpening = -1;
@@ -1936,7 +1942,9 @@ function wirePhoneHud(desk = false): void {
     const s = Math.min(2, Math.max(1, innerWidth / 250));
     document.documentElement.style.setProperty('--s', String(s));
     hud.setScale(s);
-    if (!desk) msgBox.setScale(s);
+    // A window with a mouse: whole pixels, by its height (Cam, 11-01: the bar "feels very
+    // sort of hidden", and a TM's name in it went unread).
+    msgBox.setScale(desk ? Math.max(2, Math.min(4, Math.floor(innerHeight / 360))) : s);
   };
   addEventListener('resize', scale);
   scale();
@@ -2855,12 +2863,110 @@ function drawPatches(p: Placed): void {
     const drift = DRIFT[((frame + q.key * 7) >> 3) & 7];
     if (isWater(p.m, q.x, q.y)) ctx.drawImage(patchArt.water, f * TILE, 0, TILE, TILE, x + drift, y, TILE, TILE);
     else if (isTallGrass(p.m, q.x, q.y)) ctx.drawImage(patchArt.grass, f * TILE, 0, TILE, TILE, x, y, TILE, TILE);
+    // Ash is grass under its dust (Cam, 11-01: "reuse the same sprites from the grass").
+    else if (art!.behavior(p.m.group, p.m.num, q.x, q.y) === MB_ASHGRASS) ctx.drawImage(patchArt.grass, f * TILE, 0, TILE, TILE, x, y, TILE, TILE);
     else {
       ctx.fillStyle = '#181818';
       ctx.beginPath();
       ctx.ellipse(x + 8 + drift, y + 12, 7, 3, 0, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+}
+
+// ---- what a step leaves on the ground (fieldfx.ts) --------------------------------------
+
+/** FLDEFFOBJ_* of each effect's sheet. */
+const FX_OBJ: Record<FxKind, number> = { grass: 4, ash: 6, dust: 9, foot: 11, splash: 13, long: 15, deep: 23, tire: 27 };
+const fxArt = new Map<FxKind, HTMLCanvasElement>();
+function fxSheet(k: FxKind): HTMLCanvasElement | null {
+  if (!art) return null;
+  let s = fxArt.get(k);
+  if (!s) fxArt.set(k, (s = art.fieldEffect(FX_OBJ[k], FX_SHEETS[k].frames, FX_SHEETS[k].h)));
+  return s;
+}
+/** The cells whose ash has been walked off, by map: y * w + x. A new round's has come back. */
+const ashGone = new Map<string, Set<number>>();
+let ashRound = -1;
+let effects: Effect[] = [];
+/** Where each actor was last frame, to see a step start: id -> the cell, and the way they were going. */
+const stepSeen = new Map<number, { spot: Spot; dir: number }>();
+
+function clearAsh(p: Placed, x: number, y: number): void {
+  let cells = ashGone.get(p.m.id);
+  if (!cells) ashGone.set(p.m.id, (cells = new Set()));
+  cells.add(y * p.m.w + x);
+  if (!p.ground || !art) return;
+  const g = p.ground.getContext('2d')!;
+  g.imageSmoothingEnabled = false;
+  g.drawImage(art.blockArt(p.m.group, p.m.num, grassUnderAsh(art.blockAt(p.m.group, p.m.num, x, y))), x * TILE, y * TILE);
+  p.mips = undefined;
+}
+
+/** Everybody's new steps, and the ash whose time has come. */
+function stepFrame(all: Actor[]): void {
+  if (!art) return;
+  const round = link.room.results.round;
+  if (round !== ashRound) {
+    ashRound = round;
+    for (const id of ashGone.keys()) { const p = placed.get(id); if (p) p.ground = p.cover = p.mips = undefined; }
+    ashGone.clear();
+    effects = [];
+    stepSeen.clear();
+  }
+  for (const a of all) {
+    const was = stepSeen.get(a.id);
+    const spot = a.m.spot;
+    if (was && (was.spot.map !== spot.map || was.spot.x !== spot.x || was.spot.y !== spot.y)) {
+      const from = placed.get(was.spot.map), to = placed.get(spot.map);
+      const fromX = from ? (from.gx + was.spot.x) * TILE : 0, fromY = from ? (from.gy + was.spot.y) * TILE : 0;
+      const toX = to ? (to.gx + spot.x) * TILE : 0, toY = to ? (to.gy + spot.y) * TILE : 0;
+      // A step or a hop, not a warp or a resync's jump.
+      if (from && to && a.m.action?.kind !== 'warp' && Math.abs(toX - fromX) + Math.abs(toY - fromY) <= 2 * TILE) {
+        effects.push(...stepEffects({
+          from: art.behavior(from.m.group, from.m.num, was.spot.x, was.spot.y),
+          to: art.behavior(to.m.group, to.m.num, spot.x, spot.y),
+          fromX, fromY, toX, toY,
+          dir: a.m.moveDir,
+          cameFrom: was.dir,
+          bike: a.m.bike,
+          hop: a.m.action?.kind === 'hop',
+          ashGone: !!ashGone.get(to.m.id)?.has(spot.y * to.m.w + spot.x),
+        }, frame));
+      }
+    }
+    stepSeen.set(a.id, { spot, dir: a.m.moveDir });
+  }
+  effects = effects.filter((e) => {
+    if (e.kind === 'ash' && frame >= e.start && !e.look) {
+      // The tile changes as the puff appears (UpdateAshFieldEffect_Show). `look` marks it done.
+      e.look = { frame: 0, hFlip: false, vFlip: false };
+      const p = mapUnder(e.x, e.y);
+      if (p) clearAsh(p, Math.floor(e.x / TILE) - p.gx, Math.floor(e.y / TILE) - p.gy);
+    }
+    return fxFrame(e, frame) !== 'done';
+  });
+}
+
+/** The effects that `pick` says, in view. */
+function drawEffects(pick: (e: Effect) => boolean, x0: number, y0: number, x1: number, y1: number): void {
+  for (const e of effects) {
+    if (e.x > x1 || e.y > y1 || e.x + TILE < x0 || e.y + TILE < y0 || !pick(e)) continue;
+    const f = fxFrame(e, frame);
+    if (typeof f !== 'number') continue;
+    const sheet = fxSheet(e.kind);
+    if (!sheet) continue;
+    const h = FX_SHEETS[e.kind].h;
+    // A 16 x 8 sprite sits at the feet (FldEff_Splash's y2, FldEff_Dust's 12).
+    const y = e.y + TILE - h;
+    const hFlip = !!(isFloor(e.kind) && e.look?.hFlip), vFlip = !!(isFloor(e.kind) && e.look?.vFlip);
+    if (hFlip || vFlip) {
+      ctx.save();
+      ctx.translate(e.x + (hFlip ? TILE : 0), y + (vFlip ? h : 0));
+      ctx.scale(hFlip ? -1 : 1, vFlip ? -1 : 1);
+      ctx.drawImage(sheet, f * TILE, 0, TILE, h, 0, 0, TILE, h);
+      ctx.restore();
+    } else ctx.drawImage(sheet, f * TILE, 0, TILE, h, e.x, y, TILE, h);
   }
 }
 
@@ -3181,6 +3287,8 @@ function draw(): void {
   if (!far) for (const p of visible) drawPatches(p);
   if (!far) drawGround(vx0, vy0, vx1, vy1);
   if (!far) drawProps(visible, all);
+  stepFrame(all);
+  if (!far) drawEffects((e) => isFloor(e.kind), vx0, vy0, vx1, vy1);
   const people = all
     .map((a) => ({ a, p: pixelOf(a) }))
     .filter(({ p }) => p.x > vx0 - 32 && p.x < vx1 + 32 && p.y > vy0 - 48 && p.y < vy1 + 32)
@@ -3223,7 +3331,20 @@ function draw(): void {
     }
   };
   const onTop = people.filter(({ a }) => heights?.over(a.id, a.m.spot));
-  for (const q of people) if (!onTop.includes(q)) drawPerson(q);
+  // Rustling grass and puffs of ash stand among the people, by who is below whom.
+  let fxDone = -Infinity;
+  const fxUpTo = (y: number): void => {
+    if (far) return;
+    const from = fxDone;
+    drawEffects((e) => !isFloor(e.kind) && e.y > from && e.y <= y, vx0, vy0, vx1, vy1);
+    fxDone = y;
+  };
+  for (const q of people) {
+    if (onTop.includes(q)) continue;
+    fxUpTo(q.p.y - 1);
+    drawPerson(q);
+  }
+  fxUpTo(Infinity);
   if (block) {
     if (coverCanvas.width !== W || coverCanvas.height !== H) { coverCanvas.width = W; coverCanvas.height = H; }
     const c = coverCanvas.getContext('2d')!;
@@ -3560,7 +3681,7 @@ async function boot(): Promise<void> {
     }
   }
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { get link() { return link; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; } };
+  (window as unknown as { __spike: unknown }).__spike = { get link() { return link; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; } };
 }
 
 void boot();

@@ -132,21 +132,12 @@ export class RomArt {
     return out;
   }
 
-  /** Ground, cover and border for map (group, num), as render-maps.py draws them; `over`
-   *  puts other metatiles on some cells (a cell's y * width + x), as MapGridSetMetatileIdAt
-   *  does in the game. The ground is drawn with each animation's first look; `anims` has
-   *  the rest, for the page to lay over it. */
-  map(group: number, num: number, over?: ReadonlyMap<number, number>): MapArt {
-    const header = this.u32(this.u32(this.sym('gMapGroups') + group * 4) + num * 4);
-    const layout = this.u32(header);
-    const w = this.dv.getInt32(layout - ROM, true), h = this.dv.getInt32(layout + 4 - ROM, true);
-    const border = this.u32(layout + 8), blocks = this.u32(layout + 0xc);
-    const priAt = this.u32(layout + 0x10), secAt = this.u32(layout + 0x14);
-    const pri = this.tileset(priAt), sec = this.tileset(secAt);
+  /** Draws a block in these tilesets into `px`. */
+  private blockDrawer(pri: Tileset, sec: Tileset) {
     // Primary palettes 0..5, the secondary's 6..12, the primary's again from 13.
     const pals = [...pri.palettes.slice(0, 6), ...sec.palettes.slice(6, 13), ...pri.palettes.slice(13)];
     // `frame(tid)`: an animated tile's ROM address in the look being drawn, or 0.
-    const draw = (px: Uint32Array, stride: number, bx: number, by: number, block: number, cover: boolean, frame?: (tid: number) => number) => {
+    return (px: Uint32Array, stride: number, bx: number, by: number, block: number, cover: boolean, frame?: (tid: number) => number) => {
       const mid = block & 0x3ff;
       const ts = mid < 512 ? pri : sec;
       const i = mid < 512 ? mid : mid - 512;
@@ -174,6 +165,41 @@ export class RomArt {
         }
       }
     };
+  }
+
+  /** The map's block at a cell, as its layout has it. */
+  blockAt(group: number, num: number, x: number, y: number): number {
+    const layout = this.u32(this.u32(this.u32(this.sym('gMapGroups') + group * 4) + num * 4));
+    return this.u16(this.u32(layout + 0xc) + (y * this.dv.getInt32(layout - ROM, true) + x) * 2);
+  }
+
+  /** One block in this map's tilesets, 16 x 16, for a cell that changes under a step. */
+  blockArt(group: number, num: number, block: number): HTMLCanvasElement {
+    const layout = this.u32(this.u32(this.u32(this.sym('gMapGroups') + group * 4) + num * 4));
+    const draw = this.blockDrawer(this.tileset(this.u32(layout + 0x10)), this.tileset(this.u32(layout + 0x14)));
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = BLOCK;
+    const ctx = cv.getContext('2d')!;
+    const id = ctx.createImageData(BLOCK, BLOCK);
+    const px = new Uint32Array(id.data.buffer);
+    px.fill(0xff000000);
+    draw(px, BLOCK, 0, 0, block, false);
+    ctx.putImageData(id, 0, 0);
+    return cv;
+  }
+
+  /** Ground, cover and border for map (group, num), as render-maps.py draws them; `over`
+   *  puts other metatiles on some cells (a cell's y * width + x), as MapGridSetMetatileIdAt
+   *  does in the game. The ground is drawn with each animation's first look; `anims` has
+   *  the rest, for the page to lay over it. */
+  map(group: number, num: number, over?: ReadonlyMap<number, number>): MapArt {
+    const header = this.u32(this.u32(this.sym('gMapGroups') + group * 4) + num * 4);
+    const layout = this.u32(header);
+    const w = this.dv.getInt32(layout - ROM, true), h = this.dv.getInt32(layout + 4 - ROM, true);
+    const border = this.u32(layout + 8), blocks = this.u32(layout + 0xc);
+    const priAt = this.u32(layout + 0x10), secAt = this.u32(layout + 0x14);
+    const pri = this.tileset(priAt), sec = this.tileset(secAt);
+    const draw = this.blockDrawer(pri, sec);
     const paint = (cw: number, ch: number, fill: number, each: (px: Uint32Array) => void) => {
       const cv = document.createElement('canvas');
       cv.width = cw;
@@ -276,6 +302,45 @@ export class RomArt {
       grass: this.frames(this.sym('gBrPatchTallGrassPic'), 5, 16, 16, grassPal),
       water: this.frames(this.sym('gBrPatchWaterPic'), 5, 16, 16, waterPal),
     };
+  }
+
+  /** A field effect's frames (gFieldEffectObjectTemplatePointers[obj], FLDEFFOBJ_*). Its
+   *  images are one picture's frames in a row, and it wears one of the two general palettes. */
+  fieldEffect(obj: number, count: number, h: number): HTMLCanvasElement {
+    const template = this.u32(this.sym('gFieldEffectObjectTemplatePointers') + obj * 4);
+    const FLDEFF_PAL_TAG_GENERAL_0 = 0x1004;
+    const palSym = this.u16(template + 2) === FLDEFF_PAL_TAG_GENERAL_0 ? 'gSpritePalette_GeneralFieldEffect0' : 'gSpritePalette_GeneralFieldEffect1';
+    return this.frames(this.u32(this.u32(template + 0xc)), count, 16, h, this.palette(this.u32(this.sym(palSym))));
+  }
+
+  /** The contest's curtain as its tilemap has it, 32 x 20 tiles (contest.c
+   *  SetBgForCurtainDrop: gContestCurtainTilemap in the interface's tiles); null on a patch
+   *  whose symbols predate it. */
+  contestCurtain(): HTMLCanvasElement | null {
+    const at = ['gContestCurtainTilemap', 'gContestInterfaceGfx', 'gContestInterfaceAudiencePalette'].map((n) => this.sym(n));
+    if (!at.every(Number.isFinite)) return null;
+    const map = lz77(this.rom, at[0] - ROM), tiles = lz77(this.rom, at[1] - ROM), pal = lz77(this.rom, at[2] - ROM);
+    const dvMap = new DataView(map.buffer, map.byteOffset, map.byteLength), dvPal = new DataView(pal.buffer, pal.byteOffset, pal.byteLength);
+    const cv = document.createElement('canvas');
+    cv.width = 32 * TILE;
+    cv.height = 20 * TILE;
+    const ctx = cv.getContext('2d')!;
+    const id = ctx.createImageData(cv.width, cv.height);
+    const px = new Uint32Array(id.data.buffer);
+    for (let i = 0; i < 32 * 20; i++) {
+      const e = dvMap.getUint16(i * 2, true);
+      const line = (e >> 12) & 0xf, off = (e & 0x3ff) * 32, hf = e & 0x400, vf = e & 0x800;
+      for (let y = 0; y < TILE; y++) {
+        const row = off + (vf ? TILE - 1 - y : y) * 4;
+        for (let x = 0; x < TILE; x++) {
+          const sx = hf ? TILE - 1 - x : x;
+          const c = (tiles[row + (sx >> 1)] >> ((sx & 1) * 4)) & 0xf;
+          if (c) px[(Math.floor(i / 32) * TILE + y) * cv.width + (i % 32) * TILE + x] = rgba(dvPal.getUint16((line * 16 + c) * 2, true));
+        }
+      }
+    }
+    ctx.putImageData(id, 0, 0);
+    return cv;
   }
 
   /** `count` frames of w x h 4bpp tiles from `at`, row by row, colour 0 clear. */
