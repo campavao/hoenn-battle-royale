@@ -81,6 +81,7 @@ import { KEYMAP, MARK_KEY, legendMap } from './keys';
 import { SPIKE_MS, recorder, saveRecording, watchPage } from './recorder';
 import { stallLine, watch as watchRom } from '../src/emu/watchdog';
 import spritesData from '../src/data/sprites.json';
+import { Heights } from './heights';
 import encounterData from '../src/data/encounters.json';
 
 const TILE = 16;
@@ -2765,6 +2766,7 @@ function tint(c: HTMLCanvasElement): string {
   return `rgb(${sum.map((v) => Math.round(v / n)).join(',')})`;
 }
 
+let heights: Heights | null = null;
 const sprites = new Map<number, HTMLCanvasElement>();
 function sheet(gfx: number): HTMLCanvasElement | null {
   let s = sprites.get(gfx);
@@ -3123,7 +3125,7 @@ function draw(): void {
     .map((a) => ({ a, p: pixelOf(a) }))
     .filter(({ p }) => p.x > vx0 - 32 && p.x < vx1 + 32 && p.y > vy0 - 48 && p.y < vy1 + 32)
     .sort((u, v) => u.p.y - v.p.y);
-  for (const { a, p } of people) {
+  const drawPerson = ({ a, p }: (typeof people)[number]): void => {
     // Under the sea: Brendan's and May's diving sheet, bobbing, with no blob (br_ghosts.c).
     const under = !!placed.get(a.m.spot.map)?.m.emerge;
     // On the water: sitting on the blob, bobbing (SURF's pose, FLDEFF_SURF_BLOB's bob).
@@ -3136,7 +3138,7 @@ function draw(): void {
     const gfx = rod ? FISH_GFX[a.skin] : under && a.skin < 2 ? DIVE_GFX[a.skin] : surf ? surfGfx : a.m.bike && a.skin < 2 ? BIKE_GFX[a.skin] : SKIN_GFX[a.skin];
     const info = SHEETS[String(gfx)];
     const s = sheet(gfx);
-    if (!s) continue;
+    if (!s) return;
     const fr = rod ? rod.frame : surf ? FACE[a.m.facing] : frameOf(a);
     const bob = surf || under ? ((frame >> 4) & 1) - 2 : 0;
     const dx = p.x + TILE / 2 - info.w / 2 + (rod?.dx ?? 0);
@@ -3159,7 +3161,9 @@ function draw(): void {
       ctx.lineWidth = 1 / Math.min(1, z);
       ctx.strokeRect(dx - 1, dy - 1, info.w + 2, info.h + 2);
     }
-  }
+  };
+  const onTop = people.filter(({ a }) => heights?.over(a.id, a.m.spot));
+  for (const q of people) if (!onTop.includes(q)) drawPerson(q);
   if (block) {
     if (coverCanvas.width !== W || coverCanvas.height !== H) { coverCanvas.width = W; coverCanvas.height = H; }
     const c = coverCanvas.getContext('2d')!;
@@ -3176,6 +3180,7 @@ function draw(): void {
   } else for (const p of visible) {
     if (p.cover && !far) ctx.drawImage(p.cover, p.gx * TILE, p.gy * TILE);
   }
+  onTop.forEach(drawPerson);
   drawNurses(visible);
   drawClerks(visible);
   for (const { a, p } of people) if (a.meet?.walk && link.room.tick - a.meet.since < WALKUP_BANG) drawBang(p.x, p.y - p.lift, link.room.tick - a.meet.since);
@@ -3351,6 +3356,7 @@ async function boot(): Promise<void> {
   registerServiceWorker();
   void askToKeepStorage();
   const hoenn = new WorldIndex(((await import('./data/world.json')).default as { maps: WorldMap[] }).maps);
+  heights = new Heights((map, x, y) => hoenn.world.height(map, x, y));
   placed = layout(hoenn.maps);
   let files: Awaited<ReturnType<typeof loadRom>>;
   try {

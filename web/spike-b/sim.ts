@@ -44,6 +44,8 @@ export interface Mover {
   run: boolean;
   /** Whole frames counted toward the walk anim (feet alternate per step). */
   strides: number;
+  /** Just through a door: the way to walk on, off the mat or the door (Cam 11-01). */
+  walkOn?: number;
   /** On the MACH BIKE, and gPlayerAvatar's bikeSpeed and bikeFrameCounter for it. */
   bike: boolean;
   bikeSpeed: number;
@@ -109,6 +111,7 @@ export function tick(m: Mover, keys: Keys, step: StepFn): void {
     m.px = 0;
     m.py = 0;
     m.lift = 0;
+    if (a.kind === 'warp') m.walkOn = a.dir;
   }
 }
 
@@ -126,8 +129,13 @@ function begin(m: Mover, keys: Keys, step: StepFn): void {
     m.runningState = NOT_MOVING;
     return;
   }
-  if (m.bike) return bikeBegin(m, dirOf(keys), step);
-  const dir = dirOf(keys);
+  const on = m.walkOn ?? 0;
+  m.walkOn = 0;
+  const walking = on ? step(m.spot, on) : null;
+  const going = walking && !walking.warp && !walking.hop && !walking.water;
+  if (m.bike) return bikeBegin(m, going ? on : dirOf(keys), step);
+  const dir = going ? on : dirOf(keys);
+  if (going) m.moveDir = on;
   if (!dir) {
     m.runningState = NOT_MOVING;
     return;

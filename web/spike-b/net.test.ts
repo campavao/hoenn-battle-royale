@@ -33,6 +33,37 @@ describe('the predicted trainer', () => {
   });
 });
 
+describe('a resync', () => {
+  // Cam's 11-01 play (3:45): "I'm kind of teleporting ... a map mismatch". The relay's state
+  // has already used the keys held back for replay, so replaying them walks those steps twice.
+  it('does not walk again the steps the relay has already taken', () => {
+    const room = make(5);
+    const open = (map: string, x: number, y: number) => room.world.cell(map, x, y) === 0;
+    let spot: { map: string; x: number; y: number } | undefined;
+    for (const map of room.places.keys()) {
+      for (let y = 2; y < 20 && !spot; y++) {
+        for (let x = 2; x < 20 && !spot; x++) if (Array.from({ length: 16 }, (_, i) => i).every((i) => open(map, x + i, y))) spot = { map, x, y };
+      }
+      if (spot) break;
+    }
+    expect(spot).toBeDefined();
+    room.apply({ c: 'join', id: 1, bot: false, name: 'ME', skin: 0, spot: spot!, facing: 4 });
+    room.actor(1)!.calm = 0;
+    const ws = { readyState: 1, send: () => undefined, addEventListener: () => undefined } as unknown as WebSocket;
+    const link = new Online(ws, make);
+    link.receive({ t: 'hello', id: 1, state: room.state() }, () => undefined);
+    const held = 30;
+    for (let i = 0; i < held; i++) {
+      link.frame(KEY_RIGHT);
+      room.step(new Map([[1, [KEY_RIGHT]]]));
+    }
+    const there = room.actor(1)!.m.spot;
+    expect(there.x).toBeGreaterThan(spot!.x + 2);
+    link.receive({ t: 'state', state: room.state(), a: held }, () => undefined);
+    expect(link.mine()!.m.spot).toEqual(there);
+  });
+});
+
 describe('falling behind the relay', () => {
   // Cam's 10-31 play: "bots sort of teleported to me", right after a battle among the
   // bags. A phone that drew few frames in the fight was seconds behind the relay after

@@ -212,6 +212,10 @@ export class Online implements WorldLink {
       recorder.resynced(this.room);
       this.queue = [];
       this.syncing = false;
+      // The state has used these keys: replaying them would walk those steps again.
+      if (m.a !== undefined && m.a > this.acked) this.acked = m.a;
+      while (this.sent.length && this.sent[0].seq <= this.acked) this.sent.shift();
+      this.predicted = null;
     } else if (m.t === 'f' && this.room && !this.syncing) {
       this.queue.push(...m.f);
     } else if (m.t === 'bt') {

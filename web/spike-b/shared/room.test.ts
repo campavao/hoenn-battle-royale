@@ -1453,6 +1453,21 @@ describe('doors', () => {
     expect(a.m.action?.kind).toBe('warp');
   });
 
+  it('a door walks you on: never left standing on the mat, nor on the door (Cam 11-01, 3:14)', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: { map: O, x: 6, y: 17 }, facing: 2 });
+    const a = room.actor(1)!;
+    room.step(new Map([[1, [KEY_UP]]]));
+    walk(room, 1, 0, 60);
+    expect(a.m.spot).toEqual({ map: PC, x: 7, y: 7 });
+    expect(a.m.action).toBeNull();
+    for (let i = 0; i < 60 && a.m.spot.map === PC; i++) walk(room, 1, KEY_DOWN, 1);
+    expect(a.m.spot).toEqual({ map: O, x: 6, y: 16 });
+    walk(room, 1, 0, 60);
+    expect(a.m.spot).toEqual({ map: O, x: 6, y: 17 });
+    expect(a.m.action).toBeNull();
+  });
+
   it('the fog inside is the fog at the door; a closed door stays shut; bots stay outside', () => {
     const room = makeRoom(MAPS, PATCHES, 99);
     expect(room.anchors.get(PC)).toEqual({ gx: room.places.get(O)!.gx + 6.5, gy: room.places.get(O)!.gy + 16.5 });
