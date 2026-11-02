@@ -9,6 +9,8 @@
 #include "string_util.h"
 #include "battle.h"
 #include "battle_main.h"
+#include "sprite.h"
+#include "task.h"
 #include "battle_anim.h"
 #include "battle_interface.h"
 #include "battle_controllers.h"
@@ -430,6 +432,33 @@ bool8 BrBattle_ShotTick(void)
     gBrBattle.shotFrames = 0;
     gBrBattle.timedOut++;
     return TRUE;
+}
+
+// The intro, quicker (Cam, 2026-11-01: "there is always a delay before a battle"; 7.15 s
+// from the picture to the first menu, 7.7 s from the step). The same frames of the same
+// game, more of them to a screen frame, with the sound engine at its own speed. Fades
+// keep theirs: UpdatePaletteFade waits on VBlank's transfer. Words get a slower hurry than
+// the rest: at BR_INTRO_SPEED "Wild POOCHYENA appeared!" is gone at "Wild P". Only when the
+// page asks, and it does not over a link, where the other side's blocks keep the time anyway.
+void BrBattle_HurryIntro(void)
+{
+    u8 i;
+
+    if (!gBrBattle.hurry)
+        return;
+    if (gBrBattle.menu != BR_MENU_NONE)
+    {
+        gBrBattle.hurry = FALSE;
+        return;
+    }
+    for (i = IsTextPrinterActive(B_WIN_MSG) ? BR_INTRO_SPEED - 1 : 1; i < BR_INTRO_SPEED && gMain.callback2 == BattleMainCB2; i++)
+    {
+        AnimateSprites();
+        RunTextPrinters();
+        UpdatePaletteFade();
+        RunTasks();
+        gMain.callback1();
+    }
 }
 
 // A POKe DOLL or nothing (POK-293).
