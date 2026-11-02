@@ -208,3 +208,57 @@ test('a phone player pinches the map: whole steps, kept, and no walk', async ({ 
   await expect.poll(() => zoomOf(page), 'kept').toBe(3);
   await ctx.close();
 });
+
+test("a step leaves the ROM's marks: ash comes off, sand takes prints, grass rustles", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  type P = { m: { id: string; w: number; h: number; group: number; num: number }; ground?: HTMLCanvasElement };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type S = { link: { me: number; room: any }; placed: Map<string, P>; art: { behavior(g: number, n: number, x: number, y: number): number }; effects: { kind: string }[]; ashGone: Map<string, Set<number>> };
+  /** A new match each time: grass and ash can start a wild battle, and that holds the walk. */
+  const standOn = async (map: string, mb: number) => {
+    await page.goto('about:blank');
+    await page.goto(`/?rom=${romHashParam()}#solo&nobots&safari=0&fog=900&seed=7`);
+    await page.locator('#intro-go').click({ timeout: 90_000 });
+    await onField(page);
+    await page.waitForTimeout(1500);
+    const at = await page.evaluate(([map, mb]) => {
+      const s = (window as unknown as { __spike: S }).__spike, room = s.link.room, a = room.actor(s.link.me), p = s.placed.get(map as string)!;
+      for (let y = 0; y < p.m.h; y++) for (let x = 0; x < p.m.w - 1; x++) {
+        if (s.art.behavior(p.m.group, p.m.num, x, y) !== mb || s.art.behavior(p.m.group, p.m.num, x + 1, y) !== mb) continue;
+        const spot = { map, x, y };
+        const r = room.stepFor(a)(spot, 4);
+        if (!r || r.warp || r.water || r.to.x !== x + 1) continue;
+        a.m = { ...a.m, spot, prev: spot, facing: 4, moveDir: 4, action: null, px: 0, py: 0 };
+        return { x, y };
+      }
+      return null;
+    }, [map, mb] as const);
+    expect(at, `${map} has a walk over ${mb}`).not.toBeNull();
+    await page.waitForTimeout(200);
+    return at!;
+  };
+  const kinds = () => page.evaluate(() => (window as unknown as { __spike: S }).__spike.effects.map((e) => e.kind));
+  const step = async () => { await page.keyboard.down('ArrowRight'); await page.waitForTimeout(100); await page.keyboard.up('ArrowRight'); };
+
+  // Route 113: the ash goes up, and the cell is plain grass from then on.
+  const ash = await standOn('MAP_ROUTE113', 36);
+  const pixels = () => page.evaluate(({ x, y }) => {
+    const p = (window as unknown as { __spike: S }).__spike.placed.get('MAP_ROUTE113')!;
+    return Array.from(p.ground!.getContext('2d')!.getImageData((x + 1) * 16, y * 16, 16, 16).data).join();
+  }, ash);
+  const before = await pixels();
+  await step();
+  await expect.poll(kinds, { timeout: 3000 }).toContain('ash');
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __spike: S }).__spike.ashGone.get('MAP_ROUTE113')?.size ?? 0)).toBeGreaterThan(0);
+  expect(await pixels(), 'the ground under it changed').not.toBe(before);
+
+  // Sand keeps a print behind me: the desert's deep, a beach's shallow. Grass rustles.
+  for (const [map, mb, kind] of [['MAP_ROUTE111', 6, 'deep'], ['MAP_ROUTE109', 33, 'foot'], ['MAP_ROUTE101', 2, 'grass']] as const) {
+    await standOn(map, mb);
+    await step();
+    await expect.poll(kinds, { timeout: 3000 }).toContain(kind);
+  }
+  await ctx.close();
+});

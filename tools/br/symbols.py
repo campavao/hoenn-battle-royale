@@ -30,6 +30,8 @@ ENGINE_SYMBOLS = [
     # ...and its marked spots, dealt the way br_patch.c deals them: which maps have a land
     # or a water table, and the rustle's palette (web/spike-b/romart.ts).
     "gWildMonHeaders", "gSpritePalette_GeneralFieldEffect1",
+    # What a step leaves on the ground (web/spike-b/fieldfx.ts).
+    "gFieldEffectObjectTemplatePointers", "gSpritePalette_GeneralFieldEffect0",
     "gBattleTypeFlags", "gBattleWeather", "gBattleEnvironment", "gBattleOutcome", "gBattleMainFunc", "gBattlerControllerFuncs",
     "gLinkPlayers", "gBlockRecvBuffer", "gBlockSendBuffer", "gWirelessCommType",
     "gRngValue", "gSaveBlock1", "gSaveBlock2", "gNumSafariBalls",
