@@ -98,8 +98,9 @@ export function fightKey(from: number, start: SpMsg): string {
 }
 
 /** A BSTART from a trainer's page waits this long for that page's log of the fight (it reads the
- *  ROM's battle once it is up) before the ROM's replay of it starts. A bot's has no log coming. */
-const LOG_GRACE_MS = 3000;
+ *  ROM's battle once it is up: 2.8 s after a duel's BSTART, measured) before the ROM's replay of it
+ *  starts. A bot's has no log coming. */
+const LOG_GRACE_MS = 8000;
 /** A log with no end, its fight over in the room (a late joiner past the kept log's cap, a socket's
  *  hiccup): the screen waits this long for the rest of it, then gives the field back. */
 const LOG_LOST_MS = 5000;

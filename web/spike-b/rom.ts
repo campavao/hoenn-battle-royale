@@ -59,6 +59,8 @@ const BR_PHASE_PLAY = 2;
 const LEGEND_KEY = 0xb000;
 /** Event 0's trader (BR_EVENT_TRADER_KEY), and below it his claim key. */
 const TRADER_KEY = 0xb00f;
+/** struct BrNetlink's myId and recvFlags (br_netlink.h). */
+const BT_MY_ID = 1, BT_RECV_FLAGS = 3;
 /** Ours while a mirror runs: seat 0 is then the publisher's, a ghost with their look. */
 const MIRROR_SEAT = 29;
 /** global.h's ObjectEvent: 0x24 bytes, currentCoords at 0x10, facing in 0x18's low bits. */
@@ -1130,14 +1132,18 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         blocksTo = (seq, data) => link.send(seq, data);
         const watch = emu.onFrame(() => {
           drain(published);
-          while (inbox.length && emu.read(netAt, 8)) {
-            const b = inbox[0];
-            // The fight's first block carries their name (TakePeerName): RIVAL otherwise.
-            const slots = packSlot({ t: 'bt', seat: FOE_SEAT, seq: b.seq, data: b.data, ...(b.seq === 1 ? { name: foe } : {}) });
-            if (MAILBOX.RING_SLOTS - box.pending() < slots.length) break;
-            for (const sl of slots) box.push(sl.type, sl.payload);
-            inbox.shift();
-          }
+          // One block at a time, and only once the ROM has taken the last. It has one buffer and
+          // one flag for the other side (br_netlink.c Deliver), so a second that lands before the
+          // first is read replaces it, and each side then waits for ever for a block the other has
+          // sent: the fight stood at the VS cards, or under its intro. Two arrive that close
+          // whenever this page or the network falls behind for a moment.
+          if (!inbox.length || !emu.read(netAt, 8) || box.pending()) return;
+          if (emu.read(netAt + BT_RECV_FLAGS, 8) & (1 << (emu.read(netAt + BT_MY_ID, 8) ^ 1))) return;
+          const b = inbox[0];
+          // The fight's first block carries their name (TakePeerName): RIVAL otherwise.
+          const slots = packSlot({ t: 'bt', seat: FOE_SEAT, seq: b.seq, data: b.data, ...(b.seq === 1 ? { name: foe } : {}) });
+          for (const sl of slots) box.push(sl.type, sl.payload);
+          inbox.shift();
         });
         try {
           return await battle(fog, () => {

@@ -226,10 +226,10 @@ describe('a fight with a log is drawn by the page', () => {
       r.link.onSp(2, bstart);
       r.watch.frame();
       expect(r.mirrors).toEqual([]);
-      at.mockReturnValue(3999);
+      at.mockReturnValue(8999);
       r.watch.frame();
       expect(r.mirrors).toEqual([]);
-      at.mockReturnValue(4001);
+      at.mockReturnValue(9001);
       r.watch.frame();
       expect(r.mirrors).toEqual([1]);
     } finally {

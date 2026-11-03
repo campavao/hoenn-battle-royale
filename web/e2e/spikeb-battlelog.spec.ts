@@ -41,8 +41,8 @@ async function setOption(page: Page, id: string, want: string): Promise<void> {
 }
 
 /** The relay's own code (relay/world.js over the bundled service), served here. */
-async function relay() {
-  process.env.WORLD_BOTS = '3';
+async function relay(bots = 3) {
+  process.env.WORLD_BOTS = String(bots);
   // Three fights outlast a 120 s ring phase, and past it the fog bites the party on the field, so the
   // party read after a fight is not the one the fight left.
   process.env.WORLD_RING_SECS = '900';
@@ -224,8 +224,10 @@ async function play(page: Page, switchAt = 0): Promise<void> {
     await page.waitForTimeout(400);
   }
   if (SCRATCH) await page.screenshot({ path: path.join(SCRATCH, `stuck-${Date.now()}.png`) }).catch(() => undefined);
-  const said = await page.locator('.bm-m-btn, .bm-cell').allTextContents().catch(() => []);
-  throw new Error(`the fight did not end, its menu saying ${JSON.stringify(said)}`);
+  // The windows are drawn on canvases: what they say is on their labels.
+  const said = await page.locator('.bm-m-btn:visible, .bm-cell:visible, .bm-slot:visible').evaluateAll((all) => all.map((e) => e.getAttribute('aria-label'))).catch(() => []);
+  const net = await spike(page, (s) => { const a = s.art.sym('gBrNetlink'), e = s.rom.emu; return `sent ${e.read(a + 12, 16)} heard ${e.read(a + 14, 16)} flags ${e.read(a + 3, 8)}, in the battle's own loop: ${!!e.read(s.art.sym('gBattleMainFunc'), 32)}`; }).catch(() => '');
+  throw new Error(`the fight did not end, its menu saying ${JSON.stringify(said)}; link ${net}`);
 }
 
 const flat = (got: any[]) => got.flatMap((m) => m.events) as any[];
@@ -253,8 +255,8 @@ async function expectLogMatchesRom(host: Page, events: any[], oracle: Awaited<Re
 }
 
 /** A hosted room of two pages on the in-process relay, the match begun, both ROMs up. */
-async function bootRoom(browser: Browser) {
-  const r = await relay();
+async function bootRoom(browser: Browser, bots = 3) {
+  const r = await relay(bots);
   const [hc, gc] = [await browser.newContext(), await browser.newContext()];
   const [host, guest] = [await hc.newPage(), await gc.newPage()];
   const url = `/?rom=${romHashParam()}&world=${encodeURIComponent(WORLD)}`;
@@ -403,8 +405,13 @@ test('a fight is a log: the watcher ends where the fighter\'s ROM did, and a lat
 async function watchSampler(page: Page): Promise<void> {
   await page.evaluate(() => {
     const w = window as any;
-    w.__views = { fights: {}, mirror: 0, order: [] };
+    w.__views = { fights: {}, mirror: 0, order: [], mirrorCalls: 0, spAt: 0, logAt: 0 };
     const battle = document.getElementById('battle')!;
+    const rom = w.__spike.rom, mirrorOf = rom.mirror.bind(rom);
+    rom.mirror = (...a: unknown[]) => { w.__views.mirrorCalls++; return mirrorOf(...a); };
+    const link = w.__spike.link, onSp = link.onSp, onLog = link.onBattleLog;
+    if (onSp) link.onSp = (...a: any[]) => { w.__views.spAt ||= performance.now(); onSp(...a); };
+    if (onLog) link.onBattleLog = (...a: any[]) => { w.__views.logAt ||= performance.now(); onLog(...a); };
     const frame = () => {
       requestAnimationFrame(frame);
       const s = w.__spike, on = s.watch.showing;
@@ -539,7 +546,8 @@ test('a switch, then the one switched in faints: the party has the other come ou
 
 test('two real trainers walk into a real duel, a third page watches: its view ends on the ROMs', async ({ browser }) => {
   test.setTimeout(900_000);
-  const room0 = await bootRoom(browser);
+  // No bots: one that met either of them first would have that trainer fighting it, not the other.
+  const room0 = await bootRoom(browser, 0);
   const { r, host, guest, hostId, guestId, code } = room0;
   const wc = await browser.newContext();
   const third = await wc.newPage();
@@ -553,17 +561,29 @@ test('two real trainers walk into a real duel, a third page watches: its view en
     await expect.poll(() => spike(third, (s) => s.spectating), { timeout: 60_000 }).toBeTruthy();
     await third.evaluate((id) => (window as any).__spike.watch.host.setFollow(id), hostId);
     await watchSampler(third);
-    // The room's own rule from here: two trainers who see each other fight. The spec stands them in
-    // one line on the relay's room (a page corrects to it by its hash), and they meet.
-    await expect.poll(() => {
-      const t = r.room().actor(hostId), g = r.room().actor(guestId);
-      if (t.battling) return true;
-      const map = 'MAP_LITTLEROOT_TOWN';
-      t.m = { ...t.m, spot: { map, x: 9, y: 12 }, facing: 4, moveDir: 4, action: undefined };
-      g.m = { ...g.m, spot: { map, x: 11, y: 12 }, facing: 3, moveDir: 3, action: undefined };
-      t.calm = g.calm = 0;
-      return false;
-    }, { timeout: 30_000 }).toBe(true);
+    // The room's own rule from here: two trainers who see each other fight. They fly to one street,
+    // as a page's MAP would have them (a command every page hears, so nothing has to be corrected),
+    // and the host walks toward the other until they meet. Standing them there on the relay's room
+    // alone had the pages resync, and a page can resync past the meeting: no fight, ever (Retry #2 of
+    // run 41619593068).
+    await host.evaluate(() => (window as any).__spike.link.fly('MAP_LITTLEROOT_TOWN', 9, 12));
+    await guest.evaluate(() => (window as any).__spike.link.fly('MAP_LITTLEROOT_TOWN', 11, 12));
+    await expect.poll(() => { const t = r.room().actor(hostId), g = r.room().actor(guestId); return `${t.m.spot.map},${t.m.spot.x} ${g.m.spot.map},${g.m.spot.x}`; }, { timeout: 30_000 }).toBe('MAP_LITTLEROOT_TOWN,9 MAP_LITTLEROOT_TOWN,11');
+    for (let i = 0; i < 40 && !r.room().actor(hostId).battling; i++) {
+      await host.keyboard.down('ArrowRight');
+      await host.waitForTimeout(80);
+      await host.keyboard.up('ArrowRight');
+      await host.waitForTimeout(300);
+    }
+    await expect.poll(() => { const t = r.room().actor(hostId); return t.battling ? t.foe : 0; }, { timeout: 30_000 }).toBe(guestId);
+    // The link's blocks in bunches, as a slow page or a bad network hands them over: two landing
+    // before the ROM read the first lost it, and the fight hung, in CI's every run and on no fast box.
+    for (const p of [host, guest]) await p.evaluate(() => {
+      const l = (window as any).__spike.link, receive = l.receive.bind(l);
+      const held: unknown[] = [];
+      l.receive = (m: { t: string }, ready: () => void) => { if (m.t === 'bt') held.push(m); else receive(m, ready); };
+      setInterval(() => { for (const m of held.splice(0)) receive(m, () => undefined); }, 400);
+    });
     step('they met');
     await expect.poll(() => spike(host, (s) => !!s.battle), { timeout: 60_000 }).toBe(true);
     await expect.poll(() => spike(guest, (s) => !!s.battle), { timeout: 60_000 }).toBe(true);
@@ -575,7 +595,7 @@ test('two real trainers walk into a real duel, a third page watches: its view en
     await expect.poll(() => third.evaluate(() => (window as any).__spike.watch.showing === null), { timeout: 300_000 }).toBe(true);
     const views = await third.evaluate(() => (window as any).__views);
     const view = views.fights[views.order[0]];
-    console.log(`[view of a duel] ${JSON.stringify({ views: views.order.length, mirror: views.mirror, side: view.side, firstMs: view.firstMs, lastNext: view.lastNext, events: view.events, near: view.near, far: view.far, oracleHp: oracle.hp, oracleField: oracle.field })}`);
+    console.log(`[view of a duel] ${JSON.stringify({ views: views.order.length, mirror: views.mirror, mirrorCalls: views.mirrorCalls, logAfterSp: Math.round(views.logAt - views.spAt), side: view.side, firstMs: view.firstMs, lastNext: view.lastNext, events: view.events, near: view.near, far: view.far, oracleHp: oracle.hp, oracleField: oracle.field })}`);
     if (SCRATCH) fs.writeFileSync(path.join(SCRATCH, 'duel.json'), JSON.stringify({ view, oracle }, null, 1));
     expect(views.mirror, 'no ROM replay').toBe(0);
     expect(view.lastNext).toBeGreaterThanOrEqual(view.events - 1);
