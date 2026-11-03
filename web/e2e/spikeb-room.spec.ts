@@ -85,6 +85,8 @@ test('out of the match, watching the bots walk for a minute: nobody jumps and th
   expect(j.snaps, 'nobody jumped').toBe(0);
   expect(j.cam).toBe(0);
   await ctx.close();
+});
+
 test("the host's card on a trainer: MAKE HOST hands START on, and REPLACE WITH BOT takes them out of a match with a bot in their place", async ({ browser }) => {
   test.setTimeout(420_000);
   const [hc, gc] = [await browser.newContext({ viewport: { width: 1280, height: 720 } }), await browser.newContext()];

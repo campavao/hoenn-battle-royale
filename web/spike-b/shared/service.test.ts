@@ -700,6 +700,8 @@ describe('world rooms', () => {
     } finally {
       svc.stop();
     }
+  });
+
   describe("the host's actions on a trainer's card", () => {
     const opened = () => {
       const lines: string[] = [];
