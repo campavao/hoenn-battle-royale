@@ -399,6 +399,10 @@ export function* simulation(a: SimSide, b: SimSide, opts: SimOptions): Generator
   };
   battle.setPlayer('p1', { name: 'A', team: teamA.sets });
   battle.setPlayer('p2', { name: 'B', team: teamB.sets });
+  // The engine's 'start' counts each team whole, so a mon already down (setUp) would leave it one
+  // short of over when its last one faints: nobody out, no switch to make, and the other side's every
+  // move "But it failed!" until TURN_CAP. Started by the second player's coming in, so counted here.
+  for (const s of battle.sides) s.pokemonLeft = s.pokemon.filter((m: any) => !m.fainted).length; // eslint-disable-line @typescript-eslint/no-explicit-any
   if (opts.fog) {
     battle.onEvent('Residual', battle.format, (mon: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
       // A tenth, and it hurts but never finishes anybody (br_ring.c's floorAtOne).

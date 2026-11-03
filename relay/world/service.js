@@ -9573,6 +9573,7 @@ function* simulation(a, b2, opts) {
   };
   battle.setPlayer("p1", { name: "A", team: teamA.sets });
   battle.setPlayer("p2", { name: "B", team: teamB.sets });
+  for (const s of battle.sides) s.pokemonLeft = s.pokemon.filter((m) => !m.fainted).length;
   if (opts.fog) {
     battle.onEvent("Residual", battle.format, (mon2) => {
       const bite = Math.min(Math.max(1, Math.floor(mon2.maxhp / 10)), mon2.hp - 1);
@@ -14945,4 +14946,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "5ad626f6697f";
+export const WORLD_HASH = "4fdd03ad522d";

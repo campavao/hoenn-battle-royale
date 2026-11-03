@@ -15,7 +15,7 @@ test.beforeAll(() => {
 /** Presses a room option until its label reads `want` (each press steps it once). */
 async function setOption(page: Page, id: string, want: string): Promise<void> {
   const b = page.locator(`#${id}`);
-  for (let i = 0; i < 6 && (await b.textContent())?.trim() !== want; i++) {
+  for (let i = 0; i < 12 && (await b.textContent())?.trim() !== want; i++) {
     const was = await b.textContent();
     await b.click();
     await expect(b).not.toHaveText(was ?? '', { timeout: 10_000 });
@@ -36,12 +36,17 @@ test('a new player picks a ROM on spike B itself and gets the menu', async ({ pa
 });
 
 test('a hosted room with bots plays through to its results', async ({ page }) => {
-  test.setTimeout(600_000);
+  // The relay's simulator fights them, and holds the two bots for as long as the fight's log takes
+  // to play: a minute as a rule, and minutes more when neither has much to hit with. 4 seats on these
+  // settings is a match of 198 s as a rule, 310 s at the 90th percentile and 414 s at the worst of 60,
+  // on the service with nothing on the screen. A whole standard match is spikeb-watch-log's soak.
+  test.setTimeout(720_000);
   await page.goto(`/?rom=${romHashParam()}`);
   await page.locator('#lobby-rows button', { hasText: 'HOST A ROOM' }).click({ timeout: 90_000 });
   await expect(page.locator('#room-start')).toBeVisible({ timeout: 30_000 });
   await setOption(page, 'room-fog', 'FOG 30s');
   await setOption(page, 'room-safari', 'SAFARI 60s');
+  await setOption(page, 'room-max', 'MAX 4');
   await expect(page.locator('#room-start')).toBeEnabled({ timeout: 30_000 });
   await page.locator('#room-start').click();
 
@@ -51,7 +56,7 @@ test('a hosted room with bots plays through to its results', async ({ page }) =>
   await expect.poll(() => spike('spectating'), { timeout: 30_000 }).toBeTruthy();
 
   // The match ends for everybody, and the results say where the player came.
-  await expect(page.locator('#results-panel')).toBeVisible({ timeout: 480_000 });
+  await expect(page.locator('#results-panel')).toBeVisible({ timeout: 600_000 });
   await expect(page.locator('#results-standings')).toBeVisible();
   await expect(page.locator('#results-line')).toContainText(/of \d+/);
   // The champion's page: a bot champion's team, as the match dealt it, as a trainer's is
@@ -415,13 +420,19 @@ test('two players: the room link brings a friend in, and both see one world', as
 test('the debug flags deal a world of the page own: #solo&fast&nobots&seed=7', async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto(`/?rom=${romHashParam()}#solo&fast&nobots&seed=7`);
-  type W = { link?: { me: number; room: { seed: number; ringPhase: number; opening: number; actors: { id: number; name: string }[] } } };
+  type W = { link?: { me: number; room: { seed: number; ringPhase: number; opening: number; simBots: boolean; actors: { id: number; name: string }[] } } };
   await page.waitForFunction(() => !!(window as unknown as { __spike: W }).__spike?.link, undefined, { timeout: 90_000 });
   const r = await page.evaluate(() => { const l = (window as unknown as { __spike: W }).__spike.link!; return { seed: l.room.seed, ring: l.room.ringPhase, opening: l.room.opening, actors: l.room.actors.map((a) => a.name) }; });
   expect(r.seed, '#seed=7').toBe(7);
   expect(r.ring, '#fast: 15 s a fog phase').toBe(15 * 60);
   expect(r.opening, '#fast: 25 s of Safari').toBe(25 * 60);
   expect(r.actors, '#nobots: me and nobody else, by my own name').toEqual(['CAM']);
+  const simBots = () => page.evaluate(() => (window as unknown as { __spike: W }).__spike.link!.room.simBots);
+  expect(await simBots(), 'the bots fight in the simulator, as on the relay').toBe(true);
+  await page.goto(`/?rom=${romHashParam()}#solo&fast&nobots&nosim&seed=7`);
+  await page.reload();
+  await page.waitForFunction(() => !!(window as unknown as { __spike: W }).__spike?.link, undefined, { timeout: 90_000 });
+  expect(await simBots(), '#nosim: on this page\'s hidden ROM').toBe(false);
 });
 
 test("the field's own sounds are the ROM's: asked once, a fanfare holds the song and gives it back", async ({ page }) => {

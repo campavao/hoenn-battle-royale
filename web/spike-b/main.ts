@@ -4383,7 +4383,8 @@ async function boot(): Promise<void> {
       ...(ring ? { ringFrames: Math.round(ring * 60) } : {}),
       ...(pace?.safariSecs !== undefined || ring ? { openingFrames: Math.round((pace?.safariSecs ?? ring!) * 60) } : {}),
       ...(new URLSearchParams(location.hash.slice(1)).has('nobots') ? { bots: 0 } : {}),
-      ...(new URLSearchParams(location.hash.slice(1)).has('simbots') ? { simBots: true } : {}),
+      // The bots' fights in the simulator, as the relay has them; #nosim, on this page's hidden ROM.
+      simBots: !new URLSearchParams(location.hash.slice(1)).has('nosim'),
       name: me().name, skin: me().skin,
     });
   };

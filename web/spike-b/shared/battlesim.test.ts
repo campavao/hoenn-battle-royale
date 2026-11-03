@@ -29,6 +29,23 @@ describe('battlesim', () => {
     expect(others.some((l) => JSON.stringify(l) !== JSON.stringify(one.log))).toBe(true);
   });
 
+  it('a team with a mon already down loses when its last one faints, not at the turn cap', () => {
+    // The fight after a fight: the engine counts a team when it starts, wounds or no, so the last
+    // mon's faint left it one short of over. Nobody on the field, no switch to make, and the winner
+    // used every move on nothing ("But it failed!") until TURN_CAP: 11% of the fights in a standard
+    // match, 39% of their time on screen (2026-11-03).
+    const out = simulate(side(1, [card(16, 5, { hp: 0 }), card(16, 5)]), side(2, [card(130, 50)]), { seed: 9 }); // PIDGEY, GYARADOS
+    expect(out.winner).toBe(2);
+    expect(out.capped).toBe(false);
+    expect(out.turns).toBeLessThan(10);
+    const said = out.log.filter((e) => e.e === 'text').map((e) => (e as { text: string }).text);
+    expect(said.filter((x) => x === 'But it failed!')).toEqual([]);
+    // ...and the same the other way round: the side with the gap is the winner's.
+    const back = simulate(side(1, [card(130, 50, { hp: 0 }), card(130, 50)]), side(2, [card(16, 5)]), { seed: 9 });
+    expect(back.winner).toBe(1);
+    expect(back.capped).toBe(false);
+  });
+
   it('a turn at a time is the same fight', () => {
     const [a, b] = dealt(5, 7);
     const run = simulation(a, b, { seed: 44 });
