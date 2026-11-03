@@ -1759,7 +1759,7 @@ export class Room {
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
     // A bot's pickings were the old round's, as are `picked` and the spills cleared below.
-    for (const a of this.actors) if (a.bot) { a.bites = 0; a.bleedAt = undefined; a.loot = undefined; if (a.judge) this.part(a); }
+    for (const a of this.actors) if (a.bot) { a.bites = 0; a.bleedAt = undefined; a.loot = undefined; if (a.judge) this.part(a); a.caught = a.tried = undefined; }
     // The bots open in the Zone with everybody, as the live host deals them (bots/host.ts).
     if (safari) for (const a of this.actors) if (a.bot) a.m = newMover(this.zone(a.id)[0] ?? a.m.spot, a.m.facing);
     // A walk-up the old round left half done starts no battle in this one.

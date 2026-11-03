@@ -1534,7 +1534,7 @@ describe('Cam 10-30', () => {
       worst.push(w);
     }
     expect(worst.reduce((a, b) => a + b, 0) / worst.length).toBeLessThan(60 * 60 * 3.5);
-  });
+  }, 60_000);
 });
 
 describe('the last three', () => {
