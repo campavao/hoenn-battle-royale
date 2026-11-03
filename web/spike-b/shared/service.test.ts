@@ -913,13 +913,13 @@ describe('world rooms', () => {
         sa.onText(JSON.stringify({ t: 'start' }));
         const room = [...(svc as unknown as { rooms: Map<string, { host: { room: { actors: Actor[] }; simReady(): Promise<void> } }> }).rooms.values()][0];
         await room.host.simReady();
-        const fights = () => room.host.room.actors.filter((o) => o.bot && o.battling);
+        // Two bots' (the judge is the host's): a bot can meet one of these pageless trainers first, a
+        // fight nobody logs.
+        const fights = () => room.host.room.actors.filter((o) => o.bot && o.battling && o.judge === -1);
         for (let i = 0; i < 60 * 300 && !fights().length; i++) { t += 1000 / 60; svc.pump(); }
         const fighter = fights()[0];
         expect(fighter, 'bots met').toBeTruthy();
         sb.onText(JSON.stringify({ t: 'watch', id: fighter.id }));
-        // The simulator has a few real ms a frame, and this clock runs far faster than the frames'
-        // own: on a busy machine the log takes many of them to be worked out.
         const heard = () => b.got.filter((m) => m.t === 'bl') as unknown as { from: number; events: { e: string }[]; ago?: number }[];
         for (let i = 0; i < 60 * 60 && !heard().length; i++) { t += 1000 / 60; svc.pump(); }
         const bl = heard();
