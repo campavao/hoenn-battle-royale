@@ -80,6 +80,30 @@ test('Sound off, then on: the core goes quiet and comes back', async ({ page }) 
   await expect.poll(volume).toBe(1);
 });
 
+test('Sound turned on during a catching up stays quiet at eight times, and comes on level with the fight', async ({ page }) => {
+  test.setTimeout(240_000);
+  const volume = await solo(page, true);
+  const flip = () => page.evaluate(() => document.getElementById('sound')!.click());
+  await expect.poll(volume).toBe(0);
+  await page.evaluate(() => {
+    const s = (window as any).__spike, emu = s.rom.emu, read = emu.read.bind(emu), w = window as any;
+    const at = s.art.sym('gBrSpectate'), main = s.art.sym('gBattleMainFunc');
+    w.__behind = 1;
+    w.__stop = false;
+    emu.read = (a: number, bits: number) => (a === at + 5 ? 1 : a === at + 15 ? w.__behind : a === main ? 1 : read(a, bits));
+    w.__mirror = s.rom.mirror({ peek: () => null, shift() {}, over: () => false, stopped: () => w.__stop, turned: false, skins: [0, 0] }, () => {});
+  });
+  await page.waitForTimeout(1500);
+  await flip();
+  await page.waitForTimeout(500);
+  expect(await volume(), 'catching up, whatever the button says').toBe(0);
+  await page.evaluate(() => { (window as any).__behind = 0; });
+  await expect.poll(volume, { message: 'level with the fight' }).toBe(1);
+  await flip();
+  await expect.poll(volume, { message: 'off again' }).toBe(0);
+  await page.evaluate(() => { (window as any).__stop = true; });
+});
+
 for (const muted of [true, false]) {
   test(`a ${muted ? 'muted' : 'listening'} watcher keeps their sound through a replay's catching up`, async ({ page }) => {
     test.setTimeout(240_000);
