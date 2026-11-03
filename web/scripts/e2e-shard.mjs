@@ -26,6 +26,7 @@ export const FILE_SECONDS = {
   'pwa.spec.ts': 4,
   'recorder.spec.ts': 23,
   'results-scroll.spec.ts': 2,
+  'spikeb-fieldfx.spec.ts': 360,
   'spikeb-menu.spec.ts': 149,
   'spikeb-windows.spec.ts': 452,
   'spikeb-room.spec.ts': 81,

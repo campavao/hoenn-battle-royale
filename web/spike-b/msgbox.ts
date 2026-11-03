@@ -25,6 +25,13 @@ export function revealed(lines: string[], n: number): string[] {
   });
 }
 
+/** What is already printed of `next`, when it goes on from what the box held: the rod's next dot
+ *  or its bite under them, which printed the whole line again from nothing every 20 frames (Cam,
+ *  11-02, at Slateport: "why is it flashing like this?"). Anything else starts over. */
+export function keptOf(was: string[], printed: number, next: string[]): number {
+  return next.join('\n').startsWith(was.join('\n')) ? printed : 0;
+}
+
 /** Emerald's FAST text, a character a frame. */
 const CHARS_PER_S = 60;
 
@@ -36,6 +43,9 @@ export class MessageBox {
   private draw: ((n: number) => void) | null = null;
   private raf = 0;
   private atOnce = false;
+  /** The lines the box holds, and how many characters of them are on it. */
+  private held: string[] = [];
+  private printed = 0;
 
   constructor(private readonly el: HTMLElement) {
     const canvas = document.createElement('canvas');
@@ -65,6 +75,8 @@ export class MessageBox {
     this.raf = 0;
     this.wanted = null;
     this.shown = '';
+    this.held = [];
+    this.printed = 0;
     this.el.classList.remove('on');
     this.el.removeAttribute('data-text');
   }
@@ -78,11 +90,13 @@ export class MessageBox {
     const top = dock && !dock.hidden ? dock.getBoundingClientRect().top : 0;
     this.el.style.bottom = top > 0 ? `${Math.round(innerHeight - top + 4 * this.scale)}px` : '';
     if (key === this.shown) return;
+    const sameBox = this.shown.startsWith(`${w.alert}:${w.lines}:`);
     this.shown = key;
     const lines = boxLines(w.text);
     const h = TILE + LINE * Math.max(lines.length, w.lines);
     this.c.resize(BOX_W, h, this.scale);
     const draw = (n: number) => {
+      this.printed = n;
       this.c.clearAll();
       this.c.drawMessageBox({ x: 0, y: 0, w: BOX_W, h });
       revealed(lines, n).forEach((l, i) => this.c.drawText(l, TEXT_X, 4 + i * LINE, w.alert ? TEXT_RED : TEXT_DARK));
@@ -92,13 +106,15 @@ export class MessageBox {
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
     const total = lines.join('').length;
+    const kept = sameBox ? Math.min(total, keptOf(this.held, this.printed, lines)) : 0;
+    this.held = lines;
     // A ticker's alert stays whole, it is there to be seen. The rest scroll in (Cam, 11-01:
     // "it would be nice if it has kind of like the scrolling text").
     if (w.alert || this.atOnce) {
       draw(total);
       return;
     }
-    const t0 = performance.now();
+    const t0 = performance.now() - (kept / CHARS_PER_S) * 1000;
     const step = () => {
       const n = Math.min(total, Math.ceil(((performance.now() - t0) / 1000) * CHARS_PER_S));
       draw(n);

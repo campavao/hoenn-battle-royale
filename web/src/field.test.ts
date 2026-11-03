@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_VIEW_SIZE, measureLayout, widerBand, worldBand, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandOf, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, PAD_GAP, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach, unseenFade, fieldDimmed, RING_BATTLE_FOG, FOG_EVA, FOG_EVB, WEATHER_CURR, WEATHER_EVA, WEATHER_EVB, WEATHER_FOG_HORIZONTAL } from './field';
+import { closingFade, FIELD_VIEW_SIZE, measureLayout, widerBand, worldBand, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandOf, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, PAD_GAP, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach, unseenFade, fieldDimmed, RING_BATTLE_FOG, FOG_EVA, FOG_EVB, WEATHER_CURR, WEATHER_EVA, WEATHER_EVB, WEATHER_FOG_HORIZONTAL } from './field';
 import { standsAbove } from './field-extra';
 import type { Band } from './emu';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
@@ -10,6 +10,24 @@ import type { WorldMap } from './bots/world';
 import fieldHeader from '../../include/br/br_field.h?raw';
 import fieldSource from '../../src/br/br_field.c?raw';
 import appSource from './app.ts?raw';
+
+describe('the fade a battle closes on', () => {
+  const OUT_TO_BLACK = 0x0143, NORMAL = 0;
+  const at = (y: number, active: boolean) => ({ y, color: 0, active });
+  it('counts up through it, and holds at black once it is at rest', () => {
+    expect(closingFade(false, at(31, true), OUT_TO_BLACK, 0)).toBeCloseTo(1 / 16);
+    expect(closingFade(true, at(15, true), OUT_TO_BLACK, 0)).toBeCloseTo(9 / 16);
+    // A trace of one: its last frame is the finishing counter, the mode gone, still "active".
+    expect(closingFade(true, at(0, true), 0x1043, 0)).toBe(1);
+    expect(closingFade(true, at(0, false), OUT_TO_BLACK, 0)).toBe(1);
+    expect(closingFade(true, at(0, false), NORMAL, 0)).toBe(1);
+  });
+  it('is not the rest the last battle left, a fade of anything else, or a screen coming up after', () => {
+    expect(closingFade(false, at(0, false), OUT_TO_BLACK, 0)).toBe(null);
+    expect(closingFade(false, at(8, true), NORMAL, 0xffff)).toBe(null);
+    expect(closingFade(true, at(16, true), NORMAL, 0xffffffff)).toBe(null);
+  });
+});
 
 describe('the picture past the LCD (POK-319)', () => {
   const define = (name: string): number => {

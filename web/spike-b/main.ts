@@ -45,7 +45,7 @@ import { OUT_BATCH_MS, event, felled, opening, outs, won } from '../src/match/ti
 import { MessageBox } from './msgbox';
 import { Fishing, fishPose, rodOf, type Rod } from './fish';
 import { Ticks } from './ticks';
-import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_CONTEST_CURTAIN_RISE, SE_DOOR, SE_EXIT, SE_FIELD_POISON, SE_LEDGE, SE_SELECT, SE_SHOP, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
+import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_CONTEST_CURTAIN_RISE, SE_DOOR, SE_EXIT, SE_FIELD_POISON, SE_LEDGE, SE_M_FLY, SE_SELECT, SE_SHOP, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { devRomParam, importRom } from './import';
 import { askToKeepStorage, registerServiceWorker } from '../src/pwa';
@@ -66,13 +66,14 @@ import { BattleView } from './battleview';
 import { raiseCurtain } from './curtain';
 import { frameOf as fxFrame, grassUnderAsh, isFloor, MB_ASHGRASS, SHEETS as FX_SHEETS, stepEffects, type Effect, type FxKind } from './fieldfx';
 import { ROOM_GAP, clampZoom, loadZoom, nextZoom, pickedZoom, roomFloor, saveZoom, wheelSteps, zoomLabel, zoomRange } from './zoom';
-import { fieldScale, FADE_COLOR_WORD, FADE_Y_WORD, FOG_EVA, FOG_EVB, fadeOf, keyPicture } from '../src/field';
+import { closingFade, fieldScale, FADE_COLOR_WORD, FADE_MODE_WORD, FADE_SELECTED, FADE_Y_WORD, FOG_EVA, FOG_EVB, fadeOf, keyPicture } from '../src/field';
 import { PadPrefsControl } from '../src/ui/padprefs';
 import { inputKeyboard, inputPad } from '../src/ui/hints';
 import { wireDpad } from './dpad';
 import { StartMenu } from './startmenu';
 import { MapWindow } from './mapwindow';
 import { FLY_SPOTS } from './flyspots';
+import { ARRIVES, FLIGHT_LEN, POISON_COLOUR, dollShows, flew, flightFade, flightPose, poisonBeat, poisonLook } from './looks';
 import type { MapPlace } from './ringmap';
 import { BACK_H, BATTLE_TYPE_RECORDED, BattleMenu, CELL_H, battleWantsNoPad, ppWithBonus, readBattleView, type PartyMember } from '../src/ui/battlemenu';
 import { BATTLE_TYPE_TRAINER, CARD_H, SidesView } from '../src/ui/sides';
@@ -81,7 +82,7 @@ import type { Rom } from '../src/battle/movebook';
 import { BATTLE_MENU, MENU_ACTION, MENU_PARTY, TouchLayer } from '../src/touch';
 import { romAsks, type TeamRow } from './rom';
 import { HUD } from '../src/net/hud';
-import { ITEM_MACH_BIKE, MINI_MAP, PhoneHud, fieldMoves, fogPhase, signFor, type FieldMove } from '../src/ui/phonehud';
+import { ITEM_ACRO_BIKE, ITEM_MACH_BIKE, MINI_MAP, PhoneHud, fieldMoves, fogPhase, itemCut, signFor, type FieldMove } from '../src/ui/phonehud';
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
 import { seatScreen } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
@@ -461,7 +462,7 @@ function actors(): Actor[] {
 let selectUntil = 0;
 let toldLoading = false;
 function myBits(): number {
-  if (spectating || battle || swapping || romUp || asking || casting || intro()) return 0;
+  if (spectating || battle || swapping || romUp || asking || casting || intro() || flights.some((f) => f.id === link.me)) return 0;
   // The battle ROM still booting (a match started seconds after the page opened): a
   // marked spot or a trainer stepped into now could only say "still loading" and spend
   // the spot, so the trainer waits for it, once told why.
@@ -871,7 +872,8 @@ function openMapWindow(o: { verb: string | null; can(p: MapPlace): boolean; prom
       },
       fogKey: () => {
         const ring = link.room.ring();
-        return { key: `${ring.last}|${ring.r.toFixed(1)}|${ring.cx.toFixed(0)}|${ring.cy.toFixed(0)}`, blinks: ring.next !== undefined && ring.next !== Infinity };
+        const next = ring.next !== undefined && ring.next !== Infinity ? `${ring.next}|${ring.cx.toFixed(0)}|${ring.cy.toFixed(0)}` : '';
+        return { key: `${ring.last}|${ring.r.toFixed(1)}|${ring.cx.toFixed(0)}|${ring.cy.toFixed(0)}`, next };
       },
       placeAt: (cx, cy) => map.placeAt(cx, cy),
       plots: () => map.plots({ spot: me.m.spot, gfx: gfxOf(me.skin) }),
@@ -917,7 +919,6 @@ async function lookAtMap(): Promise<void> {
   const to = place && spotOf(place);
   if (!to) return;
   const [x, y] = FLY_SPOTS[to];
-  rom?.sound(SE_EXIT);
   link.fly(to, x, y);
 }
 
@@ -955,7 +956,10 @@ function askBag(who: string, bag: Bag, species: number | undefined): Promise<str
   });
 }
 
+/** The dropped bag I have open, so it stays drawn while I look (carry.ts spillShows). */
+let bagOpen = 0;
 async function openBag(key: number, bag: Bag, who: string): Promise<void> {
+  bagOpen = key;
   // Level 0 is the DAY CARE's chest (room.ts placeChest): the rung the match is at now.
   const rung = rungForPhase(link.room.ring().phase + 1);
   const mons = (bag.mons ?? []).map((m) => (m.level > 0 ? m : { ...m, level: rung }));
@@ -966,6 +970,7 @@ async function openBag(key: number, bag: Bag, who: string): Promise<void> {
   const left = await dropPanel(who, mons);
   const rest: Bag = { items: bag.items, money: bag.money, mons: left };
   if (!emptyBag(rest)) link.drop(key, rest);
+  else bagOpen = 0;
 }
 
 /** START: the match's own menu rows on the ROM's screens (start_menu.c's MENU_ACTION_*),
@@ -1265,6 +1270,7 @@ async function takeBag(key: number, bag: Bag, who: string, quiet = false): Promi
   const money = bag.money && !isOut ? ` and ¥${bag.money}` : '';
   if (!quiet) say(`Took ${who}'s bag: ${took} item${took === 1 ? '' : 's'}${money}.${rest.items.length ? ' Some would not fit.' : ''}`);
   if (!emptyBag(rest)) link.drop(key, rest);
+  else bagOpen = 0;
 }
 
 /** What the room started for me: A at a bot, or a marked spot I landed on (the room took
@@ -1449,9 +1455,27 @@ function romFading(): boolean {
   const at = romTables.sym('gPaletteFade');
   return !!rom && at !== undefined && fadeOf(rom.emu.read(at + FADE_Y_WORD, 16), rom.emu.read(at + FADE_COLOR_WORD, 16)).active;
 }
+/** The battle's closing fade is on (field.ts closingFade). Followed in the ROM's colours the fight
+ *  went to black shapes over a map still dimmed, and then the map snapped up lit (POK-435; Cam,
+ *  10-19: "translucent boxes", "one clean fade"). So the last picture before it stays up and goes
+ *  away over the map, as the dim does. */
+let closing = false;
+function closingFrame(up: boolean): boolean {
+  const at = romTables.sym('gPaletteFade');
+  const left = up && seeing && battle && at !== undefined
+    ? closingFade(closing, fadeOf(rom!.emu.read(at + FADE_Y_WORD, 16), rom!.emu.read(at + FADE_COLOR_WORD, 16)), rom!.emu.read(at + FADE_MODE_WORD, 16), rom!.emu.read(at + FADE_SELECTED, 32))
+    : null;
+  if (left === null && !closing) return false;
+  closing = left !== null;
+  // #battle.see's #0007.
+  keyCanvas.style.opacity = closing ? String(1 - left!) : '';
+  battleEl.style.background = closing ? `rgba(0, 0, 0, ${(7 / 15) * (1 - left!)})` : '';
+  return closing;
+}
 function seeFrame(): void {
   if (panelUp && battleEl.classList.contains('panel')) return;
   const up = !!rom && battleEl.classList.contains('on');
+  if (closingFrame(up)) return;
   const keyed = up && rom!.seeThrough(seeThrough()) && rom!.picture(keyImage.data);
   // USE in the page's bag is the ROM's own BAG doing it (br_bag.h): its screen, and the
   // battle's redraw after it, have no key and showed bare -- black, the bag, a blue fade
@@ -2437,6 +2461,20 @@ function wirePhoneHud(desk = false): void {
   }, 100);
 }
 
+/** A bike's USE in the BAG (item_use.c ItemUseOutOfBattle_Bike): the window shuts and I'm on it, or
+ *  off it, the dock's BIKE by another way. It went to the hidden ROM, whose rider nobody sees, and
+ *  came back "It won't have any effect" (Cam, 11-02, at Jagged Pass: "Is it doing anything?"). This
+ *  world has the one way of riding (sim.ts, the MACH's), whichever bike is asked. Facing water
+ *  SELECT is the rod's (room.ts), which isn't what was asked for. */
+function bikeFromBag(): void {
+  closePanel();
+  const me = link.room.actor(link.me);
+  if (!me) return;
+  const can = me.m.bike || (!!link.room.stepFor(me).cycling?.(me.m.spot) && classAt(me.m.spot) !== CLASS_WATER && classAt(aheadOf(me)) !== CLASS_WATER);
+  if (can) selectUntil = frame + 40;
+  else say("There's a time and place for everything! But not now.");
+}
+
 /** gBrHmView's bits (include/br/br_hm.h): HM n+1's move at bit n. */
 const HM_CUT = 1 << 0, HM_SURF = 1 << 2, HM_STRENGTH = 1 << 3, HM_DIVE = 1 << 7;
 
@@ -2636,6 +2674,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
         give: async (slot, item) => { if (await rom?.take(item)) await rom?.setHeld(slot, item); },
         take: async (slot, item) => { await rom?.setHeld(slot, 0); await rom?.give(item, 1); },
         use: (pocket, item, slot, move) => {
+          if (item === ITEM_MACH_BIKE || item === ITEM_ACRO_BIKE) { bikeFromBag(); return; }
           const count = () => readPocket(emu, sym, pocket).find((x) => x.item === item)?.n ?? 0;
           const was = count();
           void panelWalk((r) => r.menu(2, panelShow, panelHide, { to: 'use', pocket, item, slot, move })).then(() => {
@@ -2992,6 +3031,21 @@ function pixelate(c: HTMLCanvasElement, b: number): void {
 }
 /** The roofs' layer while a mosaic is on: drawn apart, blocked, then laid over. */
 const coverCanvas = document.createElement('canvas');
+
+/** The next ring on the ground: where the fog is coming to (Cam, 11-02: "a line like a border"),
+ *  mapwindow.ts's on the MAP. */
+function drawFogLine(home: Placed, z: number): void {
+  const ring = link.room.ring();
+  const next = ring.next;
+  if (!home.m.outdoor || next === undefined || next === Infinity || next <= 0 || next >= ring.r) return;
+  ctx.save();
+  ctx.strokeStyle = 'rgb(72, 24, 136)';
+  ctx.lineWidth = 2 / Math.min(1, z);
+  ctx.beginPath();
+  ctx.arc(ring.cx * TILE, ring.cy * TILE, next * TILE, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
 
 function drawFog(x0: number, y0: number, x1: number, y1: number, home: Placed): void {
   const ring = link.room.ring();
@@ -3732,7 +3786,7 @@ function drawGround(x0: number, y0: number, x1: number, y1: number): void {
   };
   for (const g of link.room.ground().values()) if (!link.room.picked.has(g.key)) put(g.gift ? giftArt(g.key) : tinted(g.item), g.map, g.x, g.y);
   for (const b of link.room.spills.values()) {
-    if (!spillShows(b, link.room.picked.get(b.key), link.me)) continue;
+    if (!spillShows(b, link.room.picked.get(b.key), link.me, b.key === bagOpen)) continue;
     // An event's legendary stands as itself (br_legend.c's sLegends); a piece with one mon
     // or one item in it is a ball (br_loot.c), anything more a bag.
     const legend = b.legend && art ? legendArt(b.bag.mons![0].species) : b.person ? personArt(b.person.gfx) : null;
@@ -3832,6 +3886,91 @@ function drawVs(x: number, y: number): void {
   });
 }
 
+// ---- the poison look, the doll, the bird (looks.ts) ---------------------------------------
+
+/** A sheet all of one colour, its shape kept: what a sprite is blended toward. */
+const purples = new Map<number, HTMLCanvasElement>();
+function purpleSheet(gfx: number, s: HTMLCanvasElement): HTMLCanvasElement {
+  let p = purples.get(gfx);
+  if (!p) {
+    p = document.createElement('canvas');
+    p.width = s.width;
+    p.height = s.height;
+    const c = p.getContext('2d')!;
+    c.drawImage(s, 0, 0);
+    c.globalCompositeOperation = 'source-in';
+    c.fillStyle = POISON_COLOUR;
+    c.fillRect(0, 0, s.width, s.height);
+    purples.set(gfx, p);
+  }
+  return p;
+}
+
+/** items.h ITEM_POKE_DOLL. */
+const ITEM_POKE_DOLL = 80;
+let dollArt: HTMLCanvasElement | null = null;
+/** The doll in a bubble over a trainer's head, where the "!" and "VS" sit. */
+function drawDoll(x: number, y: number): void {
+  dollArt ??= itemCut(ITEM_POKE_DOLL);
+  if (!dollArt) return;
+  const w = dollArt.width, h = dollArt.height;
+  const bx = Math.round(x + 8 - w / 2 - 2), by = Math.round(y - 16 - h - 7);
+  ctx.fillStyle = '#303030';
+  ctx.fillRect(bx + 1, by - 1, w + 2, h + 6);
+  ctx.fillRect(bx - 1, by + 1, w + 6, h + 2);
+  ctx.fillRect(bx + w / 2 + 1, by + h + 5, 2, 2);
+  ctx.fillStyle = '#f8f8f8';
+  ctx.fillRect(bx, by, w + 4, h + 4);
+  ctx.drawImage(dollArt, bx + 2, by + 2);
+}
+
+/** A flight in the air: who, the world pixels of the two cells, and the frame it began. */
+interface Flight { id: number; skin: number; from: { x: number; y: number }; to: { x: number; y: number }; start: number; round: number }
+let flights: Flight[] = [];
+const birds = new Map<number, HTMLCanvasElement>();
+
+/** Anybody who has just jumped to a town's spot flew there, on whichever page sees it. The room
+ *  has them there at once: here they go on being seen where they were, till the bird has them. */
+function flightFrame(all: Actor[]): void {
+  const round = link.room.results.round;
+  flights = flights.filter((f) => f.round === round && frame - f.start < FLIGHT_LEN);
+  for (const a of all) {
+    const was = stepSeen.get(a.id);
+    if (!was || !flew(was.spot, a.m.spot, !!a.m.action, FLY_SPOTS)) continue;
+    const from = global(was.spot), to = global(a.m.spot);
+    if (!from || !to) continue;
+    const f: Flight = { id: a.id, skin: a.skin, from: { x: from.gx * TILE, y: from.gy * TILE }, to: { x: to.gx * TILE, y: to.gy * TILE }, start: frame, round };
+    flights.push(f);
+    stepSeen.set(a.id, { spot: a.m.spot, dir: a.m.moveDir });
+    if (a.id === link.me || a.id === follow || Math.hypot(f.from.x - cam.x, f.from.y - cam.y) < 240 || Math.hypot(f.to.x - cam.x, f.to.y - cam.y) < 240) rom?.sound(SE_M_FLY);
+  }
+}
+
+function drawFlights(): void {
+  for (const f of flights) {
+    const pose = flightPose(frame - f.start);
+    const at = pose.at === 'from' ? f.from : f.to;
+    // The middle of the trainer's sprite, standing there: 32 tall, its feet on the cell.
+    const mx = at.x + TILE / 2, my = at.y;
+    const look = f.skin === 1 ? 1 : 0;
+    if (pose.bird && art) {
+      let bird = birds.get(look);
+      if (!bird) birds.set(look, (bird = art.flyBird(SKIN_GFX[look])));
+      ctx.drawImage(bird, Math.round(mx + pose.bird.x - 16), Math.round(my + pose.bird.y - 16));
+    }
+    if (pose.gone) continue;
+    // Getting on and off is the surfing sheet's frame 11, Brendan's and May's; a look with no such
+    // sheet goes in its own, facing the way the bird flies.
+    const surf = f.skin < 2 && pose.mounted ? (f.skin === 1 ? OBJ_EVENT_GFX_MAY_SURFING : OBJ_EVENT_GFX_BRENDAN_SURFING) : 0;
+    const gfx = surf && SHEETS[String(surf)].frames > 11 ? surf : SKIN_GFX[f.skin] ?? SKIN_GFX[0];
+    const s = sheet(gfx);
+    if (!s) continue;
+    const info = SHEETS[String(gfx)];
+    const fr = gfx === surf ? 11 : FACE[3];
+    ctx.drawImage(s, fr * info.w, 0, info.w, info.h, Math.round(mx + pose.rider.x - info.w / 2), Math.round(at.y + TILE - info.h + pose.rider.y), info.w, info.h);
+  }
+}
+
 /** The map at world pixel (x, y), or the nearest one to it: whose border fills the space
  *  past every map's edge. Picked by where the camera looks, the same whether it follows a
  *  trainer or is dragged, so the filler never changes with how you got there (Cam). */
@@ -3852,7 +3991,13 @@ function mapUnder(x: number, y: number): Placed | null {
 function draw(): void {
   const all = actors();
   const followed = follow ? all.find((a) => a.id === follow) : undefined;
-  if (followed) {
+  flightFrame(all);
+  // Whoever the camera goes with is seen off where they were; it follows them through the fade.
+  const flight = followed && flights.find((f) => f.id === followed.id);
+  if (flight && frame - flight.start < ARRIVES) {
+    cam.x = flight.from.x + 8;
+    cam.y = flight.from.y + 8;
+  } else if (followed) {
     const p = pixelOf(followed);
     cam.x = p.x + 8;
     cam.y = p.y + 8;
@@ -3914,7 +4059,12 @@ function draw(): void {
     .map((a) => ({ a, p: pixelOf(a) }))
     .filter(({ p }) => p.x > vx0 - 32 && p.x < vx1 + 32 && p.y > vy0 - 48 && p.y < vy1 + 32)
     .sort((u, v) => u.p.y - v.p.y);
+  // Each, while they stand in the fog: the shake now, and the blend once the fog's over everything.
+  const ring = link.room.ring();
+  const blends: (() => void)[] = [];
   const drawPerson = ({ a, p }: (typeof people)[number]): void => {
+    // In the air: drawFlights has them.
+    if (flights.some((f) => f.id === a.id)) return;
     // Under the sea: Brendan's and May's diving sheet, bobbing, with no blob (br_ghosts.c).
     const under = !!placed.get(a.m.spot.map)?.m.emerge;
     // On the water: sitting on the blob, bobbing (SURF's pose, FLDEFF_SURF_BLOB's bob).
@@ -3930,7 +4080,8 @@ function draw(): void {
     if (!s) return;
     const fr = rod ? rod.frame : surf ? FACE[a.m.facing] : frameOf(a);
     const bob = surf || under ? ((frame >> 4) & 1) - 2 : 0;
-    const dx = p.x + TILE / 2 - info.w / 2 + (rod?.dx ?? 0);
+    const poison = link.room.inFog(a.m.spot, ring) ? poisonLook(poisonBeat(link.room.tick, a.id)) : null;
+    const dx = p.x + TILE / 2 - info.w / 2 + (rod?.dx ?? 0) + (poison?.dx ?? 0);
     const dy = p.y + TILE - info.h - p.lift + bob + (rod?.dy ?? 0);
     if (surf) drawBlob(surfGfx, a.m.facing, p.x + TILE / 2 - 16, p.y + TILE - 32 - p.lift + bob + 4);
     if (a.m.facing === DIR_EAST) {
@@ -3944,6 +4095,18 @@ function draw(): void {
     if (!a.m.action && classAt(a.m.spot) === 7) {
       const pl = placed.get(a.m.spot.map)!;
       if (pl.ground) ctx.drawImage(pl.ground, a.m.spot.x * TILE, a.m.spot.y * TILE + 8, TILE, 8, p.x, p.y + 8, TILE, 8);
+    }
+    if (poison?.blend) {
+      const purple = purpleSheet(gfx, s), flip = a.m.facing === DIR_EAST;
+      // Not the feet tall grass has covered.
+      const h = !a.m.action && classAt(a.m.spot) === 7 ? info.h - 8 : info.h;
+      blends.push(() => {
+        ctx.save();
+        ctx.globalAlpha = poison.blend / 16;
+        if (flip) { ctx.translate(dx + info.w, dy); ctx.scale(-1, 1); } else ctx.translate(dx, dy);
+        ctx.drawImage(purple, fr * info.w, 0, info.w, h, 0, 0, info.w, h);
+        ctx.restore();
+      });
     }
     if (spectating && a.id === follow) {
       ctx.strokeStyle = '#ffd34d';
@@ -3989,6 +4152,14 @@ function draw(): void {
   // Not over me, nor over whoever I watch, who I can see is fighting (br_ghosts.c SeatMark).
   for (const { a, p } of people) if (a.battling && a.id !== link.me && a.id !== follow) drawVs(p.x, p.y - p.lift);
   drawFog(vx0, vy0, vx1, vy1, home);
+  drawFogLine(home, z);
+  for (const b of blends) b();
+  for (const { a, p } of people) if (dollShows(a, link.room.tick, frame)) drawDoll(p.x, p.y - p.lift);
+  drawFlights();
+  if (flight) {
+    ctx.fillStyle = `rgba(0, 0, 0, ${flightFade(frame - flight.start)})`;
+    ctx.fillRect(vx0, vy0, vx1 - vx0, vy1 - vy0);
+  }
   // A door: the screen fades out and back in over the followed trainer's warp.
   const going = followed?.m.action?.kind === 'warp' ? followed.m.action : null;
   if (going) {
@@ -4305,7 +4476,7 @@ async function boot(): Promise<void> {
     }
   }
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { watch, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; } };
+  (window as unknown as { __spike: unknown }).__spike = { watch, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; } };
 }
 
 void boot();
