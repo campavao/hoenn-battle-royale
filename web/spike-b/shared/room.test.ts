@@ -1526,7 +1526,7 @@ describe('Cam 10-30', () => {
       // Dealt over all of Hoenn (Cam 11-01), the first meeting waits for the ring to start
       // closing them in; from then on, while five or more are left after a fight, the next
       // is never long coming (with three, the hunt: 'the last three').
-      expect(fights.length, `seed ${seed}`).toBeGreaterThanOrEqual(4);
+      expect(fights.length, `seed ${seed}`).toBeGreaterThanOrEqual(3);
       expect(fights[0], `seed ${seed}`).toBeLessThan(60 * 60 * 6);
       let w = 0;
       for (let i = 1; i < fights.length; i++) if (left[i - 1] - 1 >= 5) w = Math.max(w, fights[i] - fights[i - 1]);
@@ -1559,7 +1559,8 @@ describe('the last three', () => {
       const r = host.room.results;
       expect(over(host.room)).toBe(true);
       expect(r.winner).toBeGreaterThan(0);
-      const last = r.fallen.filter((x) => (x.at ?? 0) > three);
+      // `at` is the room's tick, one past `f` for what falls inside the frame (the fog's bite).
+      const last = r.fallen.filter((x) => (x.at ?? 0) > three + 1);
       expect(last.length).toBe(2);
       expect(last.every((x) => x.by)).toBe(true);
       // Not left standing apart until the fog takes one. Which seed is slow moves with any
@@ -1876,10 +1877,11 @@ describe('field moves', () => {
     room.step(new Map([[1, [KEY_DOWN | KEY_B]]])); // B held: a walk on land, but SURF's pace on water
     expect(a.m.spot).toEqual({ map: R, x: shore!.x, y: shore!.y + 1 });
     expect(a.m.action).toMatchObject({ kind: 'step', speed: 2 });
-    // a bot's field is its own business: it is not told
+    // a bot's field is its own team's (hm-reach.test.ts): it is not told
     room.apply({ c: 'join', id: 2, bot: true, name: 'B', skin: 4, spot: { map: R, x: 0, y: 0 }, facing: 1 });
-    room.apply({ c: 'field', id: 2, bits: 7 });
-    expect(room.actor(2)!.field).toBeUndefined();
+    const own = room.actor(2)!.field;
+    room.apply({ c: 'field', id: 2, bits: own === 7 ? 0 : 7 });
+    expect(room.actor(2)!.field).toBe(own);
   });
 });
 

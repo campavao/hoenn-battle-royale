@@ -145,6 +145,16 @@ describe('a bot at a legendary', () => {
     expect(bot.battling).toBe(false);
   });
 
+  it('a new round starts it again: nothing caught, nothing tried', () => {
+    const room = stage();
+    const bot = atIt(room);
+    room.apply({ c: 'bots', id: HOST_JUDGE, a: 7, b: LEGEND_FOE, winner: 7 });
+    expect(bot.caught).toEqual([404]);
+    (room as unknown as { newRound(n: number): void }).newRound(room.results.round + 1);
+    expect(room.actor(7)?.caught).toBeUndefined();
+    expect(room.actor(7)?.tried).toBeUndefined();
+  });
+
   it('no answer: it stands, and the bot walks on', () => {
     const room = stage();
     const bot = atIt(room);

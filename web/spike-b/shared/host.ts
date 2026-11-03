@@ -263,6 +263,8 @@ export class Host {
         const brain = this.brains.get(a.id);
         const bits = brain && !a.battling ? botKeys(room, a, brain) : 0;
         if (bits !== a.keys) { keys.push([a.id, bits]); a.keys = bits; }
+        // Its team can FLY and the fog has it (bots.ts flyGoal): a `fly` for every mirror, next frame.
+        if (brain?.flyTo) { this.pending.push({ c: 'fly', id: a.id, to: brain.flyTo }); brain.flyTo = undefined; }
         continue;
       }
       const p = this.players.get(a.id);

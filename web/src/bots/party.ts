@@ -12,6 +12,7 @@ import { mulberry32, pickIndex } from '../match/clock';
 import { Grade } from './roster';
 import type { PackedMon } from '../net/wire';
 import encounterData from '../data/encounters.json';
+import HMS from '../data/hms.json';
 
 /** `tools/br/export-encounters.py`: every map's land table, species ids, the commonest
  *  first, plus the level-up evolutions. A bot on Route 119 should be carrying Route
@@ -87,6 +88,27 @@ export const POOL: { species: number; name: string; moves: number[]; water?: tru
   { species: 337, name: 'ELECTRIKE', moves: [33, 84] }, // THUNDER SHOCK
   { species: 335, name: 'MAKUHITA', moves: [4, 43] },
 ];
+
+/** Knows the move, or its species could learn the HM (tools/br/export-hms.py; br_hm.c BrHm_Slot,
+ *  and Cam's 10-19 play-test: "only fly if you have ... a Pokemon that could learn Fly"). */
+function couldDo(team: readonly PackedMon[], hm: keyof typeof HMS, move: number): boolean {
+  return team.some((m) => {
+    if (m.moves.some((v) => v.id === move)) return true;
+    const byte = parseInt(HMS[hm].substr((m.species >> 3) * 2, 2), 16);
+    return !Number.isNaN(byte) && ((byte >> (m.species & 7)) & 1) === 1;
+  });
+}
+
+/** What a dealt team could do on the field, in the room's bits (room.ts FIELD_*: CUT 1, STRENGTH 2,
+ *  SURF 4), as a trainer's page tells the room of theirs (carry.ts fieldOf). */
+export function teamField(team: readonly PackedMon[]): number {
+  return (couldDo(team, 'cut', MOVE_CUT) ? 1 : 0) | (couldDo(team, 'strength', MOVE_STRENGTH) ? 2 : 0) | (couldDo(team, 'surf', MOVE_SURF) ? 4 : 0);
+}
+
+/** And whether it could FLY (carry.ts couldFly's rule for a trainer's team). */
+export function teamFlies(team: readonly PackedMon[]): boolean {
+  return couldDo(team, 'fly', MOVE_FLY);
+}
 
 function hp(level: number): number {
   // Not the Gen 3 formula -- the ROM computes the real one when it builds the mon.
