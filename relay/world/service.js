@@ -13160,6 +13160,7 @@ var Room = class {
       a.bleedAt = void 0;
       a.loot = void 0;
       if (a.judge) this.part(a);
+      a.caught = a.tried = void 0;
     }
     if (safari) {
       for (const a of this.actors) if (a.bot) a.m = newMover(this.zone(a.id)[0] ?? a.m.spot, a.m.facing);
@@ -15077,4 +15078,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "3fa568f49ead";
+export const WORLD_HASH = "12e74e641469";
