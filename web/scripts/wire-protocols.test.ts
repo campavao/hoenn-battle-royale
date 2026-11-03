@@ -32,7 +32,8 @@ describe('the protocol rows (tools/br/wire-protocols.txt)', () => {
         `${PATH} had these rows at ${sha.slice(0, 9)}: a table that changes shape is a new row under the next protocol, never a new hash under an old one`,
       ).toEqual([]);
     }
-  });
+    // A blobless clone fetches each old row over the network: 18 s on CI, past the 5 s default.
+  }, 120_000);
 
   it('count a row re-pinned in place, or dropped, as changed, and a row added as not', () => {
     const committed = protocolRows('1 0x777CC3AA\n2 0x0000BEEF\n');
