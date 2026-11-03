@@ -545,13 +545,15 @@ const handoff: number[] = []; // ms from the trigger to the ROM's first battle f
 /** A battle the ROM fights, the page showing it from its first frame and taking the
  *  screen back when it is over. */
 let logFight = 0;
-function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>, opts: { log?: boolean; label?: { name: string; skin: number } } = {}): void {
+function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>, opts: { log?: boolean; weather?: number; label?: { name: string; skin: number } } = {}): void {
   // One battle at a time: one still running from the match before (its ROM is busy with
   // it) turns this one down, or its end would be credited to this foe.
   if (battle) { link.end(); return; }
   held.clear();
   battle = { foe, shownAt: performance.now(), round: link.room.results.round, link, net: new FirstMenuNet() };
   const mine = battle;
+  const standing = link.mine()?.m.spot;
+  rom?.fieldWeather(opts.weather ?? (standing ? link.room.weatherAt(standing) : 0));
   if (!rom) {
     battleEl.classList.add('on');
     battleNote.textContent = 'The game is still loading. Try again in a moment.';
@@ -1375,7 +1377,7 @@ function startFor(e: RoomEvent): void {
         if (take) for (const [q, d] of early.splice(0)) take(q, d);
       },
     };
-    handOff(foe, (r, onStart) => r.duel(me.name, foe.name, foe.skin, e.first, wire, onStart, fog, voiceOfMember(foe.id)), { log: e.first });
+    handOff(foe, (r, onStart) => r.duel(me.name, foe.name, foe.skin, e.first, wire, onStart, fog, voiceOfMember(foe.id)), { log: e.first, weather: e.weather ?? 0 });
   } else {
     const m = placed.get(e.map)!.m;
     const fog = inFogNow();

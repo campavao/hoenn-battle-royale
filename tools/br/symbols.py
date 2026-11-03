@@ -37,7 +37,7 @@ ENGINE_SYMBOLS = [
     "gMonIconTable", "gMonIconPaletteIndices", "gMonIconPaletteTable", "gBagMaleTiles", "gBagPalette", "gSpeciesInfo", "gAbilityNames", "gBattlerPartyIndexes", "gBattlePartyCurrentOrder", "gTasks",
     # The curtain into a match (web/spike-b/curtain.ts).
     "gContestCurtainTilemap", "gContestInterfaceGfx", "gContestInterfaceAudiencePalette",
-    "gBattleTypeFlags", "gBattleWeather", "gBattleEnvironment", "gBattleOutcome", "gBattleMainFunc", "gBattlerControllerFuncs",
+    "gWeatherPtr", "gBattleTypeFlags", "gBattleWeather", "gBattleEnvironment", "gBattleOutcome", "gBattleMainFunc", "gBattlerControllerFuncs",
     "gLinkPlayers", "gBlockRecvBuffer", "gBlockSendBuffer", "gWirelessCommType",
     "gRngValue", "gSaveBlock1", "gSaveBlock2", "gNumSafariBalls",
     "gBattleCommunication", "gBattleControllerExecFlags", "gBattlersCount", "gBattleBufferA", "gBattleBufferB", "gBattleMons", "gBattleStruct",

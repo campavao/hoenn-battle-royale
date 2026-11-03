@@ -28,7 +28,7 @@
 
 import { clerkAt, type Clerk } from './marts';
 import { leaderAt } from './gyms';
-import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, draw, eventForRing } from '../../src/match/events';
+import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, clashWeather, draw, eventForRing, legendOf } from '../../src/match/events';
 import { DOOR_Y, FINAL_CHANCE, STORIES, STORY_CHANCE, type Story, type StoryDoor } from '../../src/match/story';
 import { dealParty, rungForPhase, teamField, teamFlies, tradedMon } from '../../src/bots/party';
 import { gradeOf } from '../../src/bots/roster';
@@ -192,7 +192,7 @@ export type RoomEvent =
   | { type: 'fight'; tick: number; id: number; foe: number }
   /** Two trainers saw each other: a link battle. `first` is the side that challenged
    *  (link id 0, the lower id, as the ROM's own engage has it). */
-  | { type: 'duel'; tick: number; id: number; foe: number; first: boolean }
+  | { type: 'duel'; tick: number; id: number; foe: number; first: boolean; weather?: number }
   | { type: 'item'; tick: number; id: number; key: number; item: number; gift?: boolean }
   | { type: 'bag'; tick: number; id: number; key: number; bag: Bag; name: string; person?: Spill['person'] }
   /** A at a CENTER's nurse, from the counter. */
@@ -1351,7 +1351,7 @@ export class Room {
       .sort((p, q) => d(p) - d(q) || p.y - q.y || p.x - q.x).slice(0, 1 + EVENT_RARES + EVENT_GOLD + 2);
     const level = rungForPhase(ring.phase + 1);
     const legends = LEGENDS[Math.min(n, LEGENDS.length - 1)];
-    const species = [legends[Math.min(legends.length - 1, Math.floor(rng() * legends.length))], ...draw(rng, RARES, EVENT_RARES)];
+    const species = [legendOf(legends, this.seed, rng), ...draw(rng, RARES, EVENT_RARES)];
     const bags = [...draw(rng, GOLD, EVENT_GOLD).map((id) => [{ id, n: 1 }]), SUPPLIES.map((r) => ({ ...r }))];
     // The cell past the pieces is the trader's, with a rare the event did not drop.
     const spot = cells.length > species.length + bags.length ? cells.pop()! : undefined;
@@ -1381,7 +1381,7 @@ export class Room {
    *  rung, its rares, its items, the supplies, and the trader past them. */
   private tellStory(n: number, ring: Ring, story: Story, rng: () => number): void {
     const level = rungForPhase(ring.phase + 1);
-    const species = [...(story.mons ?? []).map((pick) => pick[Math.floor(rng() * pick.length)]), ...draw(rng, RARES, story.rares ?? 0)];
+    const species = [...(story.mons ?? []).map((pick) => legendOf(pick, this.seed, rng)), ...draw(rng, RARES, story.rares ?? 0)];
     const bags = [...(story.items ?? []).map((pick) => [{ id: pick[Math.floor(rng() * pick.length)], n: 1 }]), SUPPLIES.map((r) => ({ ...r }))];
     const cells = story.cells.map((c) => ({ map: c.map ?? story.map, x: c.x, y: c.y }));
     const pieces = species.length + bags.length;
@@ -1536,6 +1536,20 @@ export class Room {
       if (s && left !== undefined) s.worn = Math.min(1, Math.max(0, left));
     }
     this.part(a);
+  }
+
+  /** The weather a fight starts in, standing at `s`: KYOGRE's rain or GROUDON's drought, the seed's
+   *  pick, in SOOTOPOLIS from the frame its story drops until its piece is gone, and the fight for
+   *  it is in it too (br_story.c BrStory_Weather; POK-384). 0 anywhere else. The room's, so nothing
+   *  waits a frame for a ROM's task to notice, and every seat has the one answer. */
+  weatherAt(s: Spot): number {
+    if (s.map !== 'MAP_SOOTOPOLIS_CITY') return 0;
+    const live = this.events.some((e) => {
+      if (e.story !== 'sootopolis' || !this.spills.has(e.key)) return false;
+      const by = this.picked.get(e.key);
+      return by === undefined || !!this.actor(by)?.battling;
+    });
+    return live ? clashWeather(this.seed) : 0;
   }
 
   /** `id` off the map, and everything that waited on them let go. */
@@ -1885,8 +1899,11 @@ export class Room {
       w.meet = o.meet = undefined;
       const [h, f] = w.bot ? [o, w] : o.bot ? [w, o] : w.id < o.id ? [w, o] : [o, w];
       if (m.duel) {
-        events.push({ type: 'duel', tick: this.tick, id: h.id, foe: f.id, first: true });
-        events.push({ type: 'duel', tick: this.tick, id: f.id, foe: h.id, first: false });
+        // One weather for the two of them, from the frame they met: a link battle reads it on both
+        // GBAs, and one side in rain is two different battles (br_story.c).
+        const weather = this.weatherAt(h.m.spot);
+        events.push({ type: 'duel', tick: this.tick, id: h.id, foe: f.id, first: true, ...(weather ? { weather } : {}) });
+        events.push({ type: 'duel', tick: this.tick, id: f.id, foe: h.id, first: false, ...(weather ? { weather } : {}) });
       } else { f.foughtBy = h.id; events.push({ type: 'fight', tick: this.tick, id: h.id, foe: f.id }); }
     }
   }
