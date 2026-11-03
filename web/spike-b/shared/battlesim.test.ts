@@ -118,13 +118,29 @@ describe('battlesim', () => {
 
   it('ends a fight that will not: the cap, nobody the winner', () => {
     const out = simulate(side(1, [card(44, 100), card(45, 100)]), side(2, [card(16, 100), card(17, 100)]), { seed: 9, turnCap: 1 });
-    expect(out).toMatchObject({ capped: true, winner: 0, loser: 0 });
+    expect(out.capped).toBe(true);
     expect(out.turns).toBe(2);
-    expect(out.log.at(-1)).toEqual({ e: 'end', winner: 0 });
+    // Judged on the HP left, not a coin: the same fight has the same answer.
+    expect(out.log.at(-1)).toEqual({ e: 'end', winner: out.winner });
+    expect(simulate(side(1, [card(44, 100), card(45, 100)]), side(2, [card(16, 100), card(17, 100)]), { seed: 9, turnCap: 1 }).winner).toBe(out.winner);
+    // A fight nobody has touched is level: nobody won.
+    const untouched = simulate(side(1, [card(44, 100)]), side(2, [card(16, 100)]), { seed: 9, turnCap: 0 });
+    expect(untouched).toMatchObject({ capped: true, winner: 0, loser: 0 });
     expect(TURN_CAP).toBe(100);
   });
 
-  it('the fog bites each turn, and can end it', () => {
+  it('the fog hurts but never finishes anybody (br_ring.c)', () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const { log } = simulate(side(1, [card(44, 50)]), side(2, [card(16, 50)]), { seed, fog: true });
+      log.forEach((e, i) => {
+        if (e.e !== 'text' || !/hurt by the fog!$/.test(e.text)) return;
+        const hp = log.slice(i + 1).find((x) => x.e === 'hp');
+        if (hp?.e === 'hp') expect(hp.hp, `seed ${seed}`).toBeGreaterThan(0);
+      });
+    }
+  });
+
+  it('the fog bites each turn', () => {
     const fought = simulate(side(1, [card(44, 50)]), side(2, [card(16, 50)]), { seed: 2, fog: true });
     const lines = fought.log.flatMap((e) => (e.e === 'text' ? [e.text] : []));
     expect(lines.some((l) => /is hurt by the fog!$/.test(l))).toBe(true);

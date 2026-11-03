@@ -9347,7 +9347,8 @@ function* simulation(a, b2, opts) {
   battle.setPlayer("p2", { name: "B", team: teamB.sets });
   if (opts.fog) {
     battle.onEvent("Residual", battle.format, (mon2) => {
-      if (mon2.hp > 0) battle.damage(Math.max(1, Math.floor(mon2.maxhp / 10)), mon2, mon2, FOG);
+      const bite = Math.min(Math.max(1, Math.floor(mon2.maxhp / 10)), mon2.hp - 1);
+      if (bite > 0) battle.damage(bite, mon2, mon2, FOG);
     });
   }
   const sides = battle.sides;
@@ -9402,7 +9403,9 @@ function* simulation(a, b2, opts) {
     return { row, share };
   };
   const ra2 = report(0), rb = report(1);
-  const winner = capped ? 0 : battle.winner === "A" ? a.seat : battle.winner === "B" ? b2.seat : 0;
+  const left = (share) => share.reduce((t7, x2) => t7 + x2, 0) / Math.max(1, share.length);
+  const byHp = left(ra2.share) > left(rb.share) ? a.seat : left(rb.share) > left(ra2.share) ? b2.seat : 0;
+  const winner = capped ? byHp : battle.winner === "A" ? a.seat : battle.winner === "B" ? b2.seat : 0;
   const logSide = (n) => {
     const s = inputs[n];
     const team = s.party.map(plainMon);
@@ -13894,7 +13897,8 @@ var Host = class {
     try {
       if (!f.run) {
         const seed = (Math.imul(r.seed ^ f.since, 2654435761) ^ Math.imul(f.a, 2246822507) ^ Math.imul(f.b, 3266489909)) >>> 0;
-        f.run = this.simulation(this.simSide(f.a), this.simSide(f.b), { seed, map: r.actor(f.a)?.m.spot.map ?? "" });
+        const at2 = r.actor(f.a)?.m.spot;
+        f.run = this.simulation(this.simSide(f.a), this.simSide(f.b), { seed, map: at2?.map ?? "", fog: !!at2 && r.inFog(at2) });
       }
       const step = f.run.next();
       if (!step.done) return;
@@ -14521,4 +14525,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "3a9c3cac6361";
+export const WORLD_HASH = "61d9db6982f0";

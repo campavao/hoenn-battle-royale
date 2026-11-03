@@ -354,7 +354,9 @@ export class Host {
       if (!f.run) {
         // Every number in it from the match: a fight can be run again from its seed.
         const seed = (Math.imul(r.seed ^ f.since, 0x9e3779b1) ^ Math.imul(f.a, 0x85ebca6b) ^ Math.imul(f.b, 0xc2b2ae35)) >>> 0;
-        f.run = this.simulation!(this.simSide(f.a), this.simSide(f.b), { seed, map: r.actor(f.a)?.m.spot.map ?? '' });
+        // In the fog where they stand, it bites them as it does a trainer in a fight (Cam, 11-02).
+        const at = r.actor(f.a)?.m.spot;
+        f.run = this.simulation!(this.simSide(f.a), this.simSide(f.b), { seed, map: at?.map ?? '', fog: !!at && r.inFog(at) });
       }
       const step = f.run.next();
       if (!step.done) return;

@@ -34,7 +34,7 @@ export interface SimOptions {
   seed: number;
   /** Where it is, for the log's ground. */
   map?: string;
-  /** The fog bites at each turn's end (br_ring.c). A bot-vs-bot fight has had none so far. */
+  /** The fog bites at each turn's end, as it does a trainer's (br_ring.c; Cam, 11-02). */
   fog?: boolean;
   /** TURN_CAP, for a test. */
   turnCap?: number;
@@ -54,7 +54,7 @@ export interface SimOutcome {
   usedA: number[];
   usedB: number[];
   turns: number;
-  /** The fight ran to TURN_CAP and nobody won. */
+  /** The fight ran to TURN_CAP: whoever has the most of their team's HP left won (nobody, level). */
   capped: boolean;
   log: BattleEvent[];
   /** Engine lines the log had no words for: empty on a clean fight, read by the tests. */
@@ -399,7 +399,9 @@ export function* simulation(a: SimSide, b: SimSide, opts: SimOptions): Generator
   battle.setPlayer('p2', { name: 'B', team: teamB.sets });
   if (opts.fog) {
     battle.onEvent('Residual', battle.format, (mon: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-      if (mon.hp > 0) battle.damage(Math.max(1, Math.floor(mon.maxhp / 10)), mon, mon, FOG);
+      // A tenth, and it hurts but never finishes anybody (br_ring.c's floorAtOne).
+      const bite = Math.min(Math.max(1, Math.floor(mon.maxhp / 10)), mon.hp - 1);
+      if (bite > 0) battle.damage(bite, mon, mon, FOG);
     });
   }
 
@@ -451,7 +453,11 @@ export function* simulation(a: SimSide, b: SimSide, opts: SimOptions): Generator
     return { row, share };
   };
   const ra = report(0), rb = report(1);
-  const winner = capped ? 0 : battle.winner === 'A' ? a.seat : battle.winner === 'B' ? b.seat : 0;
+  // Out of turns: judged on what's left, as a share of each team (Cam's rule is no coin flip, and
+  // this is what the fight showed). Level, nobody won, and both walk on.
+  const left = (share: number[]) => share.reduce((t, x) => t + x, 0) / Math.max(1, share.length);
+  const byHp = left(ra.share) > left(rb.share) ? a.seat : left(rb.share) > left(ra.share) ? b.seat : 0;
+  const winner = capped ? byHp : battle.winner === 'A' ? a.seat : battle.winner === 'B' ? b.seat : 0;
 
   const logSide = (n: 0 | 1): LogSide => {
     const s = inputs[n];
