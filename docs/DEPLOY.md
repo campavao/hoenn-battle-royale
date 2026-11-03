@@ -148,6 +148,52 @@ the same build, and the relay gates rooms on the sha1 of the ROM each tab runs a
 `br-version.json`'s `protocol` (POK-330 #3), so a relay that raises `minProtocol` needs the
 site deployed first.
 
+## On its own (auto-release.yml)
+
+`.github/workflows/auto-release.yml` ships the branch's head without being asked. It runs when
+a BR CI run on `hoenn-battle-royale` ends and every 15 minutes, holds no runner while it waits,
+and dispatches BR CI when all of these are true:
+
+- something other than docs changed since the highest tag;
+- the head's tree has both green stamps (below);
+- no release is running, and this commit has not failed twice already (a red run stays red
+  for someone to read; the next commit starts again);
+- `/health` says `"locked":0`, and `"world":0` too if `relay/`, `web/spike-b/shared/` or the ROM
+  changed since the highest tag (`tools/br/release-needs-empty.sh`). `locked` is only the old
+  rooms: a match of the game itself is on `/world`, whose connected trainers are `world`. A
+  site deploy that changes none of those can't touch a running match, so it goes out with
+  people on. No answer counts as no.
+
+The version is the next patch after the highest tag. It is read at dispatch and the tag is
+made only once the release job's gates pass, so a run that fails early leaves no hole and no
+commit bumps a version. `AUTO_RELEASE=off` (Settings -> Variables -> Actions) stops it. An
+open tab holds `world` at 1 or more, so a release that has to ask it can wait a long time:
+dispatch by hand with `ignore_match` to go anyway.
+
+### Reusing a green run
+
+The `green` job uploads a stamp named after the **git tree** a run tested: `green-checks-<tree>`
+(guards, wasm, web, relay and the whole e2e) and `green-rom-<tree>` (the ROM's sha1, once every
+driver passed). They last 14 days. A squash merge onto a base that has not moved since the
+PR's run has that run's tree. A run where any test passed only on a retry earns no
+`green-checks`, so the next run on that tree replays the e2e: only a clean first-try pass is
+reused. So:
+
+- the **push** skips whatever is stamped. A PR with `rom=false` stamps only the checks, so its
+  push still builds and drives the ROM. A base that moved means a new tree and the whole suite;
+- a **release** skips the same jobs but always builds the agbcc ROM and patch, runs `pret`, and
+  fails if the ROM's sha1 is not the stamped one. No stamp, or `full` on the dispatch, replays
+  everything as before. The run's summary names the run it reused.
+
+| when it fails | what happened | what to do |
+|---|---|---|
+| before `release` (a build, `pret`, the ROM's sha1) | nothing published | read the run; `full` if the toolchain moved |
+| `No match is live`, after 30 minutes | nothing published | auto-release tries once more |
+| after the tag (the site, `verify-site.sh`, the relay) | tag and GitHub release exist; the old site or relay may still be live | dispatch the same version on the same commit; a later release also deploys the relay if the last green release predates its change |
+
+A failed run is the only signal: nothing rolls the site back. `play-firefox` is outside the
+gate, so a red one can follow a good deploy.
+
 ## By tag (CI does all of the above)
 
 ```bash
@@ -167,8 +213,9 @@ session ships, since it can't push tags but can dispatch a workflow (the GitHub 
 tags the commit it built and carries on as below. The tag it pushes starts no second run.
 If a deploy fails after the tag, dispatch the same version on the same commit again: a tag
 that already names the commit goes through, one naming any other commit stops the run.
-A dispatch is a release like any other: check Cam isn't playing first, and a `relay/` change
-since the last tag restarts the relay, which drops every room.
+A dispatch is a release like any other: the release job waits for the relay to show no match
+and no players (`ignore_match` skips that), and a `relay/` change since the last release that
+finished restarts the relay, which drops every room.
 
 `.github/workflows/ci.yml`'s `release` job builds the ROM with agbcc, diffs it against
 the baseline pret build into the BPS (no retail ROM needed), attaches the patch and its

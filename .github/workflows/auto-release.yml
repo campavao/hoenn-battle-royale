@@ -1,0 +1,94 @@
+name: auto release
+
+# Ships hoenn-battle-royale's head once it has passed and nobody is playing (Cam, 2026-10-31:
+# a release whenever a batch is ready and no match is live). It decides and dispatches BR CI;
+# the release itself is ci.yml's, gates and all. It holds no state and no runner while it
+# waits: every pass asks again from the top, so a pass that finds a match running ends, and
+# the next one (a finished run, or the clock) tries again. Repository variable
+# AUTO_RELEASE=off stops it. docs/DEPLOY.md has the rules.
+on:
+  workflow_run:
+    workflows: [BR CI]
+    types: [completed]
+    branches: [hoenn-battle-royale]
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write # gh workflow run
+
+jobs:
+  decide:
+    if: vars.AUTO_RELEASE != 'off'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: hoenn-battle-royale
+          fetch-depth: 0 # every tag, and the diff since the last one
+          filter: blob:none
+
+      - name: Dispatch a release if one is due
+        run: |
+          head="$(git rev-parse HEAD)"
+          tree="$(git rev-parse 'HEAD^{tree}')"
+          # The version sort, so v0.3.100 comes after v0.3.99.
+          last="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)"
+          say() { echo "$1"; echo "$1" >> "$GITHUB_STEP_SUMMARY"; }
+
+          # Nothing new, or only words: the rules that scope a pull request say what can
+          # change the game.
+          if git diff --quiet "$last" HEAD; then say "$last is already $head's tree"; exit 0; fi
+          git diff -z --no-renames --name-only "$last" HEAD > changed
+          if [ "$(node web/scripts/ci-scope.mjs < changed | tr '\n' ' ')" = 'rom=false e2e=none ' ]; then
+            say "only docs since $last"; exit 0
+          fi
+
+          # Green is both stamps on this exact tree, from a pull request's run or a push's.
+          # None yet means a run is going or has failed; a run's end brings this back here.
+          for kind in checks rom; do
+            if [ -z "$(tools/br/green-stamp.sh "$kind" "$tree")" ]; then
+              say "$head has no green-$kind stamp"; exit 0
+            fi
+          done
+
+          # One release at a time; its end brings this back here too.
+          busy="$(gh run list --workflow ci.yml --event workflow_dispatch --limit 20 \
+            --json status --jq '[.[] | select(.status != "completed")] | length')"
+          if [ "$busy" != 0 ]; then say "a release is running"; exit 0; fi
+
+          # Two failed tries on this commit: leave them red for someone to read, instead of
+          # dispatching one every quarter hour. The next commit gets its own two.
+          failed="$(gh run list --workflow ci.yml --event workflow_dispatch --commit "$head" --limit 20 \
+            --json conclusion --jq '[.[] | select(.conclusion == "failure")] | length')"
+          if [ "$failed" -ge 2 ]; then
+            echo "::warning::$failed failed releases on $head; not trying again until a new commit"
+            exit 0
+          fi
+
+          # `locked` is the old rooms alone: a match of the game itself is on /world, whose
+          # trainers are `world`, and any open tab counts there. So only a release that changes
+          # what a running match stands on asks it. No answer is not a yes.
+          want='.locked == 0'
+          if [ "$(bash tools/br/release-needs-empty.sh "$last")" = yes ]; then want='.locked == 0 and .world == 0'; fi
+          health="$(curl -fsS --max-time 15 https://hoenn-relay-production.up.railway.app/health || true)"
+          if ! printf '%s' "$health" | jq -e "$want" >/dev/null 2>&1; then
+            say "not now, the relay says: ${health:-no answer}"; exit 0
+          fi
+
+          # The next patch after the highest tag, read now and made only when the release
+          # job passes its gates, so a run that fails before its tag leaves no hole in the
+          # numbers. A race for a number stops at the rom job's check that the tag is new.
+          base="${last%.*}"
+          next="$base.$(( ${last##*.} + 1 ))"
+          gh workflow run ci.yml --ref hoenn-battle-royale -f "version=$next"
+          say "dispatched $next at $head"

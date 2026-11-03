@@ -1,7 +1,7 @@
 // CI's e2e shards (scripts/e2e-shard.mjs): every test in exactly one, cut by time.
 import { readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { cut, FILE_SECONDS, UNKNOWN_SECONDS } from './e2e-shard.mjs';
+import { cut, FILE_SECONDS, SLOW_TESTS, UNKNOWN_SECONDS } from './e2e-shard.mjs';
 
 const at = (file: string, ...lines: number[]) => lines.map((line) => ({ file, line }));
 
@@ -28,7 +28,15 @@ describe('e2e-shard', () => {
     const shards = cut([...at('brand-new.spec.ts', 9), ...at('recorder.spec.ts', 61, 61)], 2);
     const filters = shards.flatMap((s) => s.filters);
     expect(filters.sort()).toEqual(['e2e/brand-new.spec.ts:9', 'e2e/recorder.spec.ts:61']);
-    expect(shards.map((s) => s.seconds).sort((a, b) => a - b)).toEqual([UNKNOWN_SECONDS, FILE_SECONDS['recorder.spec.ts']]);
+    const want = [UNKNOWN_SECONDS, FILE_SECONDS['recorder.spec.ts']].sort((a, b) => a - b);
+    expect(shards.map((s) => s.seconds).sort((a, b) => a - b)).toEqual(want);
+  });
+
+  it('counts a slow test at its own time, out of the total of its file', () => {
+    const [title, slow] = Object.entries(SLOW_TESTS)[0];
+    const shards = cut([{ file: 'spikeb.spec.ts', line: 1, title }, ...at('spikeb.spec.ts', 2, 3)], 2);
+    expect(shards[0].seconds).toBe(slow);
+    expect(shards[1].seconds).toBe(FILE_SECONDS['spikeb.spec.ts'] - slow);
   });
 
   it('names the path from web/, so watch.spec.ts cannot also pick out-watch.spec.ts', () => {
