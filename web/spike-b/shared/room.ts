@@ -362,6 +362,9 @@ const KEY_TO: Record<number, number> = { 1: KEY_DOWN, 2: KEY_UP, 3: KEY_LEFT, 4:
  *  DUEL_COOLDOWN_MS): every pair that could see each other fighting at once decided a
  *  full room before the first ring moved. */
 export const BOT_DUEL_GAP = 60 * 12;
+/** `judge` for a bot-vs-bot fight the host simulates itself (Room.simBots, battlesim.ts): no
+ *  trainer's id is ever this, so no page takes it for its own. */
+export const HOST_JUDGE = -1;
 /** A bot-vs-bot fight nobody has answered for this long lets them go: a page gone quiet
  *  with its socket open. Past the proxy's own limit (36,000 of its frames, at the 70 a
  *  second it gets behind a busy page), because a fight let go of is fought again from the
@@ -501,6 +504,8 @@ export interface RoomState {
   opening?: number;
   /** No bot-vs-bot fight starts before this frame (BOT_DUEL_GAP). */
   duelAfter?: number;
+  /** Room.simBots. */
+  simBots?: boolean;
   events?: EventMark[];
   /** The gym leaders beaten this round: leader n, by whom. */
   gyms?: [number, string][];
@@ -581,6 +586,9 @@ export class Room {
   bench: Benched[] = [];
   results: Results = { round: 0, entrants: [], fallen: [], winner: 0 };
   duelAfter = 0;
+  /** Bot-vs-bot fights are the host's to simulate (battlesim.ts), not a page's hidden ROM's: any
+   *  number at once, when they meet. Off, as ever, until it has been played enough. */
+  simBots = false;
   /** This round's events, in the order they dropped. */
   events: EventMark[] = [];
   /** Who beat which gym leader this round, in the order they fell. */
@@ -625,7 +633,7 @@ export class Room {
   }
 
   state(): RoomState {
-    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...(this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}), ...(this.epoch ? { epoch: this.epoch } : {}), ...(this.opening ? { opening: this.opening } : {}), ...(this.duelAfter ? { duelAfter: this.duelAfter } : {}), ...(this.events.length ? { events: structuredClone(this.events) } : {}), ...(this.gyms.length ? { gyms: structuredClone(this.gyms) } : {}), homes: structuredClone(this.homes) };
+    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...(this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}), ...(this.epoch ? { epoch: this.epoch } : {}), ...(this.opening ? { opening: this.opening } : {}), ...(this.duelAfter ? { duelAfter: this.duelAfter } : {}), ...(this.simBots ? { simBots: true } : {}), ...(this.events.length ? { events: structuredClone(this.events) } : {}), ...(this.gyms.length ? { gyms: structuredClone(this.gyms) } : {}), homes: structuredClone(this.homes) };
   }
 
   load(s: RoomState): void {
@@ -634,6 +642,7 @@ export class Room {
     this.epoch = s.epoch ?? 0;
     this.opening = s.opening ?? 0;
     this.duelAfter = s.duelAfter ?? 0;
+    this.simBots = s.simBots ?? false;
     this.events = structuredClone(s.events ?? []);
     this.gyms = structuredClone(s.gyms ?? []);
     this.homes = s.homes ? structuredClone(s.homes) : this.dealHomes(s.results?.round ?? 0);
@@ -1336,7 +1345,7 @@ export class Room {
    *  nobody fights. */
   private engageBots(events: RoomEvent[]): void {
     if (this.ring().safari) return;
-    if (this.tick < this.duelAfter || this.tick % 8) return;
+    if ((!this.simBots && this.tick < this.duelAfter) || this.tick % 8) return;
     // A page that can run it now: not reloading, not in a battle of its own (its ROM is
     // busy); or one on the bench, out and watching (or in for the next match), which is
     // still here: a phone that goes leaves the bench too. Otherwise, once the last trainer
@@ -1347,7 +1356,7 @@ export class Room {
     // minutes, 2 fought (2026-11-02). Until a page is free, they walk.
     const judges = [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b) => !b.away)]
       .filter((j) => !this.actors.some((a) => a.judge === j.id));
-    if (!judges.length) return;
+    if (!this.simBots && !judges.length) return;
     const byMap = new Map<string, Actor[]>();
     for (const a of this.actors) {
       if (!a.bot || a.battling || a.m.action || this.tick < a.calm) continue;
@@ -1361,20 +1370,22 @@ export class Room {
       for (let i = 0; i < l.length; i++) {
         for (let j = i + 1; j < l.length; j++) {
           const a = l[i], b = l[j];
-          if (!eitherSees(this.world, look(a), look(b))) continue;
+          if (a.battling || b.battling || !eitherSees(this.world, look(a), look(b))) continue;
           const dx = b.m.spot.x - a.m.spot.x, dy = b.m.spot.y - a.m.spot.y;
           const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
           a.m.facing = a.m.moveDir = toB;
           b.m.facing = b.m.moveDir = BACK[toB];
-          const judge = judges[(this.tick >>> 3) % judges.length];
+          const judge = this.simBots ? HOST_JUDGE : judges[(this.tick >>> 3) % judges.length].id;
           a.battling = b.battling = true;
           a.foe = b.id;
           b.foe = a.id;
-          a.judge = b.judge = judge.id;
+          a.judge = b.judge = judge;
           a.since = b.since = this.tick;
           a.keys = a.last = b.keys = b.last = 0;
+          events.push({ type: 'bots', tick: this.tick, id: judge, a: a.id, b: b.id });
+          // The host has no one fight at a time: every pair that has met, fights.
+          if (this.simBots) continue;
           this.duelAfter = this.tick + BOT_DUEL_GAP;
-          events.push({ type: 'bots', tick: this.tick, id: judge.id, a: a.id, b: b.id });
           return;
         }
       }

@@ -158,6 +158,7 @@ and not on the list is refused before the upgrade completes.
 | `BR_MIN_PROTOCOL` | `1` | advertised in `info` as `minProtocol` |
 | `BR_ORIGINS` | unset (allow all) | comma-separated `Origin` allow-list |
 | `BR_WORLD_PER_IP` | `8` | `/world` connections from one address (30 trainers in the world at most, 64 bots) |
+| `WORLD_SIM_BOTS` | unset | `1`: this relay simulates its bots' fights itself (`Room.simBots`, `web/spike-b/shared/battlesim.ts`) instead of handing each to a trainer's page |
 | `BR_TRUST_PROXY` | unset | `1`: a client's address is the proxy's `X-Real-IP`, else the last `X-Forwarded-For` entry. **Set it on Railway** |
 
 A ceiling that is not a positive number (`BR_MAX_ROOMS=forty`, `0`) is
