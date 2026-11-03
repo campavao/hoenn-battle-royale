@@ -57,7 +57,7 @@ test('the worker caches what it should and never the version file', async () => 
 
 // The built site, served by `vite preview` on its own port (playwright.config.ts) with
 // the same COOP/COEP headers production sends.
-const PREVIEW = 'http://localhost:5175';
+const PREVIEW = `http://localhost:${Number(process.env.HBR_E2E_PORT) ? Number(process.env.HBR_E2E_PORT) + 2 : 5175}`;
 
 test('after one visit the game comes back with the network gone', async ({ browser }) => {
   test.setTimeout(90_000);

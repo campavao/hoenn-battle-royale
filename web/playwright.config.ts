@@ -8,12 +8,15 @@ const __dirname = import.meta.dirname;
 
 // Fixed, out-of-the-way ports so this never fights a `npm run dev` (5173) or a real
 // relay (7790) the developer already has open.
-const RELAY_PORT = 7791;
-const VITE_PORT = 5174;
+// HBR_E2E_PORT moves all three, so two checkouts can test at once: on the same ports the second
+// would reuse the first's servers (reuseExistingServer) and test the wrong code, green.
+const BASE_PORT = Number(process.env.HBR_E2E_PORT) || 0;
+const RELAY_PORT = BASE_PORT || 7791;
+const VITE_PORT = BASE_PORT ? BASE_PORT + 1 : 5174;
 // The built site, served the way it ships. The service worker registers only in a
 // production build (POK-246), so offline behaviour cannot be tested against the dev
 // server at all -- it needs this one.
-const PREVIEW_PORT = 5175;
+const PREVIEW_PORT = BASE_PORT ? BASE_PORT + 2 : 5175;
 
 export default defineConfig({
   testDir: './e2e',
