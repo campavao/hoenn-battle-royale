@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { clampZoom, loadZoom, nextZoom, pickedZoom, saveZoom, wheelSteps, zoomLabel, zoomRange } from './zoom';
+import { ROOM_GAP, clampZoom, loadZoom, nextZoom, pickedZoom, roomFloor, saveZoom, wheelSteps, zoomLabel, zoomRange } from './zoom';
 
+const TILE = 16;
 const memory = (v: string | null = null) => {
   let held = v;
   return { getItem: () => held, setItem: (_: string, x: string) => { held = x; } };
@@ -17,7 +18,27 @@ describe('how close the player may choose', () => {
   });
 
   it('a window whose default is wider than the limit keeps its default', () => {
-    expect(zoomRange(3840, 2160, 2)).toEqual({ lo: 2, hi: 13 });
+    expect(zoomRange(1500, 900, 1)).toEqual({ lo: 1, hi: 5 });
+  });
+
+  it('but never farther than where a room would show its neighbour', () => {
+    // 3840 wide at a default of 2 would span 120 tiles: more than two gaps (96).
+    expect(zoomRange(3840, 2160, 2)).toEqual({ lo: 3, hi: 13 });
+    for (const [w, h, fit] of [[3840, 2160, 2], [2616, 2019, 2], [5120, 1440, 1], [1920, 1080, 1], [390, 844, 1]]) {
+      const r = zoomRange(w, h, fit);
+      expect(Math.max(w, h) / r.lo / TILE / 2, `${w}x${h} tiles to the edge`).toBeLessThanOrEqual(ROOM_GAP);
+      expect(r.hi).toBeGreaterThanOrEqual(r.lo);
+    }
+  });
+
+  it("a saved choice from a bigger screen is clamped, not trusted", () => {
+    expect(pickedZoom(1, 2, zoomRange(3840, 2160, 2))).toBe(3);
+  });
+
+  it("a spectator's floor is the long side across two gaps, in device pixels", () => {
+    expect(roomFloor(1920, 1080)).toBe(1.25);
+    expect(roomFloor(1080, 1920)).toBe(1.25);
+    expect(roomFloor(2616, 2019)).toBeCloseTo(1.703, 3);
   });
 
   it('a window too small for the GBA still has its default', () => {

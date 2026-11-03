@@ -223,6 +223,44 @@ test('a desktop player picks how close the map sits: wheel, keys, the sheet, and
   await ctx.close();
 });
 
+test('a spectator cannot zoom out to where the rooms show, and the plane keeps them that far apart', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  await inMatch(page);
+  type P = { gx: number; gy: number; m: { id: string; w: number; h: number; seams: { to: string }[] } };
+  // The plane: no two clusters of maps (Hoenn's outdoors, each building, the Zone, the sea
+  // floor, the islands) come within ROOM_GAP tiles of each other, either way across.
+  const gap = await page.evaluate(() => {
+    const placed = [...(window as unknown as { __spike: { placed: Map<string, P> } }).__spike.placed.values()];
+    const root = new Map<string, string>(placed.map((p) => [p.m.id, p.m.id]));
+    const find = (a: string): string => { while (root.get(a) !== a) a = root.get(a)!; return a; };
+    for (const p of placed) for (const s of p.m.seams) if (root.has(s.to)) root.set(find(p.m.id), find(s.to));
+    let least = Infinity;
+    for (let i = 0; i < placed.length; i++) for (let j = i + 1; j < placed.length; j++) {
+      const a = placed[i], b = placed[j];
+      if (find(a.m.id) === find(b.m.id)) continue;
+      const dx = Math.max(0, Math.max(a.gx, b.gx) - Math.min(a.gx + a.m.w, b.gx + b.m.w));
+      const dy = Math.max(0, Math.max(a.gy, b.gy) - Math.min(a.gy + a.m.h, b.gy + b.m.h));
+      least = Math.min(least, Math.max(dx, dy));
+    }
+    return least;
+  });
+  expect(gap, 'tiles between any two clusters').toBeGreaterThanOrEqual(48);
+
+  // Far out with the wheel, as a spectator: stopped where the long side spans two gaps.
+  await page.keyboard.press('v');
+  await page.mouse.move(640, 360);
+  for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 1000);
+  const floor = 1280 / (2 * 48 * 16);
+  await expect.poll(() => zoomOf(page), 'no farther').toBeCloseTo(floor, 3);
+  expect(1280 / (await zoomOf(page)) / 16 / 2, 'tiles from the middle to the edge').toBeLessThanOrEqual(48 + 1e-6);
+  // A bigger window moves the floor out with it.
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await expect.poll(() => zoomOf(page), 'held at the new floor').toBeCloseTo(1920 / 1536, 3);
+  await ctx.close();
+});
+
 test('a phone player pinches the map: whole steps, kept, and no walk', async ({ browser }) => {
   test.setTimeout(240_000);
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });

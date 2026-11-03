@@ -63,7 +63,7 @@ import { RingMap } from './ringmap';
 import { Watch } from './watch';
 import { raiseCurtain } from './curtain';
 import { frameOf as fxFrame, grassUnderAsh, isFloor, MB_ASHGRASS, SHEETS as FX_SHEETS, stepEffects, type Effect, type FxKind } from './fieldfx';
-import { clampZoom, loadZoom, nextZoom, pickedZoom, saveZoom, wheelSteps, zoomLabel, zoomRange } from './zoom';
+import { ROOM_GAP, clampZoom, loadZoom, nextZoom, pickedZoom, roomFloor, saveZoom, wheelSteps, zoomLabel, zoomRange } from './zoom';
 import { fieldScale, FADE_COLOR_WORD, FADE_Y_WORD, FOG_EVA, FOG_EVB, fadeOf, keyPicture } from '../src/field';
 import { PadPrefsControl } from '../src/ui/padprefs';
 import { wireDpad } from './dpad';
@@ -167,7 +167,7 @@ function layout(maps: WorldMap[]): Map<string, Placed> {
   // camera follows a trainer in, and never in sight of the outdoors.
   let right = 0, top = Infinity;
   for (const p of placed.values()) { right = Math.max(right, p.gx + p.m.w); top = Math.min(top, p.gy); }
-  const GAP = 48, ROW = 640;
+  const GAP = ROOM_GAP, ROW = 640;
   let x = right + 200, y = top, rowH = 0;
   for (const [id, { m }] of interiors(maps, placed)) {
     if (x + m.w > right + 200 + ROW) { x = right + 200; y += rowH + GAP; rowH = 0; }
@@ -3068,12 +3068,14 @@ function chooseZoom(z: number): void {
 }
 /** Whole steps closer (+) or farther (-), stopping at the ends. */
 const zoomBy = (steps: number) => chooseZoom(clampZoom(playZoom() + steps, zoomChoices()));
+/** A spectator's free zoom: out no farther than where a trainer in a room sees only that room. */
+const spectateZoom = (z: number) => Math.min(8, Math.max(roomFloor(devW, devH), z));
 
 function resize(): void {
   const dpr = devicePixelRatio || 1;
   devW = Math.round(innerWidth * dpr);
   devH = Math.round(innerHeight * dpr);
-  if (!spectating) zoom = playZoom();
+  zoom = spectating ? spectateZoom(zoom) : playZoom();
 }
 addEventListener('resize', resize);
 
@@ -3171,7 +3173,7 @@ canvas.addEventListener('pointermove', (e) => {
   p.x = e.clientX; p.y = e.clientY;
   if (pointers.size === 2 && pinch0) {
     const [a, b] = [...pointers.values()];
-    zoom = Math.min(8, Math.max(0.05, (pinch0.zoom * Math.hypot(a.x - b.x, a.y - b.y)) / pinch0.d));
+    zoom = spectateZoom((pinch0.zoom * Math.hypot(a.x - b.x, a.y - b.y)) / pinch0.d);
   }
 });
 const endPointer = (e: PointerEvent) => {
@@ -3194,7 +3196,7 @@ canvas.addEventListener('wheel', (e) => {
     if (steps) zoomBy(steps);
     return;
   }
-  zoom = Math.min(8, Math.max(0.05, zoom * Math.exp(-e.deltaY * 0.0015)));
+  zoom = spectateZoom(zoom * Math.exp(-e.deltaY * 0.0015));
 }, { passive: false });
 
 function followAt(clientX: number, clientY: number): void {
@@ -3671,7 +3673,8 @@ function draw(): void {
   }
   // Under one GBA pixel per CSS pixel (a spectator zoomed out), CSS pixels are plenty.
   const dpr = devicePixelRatio || 1;
-  const k = zoom < dpr ? dpr : Math.floor(zoom);
+  // (A spectator's zoom between two whole ones draws at its own pixel, not at the device's.)
+  const k = zoom < dpr ? dpr : Math.max(1, zoom);
   const W = Math.ceil(devW / k), H = Math.ceil(devH / k);
   if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
   const z = zoom / k;
