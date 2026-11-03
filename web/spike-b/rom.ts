@@ -92,6 +92,9 @@ const FOG_TICK = 240;
  *  damageTimer) at the match's ring phase: fog everywhere (r = 0xFF, -1), or a ring so
  *  wide nothing is outside it (r = 127 sections). The phase is the level rung (br_levels.c
  *  BrLevels_Tick): the party lifted to it on the field, a wild one rolled at it. */
+/** struct Weather's currWeather, and nextWeather after it (field_weather.h; GetCurrentWeather's own
+ *  offset), past gWeatherPtr's pointer. */
+const WEATHER_CURR = 0x6d0;
 const ringBytes = (phase: number, fog: boolean) => [1, phase, 0, 0, fog ? 0xff : 0x7f, 0, 0, 0, FOG_TICK & 0xff, FOG_TICK >> 8];
 const DREW = 3;
 const ROM_BASE = 0x08000000;
@@ -250,6 +253,11 @@ export interface RomBattles {
   /** The ring closed on the trainer in the middle of a battle: from the next turn's end
    *  that battle is fought in the fog. Nothing between battles. */
   fogNow(): void;
+  /** The field's weather the next battle starts in (room.ts weatherAt), 0 for none. The hidden ROM
+   *  stands in Littleroot; battle_util.c's switch-in reads GetCurrentWeather. */
+  fieldWeather(w: number): void;
+  /** gBattleWeather, for a spec. */
+  battleWeather(): number;
   /** An item ball picked up: into the bag the ROM's own way (a match's GIVE, so a vitamin
    *  is used and a nugget sold as in a match). What went in, as the ROM filed it; `used`
    *  when it went on the team; null when it did not fit. */
@@ -911,6 +919,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
   let volume = 100;
   const setVolume = emu.setVolume.bind(emu);
   emu.setVolume = (v: number) => { volume = v; setVolume(v); };
+  /** rom.fieldWeather's, for the next battle. gWeatherPtr is a const in the cart, pointing at it. */
+  let weatherNext = 0;
+  const weatherPtr = sym('gWeatherPtr') - 0x8000000;
+  const weatherAt = (((rom[weatherPtr] | (rom[weatherPtr + 1] << 8) | (rom[weatherPtr + 2] << 16) | (rom[weatherPtr + 3] << 24)) >>> 0) + WEATHER_CURR);
   async function battle(fog: boolean, kick: () => void, going: () => boolean, over: () => boolean, onStart: () => void, after: () => Omit<Fought, 'ok'>, hurry = true): Promise<Fought> {
     if (broken) throw new Error('the parked ROM could not be restored');
     // Every battle from one state would roll the same: a fresh draw each time.
@@ -930,6 +942,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     const at = phase;
     lay(fog, at);
     fighting = true;
+    // Held every frame up to the switch-in: the ring's own ApplyWeather sets the hidden map's.
+    const nextWeather = weatherNext;
+    weatherNext = 0;
+    const weatherOff = nextWeather ? emu.onFrame(() => emu.bytes(weatherAt, 2).set([nextWeather, nextWeather])) : () => undefined;
     emu.resume();
     // A frame on the new ring before the ask: br_main.c runs BrWild_Tick before
     // BrLevels_Tick, so a wild asked on the frame the rung moves rolls at the old one.
@@ -984,6 +1000,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       const calm = hurry ? briskFades() : () => undefined;
       await until(emu, over, Infinity);
       calm();
+      weatherOff();
       if (buzzed) { emu.write(match, BR_PHASE_PLAY, 8); buzzed = false; }
       // The ring is the battle's: back on the field nothing of it is left to bleed the
       // hidden ROM's party while a catch prompt waits.
@@ -1010,6 +1027,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       else carried = { ...(carried ?? start), tally: now.tally };
     }
     fighting = false;
+    weatherOff();
     pub();
     readerOff();
     if (reader) { reader.finish(0); lastLog = reader.stats; }
@@ -1232,6 +1250,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         carried = last = next;
       });
     },
+    fieldWeather(w: number) { weatherNext = w; },
+    battleWeather() { return emu.read(sym('gBattleWeather'), 16); },
     fogNow() {
       if (fighting && !broken && emu.read(ringAt + 4, 8) !== 0xff) lay(true);
     },
