@@ -4099,7 +4099,9 @@ async function boot(): Promise<void> {
   wireWatchdog(files);
   const t0 = performance.now();
   art = new RomArt(files.rom, files.sym);
-  romTables = { bytes: files.rom, sym: (n) => { const a = files.sym(n); return Number.isNaN(a) ? undefined : a; } };
+  // `#battleview`: the page-drawn battle (battleview.ts) on a canned log, no match.
+  if (/^#battleview(&|$)/.test(location.hash)) { void import('./battleview-dev').then((m) => m.openDevBattleView(art!, location.hash)); return; }
+  romTables ={ bytes: files.rom, sym: (n) => { const a = files.sym(n); return Number.isNaN(a) ? undefined : a; } };
   // A bots' fight, published as its side A for whoever watches either bot, as live
   // (app.ts proxyStream); the proxy's BSTART names nobody, so the names go in here.
   judge = makeJudge(files, (msg, sides) => {

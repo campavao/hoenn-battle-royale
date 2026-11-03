@@ -26,6 +26,8 @@ const TILE = 8;
 const BLOCK = 16;
 const LAYER_COVERED = 1;
 const PAL_TAG_NONE = 0x11ff;
+/** The species ids the ROM's tables have a row for (constants/species.h, one past the last). */
+const NUM_SPECIES = 412;
 
 /** A metatile with animated tiles in it (tileset_anims.c), on `cells` (y * width + x) of a
  *  map: its looks side by side in `sheet`, 16 px each, and which one is on show at each
@@ -62,6 +64,12 @@ function rgba(c: number): number {
   return (0xff << 24) | (b << 16) | (g << 8) | r;
 }
 
+/** BGR555 widened the way mGBA shows it, (v << 3) | (v >> 2), which is what the ROM's own battle looks like. */
+function rgbaWide(c: number): number {
+  const r = c & 31, g = (c >> 5) & 31, b = (c >> 10) & 31;
+  return (0xff << 24) | (((b << 3) | (b >> 2)) << 16) | (((g << 3) | (g >> 2)) << 8) | ((r << 3) | (r >> 2));
+}
+
 /** The ROM's letters as text: capitals, small letters, digits, the few marks names use; anything else a space. */
 export function text(letters: readonly number[]): string {
   let out = '';
@@ -76,6 +84,108 @@ export function text(letters: readonly number[]): string {
 }
 
 interface Tileset { tiles: Uint8Array; palettes: number[][]; metatiles: number; attrs: number }
+
+// ---- a fight, as the page draws it (battleview.ts) --------------------------------------
+//
+// Everything the watcher's screen shows of a battle comes out of these tables, the way the
+// ROM's own battle draws it: pictures are 4bpp tiles in LZ77 (a mon's front one holds its
+// two frames, one above the other), their palettes LZ77 too; the ground is tiles + a 32 x 32
+// tilemap + three BG palettes; the message box is a tilemap over its own tiles; the health
+// boxes are two sprites' tiles in one sheet. A symbol the patch does not name leaves that
+// piece null and the view draws a stand-in.
+
+/** The kinds of ground a fight can be on (battle_bg.c sBattleEnvironmentTable, and the
+ *  buildings' own palettes): the tiles, the tilemap and the palette each takes. */
+export type BattleEnv = 'grass' | 'long_grass' | 'sand' | 'underwater' | 'water' | 'pond' | 'mountain' | 'cave' | 'building' | 'plain' | 'gym';
+const ENV_ART: Record<BattleEnv, [string, string]> = {
+  grass: ['TallGrass', 'TallGrass'],
+  long_grass: ['LongGrass', 'LongGrass'],
+  sand: ['Sand', 'Sand'],
+  underwater: ['Underwater', 'Underwater'],
+  water: ['Water', 'Water'],
+  pond: ['PondWater', 'PondWater'],
+  mountain: ['Rock', 'Rock'],
+  cave: ['Cave', 'Cave'],
+  building: ['Building', 'Building'],
+  plain: ['Building', 'Plain'],
+  gym: ['Building', 'BuildingGym'],
+};
+/** The palette entries (of BG banks 2..4, so 0 is bank 2's first) that every environment draws
+ *  its sky and ground stripes with: the ROM keys them clear in a match (br_battle.c
+ *  sSeeThroughStripes) so the field shows through round the two platforms. */
+const SEE_THROUGH = [1, 11, 12, 13, 14, 15, 16 + 1, 16 + 15];
+
+/** A health box's two sprites' pictures in one canvas: 128 wide, the near one 64 tall and the far
+ *  one 32 (healthbox_singles_*.png). */
+export interface HealthboxArt {
+  box: HTMLCanvasElement;
+  /** The box palette's words: the letter, its shadow, and the two colours the genders are set in. */
+  ink: { fg: string; shadow: string; male: string; female: string };
+  /** One 8 x 8 tile of gHealthboxElementsGfxTable, in the bar's palette, or in the box's with
+   *  `status` (a 15-bit colour) put at the entry a status tile draws with. */
+  tile(element: number, status?: { slot: number; colour: number }): HTMLCanvasElement;
+}
+
+/** gHealthboxElementsGfxTable's order (battle_interface.c), the ones the view uses. */
+export const HB = { H: 1, HP_GREEN: 3, HP_YELLOW: 47, HP_RED: 56, BALL_CAUGHT: 70, STATUS: { psn: [21, 71], par: [24, 74], slp: [27, 77], frz: [30, 80], brn: [33, 83] } as Record<string, number[]> };
+
+/** A font's glyph sheet from the ROM (text.c: a glyph is four 8 x 8 tiles of 2bpp, one u16 a
+ *  row, the left pixel in the high bits; 1 is the letter, 2 its shadow, 3 the cell's own
+ *  background): the width of each glyph and a way to set a line in any two colours. */
+export class RomFont {
+  private tinted = new Map<string, HTMLCanvasElement>();
+  constructor(private readonly index: Uint8Array, readonly widths: Uint8Array) {}
+
+  width(ids: readonly number[]): number {
+    return ids.reduce((w, id) => w + (this.widths[id] ?? 6), 0);
+  }
+
+  private sheet(fg: string, shadow: string): HTMLCanvasElement {
+    const key = `${fg}|${shadow}`;
+    let cv = this.tinted.get(key);
+    if (cv) return cv;
+    cv = document.createElement('canvas');
+    cv.width = 16 * 16;
+    cv.height = 32 * 16;
+    const ctx = cv.getContext('2d')!;
+    const id = ctx.createImageData(cv.width, cv.height);
+    const px = new Uint32Array(id.data.buffer);
+    const col = (s: string) => {
+      const m = s.match(/\d+/g)!.map(Number);
+      return (0xff << 24) | (m[2] << 16) | (m[1] << 8) | m[0];
+    };
+    const c1 = col(fg), c2 = col(shadow);
+    for (let g = 0; g < 512; g++) {
+      for (let y = 0; y < 16; y++) {
+        for (let x = 0; x < 16; x++) {
+          const v = this.index[g * 256 + y * 16 + x];
+          if (v === 1 || v === 2) px[((g >> 4) * 16 + y) * cv.width + (g & 15) * 16 + x] = v === 1 ? c1 : c2;
+        }
+      }
+    }
+    ctx.putImageData(id, 0, 0);
+    this.tinted.set(key, cv);
+    return cv;
+  }
+
+  /** `ids` (charmap glyph numbers) with their top-left at (x, y); the pixels outside `clip`
+   *  (x0, y0, x1, y1) left alone, as a health box's window shows only part of its text. */
+  draw(ctx: CanvasRenderingContext2D, ids: readonly number[], x: number, y: number, fg: string, shadow: string, clip?: [number, number, number, number]): void {
+    const sheet = this.sheet(fg, shadow);
+    if (clip) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(clip[0], clip[1], clip[2] - clip[0], clip[3] - clip[1]);
+      ctx.clip();
+    }
+    let cx = x;
+    for (const id of ids) {
+      ctx.drawImage(sheet, (id & 15) * 16, (id >> 4) * 16, 16, 16, cx, y, 16, 16);
+      cx += this.widths[id] ?? 6;
+    }
+    if (clip) ctx.restore();
+  }
+}
 
 export class RomArt {
   private dv: DataView;
@@ -409,6 +519,231 @@ export class RomArt {
     }
     ctx.putImageData(id, 0, 0);
     return cv;
+  }
+
+  // ---- a fight (battleview.ts) ----
+
+  private made = new Map<string, HTMLCanvasElement | null>();
+  private once<T extends HTMLCanvasElement | null>(key: string, make: () => T): T {
+    if (!this.made.has(key)) this.made.set(key, make());
+    return this.made.get(key) as T;
+  }
+  private have(...names: string[]): boolean {
+    return names.every((n) => Number.isFinite(this.sym(n)));
+  }
+  private lz(ptr: number): Uint8Array {
+    return lz77(this.rom, ptr - ROM);
+  }
+  /** `count` colours of 15-bit words from `at` in `bytes`, as the canvas wants them. */
+  private words(bytes: Uint8Array, count: number, at = 0): number[] {
+    const out: number[] = [];
+    for (let i = 0; i < count; i++) out.push(rgbaWide(bytes[at + i * 2] | (bytes[at + i * 2 + 1] << 8)));
+    return out;
+  }
+  private raw(at: number, count: number): number[] {
+    const out: number[] = [];
+    for (let i = 0; i < count; i++) out.push(rgbaWide(this.u16(at + i * 2)));
+    return out;
+  }
+  /** 4bpp tiles (`w` x `h` pixels, a row of tiles after a row), colour 0 clear. */
+  private picture(tiles: Uint8Array, w: number, h: number, pal: number[], from = 0): HTMLCanvasElement {
+    const cv = document.createElement('canvas');
+    cv.width = w;
+    cv.height = h;
+    const ctx = cv.getContext('2d')!;
+    const id = ctx.createImageData(w, h);
+    const px = new Uint32Array(id.data.buffer);
+    const tw = w / TILE;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const b = tiles[from + ((y >> 3) * tw + (x >> 3)) * 32 + (y & 7) * 4 + ((x & 7) >> 1)];
+        const c = (b >> ((x & 1) * 4)) & 0xf;
+        if (c) px[y * w + x] = pal[c];
+      }
+    }
+    ctx.putImageData(id, 0, 0);
+    return cv;
+  }
+
+  /** A species' battle picture, 64 x 64: the front one's first frame (it holds two), or the back
+   *  one; in its palette, or the shiny one. Null for a species the ROM has no picture for or a
+   *  patch whose symbols predate this. */
+  monPic(species: number, back: boolean, shiny = false): HTMLCanvasElement | null {
+    const pics = back ? 'gMonBackPicTable' : 'gMonFrontPicTable', pals = shiny ? 'gMonShinyPaletteTable' : 'gMonPaletteTable';
+    if (!this.have(pics, pals) || !(species > 0 && species < NUM_SPECIES)) return null;
+    return this.once(`mon:${species}:${back}:${shiny}`, () => {
+      const data = this.u32(this.sym(pics) + species * 8), pal = this.u32(this.sym(pals) + species * 8);
+      if (data < ROM || pal < ROM) return null;
+      return this.picture(this.lz(data), 64, 64, this.words(this.lz(pal), 16));
+    });
+  }
+
+  /** Where a species stands: MonCoords' size byte and the y offset that puts its picture's middle on
+   *  the platform (gMonFrontPicCoords / gMonBackPicCoords: four bytes a row), and how high a flier hovers. */
+  monCoords(species: number, back: boolean): { size: number; y: number; lift: number } | null {
+    const t = this.sym(back ? 'gMonBackPicCoords' : 'gMonFrontPicCoords');
+    if (!Number.isFinite(t) || !(species >= 0 && species < NUM_SPECIES)) return null;
+    const e = this.sym('gEnemyMonElevation');
+    return { size: this.u8(t + species * 4), y: this.u8(t + species * 4 + 1), lift: Number.isFinite(e) ? this.u8(e + species) : 0 };
+  }
+
+  /** A trainer's picture, 64 x 64, by its TRAINER_PIC_* (the front table) or TRAINER_BACK_PIC_*. */
+  trainerPic(pic: number, back: boolean): HTMLCanvasElement | null {
+    const pics = back ? 'gTrainerBackPicTable' : 'gTrainerFrontPicTable', pals = back ? 'gTrainerBackPicPaletteTable' : 'gTrainerFrontPicPaletteTable';
+    if (!this.have(pics, pals) || !(pic >= 0 && pic < 100)) return null;
+    return this.once(`trainer:${pic}:${back}`, () => {
+      const data = this.u32(this.sym(pics) + pic * 8), pal = this.u32(this.sym(pals) + pic * 8);
+      if (data < ROM || pal < ROM) return null;
+      // A back picture is four frames of the throw, stored plain; a front one is one, compressed.
+      return back ? this.picture(this.rom, 64, 64, this.words(this.lz(pal), 16), data - ROM) : this.picture(this.lz(data), 64, 64, this.words(this.lz(pal), 16));
+    });
+  }
+
+  /** A trainer picture's size in tiles (what its y is worked from: (8 - size) * 4). */
+  trainerSize(pic: number, back: boolean): number {
+    const t = this.sym(back ? 'gTrainerBackPicCoords' : 'gTrainerFrontPicCoords');
+    if (!Number.isFinite(t)) return 8;
+    const s = this.u8(t + pic * 4);
+    return s > 8 ? s & 0xf : s;
+  }
+
+  /** The ground of a fight, 240 x 160: the environment's tiles laid by its tilemap (the first 30 x 20
+   *  of its 32 x 32) in its three palettes. `seeThrough` clears its sky and ground stripes as
+   *  a match's does, leaving the two platforms. Null on a patch that does not name it. */
+  battleGround(env: BattleEnv, seeThrough: boolean): HTMLCanvasElement | null {
+    const [tilesOf, palOf] = ENV_ART[env];
+    const names = [`gBattleEnvironmentTiles_${tilesOf}`, `gBattleEnvironmentTilemap_${tilesOf}`, `gBattleEnvironmentPalette_${palOf}`];
+    if (!this.have(...names)) return null;
+    return this.once(`ground:${env}:${seeThrough}`, () => {
+      const tiles = this.lz(this.sym(names[0])), map = this.lz(this.sym(names[1])), pal = this.words(this.lz(this.sym(names[2])), 48);
+      const cv = document.createElement('canvas');
+      cv.width = 240;
+      cv.height = 160;
+      const ctx = cv.getContext('2d')!;
+      const id = ctx.createImageData(240, 160);
+      const px = new Uint32Array(id.data.buffer);
+      for (let i = 0; i < 30 * 20; i++) {
+        const cx = i % 30, cy = Math.floor(i / 30);
+        const e = map[(cy * 32 + cx) * 2] | (map[(cy * 32 + cx) * 2 + 1] << 8);
+        const bank = ((e >> 12) & 0xf) - 2, off = (e & 0x3ff) * 32, hf = e & 0x400, vf = e & 0x800;
+        if (bank < 0 || bank > 2 || off + 32 > tiles.length) continue;
+        for (let y = 0; y < TILE; y++) {
+          const row = off + (vf ? TILE - 1 - y : y) * 4;
+          for (let x = 0; x < TILE; x++) {
+            const sx = hf ? TILE - 1 - x : x;
+            const c = (tiles[row + (sx >> 1)] >> ((sx & 1) * 4)) & 0xf;
+            if (!c || (seeThrough && SEE_THROUGH.includes(bank * 16 + c))) continue;
+            px[(cy * TILE + y) * 240 + cx * TILE + x] = pal[bank * 16 + c];
+          }
+        }
+      }
+      ctx.putImageData(id, 0, 0);
+      return cv;
+    });
+  }
+
+  /** The message box (the first screen of gBattleTextboxTilemap: rows 14 to 19), 240 x 48, to sit at
+   *  y 112; and the colours its words are set in (the palette's 1 and 6, text.pal's white and its
+   *  shadow). */
+  battleTextbox(): { box: HTMLCanvasElement; fg: string; shadow: string } | null {
+    if (this.textbox === undefined) this.textbox = this.makeTextbox();
+    return this.textbox;
+  }
+  private textbox: { box: HTMLCanvasElement; fg: string; shadow: string } | null | undefined;
+  private makeTextbox(): { box: HTMLCanvasElement; fg: string; shadow: string } | null {
+    if (!this.have('gBattleTextboxTiles', 'gBattleTextboxPalette', 'gBattleTextboxTilemap')) return null;
+    const tiles = this.lz(this.sym('gBattleTextboxTiles')), map = this.lz(this.sym('gBattleTextboxTilemap')), pal = this.words(this.lz(this.sym('gBattleTextboxPalette')), 32);
+    const cv = document.createElement('canvas');
+    cv.width = 240;
+    cv.height = 48;
+    const ctx = cv.getContext('2d')!;
+    const id = ctx.createImageData(240, 48);
+    const px = new Uint32Array(id.data.buffer);
+    for (let i = 0; i < 30 * 6; i++) {
+      const cx = i % 30, cy = Math.floor(i / 30) + 14;
+      const e = map[(cy * 32 + cx) * 2] | (map[(cy * 32 + cx) * 2 + 1] << 8);
+      const bank = (e >> 12) & 0xf, off = (e & 0x3ff) * 32, hf = e & 0x400, vf = e & 0x800;
+      if (bank > 1 || off + 32 > tiles.length) continue;
+      for (let y = 0; y < TILE; y++) {
+        const row = off + (vf ? TILE - 1 - y : y) * 4;
+        for (let x = 0; x < TILE; x++) {
+          const sx = hf ? TILE - 1 - x : x;
+          const c = (tiles[row + (sx >> 1)] >> ((sx & 1) * 4)) & 0xf;
+          if (c) px[((cy - 14) * TILE + y) * 240 + cx * TILE + x] = pal[bank * 16 + c];
+        }
+      }
+    }
+    ctx.putImageData(id, 0, 0);
+    const css = (c: number) => `rgb(${c & 0xff},${(c >> 8) & 0xff},${(c >> 16) & 0xff})`;
+    return { box: cv, fg: css(pal[1]), shadow: css(pal[6]) };
+  }
+
+  /** A health box's frame (gHealthboxSinglesPlayerGfx for the near one, the opponent's for the far),
+   *  in the box palette, and its tiles of bar, label and status. */
+  healthbox(near: boolean): HealthboxArt | null {
+    const key = near ? 1 : 0;
+    if (!this.boxArt.has(key)) this.boxArt.set(key, this.makeHealthbox(near));
+    return this.boxArt.get(key)!;
+  }
+  private boxArt = new Map<number, HealthboxArt | null>();
+  private makeHealthbox(near: boolean): HealthboxArt | null {
+    const names = [near ? 'gHealthboxSinglesPlayerGfx' : 'gHealthboxSinglesOpponentGfx', 'gBattleInterface_BallStatusBarPal', 'gBattleInterface_BallDisplayPal', 'gHealthboxElementsGfxTable'];
+    if (!this.have(...names)) return null;
+    const boxPal = this.raw(this.sym(names[1]), 16), barPal = this.raw(this.sym(names[2]), 16);
+    const data = this.lz(this.sym(names[0]));
+    // Sprite 1's tiles, then sprite 2's, each in 8-wide rows; 64 x 64 apiece for the near box,
+    // 64 x 32 for the far (-mwidth 8 -mheight 8|4).
+    const rows = near ? 8 : 4, per = rows * 8;
+    const box = this.once(`healthbox:${near}`, () => {
+      const cv = document.createElement('canvas');
+      cv.width = 128;
+      cv.height = rows * 8;
+      const ctx = cv.getContext('2d')!;
+      for (let t = 0; t < per * 2; t++) {
+        const tile = this.picture(data, TILE, TILE, boxPal, t * 32);
+        ctx.drawImage(tile, (t >= per ? 64 : 0) + ((t % per) & 7) * TILE, (((t % per) >> 3) & 7) * TILE);
+      }
+      return cv;
+    });
+    const elements = this.sym(names[3]);
+    const css = (c: number) => `rgb(${c & 0xff},${(c >> 8) & 0xff},${(c >> 16) & 0xff})`;
+    return {
+      box,
+      ink: { fg: css(boxPal[1]), shadow: css(boxPal[3]), male: css(boxPal[11]), female: css(boxPal[10]) },
+      tile: (element, status) => this.once(`tile:${element}:${status ? `${status.slot}:${status.colour}` : ''}`, () => {
+        const pal = status ? boxPal.map((c, i) => (i === status.slot ? rgbaWide(status.colour) : c)) : barPal;
+        return this.picture(this.rom, TILE, TILE, pal, elements - ROM + element * 32);
+      }),
+    };
+  }
+
+  private fonts = new Map<string, RomFont | null>();
+  /** One of the ROM's Latin fonts, 'small' for the health boxes' words or 'normal'. */
+  font(which: 'small' | 'normal'): RomFont | null {
+    if (this.fonts.has(which)) return this.fonts.get(which)!;
+    const name = which === 'small' ? 'gFontSmallLatin' : 'gFontNormalLatin';
+    let font: RomFont | null = null;
+    if (this.have(`${name}Glyphs`, `${name}GlyphWidths`)) {
+      const index = new Uint8Array(512 * 256), glyphs = this.sym(`${name}Glyphs`) - ROM;
+      for (let g = 0; g < 512; g++) {
+        [[0, 0, 0], [8, 0, 16], [0, 8, 32], [8, 8, 48]].forEach(([ox, oy, off]) => {
+          for (let y = 0; y < 8; y++) {
+            const v = this.dv.getUint16(glyphs + g * 64 + off + y * 2, true);
+            for (let x = 0; x < 8; x++) index[g * 256 + (oy + y) * 16 + ox + x] = (v >> (2 * (7 - x))) & 3;
+          }
+        });
+      }
+      const w = this.sym(`${name}GlyphWidths`) - ROM;
+      font = new RomFont(index, this.rom.slice(w, w + 512));
+    }
+    this.fonts.set(which, font);
+    return font;
+  }
+
+  /** A species' name as the ROM has it (gSpeciesNames, 11 letters a row). */
+  speciesName(species: number): string {
+    const t = this.sym('gSpeciesNames');
+    return Number.isFinite(t) && species > 0 && species < NUM_SPECIES ? text(this.letters(t + species * 11, 11)) : '';
   }
 
   /** `count` frames of w x h 4bpp tiles from `at`, row by row, colour 0 clear. */
