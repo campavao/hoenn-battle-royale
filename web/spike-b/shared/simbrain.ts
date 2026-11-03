@@ -17,7 +17,9 @@ export type Rng = () => number;
 export type Decision =
   | { kind: 'move'; slot: number }
   | { kind: 'switch'; to: Mon }
-  | { kind: 'item'; index: number };
+  | { kind: 'item'; index: number }
+  /** Nothing it has left can do anything: as it would with its PP gone (battlesim.ts). */
+  | { kind: 'struggle' };
 
 const STAGE = [2 / 8, 2 / 7, 2 / 6, 2 / 5, 2 / 4, 2 / 3, 1, 3 / 2, 2, 5 / 2, 3, 7 / 2, 4];
 const boosted = (mon: Mon, stat: string): number => mon.storedStats[stat] * STAGE[(mon.boosts[stat] ?? 0) + 6];
@@ -126,6 +128,7 @@ function useless(b: Battle, u: Mon, f: Mon, m: Move): boolean {
   if (m.volatileStatus === 'confusion' && (f.volatiles.confusion || f.ability === 'owntempo' || foeSide.sideConditions.safeguard)) return true;
   if (id === 'leechseed' && (f.volatiles.leechseed || f.hasType('Grass'))) return true;
   if (id === 'attract' && (f.volatiles.attract || f.ability === 'oblivious' || u.gender === 'N' || f.gender === 'N' || u.gender === f.gender)) return true;
+  if (CHANGES_HANDS.has(id)) return !canHit(b, f, u); // hands back what it takes, and the foe has nothing to give
   if (id === 'dreameater' || id === 'nightmare') return f.status !== 'slp' && f.ability !== 'comatose';
   if (id === 'snore' || id === 'sleeptalk') return u.status !== 'slp';
   if (id === 'fakeout') return u.activeTurns > 1; // the engine counts the turn it came out on as 1
@@ -249,11 +252,26 @@ function pickMove(b: Battle, u: Mon, f: Mon, slots: { id: string; disabled?: boo
 const hasSuperEffective = (b: Battle, mon: Mon, foe: Mon): boolean =>
   mon.moveSlots.some((s: any) => {
     const m = b.dex.moves.get(s.id);
-    return m.category !== 'Status' && !shutOut(b, typeOf(mon, m), m, foe) && b.dex.getEffectiveness(typeOf(mon, m), foe) > 0;
+    return s.pp > 0 && m.category !== 'Status' && !shutOut(b, typeOf(mon, m), m, foe) && b.dex.getEffectiveness(typeOf(mon, m), foe) > 0;
   });
 
-/** The best damage a mon could do to `foe`. */
-const bestDamage = (b: Battle, mon: Mon, foe: Mon): number => Math.max(0, ...mon.moveSlots.map((s: any) => damageOf(b, mon, foe, b.dex.moves.get(s.id))));
+/** The best damage a mon could do to `foe`, with the PP it has left. */
+const bestDamage = (b: Battle, mon: Mon, foe: Mon): number => Math.max(0, ...mon.moveSlots.map((s: any) => (s.pp > 0 ? damageOf(b, mon, foe, b.dex.moves.get(s.id)) : 0)));
+
+/** Has it a move left that hurts `foe`? */
+const canHit = (b: Battle, mon: Mon, foe: Mon): boolean => bestDamage(b, mon, foe) > 0;
+
+/** Nothing it may play can do a thing: every move left bounces off, has failed before it is tried,
+ *  or would only be raising what is at its limit. Emerald would have it spend all that PP first,
+ *  a turn each: 4 of 1039 fights ran the ten minutes on POISONPOWDER into an ODDISH, or a level 5
+ *  PLUSLE's sixty PP of GROWL and THUNDER WAVE into a MINUN that had only those too. */
+function spent(b: Battle, u: Mon, f: Mon, slots: { id: string; disabled?: boolean; pp?: number }[]): boolean {
+  return slots.every((slot) => {
+    if (slot.disabled || (slot.pp !== undefined && slot.pp <= 0)) return true;
+    const m = b.dex.moves.get(slot.id);
+    return useless(b, u, f, m) || (m.category !== 'Status' && !CHANGES_HANDS.has(m.id) && damageOf(b, u, f, m) <= 0);
+  });
+}
 
 /** Who comes out next when the last one is down: somebody with a super-effective move, the
  *  hardest-hitting of those; nobody like that, the hardest hitter. */
@@ -324,11 +342,15 @@ export function decide(b: Battle, side: SideObj, request: any, bag: { item: BagI
   const row = request.active[0];
   const locked = row.moves.length === 1 && (!!u.getLockedMove?.() || row.moves[0].id === 'recharge' || row.moves[0].id === 'struggle');
   if (!u || !f || u.hp <= 0 || locked) return { kind: 'move', slot: 0 };
+  const done = spent(b, u, f, row.moves);
   if (!row.trapped && !row.maybeTrapped) {
-    const to = pickSwitch(b, side, u, f, lastHit, rng);
+    // A mate who can still hit what it cannot goes in for it.
+    const mate = done ? side.pokemon.filter((p: Mon) => p.hp > 0 && !p.isActive && canHit(b, p, f)) : [];
+    const to = mate.length ? pickNext(b, { pokemon: mate }, f) : pickSwitch(b, side, u, f, lastHit, rng);
     if (to) return { kind: 'switch', to };
   }
   const item = pickItem(u, side, bag);
   if (item >= 0) return { kind: 'item', index: item };
+  if (done) return { kind: 'struggle' };
   return { kind: 'move', slot: pickMove(b, u, f, row.moves, rng) };
 }

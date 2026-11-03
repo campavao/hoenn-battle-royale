@@ -14,8 +14,9 @@
 //
 // Everything about it is best-effort. One instance, one duel at a time, a hard
 // deadline; anything that goes wrong (no core, a crash, a fight that will not end)
-// falls back to the seeded resolver, which is why this can be an upgrade rather than a
-// dependency.
+// answers null, which is why this can be an upgrade rather than a dependency. To the
+// game (spike-b judge.ts, only with its simulator switched off) null is no fight, and
+// both walk on. /classic/ alone still has a seeded resolver behind it (bots/duel.ts).
 //
 // And it runs only while it fights (POK-247). It used to boot on the first meeting and
 // then run at 8x -- 480 frames a second, each a main-thread callback -- through the
@@ -51,8 +52,8 @@ export interface ProxyCounts {
   frames: number;
   fought: number;
   timedOut: number;
-  /** Duels answered with null, for the caller's seeded resolver: a timeout, a full
-   *  queue, a draw, an instance that never came up. */
+  /** Duels answered with null: a timeout, a full queue, a draw, an instance that never
+   *  came up. */
   fellBack: number;
 }
 
@@ -170,10 +171,9 @@ const QUIET_FRAMES = 3_600;
  *  480, and no fight past 6,300 frames could finish: Cam's last two bots never did
  *  (2026-11-02). Theirs takes 256 s at 75 frames a second. */
 const STALL_MS = 30_000;
-/** How many duels may be waiting behind the one in flight before the rest are sent to
- *  the seeded resolver. One instance fights one battle at a time and a battle takes
- *  real seconds; a room where everybody meets at once would otherwise leave half the
- *  field standing still, which is worse than a coin flip nobody can see. */
+/** How many duels may be waiting behind the one in flight before the rest are told no.
+ *  One instance fights one battle at a time and a battle takes real seconds; a room where
+ *  everybody meets at once would otherwise leave half the field standing still. */
 const MAX_QUEUED = 2;
 const WAKE_FRAMES = 600;
 /** How often a running fight asks whether anybody still wants it. */
@@ -213,8 +213,8 @@ export class ProxyDuels {
     return { ...this.counts };
   }
 
-  /** Fights one, or answers null when the proxy could not (and the caller should fall
-   *  back to the seeded resolver). Duels queue: one instance, one fight at a time.
+  /** Fights one, or answers null when the proxy could not (see the top of the file).
+   *  Duels queue: one instance, one fight at a time.
    *  `wanted`: does anybody still want this one? It is asked before it starts and while
    *  it runs: a fight the room has let go of is not worth the instance. */
   async fight(a: DuelSide, b: DuelSide, wanted?: () => boolean): Promise<DuelOutcome | null> {

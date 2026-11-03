@@ -251,7 +251,7 @@ test('crowned mid-fight: the fight ends, "You won the match!", then the crown', 
   test.setTimeout(300_000);
   await page.goto(`/?rom=${romHashParam()}#solo&safari=20&fog=12&seed=7`);
   await page.locator('#intro-go').click({ timeout: 90_000 });
-  type S = { link: { me: number; room: any }; rom?: { partyCount(): number }; battle: unknown; swapping: boolean; startFor(e: unknown): void };
+  type S = { link: { me: number; room: any; fly(map: string, x: number, y: number): void }; rom?: { partyCount(): number }; battle: unknown; swapping: boolean; startFor(e: unknown): void };
   const s = <T>(f: (s: S) => T) => page.evaluate((src) => new Function('s', `return (${src})(s)`)((window as unknown as { __spike: S }).__spike), f.toString()) as Promise<T>;
   await page.waitForFunction(() => { const s = (window as unknown as { __spike?: S }).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 90_000 });
   const press = async (k: string) => { await key(page, k, true); await page.waitForTimeout(120); await key(page, k, false); await page.waitForTimeout(350); };
@@ -267,15 +267,34 @@ test('crowned mid-fight: the fight ends, "You won the match!", then the crown', 
   for (let i = 0; i < 60 && (await s((s) => s.swapping || !s.rom)); i++) await press('z');
   await page.waitForTimeout(2000);
   const spot = () => s((s) => { const p = s.link.room.actor(s.link.me)?.m.spot; return p ? `${p.map}:${p.x}:${p.y}` : ''; });
-  for (let tries = 0; tries < 6 && !(await s((s) => !!s.battle)); tries++) {
-    const dirs = await route(page, '(p, room) => room.patchesOn(p.map).some((q) => q.x === p.x && q.y === p.y)');
+  const marked = '(p, room) => room.patchesOn(p.map).some((q) => q.x === p.x && q.y === p.y && !room.isTaken(q.key))';
+  // The drop deals any map of the section, at random, and this trainer can't SURF: off MOSSDEEP's
+  // shore there is no spot to walk to. This test is about the crown, so it flies somewhere there is.
+  if (!(await route(page, marked))) {
+    await s((s) => {
+      const room = s.link.room;
+      for (const q of room.patchesOn('MAP_ROUTE102')) {
+        for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+          const x = q.x + dx, y = q.y + dy;
+          if (room.world.cell('MAP_ROUTE102', x, y) !== 0 || room.patchesOn('MAP_ROUTE102').some((o: { x: number; y: number }) => o.x === x && o.y === y)) continue;
+          s.link.fly('MAP_ROUTE102', x, y);
+          return;
+        }
+      }
+    });
+    await expect.poll(() => spot(), { timeout: 10_000 }).toMatch(/^MAP_ROUTE102:/);
+  }
+  for (let tries = 0; tries < 12 && !(await s((s) => !!s.battle)); tries++) {
+    const dirs = await route(page, marked);
     expect(dirs, 'a marked spot to walk to').not.toBeNull();
     for (const d of dirs!) {
       const was = await spot();
       await key(page, KEY[d], true);
-      await expect.poll(async () => (await spot()) !== was || !!(await s((s) => s.battle)), { timeout: 15_000, intervals: [30] }).toBe(true);
+      // A key held a moment too long is a step too many, and the rest of the list walks into a wall;
+      // and two bots in a fight on the next cell stand a minute. Either way, a new route from here.
+      const moved = await expect.poll(async () => (await spot()) !== was || !!(await s((s) => s.battle)), { timeout: 5_000, intervals: [30] }).toBe(true).then(() => true, () => false);
       await key(page, KEY[d], false);
-      if (await s((s) => s.battle)) break;
+      if (!moved || (await s((s) => s.battle))) break;
     }
     await page.waitForTimeout(1500);
   }

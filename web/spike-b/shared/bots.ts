@@ -140,7 +140,9 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
     let best: Actor | undefined, bestD = Infinity;
     for (const o of room.actors) {
       const q = planeOf(room, o.m.spot);
-      if (o === a || o.away || !p || !q || room.inFog(o.m.spot)) continue;
+      // Not one in a fight: it went and stood by them until it was over, a minute and more (Cam,
+      // 11-02: "Bots stand next to each other without fighting").
+      if (o === a || o.away || o.battling || !p || !q || room.inFog(o.m.spot)) continue;
       const d = Math.abs(q.x - p.x) + Math.abs(q.y - p.y);
       if (d < bestD) { bestD = d; best = o; }
     }
@@ -230,6 +232,8 @@ function hunting(room: Room): boolean {
 export function botKeys(room: Room, a: Actor, b: Brain): number {
   // One frame of the key is one tile (or one turn to face a shut way): then let go.
   if (a.m.action) return 0;
+  // Somebody in its eyes, mid-step: the fight is as soon as they land.
+  if (room.sightsWalker(a)) return 0;
   const ring = room.ring();
   // Hurt is a plan of its own: it rethinks the moment a fight leaves it under HURT.
   const at = `${ring.round}:${ring.phase}:${room.events.length}${health(a) < HURT ? ':hurt' : ''}`;
@@ -275,8 +279,15 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
   if (!b.steps?.length && (room.tick + a.id * 7) % 30 === 0 && room.tick >= a.calm && !ring.safari && !room.inFog(a.m.spot, ring)) {
     const here = (o: Actor) => o !== a && !o.battling && !o.away && room.tick >= o.calm && o.m.spot.map === a.m.spot.map;
     const dx = (o: Actor) => Math.abs(o.m.spot.x - a.m.spot.x), dy = (o: Actor) => Math.abs(o.m.spot.y - a.m.spot.y);
+    // Another bot may be over a seam: the page draws the two maps as one street.
+    const p = planeOf(room, a.m.spot);
+    const near = (o: Actor) => {
+      if (o === a || o.battling || o.away || room.tick < o.calm) return false;
+      const q = planeOf(room, o.m.spot);
+      return !!p && !!q && (o.m.spot.map === a.m.spot.map || !!room.maps.get(a.m.spot.map)?.seams.some((s) => s.to === o.m.spot.map)) && Math.abs(q.x - p.x) + Math.abs(q.y - p.y) <= NEAR_TILES;
+    };
     const o = room.actors.find((o) => !o.bot && here(o) && dx(o) <= NEAR_PLAYER.x && dy(o) <= NEAR_PLAYER.y) ??
-      (room.tick >= room.duelAfter ? room.actors.find((o) => o.bot && here(o) && dx(o) + dy(o) <= NEAR_TILES) : undefined);
+      (room.tick >= room.duelAfter ? room.actors.find((o) => o.bot && near(o)) : undefined);
     const path = o ? findPath(room.world, a.m.spot, o.m.spot, 2000, true, true) : null;
     if (path?.found && path.steps.length >= 2) { b.steps = path.steps.slice(0, -1); b.stuck = 0; }
   }
@@ -289,7 +300,8 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
     // bot leaves for the trainers), a person. The cell it gave up at is gone round from
     // then on, until it has somewhere new to be: Oldale's ball at the north exit held a
     // hunter there for the rest of the match.
-    else if ((b.stuck = (b.stuck ?? 0) + 1) > 90) {
+    // Two in a fight in the way will be there for a minute: round them from the first.
+    else if ((b.stuck = (b.stuck ?? 0) + 1) > 90 || room.actors.some((o) => o.battling && sameSpot(o.m.spot, b.steps![0].to))) {
       const k = room.world.key(b.steps[0].to);
       if (k >= 0) (b.avoid ??= new Set()).add(k);
       b.steps = undefined;

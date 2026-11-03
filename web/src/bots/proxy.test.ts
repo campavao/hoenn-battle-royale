@@ -542,12 +542,12 @@ describe('the proxy duel instance', () => {
     expect(await proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] })).toBeNull();
   });
 
-  it('sends the overflow to the cheap resolver rather than queue the whole room', async () => {
+  it('tells the overflow no rather than queue the whole room', async () => {
     const inst = fakeInstance({ answers: false });
     const notes: string[] = [];
     const proxy = proxyOver(inst, notes, 5_000);
     const running = proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] });
-    // Two may wait; the fourth caller is told to settle it itself.
+    // Two may wait; the fourth caller gets no fight (spike-b main.ts judgeBots: both walk on).
     const waiting = [proxy.fight({ seat: 3, party: [mon()] }, { seat: 4, party: [mon()] }), proxy.fight({ seat: 5, party: [mon()] }, { seat: 6, party: [mon()] })];
     const overflow = await settle(proxy.fight({ seat: 7, party: [mon()] }, { seat: 8, party: [mon()] }), inst, 5);
 

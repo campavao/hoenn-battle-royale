@@ -8209,6 +8209,7 @@ function useless(b2, u, f, m) {
   if (m.volatileStatus === "confusion" && (f.volatiles.confusion || f.ability === "owntempo" || foeSide.sideConditions.safeguard)) return true;
   if (id2 === "leechseed" && (f.volatiles.leechseed || f.hasType("Grass"))) return true;
   if (id2 === "attract" && (f.volatiles.attract || f.ability === "oblivious" || u.gender === "N" || f.gender === "N" || u.gender === f.gender)) return true;
+  if (CHANGES_HANDS.has(id2)) return !canHit(b2, f, u);
   if (id2 === "dreameater" || id2 === "nightmare") return f.status !== "slp" && f.ability !== "comatose";
   if (id2 === "snore" || id2 === "sleeptalk") return u.status !== "slp";
   if (id2 === "fakeout") return u.activeTurns > 1;
@@ -8324,6 +8325,13 @@ function pickMove(b2, u, f, slots, rng) {
   }
   return pool[Math.floor(rng() * pool.length)];
 }
+function spent(b2, u, f, slots) {
+  return slots.every((slot) => {
+    if (slot.disabled || slot.pp !== void 0 && slot.pp <= 0) return true;
+    const m = b2.dex.moves.get(slot.id);
+    return useless(b2, u, f, m) || m.category !== "Status" && !CHANGES_HANDS.has(m.id) && damageOf(b2, u, f, m) <= 0;
+  });
+}
 function pickNext(b2, side, foe) {
   const bench = side.pokemon.filter((p) => p.hp > 0 && !p.isActive);
   if (!bench.length) return void 0;
@@ -8381,15 +8389,18 @@ function decide(b2, side, request, bag, lastHit, rng) {
   const row = request.active[0];
   const locked = row.moves.length === 1 && (!!u.getLockedMove?.() || row.moves[0].id === "recharge" || row.moves[0].id === "struggle");
   if (!u || !f || u.hp <= 0 || locked) return { kind: "move", slot: 0 };
+  const done = spent(b2, u, f, row.moves);
   if (!row.trapped && !row.maybeTrapped) {
-    const to = pickSwitch(b2, side, u, f, lastHit, rng);
+    const mate = done ? side.pokemon.filter((p) => p.hp > 0 && !p.isActive && canHit(b2, p, f)) : [];
+    const to = mate.length ? pickNext(b2, { pokemon: mate }, f) : pickSwitch(b2, side, u, f, lastHit, rng);
     if (to) return { kind: "switch", to };
   }
   const item = pickItem(u, side, bag);
   if (item >= 0) return { kind: "item", index: item };
+  if (done) return { kind: "struggle" };
   return { kind: "move", slot: pickMove(b2, u, f, row.moves, rng) };
 }
-var STAGE, boosted, ABSORB, RECHARGE, TWO_TURN, SELF_KO, CHANGES_HANDS, RECOVERY, SETUP_LATE_OK, WASTED, FIXED, PHYSICAL, hasSuperEffective, bestDamage;
+var STAGE, boosted, ABSORB, RECHARGE, TWO_TURN, SELF_KO, CHANGES_HANDS, RECOVERY, SETUP_LATE_OK, WASTED, FIXED, PHYSICAL, hasSuperEffective, bestDamage, canHit;
 var init_simbrain = __esm({
   "web/spike-b/shared/simbrain.ts"() {
     "use strict";
@@ -8407,9 +8418,10 @@ var init_simbrain = __esm({
     PHYSICAL = /* @__PURE__ */ new Set(["Normal", "Fighting", "Flying", "Poison", "Ground", "Rock", "Bug", "Ghost", "Steel", "???"]);
     hasSuperEffective = (b2, mon2, foe) => mon2.moveSlots.some((s) => {
       const m = b2.dex.moves.get(s.id);
-      return m.category !== "Status" && !shutOut(b2, typeOf(mon2, m), m, foe) && b2.dex.getEffectiveness(typeOf(mon2, m), foe) > 0;
+      return s.pp > 0 && m.category !== "Status" && !shutOut(b2, typeOf(mon2, m), m, foe) && b2.dex.getEffectiveness(typeOf(mon2, m), foe) > 0;
     });
-    bestDamage = (b2, mon2, foe) => Math.max(0, ...mon2.moveSlots.map((s) => damageOf(b2, mon2, foe, b2.dex.moves.get(s.id))));
+    bestDamage = (b2, mon2, foe) => Math.max(0, ...mon2.moveSlots.map((s) => s.pp > 0 ? damageOf(b2, mon2, foe, b2.dex.moves.get(s.id)) : 0));
+    canHit = (b2, mon2, foe) => bestDamage(b2, mon2, foe) > 0;
   }
 });
 
@@ -9612,6 +9624,15 @@ function* simulation(a, b2, opts) {
         useItem(battle, side, bags[n][d.index]);
         battle.skip.push(side.active[0]);
         battle.choose(side.id, "default");
+      } else if (d.kind === "struggle") {
+        const slots = side.active[0].moveSlots;
+        const left2 = slots.map((slot) => slot.pp);
+        for (const slot of slots) slot.pp = 0;
+        const ok = battle.choose(side.id, "move 1");
+        slots.forEach((slot, i) => {
+          slot.pp = left2[i];
+        });
+        if (!ok) battle.choose(side.id, "default");
       } else if (!battle.choose(side.id, `move ${d.slot + 1}`)) battle.choose(side.id, "default");
     }
     if (!acted && !battle.ended) {
@@ -9685,7 +9706,7 @@ var init_battlesim = __esm({
     init_simlog();
     init_simnames();
     init_learnset_fixes();
-    TURN_CAP = 100;
+    TURN_CAP = 60;
     dex = I.forFormat("gen3customgame");
     NATURES = ["Hardy", "Lonely", "Brave", "Adamant", "Naughty", "Bold", "Docile", "Relaxed", "Impish", "Lax", "Timid", "Hasty", "Serious", "Jolly", "Naive", "Modest", "Mild", "Quiet", "Bashful", "Rash", "Calm", "Gentle", "Sassy", "Careful", "Quirky"];
     moveByNum = /* @__PURE__ */ new Map();
@@ -11658,6 +11679,20 @@ function sees(world, from, tx, ty) {
   }
   return false;
 }
+function seesOver(world, from, to, ox, oy) {
+  const d = DELTA[from.dir];
+  if (!d) return false;
+  const tx = to.x + ox, ty = to.y + oy;
+  let x2 = from.x;
+  let y = from.y;
+  for (let i = 1; i <= SIGHT_RANGE; i++) {
+    x2 += d.dx;
+    y += d.dy;
+    if (x2 === tx && y === ty) return true;
+    if (!world.clear(from.map, x2, y) && !world.clear(to.map, x2 - ox, y - oy)) return false;
+  }
+  return false;
+}
 function eitherSees(world, a, b2) {
   if (a.map !== b2.map) return false;
   return sees(world, a, b2.x, b2.y) || sees(world, b2, a.x, a.y);
@@ -12766,47 +12801,77 @@ var Room = class {
     a.foe = a.judge = a.since = 0;
     a.calm = this.tick + GRACE;
   }
-  /** Two bots on one map in each other's eyeline fight (POK-238), one pair at a time
-   *  room-wide (BOT_DUEL_GAP). A bot has no ROM, so a trainer's page fights it in a
-   *  hidden one: the trainers take turns at it, by the frame. Nobody on the map to do it,
-   *  nobody fights. */
+  /** Where bot `b` stands from `a`, on `a`'s map's cells, when they could be said to meet: the same
+   *  map, or two joined at a seam, which the page draws side by side and anybody watching takes for
+   *  one place. */
+  across(a, b2) {
+    const p = a.m.spot, q2 = b2.m.spot;
+    if (p.map === q2.map) return { dx: q2.x - p.x, dy: q2.y - p.y, ox: 0, oy: 0 };
+    const from = this.places.get(p.map), to = this.places.get(q2.map);
+    if (!from || !to || !this.maps.get(p.map)?.seams.some((s) => s.to === q2.map)) return void 0;
+    const ox = to.gx - from.gx, oy = to.gy - from.gy;
+    return { dx: q2.x + ox - p.x, dy: q2.y + oy - p.y, ox, oy };
+  }
+  /** Two bots meet when one is in the other's eyeline, or when they stand side by side whichever
+   *  way they face (Cam, 11-02: "Bots stand next to each other without fighting"). */
+  botsMeet(a, b2) {
+    const at2 = this.across(a, b2);
+    if (!at2 || at2.dx && at2.dy) return false;
+    const far = Math.abs(at2.dx) + Math.abs(at2.dy);
+    if (far > SIGHT_RANGE) return false;
+    if (far === 1) return true;
+    const look = (o) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing });
+    if (a.m.spot.map === b2.m.spot.map) return eitherSees(this.world, look(a), look(b2));
+    return seesOver(this.world, look(a), look(b2), at2.ox, at2.oy) || seesOver(this.world, look(b2), look(a), -at2.ox, -at2.oy);
+  }
+  /** `a` has somebody in its eyeline who is mid-step, and free to fight. A bot on its way is only
+   *  ever still on the frame a step ends, so two walking never would be on the same one: 83% of the
+   *  looks bots gave each other came to nothing. It stands for the moment that step takes. */
+  sightsWalker(a) {
+    if (!this.simBots || a.battling || this.tick < a.calm || this.ring().safari) return false;
+    return this.actors.some((o) => o !== a && o.bot && !o.battling && !!o.m.action && this.tick >= o.calm && this.botsMeet(a, o));
+  }
+  /** Two bots who meet fight (POK-238). The host simulates it (Room.simBots), any number at once and
+   *  from the frame they meet: the "!", and the one who looked walks up, as any fight in this game
+   *  starts (Cam, 11-02: "Are these two battling each other they should be right next to each
+   *  other"). Otherwise a bot has no ROM, so a trainer's page fights it in a hidden one, one pair at a
+   *  time room-wide (BOT_DUEL_GAP): the trainers take turns at it, by the frame. Nobody on the map to
+   *  do it, nobody fights. */
   engageBots(events) {
     if (this.ring().safari) return;
-    if (!this.simBots && this.tick < this.duelAfter || this.tick % 8) return;
+    if (!this.simBots && (this.tick < this.duelAfter || this.tick % 8)) return;
     const judges = [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b2) => !b2.away)].filter((j) => !this.actors.some((a) => a.judge === j.id));
     if (!this.simBots && !judges.length) return;
-    const byMap = /* @__PURE__ */ new Map();
-    for (const a of this.actors) {
-      if (!a.bot || a.battling || a.m.action || this.tick < a.calm) continue;
-      const l = byMap.get(a.m.spot.map) ?? [];
-      l.push(a);
-      byMap.set(a.m.spot.map, l);
-    }
-    const look = (o) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing });
-    for (const id2 of [...byMap.keys()].sort()) {
-      const l = byMap.get(id2);
-      for (let i = 0; i < l.length; i++) {
-        for (let j = i + 1; j < l.length; j++) {
-          const a = l[i], b2 = l[j];
-          if (a.battling || b2.battling || !eitherSees(this.world, look(a), look(b2))) continue;
-          const dx = b2.m.spot.x - a.m.spot.x, dy = b2.m.spot.y - a.m.spot.y;
-          const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
-          a.m.facing = a.m.moveDir = toB;
-          b2.m.facing = b2.m.moveDir = BACK[toB];
-          const judge = this.simBots ? HOST_JUDGE : judges[(this.tick >>> 3) % judges.length].id;
-          a.battling = b2.battling = true;
-          a.foe = b2.id;
-          b2.foe = a.id;
-          a.judge = b2.judge = judge;
-          a.since = b2.since = this.tick;
-          a.keys = a.last = b2.keys = b2.last = 0;
-          events.push({ type: "bots", tick: this.tick, id: judge, a: a.id, b: b2.id });
-          if (this.simBots) continue;
-          this.duelAfter = this.tick + BOT_DUEL_GAP;
-          return;
+    const free = this.actors.filter((a) => a.bot && !a.battling && !a.m.action && this.tick >= a.calm);
+    for (let i = 0; i < free.length; i++) {
+      for (let j = i + 1; j < free.length; j++) {
+        const a = free[i], b2 = free[j];
+        if (a.battling || b2.battling || !this.botsMeet(a, b2)) continue;
+        const { dx, dy } = this.across(a, b2);
+        const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        const bWalks = b2.m.facing === BACK[toB] && a.m.facing !== toB;
+        a.m.facing = a.m.moveDir = toB;
+        b2.m.facing = b2.m.moveDir = BACK[toB];
+        a.battling = b2.battling = true;
+        a.foe = b2.id;
+        b2.foe = a.id;
+        a.keys = a.last = b2.keys = b2.last = 0;
+        if (this.simBots) {
+          a.meet = { foe: b2.id, walk: !bWalks, since: this.tick, duel: false, bots: true };
+          b2.meet = { foe: a.id, walk: bWalks, since: this.tick, duel: false, bots: true };
+          continue;
         }
+        this.botsFight(a, b2, judges[(this.tick >>> 3) % judges.length].id, events);
+        this.duelAfter = this.tick + BOT_DUEL_GAP;
+        return;
       }
     }
+  }
+  /** The fight itself, handed to whoever runs it. */
+  botsFight(a, b2, judge, events) {
+    a.judge = b2.judge = judge;
+    a.since = b2.since = this.tick;
+    events.push({ type: "bots", tick: this.tick, id: judge, a: a.id, b: b2.id });
   }
   /** `id` off the map, and everything that waited on them let go. */
   remove(id2) {
@@ -13103,8 +13168,9 @@ var Room = class {
         continue;
       }
       if (this.tick - m.since < WALKUP_BANG) continue;
-      const dx = o.m.spot.x - w.m.spot.x, dy = o.m.spot.y - w.m.spot.y;
-      const beside = o.m.spot.map === w.m.spot.map && Math.abs(dx) + Math.abs(dy) <= 1;
+      const over2 = m.bots ? this.across(w, o) : void 0;
+      const dx = over2 ? over2.dx : o.m.spot.x - w.m.spot.x, dy = over2 ? over2.dy : o.m.spot.y - w.m.spot.y;
+      const beside = (over2 || o.m.spot.map === w.m.spot.map) && Math.abs(dx) + Math.abs(dy) <= 1;
       if (w.m.action) {
         tick(w.m, keysOf(0), this.stepFor(w));
         continue;
@@ -13121,6 +13187,10 @@ var Room = class {
         o.m.facing = o.m.moveDir = BACK[toO];
       }
       w.meet = o.meet = void 0;
+      if (m.bots) {
+        this.botsFight(w, o, HOST_JUDGE, events);
+        continue;
+      }
       const [h, f] = w.bot ? [o, w] : o.bot ? [w, o] : w.id < o.id ? [w, o] : [o, w];
       if (m.duel) {
         events.push({ type: "duel", tick: this.tick, id: h.id, foe: f.id, first: true });
@@ -13422,7 +13492,7 @@ var Room = class {
       if (a.meet) {
         mix2(a.meet.foe);
         mix2(a.meet.since);
-        mix2((a.meet.walk ? 1 : 0) | (a.meet.duel ? 2 : 0));
+        mix2((a.meet.walk ? 1 : 0) | (a.meet.duel ? 2 : 0) | (a.meet.bots ? 4 : 0));
       }
     }
     for (const [k, t7] of this.taken) {
@@ -13676,7 +13746,7 @@ function goal(room, a, b2) {
     let best, bestD2 = Infinity;
     for (const o of room.actors) {
       const q2 = planeOf(room, o.m.spot);
-      if (o === a || o.away || !p2 || !q2 || room.inFog(o.m.spot)) continue;
+      if (o === a || o.away || o.battling || !p2 || !q2 || room.inFog(o.m.spot)) continue;
       const d = Math.abs(q2.x - p2.x) + Math.abs(q2.y - p2.y);
       if (d < bestD2) {
         bestD2 = d;
@@ -13748,6 +13818,7 @@ function hunting(room) {
 }
 function botKeys(room, a, b2) {
   if (a.m.action) return 0;
+  if (room.sightsWalker(a)) return 0;
   const ring = room.ring();
   const at2 = `${ring.round}:${ring.phase}:${room.events.length}${health(a) < HURT ? ":hurt" : ""}`;
   if (!ring.safari && b2.goal && b2.goal.map !== a.m.spot.map && b2.goal.map.startsWith(SAFARI)) {
@@ -13783,7 +13854,13 @@ function botKeys(room, a, b2) {
   if (!b2.steps?.length && (room.tick + a.id * 7) % 30 === 0 && room.tick >= a.calm && !ring.safari && !room.inFog(a.m.spot, ring)) {
     const here = (o2) => o2 !== a && !o2.battling && !o2.away && room.tick >= o2.calm && o2.m.spot.map === a.m.spot.map;
     const dx = (o2) => Math.abs(o2.m.spot.x - a.m.spot.x), dy = (o2) => Math.abs(o2.m.spot.y - a.m.spot.y);
-    const o = room.actors.find((o2) => !o2.bot && here(o2) && dx(o2) <= NEAR_PLAYER.x && dy(o2) <= NEAR_PLAYER.y) ?? (room.tick >= room.duelAfter ? room.actors.find((o2) => o2.bot && here(o2) && dx(o2) + dy(o2) <= NEAR_TILES) : void 0);
+    const p = planeOf(room, a.m.spot);
+    const near = (o2) => {
+      if (o2 === a || o2.battling || o2.away || room.tick < o2.calm) return false;
+      const q2 = planeOf(room, o2.m.spot);
+      return !!p && !!q2 && (o2.m.spot.map === a.m.spot.map || !!room.maps.get(a.m.spot.map)?.seams.some((s) => s.to === o2.m.spot.map)) && Math.abs(q2.x - p.x) + Math.abs(q2.y - p.y) <= NEAR_TILES;
+    };
+    const o = room.actors.find((o2) => !o2.bot && here(o2) && dx(o2) <= NEAR_PLAYER.x && dy(o2) <= NEAR_PLAYER.y) ?? (room.tick >= room.duelAfter ? room.actors.find((o2) => o2.bot && near(o2)) : void 0);
     const path = o ? findPath(room.world, a.m.spot, o.m.spot, 2e3, true, true) : null;
     if (path?.found && path.steps.length >= 2) {
       b2.steps = path.steps.slice(0, -1);
@@ -13794,7 +13871,7 @@ function botKeys(room, a, b2) {
     if (sameSpot(b2.steps[0].to, a.m.spot)) {
       b2.steps.shift();
       b2.stuck = 0;
-    } else if ((b2.stuck = (b2.stuck ?? 0) + 1) > 90) {
+    } else if ((b2.stuck = (b2.stuck ?? 0) + 1) > 90 || room.actors.some((o) => o.battling && sameSpot(o.m.spot, b2.steps[0].to))) {
       const k = room.world.key(b2.steps[0].to);
       if (k >= 0) (b2.avoid ??= /* @__PURE__ */ new Set()).add(k);
       b2.steps = void 0;
@@ -13971,8 +14048,8 @@ var Host = class {
     if (this.players.has(id2)) this.pending.push({ c: "open", id: id2, n });
   }
   /** What trainer `id`'s fight left of bot `bot`'s team: each slot's HP share. */
-  wear(id2, bot, hp2, spent) {
-    if (this.players.has(id2)) this.pending.push({ c: "wear", id: id2, bot, hp: hp2, ...spent ? { spent } : {} });
+  wear(id2, bot, hp2, spent2) {
+    if (this.players.has(id2)) this.pending.push({ c: "wear", id: id2, bot, hp: hp2, ...spent2 ? { spent: spent2 } : {} });
   }
   /** FLY off the page's MAP landed it on `map` at x, y. */
   fly(id2, map, x2, y) {
@@ -14946,4 +15023,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "4fdd03ad522d";
+export const WORLD_HASH = "e9c69d9c6287";
