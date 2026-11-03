@@ -71,13 +71,10 @@ const STEP: Record<number, [number, number]> = { 1: [0, 1], 2: [0, -1], 3: [-1, 
 export interface TeamRow { species: number; level: number }
 // include/br/br_wild.h.
 const WILD_ASKED = 1;
-const WILD_FIGHTING = 2;
 const WILD_DONE = 3;
 const WILD_ASKED_SAFARI = 4;
 /** br_wild.h's BR_WILD_ASKED_TEACH: arm the teach for the item in `species`. */
 const WILD_ASKED_TEACH = 5;
-/** br_wild.h's BR_WILD_ASKED_PICK: the fly map as the drop's picker (br_pick.c). */
-const WILD_ASKED_PICK = 6;
 /** br_wild.h's BR_WILD_ASKED_FISH: a hooked POKeMON, `species` the rod (BR_WILD_FISH_SAFARI
  *  in the opening). */
 const WILD_ASKED_FISH = 7;
@@ -110,8 +107,6 @@ const BATTLE_AUTO_TEXT = 14;
 const BATTLE_MENU_AT = 8;
 /** gBrLevels.lifting (br_levels.h): set while the ROM lifts the party to a new rung. */
 const LEVELS_LIFTING = 3;
-/** br_event.h's BR_EVENT_MAX: the events gBrEvents has room for. */
-const BR_EVENT_MAX = 4;
 /** How long the last fight took to start: from the TRAINER card to the battle running. */
 export let lastStart: { ms: number; frames: number } | null = null;
 
@@ -135,18 +130,6 @@ export interface DuelLink {
   send(seq: number, data: number[]): void;
   /** Called with a function the page hands each block from the other side to. */
   listen(take: ((seq: number, data: number[]) => void) | null): void;
-}
-
-/** What the MAP row (MENU_ACTION_BR_MAP) is opened on (ringmap.ts): where this world's
- *  trainer stands, as a MAP section and a cell of it, and the ring as the ROM draws it --
- *  r 127 for nothing fogged (the page fogs over it), -1 for fog everywhere -- and the
- *  section the prompt names safe, in the ROM's own letters ([] names none). */
-export interface MapLook {
-  mapsec: number; cellX: number; cellY: number; r: number; place: number[];
-  /** The match's marks, as the room has them (the hidden ROM saw none of it): the leaders
-   *  anybody has beaten, a bit each in br_gym.c's order, and the events dropped this round,
-   *  each as its MAP section and whether its legendary is taken. */
-  marks?: { gyms: number; events: { mapsec: number; taken: boolean }[] };
 }
 
 /** Somebody else's battle, as the page hands it to a mirror (watch.ts): what their ROM
@@ -288,11 +271,7 @@ export interface RomBattles {
   reorder(a: number, b: number): Promise<void>;
   /** This one holds `item` now, 0 for nothing: what it held is not the bag's business here. */
   setHeld(slot: number, item: number): Promise<void>;
-  menu(action: number, onStart: () => void, onEnd: () => void, look?: MapLook, walk?: MenuWalk): Promise<{ up: boolean; said: string; flew?: { group: number; num: number; x: number; y: number } }>;
-  /** The drop (br_pick.c): the fly map, "Drop where?", opened on `look`, every section a
-   *  choice, its own twenty seconds. The section chosen, or 0 when the clock ran out on
-   *  none. `onStart` when the map is up. */
-  drop(look: MapLook, onStart: () => void): Promise<number>;
+  menu(action: number, onStart: () => void, onEnd: () => void, walk?: MenuWalk): Promise<{ up: boolean; said: string }>;
   /** Somebody else's battle, replayed on this ROM as the match's spectator replays it
    *  (br_spectate.c: a BSTART, its TURNs, a RESULT to finish), the trainer watched near
    *  the camera. `onStart` when the replay is on screen. Resolves back on the field (or
@@ -489,9 +468,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
   // parked boot snapshot, which would put the counts back to the boot's.
   const tallyAt = sym('gBrTally');
   const tallyOf = (u: Uint8Array) => { const v = new DataView(u.buffer, u.byteOffset, u.byteLength); return readTally((a, bits) => (bits === 8 ? v.getUint8(a) : bits === 16 ? v.getUint16(a, true) : v.getUint32(a, true)), 0); };
-  const mapAt = sym('gBrMap');
   const romView = new DataView(rom.buffer, rom.byteOffset, rom.byteLength);
-  const headerAt = sym('gMapHeader');
   const mainAt = sym('gMain');
   const seatAt = sym('gBrMySeat');
   const spectAt = sym('gBrSpectate');
@@ -822,42 +799,6 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
    *  (region_map.c InitMapBasedOnPlayerLocation): the section, and a spot on the parked
    *  map's own layout that its sum lands on the cell. Undone by the restore after. */
   const partyMenuAt = sym('gPartyMenu');
-  const lookFrom = (look: MapLook) => {
-    const r = emu.bytes(ringAt, 36);
-    r[4] = look.r & 0xff;
-    const place = look.place.slice(0, 16);
-    r.set([...place, 0xff], 14);
-    r[33] = 0; // nothing to preview: the page blinks it
-    emu.write(headerAt + 0x14, look.mapsec, 8);
-    const entry = sym('gRegionMapEntries') + look.mapsec * 8 - ROM_BASE;
-    const layout = emu.read(headerAt, 32) - ROM_BASE;
-    const along = (dim: number, cells: number, cell: number) => Math.max(1, Math.floor(dim / cells)) * cell;
-    const s1 = emu.read(save1, 32);
-    emu.write(s1, along(romView.getInt32(layout, true), rom[entry + 2], look.cellX), 16);
-    emu.write(s1 + 2, along(romView.getInt32(layout + 4, true), rom[entry + 3], look.cellY), 16);
-    if (look.marks) markFrom(look.marks);
-  };
-  /** The heads and balls the MAP draws (BrGym_DrawOnMap, BrEvent_DrawOnMap) are read from
-   *  gBrGymsBeaten and gBrEvents, which only this ROM's own fights and the classic's EVENT
-   *  messages ever wrote: the room's say goes in instead. An event slot's trader is left
-   *  off, so none is spawned on the hidden field for it (rom.trade() sends its own). */
-  const gymsAt = sym('gBrGymsBeaten');
-  const eventsAt = sym('gBrEvents');
-  const markFrom = (marks: NonNullable<MapLook['marks']>) => {
-    emu.write(gymsAt, marks.gyms & 0xff, 8);
-    const evs = marks.events.slice(-BR_EVENT_MAX);
-    let live = 0, taken = 0;
-    emu.write(eventsAt, emu.read(match + 8, 32), 32); // gBrEvents.seed: this match's
-    evs.forEach((e, i) => {
-      emu.write(eventsAt + 4 + i * 2, 0xb000 | (i << 4), 16);
-      emu.write(eventsAt + 12 + i, e.mapsec, 8);
-      emu.write(eventsAt + 20 + i * 8 + 4, 0, 16);
-      live |= 1 << i;
-      if (e.taken) taken |= 1 << i;
-    });
-    emu.write(eventsAt + 16, live, 8);
-    emu.write(eventsAt + 17, taken, 8);
-  };
   // One thing at a time on the ROM: a battle asked for while an item goes in waits for it.
   let queue: Promise<unknown> = Promise.resolve();
   // FAST text and no battle scene, as br_boot.c parks the ROM.
@@ -1419,20 +1360,16 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         carried = last = next;
       });
     },
-    menu(action, onStart, onEnd, look, walk) {
+    menu(action, onStart, onEnd, walk) {
       return onCore(async () => {
         if (broken || !startMenu) return { up: false, said: '' };
         leaving = false;
         lay();
-        if (look) lookFrom(look);
         emu.resume();
         drain(() => undefined);
         // MOVES off the team is noted as it is asked (gBrCatch.movesSlot), for the line its
-        // field says when there is nothing to learn. A on a town on the MAP, with somebody
-        // who could learn FLY, is Emerald's own flight (br_map.c, POK-278): BrMap_TakeFlight
-        // names the bird in gPartyMenu.slotId, which nothing else on a look writes.
+        // field says when there is nothing to learn.
         let moves = false;
-        if (look) emu.write(partyMenuAt + 9, 0xff, 8);
         if (walk?.to === 'use') {
           emu.write(sym('gBagPosition')! + BAG_POSITION_POCKET, walk.pocket, 8);
           emu.write(sym('gBrBag')!, walk.item, 16);
@@ -1441,7 +1378,6 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
           drain(() => undefined);
           if (!Number.isNaN(catchAt) && emu.read(catchAt + 2, 8) !== 0xff) moves = true;
         });
-        let flew: { group: number; num: number; x: number; y: number } | undefined;
         const tap = async (k: GbaKey) => { emu.press(k); await frames(emu, 3); emu.release(k); await frames(emu, 3); };
         let up = false;
         let back = true;
@@ -1482,21 +1418,11 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
             // field: the page takes the screen now, and B shuts the menu out of sight.
             onEnd();
           }
-          // A flight: the bird, then the warp, on the hidden field. Where it lands (the
-          // town's heal location) is where the page's trainer goes; the hidden ROM is
-          // parked again after, as after any row.
-          const s1 = () => emu.read(save1, 32);
-          const from = emu.read(s1() + 4, 16);
-          if (look && emu.read(partyMenuAt + 9, 8) < 6 && await until(emu, () => onField() && emu.read(s1() + 4, 16) !== from, 900)) {
-            await frames(emu, 30);
-            const s = s1();
-            flew = { group: emu.read(s + 4, 8), num: emu.read(s + 5, 8), x: emu.read(s, 16), y: emu.read(s + 2, 16) };
-          }
-          // Or the row asked the field for a screen of its own and shut the menu: the
+          // The row asked the field for a screen of its own and shut the menu: the
           // team's MOVES (party_menu.c's CursorCb_BrMoves) is the relearner once the field
           // is back (BrCatch_Tick). That one is the player's too, and what it taught stays.
-          let again = !!flew;
-          for (; !flew;) {
+          let again = false;
+          for (;;) {
             // The START menu takes keys once its handler is back and its text drawn
             // (touch.ts's START_SETTLE_FRAMES).
             await until(emu, () => emu.read(menuCbAt, 32) === startMenu.input || !onField(), 120);
@@ -1507,7 +1433,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
             await backOnField();
             onEnd();
           }
-          if (!flew && emu.read(menuCbAt, 32) === startMenu.input) {
+          if (emu.read(menuCbAt, 32) === startMenu.input) {
             await frames(emu, 12);
             await tap('b');
           } else back = again;
@@ -1526,43 +1452,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         else keep(now);
         carried = last = now;
         leaving = false;
-        return { up, said, ...(flew ? { flew } : {}) };
-      });
-    },
-    drop(look, onStart) {
-      return onCore(async () => {
-        if (broken) return 0;
-        leaving = false;
-        lay();
-        lookFrom(look);
-        emu.resume();
-        drain(() => undefined);
-        let section = -1, ran = 0;
-        const pickAt = sym('gBrPick');
-        const watch = emu.onFrame(() => drain((m) => { if (m.t === 'pick') section = m.section; }));
-        emu.write(askAt, WILD_ASKED_PICK, 8);
-        const up = await until(emu, () => emu.read(askAt, 8) === WILD_FIGHTING && !onField(), 120);
-        if (up) {
-          // Off the field is not on screen yet: the ROM fades to black and loads the region
-          // map, and showing it then put a black band over the page for a moment at every
-          // buzzer. The page keeps the field until the map's fade-in is done (two seconds
-          // at most, so a ROM with no fade to read still shows its map).
-          const fadeAt = sym('gPaletteFade');
-          await until(emu, () => { if (Number.isNaN(fadeAt)) return true; const f = fadeOf(emu.read(fadeAt + FADE_Y_WORD, 16), emu.read(fadeAt + FADE_COLOR_WORD, 16)); return !f.active && f.y === 0; }, 120);
-          onStart();
-          // Chosen, or the map's clock (BrPick.timer) ran out with the cursor on no place,
-          // which asks nothing: a second on, it is nobody's choice.
-          await until(emu, () => section >= 0 || leaving || (emu.read(pickAt + 8, 16) === 0 && ++ran > 60), 40 * 60);
-        }
-        watch();
-        await partyDone();
-        emu.pause();
-        const now = kept();
-        if (!repark(true)) broken = true;
-        else keep(now);
-        carried = last = now;
-        leaving = false;
-        return section > 0 ? section : 0;
+        return { up, said };
       });
     },
     mirror(feed, onStart) {

@@ -732,7 +732,7 @@ function giveNext(): void {
       // the agbcc build), and then it went in the bag after the player had already said who.
       const got = await r.give(item, 1);
       if (slot === null || !got?.items.some((g) => g.id === item)) return got;
-      if (isMachine(item)) await r.menu(2, () => battleEl.classList.add('on'), () => battleEl.classList.remove('on'), undefined, { to: 'use', pocket: POCKET_TMHM, item, slot });
+      if (isMachine(item)) await r.menu(2, () => battleEl.classList.add('on'), () => battleEl.classList.remove('on'), { to: 'use', pocket: POCKET_TMHM, item, slot });
       else {
         const was = battleMenu?.heldBy(slot) ?? 0;
         if (await r.take(item)) await r.setHeld(slot, item);
@@ -2627,9 +2627,9 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       field: {
         close: closePanel,
         readBag: () => readFieldBag(emu, sym),
-        summary: (slot) => void panelWalk((r) => r.menu(1, panelShow, panelHide, undefined, { to: 'summary', slot })),
+        summary: (slot) => void panelWalk((r) => r.menu(1, panelShow, panelHide, { to: 'summary', slot })),
         moves: (slot) => void panelWalk(async (r) => {
-          const { said } = await r.menu(1, panelShow, panelHide, undefined, { to: 'moves', slot });
+          const { said } = await r.menu(1, panelShow, panelHide, { to: 'moves', slot });
           if (said) say(said);
         }),
         swap: async (a, b) => { await rom?.reorder(a, b); },
@@ -2638,7 +2638,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
         use: (pocket, item, slot, move) => {
           const count = () => readPocket(emu, sym, pocket).find((x) => x.item === item)?.n ?? 0;
           const was = count();
-          void panelWalk((r) => r.menu(2, panelShow, panelHide, undefined, { to: 'use', pocket, item, slot, move })).then(() => {
+          void panelWalk((r) => r.menu(2, panelShow, panelHide, { to: 'use', pocket, item, slot, move })).then(() => {
             if (count() >= was && panelUp) say("It won't have any effect.");
           });
         },
