@@ -84,6 +84,8 @@ import { BAG_POSITION_POCKET, POCKET_TMHM, isMachine, readBattleBag, readFieldBa
 import type { Rom } from '../src/battle/movebook';
 import { BATTLE_MENU, MENU_ACTION, MENU_PARTY, TouchLayer } from '../src/touch';
 import { romAsks, type TeamRow } from './rom';
+import { pageWin } from '../src/ui/pagewin';
+import { SummaryWindow } from '../src/ui/summary';
 import { HUD } from '../src/net/hud';
 import { ITEM_ACRO_BIKE, ITEM_MACH_BIKE, MINI_MAP, PhoneHud, fieldMoves, fogPhase, itemCut, signFor, type FieldMove } from '../src/ui/phonehud';
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
@@ -458,13 +460,22 @@ addEventListener('keydown', (e) => {
 // The windows over a battle have the keys while they are up, as a pad's L and R: Q and E.
 const windowKey = (key: string): string | undefined => (key === 'q' || key === 'Q' ? 'l' : key === 'e' || key === 'E' ? 'r' : KEYMAP[key]);
 addEventListener('keydown', (e) => {
+  if (lobby?.shown || e.ctrlKey || e.metaKey || !pageWin.up) return;
+  const k = e.key === 'Escape' ? 'b' : windowKey(e.key);
+  if (!k) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  if (!e.repeat) pageWin.key(k);
+}, true);
+addEventListener('keydown', (e) => {
   if (lobby?.shown || e.ctrlKey || e.metaKey || !battleMenu?.isShown) return;
   const k = windowKey(e.key);
   if (!k) return;
   e.preventDefault();
   e.stopImmediatePropagation();
-  if (!e.repeat) battleMenu.key(k);
+  if (!e.repeat) battleMenu.press(k);
 }, true);
+addEventListener('keyup', (e) => { const k = windowKey(e.key); if (k) battleMenu?.release(k); }, true);
 addEventListener('keydown', (e) => {
   if (intro()) return;
   if (e.key === 'v' || e.key === 'V') { toggleSpectate(); return; }
@@ -1121,6 +1132,7 @@ async function openMenu(): Promise<void> {
 
 // ---- PARTY and BAG on the field, on the battle's own windows ------------------------------
 let panelUp = false;
+let summaryWin: SummaryWindow | null = null;
 function openPanel(home: 'party' | 'bag'): void {
   if (!battleMenu) return;
   swapping = true;
@@ -1672,6 +1684,22 @@ async function nurse(): Promise<void> {
   say('Done. Your POKéMON are fully healed.');
 }
 
+/** Somebody's offer of a mon: yes or no, and its SUMMARY first if I want to see it. Nobody's
+ *  party holds it, so that is what the wire says, its species, at the rung it would come at. */
+async function askLooking(title: string, yes: string, species: number): Promise<string> {
+  for (;;) {
+    const c = await ask(title, [[yes, 'y'], ['SUMMARY', 'look'], ['NO, THANKS', '']]);
+    if (c !== 'look') return c;
+    const level = rungForPhase(link.room.ring().phase + 1);
+    swapping = true;
+    await new Promise<void>((done) => {
+      summaryWin?.open([{ species, name: speciesName(species), level, hp: 1, maxHp: 1, status: 0, item: 0, itemName: '', ability: '', moves: [], active: false }], 0, () => !isOut && !battle, done);
+    });
+    swapping = false;
+    calmUntil = frame + 30;
+  }
+}
+
 /** An event's trader (br_event.c): his offer, and if yes, the party menu on the ROM's
  *  screen to pick which one he gets. He keeps it and offers it next. */
 async function trade(n: number, species: number): Promise<void> {
@@ -1682,7 +1710,7 @@ async function trade(n: number, species: number): Promise<void> {
     if (swapping) leaveScreen();
     asking?.done('');
     const name = speciesName(species);
-    const c = await ask(`I'll trade you my ${name} for one of yours. Which one?`, [['CHOOSE', 'y'], ['NO, THANKS', '']]);
+    const c = await askLooking(`I'll trade you my ${name} for one of yours. Which one?`, 'CHOOSE', species);
     // Somebody at home's goes through a trade's evolution on the way over (br_loot.c's
     // BrLoot_HomeTrade); an event's trader's does not (br_event.c's Swap).
     const got = n >= HOME_N ? tradedInto(species) : species;
@@ -1715,7 +1743,7 @@ async function gift(n: number, species: number): Promise<void> {
     if (!rom || isOut || battle || swapping) return;
     asking?.done('');
     const name = speciesName(species);
-    const c = await ask(`Will you look after my ${name} for me?`, [['YES', 'y'], ['NO, THANKS', '']]);
+    const c = await askLooking(`Will you look after my ${name} for me?`, 'YES', species);
     if (c !== 'y' || !rom || isOut) return;
     const left = await dropPanel('GIFT', [{ species, level: rungForPhase(link.room.ring().phase + 1) }]);
     if (!left.some((m) => m.species === species)) taken = species;
@@ -2700,10 +2728,10 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     return false;
   };
   const PARTY_SLOT_ID = 9;
-  let walk: { slot: number; summary: boolean; step: number; frames: number; item: boolean; move?: number; forced?: boolean } | null = null;
-  const walkParty = (slot: number, summary: boolean) => {
-    walk = { slot, summary, step: 0, frames: 0, item: false };
-    partyHold = !summary;
+  let walk: { slot: number; step: number; frames: number; item: boolean; move?: number; forced?: boolean } | null = null;
+  const walkParty = (slot: number) => {
+    walk = { slot, step: 0, frames: 0, item: false };
+    partyHold = true;
     partyGone = false;
     partyHeld = 0;
     touch.chooseBattle(MENU_ACTION, 2);
@@ -2715,7 +2743,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     emu.write(sym('gBrBag')!, item, 16);
   });
   const useOn = (pocket: number, item: number, slot: number, move?: number) => {
-    walk = { slot, summary: false, step: 0, frames: 0, item: true, move };
+    walk = { slot, step: 0, frames: 0, item: true, move };
     partyHold = true;
     partyGone = false;
     partyHeld = 0;
@@ -2725,7 +2753,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     // One has fainted: the ROM's fade and party stay behind the picture until it is answered.
     const brAt = sym('gBrBattle');
     if (brAt !== undefined && emu.read(brAt + BATTLE_MENU, 8) === MENU_PARTY) {
-      if (!walk?.summary) { partyHold = true; partyGone = true; partyHeld = 0; }
+      partyHold = true; partyGone = true; partyHeld = 0;
     }
     menu.away = !!walk;
     if (!walk) return;
@@ -2739,12 +2767,8 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       } else if (walk.frames > 400) { walk = null; partyHold = false; }
     } else if (walk.step === 1 && walk.frames > 40) {
       // Its little menu: SHIFT, SUMMARY, CANCEL.
-      touch.tapKey(walk.summary ? 'down' : 'a');
-      walk.step = walk.summary ? 2 : 3;
-      walk.frames = 0;
-    } else if (walk.step === 2 && walk.frames > 12) {
       touch.tapKey('a');
-      walk.step = 4;
+      walk.step = 3;
       walk.frames = 0;
     } else if (walk.step === 3 && walk.frames % 30 === 0) {
       // SHIFT is taken once its question has printed: pressed again until the party is gone.
@@ -2755,13 +2779,6 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       else if (choosing()) { touch.tapKey('b'); walk = null; }
       else if (walk.frames > 400) { touch.tapKey('b'); walk = null; }
       else touch.tapKey('a');
-    } else if (walk.step === 4) {
-      // The SUMMARY is the player's until it shuts; then the party, which B leaves.
-      if (walk.frames > 60 && choosing()) {
-        // Who goes out is still the question: nothing to leave, and the picture held again.
-        if (walk.forced) partyHold = true; else touch.tapKey('b');
-        walk = null;
-      }
     } else if (walk.step === 6) {
       // An ETHER's "restore which move?": down to it, and A.
       if (walk.frames > 40 && walk.frames % 12 === 0) {
@@ -2794,6 +2811,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
           moves: m.moves.map((v, n) => ({ ...v, maxPp: ppWithBonus(moveInfo(tables, v.id)?.pp ?? 0, m.ppBonuses, n) })),
           itemName: art?.itemName(m.item) ?? '',
           ability: art?.abilityName(m.species, m.ability) ?? '',
+          abilityNum: m.ability,
           active: false,
         }));
         if (panelUp) return rows;
@@ -2809,15 +2827,13 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       icon: (species) => monIconOf(species),
       bag: () => bagArtOf(),
       keys: touchPad ? undefined : { party: 'Q', bag: 'E' },
-      switchTo: (slot) => walkParty(slot, false),
-      summary: (slot) => walkParty(slot, true),
+      switchTo: (slot) => walkParty(slot),
+      showMon: (rows, at) => summaryWin?.open(rows, at, () => menu.isShown),
       useOn,
-      sendOut: (slot) => { walk = { slot, summary: false, step: 0, frames: 0, item: false, forced: true }; },
-      summaryOut: (slot) => { walk = { slot, summary: true, step: 0, frames: 0, item: false, forced: true }; partyHold = false; },
+      sendOut: (slot) => { walk = { slot, step: 0, frames: 0, item: false, forced: true }; },
       field: {
         close: closePanel,
         readBag: () => readFieldBag(emu, sym),
-        summary: (slot) => void panelWalk((r) => r.menu(1, panelShow, panelHide, { to: 'summary', slot })),
         moves: (slot) => void panelWalk(async (r) => {
           const { said } = await r.menu(1, panelShow, panelHide, { to: 'moves', slot });
           if (said) say(said);
@@ -2842,6 +2858,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       : undefined,
   });
   battleMenu = menu;
+  summaryWin = new SummaryWindow({ rom: tables, pic: (species) => art?.monPic(species, false) ?? null, speciesName, scale: windowScale, touch: touchPad });
   // A window with a mouse: the windows at their whole-pixel size, under a picture fitted to what
   // they leave. A phone's follow its picture.
   const DESK_MENU_H = 136;
@@ -3273,7 +3290,8 @@ function padMap(): Record<number, string> {
 function padDown(k: string): void {
   if (intro()) return;
   if (lobby?.shown) { if (GBA_KEY[k]) lobby.stage.key(GBA_KEY[k]); return; }
-  if (battleMenu?.isShown) { battleMenu.key(k); return; }
+  if (pageWin.up) { pageWin.key(k); return; }
+  if (battleMenu?.isShown) { battleMenu.press(k); return; }
   if (k === 'l' || k === 'r') {
     if (!asking && !battle && !swapping && !romUp) void runMenu(k === 'l' ? '1' : '2');
     return;
@@ -3285,6 +3303,7 @@ function padDown(k: string): void {
   else if (k === 'start') void openMenu();
 }
 function padUp(k: string): void {
+  battleMenu?.release(k);
   held.delete(k);
   if (GBA_KEY[k]) rom?.release(GBA_KEY[k]);
 }

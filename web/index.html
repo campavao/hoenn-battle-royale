@@ -361,6 +361,24 @@
       .stall-head { margin: 0 0 6px; font-weight: 600; color: #ffe08a; letter-spacing: 0.04em; }
       .stall-line { margin: 0 0 12px; font: 12px/1.5 ui-monospace, monospace; color: #cfe3ef; overflow-wrap: anywhere; }
       .stall-box button { font: inherit; background: #4f6b7d; color: #fff; border: 0; border-radius: 6px; padding: 6px 14px; margin-right: 8px; cursor: pointer; }
+      /* The page's own small windows over everything (ui/pagewin.ts): SUMMARY, MOVES. */
+      #page-win { position: fixed; inset: 0; z-index: 6; display: grid; place-items: center; background: #0007; }
+      #page-win[hidden], #page-win > [hidden], #page-win .bm-btn[hidden] { display: none; }
+      #page-win canvas { display: block; }
+      body:has(#page-win:not([hidden])) #battle-menu { visibility: hidden; }
+      #summary { display: grid; justify-content: center; gap: calc(var(--s, 1.5) * 4px); }
+      .sum-moves { display: grid; grid-template-columns: auto auto; column-gap: calc(var(--s, 1.5) * 8px); row-gap: calc(var(--s, 1.5) * 4px); }
+      .sum-row { display: flex; justify-content: center; gap: calc(var(--s, 1.5) * 4px); }
+      .sum-detail { display: none; }
+      #summary.on-move .sum-detail { display: block; }
+      #summary.on-move .sum-stats, #summary.on-move .sum-info { display: none; }
+      #summary.wide { grid-template-columns: auto auto; column-gap: calc(var(--s, 1.5) * 8px); }
+      #summary.wide .sum-card { grid-area: 1 / 1; }
+      #summary.wide .sum-stats { grid-area: 2 / 1; display: block; }
+      #summary.wide .sum-info { grid-area: 3 / 1; display: block; }
+      #summary.wide .sum-moves { grid-area: 1 / 2; }
+      #summary.wide .sum-detail { grid-area: 2 / 2 / 4 / 3; display: block; }
+      #summary.wide .sum-row { grid-area: 4 / 1 / 5 / 3; }
     </style>
   </head>
   <body>

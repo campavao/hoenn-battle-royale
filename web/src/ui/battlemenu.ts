@@ -286,7 +286,7 @@ const FORGET_HEAD_H = 40 + 3 * 14;
 const SAFARI_H = 40;
 
 /** A move's power as the sheet writes it: "---" for one that does no damage of its own. */
-function powerText(m: MoveInfo): string {
+export function powerText(m: MoveInfo): string {
   return m.power ? String(m.power) : '---';
 }
 const ITEM_POKE_BALL = 4, ITEM_ESCAPE_ROPE = 85, ITEM_POKEBLOCK_CASE = 273, ITEM_TM_CASE = 364;
@@ -306,7 +306,7 @@ function iconButton(c: EmeraldCanvas, w: number, h: number, icon: (cx: number, c
 }
 
 /** BACK's red arrow. */
-function drawBackArrow(c: EmeraldCanvas, cx: number, cy: number): void {
+export function drawBackArrow(c: EmeraldCanvas, cx: number, cy: number): void {
   for (let i = 0; i < 5; i++) c.fillRect({ x: Math.round(cx) - 2 + i, y: Math.round(cy) - i, w: 1, h: 2 * i + 1 }, ARROW_RED);
 }
 
@@ -314,7 +314,7 @@ function hpColor(frac: number): string {
   return frac > 0.5 ? '#38d060' : frac > 0.2 ? '#f0c000' : '#e03820';
 }
 
-function drawHp(c: EmeraldCanvas, x: number, y: number, w: number, frac: number): void {
+export function drawHp(c: EmeraldCanvas, x: number, y: number, w: number, frac: number): void {
   c.fillRect({ x, y, w, h: 4 }, '#626262');
   if (frac > 0) c.fillRect({ x: x + 1, y: y + 1, w: Math.max(1, Math.round((w - 2) * frac)), h: 2 }, hpColor(frac));
 }
@@ -344,13 +344,10 @@ export interface BattleMenuDeps {
     useOn(pocket: number, item: number, slot: number, move?: number): void;
     /** One has fainted: the party's own screen, already asking, has this one go out. */
     sendOut(slot: number): void;
-    /** ...or its SUMMARY, and back to the question. */
-    summaryOut(slot: number): void;
     /** The same windows off a battle: PARTY and BAG on the field. */
     field?: {
       close(): void;
       readBag(): Map<number, Stack[]>;
-      summary(slot: number): void;
       moves(slot: number): void;
       swap(a: number, b: number): Promise<void>;
       give(slot: number, item: number): Promise<void>;
@@ -359,9 +356,10 @@ export interface BattleMenuDeps {
     };
     /** A keyboard's keys on PARTY and BAG. */
     keys?: { party: string; bag: string };
-    /** Send out the party's `slot`; or open its SUMMARY. */
+    /** Send out the party's `slot`. */
     switchTo(slot: number): void;
-    summary(slot: number): void;
+    /** `rows[at]`'s SUMMARY: a window over these, which go on asking what they were. */
+    showMon(rows: PartyMember[], at: number): void;
   };
   /** Has the focus show from the start: nothing here is touched. */
   focusFirst?: boolean;
@@ -385,7 +383,7 @@ const ARROW_RED = '#e60808';
 const DOT_ON = '#626262';
 const DOT_OFF = '#d5d5cd';
 
-function drawType(c: EmeraldCanvas, type: number, x: number, y: number, redo: () => void): void {
+export function drawType(c: EmeraldCanvas, type: number, x: number, y: number, redo: () => void): void {
   c.drawPicture(picture('/ui/types.png', redo), 0, type * TYPES.h, TYPES.w, TYPES.h, x, y);
 }
 
@@ -406,6 +404,16 @@ function drawEffect(c: EmeraldCanvas, e: { text: string; tone: Tone; color: Text
 }
 
 const BAND_H = 15;
+
+/** A window filling from the left as it is held. */
+function fill(hold: HTMLElement): void {
+  hold.style.transition = `transform ${HOLD_MS}ms linear`;
+  hold.style.transform = 'scaleX(1)';
+}
+function unfill(hold: HTMLElement): void {
+  hold.style.transition = 'transform 120ms ease-out';
+  hold.style.transform = 'scaleX(0)';
+}
 
 export class BattleMenu {
   private view: BattleView | null = null;
@@ -455,7 +463,7 @@ export class BattleMenu {
   private readonly actions: HTMLElement;
   private readonly actionWins: Win[] = [];
   private readonly partyBox: HTMLElement;
-  private readonly partyCells: { b: HTMLButtonElement; w: Win }[] = [];
+  private readonly partyCells: { b: HTMLButtonElement; w: Win; hold: HTMLElement }[] = [];
   private readonly memberBox: HTMLElement;
   private readonly memberWins: { w: Win; ww: number; hh: number }[] = [];
   private team: PartyMember[] = [];
@@ -490,6 +498,8 @@ export class BattleMenu {
   /** Which button the keys are on, among those on show. */
   private focused: HTMLElement | null = null;
   private showFocus = false;
+  /** A on something that can be held, until it comes up or HOLD_MS. */
+  private keyHold: { fill: HTMLElement; timer: ReturnType<typeof setTimeout> } | null = null;
 
   constructor(private readonly deps: BattleMenuDeps) {
     const doc = deps.root.ownerDocument;
@@ -633,7 +643,11 @@ export class BattleMenu {
     for (let i = 0; i < 6; i++) {
       const b = button('bm-slot', this.partyBox);
       const w = new Win(b, CELL_W, PARTY_H, (c) => this.paintSlot(c, i));
-      this.partyCells.push({ b, w });
+      const hold = doc.createElement('span');
+      hold.className = 'bm-hold';
+      b.appendChild(hold);
+      this.partyCells.push({ b, w, hold });
+      this.wireSlot(b, hold, i);
       b.addEventListener('click', () => {
         if (!this.team[i] || b.getAttribute('aria-disabled') === 'true') return;
         if (this.drop) {
@@ -760,8 +774,7 @@ export class BattleMenu {
     };
     rowButton('BACK', () => TEXT_DARK, (c, cx, cy) => drawBackArrow(c, cx, cy), () => this.setMode('party'));
     rowButton('SUMMARY', () => TEXT_DARK, (c, cx, cy, redo) => drawItemFitted(c, ITEM_TM_CASE, cx, cy, ICON_BOX, redo), () => {
-      if (this.fieldHome) first?.field?.summary(this.memberAt);
-      else this.send(() => (this.forced ? first?.summaryOut(this.memberAt) : first?.summary(this.memberAt)));
+      first?.showMon(this.team, this.memberAt);
     });
     this.selectBtn = rowButton(() => (this.fieldHome ? 'SWITCH' : 'SELECT'), () => (this.canSelect() ? TEXT_BLUE : TEXT_GRAY), (c, cx, cy, redo) => drawItemFitted(c, ITEM_POKE_BALL, cx, cy, ICON_BOX, redo), () => {
       if (this.fieldHome) { this.swapFrom = this.memberAt; this.openParty(); return; }
@@ -1364,6 +1377,9 @@ export class BattleMenu {
         end();
         this.info = i;
         this.setMode('info');
+        // The finger comes off over the details, where no click comes to clear it, and a key's
+        // press on this move next was lost.
+        addEventListener('pointerup', () => setTimeout(() => { long = false; }, 50), { once: true });
       }, HOLD_MS);
     });
     for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, end);
@@ -1374,6 +1390,70 @@ export class BattleMenu {
       if (this.mode === 'moves') this.attack(i);
       else this.act(i);
     });
+  }
+
+  /** A mon held, in whichever window: its SUMMARY (Cam, 11-03: "if we long press on something,
+   *  maybe we get the summary screen"), even one greyed for what is being asked. */
+  private wireSlot(b: HTMLButtonElement, hold: HTMLElement, i: number): void {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let long = false;
+    const end = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      unfill(hold);
+    };
+    b.addEventListener('pointerdown', () => {
+      long = false;
+      if (!this.team[i]) return;
+      fill(hold);
+      timer = setTimeout(() => {
+        long = true;
+        end();
+        this.deps.firstMoves?.showMon(this.team, i);
+        // The finger comes off over the window now up, where no click comes of it.
+        addEventListener('pointerup', () => setTimeout(() => { long = false; }, 50), { once: true });
+      }, HOLD_MS);
+    });
+    for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, end);
+    b.addEventListener('click', (ev) => { if (long) { long = false; ev.stopImmediatePropagation(); } }, true);
+  }
+
+  /** What holding A on the focus would open, as a thumb's hold does: a move's details, a mon's
+   *  SUMMARY; null where A is only a press. */
+  private focusHold(): { fill: HTMLElement; go(): void } | null {
+    const at = this.focused;
+    if (!at) return null;
+    const cell = this.cells.findIndex((x) => x.b === at);
+    if (cell >= 0 && this.mode === 'moves' && this.view?.moves[cell]?.id) {
+      return { fill: this.cells[cell].hold, go: () => { this.info = cell; this.setMode('info'); } };
+    }
+    const slot = this.partyCells.findIndex((x) => x.b === at);
+    if (slot >= 0 && this.team[slot]) return { fill: this.partyCells[slot].hold, go: () => this.deps.firstMoves?.showMon(this.team, slot) };
+    return null;
+  }
+
+  /** A key going down, on its way to key(): A on something that can be held waits for its
+   *  release, or for HOLD_MS (Cam, 11-03: "make sure long press on controller/keyboard is
+   *  supported"). */
+  press(k: string): boolean {
+    const held = k === 'a' && this.shown && this.showFocus && this.mode !== 'bag' ? this.focusHold() : null;
+    if (!held) return this.key(k);
+    this.keyHold = { fill: held.fill, timer: setTimeout(() => {
+      unfill(held.fill);
+      this.keyHold = null;
+      if (this.shown) held.go();
+    }, HOLD_MS) };
+    fill(held.fill);
+    return true;
+  }
+
+  /** ...and coming up: under HOLD_MS, that was a press. */
+  release(k: string): void {
+    if (k !== 'a' || !this.keyHold) return;
+    clearTimeout(this.keyHold.timer);
+    unfill(this.keyHold.fill);
+    this.keyHold = null;
+    if (this.shown) this.key('a');
   }
 
   private act(slot: number): void {

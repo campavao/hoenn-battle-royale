@@ -182,6 +182,10 @@ export interface TeamMember {
   moves: { id: number; pp: number }[];
   /** struct PokemonSubstruct0's ppBonuses: two bits a move. */
   ppBonuses: number;
+  /** struct Pokemon's calculated stats, as the SUMMARY shows them. */
+  stats: { attack: number; defense: number; speed: number; spAttack: number; spDefense: number };
+  /** GetNatureFromPersonality. */
+  nature: number;
 }
 
 /** The party's members, in its order, from the same bytes as fameTeam. */
@@ -214,6 +218,8 @@ export function teamMembers(party: Uint8Array, count: number, nameOf: (species: 
       ability: word('M', 4) >>> 31,
       moves: ids.map((id, n) => ({ id, pp: (pp >>> (n * 8)) & 0xff })).filter((m) => m.id > 0),
       ppBonuses: word('G', 8) & 0xff,
+      stats: { attack: v.getUint16(at + 90, true), defense: v.getUint16(at + 92, true), speed: v.getUint16(at + 94, true), spAttack: v.getUint16(at + 96, true), spDefense: v.getUint16(at + 98, true) },
+      nature: personality % 25,
     });
   }
   return out;

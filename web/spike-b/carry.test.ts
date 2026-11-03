@@ -252,6 +252,14 @@ describe('what one of them holds', () => {
     expect(teamMembers(given, 1, () => 'X')[0].item).toBe(500);
     expect(partyWhole(given, 1)).toBe(true);
   });
+  it('reads the calculated stats and the nature off the same bytes', () => {
+    const had = one();
+    const v = new DataView(had.buffer, had.byteOffset, had.byteLength);
+    [90, 92, 94, 96, 98].forEach((at, i) => v.setUint16(at, 100 + i, true));
+    const m = teamMembers(had, 1, () => 'X')[0];
+    expect(m.stats).toEqual({ attack: 100, defense: 101, speed: 102, spAttack: 103, spDefense: 104 });
+    expect(m.nature).toBe(v.getUint32(0, true) % 25);
+  });
   it('leaves the party it was given alone', () => {
     const had = one();
     withHeld(had, 0, 0);
