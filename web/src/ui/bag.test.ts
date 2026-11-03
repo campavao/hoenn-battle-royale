@@ -63,6 +63,22 @@ describe("the phone's bag", () => {
     expect(itemInfo(rom, 0)).toBeNull();
   });
 
+  it('names a TM or an HM by its move, not TM22 (Cam 11-02)', () => {
+    const bytes = new Uint8Array(0x8000);
+    const put = (at: number, s: string) => [...encodeGen3(s), 0xff].forEach((b, i) => (bytes[at + i] = b));
+    // gItems at 0x08000000: ITEM_TM22 (310) is "TM22"; ITEM_HM01 (339) is "HM01". gMoveNames at 0x08006000
+    // (13 a name): SOLARBEAM is move 76, CUT is 15 (HM01's).
+    put(310 * ITEM_SIZE, 'TM22');
+    put(339 * ITEM_SIZE, 'HM01');
+    put(0x6000 + 76 * 13, 'SOLARBEAM');
+    put(0x6000 + 15 * 13, 'CUT');
+    const rom = { bytes, sym: (n: string) => (n === 'gItems' ? 0x08000000 : n === 'gBattleMoves' ? 0x08005000 : n === 'gMoveNames' ? 0x08006000 : undefined) };
+    expect(itemInfo(rom, 310)?.name).toBe('SOLARBEAM');
+    expect(itemInfo(rom, 339)?.name).toBe('CUT');
+    // Without the move tables it keeps what the item table says.
+    expect(itemInfo({ bytes: bytes.slice(), sym: (n) => (n === 'gItems' ? 0x08000000 : undefined) }, 310)?.name).toBe('TM22');
+  });
+
   it('lists only what a battle can use', () => {
     const { emu, put } = fakeEmu();
     stock(put, POCKET_ITEMS, 0x7000, [[2, 1], [1, 5]]);

@@ -18,6 +18,7 @@ import type { WorldMap } from '../bots/world';
 import { decodeGen3 } from '../text/gen3';
 import { FIELD_ICONS, ICON_COLORS, ICON_SIZE } from './fieldicons';
 import { TEXT_WHITE } from './emerald';
+import { hintFor, onHintsChange } from './hints';
 import { HUD } from '../net/hud';
 import { MAP_OFFSET } from '../net/cells';
 import { MAIN_CALLBACK2 } from '../field';
@@ -671,7 +672,7 @@ export class PhoneHud {
         c.drawFrame({ x: 0, y: 0, w: DOCK_W, h: DOCK_H });
         drawItemFitted(c, ITEM_POKE_BALL, 20, DOCK_H / 2, 18, redo);
         c.drawText('PARTY', 34, 13, this.buttons.party.getAttribute('aria-disabled') === 'true' ? TEXT_GRAY : TEXT_DARK);
-        if (bump.keys) drawKeycap(c, bump.keys.party, DOCK_W - 4, 4);
+        if (bump.keys) drawKeycap(c, hintFor('l', bump.keys.party), DOCK_W - 4, 4);
       });
       const bagBtn = button('hud-bag', 'Bag', field(() => bump.onBag()));
       this.bag = new Win(bagBtn, DOCK_W, DOCK_H, (c) => {
@@ -679,8 +680,10 @@ export class PhoneHud {
         const b = bump.bag();
         if (b) drawFitted(c, 'bag', b, 0, 0, 64, 64, 20, DOCK_H / 2, 18);
         c.drawText('BAG', 34, 13, TEXT_DARK);
-        if (bump.keys) drawKeycap(c, bump.keys.bag, DOCK_W - 4, 4);
+        if (bump.keys) drawKeycap(c, hintFor('r', bump.keys.bag), DOCK_W - 4, 4);
       });
+      // Q and E on a keyboard, the pad's shoulders once a pad is what is being used.
+      if (bump.keys) onHintsChange(() => { this.party.redraw(); this.bag?.redraw(); });
       this.ctx = new Win(this.buttons.ctx, CTX_ROUND, CTX_ROUND, (c, redo) => {
         drawItemFitted(c, this.view?.ctx.item ?? ITEM_MACH_BIKE, CTX_ROUND / 2, CTX_ROUND / 2, 22, redo);
       });

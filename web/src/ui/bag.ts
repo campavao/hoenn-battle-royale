@@ -5,7 +5,7 @@
 // pocket into gBagPosition and the item into gBrBag, and presses BAG.
 import { TMHM_MOVES } from './tmhm';
 import { decodeGen3Display } from '../text/gen3';
-import type { Rom } from '../battle/movebook';
+import { moveInfo, type Rom } from '../battle/movebook';
 import { POCKET_CAPACITY, POCKET_SIZE, SLOT_SIZE } from './phonehud';
 
 const ROM_BASE = 0x08000000;
@@ -171,9 +171,12 @@ export function itemInfo(rom: Rom, id: number): ItemInfo | null {
   if (items !== undefined && id > 0) {
     const at = items + id * ITEM_SIZE;
     const descAt = u32(rom, at + ITEM_DESC);
+    // A machine is named by its move, as a pickup says it ("BRICK BREAK went in the BAG.")
+    // and Classic's item.c does: Cam 11-02, "the name of the move, not the TM name".
+    const machine = isMachine(id) ? moveInfo(rom, TMHM_MOVES[id - ITEM_TM01])?.name : undefined;
     info = {
       id,
-      name: text(rom, at + ITEM_NAME, ITEM_NAME_SIZE),
+      name: machine || text(rom, at + ITEM_NAME, ITEM_NAME_SIZE),
       desc: descAt >= ROM_BASE ? text(rom, descAt, 120).replace(/\s+/g, ' ').trim() : '',
       battleUsage: u8(rom, at + ITEM_BATTLE_USAGE),
     };

@@ -304,6 +304,8 @@
       @media (hover: hover) and (pointer: fine) and (min-width: 600px) {
         body.desk-hud #keys:not([hidden]) { right: auto; left: 12px; }
         body.battle-menu #keys:not([hidden]) { display: none; }
+        /* The keyboard's caps, not a pad's: gone once a pad was what pressed last (ui/hints.ts). */
+        body.pad-input #keys:not([hidden]) { display: none; }
         #keys:not([hidden]) {
           display: grid;
           position: fixed; right: 12px; top: 50%; transform: translateY(-50%); z-index: 2;
@@ -364,7 +366,7 @@
       <button id="mode" type="button">Spectate (V)</button>
       <button id="sound" type="button">Sound: on</button>
       <div id="eyes" hidden title="Watching you"></div>
-      <div id="watch" hidden><span id="watch-who"></span><button id="watch-prev" type="button">◀ PREV</button><button id="watch-next" type="button">NEXT ▶</button><button id="watch-stop" type="button">STOP</button></div>
+      <div id="watch" hidden><span id="watch-who"></span><button id="watch-prev" type="button">◀ PREV</button><button id="watch-next" type="button">NEXT ▶</button><button id="watch-stop" type="button">STOP</button><button id="watch-leave" type="button" hidden>LEAVE</button></div>
     </div>
     <div id="watch-label" hidden></div>
     <div id="corner"></div>

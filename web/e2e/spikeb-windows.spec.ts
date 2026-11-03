@@ -734,3 +734,82 @@ test('any mon takes any machine, off the ground and from the BAG (Cam 10-17: onl
   expect(await shut()).toEqual([true, false, false, false, false, false]);
   await ctx.close();
 });
+
+// Cam 11-02: the TMs & HMs pocket named a machine "TM22", and the learn window said nothing of
+// the move it asked about. A machine is its move; and the forget window shows the type and the
+// power of the new move and of each of the four it could replace.
+test('a machine is named by its move, and the forget window shows type and power', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await withTeam(page);
+  const snap = (name: string) => page.screenshot({ path: `${process.env.HBR_SHOTS ?? test.info().outputDir}/${name}.png` });
+  // TM22 SOLARBEAM (310): SHARPEDO knows four moves, so which goes is asked on the windows.
+  await spike(page, (s) => s.give(310));
+  await expect(page.locator('.bm-use-head')).toBeVisible({ timeout: 15_000 });
+  await page.locator('.bm-slot').first().click();
+  await expect(page.locator('.bm-forget-head')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.bm-pick-move')).toHaveCount(4);
+  await page.waitForTimeout(500);
+  await snap('forget');
+  await expect.soft(page.locator('.bm-forget-head')).toHaveAttribute('aria-label', /SOLARBEAM, GRASS, POWER 120/);
+  const labels = await page.locator('.bm-pick-move').evaluateAll((all) => all.map((b) => b.getAttribute('aria-label') ?? ''));
+  expect(labels.length).toBe(4);
+  for (const l of labels) expect.soft(l, 'a move, its type and its power').toMatch(/^.+, [A-Z]+, POWER (\d+|---), PP \d+\/\d+$/);
+  await page.locator('#battle-menu .bm-back').click();
+  await expect.poll(() => spike(page, (s) => s.swapping || s.battleMenu.isShown), { timeout: 20_000 }).toBe(false);
+  // The same machine in the BAG's pocket: its move, not TM22.
+  await page.waitForTimeout(700);
+  await page.locator('#hud-bag').click();
+  await expect(page.locator('.bm-bag-head')).toBeVisible();
+  const row = () => spike(page, (s) => s.battleMenu.stacks().findIndex((x: any) => x.item === 310)) as Promise<number>;
+  for (let i = 0; i < 4 && (await row()) < 0; i++) { await page.getByLabel('Next pocket').click(); await page.waitForTimeout(200); }
+  expect(await row(), 'TM22 in its pocket').toBeGreaterThanOrEqual(0);
+  await page.waitForTimeout(300);
+  await snap('pocket');
+  for (let i = await row(); i > 0; i--) await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('z');
+  await expect.soft(page.locator('.bm-bag-use')).toHaveAttribute('aria-label', 'Use SOLARBEAM', { timeout: 3000 });
+  await snap('pocket-item');
+  await ctx.close();
+});
+
+// Cam 11-02, on a controller: the dock and the legend said Q and E. A pad's last press makes
+// them its own names (LB and RB on an Xbox pad); a key of the keyboard brings Q and E back.
+test('the key hints are the pad\'s once a pad is what was last used, and the keyboard\'s after a key', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 }, screen: { width: 1920, height: 1080 } });
+  const page = await ctx.newPage();
+  const snap = (name: string) => page.screenshot({ path: `${process.env.HBR_SHOTS ?? test.info().outputDir}/${name}.png` });
+  await withTeam(page);
+  const padLast = () => page.evaluate(async () => (await import(/* @vite-ignore */ '/src/ui/hints.ts')).padIsLast());
+  // A standard Xbox pad the page polls: `__held` is the buttons down.
+  await page.evaluate(() => {
+    const w = window as any;
+    w.__held = [] as number[];
+    const buttons = () => Array.from({ length: 17 }, (_, i) => ({ pressed: w.__held.includes(i), value: w.__held.includes(i) ? 1 : 0 }));
+    navigator.getGamepads = () => [{ id: 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)', index: 0, connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons: buttons() }] as any;
+  });
+  const tapPad = async (i: number) => { await page.evaluate((n) => ((window as any).__held = [n]), i); await page.waitForTimeout(120); await page.evaluate(() => ((window as any).__held = [])); await page.waitForTimeout(80); };
+  expect(await padLast(), 'the keyboard to start').toBe(false);
+  await expect(page.locator('#hud-party')).toBeVisible();
+  await expect(page.locator('#keys')).toBeVisible();
+  await snap('dock-keyboard');
+  await tapPad(14);
+  expect(await padLast(), 'a pad press').toBe(true);
+  await page.waitForTimeout(300);
+  await snap('dock-pad');
+  // The field's keyboard legend (W A S D, Z A...) goes with the keyboard.
+  await expect(page.locator('#keys')).toBeHidden();
+  await key(page, 'ArrowLeft', true); await page.waitForTimeout(90); await key(page, 'ArrowLeft', false);
+  expect(await padLast(), 'a key of the keyboard').toBe(false);
+  await expect(page.locator('#keys')).toBeVisible();
+  await intoBattle(page);
+  await expect(page.locator('.bm-keys')).toBeVisible();
+  await snap('battle-keyboard');
+  await tapPad(14);
+  expect(await padLast()).toBe(true);
+  await page.waitForTimeout(300);
+  await snap('battle-pad');
+  await ctx.close();
+});

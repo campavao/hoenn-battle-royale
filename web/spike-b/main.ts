@@ -66,6 +66,7 @@ import { frameOf as fxFrame, grassUnderAsh, isFloor, MB_ASHGRASS, SHEETS as FX_S
 import { ROOM_GAP, clampZoom, loadZoom, nextZoom, pickedZoom, roomFloor, saveZoom, wheelSteps, zoomLabel, zoomRange } from './zoom';
 import { fieldScale, FADE_COLOR_WORD, FADE_Y_WORD, FOG_EVA, FOG_EVB, fadeOf, keyPicture } from '../src/field';
 import { PadPrefsControl } from '../src/ui/padprefs';
+import { inputKeyboard, inputPad } from '../src/ui/hints';
 import { wireDpad } from './dpad';
 import { StartMenu } from './startmenu';
 import { MapWindow } from './mapwindow';
@@ -387,6 +388,7 @@ const intro = () => document.getElementById('intro') !== null;
 // live game's stage takes them, and a keyboard's letters for an entry.
 const STAGE_KEY: Record<string, GbaKey> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', z: 'a', x: 'b', Z: 'a', X: 'b', Enter: 'start', Escape: 'b' };
 addEventListener('keydown', (e) => {
+  inputKeyboard();
   if (e.key === 'Escape' && remap.cancel) { remap.cancel(); e.stopImmediatePropagation(); return; }
   if (!lobby?.shown) return;
   e.stopImmediatePropagation();
@@ -1054,7 +1056,7 @@ function askForget(slot: number, move: number): Promise<number | null> {
       battleEl.classList.remove('panel');
       if (!wasOn) battleEl.classList.remove('on');
       resolve(row);
-    });
+    }, move);
   });
 }
 romAsks.forget = askForget;
@@ -2201,6 +2203,10 @@ const padPrefs = new PadPrefsControl({
 const touchPad = matchMedia('(pointer: coarse)').matches;
 const sheetBtn = document.getElementById('sheet')!;
 sheetBtn.addEventListener('click', () => openSheet());
+// Out of the match there is no dock (so no ☰) and a phone has no R: LEAVE sits on the watch
+// strip, and opens the sheet at its "Leave the match?" (Cam, 11-02: "except for reloading").
+const watchLeave = document.getElementById('watch-leave')!;
+watchLeave.addEventListener('click', () => { openSheet(); sheetLeave = true; lobby?.stage.redraw(); });
 function openSheet(): void {
   if (!lobby || !matchOn || lobby.shown) return;
   held.clear();
@@ -3086,6 +3092,7 @@ if (typeof navigator.getGamepads === 'function') {
   const rest = new Map<number, readonly number[]>();
   let padHeld = new Set<string>();
   let buttonsHeld = new Set<number>();
+  let padId = '';
   setInterval(() => {
     const now = new Set<string>();
     const pressedNow = new Set<number>();
@@ -3108,8 +3115,11 @@ if (typeof navigator.getGamepads === 'function') {
       for (const k of padStick ? stickKeys(pad.axes, base, padStick) : guessedStickKeys(pad.axes, base).keys) if (GBA_KEY[k]) now.add(k);
       const hat = pad.axes.length >= 10 ? pad.axes[9] : 9;
       if (hat >= -1.1 && hat <= 1.1) for (const k of PAD_HAT[Math.round((hat + 1) * 3.5) % 8]) now.add(k);
+      if (now.size) padId = pad.id;
     }
     buttonsHeld = pressedNow;
+    // A fresh press (not a drifting stick) is what makes the key hints a pad's.
+    if ([...now].some((k) => !padHeld.has(k))) inputPad(padId, padKeys);
     for (const k of now) if (!padHeld.has(k)) padDown(k);
     for (const k of padHeld) if (!now.has(k)) padUp(k);
     padHeld = now;
@@ -4172,7 +4182,7 @@ async function boot(): Promise<void> {
       },
     });
     worldSock = sock;
-    sheetBtn.hidden = false;
+    sheetBtn.hidden = watchLeave.hidden = false;
     const joinAs = (how: { code?: string; host?: boolean; pass?: string }) => {
       knockedWithPass = !!how.pass;
       const c = loadCareer();
