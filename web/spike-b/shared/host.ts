@@ -5,8 +5,13 @@
 
 import type { Spot, WorldMap } from '../../src/bots/world';
 import { botKeys, botSpawns, type Brain } from './bots';
-import { Room, type Bag, type Command, type RoomEvent } from './room';
+import { BOT_DUEL_MAX, HOST_JUDGE, Room, wornParty, type Bag, type Command, type RoomEvent } from './room';
 import { within } from './items';
+import { logMs, type BattleEvent } from './battlelog';
+import { dealParty } from '../../src/bots/party';
+import { gradeOf } from '../../src/bots/roster';
+import { battleItems } from '../../src/bots/bag';
+import type { SimOutcome, SimSide, simulation as Simulation } from './battlesim';
 
 /** One frame as a mirror needs it: what changed before anybody moved, the bots whose
  *  keys changed, and the trainers' inputs the frame used. Most frames a trainer uses one
@@ -43,6 +48,31 @@ const CATCH_UP = 3;
 /** A phone this far behind (ten seconds of keys) is not catching up: the oldest go. */
 const MAX_QUEUE = 600;
 
+/** A bot-vs-bot fight the host is simulating (Room.simBots). */
+interface SimFight {
+  a: number;
+  b: number;
+  /** The meeting, as the room has it: an answer for an earlier one must not end a later one. */
+  since: number;
+  /** The fight, a turn at a time. */
+  run?: Generator<void, SimOutcome, void>;
+  /** The answer and the frame it is due, once it has run. */
+  out?: SimOutcome;
+  due?: number;
+}
+
+/** A frame spends about this long on simulating at most, in ms, and always a turn. What does not
+ *  fit waits a frame, and its bots stand busy meanwhile, as they would in a fight. */
+const SIM_BUDGET_MS = 4;
+/** A fight's bots are let go at BOT_DUEL_MAX (Room.step), so the answer lands before it. */
+const SIM_LAST_FRAME = BOT_DUEL_MAX - 60;
+
+export interface HostOptions {
+  /** A simulated fight's log, whole, the moment it is known and once for each of its two seats:
+   *  whoever watches either bot plays it from the frame the fight began. */
+  onLog?: (seat: number, events: BattleEvent[]) => void;
+}
+
 export class Host {
   readonly room: Room;
   private players = new Map<number, Player>();
@@ -50,10 +80,19 @@ export class Host {
   readonly brains = new Map<number, Brain>();
   private pending: Command[] = [];
   private nextId = 1;
+  /** Bot-vs-bot fights underway (Room.simBots), and the simulator once it has loaded: a chunk of
+   *  its own, on a page that never turns it on. */
+  private fights: SimFight[] = [];
+  private simulation: typeof Simulation | null = null;
+  private simLoad: Promise<void> | null = null;
+  private simFailed = false;
+  onLog?: HostOptions['onLog'];
 
   /** `jitter` 0 is the page hosting itself: a key is used the frame it is pressed. */
-  constructor(room: Room, bots: number, maps: readonly WorldMap[], private readonly jitter = JITTER) {
+  constructor(room: Room, bots: number, maps: readonly WorldMap[], private readonly jitter = JITTER, opts: HostOptions = {}) {
     this.room = room;
+    this.onLog = opts.onLog;
+    if (room.simBots) void this.loadSim();
     for (const b of botSpawns(room, maps, bots)) {
       const id = this.nextId++;
       this.brains.set(id, b.brain);
@@ -242,12 +281,110 @@ export class Host {
       acks.set(p.id, p.seq);
     }
     const events = room.step(used);
+    if (room.simBots) this.simFrame(events);
     const frame: Frame = { tick: room.tick };
     if (cmds.length) frame.cmds = cmds;
     if (keys.length) frame.keys = keys;
     if (ins.length) frame.ins = ins;
     if (stall.length) frame.stall = stall;
     return { frame, acks, events };
+  }
+
+  private loadSim(): Promise<void> {
+    // A page's chunk that will not load: what is waiting walks on, and the next fight tries again.
+    this.simLoad ??= import('./battlesim').then(
+      (m) => { this.simulation = m.simulation; },
+      (err) => { console.error(`no battle simulator: ${String(err)}`); this.simLoad = null; this.simFailed = true; },
+    );
+    return this.simLoad;
+  }
+
+  /** Resolves when the simulator has loaded: a test's wait, and the only async in all this. */
+  simReady(): Promise<void> {
+    return this.loadSim();
+  }
+
+  /** A bot's side of a fight, as a trainer's page deals it (main.ts judgeBots had this). */
+  private simSide(id: number): SimSide {
+    const r = this.room, b = r.actor(id);
+    return {
+      seat: id,
+      name: b?.name ?? '',
+      skin: b?.skin ?? 0,
+      party: b ? wornParty(dealParty(r.seed, id, r.ring().phase + 1, b.m.spot.map, gradeOf(r.seed, id)), b.wear) : [],
+      items: battleItems(b?.loot?.items ?? []),
+    };
+  }
+
+  /** The meeting this fight is for is still on. */
+  private simWanted(f: SimFight): boolean {
+    const a = this.room.actor(f.a), b = this.room.actor(f.b);
+    return !!a && !!b && a.since === f.since && a.judge === HOST_JUDGE && a.foe === f.b && b.foe === f.a;
+  }
+
+  /** Off the room's step and never in it: new meetings start, what is ready runs, and what is
+   *  due goes in as an ordinary `bots` command on the next frame, so every mirror applies it. */
+  private simFrame(events: readonly RoomEvent[]): void {
+    const r = this.room;
+    for (const e of events) if (e.type === 'bots' && e.id === HOST_JUDGE) this.fights.push({ a: e.a, b: e.b, since: r.actor(e.a)?.since ?? e.tick });
+    if (!this.fights.length) return;
+    this.fights = this.fights.filter((f) => this.simWanted(f));
+    if (this.simFailed) {
+      this.simFailed = false;
+      for (const f of this.fights) f.due ??= r.tick;
+    } else if (!this.simulation) void this.loadSim();
+    else {
+      const began = performance.now();
+      for (const f of this.fights) {
+        while (f.due === undefined && performance.now() - began <= SIM_BUDGET_MS) this.simRun(f);
+        if (performance.now() - began > SIM_BUDGET_MS) break;
+      }
+    }
+    this.fights = this.fights.filter((f) => {
+      if (f.due === undefined || r.tick < f.due) return true;
+      this.simAnswer(f);
+      return false;
+    });
+  }
+
+  /** A turn more of it. */
+  private simRun(f: SimFight): void {
+    const r = this.room;
+    try {
+      if (!f.run) {
+        // Every number in it from the match: a fight can be run again from its seed.
+        const seed = (Math.imul(r.seed ^ f.since, 0x9e3779b1) ^ Math.imul(f.a, 0x85ebca6b) ^ Math.imul(f.b, 0xc2b2ae35)) >>> 0;
+        f.run = this.simulation!(this.simSide(f.a), this.simSide(f.b), { seed, map: r.actor(f.a)?.m.spot.map ?? '' });
+      }
+      const step = f.run.next();
+      if (!step.done) return;
+      f.out = step.value;
+    } catch (err) {
+      // Never a coin flip, and never the room's end: no answer, and both walk on.
+      console.error(`bot fight ${f.a} v ${f.b} did not run: ${err instanceof Error ? err.stack : String(err)}`);
+      f.due = r.tick;
+      return;
+    }
+    // From the frame they met: the running took a frame or two of that.
+    const frames = Math.ceil((logMs(f.out.log) / 1000) * 60);
+    f.due = Math.max(r.tick, Math.min(f.since + frames, f.since + SIM_LAST_FRAME));
+    this.onLog?.(f.a, f.out.log);
+    this.onLog?.(f.b, f.out.log);
+  }
+
+  private simAnswer(f: SimFight): void {
+    const out = f.out;
+    if (!out) { this.pending.push({ c: 'bots', id: HOST_JUDGE, a: f.a, b: f.b, winner: 0 }); return; }
+    const hp = out.winner === f.a ? out.shareA : out.winner === f.b ? out.shareB : undefined;
+    this.pending.push({
+      c: 'bots',
+      id: HOST_JUDGE,
+      a: f.a,
+      b: f.b,
+      winner: out.winner,
+      ...(hp ? { hp } : {}),
+      ...(out.usedA.length || out.usedB.length ? { used: [out.usedA, out.usedB] as [number[], number[]] } : {}),
+    });
   }
 }
 
