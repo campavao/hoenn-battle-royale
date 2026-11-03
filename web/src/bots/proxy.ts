@@ -181,7 +181,7 @@ export class ProxyDuels {
       return null;
     }
     if (this.busy && this.queue.length >= MAX_QUEUED) {
-      this.note('queue full: settling this one the cheap way');
+      this.note('queue full: no fight this time, both walk on');
       return null;
     }
     if (this.busy) await new Promise<void>((resolve) => this.queue.push(resolve));

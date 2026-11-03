@@ -413,7 +413,7 @@ describe('the proxy duel instance', () => {
     const overflow = await settle(proxy.fight({ seat: 7, party: [mon()] }, { seat: 8, party: [mon()] }), inst, 5);
 
     expect(overflow).toBeNull();
-    expect(notes).toContain('queue full: settling this one the cheap way');
+    expect(notes).toContain('queue full: no fight this time, both walk on');
     void running;
     void waiting;
   });

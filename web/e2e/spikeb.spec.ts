@@ -108,7 +108,7 @@ test('a Safari catch, the drop on the fly map, and out of the Safari', async ({ 
   }
   expect(caught, 'a POKeMON caught in the Safari').toBeGreaterThan(0);
 
-  // The buzzer: the ROM's own fly map ("Drop where?"), A to pick, and out of the Safari.
+  // The buzzer: the page's map ("Drop where?"), A to pick, and out of the Safari.
   await expect.poll(() => s((s) => !s.link.room.ring().safari), { timeout: 150_000 }).toBe(true);
   await expect.poll(() => s((s) => s.swapping), { timeout: 15_000 }).toBe(true);
   await page.waitForTimeout(3000);

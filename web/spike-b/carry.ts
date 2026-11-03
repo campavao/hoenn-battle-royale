@@ -2,6 +2,9 @@ import type { MatchTally } from '../src/match/tally';
 import type { addTotals } from '../src/match/career';
 import HMS from '../src/data/hms.json';
 import { MOVE_CUT, MOVE_STRENGTH, MOVE_SURF } from '../src/bots/party';
+
+/** include/constants/moves.h. */
+const MOVE_FLY = 19;
 /** HM08 (include/constants/moves.h). */
 const MOVE_DIVE = 291;
 import { decodeGen3 } from '../src/text/gen3';
@@ -236,6 +239,16 @@ export function withHeld(party: Uint8Array, slot: number, item: number): Uint8Ar
 export function spillShows(s: { legend?: boolean; person?: unknown }, pickedBy: number | undefined, me: number): boolean {
   if (pickedBy === undefined) return true;
   return pickedBy === me && !s.legend && !s.person;
+}
+
+/** Who in a team could FLY: knows it, or could learn HM02 (br_hm.c BrHm_Slot, Cam's 10-19
+ *  play-test: "only fly if you have ... a Pokemon that could learn Fly"). */
+export function couldFly(team: readonly { species: number; moves?: readonly { id: number }[] }[]): boolean {
+  const has = (species: number) => {
+    const byte = parseInt(HMS.fly.substr((species >> 3) * 2, 2), 16);
+    return !Number.isNaN(byte) && ((byte >> (species & 7)) & 1) === 1;
+  };
+  return team.some((m) => m.moves?.some((x) => x.id === MOVE_FLY) || has(m.species));
 }
 
 /** Every mon's encrypted block adds up to its checksum (pokemon.c's CalculateBoxMonChecksum):
