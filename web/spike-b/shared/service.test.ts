@@ -918,8 +918,11 @@ describe('world rooms', () => {
         const fighter = fights()[0];
         expect(fighter, 'bots met').toBeTruthy();
         sb.onText(JSON.stringify({ t: 'watch', id: fighter.id }));
-        for (let i = 0; i < 120; i++) { t += 1000 / 60; svc.pump(); }
-        const bl = b.got.filter((m) => m.t === 'bl') as unknown as { from: number; events: { e: string }[]; ago?: number }[];
+        // The simulator has a few real ms a frame, and this clock runs far faster than the frames'
+        // own: on a busy machine the log takes many of them to be worked out.
+        const heard = () => b.got.filter((m) => m.t === 'bl') as unknown as { from: number; events: { e: string }[]; ago?: number }[];
+        for (let i = 0; i < 60 * 60 && !heard().length; i++) { t += 1000 / 60; svc.pump(); }
+        const bl = heard();
         expect(bl.length).toBeGreaterThan(0);
         expect(bl[0].events[0].e).toBe('start');
         expect(bl[0].events.at(-1)!.e).toBe('end');
