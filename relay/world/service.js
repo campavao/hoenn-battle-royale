@@ -230,6 +230,25 @@ function mon(level, rng, mapId, from = []) {
     ot: "BR"
   };
 }
+function tradedMon(species, phase) {
+  const level = rungForPhase(phase);
+  const grown = grownUp(species, level);
+  const max = hp(level);
+  return {
+    species: grown,
+    level,
+    hp: max,
+    maxHp: max,
+    status: 0,
+    moves: [{ id: 33, pp: 25, ppUps: 0 }],
+    heldItem: 0,
+    otId: 0,
+    personality: species * 2654435761 >>> 0,
+    exp: 0,
+    nickname: speciesName(grown),
+    ot: "BR"
+  };
+}
 function dealParty(seed, seat, phase, mapId, grade = 1 /* Regular */, pool = []) {
   const rng = mulberry32((seed ^ seat * 40503) >>> 0);
   const level = rungForPhase(phase);
@@ -11898,6 +11917,17 @@ function keysOf(bits) {
   return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A), select: !!(bits & KEY_SELECT) };
 }
 var QUAFF_FRAMES = 600;
+var LEGEND_FOE = -2;
+var LEGEND_CATCH = 1 / 3;
+var CAUGHT_WEAR = 0.5;
+var FLED_WEAR = 0.15;
+function legendMon(s, species, phase) {
+  return wornParty([tradedMon(species, phase)], s?.worn === void 0 ? void 0 : [s.worn])[0];
+}
+function botParty(seed, a, phase) {
+  const dealt = dealParty(seed, a.id, phase, a.m.spot.map, gradeOf(seed, a.id));
+  return a.caught?.length ? [...a.caught.map((sp) => tradedMon(sp, phase)), ...dealt].slice(0, 6) : dealt;
+}
 function wornParty(party, wear) {
   if (!wear) return party;
   return party.map((m, i) => {
@@ -12229,6 +12259,7 @@ var Room = class {
         a.calm = this.tick + GRACE;
       }
     } else if (cmd.c === "bots") {
+      if (cmd.b === LEGEND_FOE) return this.legendOver(cmd);
       const a = this.actor(cmd.a), b2 = this.actor(cmd.b);
       if (!a || !b2 || !a.bot || !b2.bot || a.foe !== b2.id || b2.foe !== a.id || a.judge !== cmd.id || !a.battling) return;
       this.part(a);
@@ -12592,9 +12623,26 @@ var Room = class {
    *  door (the cell they stand on just through one), which a solid bag would shut. */
   fallen(a) {
     const s = a.m.spot;
-    return this.world.warpAt(s.map, s.x, s.y) ? this.beside(a) ?? s : s;
+    if (!this.world.warpAt(s.map, s.x, s.y) && !this.pieceOn(s)) return s;
+    return this.beside(a) ?? this.nearestBare(s) ?? s;
   }
   /** The bag lying on a cell, if any. */
+  /** A ball or a bag lying on the cell, or one that will be again: a fight's legendary or boss. */
+  pieceOn(s) {
+    if (this.groundAt(s.map, s.x, s.y)) return true;
+    for (const b2 of this.spills.values()) {
+      if (b2.map === s.map && b2.x === s.x && b2.y === s.y && (!this.picked.has(b2.key) || b2.legend || b2.person?.gate !== void 0)) return true;
+    }
+    return false;
+  }
+  /** The nearest plain cell of the map with nothing on it, for a bag with nowhere beside it. */
+  nearestBare(s) {
+    for (let d = 2; d <= 6; d++) for (let dx = -d; dx <= d; dx++) for (const dy of dx === -d || dx === d ? [0] : [d - Math.abs(dx), Math.abs(dx) - d]) {
+      const t7 = { map: s.map, x: s.x + dx, y: s.y + dy };
+      if (this.world.cell(t7.map, t7.x, t7.y) === 0 && !this.world.warpAt(t7.map, t7.x, t7.y) && !this.pieceOn(t7) && !this.actors.some((o) => sameSpot(o.m.spot, t7))) return t7;
+    }
+    return void 0;
+  }
   spillAt(map, x2, y) {
     for (const b2 of this.spills.values()) if (b2.map === map && b2.x === x2 && b2.y === y && !this.picked.has(b2.key)) return b2;
     return void 0;
@@ -12651,7 +12699,7 @@ var Room = class {
         continue;
       }
       if (!a.loot?.items.length || (this.tick + a.id * 13) % QUAFF_FRAMES !== 0 || this.inFog(a.m.spot, ring)) continue;
-      const party = wornParty(dealParty(this.seed, a.id, ring.phase + 1, a.m.spot.map, gradeOf(this.seed, a.id)), a.wear);
+      const party = wornParty(botParty(this.seed, a, ring.phase + 1), a.wear);
       if (quaff(party, a.loot.items) !== null) a.wear = party.map((m) => m.maxHp > 0 ? m.hp / m.maxHp : 0);
     }
     const phase = this.phaseAt(this.tick);
@@ -12761,6 +12809,11 @@ var Room = class {
   }
   /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
   part(a) {
+    if (a.legendKey !== void 0) {
+      this.picked.delete(a.legendKey);
+      (a.tried ??= []).push(a.legendKey);
+      a.legendKey = void 0;
+    }
     a.battling = false;
     a.foe = a.judge = a.since = 0;
     a.calm = this.tick + GRACE;
@@ -12772,7 +12825,7 @@ var Room = class {
   engageBots(events) {
     if (this.ring().safari) return;
     if (!this.simBots && this.tick < this.duelAfter || this.tick % 8) return;
-    const judges = [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b2) => !b2.away)].filter((j) => !this.actors.some((a) => a.judge === j.id));
+    const judges = this.freeJudges();
     if (!this.simBots && !judges.length) return;
     const byMap = /* @__PURE__ */ new Map();
     for (const a of this.actors) {
@@ -12807,6 +12860,53 @@ var Room = class {
       }
     }
   }
+  /** The trainers whose pages could fight two bots out now (engageBots). */
+  freeJudges() {
+    return [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b2) => !b2.away)].filter((j) => !this.actors.some((a) => a.judge === j.id));
+  }
+  /** A bot pressed A at a legendary (POK-410; Cam, 11-02: "the bots are not picking up the
+   *  legendaries"). A battle like a trainer's, off the ground for everybody while it lasts,
+   *  fought where a bot's fights are: the host's simulator or a trainer's hidden ROM. Nobody
+   *  to run it, and it waits for somebody. */
+  botLegend(a, s, events) {
+    const species = s.bag.mons?.[0]?.species;
+    if (!species || this.ring().safari || this.tick < a.calm || a.tried?.includes(s.key)) return;
+    if (!this.simBots && this.tick < this.duelAfter) return;
+    const judges = this.simBots ? [] : this.freeJudges();
+    if (!this.simBots && !judges.length) return;
+    const judge = this.simBots ? HOST_JUDGE : judges[(this.tick >>> 3) % judges.length].id;
+    this.picked.set(s.key, a.id);
+    a.battling = true;
+    a.foe = LEGEND_FOE;
+    a.judge = judge;
+    a.since = this.tick;
+    a.legendKey = s.key;
+    a.keys = a.last = 0;
+    events.push({ type: "bots", tick: this.tick, id: judge, a: a.id, b: LEGEND_FOE, legend: { key: s.key, species } });
+    if (!this.simBots) this.duelAfter = this.tick + BOT_DUEL_GAP;
+  }
+  /** How a bot's legendary went. Beaten, it is the bot's, and off the map for good. Lost, the bot
+   *  gets away hurt. Either way it never fights that one again; no answer, the same, and it stands. */
+  legendOver(cmd) {
+    const a = this.actor(cmd.a);
+    if (!a?.bot || a.foe !== LEGEND_FOE || a.judge !== cmd.id || !a.battling || a.legendKey === void 0) return;
+    if (cmd.used && a.loot) spend(a.loot.items, cmd.used[0].slice(0, 4));
+    const phase = this.ring().phase + 1;
+    if (cmd.winner === a.id) {
+      const species = this.spills.get(a.legendKey)?.bag.mons?.[0]?.species;
+      const left = cmd.hp?.slice(0, 5).map((v2) => Math.min(1, Math.max(0, v2))) ?? a.wear ?? [];
+      a.legendKey = void 0;
+      if (species) {
+        a.caught = [species, ...a.caught ?? []];
+        a.wear = [CAUGHT_WEAR, ...left];
+      }
+    } else if (cmd.winner === LEGEND_FOE) {
+      a.wear = botParty(this.seed, a, phase).map(() => FLED_WEAR);
+      const s = this.spills.get(a.legendKey), left = cmd.hp?.[0];
+      if (s && left !== void 0) s.worn = Math.min(1, Math.max(0, left));
+    }
+    this.part(a);
+  }
   /** `id` off the map, and everything that waited on them let go. */
   remove(id2) {
     const a = this.actor(id2);
@@ -12816,7 +12916,7 @@ var Room = class {
     for (const o of this.actors) if (o.bot && o.judge === id2) this.part(o);
     for (const [key, by] of this.picked) {
       const b2 = this.spills.get(key);
-      if (by === id2 && (b2?.legend || b2?.person?.gate !== void 0)) this.picked.delete(key);
+      if (by === id2 && a?.battling && (b2?.legend || b2?.person?.gate !== void 0)) this.picked.delete(key);
     }
     for (const e of this.events) if (e.trader?.busy === id2) e.trader.busy = 0;
     for (const h of this.homes) if (h.busy === id2) h.busy = 0;
@@ -12828,7 +12928,7 @@ var Room = class {
     if (!this.actor(a.id)) return;
     const phase = this.ring().phase + 1;
     const grade = gradeOf(this.seed, a.id);
-    const party = dealParty(this.seed, a.id, phase, a.m.spot.map, grade);
+    const party = botParty(this.seed, a, phase);
     const bag = { items: carried(party, a.loot?.items ?? []), money: purse(phase, grade) + (a.loot?.money ?? 0), mons: party.map((m) => ({ species: m.species, level: m.level })) };
     const key = SPILL_KEY + a.id, at2 = this.fallen(a);
     if (!emptyBag(bag)) this.spills.set(key, { key, map: at2.map, x: at2.x, y: at2.y, name: a.name, bag });
@@ -13203,6 +13303,7 @@ var Room = class {
             this.picked.set(g.key, a.id);
             add(loot.items, g.item);
           }
+          if (b2?.legend && !b2.person && b2.guard === void 0) this.botLegend(a, b2, events);
           if (b2 && !b2.legend && !b2.person && b2.guard === void 0) {
             for (const st2 of b2.bag.items) add(loot.items, st2.id, st2.n);
             loot.money += b2.bag.money;
@@ -13414,6 +13515,8 @@ var Room = class {
       mix2(a.cruise ? (a.cruise.to === "lilycove" ? 8 : 16) + LEGS.indexOf(a.cruise.leg) : 0);
       mix2(a.cruise?.steps ?? 0);
       mix2(a.loot?.money ?? 0);
+      for (const sp of a.caught ?? []) mix2(sp);
+      mix2(a.legendKey ?? 0);
       for (const st2 of a.loot?.items ?? []) {
         mix2(st2.id);
         mix2(st2.n);
@@ -13684,13 +13787,17 @@ function goal(room, a, b2) {
     }
     if (best) return { ...best.m.spot };
   }
-  const ev = room.events[room.events.length - 1];
-  if (ev && room.spills.has(ev.key) && !room.picked.has(ev.key) && rand(b2) < 1 / 3 && !room.inFog({ map: ev.map, x: ev.x, y: ev.y })) {
+  const lootMood = Math.imul(room.tick + a.id, 2654435761) >>> 30 < (room.results.entrants.length - room.results.fallen.length > 8 ? 2 : 1);
+  const legend = lootMood ? lootGoal(room, a, b2, true) : null;
+  if (legend) return legend;
+  const standing = (e) => room.spills.has(e.key) && !room.picked.has(e.key) && !room.inFog({ map: e.map, x: e.x, y: e.y });
+  const ev = [...room.events].reverse().find((e) => standing(e) && room.spills.get(e.key)?.legend && !a.tried?.includes(e.key)) ?? room.events[room.events.length - 1];
+  if (ev && standing(ev) && rand(b2) < (lootMood && room.spills.get(ev.key)?.legend ? 1 : 1 / 3)) {
     const near2 = room.landedOn(ev.map).filter((s) => Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
     if (near2.length) return near2[Math.floor(rand(b2) * near2.length)];
   }
   const cells = insideNext(room);
-  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return wander(room, a, b2);
+  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return (lootMood ? lootGoal(room, a, b2) : null) ?? wander(room, a, b2);
   const p = planeOf(room, a.m.spot);
   if (!p) return null;
   const { x: x2, y } = p;
@@ -13712,6 +13819,26 @@ function goal(room, a, b2) {
   }
   const pool = near.filter((n) => n.h === bestH && n.d <= bestD + SPREAD);
   return pool.length ? pool[Math.floor(rand(b2) * pool.length)].s : null;
+}
+var LOOT_NEAR = 14;
+function lootGoal(room, a, b2, legendOnly = false) {
+  const { map, x: x2, y } = a.m.spot;
+  const reach = room.world.reachOnMap(a.m.spot, true, true);
+  const near = [];
+  const see = (s, far) => {
+    const d = Math.abs(s.x - x2) + Math.abs(s.y - y);
+    if (d && (far || d <= LOOT_NEAR) && reach.cell(s.x, s.y) && !room.inFog(s)) near.push({ s, d });
+  };
+  if (!legendOnly) {
+    for (const g of room.ground().values()) if (g.map === map && !g.gift && !room.picked.has(g.key)) see({ map, x: g.x, y: g.y }, false);
+  }
+  for (const p of room.spills.values()) {
+    if (p.map !== map || room.picked.has(p.key) || p.person || p.guard !== void 0) continue;
+    if (p.legend ? !a.tried?.includes(p.key) : !legendOnly && (p.bag.items.length > 0 || p.bag.money > 0)) see({ map, x: p.x, y: p.y }, !!p.legend);
+  }
+  if (!near.length) return null;
+  near.sort((p, q2) => p.d - q2.d);
+  return near[Math.floor(rand(b2) * Math.min(3, near.length))].s;
 }
 var SPREAD = 6;
 var HEART = /* @__PURE__ */ new WeakMap();
@@ -13855,7 +13982,6 @@ function logMs(log) {
 
 // web/spike-b/shared/host.ts
 init_party();
-init_roster();
 var JITTER = 3;
 var CATCH_UP = 3;
 var MAX_QUEUE = 600;
@@ -14087,20 +14213,25 @@ var Host = class {
       seat: id2,
       name: b2?.name ?? "",
       skin: b2?.skin ?? 0,
-      party: b2 ? wornParty(dealParty(r.seed, id2, r.ring().phase + 1, b2.m.spot.map, gradeOf(r.seed, id2)), b2.wear) : [],
+      party: b2 ? wornParty(botParty(r.seed, b2, r.ring().phase + 1), b2.wear) : [],
       items: battleItems(b2?.loot?.items ?? [])
     };
+  }
+  /** A legendary's side: its one mon at the rung. */
+  legendSide({ key, species }) {
+    return { seat: LEGEND_FOE, name: speciesName(species), skin: 0, party: [legendMon(this.room.spills.get(key), species, this.room.ring().phase + 1)] };
   }
   /** The meeting this fight is for is still on. */
   simWanted(f) {
     const a = this.room.actor(f.a), b2 = this.room.actor(f.b);
+    if (f.legend) return !!a && a.since === f.since && a.judge === HOST_JUDGE && a.foe === LEGEND_FOE;
     return !!a && !!b2 && a.since === f.since && a.judge === HOST_JUDGE && a.foe === f.b && b2.foe === f.a;
   }
   /** Off the room's step and never in it: new meetings start, what is ready runs, and what is
    *  due goes in as an ordinary `bots` command on the next frame, so every mirror applies it. */
   simFrame(events) {
     const r = this.room;
-    for (const e of events) if (e.type === "bots" && e.id === HOST_JUDGE) this.fights.push({ a: e.a, b: e.b, since: r.actor(e.a)?.since ?? e.tick });
+    for (const e of events) if (e.type === "bots" && e.id === HOST_JUDGE) this.fights.push({ a: e.a, b: e.b, since: r.actor(e.a)?.since ?? e.tick, ...e.legend ? { legend: e.legend } : {} });
     if (!this.fights.length) return;
     this.fights = this.fights.filter((f) => this.simWanted(f));
     if (this.simFailed) {
@@ -14127,7 +14258,7 @@ var Host = class {
       if (!f.run) {
         const seed = (Math.imul(r.seed ^ f.since, 2654435761) ^ Math.imul(f.a, 2246822507) ^ Math.imul(f.b, 3266489909)) >>> 0;
         const at2 = r.actor(f.a)?.m.spot;
-        f.run = this.simulation(this.simSide(f.a), this.simSide(f.b), { seed, map: at2?.map ?? "", fog: !!at2 && r.inFog(at2) });
+        f.run = this.simulation(this.simSide(f.a), f.legend ? this.legendSide(f.legend) : this.simSide(f.b), { seed, map: at2?.map ?? "", fog: !!at2 && r.inFog(at2) });
       }
       const step = f.run.next();
       if (!step.done) return;
@@ -14140,7 +14271,7 @@ var Host = class {
     const frames = Math.ceil(logMs(f.out.log) / 1e3 * 60);
     f.due = Math.max(r.tick, Math.min(f.since + frames, f.since + SIM_LAST_FRAME));
     this.onLog?.(f.a, f.out.log);
-    this.onLog?.(f.b, f.out.log);
+    if (!f.legend) this.onLog?.(f.b, f.out.log);
   }
   simAnswer(f) {
     const out = f.out;
@@ -14148,13 +14279,14 @@ var Host = class {
       this.pending.push({ c: "bots", id: HOST_JUDGE, a: f.a, b: f.b, winner: 0 });
       return;
     }
-    const hp2 = out.winner === f.a ? out.shareA : out.winner === f.b ? out.shareB : void 0;
+    const winner = f.legend && out.shareB[0] < LEGEND_CATCH ? f.a : out.winner;
+    const hp2 = winner === f.a ? out.shareA : winner === f.b ? out.shareB : void 0;
     this.pending.push({
       c: "bots",
       id: HOST_JUDGE,
       a: f.a,
       b: f.b,
-      winner: out.winner,
+      winner,
       ...hp2 ? { hp: hp2 } : {},
       ...out.usedA.length || out.usedB.length ? { used: [out.usedA, out.usedB] } : {}
     });
@@ -14945,4 +15077,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "8f5bb517bc46";
+export const WORLD_HASH = "3fa568f49ead";
