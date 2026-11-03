@@ -201,7 +201,8 @@ transcripts were made from them; a frame at the time is the evidence for each li
   spot on ash wears the grass's rustle (`fieldfx.ts`). The same steps rustle tall and long grass,
   print sand, track a bike, splash a puddle and land a ledge in dust, in the ROM's own frames
   and timings, for anybody in view. Ash is kept per browser, not shared: two players can see
-  different cells cleared. Not yet: a jump into grass's own splash, ripples, reflections.
+  different cells cleared (spec: "a step leaves the ROM's marks"). Not built, and nobody has
+  asked for them: a jump into grass's own splash, ripples, reflections.
 * **A screen wipe into the match** (1609 3:37, 4:33). The contest's curtain, as he guessed: its
   tilemap stretched across the window, hanging 0.35 s, then up at 7 pixels a frame with the
   contest's sound (`curtain.ts`). Not when a reload comes back into a match.
@@ -270,7 +271,9 @@ transcripts were made from them; a frame at the time is the evidence for each li
 * **The title screen's scrolling background should follow the game's path** (0:03). It does now:
   Littleroot, 101, Oldale, 103, back through Oldale, 102, Petalburg and on, in straight lines
   through each seam. The woods have no place on the map's own layout, so it goes by Route 104.
-* **The menu moves when touched** (1:05). Anchor it and let it grow upwards.
+* **The menu moves when touched** (1:05). The room's options, as MAX added a row of seats: 96 px
+  on a 720p window from MAX 8 to 12, still so on 11-03. They stay put now and the seats grow
+  upwards (branch `room-anchored`, `ui.test.ts` pins it at every height).
 * **Bots should look busy, not idle** (1:27). In the Safari they stood about: a median of 18
   cells seen in a minute. They go from grass to grass and ball to ball now. Bot fights over 12
   minutes across six seeds are about what they were: 5.5 from 5.8, worst gap 2.3 min from
@@ -278,7 +281,8 @@ transcripts were made from them; a frame at the time is the evidence for each li
 * **The cave needs a pass** (12:07). He was in the fog, at 6 pixels a pixel, in a cave with
   ladders and water. No one-way pocket explains it (above), so "get out" may be out of the fog,
   or the cave's look: he did not say which cave or what was wrong, and a frame does not tell.
-  A recording (K at the moment) names the map. Still open.
+  Closed 11-03, not reproduced: the 11-02 videos don't mention a cave, and `world-exits.test.ts`
+  keeps every pocket walkable out of. A recording (K at the moment) names the map if it comes back.
 * **A watched battle: no player sprites, none in the side panels** (13:49). The bstart's seats
   were the fighter's numbers (`12,14`, seats 5 and 6) and the watcher had the looks under 0 and
   31, so both drew as the default: `seatBstart` fixes the bytes, pinned by a unit test. The
@@ -290,6 +294,10 @@ transcripts were made from them; a frame at the time is the evidence for each li
   ROM never leaves the device:
   * keep the followed trainer's battles mirrored live on the hidden ROM;
   * catch up the rest unrendered, far faster than 8x, behind the wipe.
+
+  Overtaken 11-03 by #290 and #292: a watched fight is drawn by the page from its log, kept from
+  the fight's first event, so a late watcher is in the fight as it stands with no ROM behind it
+  (`spikeb-watch-log.spec.ts`). Only a fight with no log still takes the ROM's mirror.
 * **The watched battle stopped** (14:05), and there was lag after (14:50). The replay drops
   to the field with the two still in their fight, and comes back. Not reproduced: a whole
   dev match with three watched bot fights ran to their ends with no drift. A recording now
