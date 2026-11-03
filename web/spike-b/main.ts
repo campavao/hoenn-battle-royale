@@ -92,6 +92,7 @@ import { KEY_BIT, type GbaKey } from '../src/emu';
 import { KeyLegend } from '../src/ui/keys';
 import { KEYMAP, MARK_KEY, legendMap } from './keys';
 import { SPIKE_MS, recorder, saveRecording, watchPage } from './recorder';
+import { FirstMenuNet, LostNet, NET_LIMITS } from './stuck';
 import { stallLine, watch as watchRom } from '../src/emu/watchdog';
 import spritesData from '../src/data/sprites.json';
 import { Heights } from './heights';
@@ -529,7 +530,7 @@ let rom: RomBattles | null = null;
 /** Bot-vs-bot fights the room gives this page, in a hidden second ROM (judge.ts). */
 let judge: Judge | null = null;
 let artMs = 0;
-let battle: { foe: Actor | null; shownAt: number; foeGone?: boolean; heardAt?: number; round: number; link: WorldLink; boss?: number } | null = null;
+let battle: { foe: Actor | null; shownAt: number; foeGone?: boolean; heardAt?: number; round: number; link: WorldLink; boss?: number; net: FirstMenuNet; stopped?: boolean; unwatch?: () => void; force?: number } | null = null;
 /** The ROM has the screen for a dropped bag's team (rom.team). */
 let swapping = false;
 let calmUntil = 0;
@@ -544,7 +545,8 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
   // it) turns this one down, or its end would be credited to this foe.
   if (battle) { link.end(); return; }
   held.clear();
-  battle = { foe, shownAt: performance.now(), round: link.room.results.round, link };
+  battle = { foe, shownAt: performance.now(), round: link.room.results.round, link, net: new FirstMenuNet() };
+  const mine = battle;
   if (!rom) {
     battleEl.classList.add('on');
     battleNote.textContent = 'The game is still loading. Try again in a moment.';
@@ -552,6 +554,7 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
     return;
   }
   battleNote.textContent = '';
+  watchFight(mine, rom);
   // The fight, read off the ROM and told to the relay for whoever watches it (battlereader.ts);
   // a link battle is told by the side that challenged only.
   const me = link.mine();
@@ -568,10 +571,12 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
   // is still standing in its own Littleroot, which is what showed through ("teleported
   // back to my house", Cam). A battle that never starts never takes the screen.
   const r = rom;
+  // A fight the stuck-fight net let go of already (stopFight) is over: its late end is nobody's.
   void Promise.resolve()
-    .then(() => run(r, () => battleEl.classList.add('on')))
-    .then(endBattle, (e) => {
+    .then(() => run(r, () => { if (battle === mine) battleEl.classList.add('on'); }))
+    .then((f) => { if (battle === mine) endBattle(f); }, (e) => {
       console.warn('spike battle failed', e);
+      if (battle !== mine) return;
       endBattle(null);
       lastResult = 'The battle engine stopped working. Reload the page to battle again.';
     });
@@ -1298,7 +1303,7 @@ function startFor(e: RoomEvent): void {
     asking?.done('');
     const leader = LEADERS[e.n], fog = inFogNow();
     handOff(null, (r, onStart) => r.boss(e.n, onStart, fog).then((f) => {
-      if (!f.ok && f.outcome === 0) say(`${leader.name}: Come back with two POKéMON that can battle!`);
+      if (!f.ok && !f.stalled && f.outcome === 0) say(`${leader.name}: Come back with two POKéMON that can battle!`);
       return f;
     }), { label: { name: leader.name, skin: 0 } });
     battle!.boss = e.n;
@@ -1599,6 +1604,8 @@ let lastResult = '';
 
 function endBattle(r: Fought | null): void {
   battleEl.classList.remove('on');
+  battle?.unwatch?.();
+  clearTimeout(battle?.force);
   // A fight with a trainer that never got going, or was run from (a forfeit): we keep
   // apart a while, as the match's fleer does, or the two would engage again at once.
   const duel = !!battle?.foe && !battle.foe.bot;
@@ -1617,7 +1624,7 @@ function endBattle(r: Fought | null): void {
   // fleer off its pursuer): without it the bot stood beside me and fought again after the
   // two-second grace. Not the RUN that leaves a fight the match was won in.
   const ranFromBot = !!battle?.foe?.bot && !!r?.ok && (r.outcome & 0x7f) === 4 && link.room.results.winner !== link.me;
-  (battle?.link ?? link).end((duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f))) || ranFromBot, !stale && (!!battle?.foe?.bot || boss !== undefined) && !!r?.ok && r.outcome === 1);
+  (battle?.link ?? link).end((duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f))) || ranFromBot || !!r?.stalled, !stale && (!!battle?.foe?.bot || boss !== undefined) && !!r?.ok && r.outcome === 1);
   if (!stale && boss !== undefined && r?.ok && r.outcome === 1) say(`You beat ${LEADERS[boss].name}! Took their TM and ¥1000.`);
   const wild = battle && !battle.foe && boss === undefined;
   const by = battle?.foe?.id;
@@ -1627,7 +1634,8 @@ function endBattle(r: Fought | null): void {
   pressed.clear();
   // A held A from the battle's last text must not walk straight into another one.
   calmUntil = frame + 30;
-  if (r && !r.ok) lastResult = 'last battle: the ROM did not start it';
+  if (r?.stalled) { lastResult = 'last battle: stopped, it never got to its first menu'; if (!stale) say("The battle couldn't start."); }
+  else if (r && !r.ok) lastResult = 'last battle: the ROM did not start it';
   else if (r) lastResult = `last battle: ${wild ? `wild #${r.species} Lv${r.level}, ` : ''}${OUTCOME[r.outcome] ?? r.outcome}`;
   // A whiteout is the end of a trainer's match (Kanto's rules, DESIGN.md §10). So is a
   // team with nobody standing whatever the battle called its end (the fog's KO in a
@@ -1649,8 +1657,66 @@ function foeFrame(): void {
   const quiet = performance.now() - (battle!.heardAt ?? battle!.shownAt) > FOE_QUIET_MS;
   if (now && ((now.battling && now.foe === link.me) || !quiet)) return;
   battle!.foeGone = true;
-  rom?.foeOut();
+  // Still here, and no longer fighting me, before this fight reached its first menu: their page
+  // stopped it (the net below), and neither of us wins. Gone from the room: they forfeited.
+  if (now && !battle!.net.seen) stopFight(battle!, 'foe-ended');
+  else rom?.foeOut();
 }
+
+// ---- the stuck-fight net (stuck.ts) ----------------------------------------------------
+// No trainer is held for good by a fight that never started. The shot clock only runs from the
+// first menu on, so these two rules cover what comes before it. A fight stopped has no winner
+// (never a coin flip): the ROM is parked as after any fight, team and bag as they were, the
+// fight log ends, and both trainers go back to the field. The room's own end takes the
+// trainer who stopped it (keeping the two apart a while, as a fight run from does); the other
+// side stops its own, by its own minute or when foeFrame sees the foe has stopped.
+
+/** The limits, which a spec shortens (`__spike.stuckLimits`). */
+const stuckLimits = { ...NET_LIMITS };
+/** A ROM that has not unwound a stopped fight by now is let go of by the page. */
+const STUCK_LET_GO_MS = 4000;
+
+/** The net over a fight just handed to the ROM: emulator frames counted, the first menu watched
+ *  for on every one of them (a menu can open and close between two looks of a timer). */
+function watchFight(b: NonNullable<typeof battle>, r: RomBattles): void {
+  let frames = 0;
+  const off = r.emu.onFrame(() => { frames++; if (!b.net.seen && r.menuUp()) b.net.seen = true; });
+  const timer = window.setInterval(() => {
+    if (battle !== b) return;
+    if (b.net.tick(performance.now() - b.shownAt, frames, r.menuUp(), stuckLimits) === 'fire') stopFight(b, 'no-menu', frames);
+  }, 500);
+  b.unwatch = () => { off(); clearInterval(timer); };
+}
+
+function stopFight(b: NonNullable<typeof battle>, why: 'no-menu' | 'foe-ended', frames?: number): void {
+  if (b.stopped) return;
+  b.stopped = true;
+  recorder.stuck(why, b.foe?.id ?? 0, (performance.now() - b.shownAt) / 1000, frames);
+  console.warn('spike: a fight stopped with no winner', { why, frames });
+  // The ROM unwinds it in a few frames and the fight's own end follows. One that cannot (its
+  // emulator is not running, or a turn ahead of this fight never ends) must not hold the
+  // trainer: the page lets go itself, and the late end of that fight is nobody's.
+  rom?.abort();
+  b.force = window.setTimeout(() => { if (battle === b) endBattle({ ok: false, outcome: 0, species: 0, level: 0, stalled: true }); }, STUCK_LET_GO_MS);
+}
+
+/** The room says I fight, and nothing on this page explains it: no fight up, no question, no
+ *  screen, no cast. A resync that jumped past the event that would have opened it does this
+ *  (net.ts loads the relay's state; the event was made by stepping). The same minute. */
+const lostNet = new LostNet();
+function lostCheck(): void {
+  const me = link?.room?.actor(link.me);
+  const lost = !!me && me.battling && !me.meet && !battle && !swapping && !asking && !casting && !panelUp && !romUp && !giving && !toGive.length && !isOut && !spectating;
+  const now = performance.now();
+  if (lostNet.tick(now, lost, stuckLimits) !== 'fire') return;
+  lostNet.tick(now, false);
+  const l = link;
+  recorder.stuck('lost', me?.foe ?? 0, stuckLimits.ms / 1000);
+  console.warn('spike: the room had me in a fight this page never started');
+  say("The battle couldn't start.");
+  l.end(true);
+}
+setInterval(lostCheck, 1000);
 
 // ---- the fog (room.ts's ring) ----------------------------------------------------------
 
@@ -4238,7 +4304,7 @@ async function boot(): Promise<void> {
     }
   }
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { watch, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; } };
+  (window as unknown as { __spike: unknown }).__spike = { watch, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; } };
 }
 
 void boot();

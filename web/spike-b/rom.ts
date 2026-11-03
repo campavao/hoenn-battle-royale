@@ -126,6 +126,8 @@ export interface Fought {
   foe?: { hp: number; maxHp: number }[];
   /** What the bot spent of the items its card carried (br_bot.c SendSpent). */
   spent?: number[];
+  /** The stuck-fight net stopped it (stuck.ts, `abort`): no winner, nothing changed. */
+  stalled?: boolean;
 }
 
 /** A link battle's wire: our blocks out; theirs handed in by the page as they come. */
@@ -203,6 +205,14 @@ export interface RomBattles {
   /** The trainer we are fighting went out (left, or the fog took them): the fight is ours
    *  (BrNetlink_PeerOut). */
   foeOut(): void;
+  /** The stuck-fight net (stuck.ts): the fight under way, or one asked for and still waiting its
+   *  turn, ends with no winner. The hidden ROM is parked as after any fight, the team and bag
+   *  as before it, the fight log ends, and the call resolves `{ ok: false, stalled: true }`.
+   *  Does nothing on a ROM with no fight asked for. */
+  abort(): void;
+  /** A choice menu is up in the fight under way (gBrBattle.menu): from here the shot clock is the
+   *  one that counts. False with no fight under way; true on a patch that cannot say. */
+  menuUp(): boolean;
   /** The match is mine and I am still fighting (a wild one, a bot, a boss): the ROM's
    *  RESULT win (br_match.c sWinPending) leaves the fight at its next choice with the RUN
    *  that cannot fail, "You won the match!" (BR_RUN_OVER). A link fight ends by foeOut. */
@@ -621,6 +631,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
    *  never before, so the hidden field never shows through. */
   let broken = false;
   let fighting = false;
+  /** abort() counts up; a fight is aborted when it was asked for before the last one (onCore). */
+  let abortGen = 0;
+  let turnGen = 0;
+  const aborted = () => abortGen !== turnGen;
   /** buzzer() set the Zone's phase under a battle: PLAY's again once it ends. */
   let buzzed = false;
   let phase = 1;
@@ -901,11 +915,19 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
   };
   /** A turn that runs the ROM: from the parked state, the song held meanwhile. A turn
    *  that ends some way other than its own put-back is put back before the next. */
-  const onCore = <T>(f: () => Promise<T>): Promise<T> => inTurn(async () => {
+  const onCore = <T>(f: () => Promise<T>): Promise<T> => {
+    // An abort() made after this was asked for is for this one too, however long it waits.
+    const asked = abortGen;
+    return inTurn(async () => {
+      turnGen = asked;
+      return onTurn(f);
+    });
+  };
+  const onTurn = async <T>(f: () => Promise<T>): Promise<T> => {
     turns++;
     hush();
     try { return await f(); } finally { turns--; idled = true; sing(); }
-  });
+  };
   /** The volume the page last asked for (its MUTE), so a hurried start can go quiet and
    *  come back to it. */
   let volume = 100;
@@ -913,6 +935,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
   emu.setVolume = (v: number) => { volume = v; setVolume(v); };
   async function battle(fog: boolean, kick: () => void, going: () => boolean, over: () => boolean, onStart: () => void, after: () => Omit<Fought, 'ok'>, hurry = true): Promise<Fought> {
     if (broken) throw new Error('the parked ROM could not be restored');
+    // Stopped by the stuck-fight net while it waited its turn: it never starts.
+    if (aborted()) { logOut = null; return { ok: false, outcome: 0, species: 0, level: 0, stalled: true }; }
     // Every battle from one state would roll the same: a fresh draw each time.
     emu.write(sym('gRngValue'), (Math.random() * 2 ** 32) >>> 0, 32);
     emu.write(mainFunc, 0, 32);
@@ -966,29 +990,35 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     if (hurry) { emu.setSpeed(HURRY_SPEED); setVolume(0); }
     let shown = false;
     try {
-      const took = await until(emu, going, 600);
+      const took = await until(emu, () => going() || aborted(), 600);
       // Emerald's battle loop: set once the battle screen itself runs, after the swirl
       // that is drawn over the hidden ROM's own field.
       // A refused ask (DONE at once: no table for that spot) never draws a battle.
-      shown = took && !over() && await until(emu, () => emu.read(mainFunc, 32) !== 0, 600);
-      if (!shown) console.warn('spike: no battle', { took, ask: [...emu.bytes(askAt, 8)], fighting: emu.read(fightAt + 2, 8), callback2: emu.read(sym('gMain') + 4, 32).toString(16) });
+      shown = took && !aborted() && !over() && await until(emu, () => emu.read(mainFunc, 32) !== 0 || aborted(), 600) && !aborted();
+      if (!shown && !aborted()) console.warn('spike: no battle', { took, ask: [...emu.bytes(askAt, 8)], fighting: emu.read(fightAt + 2, 8), callback2: emu.read(sym('gMain') + 4, 32).toString(16) });
     } finally {
       if (hurry) { emu.setSpeed(1); setVolume(volume); }
     }
     count();
     lastStart = { ms: performance.now() - t0, frames: n };
     let result: Fought = { ok: false, outcome: 0, species: 0, level: 0 };
+    let stopped = false;
     // However long it takes: a battle is never pulled out from under the player.
     if (shown) {
       onStart();
       const calm = hurry ? briskFades() : () => undefined;
-      await until(emu, over, Infinity);
+      // ...but for the stuck-fight net (stuck.ts), which ends one that never reached its menu.
+      await until(emu, () => over() || aborted(), Infinity);
       calm();
       if (buzzed) { emu.write(match, BR_PHASE_PLAY, 8); buzzed = false; }
       // The ring is the battle's: back on the field nothing of it is left to bleed the
       // hidden ROM's party while a catch prompt waits.
       fighting = false;
       lay(false, at);
+      // Stopped: no winner, no result. The team and bag are `carried`, as they were before it.
+      stopped = !over();
+    }
+    if (shown && !stopped) {
       result = { ok: true, ...after(), released, ...(foe ? { foe } : {}), ...(spent?.length ? { spent } : {}) };
       // The end of the fight, said at once: a catch's prompt after it can take a while. Won or
       // caught, the page's trainer; lost, the foe's seat (none for a wild one); a run, nobody.
@@ -1009,6 +1039,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       // The counts stand either way: a lost battle was still fought (MY STATS).
       else carried = { ...(carried ?? start), tally: now.tally };
     }
+    if (stopped || (!result.ok && aborted())) result = { ok: false, outcome: 0, species: 0, level: 0, stalled: true };
     fighting = false;
     pub();
     readerOff();
@@ -1205,6 +1236,13 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       // in), it is said as the fight starts.
       if (fighting && !broken) send({ t: 'out', seat: FOE_SEAT });
       else foeLeft = true;
+    },
+    abort() { abortGen++; },
+    menuUp() {
+      const at = sym('gBrBattle');
+      // A patch with no such symbol cannot say, and the net would take every fight for stuck.
+      if (Number.isNaN(at)) return true;
+      return fighting && !broken && emu.read(at + BATTLE_MENU_AT, 8) !== 0;
     },
     setPhase(p) { phase = Math.max(1, Math.min(255, p | 0)); },
     setSafari(on) { safari = on; },
