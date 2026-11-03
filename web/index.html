@@ -147,6 +147,13 @@
       #item-tag[hidden] { display: none; }
       #bag-panel { position: fixed; z-index: 4; left: 50%; bottom: calc(env(safe-area-inset-bottom) + var(--s, 1.5) * 56px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: calc(var(--s, 1.5) * 8px); }
       #bag-panel[hidden] { display: none; }
+#map-window { position: fixed; z-index: 4; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; gap: 4px; align-items: center; }
+#map-window[hidden] { display: none; }
+#map-window::before { content: ''; position: absolute; top: -100vh; bottom: -100vh; left: -100vw; right: -100vw; background: #000b; z-index: -1; pointer-events: none; }
+#map-window canvas { display: block; image-rendering: pixelated; }
+#map-window .map-picture { touch-action: none; cursor: pointer; }
+#map-window .map-row { display: flex; gap: 4px; justify-content: center; }
+#map-window .map-btn[aria-disabled="true"] { cursor: default; }
       #bag-panel canvas { display: block; image-rendering: pixelated; }
       .bag-row { display: flex; gap: calc(var(--s, 1.5) * 8px); }
       body.panel-up #pad .dpad, body.panel-up #pad .ab, body.panel-up #pdock { visibility: hidden; }
@@ -217,7 +224,6 @@
       #sides .side-name { display: flex; justify-content: center; background: rgba(16, 20, 24, 0.6); border-radius: 2px; width: 100%; }
       /* The page's fog lies on the ROM's MAP, pixel for pixel (ringmap.ts). */
       #battle canvas { grid-area: 1 / 1; }
-      #ringfog { display: none; pointer-events: none; }
       /* BATTLE BACKDROP: OVER MAP -- the backdrop keyed out, the world dimmed under it. */
       #gba-key { display: none; }
       /* A battle's own screens with no key (its POKeMON to switch to, its fades): over the
@@ -227,7 +233,6 @@
       #battle.see #gba { visibility: hidden; }
       #battle.see #gba-key { display: block; }
       body:has(#battle.see) #hud { visibility: hidden; }
-      #ringfog.on { display: block; position: relative; z-index: 1; }
       #battle canvas { image-rendering: pixelated; width: min(100vw, 150vh); aspect-ratio: 240 / 160; height: auto; }
       /* A phone on its side: the battle between the pad's two halves, not under them. */
       @media (orientation: landscape) and (pointer: coarse) { #battle canvas { width: min(calc(100vw - 2 * (env(safe-area-inset-left) + 200px)), 150vh); } }
@@ -376,11 +381,11 @@
     <div id="keys" aria-hidden="true" hidden></div>
     <div id="msg" role="status"></div>
     <canvas id="item-tag" hidden></canvas>
-    <div id="bag-panel" hidden></div>
+    <div id="bag-panel" hidden></div><div id="map-window" hidden></div>
     <canvas id="askbox" class="startmenu" hidden></canvas>
     <canvas id="startmenu" class="startmenu" hidden></canvas><canvas id="stock" class="startmenu" hidden></canvas>
     <div id="win"><b id="win-title"></b><ol id="win-list"></ol><button id="win-ok" type="button">OK</button></div>
-    <div id="battle"><div class="note" id="battle-note"></div><canvas id="gba" width="240" height="160"></canvas><canvas id="gba-key" width="240" height="160"></canvas><canvas id="ringfog" width="240" height="160"></canvas><div id="battle-menu" class="battle-menu" hidden></div></div>
+    <div id="battle"><div class="note" id="battle-note"></div><canvas id="gba" width="240" height="160"></canvas><canvas id="gba-key" width="240" height="160"></canvas><div id="battle-menu" class="battle-menu" hidden></div></div>
     <div id="sides" hidden></div>
     <div id="stage" hidden>
       <div id="stage-box">

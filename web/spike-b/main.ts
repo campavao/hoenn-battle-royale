@@ -33,7 +33,7 @@ import { over } from './shared/over';
 import { Lobby, me, seeThrough, type RoomInfo } from './lobby';
 import { loadCareer, ordinal, recordMatch } from '../src/match/career';
 import type { MatchTally } from '../src/match/tally';
-import { tallySince, teamMembers, PARTY_LEN, spillShows } from './carry';
+import { couldFly, tallySince, teamMembers, PARTY_LEN, spillShows } from './carry';
 import { BagPanel } from './bagpanel';
 import { Tag } from './tag';
 import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, startStickLearn, stickKeys, stickLearnStep, type AxisSense, type StickMap } from '../src/pad';
@@ -68,6 +68,9 @@ import { fieldScale, FADE_COLOR_WORD, FADE_Y_WORD, FOG_EVA, FOG_EVB, fadeOf, key
 import { PadPrefsControl } from '../src/ui/padprefs';
 import { wireDpad } from './dpad';
 import { StartMenu } from './startmenu';
+import { MapWindow } from './mapwindow';
+import { FLY_SPOTS } from './flyspots';
+import type { MapPlace } from './ringmap';
 import { BACK_H, BATTLE_TYPE_RECORDED, BattleMenu, CELL_H, battleWantsNoPad, ppWithBonus, readBattleView, type PartyMember } from '../src/ui/battlemenu';
 import { BATTLE_TYPE_TRAINER, CARD_H, SidesView } from '../src/ui/sides';
 import { BAG_POSITION_POCKET, POCKET_TMHM, isMachine, readBattleBag, readFieldBag, readPocket, takesMachine } from '../src/ui/bag';
@@ -544,7 +547,6 @@ function routeTo(me: Actor, goal: Spot): { dirs: number[]; press: boolean } | nu
 // ---- the battle handoff: the real ROM fights, the page waits ---------------------------
 
 const battleEl = document.getElementById('battle')!;
-const fogEl = document.getElementById('ringfog') as HTMLCanvasElement;
 document.getElementById('intro-go')!.addEventListener('click', () => document.getElementById('intro')!.remove());
 const battleNote = document.getElementById('battle-note')!;
 const gbaCanvas = document.getElementById('gba') as HTMLCanvasElement;
@@ -777,7 +779,7 @@ for (const [id, rowFor] of [['startmenu', (x: number, y: number) => startMenu.ro
 }
 
 function askPaint(): void {
-  if (!asking || bagPanel) return;
+  if (!asking || bagPanel || mapWindow) return;
   // The window's own size, not the field's: a player zoomed out still has to read and tap it.
   const scale = fitZoom() / (devicePixelRatio || 1);
   const labels = asking.rows.map(([label]) => label);
@@ -795,6 +797,7 @@ function askPaint(): void {
 
 function askKey(k: string): void {
   if (!asking) return;
+  if (mapWindow) { mapWindow.key(k); return; }
   if (bagPanel) { bagPanel.key(k); return; }
   const r = asking.roller;
   if (r) {
@@ -825,6 +828,94 @@ function ask(title: string, rows: [string, string][], start = false, more: { pic
     asking = { pick: 0, start, title, rows, ...more, done: (c) => { asking = null; startMenu.hide(); askBox.hide(); calmUntil = frame + 30; resolve(c); } };
     askPaint();
   });
+}
+
+/** The page's MAP (mapwindow.ts): the answer is the place chosen, null for BACK or a fight. */
+let mapWindow: MapWindow | null = null;
+function openMapWindow(o: { verb: string | null; can(p: MapPlace): boolean; prompt(): string; back: boolean; until?: number }): Promise<MapPlace | null> {
+  return new Promise((resolve) => {
+    const me = link.room.actor(link.me);
+    if (!ringMap || !art || !me) { resolve(null); return; }
+    if (regionPixels === undefined) {
+      const cv = art.regionMap();
+      regionPixels = cv ? cv.getContext('2d')!.getImageData(0, 0, 240, 160) : null;
+    }
+    if (!regionPixels) { resolve(null); return; }
+    const map = ringMap;
+    let picked: MapPlace | null = null;
+    let timer = 0;
+    held.clear();
+    document.body.classList.add('panel-up');
+    asking = {
+      pick: 0, start: false, title: '', rows: [],
+      done: () => {
+        asking = null;
+        clearTimeout(timer);
+        mapWindow?.close();
+        mapWindow = null;
+        document.body.classList.remove('panel-up');
+        calmUntil = frame + 30;
+        resolve(picked);
+      },
+    };
+    const gfxOf = (skin: number) => SKIN_GFX[skin] ?? SKIN_GFX[0];
+    const start = map.cellOf(me.m.spot);
+    mapWindow = new MapWindow(document.getElementById('map-window')!, {
+      picture: regionPixels,
+      fogAt: (x, y, next) => {
+        const ring = link.room.ring();
+        return map.fogAt(x, y, next && ring.next !== undefined && ring.next !== Infinity ? { ...ring, r: ring.next } : ring);
+      },
+      fogKey: () => {
+        const ring = link.room.ring();
+        return { key: `${ring.last}|${ring.r.toFixed(1)}|${ring.cx.toFixed(0)}|${ring.cy.toFixed(0)}`, blinks: ring.next !== undefined && ring.next !== Infinity };
+      },
+      placeAt: (cx, cy) => map.placeAt(cx, cy),
+      plots: () => map.plots({ spot: me.m.spot, gfx: gfxOf(me.skin) }),
+      head: (gfx) => {
+        const s = sheet(gfx);
+        return s ? { img: s, w: SHEETS[String(gfx)].w } : null;
+      },
+      verb: o.verb,
+      can: o.can,
+      prompt: o.prompt,
+      back: o.back ? () => asking?.done('') : null,
+      choose: (p) => { picked = p; rom?.sound(SE_SELECT); asking?.done(''); },
+      moved: () => rom?.sound(SE_SELECT),
+      scale: Math.min(windowScale(), Math.max(1, Math.min(Math.floor(innerWidth / 240), Math.floor((innerHeight - 16) / (160 + 36 + 32 + 16))))),
+      start,
+    });
+    // The drop's clock: the place under the cursor is the choice, as br_pick.c's timeout has it.
+    if (o.until !== undefined) timer = window.setTimeout(() => {
+      const c = mapWindow?.cursor;
+      picked = c ? map.placeAt(c.x, c.y) : null;
+      asking?.done('');
+    }, o.until - performance.now());
+  });
+}
+
+/** The MAP off the menu or the minimap: a look, and with somebody who could FLY, a flight to a
+ *  town (room.ts `fly`), straight there rather than through the hidden ROM. */
+async function lookAtMap(): Promise<void> {
+  const r = rom, map = ringMap;
+  if (!r || !map) return;
+  const team = await r.fameTeam();
+  if (rom !== r || asking || battle || swapping || isOut) return;
+  // Not out of the Zone before the drop: its gate is shut both ways (room.ts `fly`).
+  const fly = couldFly(team) && !link.room.ring().safari;
+  const spotOf = (p: MapPlace) => map.mapsIn(p.id).find((m) => FLY_SPOTS[m]);
+  const safe = () => { const s = map.place(); return s ? `Safe: ${s}` : ''; };
+  const place = await openMapWindow({
+    verb: fly ? 'FLY' : null,
+    can: (p) => !!spotOf(p),
+    prompt: () => (fly ? safe() : safe() || 'Nobody here can FLY.'),
+    back: true,
+  });
+  const to = place && spotOf(place);
+  if (!to) return;
+  const [x, y] = FLY_SPOTS[to];
+  rom?.sound(SE_EXIT);
+  link.fly(to, x, y);
 }
 
 /** A at a dropped bag: what it holds, the way the match asks (br_loot.c's TryTake). What
@@ -880,15 +971,13 @@ async function openBag(key: number, bag: Bag, who: string): Promise<void> {
 async function openMenu(): Promise<void> {
   if (spectating && !battle && !swapping && !asking) return void peek();
   if (!rom || isOut || battle || swapping || asking || spectating) return;
-  // The ROM's rows (start_menu.c): POKéMON once I have one, no MAP in the Safari, my
-  // name for the trainer card. A phone has the room on its dock, as live.
-  const name = link.room.actor(link.me)?.name || 'YOU';
+  // The ROM's rows (start_menu.c): POKéMON once I have one, no MAP in the Safari. No trainer
+  // card (Cam, 11-02). A phone has the room on its dock, as live.
   rom.sound(SE_WIN_OPEN);
   const rows: [string, string][] = [
     ...(rom.partyCount() > 0 ? [['POKéMON', '1'] as [string, string]] : []),
     ['BAG', '2'],
     ...(ringMap && !link.room.ring().safari ? [['MAP', '13'] as [string, string]] : []),
-    [name, '4'],
     ...(lobby && !touchPad ? [['ROOM', 'room'] as [string, string]] : []),
     ['SAVE LOG', 'savelog'],
     ['EXIT', ''],
@@ -1048,29 +1137,21 @@ async function peek(): Promise<void> {
  *  MENU picked, or the phone dock's PARTY and MAP straight away. */
 async function runMenu(c: string): Promise<void> {
   if (!c || !rom || isOut || battle || swapping || asking || spectating) return;
+  if (c === '13') { void lookAtMap(); return; }
   if ((c === '1' || c === '2') && battleMenu) {
     if (c === '1' && rom.partyCount() === 0) { say('You have no POKeMON yet.'); return; }
     openPanel(c === '1' ? 'party' : 'bag');
     return;
   }
-  const me = link.room.actor(link.me);
-  const look = c === '13' && me && ringMap ? ringMap.look(me.m.spot) : undefined;
-  let uncover = () => {};
   swapping = true;
   held.clear();
   try {
-    const { said, flew } = await rom.menu(Number(c), () => {
+    const { said } = await rom.menu(Number(c), () => {
       if (!swapping) return;
       battleEl.classList.add('on');
-      if (look) uncover = ringMap!.cover(fogEl, rom!.emu);
-    }, () => { uncover(); battleEl.classList.remove('on'); }, look);
+    }, () => { battleEl.classList.remove('on'); });
     if (said) say(said);
-    // FLY off the MAP: where Emerald's flight landed the hidden field, this world's
-    // trainer goes (room.ts `fly`).
-    const to = flew && [...link.room.maps.values()].find((m) => m.group === flew.group && m.num === flew.num);
-    if (to) link.fly(to.id, flew.x, flew.y);
   } finally {
-    uncover();
     swapping = false;
     battleEl.classList.remove('on');
     held.clear();
@@ -1948,6 +2029,9 @@ function safariFrame(ring: Ring): void {
   void flyDrop();
 }
 
+/** br_pick.c's BR_PICK_FRAMES: how long the drop's map gives you. */
+const DROP_MS = 20_000;
+
 async function flyDrop(): Promise<void> {
   const r = rom, me = link.room.actor(link.me);
   if (!r || !me || !ringMap) return;
@@ -1957,10 +2041,17 @@ async function flyDrop(): Promise<void> {
   held.clear();
   try {
     if (!(await r.spill()).mons.length) { swapping = false; goOut('You caught nothing in the SAFARI ZONE.'); return; }
-    section = await r.drop(ringMap.look(me.m.spot), () => { if (swapping) battleEl.classList.add('on'); });
+    const until = performance.now() + DROP_MS;
+    const chosen = await openMapWindow({
+      verb: 'DROP',
+      can: () => true,
+      prompt: () => `Drop where? ${Math.max(0, Math.ceil((until - performance.now()) / 1000))}`,
+      back: false,
+      until,
+    });
+    section = chosen?.id ?? 0;
   } finally {
     swapping = false;
-    battleEl.classList.remove('on');
     held.clear();
     pressed.clear();
     calmUntil = frame + 30;
@@ -4116,7 +4207,7 @@ async function boot(): Promise<void> {
     }
   }
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { get link() { return link; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; } };
+  (window as unknown as { __spike: unknown }).__spike = { get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; } };
 }
 
 void boot();

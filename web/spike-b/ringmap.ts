@@ -21,11 +21,11 @@ import { LEADERS } from './shared/gyms';
 import type { Emulator } from '../src/emu';
 
 /** region_map.c: the grid, MAP_WIDTH x MAP_HEIGHT cells of 8 pixels from BG cell (1, 2). */
-const CELL = 8;
-const GRID_X = 1 * CELL;
-const GRID_Y = 2 * CELL;
-const GRID_W = 28;
-const GRID_H = 15;
+export const CELL = 8;
+export const GRID_X = 1 * CELL;
+export const GRID_Y = 2 * CELL;
+export const GRID_W = 28;
+export const GRID_H = 15;
 /** br_map.c: the fog in BG palette 10 (BR_FOG_PLTT), 10/16 of it over 6/16 of the map
  *  (BR_FOG_EVA, BR_FOG_EVB), on BG1, priority 1 (region_map.c sFlyMapBgTemplates); and
  *  BR_BLINK_FRAMES, the blink's 48 frames on and 48 off. */
@@ -50,6 +50,15 @@ const R_ALL = -1;
 
 interface Section { id: number; x: number; y: number; w: number; h: number; letters: number[] }
 
+/** A place on the page's MAP (mapwindow.ts): its section and what it says. */
+export interface MapPlace { id: number; name: string }
+/** What the page's MAP marks, in the picture's pixels. */
+export interface MapPlots {
+  gyms: { x: number; y: number; gfx: number }[];
+  events: { x: number; y: number; taken: boolean }[];
+  me: { x: number; y: number; gfx: number } | null;
+}
+
 export class RingMap {
   /** What it reads that the ROM's symbols must name. */
   static readonly SYMBOLS = ['gRegionMapEntries', 'gPlttBufferFaded', 'gMain', 'gMapGroups'];
@@ -59,6 +68,7 @@ export class RingMap {
   /** The SAFARI ZONE's own section: no place of the ring's, but where the drop's fly map
    *  opens (the Zone is where everybody stands when it comes up). */
   private zone: number | undefined;
+  private zoneAt: Section | undefined;
   private img: ImageData | null = null;
   private px = new Uint32Array(240 * 160);
   private lcd = new Uint8ClampedArray(240 * 160 * 4);
@@ -75,7 +85,10 @@ export class RingMap {
       this.sections.set(m.id, s);
     }
     const zone = [...room.maps.values()].find((m) => m.id.startsWith('MAP_SAFARI_ZONE_'));
-    if (zone) this.zone = art.mapsec(zone.group, zone.num);
+    if (zone) {
+      this.zone = art.mapsec(zone.group, zone.num);
+      this.zoneAt = { id: this.zone, ...art.section(this.zone) };
+    }
     this.lay();
   }
 
@@ -185,8 +198,39 @@ export class RingMap {
   /** Where a trainer on `at` is on the MAP's picture, in its pixels: the middle of the cell. */
   pixelOf(at: Spot): { x: number; y: number } {
     const l = this.look(at);
-    const s = [...this.sections.values()].find((q) => q.id === l.mapsec);
+    const s = [...this.sections.values(), ...(this.zoneAt ? [this.zoneAt] : [])].find((q) => q.id === l.mapsec);
     return { x: GRID_X + ((s?.x ?? 0) + l.cellX) * CELL + CELL / 2, y: GRID_Y + ((s?.y ?? 0) + l.cellY) * CELL + CELL / 2 };
+  }
+
+  /** The place on cell (cx, cy) of the grid; null for open sea. */
+  placeAt(cx: number, cy: number): MapPlace | null {
+    const inIt = (s: Section) => cx >= s.x && cx < s.x + s.w && cy >= s.y && cy < s.y + s.h;
+    for (const s of this.sections.values()) if (inIt(s)) return { id: s.id, name: text(s.letters) };
+    return this.zoneAt && inIt(this.zoneAt) ? { id: this.zoneAt.id, name: text(this.zoneAt.letters) } : null;
+  }
+
+  /** The cell of the grid a trainer on `at` is on. */
+  cellOf(at: Spot): { x: number; y: number } {
+    const p = this.pixelOf(at);
+    return { x: Math.floor((p.x - GRID_X) / CELL), y: Math.floor((p.y - GRID_Y) / CELL) };
+  }
+
+  /** The marks the page's MAP draws: the leaders the room has seen beaten, this round's events
+   *  (grey once their legendary is taken), and me. */
+  plots(me: { spot: Spot; gfx: number } | null): MapPlots {
+    const middle = (s: Section) => ({ x: GRID_X + (s.x + s.w / 2) * CELL, y: GRID_Y + (s.y + s.h / 2) * CELL });
+    const room = this.room;
+    const gyms = LEADERS.flatMap((l) => {
+      const at = room.bossDown(l.n) ? this.outdoors({ map: l.map, x: 0, y: 0 }) : undefined;
+      const s = at && this.sections.get(at.map);
+      return s ? [{ ...middle(s), gfx: l.gfx[0] }] : [];
+    });
+    const events = room.events.flatMap((e) => {
+      const at = this.outdoors({ map: e.map, x: e.x, y: e.y });
+      const s = at && this.sections.get(at.map);
+      return s ? [{ ...middle(s), taken: !!e.species && (!room.spills.has(e.key) || room.picked.has(e.key)) }] : [];
+    });
+    return { gyms, events, me: me ? { ...this.pixelOf(me.spot), gfx: me.gfx } : null };
   }
 
   /** Whether the MAP's pixel (x, y) lies in the fog of `ring`. */
@@ -227,29 +271,6 @@ export class RingMap {
     if (ay > 0 && 2 * ay >= ax) out += dy < 0 ? '↑' : '↓';
     if (ax > 0 && 2 * ax >= ay) out += dx < 0 ? '←' : '→';
     return out;
-  }
-
-  /** The fog on `canvas`, over the ROM's MAP on `emu`, each animation frame until the
-   *  returned function is called. */
-  cover(canvas: HTMLCanvasElement, emu: Emulator): () => void {
-    const ctx = canvas.getContext('2d')!;
-    let raf = 0;
-    const each = (t: number) => {
-      this.paint(ctx, emu, Math.floor((t * 60) / 1000));
-      raf = requestAnimationFrame(each);
-    };
-    raf = requestAnimationFrame(each);
-    canvas.classList.add('on');
-    return () => {
-      cancelAnimationFrame(raf);
-      canvas.classList.remove('on');
-    };
-  }
-
-  private paint(ctx: CanvasRenderingContext2D, emu: Emulator, frame: number): void {
-    this.img ??= new ImageData(240, 160);
-    new Uint32Array(this.img.data.buffer).set(this.fog(emu, frame));
-    ctx.putImageData(this.img, 0, 0);
   }
 
   /** One frame of the fog over the ROM's picture, as the GBA screen's pixels (ABGR, 0

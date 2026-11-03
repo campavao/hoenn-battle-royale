@@ -436,32 +436,88 @@ test('on a small phone every window a battle opens fits on the glass (Cam, 11-02
   await ctx.close();
 });
 
-test('the big MAP shows the fog, as the minimap does (Cam, 11-02)', async ({ browser }) => {
+test('the MAP is the page\'s window: fog, a cursor, BACK, and no ROM screen (Cam, 11-02)', async ({ browser }) => {
   test.setTimeout(180_000);
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const page = await ctx.newPage();
   // A short first phase: the ring is in by the time there is a team to see the MAP with.
   await withTeam(page, 40);
   await expect.poll(() => spike(page, (s) => s.link.room.ring().r), { timeout: 60_000 }).toBeLessThan(1000);
-  await page.locator('.hud-mini').click(); 
-  await expect(page.locator('#gba')).toBeVisible({ timeout: 20_000 });
-  await page.waitForTimeout(2000);
+  await page.locator('.hud-mini').click();
+  await expect(page.locator('#map-window .map-picture')).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator('#gba'), 'not the ROM').toBeHidden();
+  await page.waitForTimeout(600);
   await shot(page, 'phone-map');
-  const fog = await page.evaluate(() => {
-    const c = document.getElementById('ringfog') as HTMLCanvasElement;
-    const r = c.getBoundingClientRect(), z = getComputedStyle(c);
+  // The fog on the picture is the fog the room says is there: the purple pixels against what
+  // RingMap.fogAt asks of each pixel of the grid, as much of it as a sea or a mark doesn't hide.
+  const fog = () => page.evaluate(() => {
+    const s = (window as any).__spike, c = document.querySelector('#map-window .map-picture') as HTMLCanvasElement;
     const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
-    let painted = 0;
-    for (let i = 3; i < d.length; i += 4) if (d[i]) painted++;
-    const g = document.getElementById('gba')!.getBoundingClientRect();
-    return { on: c.classList.contains('on'), display: z.display, w: r.width, h: r.height, x: r.left, y: r.top, painted, gba: [g.left, g.top, g.width, g.height], z: z.zIndex, pos: z.position };
+    let purple = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 2] > d[i + 1] + 30 && d[i] > d[i + 1]) purple++;
+    let told = 0;
+    for (let y = 16; y < 136; y++) for (let x = 8; x < 232; x++) if (s.ringMap.fogAt(x, y)) told++;
+    return { purple, told, scale: (c.width / 240) ** 2 };
   });
-  expect(fog.on, 'the fog canvas is on').toBe(true);
-  expect(fog.painted, 'and has fog on it').toBeGreaterThan(0);
-  expect(fog.w).toBeCloseTo(fog.gba[2], 0);
-  // WebKit (Cam's iPhone) drew the ROM's picture over it without this: painted, and not seen.
-  // Only a local WebKit run saw that, so the rule itself is what CI holds to.
-  expect(await page.locator('#ringfog').evaluate((c) => getComputedStyle(c).zIndex)).toBe('1');
+  await expect.poll(async () => (await fog()).told, { timeout: 30_000, message: 'the ring has reached the map' }).toBeGreaterThan(50);
+  const seen = await fog();
+  expect(seen.purple, `fog on the map: ${JSON.stringify(seen)}`).toBeGreaterThan(seen.told * seen.scale * 0.5);
+  await expect(page.locator('#map-window .map-btn').first()).toBeInViewport({ ratio: 1 });
+  await page.locator('#map-window [aria-label="BACK"]').click();
+  await expect(page.locator('#map-window')).toBeHidden();
+  await ctx.close();
+});
+
+test('the drop and FLY are the MAP window: pick a place, learn it, fly to a town (Cam, 11-02)', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  // The first ring's length is the Safari's too, so the Zone ends soon after there is a team.
+  await withTeam(page, 60);
+  const place = () => spike(page, (s) => { const p = s.link.room.actor(s.link.me).m.spot; return `${p.map}:${p.x}:${p.y}`; }) as Promise<string>;
+  // In the Zone the MAP only looks: its gate is shut, FLY or no.
+  await spike(page, (s) => s.runMenu('13'));
+  await expect(page.locator('#map-window .map-picture')).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator('#map-window [aria-label="FLY"]')).toHaveCount(0);
+  await page.keyboard.press('x', { delay: 100 });
+  await expect(page.locator('#map-window')).toBeHidden();
+  // withTeam took me to the chest: back in the Zone for the buzzer, which only calls those in it.
+  await spike(page, (s) => { const a = s.link.room.actor(s.link.me), spot = { map: 'MAP_SAFARI_ZONE_SOUTH', x: 23, y: 30 }; a.m = { ...a.m, spot, prev: spot, action: null, px: 0, py: 0 }; });
+  // The buzzer: "Drop where?", no way back, the cursor by the keys, and A.
+  await expect(page.locator('#map-window [aria-label="DROP"]')).toBeVisible({ timeout: 90_000 });
+  await expect(page.locator('#map-window [aria-label="BACK"]')).toHaveCount(0);
+  await expect(page.locator('#map-window [aria-label="DROP"]'), 'the cursor starts on the Zone, not the corner').not.toHaveAttribute('aria-disabled', 'true');
+  await expect(page.locator('#gba'), 'not the ROM').toBeHidden();
+  await page.waitForTimeout(400);
+  await shot(page, 'desktop-map-drop');
+  const was = await spike(page, (s) => s.mapWindow.cursor) as { x: number; y: number };
+  await page.keyboard.press('ArrowRight', { delay: 100 });
+  await expect.poll(() => spike(page, (s) => s.mapWindow.cursor.x)).toBe(was.x + 1);
+  await page.keyboard.press('ArrowLeft', { delay: 100 });
+  await expect.poll(() => spike(page, (s) => s.mapWindow.cursor.x)).toBe(was.x);
+  await page.keyboard.press('z', { delay: 100 });
+  await expect(page.locator('#map-window')).toBeHidden();
+  await expect.poll(place, { timeout: 30_000, message: 'out of the Safari' }).not.toMatch(/^MAP_SAFARI/);
+  await expect.poll(() => spike(page, (s) => s.swapping), { timeout: 15_000 }).toBe(false);
+  // HM02 on the first of them, then the MAP has somebody to FLY with.
+  await spike(page, (s) => s.give(340));
+  await expect(page.locator('.bm-use-head')).toBeVisible({ timeout: 15_000 });
+  await page.locator('.bm-slot').first().click();
+  await expect(page.locator('.bm-pick-move').nth(1)).toBeVisible({ timeout: 20_000 });
+  await page.locator('.bm-pick-move').nth(1).click();
+  await expect.poll(() => spike(page, (s) => s.swapping || s.battleMenu.isShown), { timeout: 20_000 }).toBe(false);
+  await page.waitForTimeout(800);
+  await spike(page, (s) => s.runMenu('13'));
+  await expect(page.locator('#map-window [aria-label="FLY"]')).toBeVisible({ timeout: 5_000 });
+  await shot(page, 'desktop-map-fly');
+  // A press on OLDALE's cell, then the button.
+  const oldale = await spike(page, (s) => s.ringMap.cellOf({ map: 'MAP_OLDALE_TOWN', x: 5, y: 5 })) as { x: number; y: number };
+  const at = (await page.locator('#map-window .map-picture').boundingBox())!;
+  await page.mouse.click(at.x + ((8 * oldale.x + 12) * at.width) / 240, at.y + ((8 * oldale.y + 20) * at.height) / 160);
+  await expect.poll(() => spike(page, (s) => s.mapWindow.cursor)).toEqual(oldale);
+  await page.locator('#map-window [aria-label="FLY"]').click();
+  await expect(page.locator('#map-window')).toBeHidden();
+  await expect.poll(place, { timeout: 5_000 }).toBe('MAP_OLDALE_TOWN:6:17');
   await ctx.close();
 });
 
