@@ -37,6 +37,7 @@ import { World, decodeGrid, type Spot, type WorldMap } from '../../src/bots/worl
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
 import { blueTm, scatterItem } from '../../src/match/scatter';
 import roomsJson from '../data/rooms.json';
+import tableBallsJson from '../data/table-balls.json';
 import { GIFTS } from '../../src/match/gifts';
 import { cableOrDoll, isTm, type BagRows } from './items';
 import { SIGHT_RANGE, eitherSees, type Facing } from '../../src/bots/sight';
@@ -379,6 +380,8 @@ export const BOT_BITES = 10;
 
 /** The caches' rooms (tools/br/spike-rooms.py, from br_balls.c): map, cell, a house. */
 const ROOMS = roomsJson as [string, number, number, boolean, boolean, number, number, boolean][];
+/** The rest of a notable building's balls, a table each (tools/br/spike-rooms.py, POK-438). */
+const TABLE_BALLS = tableBallsJson as [string, number, number][];
 
 /** Spill keys, clear of the dealt balls' 1..n. */
 export const SPILL_KEY = 1 << 20;
@@ -979,6 +982,16 @@ export class Room {
       if (!cells.length) continue;
       const c = cells[Math.floor(rng() * cells.length)];
       out.set(`${id}:${c.x}:${c.y}`, { key: ++n, map: id, x: c.x, y: c.y, item: GIFTS[Math.floor(rng() * GIFTS.length)], gift: true });
+    }
+    // Up to three in a notable building, on its tables (POK-438; Cam, 10-19: "this place can have
+    // three, because it's more notable"). Last, and off their cells' own rolls, so all the match
+    // deals before them is what it always was.
+    for (const [map, x, y] of TABLE_BALLS) {
+      if (!this.maps.has(map) || this.places.has(map) || this.world.cell(map, x, y) > 1 || out.has(`${map}:${x}:${y}`)) continue;
+      // Not across a counter from a clerk: A there is his (Room.clerk).
+      if ([[0, 1], [0, -1], [1, 0], [-1, 0]].some(([dx, dy]) => clerkAt(map, x + dx, y + dy))) continue;
+      const r = cellRng(this.seed ^ 0x7ab1e, map, x, y);
+      out.set(`${map}:${x}:${y}`, { key: ++n, map, x, y, item: Math.floor(r() * 8) === 0 ? GOLD[Math.floor(r() * GOLD.length)] : blueTm(r) });
     }
     // A relay world makes one room a seed; keep the last few, not every one ever dealt.
     if (DEALS.size >= 8) DEALS.delete(DEALS.keys().next().value!);
