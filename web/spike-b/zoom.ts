@@ -10,6 +10,20 @@ export const ZOOM_KEY = 'hbr:zoom';
 const FARTHEST_TILES = 64;
 const TILE = 16;
 
+/** Tiles of empty plane on every side of a building or cave (main.ts layout()): the buildings
+ *  sit in rows well east of Hoenn, this far from each other and 200 from the outdoors. A view
+ *  whose half is wider than this, centred on a trainer in one room, shows the next. */
+export const ROOM_GAP = 48;
+
+/** The farthest out any camera may sit (device pixels per GBA pixel, not whole): the long
+ *  side of the window spans two gaps, so a trainer at a room's edge sees no other room.
+ *  Cam, 11-02: "you can't zoom out past where you can see the separate rooms". It is also the
+ *  stall: in the fog, drawFog lays one 64 px tile per 64 px of view, 300k drawImage a frame
+ *  at the old 0.05 floor on a 2616 x 2019 window (about 2 s a frame), 285 at this one. */
+export function roomFloor(devW: number, devH: number): number {
+  return Math.max(devW, devH) / (2 * ROOM_GAP * TILE);
+}
+
 export interface ZoomRange { lo: number; hi: number }
 
 /** Out to FARTHEST_TILES, in to the GBA's own 15 x 10 filling the window. `fit` is the
@@ -17,7 +31,8 @@ export interface ZoomRange { lo: number; hi: number }
 export function zoomRange(devW: number, devH: number, fit: number): ZoomRange {
   const far = Math.max(1, Math.ceil(Math.max(devW, devH) / (FARTHEST_TILES * TILE)));
   const gba = Math.floor(Math.min(devW / 15, devH / 10) / TILE);
-  return { lo: Math.min(fit, far), hi: Math.max(fit, gba) };
+  const lo = Math.max(Math.min(fit, far), Math.ceil(roomFloor(devW, devH)));
+  return { lo, hi: Math.max(fit, gba, lo) };
 }
 
 /** A zoom inside the range. */
