@@ -20,6 +20,7 @@ import type { PeekBag } from './shared/wire';
 import { lineAt, voiceFor } from '../src/bots/lines';
 import type { PackedMon } from '../src/net/wire';
 import { FIELD_CUT, FIELD_STRENGTH, isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
+import { arrived, routeTo } from './tapwalk';
 import { loadPatches } from '../src/bots/patches';
 import { dealParty, rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
@@ -479,14 +480,14 @@ function myBits(): number {
 // stood on (a trainer, a sign, the nurse) is "walk up to it, face it, press A".
 
 const DIR_BIT: Record<number, number> = { 1: KEY_DOWN, 2: KEY_UP, 3: KEY_LEFT, 4: KEY_RIGHT };
-let tapWalk: { dirs: number[]; at: string; since: number; press: boolean } | null = null;
+let tapWalk: { dirs: number[]; cells: string[]; at: string; since: number; press: boolean } | null = null;
 const spotKey = (p: Spot) => `${p.map}:${p.x}:${p.y}`;
 
 function tapBits(): number {
   const me = link.mine();
   if (!tapWalk || !me) return 0;
   const here = spotKey(me.m.spot);
-  if (here !== tapWalk.at) { tapWalk.at = here; tapWalk.since = frame; tapWalk.dirs.shift(); }
+  if (here !== tapWalk.at) { tapWalk.at = here; tapWalk.since = frame; arrived(tapWalk, here); }
   // Turned to face what was tapped (a bump turns): A, once, and the walk is done.
   if (!tapWalk.dirs.length || (tapWalk.dirs.length === 1 && tapWalk.press && me.m.facing === tapWalk.dirs[0] && frame - tapWalk.since > 6)) {
     const a = tapWalk.press && frame >= calmUntil;
@@ -509,37 +510,8 @@ function tapTo(clientX: number, clientY: number): void {
   if (!p) return;
   const goal = { map: p.m.id, x: Math.floor(wx / TILE) - p.gx, y: Math.floor(wy / TILE) - p.gy };
   if (goal.x < 0 || goal.y < 0 || goal.x >= p.m.w || goal.y >= p.m.h) return;
-  const route = routeTo(me, goal);
-  tapWalk = route ? { dirs: route.dirs, at: spotKey(me.m.spot), since: frame, press: route.press } : null;
-}
-
-/** The steps to `goal`, or to beside it and one more toward it (a bump: face it, then A)
- *  when it cannot be stood on. A breadth-first walk over the room's own step function. */
-function routeTo(me: Actor, goal: Spot): { dirs: number[]; press: boolean } | null {
-  const step = link.room.stepFor(me);
-  const want = spotKey(goal);
-  // A trainer on it: walk up and talk (the step function knows the ground, not who stands on it).
-  const taken = link.room.actors.some((a) => a.id !== me.id && spotKey(a.m.spot) === want);
-  const from = new Map<string, [string, number] | null>([[spotKey(me.m.spot), null]]);
-  const q: Spot[] = [me.m.spot];
-  const back = (k: string) => { const dirs: number[] = []; for (let c = k; from.get(c); c = from.get(c)![0]) dirs.unshift(from.get(c)![1]); return dirs; };
-  let beside: { k: string; d: number } | null = null;
-  for (let i = 0; i < q.length && i < 4000; i++) {
-    const at = q[i];
-    const k = spotKey(at);
-    if (k === want && !taken) return { dirs: back(k), press: false };
-    for (const d of [1, 2, 3, 4]) {
-      const r = step(at, d);
-      // The goal one step off, and not to be stood on: beside it is where to go.
-      const dx = d === 3 ? -1 : d === 4 ? 1 : 0, dy = d === 1 ? 1 : d === 2 ? -1 : 0;
-      if (!beside && at.map === goal.map && at.x + dx === goal.x && at.y + dy === goal.y && (!r || spotKey(r.to) !== want || taken)) beside = { k, d };
-      if (!r || r.warp || from.has(spotKey(r.to)) || (taken && spotKey(r.to) === want)) continue;
-      from.set(spotKey(r.to), [k, d]);
-      q.push(r.to);
-    }
-    if (beside) return { dirs: [...back(beside.k), beside.d], press: true };
-  }
-  return null;
+  const route = routeTo(link.room, me, goal);
+  tapWalk = route ? { dirs: route.dirs, cells: route.cells, at: spotKey(me.m.spot), since: frame, press: route.press } : null;
 }
 
 // ---- marked spots: the live game's visible encounters ------------------------------------

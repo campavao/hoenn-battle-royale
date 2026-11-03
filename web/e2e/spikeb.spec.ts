@@ -300,25 +300,62 @@ test('a tap on the map walks the trainer there, and the pad buzzes', async ({ pa
   type W = { link: { me: number; room: any }; rom?: unknown; cam: { x: number; y: number }; zoom: number; placed: Map<string, { gx: number; gy: number }> };
   await page.waitForFunction(() => { const s = (window as unknown as { __spike: W }).__spike; return !!s.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 90_000 });
   await page.waitForTimeout(1500);
-  // A cell five steps off on the room's own steps, and where it is on the screen.
+  // A cell some steps off on the room's own steps, and where it is on the screen. One whose
+  // straight way crosses a marked spot or hops a ledge, when the Safari has one near enough
+  // (most rounds do): this test failed one run in four for those. Stepping on a marked spot
+  // is a battle, which ended the walk where it stood, so the tap has to go round; and a
+  // ledge's hop puts the trainer on two cells, which the walk took for two steps and
+  // stopped one short. Otherwise, five steps off.
   const goal = await page.evaluate(() => {
     const s = (window as unknown as { __spike: W }).__spike, room = s.link.room, a = room.actor(s.link.me);
     const step = room.stepFor(a);
-    const k = (p: { map: string; x: number; y: number }) => `${p.map}:${p.x}:${p.y}`;
-    const depth = new Map([[k(a.m.spot), 0]]);
-    const q = [a.m.spot];
-    for (let i = 0; i < q.length; i++) {
-      const p = q[i], n = depth.get(k(p))!;
-      if (n === 5) {
-        const g = s.placed.get(p.map)!, dpr = devicePixelRatio || 1;
-        return { spot: k(p), x: ((g.gx + p.x) * 16 + 8 - s.cam.x) * s.zoom / dpr + innerWidth / 2, y: ((g.gy + p.y) * 16 + 8 - s.cam.y) * s.zoom / dpr + innerHeight / 2 };
+    type P = { map: string; x: number; y: number };
+    const k = (p: P) => `${p.map}:${p.x}:${p.y}`;
+    const marked = (p: P) => room.patchesOn(p.map).some((q: { x: number; y: number; key: number }) => q.x === p.x && q.y === p.y && !room.isTaken(q.key));
+    type C = { at: P; prev: string | null; n: number; hop: boolean };
+    /** Every cell reached in order, with how deep it is, the cell before it, and whether it was a hop. */
+    const walk = (avoid: boolean) => {
+      const from = new Map<string, C>([[k(a.m.spot), { at: a.m.spot, prev: null, n: 0, hop: false }]]);
+      const q = [a.m.spot];
+      for (let i = 0; i < q.length; i++) {
+        const p = q[i], n = from.get(k(p))!.n;
+        for (const d of [1, 2, 3, 4]) {
+          const r = step(p, d);
+          if (r && !r.warp && !r.water && !from.has(k(r.to)) && !(avoid && marked(r.to))) { from.set(k(r.to), { at: r.to, prev: k(p), n: n + 1, hop: !!r.hop }); q.push(r.to); }
+        }
       }
-      for (const d of [1, 2, 3, 4]) { const r = step(p, d); if (r && !r.warp && !r.water && !depth.has(k(r.to))) { depth.set(k(r.to), n + 1); q.push(r.to); } }
+      return from;
+    };
+    const straight = walk(false), round = walk(true);
+    const screen = (p: P) => {
+      const g = s.placed.get(p.map)!, dpr = devicePixelRatio || 1;
+      return { x: ((g.gx + p.x) * 16 + 8 - s.cam.x) * s.zoom / dpr + innerWidth / 2, y: ((g.gy + p.y) * 16 + 8 - s.cam.y) * s.zoom / dpr + innerHeight / 2 };
+    };
+    // Over the map, clear of the pad and the edges (the thumb's own corner of the screen).
+    const padTop = document.getElementById('pad')?.getBoundingClientRect().top ?? innerHeight * 0.6;
+    const visible = (p: P) => { const c = screen(p); return c.x > 24 && c.x < innerWidth - 24 && c.y > 60 && c.y < padTop - 24; };
+    /** What the straight way to `c` crosses: marked spots, and hops. */
+    const along = (c: C) => {
+      let crossing = false, hops = 0;
+      for (let w: C | undefined = c; w && w.prev; w = straight.get(w.prev)) {
+        if (w !== c && marked(w.at)) crossing = true;
+        if (w.hop) hops++;
+      }
+      return { crossing, hops };
+    };
+    let pick: C | null = null;
+    for (const c of straight.values()) {
+      if (c.n < 4 || c.n > 12 || marked(c.at) || !visible(c.at) || !round.has(k(c.at))) continue;
+      const w = along(c);
+      if ((w.crossing || w.hops) && (!pick || c.n < pick.n)) pick = c;
     }
-    return null;
+    if (!pick) for (const c of straight.values()) if (c.n === 5) { pick = c; break; }
+    if (!pick) return null;
+    const w = along(pick);
+    return { spot: k(pick.at), crossing: w.crossing, hops: w.hops, ...screen(pick.at) };
   });
-  expect(goal, 'a cell five steps away').not.toBeNull();
-  await page.mouse.click(goal!.x, goal!.y);
+  expect(goal, 'a cell some steps away').not.toBeNull();
+  test.info().annotations.push({ type: 'tap goal', description: `marked spot on the way: ${goal!.crossing}, hops: ${goal!.hops}` });  await page.mouse.click(goal!.x, goal!.y);
   const at = () => page.evaluate(() => { const s = (window as unknown as { __spike: W }).__spike; const p = s.link.room.actor(s.link.me).m.spot; return `${p.map}:${p.x}:${p.y}`; });
   await expect.poll(at, { timeout: 15_000 }).toBe(goal!.spot);
   // A pad button going down buzzes, as the live game's does (POK-245).
