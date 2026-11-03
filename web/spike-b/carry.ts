@@ -235,10 +235,12 @@ export function withHeld(party: Uint8Array, slot: number, item: number): Uint8Ar
 
 /** Whether a piece on the ground is drawn. One somebody has taken up is not; a bag I have open
  *  still lies there while I look in it (Cam, 11-02: "seems to disappear while interacting with
- *  it"), but not a legendary or a person, who are in the fight the taking started. */
-export function spillShows(s: { legend?: boolean; person?: unknown }, pickedBy: number | undefined, me: number): boolean {
+ *  it"), but not a legendary or a person, who are in the fight the taking started. Once the last
+ *  of it is taken nothing goes back down, and the room still has it as mine: `open` tells that
+ *  from looking (Cam, 11-02: "I got him but the pokeball sprite did not go away"). */
+export function spillShows(s: { legend?: boolean; person?: unknown }, pickedBy: number | undefined, me: number, open: boolean): boolean {
   if (pickedBy === undefined) return true;
-  return pickedBy === me && !s.legend && !s.person;
+  return pickedBy === me && open && !s.legend && !s.person;
 }
 
 /** Who in a team could FLY: knows it, or could learn HM02 (br_hm.c BrHm_Slot, Cam's 10-19

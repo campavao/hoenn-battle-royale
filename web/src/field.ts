@@ -175,6 +175,7 @@ export function toggleBlending(fade: { active: boolean }, mode: number, selected
   return fade.active && ((mode >> 8) & 3) !== FAST_FADE && selected !== 0;
 }
 export const FAST_WHITE_MAX = 1;
+const FAST_OUT_TO_BLACK = 3;
 /** A map load leaves y at 0 for ~13 frames before its fade-in; a hold that lasts longer
  *  than a second is not that, it is a fade the ROM never started (after a battle, say),
  *  and the field is visible under it. */
@@ -517,6 +518,17 @@ export function mapFade(
   // Its finishing frames read as done: the hold after a fast fade waits for a fade that
   // runs (heldFade), and the frames after one have y at 0, the mask at 0, and active up.
   return { fade: onMap ? { ...fade, active: running } : { ...fade, y: 0, active: false }, bg: reached };
+}
+
+/** How far through the fast fade to black every battle ends on (battle_main.c), 0 to 1, or null
+ *  when that isn't what is on. `was`: it was on last frame, so what follows is still it, the screen
+ *  black and the struct at rest, until another fade blends something: a screen after the battle,
+ *  coming up. Its own finishing frames blend nothing (`selected` 0, the mode word gone to the
+ *  counter). A rest left by the last battle's end, with no `was`, is not it. */
+export function closingFade(was: boolean, fade: { y: number; color: number; active: boolean }, mode: number, selected: number): number | null {
+  const toBlack = ((mode >> 8) & 3) === FAST_FADE && (mode & 0x3f) === FAST_OUT_TO_BLACK;
+  if (toBlack && fade.active) return mapFade(fade, 0, true, mode).fade.y / 16;
+  return was && !(fade.active && selected !== 0) ? 1 : null;
 }
 
 /** Whether a fade cleared its mask before any read saw it: the struct was at rest on the

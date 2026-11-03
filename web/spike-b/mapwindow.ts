@@ -8,8 +8,10 @@ import { CELL, GRID_H, GRID_W, GRID_X, GRID_Y, type MapPlots, type MapPlace } fr
 
 const W = 240, H = 160, FOOT_H = 36, BTN_H = 32, GAP = 4, BTN_W = (W - GAP) / 2;
 const FOG_TINT = [152, 96, 200], FOG_MIX = 0.62;
-/** br_map.c's BR_BLINK_FRAMES: what the next ring takes, 48 frames on and 48 off, in ms. */
-const BLINK_MS = 1600;
+/** The next ring's edge: a border round what's still safe, rather than the next fog blinking on
+ *  and off (Cam, 11-02: "make this a line like a border so it just kind of looks like an area
+ *  that's being filled in"). */
+const FOG_LINE = [72, 24, 136];
 const ITEM_POKE_BALL = 4;
 
 export interface MapWindowDeps {
@@ -17,8 +19,8 @@ export interface MapWindowDeps {
   picture: ImageData;
   /** Whether the picture's pixel is in the fog; `next` asks of the ring after this one. */
   fogAt(x: number, y: number, next: boolean): boolean;
-  /** Whether a next ring is announced to blink, and what the fog looks like now, as a key. */
-  fogKey(): { key: string; blinks: boolean };
+  /** What the fog looks like now, and the next ring's, as keys ('' for no next ring). */
+  fogKey(): { key: string; next: string };
   /** The place on a cell of the grid. */
   placeAt(cx: number, cy: number): MapPlace | null;
   plots(): MapPlots;
@@ -52,6 +54,9 @@ export class MapWindow {
   private cy: number;
   private fogged = document.createElement('canvas');
   private fogMade = '';
+  /** The next ring's edge on the picture's pixels, and which ring that is. */
+  private edge: Uint8Array | null = null;
+  private edgeOf = '';
   private raf = 0;
 
   constructor(private readonly el: HTMLElement, private readonly deps: MapWindowDeps) {
@@ -140,15 +145,29 @@ export class MapWindow {
     else if (k === 'b' || k === 'start') this.deps.back?.();
   }
 
-  private blinkOn(): boolean {
-    return performance.now() % BLINK_MS < BLINK_MS / 2;
+  /** The pixels just inside the next ring: safe, with fog-to-be beside them. */
+  private nextEdge(next: string): Uint8Array | null {
+    if (!next) return null;
+    if (next === this.edgeOf) return this.edge;
+    const out = new Uint8Array(W * H), fog = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) fog[y * W + x] = this.deps.fogAt(x, y, true) ? 1 : 0;
+    for (let y = 1; y < H - 1; y++) {
+      for (let x = 1; x < W - 1; x++) {
+        const i = y * W + x;
+        // Not off the grid: no fog says nothing out there, and it would box the grid in.
+        const onGrid = x >= GRID_X && y >= GRID_Y && x < GRID_X + GRID_W * CELL && y < GRID_Y + GRID_H * CELL;
+        if (onGrid && !fog[i] && (fog[i - 1] || fog[i + 1] || fog[i - W] || fog[i + W])) out[i] = 1;
+      }
+    }
+    this.edgeOf = next;
+    this.edge = out;
+    return out;
   }
 
   private paint(): void {
-    const { key, blinks } = this.deps.fogKey();
+    const { key, next } = this.deps.fogKey();
     const p = this.place();
-    const on = blinks && this.blinkOn();
-    this.map.show(`${this.cx}|${this.cy}|${key}|${on}|${Math.floor(performance.now() / 400) % 2}|${JSON.stringify(this.deps.plots())}`);
+    this.map.show(`${this.cx}|${this.cy}|${key}|${next}|${Math.floor(performance.now() / 400) % 2}|${JSON.stringify(this.deps.plots())}`);
     this.foot.show(`${p?.name ?? ''}|${this.deps.prompt()}`);
     if (this.verbBtn) {
       const off = !p || !this.deps.can(p);
@@ -161,19 +180,20 @@ export class MapWindow {
 
   /** The picture with the fog on it, made again only when the fog moved. */
   private fogPicture(): HTMLCanvasElement {
-    const { key, blinks } = this.deps.fogKey();
-    const next = blinks && this.blinkOn();
+    const { key, next } = this.deps.fogKey();
     const made = `${key}|${next}`;
     if (made !== this.fogMade) {
       this.fogMade = made;
       const c = this.fogged.getContext('2d')!;
       const from = this.deps.picture.data;
       const img = c.createImageData(W, H);
+      const edge = this.nextEdge(next);
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
           const i = (y * W + x) * 4;
-          const fog = this.deps.fogAt(x, y, false) || (next && this.deps.fogAt(x, y, true));
-          for (let j = 0; j < 3; j++) img.data[i + j] = fog ? from[i + j] * (1 - FOG_MIX) + FOG_TINT[j] * FOG_MIX : from[i + j];
+          const fog = this.deps.fogAt(x, y, false);
+          const line = !fog && edge?.[y * W + x];
+          for (let j = 0; j < 3; j++) img.data[i + j] = line ? FOG_LINE[j] : fog ? from[i + j] * (1 - FOG_MIX) + FOG_TINT[j] * FOG_MIX : from[i + j];
           img.data[i + 3] = 255;
         }
       }

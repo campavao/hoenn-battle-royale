@@ -426,6 +426,16 @@ export class RomArt {
     return this.frames(this.u32(this.u32(template + 0xc)), count, 16, h, this.palette(this.u32(this.sym(palSym))));
   }
 
+  /** FLY's bird (FLDEFFOBJ_BIRD): one 32 x 32 picture, in sprite palette 0 (CreateFlyBirdSprite),
+   *  which is the player's: Brendan's or May's. */
+  flyBird(playerGfx: number): HTMLCanvasElement {
+    const FLDEFFOBJ_BIRD = 26;
+    const template = this.u32(this.sym('gFieldEffectObjectTemplatePointers') + FLDEFFOBJ_BIRD * 4);
+    const info = this.u32(this.sym('gObjectEventGraphicsInfoPointers') + playerGfx * 4);
+    const pal = this.objectPalettes().get(this.u16(info + 2)) ?? new Array(16).fill(0xffff00ff);
+    return this.frames(this.u32(this.u32(template + 0xc)), 1, 32, 32, pal);
+  }
+
   /** The MAP's picture as the ROM lays it down (region_map.c LoadRegionMapGfx): 64 x 64 cells
    *  of 8bpp tiles, in BG palettes 7 on. Null on a patch that does not say where it is. */
   regionMap(): HTMLCanvasElement | null {

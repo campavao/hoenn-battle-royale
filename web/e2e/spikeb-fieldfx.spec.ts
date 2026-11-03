@@ -1,0 +1,419 @@
+// What's drawn on the field, from Cam's 11-02 play-test: the coming fog as a line, a poisoned look in
+// the fog, the doll over whoever got away with one, a ball that goes when it's taken, the rod's box
+// that adds a dot, the bird for a flight, and a bike out of the BAG.
+import { expect, test, type Page } from '@playwright/test';
+import { key } from './spike';
+import { romExists, romHashParam, romPath } from './symbols';
+
+test.skip(!romExists(), `no ROM at ${romPath()} -- set HBR_ROM or place pokeemerald.gba at the repo root, then run tools/br/dev-patch.sh`);
+
+test.use({ screenshot: 'only-on-failure' });
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const spike = <T>(page: Page, f: (s: any) => T) => page.evaluate((src) => new Function('s', `return (${src})(s)`)((window as any).__spike), f.toString()) as Promise<T>;
+const shot = (page: Page, name: string) => page.screenshot({ path: test.info().outputPath(`${name}.png`) });
+
+/** Into a match of the page's own, past the chest with one mon (the ball off its floor, by the keys). */
+async function intoMatch(page: Page, opts = '#solo&nobots&safari=0&fog=900&seed=7'): Promise<void> {
+  await page.goto(`/?rom=${romHashParam()}${opts}`);
+  await page.locator('#intro-go').click({ timeout: 90_000 });
+  await page.waitForFunction(() => { const s = (window as any).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 120_000 });
+  await page.waitForTimeout(4000);
+}
+
+async function fromChest(page: Page): Promise<void> {
+  const tap = async (k: string) => { await key(page, k, true); await page.waitForTimeout(90); await key(page, k, false); };
+  await stand(page, 'MAP_ROUTE117_POKEMON_DAY_CARE', 5, 6, 2);
+  await page.waitForTimeout(800);
+  const party = () => spike(page, (s) => s.rom.partyCount());
+  for (let i = 0; i < 40 && !(await party()); i++) {
+    if (await page.locator('.bm-slot').first().isVisible()) {
+      await page.locator('.bm-slot').first().click();
+      await page.waitForTimeout(1500);
+    } else if (!(await spike(page, (s) => s.swapping))) {
+      await tap('z');
+      await page.waitForTimeout(800);
+    } else await page.waitForTimeout(500);
+  }
+  expect(await party(), 'a mon out of the chest').toBeGreaterThan(0);
+  await expect.poll(() => spike(page, (s) => s.swapping), { timeout: 30_000 }).toBe(false);
+}
+
+const stand = (page: Page, map: string, x: number, y: number, facing: number) => page.evaluate(([map, x, y, facing]) => {
+  const s = (window as any).__spike, a = s.link.room.actor(s.link.me), spot = { map, x, y };
+  a.m = { ...a.m, spot, prev: spot, facing, moveDir: facing, action: null, px: 0, py: 0, bike: false };
+  a.calm = 1e9;
+}, [map, x, y, facing] as const);
+
+/** The cell's pixels on the world's canvas, top-left and 16 x 16 world pixels of it, as [r, g, b, a] rows. */
+const cellPixels = (page: Page, map: string, x: number, y: number, up = 0) => page.evaluate(([map, x, y, up]) => {
+  const s = (window as any).__spike, canvas = document.getElementById('world') as HTMLCanvasElement;
+  const dpr = devicePixelRatio || 1, zoom = s.zoom as number, k = zoom < dpr ? dpr : Math.max(1, zoom), z = zoom / k;
+  const p = s.placed.get(map);
+  const wx = (p.gx + (x as number)) * 16, wy = (p.gy + (y as number)) * 16 - (up as number);
+  const cx = Math.round(canvas.width / 2 - s.cam.x * z) + wx * z, cy = Math.round(canvas.height / 2 - s.cam.y * z) + wy * z;
+  const size = Math.ceil(16 * z);
+  return Array.from(canvas.getContext('2d')!.getImageData(cx, cy, size, size + Math.ceil((up as number) * z)).data);
+}, [map, x, y, up] as const);
+
+const changed = (a: number[], b: number[]) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) n++; return n; };
+
+test('a ball with the last of a drop in it goes when it is taken, and the window is as wide as its box', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  await intoMatch(page);
+  await fromChest(page);
+  // Out in the open, with one mon lying ahead, as LANETTE's WINGULL lay on Route 110 (video 1, 11:11).
+  const ground = await spike(page, (s) => {
+    const room = s.link.room, a = room.actor(s.link.me), map = 'MAP_ROUTE101';
+    for (let y = 1; y < 19; y++) for (let x = 1; x < 18; x++) {
+      if (room.world.cell(map, x, y) === 0 && room.world.cell(map, x, y - 1) === 0 && room.world.cell(map, x + 2, y) === 0 && room.stepFor(a)({ map, x, y }, 2) && !room.groundAt(map, x, y - 1)) return { map, x, y };
+    }
+    return null;
+  }) as { map: string; x: number; y: number };
+  await stand(page, ground.map, ground.x + 2, ground.y, 2);
+  await page.waitForTimeout(800);
+  const bare = await cellPixels(page, ground.map, ground.x, ground.y - 1);
+  await page.evaluate((g) => {
+    (window as any).__spike.link.room.spills.set(0x7e0042, { key: 0x7e0042, map: g.map, x: g.x, y: g.y - 1, name: 'LANETTE', bag: { items: [], money: 0, mons: [{ species: 278, level: 30 }] } });
+  }, ground);
+  await page.waitForTimeout(300);
+  expect(changed(bare, await cellPixels(page, ground.map, ground.x, ground.y - 1)), 'the ball, lying there').toBeGreaterThan(10);
+  await stand(page, ground.map, ground.x, ground.y, 2);
+  await page.waitForTimeout(400);
+  await page.keyboard.press('z', { delay: 120 });
+  await expect(page.locator('.bm-slot').first()).toBeVisible({ timeout: 15_000 });
+  // A key shows the box round the one on its own (video 1, 11:14: wider than the window).
+  await page.keyboard.press('ArrowDown', { delay: 120 });
+  await page.keyboard.press('ArrowUp', { delay: 120 });
+  await page.waitForTimeout(300);
+  await shot(page, 'drop-window');
+  const sizes = await page.evaluate(() => {
+    const b = document.querySelector('.bm-slot') as HTMLElement, c = b.querySelector('canvas')!;
+    return { box: b.getBoundingClientRect().width, win: c.getBoundingClientRect().width };
+  });
+  expect.soft(sizes.box, 'the box round it is the window').toBeCloseTo(sizes.win, 0);
+  await page.locator('.bm-slot').first().click();
+  await expect.poll(() => spike(page, (s) => s.rom.partyCount()), { timeout: 30_000 }).toBe(2);
+  await expect.poll(() => spike(page, (s) => s.swapping), { timeout: 30_000 }).toBe(false);
+  // Off it, so its head isn't over the cell.
+  await stand(page, ground.map, ground.x + 2, ground.y, 2);
+  await page.waitForTimeout(600);
+  await shot(page, 'drop-taken');
+  expect(changed(bare, await cellPixels(page, ground.map, ground.x, ground.y - 1)), 'the ball, taken').toBe(0);
+  await ctx.close();
+});
+
+test("the rod's box adds a dot: it does not print its line again from nothing", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  await intoMatch(page);
+  await fromChest(page);
+  const spot = await spike(page, (s) => {
+    const w = s.link.room.world, map = 'MAP_SLATEPORT_CITY';
+    for (let y = 5; y < 50; y++) for (let x = 5; x < 40; x++) if (w.cell(map, x, y) === 0 && w.cell(map, x + 1, y) === 2) return { map, x, y };
+    return null;
+  }) as { map: string; x: number; y: number };
+  await stand(page, spot.map, spot.x, spot.y, 4);
+  await page.waitForTimeout(600);
+  // Every frame: the words the box holds and how much of them is printed (dark pixels).
+  await page.evaluate(() => {
+    const el = document.getElementById('msg')!, c = el.querySelector('canvas') as HTMLCanvasElement;
+    const seen: { text: string; ink: number }[] = [];
+    (window as any).__ink = seen;
+    const look = () => {
+      const text = el.dataset.text;
+      if (text !== undefined && el.classList.contains('on') && c.width) {
+        const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+        let ink = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i + 3] && d[i] < 110 && d[i + 1] < 110 && d[i + 2] < 110) ink++;
+        seen.push({ text, ink });
+      }
+      requestAnimationFrame(look);
+    };
+    requestAnimationFrame(look);
+  });
+  await page.keyboard.press('Shift', { delay: 120 });
+  await expect.poll(() => page.evaluate(() => (window as any).__ink.filter((x: any) => x.text.split('·').length > 4).length), { timeout: 15_000 }).toBeGreaterThan(0);
+  await page.waitForTimeout(300);
+  await shot(page, 'rod-box');
+  const seen = await page.evaluate(() => (window as any).__ink) as { text: string; ink: number }[];
+  const dots = seen.filter((x) => /^[· ]+$/.test(x.text));
+  // Frame to frame, dots only ever add ink.
+  let fell = 0;
+  for (let i = 1; i < dots.length; i++) if (dots[i].ink < dots[i - 1].ink) fell++;
+  expect(dots.length).toBeGreaterThan(20);
+  expect(fell, 'frames where the dots got fewer').toBe(0);
+  await ctx.close();
+});
+
+test('the MAP has the next fog as a line, and nothing blinks', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  // A first ring soon, so there's fog and a next one, and a team before it bites.
+  await intoMatch(page, '#solo&nobots&safari=0&fog=40&seed=7');
+  await fromChest(page);
+  await expect.poll(() => spike(page, (s) => { const r = s.link.room.ring(); return r.phase >= 1 && r.left > 120; }), { timeout: 70_000 }).toBe(true);
+  await spike(page, (s) => s.rom.fillParty());
+  // Field first: the line on the ground, ahead of the fog.
+  const place = await spike(page, (s) => {
+    const room = s.link.room, ring = room.ring();
+    // A cell just outside the next ring.
+    for (const [id, p] of room.places) for (let y = 1; y < (s.placed.get(id)?.m.h ?? 0) - 1; y++) for (let x = 1; x < s.placed.get(id).m.w - 1; x++) {
+      if (!s.placed.get(id).m.outdoor || room.world.cell(id, x, y) !== 0) continue;
+      const d = Math.hypot(p.gx + x + 0.5 - ring.cx, p.gy + y + 0.5 - ring.cy);
+      if (d > ring.next + 0.5 && d < ring.next + 2) return { map: id, x, y };
+    }
+    return null;
+  }) as { map: string; x: number; y: number };
+  await stand(page, place.map, place.x, place.y, 1);
+  await page.waitForTimeout(800);
+  await shot(page, 'field-line');
+  await spike(page, (s) => s.runMenu('13'));
+  await expect(page.locator('#map-window .map-picture')).toBeVisible({ timeout: 5_000 });
+  await page.waitForTimeout(400);
+  await shot(page, 'map-line-1');
+  // How much fog is on the picture, a dozen times over two blinks: the same each time.
+  const pale = () => page.evaluate(() => {
+    const c = document.querySelector('#map-window .map-picture') as HTMLCanvasElement;
+    const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+    let fog = 0, line = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] === 72 && d[i + 1] === 24 && d[i + 2] === 136) line++;
+      if (d[i + 2] > d[i + 1] + 40 && d[i] > d[i + 1]) fog++;
+    }
+    return { fog, line };
+  });
+  const seen: { fog: number; line: number }[] = [];
+  for (let i = 0; i < 12; i++) { seen.push(await pale()); await page.waitForTimeout(280); }
+  await shot(page, 'map-line-2');
+  const fogs = seen.map((x) => x.fog);
+  expect(Math.max(...fogs) - Math.min(...fogs), 'the fog does not blink').toBeLessThan(0.02 * Math.max(...fogs));
+  expect(Math.min(...seen.map((x) => x.line)), 'the line is on it').toBeGreaterThan(100);
+  await ctx.close();
+});
+
+test('in the fog a trainer goes purple, as poison does, me and the others', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  await intoMatch(page, '#solo&safari=0&fog=40&seed=7');
+  await fromChest(page);
+  await expect.poll(() => spike(page, (s) => s.link.room.ring().phase >= 1), { timeout: 70_000 }).toBe(true);
+  await spike(page, (s) => s.rom.fillParty());
+  // Me and a bot, a step apart, in the fog; and another, out of it, off to the side.
+  const at = await spike(page, (s) => {
+    const room = s.link.room, ring = room.ring();
+    for (const [id, p] of room.places) for (let y = 3; y < (s.placed.get(id)?.m.h ?? 0) - 3; y++) for (let x = 3; x < s.placed.get(id).m.w - 3; x++) {
+      if (!s.placed.get(id).m.outdoor || room.world.cell(id, x, y) || room.world.cell(id, x + 2, y) || room.world.cell(id, x - 2, y)) continue;
+      if (Math.hypot(p.gx + x - ring.cx, p.gy + y - ring.cy) < ring.r + 3) continue;
+      const bot = room.actors.find((o: any) => o.bot && !o.battling);
+      const spot = { map: id, x: x + 2, y };
+      bot.m = { ...bot.m, spot, prev: spot, action: null, px: 0, py: 0 };
+      bot.calm = 1e9;
+      return { map: id, x, y, bot: bot.id };
+    }
+    return null;
+  }) as { map: string; x: number; y: number; bot: number };
+  await stand(page, at.map, at.x, at.y, 1);
+  await page.waitForTimeout(500);
+  // Frame by frame over two pulses: how much of each sprite is the purple of RGB(30, 0, 31).
+  const purple = await page.evaluate(([map, x, y, bx]) => new Promise<{ me: number; bot: number; shots: number }>((done) => {
+    const s = (window as any).__spike, canvas = document.getElementById('world') as HTMLCanvasElement;
+    const c = canvas.getContext('2d')!;
+    let n = 0, me = 0, bot = 0;
+    const count = (cx: number) => {
+      const dpr = devicePixelRatio || 1, zoom = s.zoom as number, k = zoom < dpr ? dpr : Math.max(1, zoom), z = zoom / k;
+      const p = s.placed.get(map);
+      const left = Math.round(canvas.width / 2 - s.cam.x * z) + (p.gx + cx) * 16 * z, top = Math.round(canvas.height / 2 - s.cam.y * z) + (p.gy + (y as number) - 1) * 16 * z;
+      const d = c.getImageData(left, top, 16 * z, 32 * z).data;
+      let m = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i] > 170 && d[i + 2] > 170 && d[i + 1] < 90) m++;
+      return m;
+    };
+    const look = () => {
+      me = Math.max(me, count(x as number));
+      bot = Math.max(bot, count(bx as number));
+      if (++n < 200) requestAnimationFrame(look); else done({ me, bot, shots: n });
+    };
+    requestAnimationFrame(look);
+  }), [at.map, at.x, at.y, at.x + 2] as const);
+  await shot(page, 'poison');
+  expect(purple.me, 'me').toBeGreaterThan(10);
+  expect(purple.bot, 'the bot beside me').toBeGreaterThan(10);
+  await ctx.close();
+});
+
+test('a bot run from with a POKe DOLL: the doll over the runner, blinking', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  await intoMatch(page, '#solo&safari=0&fog=900&seed=7');
+  await fromChest(page);
+  // #safari=0 still opens with the Zone's rules, in which nobody fights.
+  await spike(page, (s) => { s.link.room.opening = 0; });
+  await spike(page, (s) => s.give(80));
+  await page.waitForTimeout(1500);
+  // A bot a step away, in the open: the room's own engage.
+  await spike(page, (s) => {
+    const room = s.link.room, a = room.actor(s.link.me), map = 'MAP_ROUTE101';
+    const bot = room.actors.find((o: any) => o.bot && !o.battling);
+    for (let y = 1; y < 19; y++) for (let x = 1; x < 18; x++) {
+      if (!room.world.cell(map, x, y) && !room.world.cell(map, x + 1, y) && !room.patchesOn(map).some((q: any) => q.x === x && q.y === y)) {
+        const me = { map, x, y }, it = { map, x: x + 1, y };
+        a.m = { ...a.m, spot: me, prev: me, facing: 4, moveDir: 4, action: null, px: 0, py: 0 };
+        bot.m = { ...bot.m, spot: it, prev: it, facing: 3, moveDir: 3, action: null, px: 0, py: 0 };
+        a.calm = bot.calm = 0;
+        return;
+      }
+    }
+  });
+  await page.waitForTimeout(300);
+  await page.keyboard.press('z', { delay: 150 });
+  await page.waitForFunction(() => (window as any).__spike.battleMenu?.isShown, undefined, { timeout: 60_000 });
+  await page.waitForTimeout(500);
+  // The fight's picture, as it closes: never gone to black shapes (POK-435).
+  await page.evaluate(() => {
+    const k = document.getElementById('gba-key') as HTMLCanvasElement, b = document.getElementById('battle')!, seen: number[] = [];
+    (window as any).__black = seen;
+    const look = () => {
+      if (b.classList.contains('see')) {
+        const d = k.getContext('2d')!.getImageData(0, 0, k.width, k.height).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i + 3] && d[i] + d[i + 1] + d[i + 2] < 24) n++;
+        seen.push(n);
+      }
+      requestAnimationFrame(look);
+    };
+    requestAnimationFrame(look);
+  });
+  await page.locator('.bm-act-run').click();
+  await expect.poll(() => spike(page, (s) => { const a = s.link.room.actor(s.link.me); return !a.battling && a.shunUntil > s.link.room.tick; }), { timeout: 40_000 }).toBe(true);
+  const black = await page.evaluate(() => (window as any).__black) as number[];
+  expect(black.length).toBeGreaterThan(10);
+  expect(Math.max(...black), 'black in the fight\'s picture, as it closed').toBeLessThan(2 * black[0] + 200);
+  const box = await spike(page, (s) => { const a = s.link.room.actor(s.link.me); return { map: a.m.spot.map, x: a.m.spot.x, y: a.m.spot.y }; }) as { map: string; x: number; y: number };
+  // Over the head: on, and off, and on.
+  const counts: number[] = [];
+  let shots = 0;
+  for (let i = 0; i < 24; i++) {
+    const d = await cellPixels(page, box.map, box.x, box.y, 48);
+    let n = 0;
+    for (let j = 0; j < d.length; j += 4) if (d[j] === 248 && d[j + 1] === 248 && d[j + 2] === 248) n++;
+    counts.push(n);
+    if (n > 60 && shots < 1) { shots++; await shot(page, 'doll-on'); }
+    await page.waitForTimeout(40);
+  }
+  await shot(page, 'doll-any');
+  expect(Math.max(...counts) - Math.min(...counts), 'the doll is up, and it blinks').toBeGreaterThan(40);
+  await ctx.close();
+});
+
+test('FLY is Emerald\'s bird: off the MAP, and for a trainer in view', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  await intoMatch(page, '#solo&safari=0&fog=900&seed=7');
+  await fromChest(page);
+  await spike(page, (s) => { s.link.room.opening = 0; });
+  await stand(page, 'MAP_ROUTE101', 10, 10, 1);
+  await spike(page, (s) => s.give(340));
+  await expect(page.locator('.bm-use-head')).toBeVisible({ timeout: 15_000 });
+  await page.locator('.bm-slot').first().click();
+  // With four moves it asks which goes.
+  await page.locator('.bm-pick-move').nth(1).click({ timeout: 8_000 }).catch(() => {});
+  await expect.poll(() => page.evaluate(async () => (await (window as any).__spike.rom.fameTeam()).some((m: any) => m.moves.some((x: any) => x.id === 19))), { timeout: 20_000 }).toBe(true);
+  await expect.poll(() => spike(page, (s) => s.swapping || s.battleMenu.isShown), { timeout: 20_000 }).toBe(false);
+  await page.waitForTimeout(800);
+  await spike(page, (s) => s.runMenu('13'));
+  await expect(page.locator('#map-window [aria-label="FLY"]')).toBeVisible({ timeout: 5_000 });
+  const oldale = await spike(page, (s) => s.ringMap.cellOf({ map: 'MAP_OLDALE_TOWN', x: 5, y: 5 })) as { x: number; y: number };
+  const at = (await page.locator('#map-window .map-picture').boundingBox())!;
+  await page.mouse.click(at.x + ((8 * oldale.x + 12) * at.width) / 240, at.y + ((8 * oldale.y + 20) * at.height) / 160);
+  await expect.poll(() => spike(page, (s) => s.mapWindow.cursor)).toEqual(oldale);
+  // The canvas every few frames from the press on, to look at after.
+  await page.evaluate(() => {
+    const canvas = document.getElementById('world') as HTMLCanvasElement, out: string[] = [];
+    (window as any).__frames = out;
+    let n = 0;
+    const look = () => {
+      if (n++ % 8 === 0 && out.length < 16) out.push(canvas.toDataURL('image/jpeg', 0.8));
+      if (out.length < 16) requestAnimationFrame(look);
+    };
+    requestAnimationFrame(look);
+  });
+  await page.locator('#map-window [aria-label="FLY"]').click();
+  const seenBird = await page.waitForFunction(() => (window as any).__spike.flights?.length > 0, undefined, { timeout: 3_000 }).then(() => true, () => false);
+  await expect.poll(() => spike(page, (s) => { const p = s.link.room.actor(s.link.me).m.spot; return `${p.map}:${p.x}:${p.y}`; }), { timeout: 5_000 }).toBe('MAP_OLDALE_TOWN:6:17');
+  await page.waitForTimeout(2500);
+  const frames = await page.evaluate(() => (window as any).__frames) as string[];
+  const { writeFileSync } = await import('node:fs');
+  frames.forEach((f, i) => writeFileSync(test.info().outputPath(`fly-${String(i).padStart(2, '0')}.jpg`), Buffer.from(f.split(',')[1], 'base64')));
+  expect(seenBird, 'the bird').toBe(true);
+  await expect.poll(() => spike(page, (s) => s.flights.length), { timeout: 5_000 }).toBe(0);
+  // Somebody else's, as the room hands it to this page: the same command off the relay. In view
+  // here, and the bird comes for them where I can see.
+  const other = await spike(page, (s) => {
+    const room = s.link.room, me = room.actor(s.link.me).m.spot;
+    const o = room.actors.find((a: any) => a.bot && !a.battling);
+    const spot = { map: me.map, x: me.x + 2, y: me.y };
+    o.m = { ...o.m, spot, prev: spot, action: null, px: 0, py: 0 };
+    o.bot = false;
+    o.calm = 1e9;
+    return o.id;
+  }) as number;
+  await page.waitForTimeout(600);
+  await page.evaluate((id) => {
+    const s = (window as any).__spike;
+    s.link.room.apply({ c: 'fly', id, to: { map: 'MAP_RUSTBORO_CITY', x: 16, y: 39 } });
+  }, other);
+  await page.waitForFunction((id) => (window as any).__spike.flights.some((f: any) => f.id === id), other, { timeout: 2_000 });
+  await page.waitForTimeout(280);
+  await shot(page, 'fly-other');
+  await ctx.close();
+});
+
+test('the ACRO BIKE and the MACH BIKE from the BAG: the window shuts and I ride, and again gets off', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  await intoMatch(page);
+  await fromChest(page);
+  await spike(page, (s) => { s.link.room.opening = 0; });
+  await stand(page, 'MAP_ROUTE101', 10, 10, 1);
+  await page.waitForTimeout(500);
+  const useBike = async (item: number) => {
+    await page.keyboard.press('e', { delay: 120 });
+    await expect(page.locator('.bm-bag-head')).toBeVisible();
+    await page.evaluate((item) => {
+      const m = (window as any).__spike.battleMenu;
+      for (let i = 0; i < 6 && !m.stacks().some((x: any) => x.item === item); i++) m.stepPocket(1);
+      m.picked = item;
+      m.setMode('item');
+    }, item);
+    await page.waitForTimeout(200);
+    await shot(page, `bike-bag-${item}`);
+    await page.locator('.bm-bag-use').click();
+  };
+  const riding = () => spike(page, (s) => s.link.room.actor(s.link.me).m.bike);
+  await useBike(272);
+  await expect.poll(riding, { timeout: 5_000, message: 'on the bike' }).toBe(true);
+  await expect(page.locator('.bm-bag-head')).toBeHidden();
+  await page.waitForTimeout(300);
+  await shot(page, 'bike-on');
+  await useBike(272);
+  await expect.poll(riding, { timeout: 5_000, message: 'off it' }).toBe(false);
+  await useBike(259);
+  await expect.poll(riding, { timeout: 5_000, message: 'on the other' }).toBe(true);
+  // Indoors there's no riding, and it says so.
+  await spike(page, (s) => { s.link.room.actor(s.link.me).m.bike = false; });
+  await stand(page, 'MAP_ROUTE117_POKEMON_DAY_CARE', 5, 7, 1);
+  await page.waitForTimeout(400);
+  await useBike(272);
+  await expect(page.locator('#msg')).toHaveAttribute('data-text', /time and place/, { timeout: 5_000 });
+  expect(await riding()).toBe(false);
+  await ctx.close();
+});

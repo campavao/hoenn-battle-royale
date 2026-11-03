@@ -466,6 +466,20 @@ export function drawItemFitted(c: EmeraldCanvas, item: number, cx: number, cy: n
   drawFitted(c, `item${item}`, img, (item % ICONS.cols) * n, Math.floor(item / ICONS.cols) * n, n, n, cx, cy, box);
 }
 
+/** An item's icon cut to what is drawn of it, for a canvas that isn't Emerald's; null until the
+ *  picture has loaded. */
+export function itemCut(item: number): HTMLCanvasElement | null {
+  const img = picture('/ui/items.png', () => {});
+  if (!img.complete || img.naturalWidth === 0) return null;
+  const n = ICONS.cell;
+  const b = opaqueBox(`item${item}`, img, (item % ICONS.cols) * n, Math.floor(item / ICONS.cols) * n, n, n);
+  const cut = document.createElement('canvas');
+  cut.width = b.w;
+  cut.height = b.h;
+  cut.getContext('2d')!.drawImage(img, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
+  return cut;
+}
+
 /** A key's cap on a button, top right. */
 export function drawKeycap(c: EmeraldCanvas, key: string, right: number, y: number): void {
   const w = measure(key) + 5;

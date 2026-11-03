@@ -261,12 +261,14 @@ describe('what one of them holds', () => {
 
 describe('a piece on the ground while it is taken up', () => {
   it('a bag I have open stays, nobody else\'s does', () => {
-    expect(spillShows({}, undefined, 1)).toBe(true);
-    expect(spillShows({}, 1, 1)).toBe(true);
-    expect(spillShows({}, 2, 1)).toBe(false);
+    expect(spillShows({}, undefined, 1, false)).toBe(true);
+    expect(spillShows({}, 1, 1, true)).toBe(true);
+    // Taken to the last: the room still has it as mine, and it's gone.
+    expect(spillShows({}, 1, 1, false)).toBe(false);
+    expect(spillShows({}, 2, 1, false)).toBe(false);
   });
   it('a legendary or a person I am fighting does not stand there too', () => {
-    expect(spillShows({ legend: true }, 1, 1)).toBe(false);
-    expect(spillShows({ person: {} }, 1, 1)).toBe(false);
+    expect(spillShows({ legend: true }, 1, 1, true)).toBe(false);
+    expect(spillShows({ person: {} }, 1, 1, true)).toBe(false);
   });
 });
