@@ -208,6 +208,9 @@ export type RoomEvent =
   | { type: 'gate'; tick: number; id: number; key: number; gate: number; bag: Bag; name: string }
   /** A at a piece a gate's boss still guards. */
   | { type: 'guarded'; tick: number; id: number; name: string }
+  /** A at somebody who has given away what they held (Room.spentAt): `by` took it. A fight
+   *  still on for it has `busy`, its fighter's name; a beaten leader `beaten`, who beat them. */
+  | { type: 'spent'; tick: number; id: number; by: number; busy?: string; beaten?: string }
   /** A at the ferry's attendant (the live islands' stories, none: not sailing) or at a
    *  dock's sailor (`home`: back to Lilycove), or at a CABLE CAR's attendant (`cable`). */
   | { type: 'ferry'; tick: number; id: number; to: { id: string; name: string }[]; home?: boolean; briney?: boolean; cable?: 'up' | 'down' }
@@ -368,7 +371,7 @@ export interface Trader { x: number; y: number; species: number; busy: number }
  *  somebody beside its cache with a Pokémon, half of them giving it to the first trainer
  *  who talks to them (then gone), half trading it; and the big floors' traders. A trader
  *  keeps what he is given and offers that next. `n` is HOME_N + the row. */
-export interface Home extends Trader { n: number; map: string; gives?: boolean; gone?: boolean }
+export interface Home extends Trader { n: number; map: string; gives?: boolean; gone?: boolean; by?: number }
 export const HOME_N = 1000;
 /** br_balls.c's sHomeMons: what Hoenn's own people give and trade. */
 const HOME_MONS = [277, 280, 283, 1, 4, 7, 64, 67, 75, 93, 385, 143];
@@ -784,11 +787,11 @@ export class Room {
         this.spills.set(key, { key, map: to.map, x: to.x, y: to.y, name: '', bag: { items: [], money: 0, mons: [{ species: mon.species, level: mon.level }] } });
       }
     } else if (cmd.c === 'traded') {
-      const t: (Trader & { gives?: boolean; gone?: boolean }) | undefined = this.events.find((e) => e.n === cmd.n)?.trader ?? this.homes.find((h) => h.n === cmd.n);
+      const t: (Trader & { gives?: boolean; gone?: boolean; by?: number }) | undefined = this.events.find((e) => e.n === cmd.n)?.trader ?? this.homes.find((h) => h.n === cmd.n);
       if (!t || t.busy !== cmd.id) return;
       t.busy = 0;
-      // A giver's is taken (given: anything but 0), and he is gone; a trader holds yours.
-      if (t.gives) { if (cmd.given) t.gone = true; }
+      // A giver's is taken (given: anything but 0), and he has no more; a trader holds yours.
+      if (t.gives) { if (cmd.given) { t.gone = true; t.by = cmd.id; } }
       else if (cmd.given > 0 && cmd.given < 412) t.species = cmd.given;
       const a = this.actor(cmd.id);
       if (a?.battling && !a.foe) { a.battling = false; a.calm = this.tick + GRACE; }
@@ -1196,6 +1199,21 @@ export class Room {
   groundAt(map: string, x: number, y: number): Ground | undefined {
     const g = this.ground().get(`${map}:${x}:${y}`);
     return g && !this.picked.has(g.key) ? g : undefined;
+  }
+
+  /** Somebody standing on a cell who has given away what they held: a gift-giver, somebody at
+   *  home, a story's person, a beaten leader. They stay (Cam, 11-02: "I don't think we should
+   *  ever disappear a person"), still in the way, and say so when talked to. Whoever took it
+   *  did it through the room, so every page has them standing the same. */
+  spentAt(map: string, x: number, y: number): { by: number; gate?: boolean; beaten?: string } | undefined {
+    const g = this.ground().get(`${map}:${x}:${y}`);
+    if (g?.gift && this.picked.has(g.key)) return { by: this.picked.get(g.key)! };
+    for (const h of this.homes) if (h.gone && h.map === map && h.x === x && h.y === y) return { by: h.by ?? 0 };
+    for (const b of this.spills.values()) {
+      if (b.person && b.map === map && b.x === x && b.y === y && this.picked.has(b.key)) return { by: this.picked.get(b.key)!, ...(b.person.gate !== undefined ? { gate: true } : {}) };
+    }
+    const boss = leaderAt(map, x, y);
+    return boss && this.bossDown(boss.n) ? { by: 0, beaten: this.gyms.find(([n]) => n === boss.n)?.[1] ?? '' } : undefined;
   }
 
   /** A free cell beside a trainer, facing first, then round: walkable for them, not a
@@ -2066,6 +2084,7 @@ export class Room {
         const foe = g || b ? undefined : this.facing(a);
         const tr = foe ? undefined : this.traderAt(a.m.spot.map, x, y);
         const boss = foe || tr ? undefined : leaderAt(a.m.spot.map, x, y);
+        const spent = g || b || foe || tr ? undefined : this.spentAt(a.m.spot.map, x, y);
         // Last of A's (ProcessPlayerFieldInput asks the dive after everything ahead).
         const dive = g || b || foe || tr || boss ? undefined : diveTo(this.maps, this.world, a.m.spot, a.field ?? 0);
         if (boss && !this.bossDown(boss.n)) {
@@ -2078,6 +2097,10 @@ export class Room {
           events.push({ type: 'trade', tick: this.tick, id: a.id, n: tr.n, species: tr.t.species, ...(tr.t.gives ? { gives: true } : {}) });
         } else if (tr) {
           // Somebody is trading with him: nothing.
+        } else if (spent) {
+          // A gate's boss in a fight for his piece may yet win it back: that fight isn't over.
+          const busy = spent.gate ? this.actor(spent.by) : undefined;
+          events.push({ type: 'spent', tick: this.tick, id: a.id, by: spent.by, ...(busy?.battling ? { busy: busy.name } : {}), ...(spent.beaten !== undefined ? { beaten: spent.beaten === a.name ? '' : spent.beaten } : {}) });
         } else if (g) {
           this.picked.set(g.key, a.id);
           events.push({ type: 'item', tick: this.tick, id: a.id, key: g.key, item: g.item, ...(g.gift ? { gift: true } : {}) });
@@ -2176,7 +2199,8 @@ export class Room {
       // The Zone's gate is shut until the drop, both ways.
       if (from.map.startsWith(SAFARI) !== t.map.startsWith(SAFARI) && this.ring().safari) return null;
       const boss = leaderAt(t.map, t.x, t.y);
-      if (boss && !this.bossDown(boss.n)) return null;
+      if (boss) return null; // beaten or not, a leader stands where they stand
+      if (this.spentAt(t.map, t.x, t.y)) return null;
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return null;
       return r;
     };

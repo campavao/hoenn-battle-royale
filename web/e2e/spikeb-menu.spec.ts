@@ -130,7 +130,7 @@ test("a desktop's name tag reads at a glance, and names what is in reach", async
   });
   await expect(page.locator('#item-tag')).toHaveAttribute('data-text', named, { timeout: 5000 });
   const box = (await boxOf(page, '#item-tag'))!;
-  expect(box.height, 'its window and its point, at 3 pixels a pixel').toBe(28 * 3);
+  expect(box.height, "its window with the item's picture, and its point, at 3 pixels a pixel").toBe(42 * 3);
   await page.screenshot({ path: test.info().outputPath('bar.png') });
   await ctx.close();
 });
