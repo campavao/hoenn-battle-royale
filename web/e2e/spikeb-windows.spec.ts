@@ -448,14 +448,20 @@ test('the MAP is the page\'s window: fog, a cursor, BACK, and no ROM screen (Cam
   await expect(page.locator('#gba'), 'not the ROM').toBeHidden();
   await page.waitForTimeout(600);
   await shot(page, 'phone-map');
-  // The fog is on the picture, in its purple: the same pixels WebKit once hid are the picture itself.
-  const purple = await page.locator('#map-window .map-picture').evaluate((c: HTMLCanvasElement) => {
+  // The fog on the picture is the fog the room says is there: the purple pixels against what
+  // RingMap.fogAt asks of each pixel of the grid, as much of it as a sea or a mark doesn't hide.
+  const fog = () => page.evaluate(() => {
+    const s = (window as any).__spike, c = document.querySelector('#map-window .map-picture') as HTMLCanvasElement;
     const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
-    let n = 0;
-    for (let i = 0; i < d.length; i += 4) if (d[i + 2] > d[i + 1] + 30 && d[i] > d[i + 1]) n++;
-    return n;
+    let purple = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 2] > d[i + 1] + 30 && d[i] > d[i + 1]) purple++;
+    let told = 0;
+    for (let y = 16; y < 136; y++) for (let x = 8; x < 232; x++) if (s.ringMap.fogAt(x, y)) told++;
+    return { purple, told, scale: (c.width / 240) ** 2 };
   });
-  expect(purple, 'fog on the map').toBeGreaterThan(1000);
+  await expect.poll(async () => (await fog()).told, { timeout: 30_000, message: 'the ring has reached the map' }).toBeGreaterThan(50);
+  const seen = await fog();
+  expect(seen.purple, `fog on the map: ${JSON.stringify(seen)}`).toBeGreaterThan(seen.told * seen.scale * 0.5);
   await expect(page.locator('#map-window .map-btn').first()).toBeInViewport({ ratio: 1 });
   await page.locator('#map-window [aria-label="BACK"]').click();
   await expect(page.locator('#map-window')).toBeHidden();
