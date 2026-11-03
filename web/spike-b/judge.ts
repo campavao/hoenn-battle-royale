@@ -4,7 +4,7 @@
 // own) and says who won. Never a coin flip: no answer, and both bots walk on.
 import { Emulator } from '../src/emu';
 import { MAILBOX } from '../src/net/mailbox';
-import { ProxyDuels, type DuelOutcome, type DuelSide } from '../src/bots/proxy';
+import { ProxyDuels, stageForReplay, type DuelOutcome, type DuelSide } from '../src/bots/proxy';
 import type { BstartMsg, TurnMsg } from '../src/net/wire';
 import type { RomFiles } from './rom';
 
@@ -46,6 +46,7 @@ export function makeJudge({ rom, sym }: RomFiles, onStream?: (msg: BstartMsg | T
         const boot = [BOOT_MAP, 0, 0, 9, 5, 0, 8, 0, 0xca, 0xcc, 0xc9, 0xd2, 0xd3, 0xff];
         e.bytes(base + MAILBOX.OFF_BOOT, boot.length).set(boot);
       },
+      beforeDuel: (e) => stageForReplay(e, sym('gRecordedBattleRngSeed'), sym('gSaveBlock1Ptr')),
       onNote: (what) => console.info('[spike proxy]', what),
       onStream,
     });

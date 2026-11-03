@@ -105,6 +105,9 @@ export interface ProxyOptions {
    *  heap reset between them loses it whole with nothing said (BrDuel_HeapReset): the
    *  ROM stood on the field, fought nothing, and the deadline was all that ended it. */
   onField?: (emu: ProxyEmulator) => boolean;
+  /** Just before each duel is handed over: what has to be true of the instance for
+   *  this fight (stageForReplay). */
+  beforeDuel?: (emu: ProxyEmulator) => void;
   /** Told about anything worth knowing: a timeout, a crash, a fallback. */
   onNote?: (what: string) => void;
   /** The fight as it happens (POK-300): the instance publishes its duel the way a
@@ -113,6 +116,35 @@ export interface ProxyOptions {
    *  with the duel's two seats side A first: the ROM's player side, whose name goes
    *  first in the bstart (POK-368). */
   onStream?: (msg: BstartMsg | TurnMsg, sides: [number, number]) => void;
+}
+
+/** SaveBlock1's flags (include/global.h), and four of the badges in them: FLAG_BADGE01_GET
+ *  is 0x867, FLAG_BADGE03/05/07 0x869/0x86B/0x86D. */
+const SAVE1_FLAGS = 0x1270;
+const BOOST_BADGES = [0x867, 0x869, 0x86b, 0x86d];
+
+/** What a duel's watcher needs of the instance, or their replay shows another fight and the
+ *  ROM's turn check ends it (Cam's 11-02 play-test: "that game just kind of short circuited").
+ *
+ *  The seed. A replay is the fight's seed and its choices. The BSTART goes the moment the
+ *  battle is on and the parties are in, and CB2_HandleStartBattle takes this fight's seed some
+ *  frames after: at 0 the ROM waits for it (BattleReady), but the last duel's is still there on
+ *  an instance that fights on, so every duel but the first after a boot published that one.
+ *
+ *  The badges. Every ROM boots with all eight (br_boot.c), and a fight that is no link gives
+ *  the player's side the 10% each of these four is worth: attack, speed, defence, the specials.
+ *  Side A had them in the duel and not in its replay, which is built as a link fight
+ *  (RecordedBattle_StartSpectate) and has none. Nobody earned them: a duel is two bots, and A
+ *  was only the one the room named first. The other four stay: without the eighth a mon from
+ *  another trainer disobeys, as it never does in a replay. */
+export function stageForReplay(emu: Pick<ProxyEmulator, 'read' | 'write'>, seedAt: number, save1PtrAt: number): void {
+  if (Number.isFinite(seedAt)) emu.write(seedAt, 0, 32);
+  const save1 = Number.isFinite(save1PtrAt) ? emu.read(save1PtrAt, 32) : 0;
+  if (!save1) return;
+  for (const flag of BOOST_BADGES) {
+    const at = save1 + SAVE1_FLAGS + (flag >> 3);
+    emu.write(at, emu.read(at, 8) & ~(1 << (flag & 7)) & 0xff, 8);
+  }
 }
 
 /** A battle has message boxes that wait for a press (POK-269's rule) -- the intro's
@@ -274,6 +306,7 @@ export class ProxyDuels {
       // Drain whatever the instance said while it was idle -- it walks around Littleroot
       // like any other boot and has been talking to nobody.
       mailbox.poll();
+      this.opts.beforeDuel?.(emu);
       const duel: Msg = { t: 'duel', seatA: a.seat, seatB: b.seat, a: a.party, b: b.party };
       if (a.items?.length) (duel as { itemsA?: number[] }).itemsA = a.items;
       if (b.items?.length) (duel as { itemsB?: number[] }).itemsB = b.items;

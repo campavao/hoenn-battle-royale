@@ -180,6 +180,15 @@ transcripts were made from them; a frame at the time is the evidence for each li
   dev match with three watched bot fights ran to their ends with no drift. A recording now
   logs `mirror-end` with why (1 who was watched changed, 2 a new match, 3 not idle, 4 the
   fight was over, 5 the ROM ended it itself, a drift among those), so the next one says.
+  **Found 11-02 (v0.3.81, rom dc179db): the ROM's turn check ending a replay that really was
+  another fight** (`web/e2e/watch-replay.spec.ts`). Cam's recorded 6411 through `rom.mirror` ends
+  26.8 s in, as his did. Bots' fights: the proxy published the last duel's seed, and side A fought
+  with a 10% from four badges its replay does not have; both fixed from the page (`stageForReplay`).
+  A trainer's own fight with a bot or a gym still drifts on the badges alone (generator level, HP
+  apart, checked off a real fight): that one is a rule change or C, Cam's call. A replay that
+  ends itself now goes back in once (`Watch.rejoin`), and a watcher's camera no longer
+  leaves a replay the room has already finished. Read `gBrJank` in a frame listener: a mirror's
+  repark puts it back to 0 before the promise resolves.
 
 ## 2026-09-27, POK-329's switch: what to look at on the phone (not yet play-tested)
 
