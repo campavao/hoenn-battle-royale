@@ -248,6 +248,35 @@ for (const guestNet of [true, false]) test(`a duel whose link blocks stop at its
   }
 });
 
+test('a foe whose page froze is let go by the room a minute after the other let go of the fight', async ({ browser }) => {
+  test.setTimeout(400_000);
+  const room = await bootRoom(browser);
+  try {
+    const { r, host, guest, hostId, guestId } = room;
+    // No net of its own, and from the moment they meet, no frames: as a page that has hung, but
+    // for its `here` (a timer), which keeps the relay from dropping it.
+    await guest.evaluate(() => {
+      const s = (window as any).__spike, l = s.link, receive = l.receive.bind(l);
+      Object.assign(s.stuckLimits, { ms: 1e12, frames: 1e12, hardMs: 1e12 });
+      l.receive = (m: { t: string }, ready: () => void) => { if (m.t !== 'bt') receive(m, ready); };
+    });
+    await meet(room);
+    await guest.evaluate(() => { window.requestAnimationFrame = () => 0; (window as any).__spike.rom.emu.pause(); });
+    step('they met, and the guest froze');
+    await expect.poll(() => r.room().actor(hostId).battling, { timeout: 60_000, intervals: [500], message: "the host's own net lets the host go" }).toBe(false);
+    const t0 = Date.now();
+    step('the host is free');
+    expect(r.room().actor(guestId).battling, 'the room still has the guest fighting').toBe(true);
+    await expect.poll(() => r.room().actor(guestId).battling, { timeout: 80_000, intervals: [500], message: 'the room lets the guest go' }).toBe(false);
+    step(`the guest let go after ${Date.now() - t0} ms`);
+    expect(Date.now() - t0, 'and not before its minute').toBeGreaterThan(55_000);
+    expect(r.room().actor(guestId).foe).toBe(0);
+    expect(r.room().actor(guestId).shun, 'kept apart').toBe(hostId);
+  } finally {
+    await room.close();
+  }
+});
+
 test('a page that resynced past its fight event is told the room has it fighting, and is back on the field with the other', async ({ browser }) => {
   test.setTimeout(400_000);
   const room = await bootRoom(browser);
