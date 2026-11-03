@@ -85,3 +85,27 @@ for (const path of ['/']) {
     await desk.close();
   });
 }
+
+test("a notched iPhone's bottom buttons are on the glass (Cam, 11-03: can't hit them)", async ({ browser }) => {
+  // iPhone 13 mini in Safari, with what env(safe-area-inset-*) gives #stage there. Chromium has no
+  // notch, so the padding is put on by hand: a stage counting it as room drew past the bottom.
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 664 }, hasTouch: true, isMobile: true });
+  const page = await ctx.newPage();
+  await page.addInitScript(() => {
+    addEventListener('DOMContentLoaded', () => {
+      const st = document.createElement('style');
+      st.textContent = '#stage { padding: 50px 0 34px !important; }';
+      document.head.appendChild(st);
+    });
+  });
+  await showResults(page, '/');
+  await expect(page.locator('#results-again')).toBeInViewport({ ratio: 1 });
+  await expect(page.locator('#results-menu')).toBeInViewport({ ratio: 1 });
+  // And not in the home bar's strip, where a thumb can't press it.
+  const box = (await page.locator('#results-again').boundingBox())!;
+  expect(box.y + box.height, 'above the home bar').toBeLessThanOrEqual(664 - 34 + 1);
+  // Past the screen's fade from black.
+  await expect.poll(() => page.locator('#stage-fade').evaluate((f) => getComputedStyle(f).opacity)).toBe('0');
+  await page.screenshot({ path: test.info().outputPath('notch.png') });
+  await ctx.close();
+});
