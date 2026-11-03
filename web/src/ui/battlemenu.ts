@@ -21,6 +21,7 @@ import { EmeraldCanvas, TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_GREEN, TEXT_RED, T
 import { hintFor, onHintsChange } from './hints';
 import { ITEMS_POCKET, Win, bagHolds, drawFitted, drawIcon, drawItemFitted, drawKeycap, picture } from './phonehud';
 import { nextFocus, type Dir } from './focus';
+import { eatLiftClick } from './pagewin';
 import { BAG_POCKETS, FIELD_POCKETS, POCKET_BALLS, asksMove, asksWhoInField, isMachine, itemEffect, itemInfo, medicineHelps, takesMachine, readBattleBag, usableInField, usedOnOne, type Stack } from './bag';
 
 // ---- what the ROM says ---------------------------------------------------------------
@@ -1381,9 +1382,9 @@ export class BattleMenu {
         end();
         this.info = i;
         this.setMode('info');
-        // The finger comes off over the details, where no click comes to clear it, and a key's
-        // press on this move next was lost.
-        addEventListener('pointerup', () => setTimeout(() => { long = false; }, 50), { once: true });
+        eatLiftClick();
+        // No click comes here to clear it now, and a key's press on this move next was lost.
+        long = false;
       }, HOLD_MS);
     });
     for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, end);
@@ -1400,26 +1401,21 @@ export class BattleMenu {
    *  maybe we get the summary screen"), even one greyed for what is being asked. */
   private wireSlot(b: HTMLButtonElement, hold: HTMLElement, i: number): void {
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let long = false;
     const end = () => {
       if (timer) clearTimeout(timer);
       timer = null;
       unfill(hold);
     };
     b.addEventListener('pointerdown', () => {
-      long = false;
       if (!this.team[i]) return;
       fill(hold);
       timer = setTimeout(() => {
-        long = true;
         end();
+        eatLiftClick();
         this.deps.firstMoves?.showMon(this.team, i);
-        // The finger comes off over the window now up, where no click comes of it.
-        addEventListener('pointerup', () => setTimeout(() => { long = false; }, 50), { once: true });
       }, HOLD_MS);
     });
     for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, end);
-    b.addEventListener('click', (ev) => { if (long) { long = false; ev.stopImmediatePropagation(); } }, true);
   }
 
   /** What holding A on the focus would open, as a thumb's hold does: a move's details, a mon's
