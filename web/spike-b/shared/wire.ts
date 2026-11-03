@@ -3,6 +3,7 @@
 import type { Frame } from './host';
 import type { Bag, RoomState } from './room';
 import type { FameMon } from '../../src/ui/results';
+import type { BattleEvent } from './battlelog';
 
 /** Phone to relay. */
 export type WorldUp =
@@ -64,6 +65,10 @@ export type WorldUp =
    *  watches me or the one I fight. `as`: a bot's fight I judge (judge.ts), published as
    *  side A of it, so a page out of the match can watch two bots fight as live does. */
   | { t: 'sp'; m: SpMsg; as?: number }
+  /** What my page read of the battle I am in, as battlelog.ts events (battlereader.ts), a turn at a
+   *  time: fight `f` (my page's own counter), whose first event is a `start`. For whoever watches me
+   *  or the one I fight; kept for a watcher who comes in late. */
+  | { t: 'bl'; f: number; events: BattleEvent[] }
   /** My team as it stands (after a battle, a catch, a trade): the results screen's hall
    *  of fame when I win. And my bag, for a watcher's START (Kanto's peek). */
   | { t: 'team'; mons: FameMon[]; bag?: PeekBag };
@@ -136,6 +141,9 @@ export type WorldDown =
   | { t: 'bt'; q: number; d: number[] }
   /** The battle the trainer I watch is in, from its start (`from`: whose ROM it is). */
   | { t: 'sp'; from: number; m: SpMsg }
+  /** The fight trainer `from` is in, as events. A watcher who comes in late gets the whole log so
+   *  far in one go, with `ago`: how many ms since it began (battlelog.ts stateAt). */
+  | { t: 'bl'; from: number; f: number; events: BattleEvent[]; ago?: number }
   /** How many are watching me now. */
   | { t: 'eyes'; n: number }
   /** Trainer `id`'s team (and bag) as they last told it. */

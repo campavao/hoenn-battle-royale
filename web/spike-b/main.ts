@@ -565,7 +565,8 @@ const handoff: number[] = []; // ms from the trigger to the ROM's first battle f
 
 /** A battle the ROM fights, the page showing it from its first frame and taking the
  *  screen back when it is over. */
-function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>): void {
+let logFight = 0;
+function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>, opts: { log?: boolean; label?: { name: string; skin: number } } = {}): void {
   // One battle at a time: one still running from the match before (its ROM is busy with
   // it) turns this one down, or its end would be credited to this foe.
   if (battle) { link.end(); return; }
@@ -578,6 +579,16 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
     return;
   }
   battleNote.textContent = '';
+  // The fight, read off the ROM and told to the relay for whoever watches it (battlereader.ts);
+  // a link battle is told by the side that challenged only.
+  const me = link.mine();
+  if (link.online && me && opts.log !== false) {
+    const l = link, f = ++logFight & 0xffff;
+    rom.logTo({
+      ctx: { me: { seat: l.me, name: me.name, skin: me.skin }, foe: { seat: foe?.id ?? 0, name: foe?.name ?? opts.label?.name ?? '', skin: foe?.skin ?? opts.label?.skin ?? 0 }, map: me.m.spot.map },
+      emit: (events) => l.bl(f, events),
+    });
+  }
   const t0 = performance.now();
   const firstFrame = rom.emu.onFrame(() => { handoff.push(performance.now() - t0); firstFrame(); });
   // The page keeps the screen until the ROM's battle is up: before that the hidden ROM
@@ -1292,7 +1303,7 @@ function startFor(e: RoomEvent): void {
         giveNext();
       } else l.drop(key);
       return f;
-    }, (err) => { l.drop(key); throw err; }));
+    }, (err) => { l.drop(key); throw err; }), { label: { name: e.name, skin: 0 } });
     return;
   }
   if (e.type === 'legend') {
@@ -1316,7 +1327,7 @@ function startFor(e: RoomEvent): void {
     handOff(null, (r, onStart) => r.boss(e.n, onStart, fog).then((f) => {
       if (!f.ok && f.outcome === 0) say(`${leader.name}: Come back with two POKéMON that can battle!`);
       return f;
-    }));
+    }), { label: { name: leader.name, skin: 0 } });
     battle!.boss = e.n;
     return;
   }
@@ -1366,7 +1377,7 @@ function startFor(e: RoomEvent): void {
         if (take) for (const [q, d] of early.splice(0)) take(q, d);
       },
     };
-    handOff(foe, (r, onStart) => r.duel(me.name, foe.name, foe.skin, e.first, wire, onStart, fog, voiceOfMember(foe.id)));
+    handOff(foe, (r, onStart) => r.duel(me.name, foe.name, foe.skin, e.first, wire, onStart, fog, voiceOfMember(foe.id)), { log: e.first });
   } else {
     const m = placed.get(e.map)!.m;
     const fog = inFogNow();
