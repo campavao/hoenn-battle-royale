@@ -39,7 +39,7 @@ anything more than UI gets its own session.
   Cam, on BATTLE BACKDROP's value: "change the option text when that is true. No Backdrop vs
   Backdrop." SEND PLAY COUNT's ON/OFF needs the same treatment.
 * `fog-field`: "I'm not sure we need the per-level messages." "All POKeMON are now Lv. N!",
-  `main.ts` `fogFrame`'s tick. Still open: it is the only thing that says the team went up.
+  `main.ts` `fogFrame`'s tick. Cam: cut.
 * `fog-closed-msg`: "Not sure if we need the fog text now that we can see it easily." Cam: "'The fog
   is here' text, and more generally all of them now that we can easily see the fog." Goes: "You
   are in the fog! Safe X", "The fog closes in on X". The CENTER and MART lines still need to say
@@ -49,8 +49,7 @@ anything more than UI gets its own session.
 * `trainer-party`: "Make sure the full trainer name is seen here, this looks to be cut off."
   COURTNE: a name is 7 letters everywhere the ROM has it (`short` in `match/ticker.ts`, `name[8]` in
   `br_bot.h`), and the ROM's own "TRAINER COURTNE would like to battle!" too. Only COURTNEY and
-  FLANNERY are over (`NAMES` in `bots/roster.ts`). Simplest: two bots with shorter names, BRINEY and
-  STERN say. Showing 8 letters means the ROM, the wire and the card all change.
+  FLANNERY are over (`NAMES` in `bots/roster.ts`). Cam: swap those two bots for BRINEY and STERN.
 
 **Layout**
 * `menu`: "Make sure the sprites and text are aligned."
@@ -67,8 +66,8 @@ anything more than UI gets its own session.
   `room-card` below: a seat opens a whole screen, not a box over the list.
 * `rom-summary`: "Make this smaller so it doesn't take up the whole screen, like the battle screen."
   `#battle.screen` has no size of its own on a desktop, where a battle has `--pic`.
-* `tm-pick`: "Put these on top." `?` "THIEF / Which POKeMON?", beside the slots on a desktop and
-  over them on a phone. Same head on every pick.
+* `tm-pick`: "Put these on top." Cam: "THIEF / Which POKeMON?" goes over the options on a desktop
+  too, not to their left. Same head on every pick.
 
 **What's drawn**
 * `safari-field`, `bag-drop`: "Why is the bag green? Make it normal colour." Twice. `art.bagSprite()`
@@ -113,6 +112,22 @@ anything more than UI gets its own session.
   which doesn't have every stat yet (11-02). Then hold on keys and pads for every window. Proposed
   rule: hold anything for its details. A move's is page-only and could go on this branch with
   `tm-forget`; a mon's is this session's.
+
+### Seen on the tour, no call from Cam yet
+
+* `land-battle`: a phone on its side: the windows cover the whole fight, neither mon nor HP in view.
+* `watch-no-menu`: out on a phone there is no ☰: `dock.hidden = !mine` in `wirePhoneHud`. No sheet,
+  so no mute, zoom or feedback.
+* `sheet`: TRAINER CARD still opens the ROM's card (`onCard`), taken off START on 11-02. "spike B" is
+  on the last line for every player (`rom.ts`). Twelve rows in no order.
+* `room-no-fill`, `room-playing`, `room-ready`: the note is cut off mid-word.
+* `battle-forced-later`: "Use next POKeMON? Yes/No" stays in the picture behind the party windows.
+  One run caught a frame of it as a solid black shape.
+* `mart-count`, `mart-confirm`, `trade-offer`: the dock drops PARTY and BAG, leaving ☰ alone. The
+  nurse keeps them.
+* Lower: START floats by the trainer and carries SAVE LOG; the MAP is 240 px across on a 390 px
+  phone; the watch strip and SAVE LOG are in the old web look; the place sign never fades;
+  `#solo`'s "Engine preview" card and YOU WIN box are dead for players.
 
 ---
 
