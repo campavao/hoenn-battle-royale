@@ -104,6 +104,8 @@ test("a notched iPhone's bottom buttons are on the glass (Cam, 11-03: can't hit 
   // And not in the home bar's strip, where a thumb can't press it.
   const box = (await page.locator('#results-again').boundingBox())!;
   expect(box.y + box.height, 'above the home bar').toBeLessThanOrEqual(664 - 34 + 1);
+  // Past the screen's fade from black.
+  await expect.poll(() => page.locator('#stage-fade').evaluate((f) => getComputedStyle(f).opacity)).toBe('0');
   await page.screenshot({ path: test.info().outputPath('notch.png') });
   await ctx.close();
 });
