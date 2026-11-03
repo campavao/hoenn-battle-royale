@@ -11,15 +11,21 @@ import type { RomFiles } from './rom';
 /** br_boot.h's BR_BOOT_MAP: a fresh game in Littleroot, nobody in the party. */
 const BOOT_MAP = 1;
 
-export type Judge = (a: DuelSide, b: DuelSide) => Promise<DuelOutcome | null>;
+/** `wanted`: is the room still waiting on this fight? (ProxyDuels' own.) */
+export type Judge = (a: DuelSide, b: DuelSide, wanted?: () => boolean) => Promise<DuelOutcome | null>;
 
 /** `onStream`: the fight as it is fought (ProxyDuels' own), for whoever watches either bot. */
 export function makeJudge({ rom, sym }: RomFiles, onStream?: (msg: BstartMsg | TurnMsg, sides: [number, number]) => void): Judge {
   const mailboxBase = sym('gBrMailbox');
+  // gMain.callback2: main.h has it second, after callback1. A function's address has the
+  // Thumb bit on it there, and none in the symbols.
+  const callback2 = sym('gMain') + 4;
+  const overworld = sym('CB2_Overworld');
   let proxy: ProxyDuels | null = null;
-  return (a, b) => {
+  return (a, b, wanted) => {
     proxy ??= new ProxyDuels({
       mailboxBase,
+      onField: Number.isFinite(callback2) && Number.isFinite(overworld) ? (e) => (e.read(callback2, 32) & ~1) === overworld : undefined,
       boot: async () => {
         // Headless: a second core with a window would take the first one's canvas.
         const hidden = document.createElement('canvas');
@@ -43,6 +49,6 @@ export function makeJudge({ rom, sym }: RomFiles, onStream?: (msg: BstartMsg | T
       onNote: (what) => console.info('[spike proxy]', what),
       onStream,
     });
-    return proxy.fight(a, b);
+    return proxy.fight(a, b, wanted);
   };
 }

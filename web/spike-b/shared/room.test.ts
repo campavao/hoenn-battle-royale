@@ -1812,6 +1812,72 @@ describe('after the last trainer is out', () => {
     for (let i = 0; i < 400; i++) expect(again.step(new Map()).filter((e) => e.type === 'bots')).toEqual([]);
   });
 
+  // Cam's 2026-11-02 play-test: BRENDAN and WALLY, the last two, his page the judge at 70
+  // frames a second. Their fight is 19,148 frames, 256 s at 75 a second on rom dc179db; the
+  // room let them go at 120 s, took no answer after, met them again, and it never ended.
+  it('waits out a fight slower than two minutes, so the last two bots end the match', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 7, bot: false, name: 'A', skin: 0, spot: { map: L, x: 3, y: 3 }, facing: 1 });
+    room.apply({ c: 'join', id: 1, bot: true, name: 'ONE', skin: 4, spot: { map: L, x: 9, y: 12 }, facing: 4 });
+    room.apply({ c: 'join', id: 2, bot: true, name: 'TWO', skin: 5, spot: { map: L, x: 11, y: 12 }, facing: 3 });
+    room.apply({ c: 'lock' });
+    room.apply({ c: 'out', id: 7 });
+    const handed: number[] = [];
+    let i = 0;
+    for (; i < 60 * 60 * 20 && !room.results.winner; i++) {
+      for (const e of room.step(new Map())) if (e.type === 'bots') handed.push(i);
+      // The page answers 256 s after each meeting it is handed.
+      if (handed.length && i === handed.at(-1)! + 256 * 60) room.apply({ c: 'bots', id: 7, a: 1, b: 2, winner: 2 });
+    }
+    expect(room.results.winner).toBe(2);
+    expect(handed, 'fought once, not started over').toHaveLength(1);
+  });
+
+  it('hands a page one fight at a time: the others walk until it is free, none told no', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 7, bot: false, name: 'A', skin: 0, spot: { map: L, x: 3, y: 3 }, facing: 1 });
+    room.apply({ c: 'join', id: 1, bot: true, name: 'ONE', skin: 4, spot: { map: L, x: 9, y: 12 }, facing: 4 });
+    room.apply({ c: 'join', id: 2, bot: true, name: 'TWO', skin: 5, spot: { map: L, x: 11, y: 12 }, facing: 3 });
+    room.apply({ c: 'join', id: 3, bot: true, name: 'SIX', skin: 4, spot: { map: L, x: 9, y: 15 }, facing: 4 });
+    room.apply({ c: 'join', id: 4, bot: true, name: 'TEN', skin: 5, spot: { map: L, x: 11, y: 15 }, facing: 3 });
+    room.apply({ c: 'lock' });
+    const fights = (n: number) => { const out: { a: number; b: number }[] = []; for (let i = 0; i < n; i++) for (const e of room.step(new Map())) if (e.type === 'bots') out.push(e); return out; };
+    // A minute on: BOT_DUEL_GAP is twelve seconds, and the page is busy for all of it.
+    expect(fights(3600)).toMatchObject([{ a: 1, b: 2 }]);
+    expect(room.actor(3)!.battling, 'not frozen in its queue').toBe(false);
+    room.apply({ c: 'bots', id: 7, a: 1, b: 2, winner: 2 });
+    expect(fights(60), 'free: the next pair, at once').toMatchObject([{ a: 3, b: 4 }]);
+  });
+
+  it('a page that goes away (a reload) lets go of the fight it was running', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 7, bot: false, name: 'A', skin: 0, spot: { map: L, x: 3, y: 3 }, facing: 1 });
+    room.apply({ c: 'join', id: 1, bot: true, name: 'ONE', skin: 4, spot: { map: L, x: 9, y: 12 }, facing: 4 });
+    room.apply({ c: 'join', id: 2, bot: true, name: 'TWO', skin: 5, spot: { map: L, x: 11, y: 12 }, facing: 3 });
+    room.apply({ c: 'lock' });
+    for (let i = 0; i < 400 && !room.actor(1)!.battling; i++) room.step(new Map());
+    expect(room.actor(1)!.judge).toBe(7);
+    room.apply({ c: 'away', id: 7, on: true });
+    expect(room.actors.filter((a) => a.battling)).toEqual([]);
+  });
+
+  it('with two pages, two fights at once', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 7, bot: false, name: 'A', skin: 0, spot: { map: L, x: 3, y: 3 }, facing: 1 });
+    room.apply({ c: 'join', id: 8, bot: false, name: 'B', skin: 1, spot: { map: L, x: 3, y: 20 }, facing: 1 });
+    room.apply({ c: 'join', id: 1, bot: true, name: 'ONE', skin: 4, spot: { map: L, x: 9, y: 12 }, facing: 4 });
+    room.apply({ c: 'join', id: 2, bot: true, name: 'TWO', skin: 5, spot: { map: L, x: 11, y: 12 }, facing: 3 });
+    room.apply({ c: 'join', id: 3, bot: true, name: 'SIX', skin: 4, spot: { map: L, x: 9, y: 15 }, facing: 4 });
+    room.apply({ c: 'join', id: 4, bot: true, name: 'TEN', skin: 5, spot: { map: L, x: 11, y: 15 }, facing: 3 });
+    room.apply({ c: 'lock' });
+    room.apply({ c: 'out', id: 7 });
+    room.apply({ c: 'out', id: 8 });
+    const handed: { id: number; a: number }[] = [];
+    for (let i = 0; i < 3600; i++) for (const e of room.step(new Map())) if (e.type === 'bots') handed.push(e);
+    expect(handed.map((e) => e.a).sort()).toEqual([1, 3]);
+    expect(new Set(handed.map((e) => e.id)).size, 'one each').toBe(2);
+  });
+
   it('a match of one trainer and seven bots, the trainer out at a minute, ends with a champion', () => {
     const host = new Host(makeRoom(MAPS, PATCHES, 4242), 7, MAPS, 0);
     host.room.ringPhase = 120 * 60;
