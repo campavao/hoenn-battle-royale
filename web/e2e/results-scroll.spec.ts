@@ -58,6 +58,12 @@ for (const path of ['/']) {
     const y1 = box.y + box.height * 0.7;
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: cx, y: y0 }] });
     for (let i = 1; i <= 10; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: cx, y: y0 + ((y1 - y0) * i) / 10 }] });
+    // The finger rests before it lifts, as a real one does at the end of a drag. Lifted in
+    // the same breath as the last move, the ten moves (a few ms apart, no timestamps) are a
+    // flick, Chrome starts a fling, and the next tap, however late, only stops that: no
+    // click comes (down, up, no click -- on 20 runs of 20 here, a few in 19 on CI, where
+    // the moves are spread thinner). A tap on the arrow right after a drag is the test.
+    await page.waitForTimeout(150);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await expect.poll(() => picture(page), 'a swipe moves it').not.toBe(was);
 
@@ -79,3 +85,27 @@ for (const path of ['/']) {
     await desk.close();
   });
 }
+
+test("a notched iPhone's bottom buttons are on the glass (Cam, 11-03: can't hit them)", async ({ browser }) => {
+  // iPhone 13 mini in Safari, with what env(safe-area-inset-*) gives #stage there. Chromium has no
+  // notch, so the padding is put on by hand: a stage counting it as room drew past the bottom.
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 664 }, hasTouch: true, isMobile: true });
+  const page = await ctx.newPage();
+  await page.addInitScript(() => {
+    addEventListener('DOMContentLoaded', () => {
+      const st = document.createElement('style');
+      st.textContent = '#stage { padding: 50px 0 34px !important; }';
+      document.head.appendChild(st);
+    });
+  });
+  await showResults(page, '/');
+  await expect(page.locator('#results-again')).toBeInViewport({ ratio: 1 });
+  await expect(page.locator('#results-menu')).toBeInViewport({ ratio: 1 });
+  // And not in the home bar's strip, where a thumb can't press it.
+  const box = (await page.locator('#results-again').boundingBox())!;
+  expect(box.y + box.height, 'above the home bar').toBeLessThanOrEqual(664 - 34 + 1);
+  // Past the screen's fade from black.
+  await expect.poll(() => page.locator('#stage-fade').evaluate((f) => getComputedStyle(f).opacity)).toBe('0');
+  await page.screenshot({ path: test.info().outputPath('notch.png') });
+  await ctx.close();
+});

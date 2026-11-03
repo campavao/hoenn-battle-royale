@@ -448,9 +448,13 @@ export class Stage {
   paintNow(): void {
     if (!this.screen || this.root.hidden) return;
     this.applyLook();
-    const cssW = this.root.clientWidth;
-    const cssH = this.root.clientHeight;
-    if (cssW === 0 || cssH === 0) return;
+    // The room inside the padding: clientWidth and clientHeight count it, and #stage's is the
+    // safe area, so on a notched phone the canvas ran off the bottom by the notch and the home
+    // bar, with the buttons on it (Cam, 11-03).
+    const pad = getComputedStyle(this.root);
+    const cssW = this.root.clientWidth - (parseFloat(pad.paddingLeft) || 0) - (parseFloat(pad.paddingRight) || 0);
+    const cssH = this.root.clientHeight - (parseFloat(pad.paddingTop) || 0) - (parseFloat(pad.paddingBottom) || 0);
+    if (cssW <= 0 || cssH <= 0) return;
     const scale = stageScale(cssW, cssH);
     const w = Math.max(STAGE_WIDTH, Math.floor(cssW / scale));
     const h = Math.floor(cssH / scale);

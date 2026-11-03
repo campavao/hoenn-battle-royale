@@ -8549,13 +8549,13 @@ function translate(lines, names, winnerSeat, seats) {
   const out = [-1, -1];
   const opening = [[], []];
   for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
-    if (line.startsWith("|split|")) {
-      line = lines[++i] ?? "";
+    let line2 = lines[i];
+    if (line2.startsWith("|split|")) {
+      line2 = lines[++i] ?? "";
       i++;
     }
-    if (!line.startsWith("|")) continue;
-    const p = line.split("|").slice(1);
+    if (!line2.startsWith("|")) continue;
+    const p = line2.split("|").slice(1);
     const kind = p[0];
     if (kind !== "-crit" && kind !== "-supereffective" && kind !== "-resisted" && kind !== "-damage" && kind !== "-ohko" && kind !== "-hitcount") flush();
     switch (kind) {
@@ -9086,6 +9086,234 @@ var init_simlog = __esm({
   }
 });
 
+// web/spike-b/shared/learnset-fixes.json
+var learnset_fixes_default;
+var init_learnset_fixes = __esm({
+  "web/spike-b/shared/learnset-fixes.json"() {
+    learnset_fixes_default = {
+      aggron: [1, 33, 1, 106, 1, 189, 1, 29, 4, 106, 7, 189, 10, 29, 13, 232, 17, 334, 21, 46, 25, 36, 29, 231, 37, 182, 50, 319, 63, 38],
+      alakazam: [1, 100, 1, 134, 1, 93, 16, 93, 18, 50, 21, 60, 23, 115, 25, 105, 30, 248, 33, 347, 36, 94, 43, 271],
+      altaria: [1, 64, 1, 45, 1, 310, 1, 47, 8, 310, 11, 47, 18, 31, 21, 219, 28, 54, 31, 36, 35, 225, 40, 349, 45, 287, 54, 195, 59, 143],
+      ampharos: [1, 33, 1, 45, 1, 84, 1, 86, 9, 84, 18, 86, 27, 178, 30, 9, 42, 113, 57, 87],
+      arbok: [1, 35, 1, 43, 1, 40, 1, 44, 8, 40, 13, 44, 20, 137, 28, 103, 38, 51, 46, 254, 46, 256, 46, 255, 56, 114],
+      ariados: [1, 40, 1, 81, 1, 184, 1, 132, 6, 184, 11, 132, 17, 101, 25, 141, 34, 154, 43, 169, 53, 97, 63, 94],
+      armaldo: [1, 10, 1, 106, 1, 300, 1, 55, 7, 106, 13, 300, 19, 55, 25, 232, 31, 182, 37, 246, 46, 210, 55, 163, 64, 350],
+      azumarill: [1, 33, 1, 111, 1, 39, 1, 55, 3, 111, 6, 39, 10, 55, 15, 205, 24, 61, 34, 38, 45, 240, 57, 56],
+      banette: [1, 282, 1, 103, 1, 101, 1, 174, 8, 103, 13, 101, 20, 174, 25, 180, 32, 261, 39, 185, 48, 247, 55, 289, 64, 288],
+      barboach: [1, 189, 6, 300, 6, 346, 11, 55, 16, 222, 21, 133, 26, 156, 26, 173, 31, 89, 36, 248, 41, 90],
+      bayleef: [1, 33, 1, 45, 1, 75, 1, 115, 8, 75, 12, 115, 15, 77, 23, 235, 31, 34, 39, 113, 47, 219, 55, 76],
+      beautifly: [1, 71, 10, 71, 13, 16, 17, 78, 20, 234, 24, 72, 27, 18, 31, 213, 34, 318, 38, 202],
+      beedrill: [1, 31, 10, 31, 15, 116, 20, 41, 25, 99, 30, 228, 35, 42, 40, 97, 45, 283],
+      bellossom: [1, 71, 1, 230, 1, 78, 1, 345, 44, 80, 55, 76],
+      blastoise: [1, 33, 1, 39, 1, 145, 1, 110, 4, 39, 7, 145, 10, 110, 13, 55, 19, 44, 25, 229, 31, 182, 42, 240, 55, 130, 68, 56],
+      blaziken: [1, 7, 1, 10, 1, 45, 1, 116, 1, 52, 7, 116, 13, 52, 16, 24, 17, 64, 21, 28, 28, 339, 32, 98, 36, 299, 42, 163, 49, 119, 59, 327],
+      breloom: [1, 71, 1, 33, 1, 78, 1, 73, 4, 33, 7, 78, 10, 73, 16, 72, 22, 29, 23, 183, 28, 68, 36, 327, 45, 170, 54, 223],
+      butterfree: [1, 93, 10, 93, 13, 77, 14, 78, 15, 79, 18, 48, 23, 18, 28, 16, 34, 60, 40, 219, 47, 318],
+      cacnea: [1, 40, 1, 43, 5, 71, 9, 74, 13, 73, 17, 28, 21, 42, 25, 275, 29, 185, 33, 191, 37, 302, 41, 178, 45, 201],
+      cacturne: [1, 40, 1, 43, 1, 71, 1, 74, 5, 71, 9, 74, 13, 73, 17, 28, 21, 42, 25, 275, 29, 185, 35, 191, 41, 302, 47, 178, 53, 201],
+      camerupt: [1, 45, 1, 33, 1, 52, 1, 222, 11, 52, 19, 222, 25, 116, 29, 36, 31, 133, 33, 157, 37, 89, 45, 284, 55, 90],
+      carvanha: [1, 43, 1, 44, 7, 99, 13, 116, 16, 184, 22, 242, 28, 103, 31, 36, 37, 207, 43, 97],
+      cascoon: [1, 106, 7, 106],
+      castform: [1, 33, 10, 55, 10, 52, 10, 181, 20, 240, 20, 241, 20, 258, 30, 311],
+      celebi: [1, 73, 1, 93, 1, 105, 1, 215, 10, 219, 20, 246, 30, 248, 40, 226, 50, 195],
+      charizard: [1, 10, 1, 45, 1, 52, 1, 108, 7, 52, 13, 108, 20, 99, 27, 184, 34, 53, 36, 17, 44, 163, 54, 82, 64, 83],
+      charmander: [1, 10, 1, 45, 7, 52, 13, 108, 19, 99, 25, 184, 31, 53, 37, 163, 43, 82, 49, 83],
+      charmeleon: [1, 10, 1, 45, 1, 52, 7, 52, 13, 108, 20, 99, 27, 184, 34, 53, 41, 163, 48, 82, 55, 83],
+      clamperl: [1, 128, 1, 55, 1, 250, 1, 334],
+      claydol: [1, 100, 1, 93, 1, 106, 1, 229, 3, 106, 5, 229, 7, 189, 11, 60, 15, 317, 19, 120, 25, 246, 31, 201, 36, 63, 42, 322, 55, 153],
+      clefairy: [1, 1, 1, 45, 5, 227, 9, 47, 13, 3, 17, 266, 21, 107, 25, 111, 29, 118, 33, 322, 37, 236, 41, 113, 45, 309],
+      cleffa: [1, 1, 1, 204, 4, 227, 8, 47, 13, 186],
+      combusken: [1, 10, 1, 45, 1, 116, 1, 52, 7, 116, 13, 52, 16, 24, 17, 64, 21, 28, 28, 339, 32, 98, 39, 163, 43, 119, 50, 327],
+      corphish: [1, 145, 7, 106, 10, 11, 13, 43, 20, 61, 23, 182, 26, 282, 32, 269, 35, 152, 38, 14, 44, 12],
+      cradily: [1, 310, 1, 132, 1, 51, 1, 275, 8, 132, 15, 51, 22, 275, 29, 109, 36, 133, 48, 246, 60, 254, 60, 255, 60, 256],
+      crawdaunt: [1, 145, 1, 106, 1, 11, 1, 43, 7, 106, 10, 11, 13, 43, 20, 61, 23, 182, 26, 282, 34, 269, 39, 152, 44, 14, 52, 12],
+      crobat: [1, 103, 1, 141, 1, 48, 1, 310, 6, 48, 11, 310, 16, 44, 21, 17, 28, 109, 35, 314, 42, 212, 49, 305, 56, 114],
+      croconaw: [1, 10, 1, 43, 1, 99, 7, 99, 13, 55, 21, 44, 28, 184, 37, 163, 45, 103, 55, 56],
+      deoxys: [1, 43, 1, 35, 5, 101, 10, 104, 15, 282, 20, 228, 25, 94, 30, 129, 35, 97, 40, 105, 45, 354, 50, 245],
+      dewgong: [1, 29, 1, 45, 1, 196, 1, 62, 9, 45, 17, 196, 21, 62, 29, 156, 34, 329, 42, 36, 51, 58, 64, 219],
+      diglett: [1, 10, 1, 28, 5, 45, 9, 222, 17, 91, 25, 189, 33, 163, 41, 89, 49, 90],
+      dodrio: [1, 64, 1, 45, 1, 228, 1, 31, 9, 228, 13, 31, 21, 161, 25, 99, 38, 253, 47, 65, 60, 97],
+      donphan: [1, 316, 1, 30, 1, 45, 9, 111, 17, 175, 25, 31, 33, 205, 41, 229, 49, 89],
+      dragonair: [1, 35, 1, 43, 1, 86, 1, 239, 8, 86, 15, 239, 22, 82, 29, 21, 38, 97, 47, 219, 56, 200, 65, 63],
+      dragonite: [1, 35, 1, 43, 1, 86, 1, 239, 8, 86, 15, 239, 22, 82, 29, 21, 38, 97, 47, 219, 55, 17, 61, 200, 75, 63],
+      drowzee: [1, 1, 1, 95, 10, 50, 18, 93, 25, 29, 31, 139, 36, 96, 40, 94, 43, 244, 45, 248],
+      dugtrio: [1, 161, 1, 10, 1, 28, 1, 45, 5, 45, 9, 222, 17, 91, 25, 189, 26, 328, 38, 163, 51, 89, 64, 90],
+      dunsparce: [1, 99, 4, 111, 11, 281, 14, 137, 21, 180, 24, 228, 31, 103, 34, 36, 41, 283],
+      dusclops: [1, 20, 1, 43, 1, 101, 1, 50, 5, 50, 12, 193, 16, 310, 23, 109, 27, 228, 34, 174, 37, 325, 41, 261, 51, 212, 58, 248],
+      dustox: [1, 93, 10, 93, 13, 16, 17, 182, 20, 236, 24, 60, 27, 18, 31, 113, 34, 318, 38, 92],
+      ekans: [1, 35, 1, 43, 8, 40, 13, 44, 20, 137, 25, 103, 32, 51, 37, 254, 37, 256, 37, 255, 44, 114],
+      electabuzz: [1, 98, 1, 43, 1, 9, 9, 9, 17, 113, 25, 129, 36, 103, 47, 85, 58, 87],
+      electrode: [1, 268, 1, 33, 1, 103, 1, 49, 8, 103, 15, 49, 21, 209, 27, 120, 34, 205, 41, 113, 48, 129, 54, 153, 59, 243],
+      exploud: [1, 1, 1, 253, 1, 310, 1, 336, 5, 253, 11, 310, 15, 336, 23, 48, 29, 23, 37, 103, 40, 63, 45, 46, 55, 156, 55, 214, 63, 304],
+      fearow: [1, 64, 1, 45, 1, 43, 1, 31, 7, 43, 13, 31, 26, 228, 32, 119, 40, 65, 47, 97],
+      feraligatr: [1, 10, 1, 43, 1, 99, 1, 55, 7, 99, 13, 55, 21, 44, 28, 184, 38, 163, 47, 103, 58, 56],
+      flaaffy: [1, 33, 1, 45, 1, 84, 9, 84, 18, 86, 27, 178, 36, 113, 45, 87],
+      flygon: [1, 44, 1, 28, 1, 185, 1, 328, 9, 28, 17, 185, 25, 328, 33, 242, 35, 225, 41, 103, 53, 201, 65, 63],
+      forretress: [1, 33, 1, 182, 1, 120, 8, 120, 15, 36, 22, 229, 29, 117, 39, 153, 49, 191, 59, 38],
+      furret: [1, 10, 1, 111, 1, 98, 4, 111, 7, 98, 12, 154, 19, 270, 28, 21, 37, 266, 48, 156, 59, 133],
+      gardevoir: [1, 45, 1, 93, 1, 104, 1, 100, 6, 93, 11, 104, 16, 100, 21, 347, 26, 94, 33, 286, 42, 248, 51, 95, 60, 138],
+      gastly: [1, 95, 1, 122, 8, 180, 13, 212, 16, 174, 21, 101, 28, 109, 33, 138, 36, 194],
+      gengar: [1, 95, 1, 122, 1, 180, 8, 180, 13, 212, 16, 174, 21, 101, 25, 325, 31, 109, 39, 138, 48, 194],
+      glalie: [1, 181, 1, 43, 1, 104, 1, 44, 7, 104, 10, 44, 16, 196, 19, 29, 25, 182, 28, 242, 34, 58, 42, 258, 53, 59, 61, 329],
+      gloom: [1, 71, 1, 230, 1, 77, 7, 230, 14, 77, 16, 78, 18, 79, 24, 51, 35, 236, 44, 80],
+      golbat: [1, 103, 1, 141, 1, 48, 1, 310, 6, 48, 11, 310, 16, 44, 21, 17, 28, 109, 35, 314, 42, 212, 49, 305, 56, 114],
+      goldeen: [1, 64, 1, 39, 1, 346, 10, 48, 15, 30, 24, 175, 29, 31, 38, 127, 43, 32, 52, 97],
+      golduck: [1, 346, 1, 10, 1, 39, 1, 50, 5, 39, 10, 50, 16, 93, 23, 103, 31, 244, 44, 154, 58, 56],
+      golem: [1, 33, 1, 111, 1, 300, 1, 88, 6, 300, 11, 88, 16, 222, 21, 120, 29, 205, 37, 350, 45, 89, 53, 153, 62, 38],
+      graveler: [1, 33, 1, 111, 1, 300, 1, 88, 6, 300, 11, 88, 16, 222, 21, 120, 29, 205, 37, 350, 45, 89, 53, 153, 62, 38],
+      grimer: [1, 139, 1, 1, 4, 106, 8, 50, 13, 124, 19, 107, 26, 103, 34, 151, 43, 188, 53, 262],
+      grovyle: [1, 1, 1, 43, 1, 71, 1, 98, 6, 71, 11, 98, 16, 210, 17, 228, 23, 103, 29, 348, 35, 97, 41, 21, 47, 197, 53, 206],
+      grumpig: [1, 150, 1, 149, 1, 316, 1, 60, 7, 149, 10, 316, 16, 60, 19, 244, 25, 109, 28, 277, 37, 94, 43, 156, 43, 173, 55, 340],
+      hariyama: [1, 33, 1, 116, 1, 28, 1, 292, 4, 28, 10, 292, 13, 233, 19, 252, 22, 18, 29, 282, 33, 265, 40, 187, 44, 203, 51, 69, 55, 179],
+      haunter: [1, 95, 1, 122, 1, 180, 8, 180, 13, 212, 16, 174, 21, 101, 25, 325, 31, 109, 39, 138, 48, 194],
+      hitmonchan: [1, 279, 1, 4, 7, 97, 13, 228, 20, 183, 26, 9, 26, 8, 26, 7, 32, 327, 38, 5, 44, 197, 50, 68],
+      hitmonlee: [1, 279, 1, 24, 6, 96, 11, 27, 16, 26, 20, 280, 21, 116, 26, 136, 31, 170, 36, 193, 41, 203, 46, 25, 51, 179],
+      hitmontop: [1, 279, 1, 27, 7, 116, 13, 228, 19, 98, 20, 167, 25, 229, 31, 68, 37, 97, 43, 197, 49, 283],
+      hoppip: [1, 150, 5, 235, 5, 39, 10, 33, 13, 77, 15, 78, 17, 79, 20, 73, 25, 178, 30, 72],
+      houndoom: [1, 43, 1, 52, 1, 336, 7, 336, 13, 123, 19, 46, 27, 44, 35, 316, 43, 185, 51, 53, 59, 242],
+      houndour: [1, 43, 1, 52, 7, 336, 13, 123, 19, 46, 25, 44, 31, 316, 37, 185, 43, 53, 49, 242],
+      hypno: [1, 1, 1, 95, 1, 50, 1, 93, 10, 50, 18, 93, 25, 29, 33, 139, 40, 96, 49, 94, 55, 244, 60, 248],
+      ivysaur: [1, 33, 1, 45, 1, 73, 4, 45, 7, 73, 10, 22, 15, 77, 15, 79, 22, 75, 29, 230, 38, 74, 47, 235, 56, 76],
+      jirachi: [1, 273, 1, 93, 5, 156, 10, 129, 15, 270, 20, 94, 25, 287, 30, 156, 35, 38, 40, 248, 45, 322, 50, 353],
+      jumpluff: [1, 150, 1, 235, 1, 39, 1, 33, 5, 235, 5, 39, 10, 33, 13, 77, 15, 78, 17, 79, 22, 73, 33, 178, 44, 72],
+      jynx: [1, 1, 1, 122, 1, 142, 1, 181, 9, 142, 13, 181, 21, 3, 25, 8, 35, 212, 41, 313, 51, 34, 57, 195, 67, 59],
+      kabutops: [1, 10, 1, 106, 1, 71, 13, 71, 19, 43, 25, 341, 31, 28, 37, 203, 40, 163, 46, 319, 55, 72, 65, 246],
+      kadabra: [1, 100, 1, 134, 1, 93, 16, 93, 18, 50, 21, 60, 23, 115, 25, 105, 30, 248, 33, 272, 36, 94, 43, 271],
+      kakuna: [1, 106, 7, 106],
+      kecleon: [1, 168, 1, 39, 1, 310, 1, 122, 1, 10, 4, 20, 7, 185, 12, 154, 17, 60, 24, 103, 31, 163, 40, 164, 49, 246],
+      kingdra: [1, 145, 1, 108, 1, 43, 1, 55, 8, 108, 15, 43, 22, 55, 29, 239, 40, 97, 51, 56, 62, 349],
+      kingler: [1, 145, 1, 43, 1, 11, 5, 43, 12, 11, 16, 106, 23, 341, 27, 23, 38, 12, 49, 182, 57, 152],
+      kirlia: [1, 45, 1, 93, 1, 104, 1, 100, 6, 93, 11, 104, 16, 100, 21, 347, 26, 94, 33, 286, 40, 248, 47, 95, 54, 138],
+      koffing: [1, 139, 1, 33, 9, 123, 17, 120, 21, 124, 25, 108, 33, 114, 41, 153, 45, 194, 49, 262],
+      krabby: [1, 145, 5, 43, 12, 11, 16, 106, 23, 341, 27, 23, 34, 12, 41, 182, 45, 152],
+      lairon: [1, 33, 1, 106, 1, 189, 1, 29, 4, 106, 7, 189, 10, 29, 13, 232, 17, 334, 21, 46, 25, 36, 29, 231, 37, 182, 45, 319, 53, 38],
+      lanturn: [1, 145, 1, 86, 1, 48, 5, 48, 13, 175, 17, 55, 25, 209, 32, 109, 43, 36, 50, 56, 61, 268],
+      ledian: [1, 33, 1, 48, 8, 48, 15, 4, 24, 113, 24, 115, 24, 219, 33, 226, 42, 129, 51, 97, 60, 38],
+      linoone: [1, 33, 1, 45, 1, 39, 1, 29, 5, 39, 9, 29, 13, 28, 17, 316, 23, 300, 29, 154, 35, 343, 41, 163, 47, 156, 53, 187],
+      loudred: [1, 1, 1, 253, 1, 310, 1, 336, 5, 253, 11, 310, 15, 336, 23, 48, 29, 23, 37, 103, 43, 46, 51, 156, 51, 214, 57, 304],
+      machamp: [1, 67, 1, 43, 1, 116, 7, 116, 13, 2, 19, 69, 22, 193, 25, 279, 33, 233, 41, 66, 46, 238, 51, 184, 59, 223],
+      machoke: [1, 67, 1, 43, 1, 116, 7, 116, 13, 2, 19, 69, 22, 193, 25, 279, 33, 233, 41, 66, 46, 238, 51, 184, 59, 223],
+      machop: [1, 67, 1, 43, 7, 116, 13, 2, 19, 69, 22, 193, 25, 279, 31, 233, 37, 66, 40, 238, 43, 184, 49, 223],
+      magcargo: [1, 281, 1, 123, 1, 52, 1, 88, 8, 52, 15, 88, 22, 106, 29, 133, 36, 53, 48, 157, 60, 34],
+      magmar: [1, 52, 1, 43, 1, 123, 1, 7, 7, 43, 13, 123, 19, 7, 25, 108, 33, 241, 41, 53, 49, 109, 57, 126],
+      magnemite: [1, 319, 1, 33, 6, 84, 11, 48, 16, 49, 21, 86, 26, 209, 32, 199, 38, 129, 44, 103, 50, 192],
+      magneton: [1, 319, 1, 33, 1, 84, 1, 48, 6, 84, 11, 48, 16, 49, 21, 86, 26, 209, 35, 199, 44, 161, 53, 103, 62, 192],
+      manectric: [1, 33, 1, 86, 1, 43, 1, 336, 4, 86, 9, 43, 12, 336, 17, 98, 20, 209, 25, 316, 31, 46, 39, 44, 45, 87, 53, 268],
+      mankey: [1, 10, 1, 43, 9, 67, 15, 2, 21, 154, 27, 116, 33, 69, 39, 238, 45, 103, 51, 37],
+      marowak: [1, 45, 1, 39, 1, 125, 1, 29, 5, 39, 9, 125, 13, 29, 17, 43, 21, 116, 25, 155, 32, 99, 39, 206, 46, 37, 53, 198, 61, 38],
+      marshtomp: [1, 33, 1, 45, 1, 189, 1, 55, 6, 189, 10, 55, 15, 117, 16, 341, 20, 193, 25, 300, 31, 36, 37, 330, 42, 182, 46, 89, 53, 283],
+      masquerain: [1, 145, 1, 98, 1, 230, 1, 346, 7, 98, 13, 230, 19, 346, 26, 16, 33, 184, 40, 78, 47, 318, 53, 18],
+      mawile: [1, 310, 6, 313, 11, 44, 16, 230, 21, 11, 26, 185, 31, 226, 36, 242, 41, 334, 46, 254, 46, 256, 46, 255],
+      medicham: [1, 7, 1, 9, 1, 8, 1, 117, 1, 96, 1, 93, 1, 197, 4, 96, 9, 93, 12, 197, 18, 237, 22, 170, 28, 347, 32, 136, 40, 244, 46, 179, 54, 105],
+      meditite: [1, 117, 4, 96, 9, 93, 12, 197, 18, 237, 22, 170, 28, 347, 32, 136, 38, 244, 42, 179, 48, 105],
+      meganium: [1, 33, 1, 45, 1, 75, 1, 115, 8, 75, 12, 115, 15, 77, 23, 235, 31, 34, 41, 113, 51, 219, 61, 76],
+      meowth: [1, 10, 1, 45, 11, 44, 20, 6, 28, 185, 35, 103, 41, 154, 46, 163, 50, 252],
+      metagross: [1, 36, 1, 93, 1, 232, 1, 184, 20, 93, 20, 232, 26, 184, 32, 228, 38, 94, 44, 334, 55, 309, 66, 97, 77, 63],
+      metapod: [1, 106, 7, 106],
+      mewtwo: [1, 93, 1, 50, 11, 112, 22, 129, 33, 244, 44, 248, 55, 54, 66, 94, 77, 133, 88, 105, 99, 219],
+      mightyena: [1, 33, 1, 336, 1, 28, 1, 44, 5, 336, 9, 28, 13, 44, 17, 316, 22, 46, 27, 207, 32, 184, 37, 36, 42, 269, 47, 242, 52, 168],
+      mrmime: [1, 112, 5, 93, 9, 164, 13, 96, 17, 3, 21, 113, 21, 115, 25, 227, 29, 60, 33, 278, 37, 271, 41, 272, 45, 94, 49, 226, 53, 219],
+      muk: [1, 139, 1, 1, 1, 106, 4, 106, 8, 50, 13, 124, 19, 107, 26, 103, 34, 151, 47, 188, 61, 262],
+      natu: [1, 64, 1, 43, 10, 101, 20, 100, 30, 273, 30, 248, 40, 109, 50, 94],
+      nidoking: [1, 64, 1, 116, 1, 24, 1, 40, 23, 37],
+      nidoqueen: [1, 10, 1, 39, 1, 24, 1, 40, 23, 34],
+      nidoranf: [1, 45, 1, 10, 8, 39, 12, 24, 17, 40, 20, 44, 23, 270, 30, 154, 38, 260, 47, 242],
+      nidoranm: [1, 43, 1, 64, 8, 116, 12, 24, 17, 40, 20, 30, 23, 270, 30, 31, 38, 260, 47, 32],
+      nidorina: [1, 45, 1, 10, 8, 39, 12, 24, 18, 40, 22, 44, 26, 270, 34, 154, 43, 260, 53, 242],
+      nidorino: [1, 43, 1, 64, 8, 116, 12, 24, 18, 40, 22, 30, 26, 270, 34, 31, 43, 260, 53, 32],
+      ninjask: [1, 10, 1, 106, 1, 141, 1, 28, 5, 141, 9, 28, 14, 154, 19, 170, 20, 104, 20, 210, 20, 103, 25, 14, 31, 163, 38, 97, 45, 226],
+      noctowl: [1, 33, 1, 45, 1, 193, 1, 64, 6, 193, 11, 64, 16, 95, 25, 115, 33, 36, 41, 93, 57, 138],
+      numel: [1, 45, 1, 33, 11, 52, 19, 222, 25, 116, 29, 36, 31, 133, 35, 89, 41, 53, 49, 38],
+      octillery: [1, 55, 11, 132, 22, 60, 22, 62, 22, 61, 25, 190, 38, 116, 54, 58, 70, 63],
+      omastar: [1, 132, 1, 110, 1, 44, 13, 44, 19, 55, 25, 341, 31, 43, 37, 182, 40, 131, 46, 321, 55, 246, 65, 56],
+      onix: [1, 33, 1, 103, 9, 20, 13, 88, 21, 106, 25, 99, 33, 201, 37, 21, 45, 231, 49, 328, 57, 38],
+      parasect: [1, 10, 1, 78, 1, 77, 7, 78, 13, 77, 19, 141, 27, 147, 35, 163, 43, 74, 51, 202, 59, 312],
+      pelipper: [1, 45, 1, 55, 1, 346, 1, 17, 3, 55, 7, 48, 13, 17, 21, 54, 25, 182, 33, 254, 33, 256, 47, 255, 61, 56],
+      persian: [1, 10, 1, 45, 1, 44, 11, 44, 20, 6, 29, 185, 38, 103, 46, 154, 53, 163, 59, 252],
+      phanpy: [1, 316, 1, 33, 1, 45, 9, 111, 17, 175, 25, 36, 33, 205, 41, 203, 49, 38],
+      pidgeot: [1, 33, 1, 28, 1, 16, 1, 98, 5, 28, 9, 16, 13, 98, 20, 18, 27, 17, 34, 297, 48, 97, 62, 119],
+      pidgeotto: [1, 33, 1, 28, 1, 16, 5, 28, 9, 16, 13, 98, 20, 18, 27, 17, 34, 297, 43, 97, 52, 119],
+      pikachu: [1, 84, 1, 45, 6, 39, 8, 86, 11, 98, 15, 104, 20, 21, 26, 85, 33, 97, 41, 87, 50, 113],
+      piloswine: [1, 30, 1, 316, 1, 181, 1, 203, 10, 181, 19, 203, 28, 36, 33, 31, 42, 54, 56, 59, 70, 133],
+      politoed: [1, 55, 1, 95, 1, 3, 1, 195, 35, 195, 51, 207],
+      poliwhirl: [1, 145, 1, 95, 1, 55, 7, 95, 13, 55, 19, 3, 27, 240, 35, 34, 43, 187, 51, 56],
+      poliwrath: [1, 55, 1, 95, 1, 3, 1, 66, 35, 66, 51, 170],
+      ponyta: [1, 33, 5, 45, 9, 39, 14, 52, 19, 23, 25, 83, 31, 36, 38, 97, 45, 340, 53, 126],
+      porygon: [1, 176, 1, 33, 1, 160, 9, 97, 12, 60, 20, 105, 24, 159, 32, 199, 36, 161, 44, 278, 48, 192],
+      porygon2: [1, 176, 1, 33, 1, 160, 9, 97, 12, 60, 20, 105, 24, 111, 32, 199, 36, 161, 44, 278, 48, 192],
+      primeape: [1, 10, 1, 43, 1, 67, 1, 99, 9, 67, 15, 2, 21, 154, 27, 116, 28, 99, 36, 69, 45, 238, 54, 103, 63, 37],
+      psyduck: [1, 346, 1, 10, 5, 39, 10, 50, 16, 93, 23, 103, 31, 244, 40, 154, 50, 56],
+      pupitar: [1, 44, 1, 43, 1, 201, 1, 103, 8, 201, 15, 103, 22, 157, 29, 37, 38, 184, 47, 242, 56, 89, 65, 63],
+      quilava: [1, 33, 1, 43, 1, 108, 6, 108, 12, 52, 21, 98, 31, 172, 42, 129, 54, 53],
+      qwilfish: [1, 191, 1, 33, 1, 40, 10, 106, 10, 107, 19, 55, 28, 42, 37, 36, 46, 56],
+      rapidash: [1, 33, 1, 45, 1, 39, 1, 52, 5, 45, 9, 39, 14, 52, 19, 23, 25, 83, 31, 36, 38, 97, 40, 31, 50, 340, 63, 126],
+      raticate: [1, 33, 1, 39, 1, 98, 7, 98, 13, 158, 20, 184, 30, 228, 40, 162, 50, 283],
+      registeel: [1, 153, 9, 232, 17, 174, 25, 276, 33, 246, 41, 334, 41, 133, 49, 192, 57, 199, 65, 63],
+      remoraid: [1, 55, 11, 199, 22, 60, 22, 62, 22, 61, 33, 116, 44, 58, 55, 63],
+      rhydon: [1, 30, 1, 39, 1, 23, 1, 31, 10, 23, 15, 31, 24, 184, 29, 350, 38, 32, 46, 36, 58, 89, 66, 224],
+      sableye: [1, 43, 1, 10, 5, 193, 9, 101, 13, 310, 17, 154, 21, 252, 25, 197, 29, 185, 33, 282, 37, 109, 41, 247, 45, 212],
+      salamence: [1, 99, 1, 44, 1, 43, 1, 29, 5, 44, 9, 43, 17, 29, 21, 116, 25, 52, 30, 182, 38, 225, 47, 184, 50, 19, 61, 242, 79, 337, 93, 38],
+      sandslash: [1, 10, 1, 111, 1, 28, 6, 111, 11, 28, 17, 40, 24, 163, 33, 129, 42, 154, 52, 328, 62, 201],
+      sceptile: [1, 1, 1, 43, 1, 71, 1, 98, 6, 71, 11, 98, 16, 210, 17, 228, 23, 103, 29, 348, 35, 97, 43, 21, 51, 197, 59, 206],
+      scizor: [1, 98, 1, 43, 6, 116, 11, 228, 16, 206, 21, 97, 26, 232, 31, 163, 36, 14, 41, 104, 46, 210],
+      seadra: [1, 145, 1, 108, 1, 43, 1, 55, 8, 108, 15, 43, 22, 55, 29, 239, 40, 97, 51, 56, 62, 349],
+      seaking: [1, 64, 1, 39, 1, 346, 1, 48, 10, 48, 15, 30, 24, 175, 29, 31, 41, 127, 49, 32, 61, 97],
+      sealeo: [1, 181, 1, 45, 1, 55, 1, 227, 7, 227, 13, 301, 19, 34, 25, 62, 31, 258, 39, 156, 39, 173, 47, 59, 55, 329],
+      sharpedo: [1, 43, 1, 44, 1, 99, 1, 116, 7, 99, 13, 116, 16, 184, 22, 242, 28, 103, 33, 163, 38, 269, 43, 207, 48, 130, 53, 97],
+      shelgon: [1, 99, 1, 44, 1, 43, 1, 29, 5, 44, 9, 43, 17, 29, 21, 116, 25, 52, 30, 182, 38, 225, 47, 184, 56, 242, 69, 337, 78, 38],
+      shellder: [1, 33, 1, 110, 9, 48, 17, 62, 25, 182, 33, 43, 41, 128, 49, 58],
+      silcoon: [1, 106, 7, 106],
+      skarmory: [1, 43, 1, 64, 10, 28, 13, 129, 16, 97, 26, 31, 29, 314, 32, 211, 42, 191, 45, 319],
+      skiploom: [1, 150, 1, 235, 1, 39, 1, 33, 5, 235, 5, 39, 10, 33, 13, 77, 15, 78, 17, 79, 22, 73, 29, 178, 36, 72],
+      skitty: [1, 45, 1, 33, 3, 39, 7, 213, 13, 47, 15, 3, 19, 274, 25, 204, 27, 185, 31, 343, 37, 215, 39, 38],
+      slaking: [1, 10, 1, 281, 1, 227, 1, 303, 7, 227, 13, 303, 19, 185, 25, 133, 31, 343, 36, 207, 37, 68, 43, 175],
+      slowbro: [1, 174, 1, 281, 1, 33, 1, 45, 6, 45, 15, 55, 20, 93, 29, 50, 34, 29, 37, 110, 46, 133, 54, 94],
+      slowking: [1, 174, 1, 281, 1, 33, 6, 45, 15, 55, 20, 93, 29, 50, 34, 29, 43, 207, 48, 94],
+      slowpoke: [1, 174, 1, 281, 1, 33, 6, 45, 15, 55, 20, 93, 29, 50, 34, 29, 43, 133, 48, 94],
+      slugma: [1, 281, 1, 123, 8, 52, 15, 88, 22, 106, 29, 133, 36, 53, 43, 157, 50, 34],
+      smeargle: [1, 166, 11, 166, 21, 166, 31, 166, 41, 166, 51, 166, 61, 166, 71, 166, 81, 166, 91, 166],
+      snorlax: [1, 33, 6, 133, 10, 111, 15, 187, 19, 29, 24, 281, 28, 156, 28, 173, 33, 34, 37, 335, 42, 343, 46, 205, 51, 63],
+      spheal: [1, 181, 1, 45, 1, 55, 7, 227, 13, 301, 19, 34, 25, 62, 31, 258, 37, 156, 37, 173, 43, 59, 49, 329],
+      spoink: [1, 150, 7, 149, 10, 316, 16, 60, 19, 244, 25, 109, 28, 277, 34, 94, 37, 156, 37, 173, 43, 340],
+      stantler: [1, 33, 7, 43, 13, 310, 19, 95, 25, 23, 31, 28, 37, 36, 43, 109, 49, 347],
+      steelix: [1, 33, 1, 103, 9, 20, 13, 88, 21, 106, 25, 99, 33, 201, 37, 21, 45, 231, 49, 242, 57, 38],
+      sunflora: [1, 71, 1, 1, 6, 74, 13, 75, 18, 275, 25, 331, 30, 241, 37, 80, 42, 76],
+      swalot: [1, 1, 1, 281, 1, 139, 1, 124, 6, 281, 9, 139, 14, 124, 17, 133, 23, 227, 26, 34, 31, 92, 40, 254, 40, 255, 40, 256, 48, 188],
+      swampert: [1, 33, 1, 45, 1, 189, 1, 55, 6, 189, 10, 55, 15, 117, 16, 341, 20, 193, 25, 300, 31, 36, 39, 330, 46, 182, 52, 89, 61, 283],
+      swellow: [1, 64, 1, 45, 1, 116, 1, 98, 4, 116, 8, 98, 13, 17, 19, 104, 28, 283, 38, 332, 49, 97],
+      tangela: [1, 275, 1, 132, 4, 79, 10, 71, 13, 74, 19, 77, 22, 22, 28, 20, 31, 72, 37, 78, 40, 21, 46, 321],
+      tauros: [1, 33, 4, 39, 8, 99, 13, 30, 19, 184, 26, 228, 34, 156, 43, 37, 53, 36],
+      tentacruel: [1, 40, 1, 48, 1, 132, 6, 48, 12, 132, 19, 51, 25, 61, 30, 35, 38, 112, 47, 103, 55, 56],
+      togepi: [1, 45, 1, 204, 6, 118, 11, 186, 16, 281, 21, 227, 26, 266, 31, 273, 36, 219, 41, 38],
+      togetic: [1, 45, 1, 204, 6, 118, 11, 186, 16, 281, 21, 227, 26, 266, 31, 273, 36, 219, 41, 38],
+      tropius: [1, 43, 1, 16, 7, 74, 11, 75, 17, 23, 21, 230, 27, 18, 31, 345, 37, 34, 41, 76, 47, 235],
+      typhlosion: [1, 33, 1, 43, 1, 108, 1, 52, 6, 108, 12, 52, 21, 98, 31, 172, 45, 129, 60, 53],
+      tyranitar: [1, 44, 1, 43, 1, 201, 1, 103, 8, 201, 15, 103, 22, 157, 29, 37, 38, 184, 47, 242, 61, 89, 75, 63],
+      ursaring: [1, 10, 1, 43, 1, 122, 1, 154, 7, 122, 13, 154, 19, 313, 25, 185, 31, 156, 37, 163, 43, 173, 49, 37],
+      venomoth: [1, 318, 1, 33, 1, 50, 1, 193, 1, 48, 9, 48, 17, 93, 20, 77, 25, 141, 28, 78, 31, 16, 36, 60, 42, 79, 52, 94],
+      venusaur: [1, 33, 1, 45, 1, 73, 1, 22, 4, 45, 7, 73, 10, 22, 15, 77, 15, 79, 22, 75, 29, 230, 41, 74, 53, 235, 65, 76],
+      vibrava: [1, 44, 1, 28, 1, 185, 1, 328, 9, 28, 17, 185, 25, 328, 33, 242, 35, 225, 41, 103, 49, 201, 57, 63],
+      victreebel: [1, 22, 1, 79, 1, 230, 1, 75],
+      vigoroth: [1, 10, 1, 116, 1, 227, 1, 253, 7, 227, 13, 253, 19, 154, 25, 203, 31, 163, 37, 68, 43, 264, 49, 179],
+      vileplume: [1, 71, 1, 312, 1, 78, 1, 72, 44, 80],
+      voltorb: [1, 268, 1, 33, 8, 103, 15, 49, 21, 209, 27, 120, 32, 205, 37, 113, 42, 129, 46, 153, 49, 243],
+      wailord: [1, 150, 1, 45, 1, 55, 1, 205, 5, 45, 10, 55, 14, 205, 19, 250, 23, 310, 28, 352, 32, 54, 37, 156, 44, 323, 52, 133, 59, 56],
+      walrein: [1, 181, 1, 45, 1, 55, 1, 227, 7, 227, 13, 301, 19, 34, 25, 62, 31, 258, 39, 156, 39, 173, 50, 59, 61, 329],
+      wartortle: [1, 33, 1, 39, 1, 145, 4, 39, 7, 145, 10, 110, 13, 55, 19, 44, 25, 229, 31, 182, 37, 240, 45, 130, 53, 56],
+      weepinbell: [1, 22, 1, 74, 1, 35, 6, 74, 11, 35, 15, 79, 17, 77, 19, 78, 24, 51, 33, 230, 42, 75, 54, 21],
+      weezing: [1, 139, 1, 33, 1, 123, 1, 120, 9, 123, 17, 120, 21, 124, 25, 108, 33, 114, 44, 153, 51, 194, 58, 262],
+      whiscash: [1, 321, 1, 189, 1, 300, 1, 346, 6, 300, 6, 346, 11, 55, 16, 222, 21, 133, 26, 156, 26, 173, 36, 89, 46, 248, 56, 90],
+      wigglytuff: [1, 47, 1, 50, 1, 111, 1, 3],
+      wingull: [1, 45, 1, 55, 7, 48, 13, 17, 21, 54, 31, 98, 43, 228, 55, 97],
+      wobbuffet: [1, 68, 1, 243, 1, 219, 1, 194],
+      wynaut: [1, 150, 1, 204, 1, 227, 15, 68, 15, 243, 15, 219, 15, 194],
+      xatu: [1, 64, 1, 43, 10, 101, 20, 100, 35, 273, 35, 248, 50, 109, 65, 94],
+      yanma: [1, 33, 1, 193, 7, 98, 13, 104, 19, 49, 25, 197, 31, 48, 37, 253, 43, 17, 49, 103],
+      zubat: [1, 141, 6, 48, 11, 310, 16, 44, 21, 17, 26, 109, 31, 314, 36, 212, 41, 305, 46, 114]
+    };
+  }
+});
+
 // web/spike-b/shared/battlesim.ts
 var battlesim_exports = {};
 __export(battlesim_exports, {
@@ -9189,7 +9417,7 @@ function teach(who2, moves, num) {
   if (best !== 4) moves[best] = num;
 }
 function movesFor(speciesId, level, who2, known = []) {
-  const row = ro[speciesId] ?? [];
+  const row = learnset_fixes_default[speciesId] ?? ro[speciesId] ?? [];
   const moves = [0, 0, 0, 0];
   for (let i = 0; i < 4; i++) moves[i] = known[i] ?? 0;
   if (!known.length) {
@@ -9455,6 +9683,7 @@ var init_battlesim = __esm({
     init_simbrain();
     init_simlog();
     init_simnames();
+    init_learnset_fixes();
     TURN_CAP = 100;
     dex = I.forFormat("gen3customgame");
     NATURES = ["Hardy", "Lonely", "Brave", "Adamant", "Naughty", "Bold", "Docile", "Relaxed", "Impish", "Lax", "Timid", "Hasty", "Serious", "Jolly", "Naive", "Modest", "Mild", "Quiet", "Bashful", "Rash", "Calm", "Gentle", "Sassy", "Careful", "Quirky"];
@@ -13945,6 +14174,102 @@ var BOT_FILL = 8;
 var FOG_STEPS = [30, 60, 90, 120, 180];
 var SAFARI_STEPS = [0, 60, 120, 180];
 
+// web/spike-b/shared/logwire.ts
+var LOG_MSG_EVENTS = 80;
+var LOG_MSG_CHARS = 3800;
+var LOG_TEXT_MAX = 160;
+var LOG_STREAM_EVENTS = 1500;
+var LOG_STREAM_CHARS = 96 * 1024;
+var int = (v2, lo, hi2) => typeof v2 === "number" && Number.isInteger(v2) && v2 >= lo && v2 <= hi2 ? v2 : void 0;
+function line(v2, max) {
+  if (typeof v2 !== "string") return void 0;
+  return v2.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, max);
+}
+var sideOf = (v2) => v2 === 0 || v2 === 1 ? v2 : void 0;
+function monOf(m) {
+  if (!m || typeof m !== "object") return void 0;
+  const o = m;
+  const species = int(o.species, 1, 1023), level = int(o.level, 1, 100), hp2 = int(o.hp, 0, 9999), maxHp = int(o.maxHp, 1, 9999), status = int(o.status, 0, 255);
+  if (species === void 0 || level === void 0 || hp2 === void 0 || maxHp === void 0 || status === void 0) return void 0;
+  const gender = int(o.gender, 0, 2), nick = line(o.nickname, 12);
+  return {
+    species,
+    level,
+    hp: Math.min(hp2, maxHp),
+    maxHp,
+    status,
+    ...o.shiny === true ? { shiny: true } : {},
+    ...gender !== void 0 ? { gender } : {},
+    ...nick ? { nickname: nick } : {}
+  };
+}
+function sideTeam(s) {
+  if (!s || typeof s !== "object") return void 0;
+  const o = s;
+  const seat = int(o.seat, 0, 2147483647), skin = int(o.skin, 0, 255), name = line(o.name, 24);
+  if (seat === void 0 || skin === void 0 || name === void 0 || !Array.isArray(o.team) || o.team.length > 6) return void 0;
+  const team = [];
+  for (const m of o.team) {
+    const mon2 = monOf(m);
+    if (!mon2) return void 0;
+    team.push(mon2);
+  }
+  return { seat, name, skin, team };
+}
+function cleanEvent(raw) {
+  if (!raw || typeof raw !== "object") return void 0;
+  const o = raw;
+  switch (o.e) {
+    case "start": {
+      const a = sideTeam(o.a), b2 = sideTeam(o.b), map = line(o.map, 64);
+      return a && b2 && map !== void 0 ? { e: "start", a, b: b2, map } : void 0;
+    }
+    case "send": {
+      const side = sideOf(o.side), slot = int(o.slot, 0, 5);
+      return side !== void 0 && slot !== void 0 ? { e: "send", side, slot } : void 0;
+    }
+    case "back": {
+      const side = sideOf(o.side);
+      return side !== void 0 ? { e: "back", side } : void 0;
+    }
+    case "text": {
+      const text = line(o.text, LOG_TEXT_MAX);
+      return text ? { e: "text", text } : void 0;
+    }
+    case "hit": {
+      const side = sideOf(o.side), move = int(o.move, 0, 65535);
+      return side !== void 0 ? { e: "hit", side, ...move ? { move } : {} } : void 0;
+    }
+    case "hp": {
+      const side = sideOf(o.side), hp2 = int(o.hp, 0, 9999);
+      return side !== void 0 && hp2 !== void 0 ? { e: "hp", side, hp: hp2 } : void 0;
+    }
+    case "status": {
+      const side = sideOf(o.side), status = int(o.status, 0, 255);
+      return side !== void 0 && status !== void 0 ? { e: "status", side, status } : void 0;
+    }
+    case "faint": {
+      const side = sideOf(o.side);
+      return side !== void 0 ? { e: "faint", side } : void 0;
+    }
+    case "end": {
+      const winner = int(o.winner, 0, 2147483647);
+      return winner !== void 0 ? { e: "end", winner } : void 0;
+    }
+    default:
+      return void 0;
+  }
+}
+function cleanEvents(raw, max = LOG_MSG_EVENTS) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (let i = 0; i < raw.length && out.length < max; i++) {
+    const ev = cleanEvent(raw[i]);
+    if (ev) out.push(ev);
+  }
+  return out;
+}
+
 // web/spike-b/shared/over.ts
 function over(room) {
   const r = room.results;
@@ -13964,29 +14289,29 @@ function recOf(r) {
   const n = (v2) => Number.isInteger(v2) && v2 >= 0 && v2 < 1e6 ? v2 : void 0;
   const { wins, played, best, intro, win, lose } = r;
   const w = n(wins), p = n(played), b2 = n(best);
-  const line = (v2) => Number.isInteger(v2) && v2 >= 0 && v2 < 1e3 ? v2 : void 0;
-  const i = line(intro), wl = line(win), l = line(lose);
+  const line2 = (v2) => Number.isInteger(v2) && v2 >= 0 && v2 < 1e3 ? v2 : void 0;
+  const i = line2(intro), wl = line2(win), l = line2(lose);
   return w === void 0 || p === void 0 ? {} : { rec: { wins: w, played: p, ...b2 ? { best: b2 } : {}, ...i !== void 0 ? { intro: i } : {}, ...wl !== void 0 ? { win: wl } : {}, ...l !== void 0 ? { lose: l } : {} } };
 }
 var isPass = (s) => s.length === 4 && [...s.toUpperCase()].every((c) => CODE_ALPHABET.includes(c));
 function teamOf(t7) {
   if (!Array.isArray(t7) || t7.length > 6) return void 0;
-  const int = (v2, max) => Number.isInteger(v2) && v2 >= 0 && v2 <= max ? v2 : void 0;
+  const int2 = (v2, max) => Number.isInteger(v2) && v2 >= 0 && v2 <= max ? v2 : void 0;
   const out = [];
   for (const m of t7) {
     if (!m || typeof m !== "object") return void 0;
-    const species = int(m.species, 65535), level = int(m.level, 100);
+    const species = int2(m.species, 65535), level = int2(m.level, 100);
     if (!species || level === void 0) return void 0;
-    const moves = Array.isArray(m.moves) ? m.moves.slice(0, 4).map((v2) => int(v2?.id, 65535)).filter((id2) => !!id2).map((id2) => ({ id: id2 })) : [];
+    const moves = Array.isArray(m.moves) ? m.moves.slice(0, 4).map((v2) => int2(v2?.id, 65535)).filter((id2) => !!id2).map((id2) => ({ id: id2 })) : [];
     out.push({
       species,
       level,
       ...typeof m.nickname === "string" ? { nickname: m.nickname.slice(0, 10) } : {},
-      ...int(m.hp, 999) !== void 0 ? { hp: m.hp } : {},
-      ...int(m.maxHp, 999) !== void 0 ? { maxHp: m.maxHp } : {},
+      ...int2(m.hp, 999) !== void 0 ? { hp: m.hp } : {},
+      ...int2(m.maxHp, 999) !== void 0 ? { maxHp: m.maxHp } : {},
       ...m.shiny === true ? { shiny: true } : {},
-      ...int(m.personality, 4294967295) !== void 0 ? { personality: m.personality } : {},
-      ...int(m.otId, 4294967295) !== void 0 ? { otId: m.otId } : {},
+      ...int2(m.personality, 4294967295) !== void 0 ? { personality: m.personality } : {},
+      ...int2(m.otId, 4294967295) !== void 0 ? { otId: m.otId } : {},
       moves
     });
   }
@@ -14037,6 +14362,7 @@ var WorldService = class {
   where = /* @__PURE__ */ new Map();
   timer = null;
   nextId = FIRST_ID;
+  nextFight = 0;
   /** Trainers on this relay, in every room. */
   get players() {
     return this.where.size;
@@ -14192,9 +14518,11 @@ var WorldService = class {
           if ([m.a, m.b, m.w].every(Number.isInteger)) host.bots(phone.id, m.a, m.b, m.w, sharesOf(m.hp) ? m.hp : void 0, [itemsOf(m.ua), itemsOf(m.ub)]);
         } else if (m.t === "end") {
           room.streams.delete(phone.id);
+          this.closeLog(room, phone.id);
           host.end(phone.id, m.fled === true, m.won === true);
         } else if (m.t === "out") {
           room.streams.delete(phone.id);
+          this.closeLog(room, phone.id);
           host.out(phone.id, cleanBag(m.bag) ?? void 0, Number.isInteger(m.by) && m.by > 0 ? m.by : void 0, m.wild === true);
         } else if (m.t === "drop") {
           if (Number.isInteger(m.k)) host.drop(phone.id, m.k, cleanBag(m.rest) ?? void 0);
@@ -14207,6 +14535,8 @@ var WorldService = class {
           if (to) this.send(to.link, { t: "bt", q: m.q & 65535, d: m.d.map((v2) => (Number(v2) | 0) & 255) });
         } else if (m.t === "sp") {
           this.publish(room, phone, m.m, m.as);
+        } else if (m.t === "bl") {
+          if (text.length <= LOG_MSG_CHARS) this.publishBl(room, phone, m);
         } else if (m.t === "watch") {
           if (!Number.isInteger(m.id) || m.id < 0 || m.id === phone.id || m.id === phone.watching) return;
           const was = phone.watching;
@@ -14215,6 +14545,8 @@ var WorldService = class {
           this.eyes(room, m.id);
           const s = this.streamOf(room, m.id);
           if (s) for (const text2 of s.sent) link.send(text2);
+          const lg = this.logOf(room, m.id);
+          if (lg) link.send(JSON.stringify({ t: "bl", from: lg.from, f: lg.f, events: lg.events, ago: Math.max(0, this.opts.now() - lg.t0) }));
         } else if (m.t === "sync") {
           const now = this.opts.now();
           if (now - phone.synced < SYNC_MS) return;
@@ -14233,6 +14565,7 @@ var WorldService = class {
         p.watching = 0;
         if (room) {
           room.streams.delete(p.id);
+          this.closeLog(room, p.id);
           this.eyes(room, was);
         }
         const benched = !me2 && room?.host?.room.bench.some((x2) => x2.id === p.id);
@@ -14255,6 +14588,7 @@ var WorldService = class {
     room.members.delete(p.id);
     room.host?.leave(p.id);
     room.streams.delete(p.id);
+    this.closeLog(room, p.id);
     this.eyes(room, p.watching);
     if (room.owner === p.id) room.owner = [...room.members.values()].find((q2) => !q2.away)?.id ?? 0;
     this.opts.log(`world: #${p.id} out of room ${room.code} (${room.members.size} there)`);
@@ -14327,7 +14661,7 @@ var WorldService = class {
     } while (this.rooms.has(code));
     const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
     const set = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: BOT_FILL, door: "open", textSpeed: 5, animations: false };
-    const room = { rom, pass: "", code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map(), set, banned: /* @__PURE__ */ new Set() };
+    const room = { rom, pass: "", code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map(), logs: /* @__PURE__ */ new Map(), set, banned: /* @__PURE__ */ new Set() };
     this.rooms.set(code, room);
     return room;
   }
@@ -14348,7 +14682,9 @@ var WorldService = class {
     r.ringPhase = Math.round(room.set.fogSecs * 60);
     if (this.opts.simBots) r.simBots = true;
     r.opening = Math.round(room.set.safariSecs * 60);
-    const host = new Host(r, bots, this.opts.maps);
+    const host = new Host(r, bots, this.opts.maps, void 0, { onLog: (seat, log) => {
+      this.publishLog(room.code, seat, log);
+    } });
     for (const p of room.members.values()) {
       host.join(p.name, p.skin, void 0, p.id);
       p.heard = room.t0 = this.opts.now();
@@ -14371,8 +14707,10 @@ var WorldService = class {
     const res = room.host?.room.results;
     this.opts.log(`world: room ${room.code} over${res?.winner ? `, ${res.entrants.find(([id2]) => id2 === res.winner)?.[1]} wins` : ""}`);
     if (room.host) this.opts.log(`match ${room.code} ended after ${Math.round((this.opts.now() - room.t0) / 1e3)}s`);
+    for (const id2 of [...room.logs.keys()]) this.closeLog(room, id2);
     room.host = null;
     room.streams.clear();
+    room.logs.clear();
     for (const p of room.members.values()) p.watching = 0;
     if (room.quick) {
       room.played = true;
@@ -14402,7 +14740,7 @@ var WorldService = class {
     if (!me2?.battling) return;
     const m = { t: raw.t, battle: raw.battle & 65535, data: raw.data.map((v2) => (Number(v2) | 0) & 255) };
     let s = room.streams.get(me2.id);
-    if (m.t === "bstart") room.streams.set(me2.id, s = { battle: m.battle, sent: [], bytes: 0, foe: me2.foe });
+    if (m.t === "bstart") room.streams.set(me2.id, s = { battle: m.battle, sent: [], bytes: 0, foe: me2.foe, since: me2.since ?? 0 });
     if (!s || s.battle !== m.battle) return;
     const text = JSON.stringify({ t: "sp", from: me2.id, m });
     if (s.bytes + text.length <= STREAM_MAX) {
@@ -14420,10 +14758,92 @@ var WorldService = class {
     const a = r?.actor(id2);
     if (!r || !a?.battling) return void 0;
     const own = room.streams.get(id2);
-    if (own && own.foe === a.foe) return own;
+    if (own && own.foe === a.foe && own.since === (a.since ?? 0)) return own;
     const foe = a.foe ? r.actor(a.foe) : void 0;
     const theirs = foe?.battling && foe.foe === id2 ? room.streams.get(foe.id) : void 0;
-    return theirs && theirs.foe === id2 ? theirs : void 0;
+    return theirs && theirs.foe === id2 && theirs.since === (foe.since ?? 0) ? theirs : void 0;
+  }
+  /** The log of the fight trainer `id` is in now: their page's, or their foe's (a link battle is
+   *  logged by one side only), and only this meeting's, as streamOf has it. */
+  logOf(room, id2) {
+    const r = room.host?.room;
+    const a = r?.actor(id2);
+    if (!r || !a?.battling) return void 0;
+    const own = room.logs.get(id2);
+    if (own && own.foe === a.foe && own.since === (a.since ?? 0)) return own;
+    const foe = a.foe ? r.actor(a.foe) : void 0;
+    const theirs = foe?.battling && foe.foe === id2 ? room.logs.get(foe.id) : void 0;
+    return theirs && theirs.foe === id2 && theirs.since === (foe.since ?? 0) ? theirs : void 0;
+  }
+  /** A fighter's page's events, a turn at a time: a fight begins at its `start` (one log a
+   *  fighter, the last), and the rest follows it with the same `f`. Only from a trainer in a
+   *  battle, and only one side of a fight between two trainers logs it (the first to start). */
+  publishBl(room, phone, raw) {
+    if (!Number.isInteger(raw.f)) return;
+    const me2 = room.host?.room.actor(phone.id);
+    if (!me2?.battling) return;
+    let events = cleanEvents(raw.events, LOG_STREAM_EVENTS);
+    const f = raw.f & 65535;
+    let l = room.logs.get(me2.id);
+    const begin2 = events.findIndex((e) => e.e === "start");
+    if (begin2 >= 0) {
+      events = events.slice(begin2);
+      const foe = me2.foe ? room.host.room.actor(me2.foe) : void 0;
+      const theirs = foe && !foe.bot ? room.logs.get(foe.id) : void 0;
+      if (theirs && !theirs.ended && theirs.foe === me2.id) return;
+      const s = events[0];
+      s.a.seat = me2.id;
+      s.b.seat = me2.foe;
+      room.logs.set(me2.id, l = { f, from: me2.id, foe: me2.foe, since: me2.since ?? 0, t0: this.opts.now(), events: [], chars: 0, ended: false });
+    }
+    if (!l || l.f !== f || l.ended || !events.length) return;
+    this.putEvents(room, l, events, phone);
+  }
+  /** `events` on the end of a log, kept (within the cap) and on to everybody watching either
+   *  side of it (but `not`, the one who said them). */
+  putEvents(room, l, events, not) {
+    for (const ev of events) {
+      const n = JSON.stringify(ev).length;
+      if (l.events.length < LOG_STREAM_EVENTS && l.chars + n <= LOG_STREAM_CHARS) {
+        l.events.push(ev);
+        l.chars += n;
+      }
+      if (ev.e === "end") l.ended = true;
+    }
+    const text = JSON.stringify({ t: "bl", from: l.from, f: l.f, events, ...events[0]?.e === "start" ? { ago: Math.max(0, this.opts.now() - l.t0) } : {} });
+    for (const w of room.members.values()) {
+      if (w !== not && w.watching && (w.watching === l.from || w.watching === l.foe)) w.link.send(text);
+    }
+  }
+  /** The fight a trainer's log is of is over (their `end`, their `out`, their page gone): a log
+   *  that has not said so ends with nobody the winner, and goes. */
+  closeLog(room, id2) {
+    const l = room.logs.get(id2);
+    if (!l) return;
+    room.logs.delete(id2);
+    if (!l.ended) this.putEvents(room, l, [{ e: "end", winner: 0 }]);
+  }
+  /** For the server's simulator (a bots' fight it played out, battlesim.ts): the WHOLE log of the
+   *  fight `seat` is in, `log` from its `start` to its `end`, to everybody watching either side
+   *  of it, and to anybody who comes to watch it later (they are told how long ago it began). The
+   *  fight is timed from the frame the room began it, not from when it was worked out, so a watcher
+   *  lands where it stands. The host says each log once a seat: the second finds the first's, which
+   *  logOf gives a watcher of either. It replaces whatever log `seat` had. False when nothing was
+   *  published: no such room, no such actor, or a log that does not begin with its `start`. */
+  publishLog(code, seat, log) {
+    const room = this.rooms.get(String(code).toUpperCase());
+    const a = room?.host?.room.actor(seat);
+    const events = cleanEvents(log, LOG_STREAM_EVENTS);
+    if (!room || !a || events[0]?.e !== "start") return false;
+    const since = a.since ?? 0;
+    const foe = a.foe ? room.host.room.actor(a.foe) : void 0;
+    const theirs = foe ? room.logs.get(foe.id) : void 0;
+    if (theirs && theirs.foe === seat && theirs.since === since && foe.since === since) return true;
+    const ago = a.battling && since ? Math.max(0, room.host.room.tick - since) * FRAME_MS : 0;
+    const l = { f: ++this.nextFight & 65535, from: seat, foe: a.foe, since, t0: this.opts.now() - ago, events: [], chars: 0, ended: false };
+    room.logs.set(seat, l);
+    this.putEvents(room, l, events);
+    return true;
   }
   /** Every team the room's trainers have told, to one phone just in (the legendary's
    *  chip and the champion's hall of fame read them). */
@@ -14525,4 +14945,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "61d9db6982f0";
+export const WORLD_HASH = "8f5bb517bc46";

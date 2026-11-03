@@ -143,6 +143,9 @@ so no env var is needed. Watch it come up:
 railway logs
 ```
 
+`WORLD_SIM_BOTS=1` in the relay's Railway variables makes it simulate its bots' fights and hand
+watchers the logs (`docs/DESIGN.md`); unset, as it is now, bot fights go through a trainer's page.
+
 The relay's test suite is `cd relay && node --test`. Both sides of a link battle must run
 the same build, and the relay gates rooms on the sha1 of the ROM each tab runs and on
 `br-version.json`'s `protocol` (POK-330 #3), so a relay that raises `minProtocol` needs the

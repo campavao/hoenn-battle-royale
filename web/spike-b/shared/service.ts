@@ -18,6 +18,8 @@ import { Host } from './host';
 import { RING_PHASE, makeRoom } from './room';
 import { BOT_FILL, FOG_STEPS, MAX_STEPS, SAFARI_STEPS, dealable } from '../../src/match/room';
 import { cleanBag } from './items';
+import type { BattleEvent } from './battlelog';
+import { LOG_MSG_CHARS, LOG_STREAM_CHARS, LOG_STREAM_EVENTS, cleanEvents } from './logwire';
 import { over } from './over';
 import type { FameMon } from '../../src/ui/results';
 import { HASH_EVERY, fillFor, type Again, type CardRecord, type Listed, type Member, type PeekBag, type Settings, type SpMsg, type WireFrame, type WorldDown, type WorldUp } from './wire';
@@ -167,7 +169,13 @@ interface Phone {
 
 /** The battle a phone's ROM is publishing, as sent: for a watcher who comes in after it
  *  started (the replay must start from its BSTART). */
-interface Stream { battle: number; sent: string[]; bytes: number; foe: number }
+interface Stream { battle: number; sent: string[]; bytes: number; foe: number; since: number }
+
+/** A fight as a log (battlelog.ts), by who publishes it: kept for a watcher who comes in late.
+ *  `f` is the publisher's id for it, `foe` and `since` who and when the room had the meeting
+ *  (room.ts Actor.since: the frame a bots' fight began), so a log is for this meeting and not an
+ *  earlier one of the same pair. `t0` is the relay's clock when it began (for `ago`). */
+interface FightLog { f: number; from: number; foe: number; since: number; t0: number; events: BattleEvent[]; chars: number; ended: boolean }
 
 interface Lobby {
   code: string;
@@ -185,6 +193,8 @@ interface Lobby {
   t0: number;
   /** Each fighter's published battle, by who publishes it. */
   streams: Map<number, Stream>;
+  /** ...and as a log of events (battlelog.ts), by who publishes it. */
+  logs: Map<number, FightLog>;
   /** The host's settings for its next match. */
   set: Settings;
   /** The passcode, when the door is `pass`: the host's to read out, nobody else's. */
@@ -207,6 +217,7 @@ export class WorldService {
   private readonly where = new Map<number, Lobby>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private nextId = FIRST_ID;
+  private nextFight = 0;
 
   constructor(private readonly opts: ServiceOptions) {}
 
@@ -333,9 +344,11 @@ export class WorldService {
           if ([m.a, m.b, m.w].every(Number.isInteger)) host.bots(phone.id, m.a, m.b, m.w, sharesOf(m.hp) ? m.hp : undefined, [itemsOf(m.ua), itemsOf(m.ub)]);
         } else if (m.t === 'end') {
           room.streams.delete(phone.id);
+          this.closeLog(room, phone.id);
           host.end(phone.id, m.fled === true, m.won === true);
         } else if (m.t === 'out') {
           room.streams.delete(phone.id);
+          this.closeLog(room, phone.id);
           host.out(phone.id, cleanBag(m.bag) ?? undefined, Number.isInteger(m.by) && m.by! > 0 ? m.by : undefined, m.wild === true);
         } else if (m.t === 'drop') {
           if (Number.isInteger(m.k)) host.drop(phone.id, m.k, cleanBag(m.rest) ?? undefined);
@@ -350,7 +363,9 @@ export class WorldService {
           if (to) this.send(to.link, { t: 'bt', q: m.q & 0xffff, d: m.d.map((v) => (Number(v) | 0) & 0xff) });
         } else if (m.t === 'sp') {
           this.publish(room, phone, m.m, m.as);
-
+        } else if (m.t === 'bl') {
+          // The raw frame, before it is parsed again: a message past the cap is none.
+          if (text.length <= LOG_MSG_CHARS) this.publishBl(room, phone, m);
         } else if (m.t === 'watch') {
           if (!Number.isInteger(m.id) || m.id < 0 || m.id === phone.id || m.id === phone.watching) return;
           const was = phone.watching;
@@ -360,6 +375,9 @@ export class WorldService {
           // In the middle of a battle: the watcher's replay starts from its BSTART.
           const s = this.streamOf(room, m.id);
           if (s) for (const text of s.sent) link.send(text);
+          // ...and a log of it from its first event, with how long ago that was.
+          const lg = this.logOf(room, m.id);
+          if (lg) link.send(JSON.stringify({ t: 'bl', from: lg.from, f: lg.f, events: lg.events, ago: Math.max(0, this.opts.now() - lg.t0) } satisfies WorldDown));
         } else if (m.t === 'sync') {
           const now = this.opts.now();
           if (now - phone.synced < SYNC_MS) return;
@@ -378,7 +396,7 @@ export class WorldService {
         // Gone, if only for a reload: watching nobody now (the reload says whom again).
         const was = p.watching;
         p.watching = 0;
-        if (room) { room.streams.delete(p.id); this.eyes(room, was); }
+        if (room) { room.streams.delete(p.id); this.closeLog(room, p.id); this.eyes(room, was); }
         // Mid-match, a reload comes back within the minute to the trainer it left, or to
         // watching (out, or in for the next match): it went back to the menu, a match it
         // was still in (Cam 10-29, "the game reset"). A reload mid-battle is a forfeit (Cam).
@@ -403,6 +421,7 @@ export class WorldService {
     room.members.delete(p.id);
     room.host?.leave(p.id);
     room.streams.delete(p.id);
+    this.closeLog(room, p.id);
     this.eyes(room, p.watching);
     // START passes to whoever came in next.
     if (room.owner === p.id) room.owner = [...room.members.values()].find((q) => !q.away)?.id ?? 0;
@@ -484,7 +503,7 @@ export class WorldService {
     const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
     // The live room's: MAX 8 with FILL on (BOT_FILL), a quick room's the same.
     const set: Settings = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: BOT_FILL, door: 'open', textSpeed: 5, animations: false };
-    const room: Lobby = { rom, pass: '', code, quick, owner: 0, members: new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: new Map(), set, banned: new Set() };
+    const room: Lobby = { rom, pass: '', code, quick, owner: 0, members: new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: new Map(), logs: new Map(), set, banned: new Set() };
     this.rooms.set(code, room);
     return room;
   }
@@ -503,7 +522,8 @@ export class WorldService {
     r.ringPhase = Math.round(room.set.fogSecs * 60);
     if (this.opts.simBots) r.simBots = true;
     r.opening = Math.round(room.set.safariSecs * 60);
-    const host = new Host(r, bots, this.opts.maps);
+    // A simulated fight's log, to whoever watches either of its bots (the whole of it at once).
+    const host = new Host(r, bots, this.opts.maps, undefined, { onLog: (seat, log) => { this.publishLog(room.code, seat, log); } });
     for (const p of room.members.values()) { host.join(p.name, p.skin, undefined, p.id); p.heard = room.t0 = this.opts.now(); }
     host.lock();
     room.host = host;
@@ -524,8 +544,12 @@ export class WorldService {
     const res = room.host?.room.results;
     this.opts.log(`world: room ${room.code} over${res?.winner ? `, ${res.entrants.find(([id]) => id === res.winner)?.[1]} wins` : ''}`);
     if (room.host) this.opts.log(`match ${room.code} ended after ${Math.round((this.opts.now() - room.t0) / 1000)}s`);
+    // Whatever fight is still being read ends here for whoever watches it: the fighter's own end
+    // (a page's, after its ROM has finished) now has no match to come to.
+    for (const id of [...room.logs.keys()]) this.closeLog(room, id);
     room.host = null;
     room.streams.clear();
+    room.logs.clear();
     for (const p of room.members.values()) p.watching = 0;
     // A quick one waits for READY UP: the next match is the one nobody asked for yet.
     if (room.quick) { room.played = true; room.startsAt = null; }
@@ -557,7 +581,7 @@ export class WorldService {
     if (!me?.battling) return;
     const m: SpMsg = { t: raw.t, battle: raw.battle & 0xffff, data: raw.data.map((v) => (Number(v) | 0) & 0xff) };
     let s = room.streams.get(me.id);
-    if (m.t === 'bstart') room.streams.set(me.id, (s = { battle: m.battle, sent: [], bytes: 0, foe: me.foe }));
+    if (m.t === 'bstart') room.streams.set(me.id, (s = { battle: m.battle, sent: [], bytes: 0, foe: me.foe, since: me.since ?? 0 }));
     if (!s || s.battle !== m.battle) return;
     const text = JSON.stringify({ t: 'sp', from: me.id, m } satisfies WorldDown);
     if (s.bytes + text.length <= STREAM_MAX) { s.sent.push(text); s.bytes += text.length; }
@@ -574,11 +598,101 @@ export class WorldService {
     if (!r || !a?.battling) return undefined;
     // A stream is the fight it began with: a bot's is never dropped (no end of its own
     // comes), so one against somebody else is an old fight, not this one.
+    // ...and for this meeting: the same pair meeting again (a rematch of two bots) is a new
+    // one, told by the frame the room began it (`since`), not by who is in it.
     const own = room.streams.get(id);
-    if (own && own.foe === a.foe) return own;
+    if (own && own.foe === a.foe && own.since === (a.since ?? 0)) return own;
     const foe = a.foe ? r.actor(a.foe) : undefined;
     const theirs = foe?.battling && foe.foe === id ? room.streams.get(foe.id) : undefined;
-    return theirs && theirs.foe === id ? theirs : undefined;
+    return theirs && theirs.foe === id && theirs.since === (foe!.since ?? 0) ? theirs : undefined;
+  }
+
+  /** The log of the fight trainer `id` is in now: their page's, or their foe's (a link battle is
+   *  logged by one side only), and only this meeting's, as streamOf has it. */
+  private logOf(room: Lobby, id: number): FightLog | undefined {
+    const r = room.host?.room;
+    const a = r?.actor(id);
+    if (!r || !a?.battling) return undefined;
+    const own = room.logs.get(id);
+    if (own && own.foe === a.foe && own.since === (a.since ?? 0)) return own;
+    const foe = a.foe ? r.actor(a.foe) : undefined;
+    const theirs = foe?.battling && foe.foe === id ? room.logs.get(foe.id) : undefined;
+    return theirs && theirs.foe === id && theirs.since === (foe!.since ?? 0) ? theirs : undefined;
+  }
+
+  /** A fighter's page's events, a turn at a time: a fight begins at its `start` (one log a
+   *  fighter, the last), and the rest follows it with the same `f`. Only from a trainer in a
+   *  battle, and only one side of a fight between two trainers logs it (the first to start). */
+  private publishBl(room: Lobby, phone: Phone, raw: { f?: unknown; events?: unknown }): void {
+    if (!Number.isInteger(raw.f)) return;
+    const me = room.host?.room.actor(phone.id);
+    if (!me?.battling) return;
+    let events = cleanEvents(raw.events, LOG_STREAM_EVENTS);
+    const f = (raw.f as number) & 0xffff;
+    let l = room.logs.get(me.id);
+    const begin = events.findIndex((e) => e.e === 'start');
+    if (begin >= 0) {
+      events = events.slice(begin);
+      // The other trainer of a fight between two is already logging it: theirs is the one.
+      const foe = me.foe ? room.host!.room.actor(me.foe) : undefined;
+      const theirs = foe && !foe.bot ? room.logs.get(foe.id) : undefined;
+      if (theirs && !theirs.ended && theirs.foe === me.id) return;
+      // The seats are the room's to say, not the page's.
+      const s = events[0] as Extract<BattleEvent, { e: 'start' }>;
+      s.a.seat = me.id;
+      s.b.seat = me.foe;
+      room.logs.set(me.id, (l = { f, from: me.id, foe: me.foe, since: me.since ?? 0, t0: this.opts.now(), events: [], chars: 0, ended: false }));
+    }
+    if (!l || l.f !== f || l.ended || !events.length) return;
+    this.putEvents(room, l, events, phone);
+  }
+
+  /** `events` on the end of a log, kept (within the cap) and on to everybody watching either
+   *  side of it (but `not`, the one who said them). */
+  private putEvents(room: Lobby, l: FightLog, events: BattleEvent[], not?: Phone): void {
+    for (const ev of events) {
+      const n = JSON.stringify(ev).length;
+      if (l.events.length < LOG_STREAM_EVENTS && l.chars + n <= LOG_STREAM_CHARS) { l.events.push(ev); l.chars += n; }
+      if (ev.e === 'end') l.ended = true;
+    }
+    // A message that begins a fight says how long ago it began (a fighter's: just now), so a view
+    // plays it as a join's.
+    const text = JSON.stringify({ t: 'bl', from: l.from, f: l.f, events, ...(events[0]?.e === 'start' ? { ago: Math.max(0, this.opts.now() - l.t0) } : {}) } satisfies WorldDown);
+    for (const w of room.members.values()) {
+      if (w !== not && w.watching && (w.watching === l.from || w.watching === l.foe)) w.link.send(text);
+    }
+  }
+
+  /** The fight a trainer's log is of is over (their `end`, their `out`, their page gone): a log
+   *  that has not said so ends with nobody the winner, and goes. */
+  private closeLog(room: Lobby, id: number): void {
+    const l = room.logs.get(id);
+    if (!l) return;
+    room.logs.delete(id);
+    if (!l.ended) this.putEvents(room, l, [{ e: 'end', winner: 0 }]);
+  }
+
+  /** For the server's simulator (a bots' fight it played out, battlesim.ts): the WHOLE log of the
+   *  fight `seat` is in, `log` from its `start` to its `end`, to everybody watching either side
+   *  of it, and to anybody who comes to watch it later (they are told how long ago it began). The
+   *  fight is timed from the frame the room began it, not from when it was worked out, so a watcher
+   *  lands where it stands. The host says each log once a seat: the second finds the first's, which
+   *  logOf gives a watcher of either. It replaces whatever log `seat` had. False when nothing was
+   *  published: no such room, no such actor, or a log that does not begin with its `start`. */
+  publishLog(code: string, seat: number, log: readonly BattleEvent[]): boolean {
+    const room = this.rooms.get(String(code).toUpperCase());
+    const a = room?.host?.room.actor(seat);
+    const events = cleanEvents(log, LOG_STREAM_EVENTS);
+    if (!room || !a || events[0]?.e !== 'start') return false;
+    const since = a.since ?? 0;
+    const foe = a.foe ? room.host!.room.actor(a.foe) : undefined;
+    const theirs = foe ? room.logs.get(foe.id) : undefined;
+    if (theirs && theirs.foe === seat && theirs.since === since && foe!.since === since) return true;
+    const ago = a.battling && since ? Math.max(0, room.host!.room.tick - since) * FRAME_MS : 0;
+    const l: FightLog = { f: ++this.nextFight & 0xffff, from: seat, foe: a.foe, since, t0: this.opts.now() - ago, events: [], chars: 0, ended: false };
+    room.logs.set(seat, l);
+    this.putEvents(room, l, events);
+    return true;
   }
 
   /** Every team the room's trainers have told, to one phone just in (the legendary's
