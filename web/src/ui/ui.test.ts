@@ -189,6 +189,30 @@ describe('the drawn screens (POK-320)', () => {
     }
   });
 
+  it("keeps the host's options where they are as MAX changes: the seats grow upwards (Cam, 11-01)", async () => {
+    const { roomScreen } = await import('./screens');
+    const { fakeCanvas } = await import('./fakecanvas');
+    const options = ['max', 'fill', 'door', 'text', 'anim', 'fog', 'safari'].map((id) => ({ id: `room-${id}`, label: id.toUpperCase(), onPress: () => undefined }));
+    const model = (max: number) => ({
+      status: 'Room ABCDEF', note: 'START', seats: [{ seat: 0, name: 'P0', skin: 0, isMe: true, spectating: false, alive: true }], max, fill: true,
+      isHost: true, started: false, canStart: true, startLabel: 'START', countdown: null, options, card: null,
+      onStart: () => undefined, onLeave: () => undefined, onSeat: () => undefined, onKick: () => undefined, onCloseCard: () => undefined,
+    });
+    for (const h of [320, 400, 480, 640]) {
+      const at = (max: number) => {
+        const painted = roomScreen(() => model(max) as never).paint(fakeCanvas().canvas, h);
+        const y = (id: string) => painted.widgets.find((w) => w.id === id)!.rect.y;
+        return { max: y('room-max'), start: y('room-start'), code: y('room-code') };
+      };
+      const big = at(30);
+      expect(big.code, 'the screen is full at the most seats').toBe(4);
+      for (const max of [2, 4, 8, 12, 16, 20]) {
+        expect(at(max).max, `h ${h}, MAX ${max}`).toBe(big.max);
+        expect(at(max).start, `h ${h}, MAX ${max}`).toBe(big.start);
+      }
+    }
+  });
+
   it('keeps START and LEAVE off the host options at any MAX, on any height (POK-375)', async () => {
     const { roomScreen } = await import('./screens');
     const { fakeCanvas } = await import('./fakecanvas');

@@ -297,7 +297,12 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
         { id: 'room-controls', cls: 'room-controls', hidden: !m.options || m.started },
         { id: 'trainer-card', cls: 'trainer-card', hidden: !m.card },
       ];
-      let y = 4;
+      // The host's options stay where they are, and the seats grow upwards from them: a press on
+      // MAX that added a row moved the whole panel out from under the finger (Cam, 11-01,
+      // "anchor it and let it grow upwards"). So the code and the seats start as far down as
+      // the most seats this screen has room for would leave them.
+      const top = 4 + 20;
+      let y = 4 + (m.options && !m.started ? (roomSeatRows({ ...m, max: 4 * SEAT_COLS }, h, top) - roomSeatRows(m, h, top)) * SEAT_H : 0);
       paintTitle(c, fitText(m.status, W - 8), y);
       widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.status, id: 'room-code', cls: 'room-status', cursor: null });
       y += 20;
@@ -306,7 +311,7 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
       // reaches 30 (POK-330 #29), and a fourth row put START on the SAFARI row of a
       // 720 px phone (POK-375). Empty and bot cells go first; the note says how many
       // bots the rest are, and a room with more people than cells says +N.
-      const lay = layoutSeats(y, roomSeatRows(m, h, y) * SEAT_COLS);
+      const lay = layoutSeats(y, roomSeatRows(m, h, top) * SEAT_COLS);
       c.drawFrame(lay.frame);
       const { shown: seated, more } = roomPage(m.seats, lay.cells.length, page);
       const taken = seated.length;
