@@ -487,6 +487,8 @@ test('the drop and FLY are the MAP window: pick a place, learn it, fly to a town
   const was = await spike(page, (s) => s.mapWindow.cursor) as { x: number; y: number };
   await page.keyboard.press('ArrowRight', { delay: 100 });
   await expect.poll(() => spike(page, (s) => s.mapWindow.cursor.x)).toBe(was.x + 1);
+  await page.keyboard.press('ArrowLeft', { delay: 100 });
+  await expect.poll(() => spike(page, (s) => s.mapWindow.cursor.x)).toBe(was.x);
   await page.keyboard.press('z', { delay: 100 });
   await expect(page.locator('#map-window')).toBeHidden();
   await expect.poll(place, { timeout: 30_000, message: 'out of the Safari' }).not.toMatch(/^MAP_SAFARI/);
