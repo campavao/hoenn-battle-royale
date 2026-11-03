@@ -158,6 +158,20 @@ var init_encounters = __esm({
   }
 });
 
+// web/src/data/hms.json
+var hms_default;
+var init_hms = __esm({
+  "web/src/data/hms.json"() {
+    hms_default = {
+      cut: "7e8018f807f83c00e00308000c100d880020a0ff070040c03180d103080038090000e00703f80820c4000003007802c1c1b8a105",
+      fly: "400067000000000000003800000000000040a70018020500400000000a000006000000000000630000600000c00002000020c001",
+      surf: "800300800400c0700083c10c0c10f9034dbcb8c0070c80058c0088c0450022030000003883034006f88fe1400000e0200100d001",
+      strength: "fe0390ff9f01c06f1cfc01c2cc9f0be00dc0e0b60500b04788f8f77ba0311e070000e0bf021b18b6d3f8ff0238f41bd9a1b87f04",
+      dive: "800300000000c0700083c10c0c00f0034c2ca0c0010c80058c000880450020020000003800030006b80fe0000000e0200000d001"
+    };
+  }
+});
+
 // web/src/bots/party.ts
 function evolutionOf(species) {
   const row = EXPORTED.evolve[String(species)];
@@ -175,6 +189,19 @@ function grownUp(species, level) {
 function rungForPhase(phase) {
   const i = phase === 0 ? 0 : phase - 1;
   return LADDER[Math.min(i, LADDER.length - 1)];
+}
+function couldDo(team, hm, move) {
+  return team.some((m) => {
+    if (m.moves.some((v2) => v2.id === move)) return true;
+    const byte = parseInt(hms_default[hm].substr((m.species >> 3) * 2, 2), 16);
+    return !Number.isNaN(byte) && (byte >> (m.species & 7) & 1) === 1;
+  });
+}
+function teamField(team) {
+  return (couldDo(team, "cut", MOVE_CUT) ? 1 : 0) | (couldDo(team, "strength", MOVE_STRENGTH) ? 2 : 0) | (couldDo(team, "surf", MOVE_SURF) ? 4 : 0);
+}
+function teamFlies(team) {
+  return couldDo(team, "fly", MOVE_FLY);
 }
 function hp(level) {
   return Math.max(10, Math.floor(level * 2.2) + 10);
@@ -258,19 +285,21 @@ function dealParty(seed, seat, phase, mapId, grade = 1 /* Regular */, pool = [])
   for (let i = 0; i < count; i++) party.push(mon(level, rng, mapId, i === 0 ? pool : []));
   return party;
 }
-var EXPORTED, ENCOUNTERS, LADDER, MOVE_SURF, MOVE_CUT, MOVE_FLY, SURF_RUNG, CUT_RUNG, FLY_RUNG, POOL;
+var EXPORTED, ENCOUNTERS, LADDER, MOVE_SURF, MOVE_CUT, MOVE_FLY, MOVE_STRENGTH, SURF_RUNG, CUT_RUNG, FLY_RUNG, POOL;
 var init_party = __esm({
   "web/src/bots/party.ts"() {
     "use strict";
     init_clock();
     init_roster();
     init_encounters();
+    init_hms();
     EXPORTED = encounters_default;
     ENCOUNTERS = EXPORTED.maps;
     LADDER = [5, 15, 30, 50, 75, 100];
     MOVE_SURF = 57;
     MOVE_CUT = 15;
     MOVE_FLY = 19;
+    MOVE_STRENGTH = 70;
     SURF_RUNG = 30;
     CUT_RUNG = 20;
     FLY_RUNG = 25;
@@ -10938,6 +10967,7 @@ function findPathToAny(world, from, goals, maxVisited = DEFAULT_BUDGET, surf = f
 
 // web/spike-b/shared/bots.ts
 init_roster();
+init_party();
 init_clock();
 
 // web/spike-b/shared/marts.ts
@@ -11924,6 +11954,7 @@ var FLED_WEAR = 0.15;
 function legendMon(s, species, phase) {
   return wornParty([tradedMon(species, phase)], s?.worn === void 0 ? void 0 : [s.worn])[0];
 }
+var MAINLANDS = /* @__PURE__ */ new Map();
 function botParty(seed, a, phase) {
   const dealt = dealParty(seed, a.id, phase, a.m.spot.map, gradeOf(seed, a.id));
   return a.caught?.length ? [...a.caught.map((sp) => tradedMon(sp, phase)), ...dealt].slice(0, 6) : dealt;
@@ -12205,7 +12236,8 @@ var Room = class {
       if (cmd.spent && b2.loot) spend(b2.loot.items, cmd.spent.slice(0, 4));
     } else if (cmd.c === "fly") {
       const a = this.actor(cmd.id), t7 = cmd.to;
-      if (!a || a.bot || a.battling || a.m.action || this.ring().safari || !this.places.has(t7.map)) return;
+      if (!a || a.battling || a.m.action || this.ring().safari || !this.places.has(t7.map)) return;
+      if (a.bot && !teamFlies(botParty(this.seed, a, this.ring().phase + 1))) return;
       if (this.world.cell(t7.map, t7.x, t7.y) !== 0 || this.actors.some((o) => o.m.spot.map === t7.map && o.m.spot.x === t7.x && o.m.spot.y === t7.y)) return;
       a.m = newMover({ map: t7.map, x: t7.x, y: t7.y }, 1);
     } else if (cmd.c === "sail") {
@@ -12282,6 +12314,7 @@ var Room = class {
         return;
       }
       const a = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, foe: 0, calm: this.tick + JOIN_GRACE, shun: 0, shunUntil: 0, arriving: false };
+      if (a.bot) this.botLearns(a);
       this.actors.push(a);
       this.actors.sort((p, q2) => p.id - q2.id);
     } else if (cmd.c === "drop") {
@@ -12664,9 +12697,13 @@ var Room = class {
     const end = this.roundEnd();
     if (end !== void 0 && this.tick >= end + AFTER_WIN) this.newRound(r.round + 1);
     else if (was.safari && !ring.safari) {
-      for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) this.dropOne(a);
+      for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) {
+        this.dropOne(a);
+        this.botLearns(a);
+      }
     } else if (ring.phase !== was.phase) {
       for (const e of this.events) if (e.story && DOORS[e.story] === "wait" && ring.phase > (e.phase ?? 0)) e.opened = true;
+      for (const a of this.actors) if (a.bot) this.botLearns(a);
       if (ring.phase === 1 && !r.entrants.length) r.entrants = this.actors.map((a) => [a.id, a.name]);
       const n = eventForRing(ring.phase);
       if (n !== void 0) this.dropEvent(n, ring);
@@ -12860,6 +12897,12 @@ var Room = class {
       }
     }
   }
+  /** What a bot's team could do on the field, in `field` as a trainer's page says theirs (POK-437;
+   *  Cam said yes, 10-20). Asked when it joins, each phase and after a catch; never forgotten in a
+   *  round, since the team it is dealt turns with the map under it and it must not lose SURF at sea. */
+  botLearns(a) {
+    a.field = (a.field ?? 0) | teamField(botParty(this.seed, a, this.ring().phase + 1));
+  }
   /** The trainers whose pages could fight two bots out now (engageBots). */
   freeJudges() {
     return [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b2) => !b2.away)].filter((j) => !this.actors.some((a) => a.judge === j.id));
@@ -12899,6 +12942,7 @@ var Room = class {
       if (species) {
         a.caught = [species, ...a.caught ?? []];
         a.wear = [CAUGHT_WEAR, ...left];
+        this.botLearns(a);
       }
     } else if (cmd.winner === LEGEND_FOE) {
       a.wear = botParty(this.seed, a, phase).map(() => FLED_WEAR);
@@ -13090,6 +13134,61 @@ var Room = class {
     }
     return OPENS.get(id2);
   }
+  /** The landing cells that walk to a harbour with no HM at all, the boats counted: nobody dealt
+   *  one is stranded behind water, a tree or a boulder (POK-437). The rest are MOSSDEEP, EVER GRANDE
+   *  and the far end of ROUTE 115 (hm-reach.test.ts). */
+  mainland() {
+    const id2 = "mainland:" + [...this.maps.keys()].join();
+    const hit = MAINLANDS.get(id2);
+    if (hit) return hit;
+    const index = /* @__PURE__ */ new Map(), spots = [], back = [];
+    const node = (s) => {
+      const k = `${s.map}:${s.x}:${s.y}:${s.z ?? ""}`;
+      let n = index.get(k);
+      if (n === void 0) {
+        n = spots.length;
+        index.set(k, n);
+        spots.push(s);
+        back.push([]);
+      }
+      return n;
+    };
+    for (const m of this.maps.values()) {
+      if (m.id.startsWith(SAFARI)) continue;
+      for (let y = 0; y < m.h; y++) for (let x2 = 0; x2 < m.w; x2++) if (this.world.standable(m.id, x2, y)) node({ map: m.id, x: x2, y });
+    }
+    for (let n = 0; n < spots.length; n++) {
+      for (let dir = 1; dir <= 4; dir++) {
+        const r = this.base(spots[n], dir);
+        if (r && this.maps.has(r.to.map) && !r.to.map.startsWith(SAFARI)) back[node(r.to)].push(n);
+      }
+    }
+    const SIDES = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+    const boats = [...BOATS.map((b2) => ({ at: b2, to: b2.to })), { at: ATTENDANT, to: ["slateport"] }];
+    for (const b2 of boats) for (const to of b2.to) for (const [dx, dy] of SIDES) {
+      const from = index.get(`${b2.at.map}:${b2.at.x + dx}:${b2.at.y + dy}:`);
+      if (from !== void 0) back[node(PORTS[to].land)].push(from);
+    }
+    const ok = new Uint8Array(spots.length), queue = [];
+    for (let n = 0; n < spots.length; n++) if (spots[n].map === ATTENDANT.map || spots[n].map === PORTS.slateport.land.map) {
+      ok[n] = 1;
+      queue.push(n);
+    }
+    while (queue.length) for (const u of back[queue.pop()]) if (!ok[u]) {
+      ok[u] = 1;
+      queue.push(u);
+    }
+    const out = /* @__PURE__ */ new Set();
+    for (const k of this.landing()) {
+      const [map, x2, y] = k.split(":");
+      if ([`${map}:${x2}:${y}:`, ...this.world.levels(map, +x2, +y).map((z2) => `${map}:${x2}:${y}:${z2}`)].some((q2) => {
+        const n = index.get(q2);
+        return n !== void 0 && ok[n];
+      })) out.add(k);
+    }
+    MAINLANDS.set(id2, out);
+    return out;
+  }
   /** The fly map's time (PICK_WAIT after the Safari, or after a battle fought in the
    *  Zone since): whoever is still there, having chosen nowhere, drops anywhere outdoors
    *  (br_pick.c's timeout). */
@@ -13111,12 +13210,14 @@ var Room = class {
       return (state >>> 0) / 4294967296;
     };
     const used = new Set(this.actors.map((o) => `${o.m.spot.map}:${o.m.spot.x}:${o.m.spot.y}`));
-    const land = this.landing();
-    let landed = LANDED.get(land);
-    if (!landed) LANDED.set(land, landed = new Set([...land].map((k) => k.slice(0, k.indexOf(":")))));
+    const main = this.mainland();
+    let landed = LANDED.get(main);
+    if (!landed) LANDED.set(main, landed = new Set([...main].map((k) => k.slice(0, k.indexOf(":")))));
     const maps = [...this.places.keys()].filter((m) => !m.startsWith(SAFARI) && landed.has(m)).sort();
     for (let tries = 0; tries < 4; tries++) {
-      const map = tries === 0 && want ? want : maps[Math.floor(rng() * maps.length)];
+      const picked = tries === 0 && want;
+      const map = picked ? want : maps[Math.floor(rng() * maps.length)];
+      const land = picked ? this.landing() : main;
       const m = this.maps.get(map);
       if (!m) continue;
       const cells = [];
@@ -13160,7 +13261,8 @@ var Room = class {
       a.bleedAt = void 0;
       a.loot = void 0;
       if (a.judge) this.part(a);
-      a.caught = a.tried = void 0;
+      a.caught = a.tried = a.field = void 0;
+      this.botLearns(a);
     }
     if (safari) {
       for (const a of this.actors) if (a.bot) a.m = newMover(this.zone(a.id)[0] ?? a.m.spot, a.m.facing);
@@ -13452,7 +13554,7 @@ var Room = class {
    *  two can't both walk into one cell). */
   stepFor(a, onWay = false) {
     const fn = (from, dir) => {
-      const bits = a.bot ? 7 : a.field ?? 0;
+      const bits = a.field ?? 0;
       const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir) : this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
       if (a.bot && !onWay && this.places.has(from.map) && !this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) return null;
@@ -13740,7 +13842,7 @@ function centreFor(room, a) {
   let best = null, bestH = Infinity, bestD = Infinity;
   for (const s of room.centreSteps()) {
     if (room.inFog(s)) continue;
-    const h = room.world.hops(a.m.spot.map, s.map, true, true);
+    const h = room.world.hops(a.m.spot.map, s.map, surfs(a), cuts(a));
     if (h === void 0 || h > bestH) continue;
     const q2 = room.places.get(s.map);
     const d = Math.abs(q2.gx + s.x - p.gx - a.m.spot.x) + Math.abs(q2.gy + s.y - p.gy - a.m.spot.y);
@@ -13760,7 +13862,7 @@ function planeOf(room, s) {
 }
 function safariGoal(room, a, b2) {
   const { map, x: x2, y } = a.m.spot;
-  const reach = room.world.reachOnMap(a.m.spot, true, true);
+  const reach = room.world.reachOnMap(a.m.spot, surfs(a), cuts(a));
   const spots = [...room.patchesOn(map)];
   for (const g of room.ground().values()) if (g.map === map && !g.gift && !room.picked.has(g.key)) spots.push(g);
   const near = spots.filter((s2) => (s2.x !== x2 || s2.y !== y) && reach.cell(s2.x, s2.y)).map((s2) => ({ s: s2, d: Math.abs(s2.x - x2) + Math.abs(s2.y - y) })).sort((p, q2) => p.d - q2.d).slice(0, 5);
@@ -13806,7 +13908,7 @@ function goal(room, a, b2) {
   const near = [];
   let bestH = Infinity, bestD = Infinity;
   for (const s of cells) {
-    if (!hops.has(s.map)) hops.set(s.map, room.world.hops(a.m.spot.map, s.map, true, true));
+    if (!hops.has(s.map)) hops.set(s.map, room.world.hops(a.m.spot.map, s.map, surfs(a), cuts(a)));
     const h = hops.get(s.map);
     if (h === void 0 || h > bestH) continue;
     const q2 = room.places.get(s.map);
@@ -13821,10 +13923,25 @@ function goal(room, a, b2) {
   const pool = near.filter((n) => n.h === bestH && n.d <= bestD + SPREAD);
   return pool.length ? pool[Math.floor(rand(b2) * pool.length)].s : null;
 }
+var surfs = (a) => ((a.field ?? 0) & FIELD_SURF) !== 0;
+var cuts = (a) => (a.field ?? 0) & 3;
+var FLY_EVERY = 60 * 60;
+var FLY_CLEAR = { x: 9, y: 7 };
+function flyGoal(room, a, b2) {
+  if (hunting(room) || room.tick < (b2.flyAfter ?? 0) || !teamFlies(botParty(room.seed, a, room.ring().phase + 1))) return null;
+  const seen = (s) => room.actors.some((o) => o !== a && o.m.spot.map === s.map && Math.abs(o.m.spot.x - s.x) <= FLY_CLEAR.x && Math.abs(o.m.spot.y - s.y) <= FLY_CLEAR.y);
+  const main = room.mainland();
+  const home = heart(room).filter((s) => main.has(`${s.map}:${s.x}:${s.y}`) && room.places.has(s.map) && room.world.cell(s.map, s.x, s.y) === 0 && !room.groundAt(s.map, s.x, s.y) && !room.spillAt(s.map, s.x, s.y));
+  for (let i = 0; i < 8 && home.length; i++) {
+    const s = home[Math.floor(rand(b2) * home.length)];
+    if (!seen(s)) return s;
+  }
+  return null;
+}
 var LOOT_NEAR = 14;
 function lootGoal(room, a, b2, legendOnly = false) {
   const { map, x: x2, y } = a.m.spot;
-  const reach = room.world.reachOnMap(a.m.spot, true, true);
+  const reach = room.world.reachOnMap(a.m.spot, surfs(a), cuts(a));
   const near = [];
   const see = (s, far) => {
     const d = Math.abs(s.x - x2) + Math.abs(s.y - y);
@@ -13862,11 +13979,11 @@ function wander(room, a, b2) {
   const pool = here.length && rand(b2) < 0.5 ? here : inside;
   return pool.length ? pool[Math.floor(rand(b2) * pool.length)] : null;
 }
-function leg(room, from, to, avoid) {
-  const w = room.world;
-  if (from.map === to.map && w.reachOnMap(from, true, true).cell(to.x, to.y)) return findPath(w, from, to, 6e3, true, true, avoid);
-  const over2 = w.firstCrossing(from, to.map, true, true, (r) => r.cell(to.x, to.y));
-  return over2?.length ? findPathToAny(w, from, over2, 6e3, true, true, avoid) : null;
+function leg(room, a, to, avoid) {
+  const w = room.world, from = a.m.spot, surf = surfs(a), cut = cuts(a);
+  if (from.map === to.map && w.reachOnMap(from, surf, cut).cell(to.x, to.y)) return findPath(w, from, to, 6e3, surf, cut, avoid);
+  const over2 = w.firstCrossing(from, to.map, surf, cut, (r) => r.cell(to.x, to.y));
+  return over2?.length ? findPathToAny(w, from, over2, 6e3, surf, cut, avoid) : null;
 }
 var HUNT_AT = 3;
 function hunting(room) {
@@ -13896,8 +14013,18 @@ function botKeys(room, a, b2) {
     b2.legs = 0;
     b2.avoid = void 0;
   }
+  if (!ring.safari && (room.tick + a.id * 7) % 30 === 0 && room.inFog(a.m.spot, ring)) {
+    const to = flyGoal(room, a, b2);
+    if (to) {
+      b2.flyTo = to;
+      b2.flyAfter = room.tick + FLY_EVERY;
+      b2.goal = null;
+      b2.steps = void 0;
+      return 0;
+    }
+  }
   if (b2.goal && !b2.steps?.length && (room.tick + a.id * 7) % 30 === 0) {
-    const path = !sameSpot(a.m.spot, b2.goal) && (b2.legs = (b2.legs ?? 0) + 1) <= 24 ? leg(room, a.m.spot, b2.goal, b2.avoid) : null;
+    const path = !sameSpot(a.m.spot, b2.goal) && (b2.legs = (b2.legs ?? 0) + 1) <= 24 ? leg(room, a, b2.goal, b2.avoid) : null;
     b2.steps = path?.found ? path.steps : void 0;
     const end = b2.steps?.[b2.steps.length - 1]?.to;
     if (end && room.actors.some((o) => o !== a && sameSpot(o.m.spot, end))) b2.steps = b2.steps.slice(0, -1);
@@ -13911,7 +14038,7 @@ function botKeys(room, a, b2) {
     const here = (o2) => o2 !== a && !o2.battling && !o2.away && room.tick >= o2.calm && o2.m.spot.map === a.m.spot.map;
     const dx = (o2) => Math.abs(o2.m.spot.x - a.m.spot.x), dy = (o2) => Math.abs(o2.m.spot.y - a.m.spot.y);
     const o = room.actors.find((o2) => !o2.bot && here(o2) && dx(o2) <= NEAR_PLAYER.x && dy(o2) <= NEAR_PLAYER.y) ?? (room.tick >= room.duelAfter ? room.actors.find((o2) => o2.bot && here(o2) && dx(o2) + dy(o2) <= NEAR_TILES) : void 0);
-    const path = o ? findPath(room.world, a.m.spot, o.m.spot, 2e3, true, true) : null;
+    const path = o ? findPath(room.world, a.m.spot, o.m.spot, 2e3, surfs(a), cuts(a)) : null;
     if (path?.found && path.steps.length >= 2) {
       b2.steps = path.steps.slice(0, -1);
       b2.stuck = 0;
@@ -13958,10 +14085,11 @@ function botSpawns(room, maps, count) {
     out.push({ name, skin, spot, facing, brain: { rng: n * 2654435761 >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
   };
   for (const [x2, y] of [[7, 12], [13, 13], [11, 16]].slice(0, count)) add2({ map: "MAP_LITTLEROOT_TOWN", x: x2, y }, 1, botSkin(out.length * 7 + 1));
+  const main = room.mainland();
   const cells = room.landed().filter((s) => {
     const m = grids.get(s.map);
     const c = m?.[s.y * room.maps.get(s.map).w + s.x];
-    return m && (c === 0 || c === 7) && !room.groundAt(s.map, s.x, s.y) && !(s.map === "MAP_LITTLEROOT_TOWN" && s.x >= 7 && s.x <= 13 && s.y >= 9 && s.y <= 13);
+    return m && (c === 0 || c === 7) && !room.groundAt(s.map, s.x, s.y) && (c !== 0 || main.has(`${s.map}:${s.x}:${s.y}`)) && !(s.map === "MAP_LITTLEROOT_TOWN" && s.x >= 7 && s.x <= 13 && s.y >= 9 && s.y <= 13);
   });
   for (let tries = 0; out.length < count && cells.length && tries < 5e4; tries++) {
     const s = cells[Math.floor(r() * cells.length)];
@@ -14147,6 +14275,10 @@ var Host = class {
         if (bits !== a.keys) {
           keys.push([a.id, bits]);
           a.keys = bits;
+        }
+        if (brain?.flyTo) {
+          this.pending.push({ c: "fly", id: a.id, to: brain.flyTo });
+          brain.flyTo = void 0;
         }
         continue;
       }
@@ -15078,4 +15210,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "12e74e641469";
+export const WORLD_HASH = "c401af8603db";
