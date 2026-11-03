@@ -41,7 +41,7 @@ import roomsJson from '../data/rooms.json';
 import tableBallsJson from '../data/table-balls.json';
 import { GIFTS } from '../../src/match/gifts';
 import { cableOrDoll, isTm, type BagRows } from './items';
-import { SIGHT_RANGE, eitherSees, type Facing } from '../../src/bots/sight';
+import { SIGHT_RANGE, eitherSees, seesOver, type Facing } from '../../src/bots/sight';
 import { SAFARI_CELLS } from '../../src/match/safari';
 import { RING_RADII } from '../../src/match/clock';
 import { CLASS_WATER, DIR_NORTH, dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
@@ -117,7 +117,7 @@ export interface Actor {
   /** A fight that started from a look, before it starts (br_walkup.h): the "!", then the
    *  walker walks the eyeline to the cell beside the other. On both; `walk` on the one
    *  who walks, `duel` for two trainers (a bot's is a fight). */
-  meet?: { foe: number; walk: boolean; since: number; duel: boolean };
+  meet?: { foe: number; walk: boolean; since: number; duel: boolean; bots?: boolean };
 }
 
 /** brain.ts QUAFF_COOLDOWN_MS: a bot drinks at most one medicine every 10 s. */
@@ -397,9 +397,10 @@ const BACK: Record<number, number> = { 1: 2, 2: 1, 3: 4, 4: 3 };
 export const WALKUP_BANG = 30;
 export const APPROACH_FRAMES = (SIGHT_RANGE + 1) * 16 + 90;
 const KEY_TO: Record<number, number> = { 1: KEY_DOWN, 2: KEY_UP, 3: KEY_LEFT, 4: KEY_RIGHT };
-/** One bot-vs-bot fight starts at most this often, room-wide (POK-273's
- *  DUEL_COOLDOWN_MS): every pair that could see each other fighting at once decided a
- *  full room before the first ring moved. */
+/** With a trainer's page to fight them (no Room.simBots), one bot-vs-bot fight starts at most this
+ *  often, room-wide (POK-273's DUEL_COOLDOWN_MS): every pair that could see each other fighting at
+ *  once decided a full room before the first ring moved. A simulated fight holds its two for as long
+ *  as it takes to play, a minute as a rule, which paces a room without this. */
 export const BOT_DUEL_GAP = 60 * 12;
 /** `judge` for a bot-vs-bot fight the host simulates itself (Room.simBots, battlesim.ts): no
  *  trainer's id is ever this, so no page takes it for its own. */
@@ -1445,13 +1446,48 @@ export class Room {
     a.calm = this.tick + GRACE;
   }
 
-  /** Two bots on one map in each other's eyeline fight (POK-238), one pair at a time
-   *  room-wide (BOT_DUEL_GAP). A bot has no ROM, so a trainer's page fights it in a
-   *  hidden one: the trainers take turns at it, by the frame. Nobody on the map to do it,
-   *  nobody fights. */
+  /** Where bot `b` stands from `a`, on `a`'s map's cells, when they could be said to meet: the same
+   *  map, or two joined at a seam, which the page draws side by side and anybody watching takes for
+   *  one place. */
+  private across(a: Actor, b: Actor): { dx: number; dy: number; ox: number; oy: number } | undefined {
+    const p = a.m.spot, q = b.m.spot;
+    if (p.map === q.map) return { dx: q.x - p.x, dy: q.y - p.y, ox: 0, oy: 0 };
+    const from = this.places.get(p.map), to = this.places.get(q.map);
+    if (!from || !to || !this.maps.get(p.map)?.seams.some((s) => s.to === q.map)) return undefined;
+    const ox = to.gx - from.gx, oy = to.gy - from.gy;
+    return { dx: q.x + ox - p.x, dy: q.y + oy - p.y, ox, oy };
+  }
+
+  /** Two bots meet when one is in the other's eyeline, or when they stand side by side whichever
+   *  way they face (Cam, 11-02: "Bots stand next to each other without fighting"). */
+  botsMeet(a: Actor, b: Actor): boolean {
+    const at = this.across(a, b);
+    if (!at || (at.dx && at.dy)) return false;
+    const far = Math.abs(at.dx) + Math.abs(at.dy);
+    if (far > SIGHT_RANGE) return false;
+    if (far === 1) return true;
+    const look = (o: Actor) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing as Facing });
+    if (a.m.spot.map === b.m.spot.map) return eitherSees(this.world, look(a), look(b));
+    return seesOver(this.world, look(a), look(b), at.ox, at.oy) || seesOver(this.world, look(b), look(a), -at.ox, -at.oy);
+  }
+
+  /** `a` has somebody in its eyeline who is mid-step, and free to fight. A bot on its way is only
+   *  ever still on the frame a step ends, so two walking never would be on the same one: 83% of the
+   *  looks bots gave each other came to nothing. It stands for the moment that step takes. */
+  sightsWalker(a: Actor): boolean {
+    if (!this.simBots || a.battling || this.tick < a.calm || this.ring().safari) return false;
+    return this.actors.some((o) => o !== a && o.bot && !o.battling && !!o.m.action && this.tick >= o.calm && this.botsMeet(a, o));
+  }
+
+  /** Two bots who meet fight (POK-238). The host simulates it (Room.simBots), any number at once and
+   *  from the frame they meet: the "!", and the one who looked walks up, as any fight in this game
+   *  starts (Cam, 11-02: "Are these two battling each other they should be right next to each
+   *  other"). Otherwise a bot has no ROM, so a trainer's page fights it in a hidden one, one pair at a
+   *  time room-wide (BOT_DUEL_GAP): the trainers take turns at it, by the frame. Nobody on the map to
+   *  do it, nobody fights. */
   private engageBots(events: RoomEvent[]): void {
     if (this.ring().safari) return;
-    if ((!this.simBots && this.tick < this.duelAfter) || this.tick % 8) return;
+    if (!this.simBots && (this.tick < this.duelAfter || this.tick % 8)) return;
     // A page that can run it now: not reloading, not in a battle of its own (its ROM is
     // busy); or one on the bench, out and watching (or in for the next match), which is
     // still here: a phone that goes leaves the bench too. Otherwise, once the last trainer
@@ -1462,37 +1498,30 @@ export class Room {
     // minutes, 2 fought (2026-11-02). Until a page is free, they walk.
     const judges = this.freeJudges();
     if (!this.simBots && !judges.length) return;
-    const byMap = new Map<string, Actor[]>();
-    for (const a of this.actors) {
-      if (!a.bot || a.battling || a.m.action || this.tick < a.calm) continue;
-      const l = byMap.get(a.m.spot.map) ?? [];
-      l.push(a);
-      byMap.set(a.m.spot.map, l);
-    }
-    const look = (o: Actor) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing as Facing });
-    for (const id of [...byMap.keys()].sort()) {
-      const l = byMap.get(id)!;
-      for (let i = 0; i < l.length; i++) {
-        for (let j = i + 1; j < l.length; j++) {
-          const a = l[i], b = l[j];
-          if (a.battling || b.battling || !eitherSees(this.world, look(a), look(b))) continue;
-          const dx = b.m.spot.x - a.m.spot.x, dy = b.m.spot.y - a.m.spot.y;
-          const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
-          a.m.facing = a.m.moveDir = toB;
-          b.m.facing = b.m.moveDir = BACK[toB];
-          const judge = this.simBots ? HOST_JUDGE : judges[(this.tick >>> 3) % judges.length].id;
-          a.battling = b.battling = true;
-          a.foe = b.id;
-          b.foe = a.id;
-          a.judge = b.judge = judge;
-          a.since = b.since = this.tick;
-          a.keys = a.last = b.keys = b.last = 0;
-          events.push({ type: 'bots', tick: this.tick, id: judge, a: a.id, b: b.id });
-          // The host has no one fight at a time: every pair that has met, fights.
-          if (this.simBots) continue;
-          this.duelAfter = this.tick + BOT_DUEL_GAP;
-          return;
+    const free = this.actors.filter((a) => a.bot && !a.battling && !a.m.action && this.tick >= a.calm);
+    for (let i = 0; i < free.length; i++) {
+      for (let j = i + 1; j < free.length; j++) {
+        const a = free[i], b = free[j];
+        if (a.battling || b.battling || !this.botsMeet(a, b)) continue;
+        const { dx, dy } = this.across(a, b)!;
+        const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        // Who walks: the one who was facing down the line at the other; both or neither, the first.
+        const bWalks = b.m.facing === BACK[toB] && a.m.facing !== toB;
+        a.m.facing = a.m.moveDir = toB;
+        b.m.facing = b.m.moveDir = BACK[toB];
+        a.battling = b.battling = true;
+        a.foe = b.id;
+        b.foe = a.id;
+        a.keys = a.last = b.keys = b.last = 0;
+        // The host has no one fight at a time: every pair that has met, fights.
+        if (this.simBots) {
+          a.meet = { foe: b.id, walk: !bWalks, since: this.tick, duel: false, bots: true };
+          b.meet = { foe: a.id, walk: bWalks, since: this.tick, duel: false, bots: true };
+          continue;
         }
+        this.botsFight(a, b, judges[(this.tick >>> 3) % judges.length].id, events);
+        this.duelAfter = this.tick + BOT_DUEL_GAP;
+        return;
       }
     }
   }
@@ -1568,6 +1597,13 @@ export class Room {
       return by === undefined || !!this.actor(by)?.battling;
     });
     return live ? clashWeather(this.seed) : 0;
+  }
+
+  /** The fight itself, handed to whoever runs it. */
+  private botsFight(a: Actor, b: Actor, judge: number, events: RoomEvent[]): void {
+    a.judge = b.judge = judge;
+    a.since = b.since = this.tick;
+    events.push({ type: 'bots', tick: this.tick, id: judge, a: a.id, b: b.id });
   }
 
   /** `id` off the map, and everything that waited on them let go. */
@@ -1902,8 +1938,10 @@ export class Room {
       // The other is gone (left, out): no fight, and the walker walks on.
       if (!o || o.meet?.foe !== w.id) { w.meet = undefined; w.battling = false; w.foe = 0; continue; }
       if (this.tick - m.since < WALKUP_BANG) continue;
-      const dx = o.m.spot.x - w.m.spot.x, dy = o.m.spot.y - w.m.spot.y;
-      const beside = o.m.spot.map === w.m.spot.map && Math.abs(dx) + Math.abs(dy) <= 1;
+      // Two bots may have met over a seam (Room.across).
+      const over = m.bots ? this.across(w, o) : undefined;
+      const dx = over ? over.dx : o.m.spot.x - w.m.spot.x, dy = over ? over.dy : o.m.spot.y - w.m.spot.y;
+      const beside = (over || o.m.spot.map === w.m.spot.map) && Math.abs(dx) + Math.abs(dy) <= 1;
       if (w.m.action) { tick(w.m, keysOf(0), this.stepFor(w)); continue; }
       if (!beside && this.tick - m.since < APPROACH_FRAMES) {
         const dir = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
@@ -1915,6 +1953,7 @@ export class Room {
       const toO = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
       if (dx || dy) { w.m.facing = w.m.moveDir = toO; o.m.facing = o.m.moveDir = BACK[toO]; }
       w.meet = o.meet = undefined;
+      if (m.bots) { this.botsFight(w, o, HOST_JUDGE, events); continue; }
       const [h, f] = w.bot ? [o, w] : o.bot ? [w, o] : w.id < o.id ? [w, o] : [o, w];
       if (m.duel) {
         // One weather for the two of them, from the frame they met: a link battle reads it on both
@@ -2220,7 +2259,7 @@ export class Room {
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
       mix((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.bleedAt ?? 0); mix(a.boss ?? 0); mix(a.away ? 1 : 0); mix(a.pickBy ?? 0); mix(a.cruise ? (a.cruise.to === 'lilycove' ? 8 : 16) + LEGS.indexOf(a.cruise.leg) : 0); mix(a.cruise?.steps ?? 0); mix(a.loot?.money ?? 0); for (const sp of a.caught ?? []) mix(sp); mix(a.legendKey ?? 0); for (const st of a.loot?.items ?? []) { mix(st.id); mix(st.n); }
-      if (a.meet) { mix(a.meet.foe); mix(a.meet.since); mix((a.meet.walk ? 1 : 0) | (a.meet.duel ? 2 : 0)); }
+      if (a.meet) { mix(a.meet.foe); mix(a.meet.since); mix((a.meet.walk ? 1 : 0) | (a.meet.duel ? 2 : 0) | (a.meet.bots ? 4 : 0)); }
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
     for (const [k, by] of this.picked) { mix(k); mix(by); }

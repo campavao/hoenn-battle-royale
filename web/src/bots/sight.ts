@@ -44,6 +44,24 @@ export function sees(world: World, from: Look, tx: number, ty: number): boolean 
   return false;
 }
 
+/** The same look when `to` stands on a map joined to this one at a seam. A ROM only ever sees its own
+ *  map, so this is for two bots, which have none. `(ox, oy)` is `to`'s map's corner on this map's
+ *  cells; a cell is on one map or the other, and the void off either is not clear. */
+export function seesOver(world: World, from: Look, to: Look, ox: number, oy: number): boolean {
+  const d = DELTA[from.dir];
+  if (!d) return false;
+  const tx = to.x + ox, ty = to.y + oy;
+  let x = from.x;
+  let y = from.y;
+  for (let i = 1; i <= SIGHT_RANGE; i++) {
+    x += d.dx;
+    y += d.dy;
+    if (x === tx && y === ty) return true;
+    if (!world.clear(from.map, x, y) && !world.clear(to.map, x - ox, y - oy)) return false;
+  }
+  return false;
+}
+
 /** Either of them spotting the other is an engage -- the ROM tries both looks too. */
 export function eitherSees(world: World, a: Look, b: Look): boolean {
   if (a.map !== b.map) return false;

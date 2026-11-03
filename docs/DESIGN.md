@@ -132,7 +132,7 @@ replays it as `BATTLE_TYPE_RECORDED_LINK` a turn behind (`br_spectate.c`, the BR
 
 **Bot vs bot runs with no ROM at all (`Room.simBots`).** The host, the relay or a solo page, fights a
 meeting itself in a simulator (`web/spike-b/shared/battlesim.ts`: Pokemon Showdown's MIT Gen 3 engine, cut down by
-`tools/br/build-sim.mjs`), any number at once, off the room's step, and holds both bots for as long
+`tools/br/build-sim.mjs`), any number at once with no gap between them, off the room's step, and holds both bots for as long
 as the log (`battlelog.ts`) takes to play. Nothing of the ROM's goes in: public tables and our own
 rules (`br_bot.c`'s build, `br_levels.c`'s learnset walk), and a bot brain of its own (`simbrain.ts`).
 The engine's learnsets are corrected to Emerald's by `tools/br/learnset-fixes.mjs`. To turn it off with

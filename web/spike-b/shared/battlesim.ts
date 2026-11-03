@@ -62,10 +62,10 @@ export interface SimOutcome {
   unknown: string[];
 }
 
-/** A fight that has not ended by now will not, for a watcher: Recover against Recover, about ten
- *  minutes of screen. It ends with nobody the winner and both walk on, as a fight the ROM could not
- *  finish did (proxy.ts). */
-export const TURN_CAP = 100;
+/** A fight that has not ended by now will not, for a watcher: REST against REST, seven minutes of
+ *  screen or more. The longest of 2324 fights from whole matches ran 68 turns, and at 60 the same
+ *  fights lose one, to the side that was ahead and went on to win it anyway. */
+export const TURN_CAP = 60;
 
 const dex = Dex.forFormat('gen3customgame');
 const NATURES = ['Hardy', 'Lonely', 'Brave', 'Adamant', 'Naughty', 'Bold', 'Docile', 'Relaxed', 'Impish', 'Lax', 'Timid', 'Hasty', 'Serious', 'Jolly', 'Naive', 'Modest', 'Mild', 'Quiet', 'Bashful', 'Rash', 'Calm', 'Gentle', 'Sassy', 'Careful', 'Quirky'];
@@ -440,6 +440,15 @@ export function* simulation(a: SimSide, b: SimSide, opts: SimOptions): Generator
         useItem(battle, side, bags[n][d.index]);
         battle.skip.push(side.active[0]);
         battle.choose(side.id, 'default');
+      } else if (d.kind === 'struggle') {
+        // The engine's way to STRUGGLE is no PP, for the choosing: what it has left is still there
+        // if the foe sends out something it can work on.
+        const slots: { pp: number }[] = side.active[0].moveSlots;
+        const left = slots.map((slot) => slot.pp);
+        for (const slot of slots) slot.pp = 0;
+        const ok = battle.choose(side.id, 'move 1');
+        slots.forEach((slot, i) => { slot.pp = left[i]; });
+        if (!ok) battle.choose(side.id, 'default');
       } else if (!battle.choose(side.id, `move ${d.slot + 1}`)) battle.choose(side.id, 'default');
     }
     if (!acted && !battle.ended) { capped = true; break; }
