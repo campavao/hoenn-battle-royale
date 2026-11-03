@@ -154,7 +154,7 @@ export interface MapLook {
 /** The page has asked already: the ROM's BAG and party are gone through unseen. A screen that
  *  is the ROM's alone (an evolution, the SUMMARY) is shown when it settles. */
 export type MenuWalk =
-  | { to: 'summary' | 'moves'; slot: number }
+  | { to: 'moves'; slot: number }
   | { to: 'use'; pocket: number; item: number; slot?: number; move?: number };
 
 /** What a walk needs the page to ask. `forget`: a new move and four known, which goes, by the
@@ -717,7 +717,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     const tap = async (k: GbaKey) => { emu.press(k); await frames(emu, 3); emu.release(k); await frames(emu, 3); };
     hurryOn();
     if (walk.to !== 'use') {
-      // The party's row: SUMMARY first, then MOVES (party_menu.c SetPartyMonFieldSelectionActions).
+      // The party's row: MOVES under SUMMARY (party_menu.c SetPartyMonFieldSelectionActions).
       // Its task is up before its screen is, and takes no keys until the fade is done.
       await until(emu, () => choosing() && screenIs(partyScreen()) && !fade().active, 240);
       emu.write(partyMenuAt + 9, walk.slot, 8);
@@ -725,29 +725,16 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       // Its little menu takes keys once "Do what with this" has printed.
       await frames(emu, 45);
       // MOVES says so for a frame (gBrCatch.movesSlot): at full speed, or the page misses it.
-      if (walk.to === 'moves') { await tap('down'); hurryOff(); }
+      await tap('down');
+      hurryOff();
       const partyCb = partyScreen();
       for (let i = 0; i < 8 && screenIs(partyCb); i++) {
         await tap('a');
         await frames(emu, 30);
       }
-      if (walk.to === 'moves') {
-        // Back on the field first: the relearner opens from there (BrCatch_Tick).
-        await until(emu, onField, 300);
-        hurryOff();
-        return;
-      }
+      // Back on the field first: the relearner opens from there (BrCatch_Tick).
+      await until(emu, onField, 300);
       hurryOff();
-      await settled();
-      onStart();
-      // Out of it, the party comes back with B: the page has that, so it goes on unseen.
-      const summary = emu.read(sym('gMain')! + 4, 32);
-      const off = emu.onFrame(() => {
-        if (emu.read(sym('gMain')! + 4, 32) !== summary) { off(); onEnd(); leaving = true; }
-      });
-      await backOnField();
-      off();
-      onEnd();
       return;
     }
     await pickLoop(walk.slot, walk.move, onStart, onEnd);

@@ -317,14 +317,13 @@ test('PARTY and BAG on the field are the windows: switch, hold, summary, and use
   await page.locator('.bm-slot').first().click();
   await page.locator('.bm-m-btn').nth(3).click();
   await expect.poll(async () => (await team())[0].item, { timeout: 15_000 }).toBe(0);
-  // SUMMARY is the ROM's own, and comes back to the windows.
+  // SUMMARY is a window over them, and comes back to them (spikeb-summary.spec.ts has the rest).
   await page.locator('.bm-m-btn').nth(1).click();
-  await expect(page.locator('#gba')).toBeVisible({ timeout: 15_000 });
-  await page.waitForTimeout(1500);
+  await expect(page.locator('#summary')).toBeVisible();
+  await expect(page.locator('#gba')).toBeHidden();
   await shot(page, 'desk-field-summary');
   await page.keyboard.press('x', { delay: 150 });
   await expect(page.locator('.bm-member')).toBeVisible({ timeout: 20_000 });
-  await expect(page.locator('#gba')).toBeHidden();
   // BACK, BACK: the field, and walking again.
   await page.keyboard.press('x');
   await expect(page.locator('.bm-slot').first()).toBeVisible();
