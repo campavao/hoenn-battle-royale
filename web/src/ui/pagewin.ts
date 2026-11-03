@@ -40,6 +40,20 @@ export const pageWin = {
   },
 };
 
+/** A hold has just opened something under the finger: the click its lift may yet make is nobody's.
+ *  A phone hit-tests it where it lands, on whatever window came up there. */
+export function eatLiftClick(): void {
+  const eat = (ev: Event) => { ev.stopImmediatePropagation(); ev.preventDefault(); };
+  addEventListener('click', eat, true);
+  const done = () => {
+    removeEventListener('pointerup', done, true);
+    removeEventListener('pointercancel', done, true);
+    setTimeout(() => removeEventListener('click', eat, true), 120);
+  };
+  addEventListener('pointerup', done, true);
+  addEventListener('pointercancel', done, true);
+}
+
 /** CSS pixels per GBA pixel for a box of `w` x `h`. A phone's is the battle windows' scale, or
  *  what fits; a window with a mouse goes down a whole step from its windows, so that this is a
  *  box on the screen and not the screen. */

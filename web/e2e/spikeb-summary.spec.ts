@@ -239,9 +239,15 @@ test('by a thumb: the same window fits a phone, and a finger held on a mon opens
   await page.locator('#hud-party').click();
   const slot = page.locator('.bm-slot').nth(1);
   await expect(slot).toBeVisible();
+  // The last one: lifted, the finger is over the window's moves, and that is not a tap on them.
+  await touchHold(page, page.locator('.bm-slot').nth(5), 700);
+  await expect(page.locator('#summary')).toBeVisible();
+  await page.waitForTimeout(300);
+  await expect(page.locator('.sum-stats'), 'the lift tapped nothing').toBeVisible();
+  await expect(page.locator('.bm-member')).toBeHidden();
+  await page.keyboard.press('x');
   await touchHold(page, slot, 700);
   await expect(page.locator('#summary')).toBeVisible();
-  await expect(page.locator('.bm-member')).toBeHidden();
   await small(page, 1, 0.75);
   await page.waitForTimeout(300);
   await shot(page, 'phone-summary');
