@@ -58,6 +58,12 @@ for (const path of ['/']) {
     const y1 = box.y + box.height * 0.7;
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: cx, y: y0 }] });
     for (let i = 1; i <= 10; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: cx, y: y0 + ((y1 - y0) * i) / 10 }] });
+    // The finger rests before it lifts, as a real one does at the end of a drag. Lifted in
+    // the same breath as the last move, the ten moves (a few ms apart, no timestamps) are a
+    // flick, Chrome starts a fling, and the next tap, however late, only stops that: no
+    // click comes (down, up, no click -- on 20 runs of 20 here, a few in 19 on CI, where
+    // the moves are spread thinner). A tap on the arrow right after a drag is the test.
+    await page.waitForTimeout(150);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await expect.poll(() => picture(page), 'a swipe moves it').not.toBe(was);
 

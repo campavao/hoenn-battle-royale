@@ -20,13 +20,17 @@ async function setOption(page: Page, id: string, want: string): Promise<void> {
   await expect(b).toHaveText(want);
 }
 
-/** The walk to the nearest marked Safari spot nobody has taken, over the room's own
- *  step function, as directions: 1 south, 2 north, 3 west, 4 east (spikeb.spec.ts route). */
+/** The first step of the walk to the nearest marked Safari spot nobody has taken, over the
+ *  room's own step function: 1 south, 2 north, 3 west, 4 east (spikeb.spec.ts route). It
+ *  starts from where the page has the trainer (`link.mine()`, the keys already sent
+ *  played on the room's state), not the room's older copy, and is asked again for every
+ *  step: a key held a little long takes a step more than the plan had, and a plan made
+ *  once walked on from the wrong cell into a wall (15 s of bumping, POK flake 11-02). */
 async function toPatch(page: Page): Promise<number[] | null> {
   return page.evaluate(() => {
-    const s = (window as unknown as { __spike: { link: { me: number; room: any } } }).__spike;
-    const room = s.link.room, a = room.actor(s.link.me);
-    const ok = (p: { map: string; x: number; y: number }) => room.patchesOn(p.map).some((q: { x: number; y: number }) => q.x === p.x && q.y === p.y) && !room.taken.has(room.patchKey ? room.patchKey(p) : -1);
+    const s = (window as unknown as { __spike: { link: { me: number; room: any; mine(): any } } }).__spike;
+    const room = s.link.room, a = s.link.mine() ?? room.actor(s.link.me);
+    const ok = (p: { map: string; x: number; y: number }) => room.patchesOn(p.map).some((q: { x: number; y: number; key: number }) => q.x === p.x && q.y === p.y && !room.isTaken(q.key));
     const step = room.stepFor(a);
     const k = (p: { map: string; x: number; y: number }) => `${p.map}:${p.x}:${p.y}`;
     const from = new Map<string, [string, number] | null>([[k(a.m.spot), null]]);
@@ -52,21 +56,29 @@ async function toPatch(page: Page): Promise<number[] | null> {
 const KEY = { 1: 'ArrowDown', 2: 'ArrowUp', 3: 'ArrowLeft', 4: 'ArrowRight', a: 'z' } as Record<number | string, string>;
 const key = (page: Page, k: string, down: boolean) => page.evaluate(([k, down]) => dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { key: k as string, bubbles: true })), [k, down] as const);
 
-/** To marked spots until something is caught; the party count after. */
+/** To marked spots until something is caught; the party count after. One step at a time:
+ *  the key goes down, comes up the moment the page's own trainer has left its cell (a step
+ *  is 16 frames and starts there, so one press is one step), and the route is worked out
+ *  again from the cell it reached. The room's copy of the trainer is a round trip behind
+ *  the page's, and a key held until it moved ran on a step or two past the plan. */
 async function catchOne(page: Page): Promise<number> {
-  type S = { link: { me: number; room: { actor(id: number): { m: { spot: { map: string; x: number; y: number } } } | undefined } }; rom?: { partyCount(): number }; battle: unknown };
+  type S = { link: { me: number; mine(): { m: { spot: { map: string; x: number; y: number } } } | undefined }; rom?: { partyCount(): number }; battle: unknown };
   const s = <T>(f: (s: S) => T) => page.evaluate((src) => new Function('s', `return (${src})(s)`)((window as unknown as { __spike: S }).__spike), f.toString()) as Promise<T>;
-  const spot = () => s((s) => { const p = s.link.room.actor(s.link.me)?.m.spot; return p ? `${p.map}:${p.x}:${p.y}` : ''; });
+  const spot = () => s((s) => { const p = s.link.mine()?.m.spot; return p ? `${p.map}:${p.x}:${p.y}` : ''; });
   let caught = 0;
   for (let tries = 0; tries < 8 && !caught; tries++) {
-    const dirs = await toPatch(page);
-    if (!dirs) break;
-    for (const d of dirs) {
-      const was = await spot();
+    for (let steps = 0; steps < 150 && !(await s((s) => !!s.battle)); steps++) {
+      const dirs = await toPatch(page);
+      if (!dirs) break;
+      const was = await spot(), d = dirs[0];
       await key(page, KEY[d], true);
-      await expect.poll(async () => (await spot()) !== was || !!(await s((s) => s.battle)), { timeout: 15_000, intervals: [30] }).toBe(true);
-      await key(page, KEY[d], false);
-      if (await s((s) => s.battle)) break;
+      try {
+        await expect.poll(async () => (await spot()) !== was || !!(await s((s) => s.battle)), { timeout: 15_000, intervals: [15] }).toBe(true);
+      } finally {
+        await key(page, KEY[d], false);
+      }
+      // Landed on a spot: the room says whose it is, and the fight starts.
+      if (dirs.length === 1) break;
     }
     await expect.poll(() => s((s) => !!s.battle), { timeout: 5_000 }).toBe(true).catch(() => undefined);
     for (let t = 0; t < 45 && (await s((s) => !!s.battle)); t++) {
