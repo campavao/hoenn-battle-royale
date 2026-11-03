@@ -35,7 +35,7 @@ export const FILE_SECONDS = {
   'spikeb-passcode.spec.ts': 9,
   'watch-replay.spec.ts': 110,
   'battleview.spec.ts': 70,
-  'spikeb-battlelog.spec.ts': 400,
+  'spikeb-battlelog.spec.ts': 450,
   'spikeb-watch-log.spec.ts': 420,
   // Skipped in CI: these need the deployed site, or HBR_SOAK.
   'live-room.spec.ts': 0,

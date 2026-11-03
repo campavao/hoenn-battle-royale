@@ -155,7 +155,9 @@ describe('a fight with a log is drawn by the page', () => {
     vi.stubGlobal('document', { getElementById: (id: string) => els.get(id) ?? els.set(id, el()).get(id) });
     vi.stubGlobal('devicePixelRatio', 1);
     let battling = true;
-    const room = { picked: new Map(), actor: (id: number) => (id === 2 || id === 3 ? { id, bot: fighterBot, name: 'BRENDAN', battling, foe: 8, skin: 0 } : undefined) };
+    let foe = 8;
+    const results = { winner: 0, entrants: [] as [number, string][], fallen: [] as { id: number }[] };
+    const room = { results, picked: new Map(), actor: (id: number) => (id === 2 || id === 3 ? { id, bot: fighterBot, name: 'BRENDAN', battling, foe, skin: 0 } : undefined) };
     let follow = 2;
     let idle = true;
     const asked: number[] = [];
@@ -184,7 +186,7 @@ describe('a fight with a log is drawn by the page', () => {
         return { play: (log, ms) => { v.played = [[...log], ms]; }, add: (ev) => { v.added.push(...ev); }, snapshot: () => v.at, redraw: () => undefined, close: () => { v.closed = true; } };
       },
     });
-    return { comeInAt: (n: number) => { cameInAt = n; }, watch, link, asked, mirrors, songs, sounds, views, dim: () => els.get('battleview-dim')!, setFollow: (id: number) => { follow = id; }, setIdle: (on: boolean) => { idle = on; }, fightOver: () => { battling = false; } };
+    return { comeInAt: (n: number) => { cameInAt = n; }, watch, link, asked, mirrors, songs, sounds, views, dim: () => els.get('battleview-dim')!, setFollow: (id: number) => { follow = id; }, setIdle: (on: boolean) => { idle = on; }, fightOver: () => { battling = false; }, otherFoe: () => { foe = 9; }, crowned: () => { results.winner = 7; } };
   }
 
   it('in the battle screen\'s place, from where the fight stands, its back to us on the side followed', () => {
@@ -322,6 +324,62 @@ describe('a fight with a log is drawn by the page', () => {
     } finally {
       at.mockRestore();
     }
+  });
+
+  describe('a log that just stops', () => {
+    const run = (r: ReturnType<typeof rig>, at: ReturnType<typeof vi.spyOn>, ms: number) => { (at as unknown as { mockReturnValue(n: number): void }).mockReturnValue(ms); r.watch.frame(); };
+    const open = (r: ReturnType<typeof rig>, at: ReturnType<typeof vi.spyOn>) => {
+      run(r, at, 1000);
+      r.link.onBattleLog(2, 7, [start()], 0);
+      r.watch.frame();
+      r.views[0].at.waiting = true;
+    };
+
+    it('the watched trainer in another fight: this one is over', () => {
+      const r = rig();
+      const at = vi.spyOn(performance, 'now');
+      try {
+        open(r, at);
+        r.otherFoe();
+        run(r, at, 1100);
+        expect(r.views[0].closed).toBe(false);
+        run(r, at, 6200);
+        expect(r.views[0].closed).toBe(true);
+      } finally {
+        at.mockRestore();
+      }
+    });
+
+    it('the match over, its room standing still with them still marked as fighting', () => {
+      const r = rig();
+      const at = vi.spyOn(performance, 'now');
+      try {
+        open(r, at);
+        r.crowned();
+        run(r, at, 1100);
+        run(r, at, 6200);
+        expect(r.views[0].closed).toBe(true);
+      } finally {
+        at.mockRestore();
+      }
+    });
+
+    it('still marked as fighting and nothing heard for minutes: the socket has gone', () => {
+      const r = rig();
+      const at = vi.spyOn(performance, 'now');
+      try {
+        open(r, at);
+        run(r, at, 100_000);
+        expect(r.views[0].closed, 'a long think at a menu').toBe(false);
+        r.link.onBattleLog(2, 7, [{ e: 'text', text: 'there you are' }]);
+        run(r, at, 180_000);
+        expect(r.views[0].closed, 'heard from at 100 s').toBe(false);
+        run(r, at, 285_000);
+        expect(r.views[0].closed).toBe(true);
+      } finally {
+        at.mockRestore();
+      }
+    });
   });
 
   it('comes up only when nothing of my own is on the screen, and where the fight stands by then', () => {

@@ -544,6 +544,9 @@ export class WorldService {
     const res = room.host?.room.results;
     this.opts.log(`world: room ${room.code} over${res?.winner ? `, ${res.entrants.find(([id]) => id === res.winner)?.[1]} wins` : ''}`);
     if (room.host) this.opts.log(`match ${room.code} ended after ${Math.round((this.opts.now() - room.t0) / 1000)}s`);
+    // Whatever fight is still being read ends here for whoever watches it: the fighter's own end
+    // (a page's, after its ROM has finished) now has no match to come to.
+    for (const id of [...room.logs.keys()]) this.closeLog(room, id);
     room.host = null;
     room.streams.clear();
     room.logs.clear();

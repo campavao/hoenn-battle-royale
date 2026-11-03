@@ -43,15 +43,19 @@ async function setOption(page: Page, id: string, want: string): Promise<void> {
 /** The relay's own code (relay/world.js over the bundled service), served here. */
 async function relay() {
   process.env.WORLD_BOTS = '3';
+  // Three fights outlast a 120 s ring phase, and past it the fog bites the party on the field, so the
+  // party read after a fight is not the one the fight left.
+  process.env.WORLD_RING_SECS = '900';
   const { createWorld } = (await import('../../relay/world.js' as string)) as any;
   const { WORLD_HASH } = (await import('../../relay/world/service.js' as string)) as any;
-  const world = createWorld({ log: () => undefined });
+  const world = createWorld({ log: (l: string) => step(`relay: ${l}`) });
   const server = http.createServer((_, res) => res.end('ok'));
   server.on('upgrade', (req, socket, head) => world.handle(req, socket, head, '127.0.0.1'));
   await new Promise<void>((ok) => server.listen(PORT, ok));
   return {
     hash: WORLD_HASH as string,
     room: () => [...(world.service as any).rooms.values()][0].host.room as any,
+    match: () => [...(world.service as any).rooms.values()][0] as any,
     close: async () => { world.close(); await new Promise((ok) => server.close(ok)); },
   };
 }
@@ -106,7 +110,9 @@ async function installOracle(page: Page): Promise<void> {
 
 /** What the ROM's buffer holds besides the box's lines: a healthbox's name, and the move menu's
  *  PP and type windows. Judged here on its own, so the reader's own filter is held to it. */
-const NOT_A_LINE = /^(PP|-|\d+\/\d+|[A-Z]+[♀♂]?|(NORMAL|FIGHT|FLYING|POISON|GROUND|ROCK|BUG|GHOST|STEEL|FIRE|WATER|GRASS|ELECTR|PSYCHC|ICE|DRAGON|DARK)\b[ ./\d]*)$/;
+// Sampled every frame it catches that buffer half rewritten too ("18/3SH", "1P"), which is why a
+// word on its own with nothing to end it is no line, whatever it says.
+const NOT_A_LINE = /^(\S*[^\s!?…]|(NORMAL|FIGHT|FLYING|POISON|GROUND|ROCK|BUG|GHOST|STEEL|FIRE|WATER|GRASS|ELECTR|PSYCHC|ICE|DRAGON|DARK)\b[ ./\d]*)$/;
 const takeOracle = (page: Page) => page.evaluate(() => { const o = (window as any).__oracle; o.off(); return { lines: o.lines as string[], hp: o.hp as Record<number, number>[], field: o.field as number[][] }; }).then((o) => ({ ...o, lines: o.lines.filter((l) => !NOT_A_LINE.test(l)) }));
 
 /** Folds events the way a watcher's view would. */
@@ -182,14 +188,21 @@ async function play(page: Page, switchAt = 0): Promise<void> {
   // Always the first move; once, `switchAt` taps in, the second of the party is sent out (PARTY on
   // Q, the slot, SEND OUT: the windows' own keys).
   let turns = 0;
+  let tried = 0;
   for (let i = 0; i < 400; i++) {
     if (!(await spike(page, (s) => !!s.battle))) return;
     if (i % 20 === 3) step(`play ${i}: ${JSON.stringify(await spike(page, (s) => ({ menu: s.battleMenu?.isShown, lead: s.rom.emu.read(s.art.sym('gBattlerPartyIndexes'), 16) })))} cells ${await page.locator('.bm-cell').count()} slots ${await page.locator('.bm-slot').count()}`);
     if (await page.locator('.bm-m-btn').first().isVisible().catch(() => false)) {
-      // A member's panel (BACK, SUMMARY, SEND OUT): a forced switch after a faint lands here.
-      await page.locator('.bm-m-btn').nth(2).click(CLICK).catch(() => undefined);
+      // A member's panel (BACK, SUMMARY, SEND OUT): a forced switch after a faint lands here. One
+      // that cannot go has its SEND OUT off, which no click will take: BACK, and the next of the party.
+      const send = page.locator('.bm-m-btn').nth(2);
+      if ((await send.getAttribute('aria-disabled').catch(() => null)) === 'true') await page.locator('.bm-m-btn').first().click(CLICK).catch(() => undefined);
+      else await send.click(CLICK).catch(() => undefined);
     } else if (await page.locator('.bm-cell').first().isVisible().catch(() => false)) {
-      if (switchAt && ++turns === switchAt) {
+      // Only while the lead is still out and the other can go: with the lead down and the other out,
+      // the party has nobody to send, and the window would never let this go on (it held one repeat
+      // in three at a menu until the 400 tries ran out).
+      if (switchAt && ++turns === switchAt && (await spike(page, (s) => s.rom.emu.read(s.art.sym('gBattlerPartyIndexes'), 16))) === 0) {
         step('switching');
         await page.keyboard.press('q');
         await page.locator('.bm-slot').nth(1).click(CLICK).catch(() => undefined);
@@ -200,15 +213,19 @@ async function play(page: Page, switchAt = 0): Promise<void> {
       await page.locator('.bm-cell').first().click(CLICK).catch(() => undefined);
     } else if (await page.locator('.bm-slot').first().isVisible().catch(() => false)) {
       const slots = page.locator('.bm-slot');
-      for (let k = (await slots.count()) - 1; k >= 0; k--) {
-        if ((await slots.nth(k).getAttribute('aria-disabled')) !== 'true') { await slots.nth(k).click(CLICK).catch(() => undefined); break; }
+      const n = await slots.count();
+      for (let k = 0; k < n; k++) {
+        const at = slots.nth(n - 1 - tried++ % n);
+        if ((await at.isVisible()) && (await at.getAttribute('aria-disabled')) !== 'true') { await at.click(CLICK).catch(() => undefined); break; }
       }
     } else {
       await page.keyboard.press('z');
     }
     await page.waitForTimeout(400);
   }
-  throw new Error('the fight did not end');
+  if (SCRATCH) await page.screenshot({ path: path.join(SCRATCH, `stuck-${Date.now()}.png`) }).catch(() => undefined);
+  const said = await page.locator('.bm-m-btn, .bm-cell').allTextContents().catch(() => []);
+  throw new Error(`the fight did not end, its menu saying ${JSON.stringify(said)}`);
 }
 
 const flat = (got: any[]) => got.flatMap((m) => m.events) as any[];
@@ -278,14 +295,21 @@ test('a fight is a log: the watcher ends where the fighter\'s ROM did, and a lat
     await giveTeam(host, TEAM);
     expect(await spike(host, (s) => s.rom.partyCount())).toBe(2);
 
-    // The watcher's page takes the log as a view would: every call, in order.
-    await guest.evaluate(([id]) => {
-      const w = window as any;
+    // The watcher is what a watcher is: a trainer who is out, following the host. As a trainer still
+    // in, with no team, the first bot to meet it put it out, and being out it follows whoever is
+    // nearest: the relay rightly stopped sending it the host's fight (1 repeat in 6, 2 in 16, at a
+    // fight's tail or its head). Its page takes each call as it comes, and hands it on to the view.
+    await spike(guest, (s) => s.goOut('out'));
+    await expect.poll(() => spike(guest, (s) => s.spectating), { timeout: 30_000 }).toBeTruthy();
+    await guest.evaluate((id) => (window as any).__spike.watch.host.setFollow(id), hostId);
+    await expect.poll(() => spike(guest, (s) => !!s.link.onBattleLog), { timeout: 10_000 }).toBe(true);
+    await guest.evaluate(() => {
+      const w = window as any, l = w.__spike.link, view = l.onBattleLog;
       w.__got = [];
-      w.__spike.link.onBattleLog = (from: number, f: number, events: unknown[], ago?: number) => w.__got.push({ from, f, events, ago });
-      w.__spike.link.watch(id);
-    }, [hostId]);
-    const bots = r.room().actors.filter((a: any) => a.bot).map((a: any) => a.id as number);
+      l.onBattleLog = (from: number, f: number, events: unknown[], ago?: number) => { w.__got.push({ from, f, events, ago }); view(from, f, events, ago); };
+    });
+    const freeBot = () => r.room().actors.find((a: any) => a.bot && !a.battling)?.id as number;
+    const stillIn = () => !!r.match()?.host?.room.actor(hostId);
 
     /** One fight of the host's: the relay's room says they are at it (room.ts engage), the page
      *  hands it to its ROM as the event would, and the spec plays it. A late joiner comes in
@@ -297,6 +321,11 @@ test('a fight is a log: the watcher ends where the fighter\'s ROM did, and a lat
       step(`${what}: start`);
       await installOracle(host);
       await guest.evaluate(() => { (window as any).__got.length = 0; });
+      await host.evaluate(() => {
+        const w = window as any, l = w.__spike.link;
+        w.__said = [];
+        if (!w.__saidOn) { w.__saidOn = true; const bl = l.bl.bind(l); l.bl = (f: number, ev: any[]) => { w.__said.push(...ev.map((e) => e.e)); bl(f, ev); }; }
+      });
       const lates: Awaited<ReturnType<typeof lateJoiner>>[] = [];
       await host.evaluate((ev) => (window as any).__spike.startFor(ev), event(foe) as any);
       const playing = play(host, switchAt);
@@ -313,6 +342,10 @@ test('a fight is a log: the watcher ends where the fighter\'s ROM did, and a lat
       await host.waitForTimeout(1500);
       const got = await guest.evaluate(() => (window as any).__got);
       const events = flat(got);
+      const said = await host.evaluate(() => (window as any).__said as string[]);
+      step(`${what}: page said ${said.length} (last ${said.at(-1)}), watcher got ${events.length} (last ${events.at(-1)?.e}); ${await spike(host, (s) => s.lastResult)}; watcher ${await spike(guest, (s) => `${s.isOut ? 'out' : 'in'}, ${document.getElementById('watch-who')!.textContent}`)}; round ${r.match()?.host?.room.results.round}`);
+      expect(said.at(-1), `${what}: the ROM's fight-end is said`).toBe('end');
+      expect(events.length, `${what}: the watcher has all of it`).toBe(said.length);
       const oracle = await takeOracle(host);
       const result = await spike(host, (s) => s.lastResult as string);
       const stats = await spike(host, (s) => s.rom.logStats());
@@ -320,6 +353,9 @@ test('a fight is a log: the watcher ends where the fighter\'s ROM did, and a lat
       console.log(`[${what}] ` + events.map((e: any) => (e.e === 'text' ? `"${e.text}"` : e.e === 'start' ? 'start' : `${e.e}${e.side ?? ''}${e.slot ?? e.hp ?? e.winner ?? ''}`)).join(' '));
       if (SCRATCH) fs.writeFileSync(path.join(SCRATCH, `${what.replace(/\W+/g, '-')}.json`), JSON.stringify({ events, oracle, got }, null, 1));
       const state = await expectLogMatchesRom(host, events, oracle, what);
+      // ...and its view, playing it at the log's pace, gets to the end and closes. (After the party is
+      // read: on the field the fog goes on biting it.)
+      await expect.poll(() => spike(guest, (s) => !s.watch.showing), { timeout: 180_000 }).toBe(true);
       for (const l of lates) {
         await expect.poll(() => l.bl().length, { timeout: 10_000 }).toBeGreaterThan(0);
         const first = l.bl()[0];
@@ -333,15 +369,25 @@ test('a fight is a log: the watcher ends where the fighter\'s ROM did, and a lat
     };
 
     // A bot, to the end: two send-outs, a lead fainting, the next coming in, a faint, the end.
-    const botFight = await fight('bot fight', (foe) => ({ type: 'fight', tick: 0, id: hostId, foe }), bots[0], 8, 4);
+    const botFight = await fight('bot fight', (foe) => ({ type: 'fight', tick: 0, id: hostId, foe }), freeBot(), 8, 4);
     expect(botFight.events.filter((e) => e.e === 'send').length, 'a send-out beyond the first two').toBeGreaterThan(2);
     expect(botFight.events.some((e) => e.e === 'faint')).toBe(true);
     expect(botFight.events.some((e) => e.e === 'hit') && botFight.events.some((e) => e.e === 'hp')).toBe(true);
 
+    // A team that loses puts the host out of the match, and the room has no trainer left to stage the
+    // next fight on: what ran was checked, and this repeat is done. Said, not hidden.
+    const lost = (what: string, result: string) => {
+      if (stillIn()) return false;
+      test.info().annotations.push({ type: 'note', description: `the ${what} fight was lost (${result}): no more fights this repeat` });
+      step(`the ${what} fight was lost: the host is out, no more fights this repeat`);
+      return true;
+    };
+    if (lost('bot', botFight.result)) return;
     // A wild POKeMON, off a marked spot of Route 117.
     const spot = await spike(host, (s) => { const q = s.link.room.patchesOn('MAP_ROUTE117')[0]; return { x: q.x, y: q.y, key: q.key }; });
     const wild = await fight('wild fight', () => ({ type: 'wild', tick: 0, id: hostId, map: 'MAP_ROUTE117', x: spot.x, y: spot.y, key: spot.key }), 0, 6);
     expect(wild.events[0].b.seat, 'a wild one has no trainer').toBe(0);
+    if (lost('wild', wild.result)) return;
     // A gym leader's, lost: the log says it ended with nobody the winner.
     const gym = await fight('gym fight', () => ({ type: 'boss', tick: 0, id: hostId, n: 0 }), 0);
     void gym;
@@ -431,6 +477,61 @@ test("a trainer's real fight on a second page: its view, no ROM replay, and it e
     expectViewEndsOnRom(view, oracle, 0, 'real fight');
     // Every line the fighter saw, in order, as the watcher's own screen read it.
     expect(view.texts.filter((t: string) => !/would like to battle/.test(t))).toEqual(oracle.lines.filter((l: string) => !/would like to battle/.test(l)).filter((l: string, i: number, a: string[]) => a[i - 1] !== l));
+  } finally {
+    await room0.close();
+  }
+});
+
+test('a switch, then the one switched in faints: the party has the other come out, and the fight ends', async ({ browser }) => {
+  test.setTimeout(420_000);
+  const room0 = await bootRoom(browser);
+  const { r, host, hostId } = room0;
+  try {
+    // Whoever is out, the page's slots are the ROM's screen's: the one out first. Read in the field's
+    // order the two swapped after any switch, and the last of a team could not be sent (one repeat in
+    // three of the spec above stood at this window until it gave up).
+    await giveTeam(host, [
+      { species: 258, name: 'MUDKIP', level: 8, moves: [33, 189], hp: 28, stats: [16, 15, 12, 12, 12], personality: 2222 },
+      { species: 129, name: 'MAGIKARP', level: 3, moves: [33, 150], hp: 2, stats: [1, 1, 1, 1, 1], personality: 1111 },
+    ]);
+    const foe = r.room().actors.find((a: any) => a.bot && !a.battling).id as number;
+    Object.assign(r.room().actor(hostId), { battling: true, foe });
+    Object.assign(r.room().actor(foe), { battling: true, foe: hostId, foughtBy: hostId });
+    await installOracle(host);
+    await host.evaluate((ev) => (window as any).__spike.startFor(ev), { type: 'fight', tick: 0, id: hostId, foe } as any);
+    const inFight = () => spike(host, (s) => !!s.battle);
+    const cell = host.locator('.bm-cell').first();
+    await expect(cell).toBeVisible({ timeout: 60_000 });
+    // The first menu: MAGIKARP, the weak one, for MUDKIP.
+    await host.keyboard.press('q');
+    await expect(host.locator('.bm-slot').first()).toBeVisible();
+    await host.locator('.bm-slot').nth(1).click(CLICK);
+    await host.locator('.bm-m-btn').nth(2).click(CLICK);
+    await expect.poll(() => spike(host, (s) => s.rom.emu.read(s.art.sym('gBattlerPartyIndexes'), 16)), { timeout: 30_000 }).toBe(1);
+    // The window now: MAGIKARP first, marked as out; MUDKIP, who can go, second.
+    await expect(cell).toBeVisible({ timeout: 60_000 });
+    await host.keyboard.press('q');
+    await expect(host.locator('.bm-slot').first()).toBeVisible();
+    const rows = await spike(host, (s) => s.battleMenu.team.map((m: any) => ({ name: m.name, active: m.active })));
+    expect(rows).toEqual([{ name: 'MAGIKARP', active: true }, { name: 'MUDKIP', active: false }]);
+    await host.keyboard.press('x');
+    await expect(cell).toBeVisible({ timeout: 10_000 });
+    await host.locator('.bm-cell').first().click(CLICK);
+    // MAGIKARP goes down: MUDKIP must be choosable, from the same window, on the first asking.
+    await expect.poll(async () => { await host.keyboard.press('z'); return host.locator('.bm-m-btn, .bm-slot').first().isVisible(); }, { timeout: 90_000 }).toBe(true);
+    await expect(host.locator('.bm-slot').first()).toBeVisible();
+    const forced = await spike(host, (s) => s.battleMenu.team.map((m: any) => ({ name: m.name, active: m.active, hp: m.hp })));
+    step(`forced: ${JSON.stringify(forced)}`);
+    expect(forced.map((m: any) => m.name)).toEqual(['MAGIKARP', 'MUDKIP']);
+    expect(forced[0].active).toBe(true);
+    expect(forced[0].hp).toBe(0);
+    await host.locator('.bm-slot').nth(1).click(CLICK);
+    await expect(host.locator('.bm-m-btn').nth(2)).toHaveAttribute('aria-disabled', 'false');
+    await host.locator('.bm-m-btn').nth(2).click(CLICK);
+    await expect.poll(() => spike(host, (s) => s.rom.emu.read(s.art.sym('gBattlerPartyIndexes'), 16)), { timeout: 30_000 }).toBe(0);
+    await play(host);
+    expect(await inFight()).toBe(false);
+    if (SCRATCH) fs.writeFileSync(path.join(SCRATCH, 'switch-fight.json'), JSON.stringify({ forced, oracle: await takeOracle(host) }, null, 1));
   } finally {
     await room0.close();
   }

@@ -2522,13 +2522,22 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
         const out = sym('gBattlerPartyIndexes');
         const lead = out === undefined ? 0 : emu.read(out, 16);
         const count = emu.read(countAt, 8);
-        return teamMembers(emu.bytes(partyAt, PARTY_LEN).slice(), count, speciesName).map((m, i) => ({
+        const rows = teamMembers(emu.bytes(partyAt, PARTY_LEN).slice(), count, speciesName).map((m) => ({
           ...m,
           moves: m.moves.map((v, n) => ({ ...v, maxPp: ppWithBonus(moveInfo(tables, v.id)?.pp ?? 0, m.ppBonuses, n) })),
           itemName: art?.itemName(m.item) ?? '',
           ability: art?.abilityName(m.species, m.ability) ?? '',
-          active: !panelUp && partyId(i) === lead,
+          active: false,
         }));
+        if (panelUp) return rows;
+        // A slot here is a slot of the ROM's party screen, which shows the battle's order, the one out
+        // first. The party is only in that order while that screen is up (party_menu.c
+        // UpdatePartyToBattleOrder); in the battle it is in the field's. Read as if it always were, a
+        // switch left the wrong one marked as out, and when the one switched in fainted, the other
+        // could not be chosen: the fight stood there for good.
+        const main = sym('gMain'), fight = sym('BattleMainCB2');
+        const onItsScreen = main !== undefined && fight !== undefined && ((emu.read(main + 4, 32) ^ fight) & ~1) !== 0;
+        return rows.map((_, slot) => ({ ...rows[onItsScreen ? slot : partyId(slot)], active: partyId(slot) === lead }));
       },
       icon: (species) => monIconOf(species),
       bag: () => bagArtOf(),

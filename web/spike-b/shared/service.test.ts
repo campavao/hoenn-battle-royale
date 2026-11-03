@@ -851,6 +851,25 @@ describe('world rooms', () => {
       }
     });
 
+    it('a match that ends under a fight still being read ends its log for whoever watches', () => {
+      const r = rig(2);
+      try {
+        const me = r.room.host.room.actor(r.alice);
+        Object.assign(me, { battling: true, foe: 0 });
+        r.sb.onText(JSON.stringify({ t: 'watch', id: r.alice }));
+        r.sa.onText(JSON.stringify({ t: 'bl', f: 7, events: [start(r.alice, 0)] }));
+        r.sa.onText(JSON.stringify({ t: 'bl', f: 7, events: [{ e: 'text', text: 'still fighting' }] }));
+        expect(r.bl(r.b).flatMap((m) => m.events).map((e) => e.e)).toEqual(['start', 'text']);
+        const live = r.room.host.room as unknown as { results: { winner: number } };
+        live.results.winner = r.bob;
+        r.t(50);
+        r.svc.pump();
+        expect(r.bl(r.b).flatMap((m) => m.events).map((e) => e.e)).toEqual(['start', 'text', 'end']);
+      } finally {
+        r.svc.stop();
+      }
+    });
+
     it("the simulator's log is one fight to a watcher of either bot, and timed from the frame it began", () => {
       const r = rig(2);
       try {

@@ -237,6 +237,20 @@ export function sceneAt(log: readonly BattleEvent[], ms: number, follow: Side = 
   return { ms, next, ev, elapsed, p, state, near, far, map: ev?.e === 'start' ? ev.map : state.map, text, chars, ended, waiting: next >= log.length && !ended };
 }
 
+/** A health box is up from this far through its mon's coming out. */
+export const BOX_FROM = 0.3;
+
+/** Which trainers' names have room over their pictures. The ROM has no such labels, so they make way:
+ *  each goes as its trainer sends their first mon out and slides off the edge with its name cut, and
+ *  the near one's, which sits where the far health box goes (its line, y 34, is inside the box's),
+ *  goes once that box is up. */
+export function namesShown(s: Scene): { near: boolean; far: boolean } {
+  return {
+    far: s.far.trainerDx !== null && !!s.far.name && !s.far.mon,
+    near: s.near.trainerDx !== null && !!s.near.name && !s.near.mon && !(s.far.mon && s.far.appear > BOX_FROM),
+  };
+}
+
 /** What a spec (or a person) can say about a scene without a screenshot. */
 export function describe(s: Scene): string {
   const side = (v: SideScene) => `${v.name || '-'}: ${v.mon ? `slot ${v.slot} ${v.hp}/${v.mon.maxHp}${v.status ? ` st${v.status}` : ''}` : v.trainerDx === null ? 'empty' : 'trainer'}`;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { eventMs, logMs, stateAt, type BattleEvent } from './shared/battlelog';
 import { CANNED_LOG } from './fixtures/battlelog-canned';
-import { BLINK_MS, CHAR_MS, advance, boxLines, envFor, fitScale, introLine, readsFor, revealed, sceneAt, sideOf, slotOf } from './battlescene';
+import { BLINK_MS, CHAR_MS, advance, boxLines, envFor, fitScale, introLine, namesShown, readsFor, revealed, sceneAt, sideOf, slotOf } from './battlescene';
 import { barColour, barPixels, statusKind, trainerPicFor } from './battleview';
 
 /** The ms at which event `i` of the canned log starts. */
@@ -252,6 +252,39 @@ describe('the trainers pictures', () => {
     expect(trainerPicFor(15, 'far')).toEqual({ pic: 77, back: false, flip: false });
     expect(trainerPicFor(0, 'far')).toEqual({ pic: 71, back: false, flip: false });
     expect(trainerPicFor(99, 'far').pic).toBe(71);
+  });
+});
+
+describe("the trainers' names", () => {
+  const mon = { species: 280, level: 12, hp: 31, maxHp: 31, status: 0 };
+  const log: BattleEvent[] = [
+    { e: 'start', a: { seat: 1, name: 'NEAR', skin: 0, team: [mon] }, b: { seat: 2, name: 'FAR', skin: 1, team: [mon] }, map: 'MAP_ROUTE101' },
+    { e: 'send', side: 1, slot: 0 },
+    { e: 'text', text: 'Go!' },
+    { e: 'send', side: 0, slot: 0 },
+  ];
+  const at = (i: number, extra = 0) => log.slice(0, i).reduce((t, e) => t + eventMs(e), 0) + extra;
+
+  it('both over their pictures as the fight opens', () => {
+    expect(namesShown(sceneAt(log, at(0, 1000)))).toEqual({ near: true, far: true });
+  });
+
+  it("the near one's makes way for the far health box, the moment it is up", () => {
+    expect(namesShown(sceneAt(log, at(1, 1))).near, 'the far mon just coming out').toBe(true);
+    const up = sceneAt(log, at(2, 10));
+    expect(up.near.trainerDx, 'its picture still there').not.toBeNull();
+    expect(up.far.mon).toBeTruthy();
+    expect(namesShown(up).near).toBe(false);
+  });
+
+  it('not over a picture that has gone', () => {
+    expect(namesShown(sceneAt(log, at(3, 1190)))).toEqual({ near: false, far: false });
+  });
+
+  it('from side 1 too: the near one is whoever is near', () => {
+    const up = sceneAt(log, at(2, 10), 1);
+    expect(up.near.name, 'side 1 near').toBe('FAR');
+    expect(namesShown(up), "its picture has gone; the far one's has room").toEqual({ near: false, far: true });
   });
 });
 

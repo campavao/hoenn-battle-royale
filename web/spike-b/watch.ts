@@ -20,6 +20,7 @@
 // song and its hit, send-out and faint sounds, on the parked field's sound engine (rom.ts fightSong).
 
 import type { Actor } from './shared/room';
+import { over } from './shared/over';
 import type { WorldLink } from './net';
 import type { MirrorFeed, RomBattles } from './rom';
 import type { SpMsg } from './shared/wire';
@@ -99,9 +100,12 @@ export function fightKey(from: number, start: SpMsg): string {
 /** A BSTART from a trainer's page waits this long for that page's log of the fight (it reads the
  *  ROM's battle once it is up) before the ROM's replay of it starts. A bot's has no log coming. */
 const LOG_GRACE_MS = 3000;
-/** A log with no end, its fight long over in the room (a late joiner past the kept log's cap, or a
- *  socket's hiccup): the screen stops waiting for the rest of it. */
+/** A log with no end, its fight over in the room (a late joiner past the kept log's cap, a socket's
+ *  hiccup): the screen waits this long for the rest of it, then gives the field back. */
 const LOG_LOST_MS = 5000;
+/** A fight the room says is still on, and not a word of it for this long (a socket that has gone, its
+ *  frames with it, so the room here stands still too; a menu's own clock is far shorter). */
+const LOG_SILENT_MS = 180_000;
 
 /** The sound of an event of a watched fight (constants/songs.h), as a fight sounds it. */
 function soundOf(ev: BattleEvent | undefined): number {
@@ -132,7 +136,7 @@ export class Watch {
   private queue: { from: number; m: SpMsg; at: number }[] = [];
   private mirroring = false;
   /** The fight the trainer watched is in, as a log, and the view of it once there can be one. */
-  private fight: { from: number; f: number; side: Side; events: BattleEvent[]; began: number; view: LogView | null; next: number; lostAt: number } | null = null;
+  private fight: { from: number; f: number; side: Side; events: BattleEvent[]; began: number; view: LogView | null; next: number; lostAt: number; heard: number } | null = null;
   private viewEl: HTMLElement;
   /** A battle of the trainer watched is on my screen now (the results wait for it). */
   get replaying(): boolean { return this.mirroring || !!this.fight; }
@@ -272,6 +276,7 @@ export class Watch {
       if (this.fight?.from === from && this.fight.f === f) {
         this.fight.events.push(...events);
         this.fight.view?.add(events);
+        this.fight.heard = performance.now();
       }
       return;
     }
@@ -282,7 +287,7 @@ export class Watch {
     if (side === null) return;
     this.endFight();
     this.queue = [];
-    this.fight = { from, f, side, events: [...events], began: performance.now() - ago, view: null, next: -1, lostAt: 0 };
+    this.fight = { from, f, side, events: [...events], began: performance.now() - ago, view: null, next: -1, lostAt: 0, heard: performance.now() };
     recorder.net('log-fight', from, f, Math.round(ago));
   }
 
@@ -314,11 +319,22 @@ export class Watch {
       if (sound) rom?.sound(sound);
       fight.next = at.next;
     }
-    if (at.waiting && !this.host.link()?.room.actor(this.told)?.battling) {
+    // Run out of log with no end to it: over, if the room says this fight is.
+    if (at.waiting && this.fightIsOver(fight)) {
       fight.lostAt ||= now;
       if (now - fight.lostAt > LOG_LOST_MS) at.ended = true;
     } else fight.lostAt = 0;
-    if (at.ended) this.endFight();
+    if (at.ended || (at.waiting && now - fight.heard > LOG_SILENT_MS)) this.endFight();
+  }
+
+  /** The room has the trainer watched out of this fight: not in one, in another with somebody else,
+   *  or the match has ended with the room left standing. */
+  private fightIsOver(fight: NonNullable<Watch['fight']>): boolean {
+    const room = this.host.link()?.room;
+    const a = room?.actor(this.told);
+    if (!room || !a?.battling || over(room)) return true;
+    const s = fight.events[0];
+    return s.e === 'start' && a.foe !== (s.a.seat === this.told ? s.b.seat : s.a.seat);
   }
 
   private endFight(): void {

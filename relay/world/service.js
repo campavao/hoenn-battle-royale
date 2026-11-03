@@ -14707,6 +14707,7 @@ var WorldService = class {
     const res = room.host?.room.results;
     this.opts.log(`world: room ${room.code} over${res?.winner ? `, ${res.entrants.find(([id2]) => id2 === res.winner)?.[1]} wins` : ""}`);
     if (room.host) this.opts.log(`match ${room.code} ended after ${Math.round((this.opts.now() - room.t0) / 1e3)}s`);
+    for (const id2 of [...room.logs.keys()]) this.closeLog(room, id2);
     room.host = null;
     room.streams.clear();
     room.logs.clear();
@@ -14944,4 +14945,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "55b9f4da8227";
+export const WORLD_HASH = "8f5bb517bc46";
