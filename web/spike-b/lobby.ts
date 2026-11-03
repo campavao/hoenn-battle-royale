@@ -13,7 +13,7 @@ import { howToScreen } from '../src/ui/howto';
 import { howToRead, markHowToRead } from '../src/ui/howto-due';
 import { SKINS, cleanName, exportCareer, importCareer, loadCareer, saveProfile, skinUnlocked } from '../src/match/career';
 import { LINES } from '../src/bots/lines';
-import { cardFields, lookScreen, statsScreen, trainerScreen } from '../src/ui/profile';
+import { lookScreen, seatScreen, statsScreen, trainerScreen } from '../src/ui/profile';
 import { resultsScreen, type ResultsModel } from '../src/ui/results';
 import type { TallyNames } from '../src/match/tally';
 import { feedbackScreen, type FeedbackState } from '../src/ui/feedback';
@@ -121,7 +121,7 @@ export class Lobby {
   /** A locked room turned me away: asked for its passcode (again, if the one I typed was
    *  not it), not sent back to the menu -- classic's words, Kanto's (browse.lua). */
   askPass(code: string, wrong: boolean): void {
-    const note = wrong ? 'WRONG PASSCODE' : `Room ${code} is locked. Ask the host for it.`;
+    const note = wrong ? 'WRONG PASSCODE' : `Room ${code} is locked.`;
     this.stage.push(this.passEntry('PASSCODE', note, (pass) => this.hooks.join({ code, pass }), wrong));
   }
 
@@ -138,7 +138,7 @@ export class Lobby {
     const was = this.room;
     this.room = r;
     this.heardAt = performance.now();
-    if (!was || this.stage.current !== this.roomShown) this.stage.show(this.roomShown);
+    if (!was || (this.stage.current !== this.roomShown && this.stage.current !== this.seatShown)) this.stage.show(this.roomShown);
     else this.stage.redraw();
     this.open();
   }
@@ -204,7 +204,7 @@ export class Lobby {
     else if (a.kind === 'howto') this.stage.push(this.howTo);
     else if (a.kind === 'lobbies') { this.hooks.list(); this.stage.push(this.lobbies); }
     else if (a.kind === 'join') {
-      if (a.pass) this.stage.push(this.passEntry('PASSCODE', 'Ask the host for it.', (pass) => this.hooks.join({ code: a.code, pass })));
+      if (a.pass) this.stage.push(this.passEntry('PASSCODE', '', (pass) => this.hooks.join({ code: a.code, pass })));
       else this.hooks.join({ code: a.code });
     }
     else if (a.kind === 'feedback') { if (this.said !== 'sending') this.said = 'typing'; this.stage.push(this.feedback); }
@@ -231,13 +231,14 @@ export class Lobby {
     return {
       face: { name: me().name, skin: me().skin, wins: c.wins, played: c.matches, best: c.best },
       rows: [
-        { label: 'MY LOOK', detail: 'sprite and lines', id: 'trainer-look', onPress: () => this.press({ kind: 'look' }) },
-        { label: 'MY STATS', detail: 'every match so far', id: 'trainer-mystats', onPress: () => this.press({ kind: 'mystats' }) },
-        // The live card's BATTLE BACKDROP, the same browser setting (hbr-see-through).
-        { label: 'BATTLE BACKDROP', detail: seeThrough() ? 'OVER MAP' : 'CLASSIC', id: 'trainer-seethrough', onPress: () => { setSeeThrough(!seeThrough()); this.stage.redraw(); } },
-        { label: 'MY CAREER', detail: 'save or load a file', id: 'trainer-career', onPress: () => this.stage.push(this.careerAsk) },
+        { label: 'MY LOOK', center: true, id: 'trainer-look', onPress: () => this.press({ kind: 'look' }) },
+        { label: 'MY STATS', center: true, id: 'trainer-mystats', onPress: () => this.press({ kind: 'mystats' }) },
+        // The live card's BATTLE BACKDROP, the same browser setting (hbr-see-through): the row
+        // says which it is (Cam, 11-03).
+        { label: seeThrough() ? 'NO BACKDROP' : 'BACKDROP', center: true, id: 'trainer-seethrough', onPress: () => { setSeeThrough(!seeThrough()); this.stage.redraw(); } },
+        { label: 'MY CAREER', center: true, id: 'trainer-career', onPress: () => this.stage.push(this.careerAsk) },
         // The live card's anonymous play count (match/stats.ts): solo matches, told to the relay.
-        { label: 'SEND PLAY COUNT', detail: loadStats().off ? 'OFF' : 'ON', id: 'trainer-stats', onPress: () => { setStatsOff(!loadStats().off); this.stage.redraw(); } },
+        { label: loadStats().off ? 'NO PLAY COUNT' : 'SEND PLAY COUNT', center: true, id: 'trainer-stats', onPress: () => { setStatsOff(!loadStats().off); this.stage.redraw(); } },
       ],
       note: this.trainerNote,
       onName: () => this.press({ kind: 'name' }),
@@ -266,10 +267,11 @@ export class Lobby {
    *  row each. HOST makes one of my own. */
   private readonly lobbies: DrawnScreen = menuScreen(() => ({
     title: 'LOBBIES',
-    rows: roomRows(this.rooms.map((r) => ({ code: r.code, host: r.host, skin: String(r.skin), players: r.players, seats: r.seats, pass: r.pass, full: r.players >= r.seats })))
+    rows: roomRows(this.rooms.map((r) => ({ code: r.code, host: r.host, players: r.players, seats: r.seats, pass: r.pass, full: r.players >= r.seats })))
       .map((row, i): RowSpec => ({
         label: row.label,
-        detail: row.detail?.replace('🔒', 'PASS') ?? '',
+        detail: row.detail?.replace(' · 🔒', '') ?? '',
+        lock: !!this.rooms[i].pass,
         disabled: row.disabled,
         id: `lobbies-${this.rooms[i].code}`,
         onPress: () => this.press(row.action),
@@ -425,8 +427,20 @@ export class Lobby {
     }));
   }
 
-  /** The seat whose card is open on the room screen (KICK on it, for the host). */
-  private card: number | null = null;
+  /** Somebody's card off a seat, KICK on it for the host. */
+  private seatShown: DrawnScreen | null = null;
+  private openSeat(seat: number): void {
+    this.seatShown = seatScreen(() => {
+      const r = this.room!;
+      const m = r.members.find((x) => x.id === seat);
+      return {
+        face: { name: m?.name ?? '', skin: m?.skin ?? 0, wins: m?.rec?.wins ?? 0, played: m?.rec?.played ?? 0, best: m?.rec?.best },
+        ...(r.owner === r.you && seat !== r.you ? { onKick: () => { this.hooks.kick(seat); this.stage.pop(); } } : {}),
+        onBack: () => this.stage.pop(),
+      };
+    });
+    this.stage.push(this.seatShown);
+  }
 
   private codeEntry(): DrawnScreen {
     const state = newEntry(CODE_ENTRY);
@@ -503,15 +517,12 @@ export class Lobby {
         { id: 'room-fog', label: `FOG ${r.set.fogSecs}s`, visual: { kind: 'level', ...levelOf(FOG_STEPS, r.set.fogSecs), clock: true }, onPress: () => this.hooks.set({ fogSecs: nextFog(r.set.fogSecs) }) },
         { id: 'room-safari', label: safariLabel(r.set.safariSecs), visual: { kind: 'level', ...levelOf(SAFARI_STEPS, r.set.safariSecs, true), clock: true }, onPress: () => this.hooks.set({ safariSecs: nextSafari(r.set.safariSecs) }) },
       ] : null,
-      card: (() => {
-        const m = this.card === null ? undefined : r.members.find((x) => x.id === this.card);
-        return m ? { seat: m.id, skin: m.skin, lines: [{ label: 'NAME', value: m.name }, ...(m.rec ? cardFields({ name: m.name, skin: m.skin, wins: m.rec.wins, played: m.rec.played, best: m.rec.best }) : [])], canKick: isHost && m.id !== r.you } : null;
-      })(),
+      card: null,
       onStart: () => this.hooks.start(),
       onLeave: () => this.hooks.leave(),
-      onSeat: (seat) => { this.card = this.card === seat ? null : seat; this.stage.redraw(); },
-      onKick: (seat) => { this.hooks.kick(seat); this.card = null; this.stage.redraw(); },
-      onCloseCard: () => { this.card = null; this.stage.redraw(); },
+      onSeat: (seat) => this.openSeat(seat),
+      onKick: (seat) => this.hooks.kick(seat),
+      onCloseCard: () => {},
     };
   });
 }

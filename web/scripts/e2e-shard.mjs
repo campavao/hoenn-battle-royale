@@ -25,7 +25,6 @@ export const FILE_SECONDS = {
   'patch.spec.ts': 9,
   'pwa.spec.ts': 4,
   'recorder.spec.ts': 23,
-  'rooms-page.spec.ts': 2,
   'results-scroll.spec.ts': 2,
   'spikeb-menu.spec.ts': 149,
   'spikeb-windows.spec.ts': 452,

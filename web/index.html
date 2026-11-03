@@ -111,36 +111,34 @@
       .bm-forget-head { grid-column: 1 / -1; justify-self: center; pointer-events: none; }
       .bm-forget-head[hidden] { display: none; }
       .bm-forget-head canvas { display: block; }
-      /* A desktop's windows fill the height under the picture, so it stands beside them. */
-      body.desk-hud .bm-party { position: relative; }
-      body.desk-hud .bm-use-head { position: absolute; right: calc(100% + 8px); top: 0; }
       .bm-party { grid-column: 1 / -1; display: grid; grid-template-columns: auto auto; gap: calc(var(--s, 1.5) * 8px); }
+      /* Its own width, not its column's: the focus box goes round the window (Cam, 11-03). */
+      .bm-slot { justify-self: start; }
+      .bm-cell { justify-self: center; }
       .bm-member { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: calc(var(--s, 1.5) * 8px); }
       .bm-m-moves { display: grid; grid-template-columns: auto auto; gap: calc(var(--s, 1.5) * 8px); }
       .bm-m-row { display: flex; flex-wrap: wrap; justify-content: center; gap: calc(var(--s, 1.5) * 8px); }
       .bm-m-row [hidden] { display: none; }
       /* PARTY and BAG on the field: the windows alone, over the world. */
-      body #battle.on.panel, body.desk-hud #battle.on.panel:not(.screen) { background: #0007; place-items: center; align-content: center; padding-top: 0; }
-      body.desk-hud #battle.panel .bm-m-row { max-width: calc(var(--s, 3) * 240px); }
-      body.desk-hud #battle.panel .bm-keys { top: auto; bottom: 8px; }
+      body #battle.on.panel, body.desk-wide #battle.on.panel:not(.screen) { background: #0007; place-items: center; align-content: center; padding-top: 0; }
+      body.desk-wide #battle.panel .bm-m-row { max-width: calc(var(--s, 3) * 240px); }
       #battle.panel #gba, #battle.panel #gba-key, #battle.panel .note { display: none; }
       .bm-m-card canvas, .bm-m-held canvas, .bm-m-moves canvas, .bm-actions canvas { display: block; }
-      body.desk-hud #battle.on:not(.screen) { place-items: start center; align-content: start; padding-top: 0; }
-      body.desk-hud #battle.on:not(.screen) canvas { width: calc(var(--pic, 4) * 240px); }
-      body.desk-hud #battle-menu:not([hidden]) { grid-template-columns: auto auto auto; margin-top: 8px; }
-      body.desk-hud .bm-actions { grid-column: 3; grid-row: 1 / 3; flex-direction: column; }
-      body.desk-hud .bm-party { grid-template-columns: auto auto auto; }
-      body.desk-hud .bm-back { grid-column: 1 / -1; justify-self: center; }
-      body.desk-hud .bm-member:not([hidden]) { display: grid; grid-template-columns: auto auto; column-gap: calc(var(--s, 3) * 8px); row-gap: calc(var(--s, 3) * 8px); justify-items: center; }
-      body.desk-hud .bm-m-card { grid-area: 1 / 1; }
-      body.desk-hud .bm-m-held { grid-area: 2 / 1; }
-      body.desk-hud .bm-m-row { grid-area: 3 / 1; }
-      body.desk-hud .bm-m-moves { grid-area: 1 / 2 / 4 / 3; }
-      .bm-keys { display: none; }
-      body.desk-hud .bm-keys { display: block; position: fixed; left: 8px; top: 8px; pointer-events: none; }
-      @media (max-width: 1099px) { body.desk-hud .bm-keys { display: none; } }
-      body.desk-hud #battle-menu[data-mode="bag"], body.desk-hud #battle-menu[data-mode="item"], body.desk-hud #battle-menu[data-mode="info"] { position: fixed; left: 0; right: 0; width: fit-content; margin-inline: auto; bottom: 8px; }
-      body.desk-hud #battle-menu[data-mode="bag"], body.desk-hud #battle-menu[data-mode="item"], body.desk-hud #battle-menu[data-mode="info"] { grid-template-columns: auto auto; }
+      /* A mouse and the room for it (main.ts wirePhoneHud): anything narrower has the phone's
+         windows, stacked, rather than cut off (Cam, 11-03). */
+      body.desk-wide #battle.on:not(.screen) { place-items: start center; align-content: start; padding-top: 0; }
+      body.desk-wide #battle.on:not(.screen) canvas { width: calc(var(--pic, 4) * 240px); }
+      body.desk-wide #battle-menu:not([hidden]) { grid-template-columns: auto auto auto; margin-top: 8px; }
+      body.desk-wide .bm-actions { grid-column: 3; grid-row: 1 / 3; flex-direction: column; }
+      body.desk-wide .bm-party { grid-template-columns: auto auto auto; }
+      body.desk-wide .bm-back { grid-column: 1 / -1; justify-self: center; }
+      body.desk-wide .bm-member:not([hidden]) { display: grid; grid-template-columns: auto auto; column-gap: calc(var(--s, 3) * 8px); row-gap: calc(var(--s, 3) * 8px); justify-items: center; }
+      body.desk-wide .bm-m-card { grid-area: 1 / 1; }
+      body.desk-wide .bm-m-held { grid-area: 2 / 1; }
+      body.desk-wide .bm-m-row { grid-area: 3 / 1; }
+      body.desk-wide .bm-m-moves { grid-area: 1 / 2 / 4 / 3; }
+      body.desk-wide #battle-menu[data-mode="bag"], body.desk-wide #battle-menu[data-mode="item"], body.desk-wide #battle-menu[data-mode="info"] { position: fixed; left: 0; right: 0; width: fit-content; margin-inline: auto; bottom: 8px; }
+      body.desk-wide #battle-menu[data-mode="bag"], body.desk-wide #battle-menu[data-mode="item"], body.desk-wide #battle-menu[data-mode="info"] { grid-template-columns: auto auto; }
       .hud-mini { pointer-events: auto; cursor: pointer; }
       .hud-moves { top: calc(var(--s, 1.5) * 108px); }
       #item-tag { position: fixed; left: 0; top: 0; z-index: 2; pointer-events: none; image-rendering: pixelated; }

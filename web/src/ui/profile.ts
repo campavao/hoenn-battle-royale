@@ -8,7 +8,7 @@ import { CARD_BADGES, SKINS, SKIN_UNLOCK_WINS, WARDROBE, cardBadges, cardStars, 
 import { favourite, type TallyNames } from '../match/tally';
 import type { RecordLine } from '../match/record';
 import { type Rect, TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_RED, TEXT_WHITE, type EmeraldCanvas, measure, skinSheet } from './emerald';
-import { ROW_H, W, menuScreen, paintButtons, paintNote, paintRows, type CardLine, type RowSpec } from './screens';
+import { ROW_H, W, menuScreen, paintButtons, paintNote, paintRows, type ButtonSpec, type CardLine, type RowSpec } from './screens';
 import type { DrawnScreen, Painted, Widget } from './stage';
 
 // ---- the trainer card ---------------------------------------------------------------------
@@ -53,7 +53,7 @@ export function paintTrainerCard(
   y: number,
   face: CardFace,
   parent: string,
-  on: { onName: () => void; onSkin: () => void },
+  on: { onName?: () => void; onSkin?: () => void },
 ): Widget[] {
   // Nothing on the card before the card: text over the bare page, and the art popping in
   // under it, read as broken. The canvas paints again when it lands. If it never does, a
@@ -88,7 +88,7 @@ export function paintTrainerCard(
       parent,
       onPress: on.onName,
       // Left of the card's own row marker, which the cursor drawn over it turned into a box.
-      cursor: { x: 12, y: y + 43 },
+      cursor: on.onName ? { x: 12, y: y + 43 } : null,
     },
     {
       rect: { x: CARD_PIC.x - 8, y: y + CARD_PIC.y, w: CARD_PIC.w + 16, h: CARD_PIC.h },
@@ -96,7 +96,7 @@ export function paintTrainerCard(
       id: 'trainer-skin',
       parent,
       onPress: on.onSkin,
-      cursor: { x: CARD_PIC.x - 8, y: y + CARD_PIC.y + 28 },
+      cursor: on.onSkin ? { x: CARD_PIC.x - 8, y: y + CARD_PIC.y + 28 } : null,
     },
     { rect: { x: 16, y: y + 64, w: 120, h: 3 * ROW_H }, text: stats, id: 'trainer-record', cursor: null },
   ];
@@ -136,6 +136,46 @@ export function trainerScreen(model: () => TrainerModel): DrawnScreen {
   };
 }
 
+
+/** Somebody's card, off a seat in the room or the match's sheet: the whole screen, in place of
+ *  a box over the list (Cam, 11-03). BACK first for the cursor: an A out of habit kicks nobody. */
+export interface SeatModel {
+  face: CardFace;
+  /** Over the game still running under it. */
+  look?: 'overlay';
+  note?: string;
+  onWatch?(): void;
+  onKick?(): void;
+  onBack(): void;
+}
+
+export function seatScreen(model: () => SeatModel): DrawnScreen {
+  return {
+    ...(model().look ? { look: () => 'overlay' as const } : {}),
+    back() {
+      model().onBack();
+    },
+    paint(c, h): Painted {
+      const m = model();
+      if (m.look === 'overlay') c.fillRect({ x: -c.origin, y: 0, w: c.width, h }, '#000', 0.6);
+      const widgets = paintTrainerCard(c, 0, m.face, 'seat-card', {});
+      let y = CARD_H + 4;
+      if (m.note) {
+        const rect = paintNote(c, m.note, y);
+        widgets.push({ rect, text: m.note, id: 'seat-note', cursor: null });
+        y += ROW_H;
+      }
+      const buttons: ButtonSpec[] = [
+        ...(m.onWatch ? [{ label: 'SPECTATE', id: 'seat-watch', cls: 'card-watch', parent: 'seat-card', onPress: m.onWatch }] : []),
+        ...(m.onKick ? [{ label: 'KICK', id: 'seat-kick', cls: 'card-kick', parent: 'seat-card', onPress: m.onKick }] : []),
+        { label: 'BACK', id: 'seat-back', cls: 'card-close', parent: 'seat-card', onPress: m.onBack },
+      ];
+      const pressable = paintButtons(c, y, buttons);
+      widgets.push(pressable[pressable.length - 1], ...pressable.slice(0, -1));
+      return { widgets, containers: [{ id: 'seat-card', cls: 'trainer-card' }] };
+    },
+  };
+}
 
 // ---- MY LOOK: your sprite and your lines ------------------------------------------------
 

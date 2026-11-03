@@ -250,5 +250,5 @@ export function roomRows(rooms: RoomListing[]): LobbyRow[] {
  *  longer one was cut at "and fil..." (10-20 play-test #16, HBR-49, HBR-50). LOBBIES
  *  has a HOST button beside it; the offline line is the main menu's. */
 export function emptyNote(online: boolean): string {
-  return online ? 'No open rooms. HOST opens one.' : 'Not connected. QUICK PLAY is vs bots.';
+  return online ? 'No open rooms' : 'Not connected. QUICK PLAY is vs bots.';
 }

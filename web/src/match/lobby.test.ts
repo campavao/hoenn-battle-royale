@@ -96,7 +96,7 @@ describe('the room rows', () => {
 
 describe('the empty list', () => {
   it('says what to do about it either way', () => {
-    expect(emptyNote(true)).toContain('HOST');
+    expect(emptyNote(true)).toBe('No open rooms');
     expect(emptyNote(false)).toContain('QUICK PLAY');
   });
   it('fits the note line whole (HBR-49: it was cut off at "fil…")', () => {

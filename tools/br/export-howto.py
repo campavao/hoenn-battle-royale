@@ -10,22 +10,24 @@ One sheet, 240 wide (the screen's width), its pictures 150 tall, top to bottom:
     150  Hoenn: the POKéNAV's region map, `graphics/pokenav/region_map/map.png` laid out by
          its affine tilemap `map.bin` in `map.pal` (loaded at palette 7, hence the pixels'
          112 offset), at its own scale
-    300  a field for the fog to roll over, Route 101
-    450  a battle about to start: BRENDAN and MAY face to face on Route 101, the
+    300  a town for the fog to roll over, Fortree City
+    450  a battle about to start: BRENDAN and MAY face to face on Route 103, the
          trainer's "!" (field_effects/pics/emotion_exclamation.png) over each
-    600  an event the way a ROM shows it, in Route 111's desert (src/br/br_loot.c's Spawn):
-         GROUDON surfacing (gfx 198, br_legend.c), its two rares as red balls, three gold
-         balls (br_item_ball_gold.png in sShades' gold, src/br/br_balls.c), BIRCH's bag of
-         supplies, and the trader, a GENTLEMAN facing down (br_event.c)
+    600  an event the way a ROM shows it, at the top of Sky Pillar (src/br/br_loot.c's Spawn):
+         RAYQUAZA (gfx 207, br_legend.c), its two rares as red balls and three gold balls
+         (br_item_ball_gold.png in sShades' gold, src/br/br_balls.c)
     750  the evolution scene's backdrop, twelve frames of its palette cycle: bg_inner.bin
          over bg.png, in sBgAnim_Pal by sBgAnim_PalIndexes rows 13..24, the loop
          Task_UpdateBgPalette runs while a POKéMON evolves (src/evolution_scene.c)
     2550 CHARMANDER, CHARMELEON, CHARIZARD, 64x64 each, in their own colours; under them,
          at 2614, the same three in white, the way they flash while they change
-    2678 encounters (br_patch.c): Route 101's grass with three of its darkened patches,
-         the tall grass's rustle in general_1's palette, and BRENDAN about to step on one
-    2828 item pickups: Route 101 with two item balls, a gold one and a fallen trainer's
-         bag (br_loot.c draws a bag as BIRCH's), BRENDAN about to take the nearest
+    2678 encounters (br_patch.c): Route 123's grass with three of its darkened patches,
+         the tall grass's rustle in general_1's palette, and BRENDAN in the middle, about to
+         step on one
+    2828 item pickups: a Slateport street with two item balls, a gold one and a fallen
+         trainer's bag (br_loot.c draws a bag as BIRCH's), BRENDAN about to take the nearest
+
+A panel's pictures are all of different places (Cam, 11-03), each with its trainer in the middle.
 
 The field sprites are the sheets export-sprites.py wrote to web/public/field-sprites:
 standing south is frame 0, west frame 2; east is west mirrored, as the ROM draws it.
@@ -45,12 +47,13 @@ SHEETS = json.loads((ROOT / "web/src/data/sprites.json").read_text())
 BANG = ROOT / "graphics/field_effects/pics/emotion_exclamation.png"
 FX = ROOT / "graphics/field_effects"
 W, H = 240, 150
+BATTLE_AT = ("ROUTE103", 160, 96)
 EVO_FRAMES = range(13, 25)
 MONS = ["charmander", "charmeleon", "charizard"]
 SHEET_H = H * 5 + H * len(EVO_FRAMES) + 64 * 2 + H * 2
 
-GFX_BRENDAN, GFX_MAY, GFX_GENTLEMAN = 0, 89, 48
-GFX_ITEM_BALL, GFX_BIRCHS_BAG, GFX_GROUDON = 59, 97, 198
+GFX_BRENDAN, GFX_MAY = 0, 89
+GFX_ITEM_BALL, GFX_BIRCHS_BAG, GFX_RAYQUAZA = 59, 97, 207
 
 
 def jasc(path: Path) -> list:
@@ -104,16 +107,20 @@ def hoenn() -> Image.Image:
     return out.crop((7, 0, 7 + W, H))
 
 
-def route101() -> Image.Image:
-    return Image.open(MAPS / "MAP_ROUTE101.png").convert("RGBA").crop((32, 112, 32 + W, 112 + H))
+def on_map(name: str, x: int, y: int) -> Image.Image:
+    return Image.open(MAPS / f"MAP_{name}.png").convert("RGBA").crop((x, y, x + W, y + H))
+
+
+def fog_town() -> Image.Image:
+    return on_map("FORTREE_CITY", 208, 96)
 
 
 def battle() -> Image.Image:
-    im = route101()
+    im = on_map(*BATTLE_AT)
     bang = paletted(BANG, own_palette(BANG))
-    # Three steps apart on the path, BRENDAN facing east and MAY west.
+    # Three steps apart, either side of the middle, BRENDAN facing east and MAY west.
     foot = 96
-    for gfx, x, mirror in ((GFX_BRENDAN, 64, True), (GFX_MAY, 112, False)):
+    for gfx, x, mirror in ((GFX_BRENDAN, 88, True), (GFX_MAY, 136, False)):
         im.alpha_composite(frame(gfx, 2, mirror), (x, foot - 32))
         im.alpha_composite(bang, (x, foot - 32 - 16))
     return im
@@ -129,14 +136,13 @@ def gold_ball() -> Image.Image:
 
 
 def event() -> Image.Image:
-    im = Image.open(MAPS / "MAP_ROUTE111.png").convert("RGBA").crop((336, 848, 336 + W, 848 + H))
+    im = on_map("SKY_PILLAR_TOP", 96, 48)
     put = on_tiles(im)
 
-    ball, gold, bag = frame(GFX_ITEM_BALL, 0), gold_ball(), frame(GFX_BIRCHS_BAG, 0)
-    put(frame(GFX_GROUDON, 0), 7, 4)
-    for tx, ty, piece in ((5, 5, ball), (9, 5, ball), (6, 6, gold), (7, 6, gold), (8, 6, gold), (4, 6, bag)):
+    ball, gold = frame(GFX_ITEM_BALL, 0), gold_ball()
+    put(frame(GFX_RAYQUAZA, 0), 7, 4)
+    for tx, ty, piece in ((4, 4, ball), (10, 4, ball), (6, 6, gold), (7, 6, gold), (8, 6, gold)):
         put(piece, tx, ty)
-    put(frame(GFX_GENTLEMAN, 0), 10, 4)
     return im
 
 
@@ -149,23 +155,23 @@ def on_tiles(im: Image.Image):
 
 
 def encounters() -> Image.Image:
-    im = Image.open(MAPS / "MAP_ROUTE101.png").convert("RGBA").crop((0, 32, W, 32 + H))
+    im = on_map("ROUTE123", 1008, 96)
     put = on_tiles(im)
     # The rustle's second frame, the grass at its widest, reads best standing still.
     patch = paletted(FX / "pics/br_patch_tall_grass.png", jasc(FX / "palettes/general_1.pal")).crop((16, 0, 32, 16))
-    for tx, ty in ((5, 2), (3, 1), (13, 3)):
+    for tx, ty in ((6, 4), (9, 3), (5, 2)):
         put(patch, tx, ty)
-    put(frame(GFX_BRENDAN, 2), 6, 2)
+    put(frame(GFX_BRENDAN, 2), 7, 4)
     return im
 
 
 def pickups() -> Image.Image:
-    im = Image.open(MAPS / "MAP_ROUTE101.png").convert("RGBA").crop((0, 160, W, 160 + H))
+    im = on_map("SLATEPORT_CITY", 160, 496)
     put = on_tiles(im)
     ball = frame(GFX_ITEM_BALL, 0)
-    for tx, ty, piece in ((5, 3, ball), (9, 1, ball), (10, 4, gold_ball()), (8, 3, frame(GFX_BIRCHS_BAG, 0))):
+    for tx, ty, piece in ((8, 2, ball), (6, 6, ball), (8, 6, gold_ball()), (6, 4, frame(GFX_BIRCHS_BAG, 0))):
         put(piece, tx, ty)
-    put(frame(GFX_BRENDAN, 2), 6, 3)
+    put(frame(GFX_BRENDAN, 2), 7, 4)
     return im
 
 
@@ -218,7 +224,7 @@ def mons() -> tuple:
 
 def main():
     sheet = Image.new("RGBA", (W, SHEET_H))
-    for i, im in enumerate((safari(), hoenn(), route101(), battle(), event())):
+    for i, im in enumerate((safari(), hoenn(), fog_town(), battle(), event())):
         sheet.paste(im, (0, i * H))
     for i, im in enumerate(evolution_backdrop()):
         sheet.paste(im, (0, H * 5 + i * H))

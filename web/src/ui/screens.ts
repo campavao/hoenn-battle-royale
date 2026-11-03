@@ -53,6 +53,17 @@ export interface RowSpec {
   art?: { item?: number; gfx?: number[] };
   /** A red NEW on the tile's corner. */
   badge?: boolean;
+  /** A padlock before the detail: a room with a passcode. */
+  lock?: boolean;
+  /** The label in the row's middle, for a list of rows with no details. */
+  center?: boolean;
+}
+
+const LOCK = ['..###..', '.#...#.', '.#...#.', '#######', '###.###', '###.###', '#######'];
+function paintLock(c: EmeraldCanvas, x: number, y: number, color: string): void {
+  LOCK.forEach((row, j) => {
+    for (let i = 0; i < row.length; i++) if (row[i] === '#') c.fillRect({ x: x + i, y: y + j, w: 1, h: 1 }, color);
+  });
 }
 
 /** Where the rows of a list go: a frame at `y`, one ROW_H row each inside its border. */
@@ -72,25 +83,29 @@ export function paintRows(c: EmeraldCanvas, y: number, rows: RowSpec[], parent?:
   rows.forEach((row, i) => {
     const r = lay.rows[i];
     const color = row.disabled ? TEXT_GRAY : (row.color ?? TEXT_DARK);
-    const labelW = c.drawText(fitText(row.label, r.w - 8), r.x + 8, r.y, color);
+    const label = fitText(row.label, r.w - 8);
+    const labelX = row.center ? Math.round(r.x + (r.w - measure(label)) / 2) : r.x + 8;
+    const labelW = c.drawText(label, labelX, r.y, color);
     if (row.detail) {
-      const room = r.w - 8 - labelW - 8;
+      const room = r.w - 8 - labelW - 8 - (row.lock ? 11 : 0);
       if (room > 12) {
         const detail = fitText(row.detail, room);
         // Dark, as the label is: the light gray is a shadow colour, and on the window's
         // white it could not be read at all (POK-332). A disabled row stays faint.
-        c.drawText(detail, r.x + r.w - measure(detail), r.y, row.disabled ? TEXT_GRAY : TEXT_DARK);
+        const detailX = r.x + r.w - measure(detail);
+        c.drawText(detail, detailX, r.y, row.disabled ? TEXT_GRAY : TEXT_DARK);
+        if (row.lock) paintLock(c, detailX - 11, r.y + 4, row.disabled ? '#b8b8b8' : '#505058');
       }
     }
     widgets.push({
       rect: r,
-      text: row.detail ? `${row.label} ${row.detail}` : row.label,
+      text: `${row.label}${row.detail ? ` ${row.detail}` : ''}${row.lock ? ' LOCKED' : ''}`,
       id: row.id,
       cls: row.cls,
       parent,
       disabled: row.disabled,
       onPress: row.onPress,
-      cursor: row.onPress ? { x: r.x, y: r.y + 2 } : null,
+      cursor: row.onPress ? { x: row.center ? labelX - 8 : r.x, y: r.y + 2 } : null,
     });
   });
   return { widgets, bottom: lay.frame.y + lay.frame.h };
@@ -834,6 +849,7 @@ const WIDE_H = 44;
 const TILE_H = 62;
 /** Room between two people on a tile (Cam, 2026-10-20: "some padding between sprites"). */
 const SPRITE_STEP = 28;
+const PERSON_LIFT = 5;
 const TILE_MIN_H = 36;
 const BADGE = { w: 28, h: 13 };
 
@@ -877,11 +893,14 @@ function paintTiles(c: EmeraldCanvas, y: number, rows: RowSpec[], room: number, 
     // A picture beside the words leaves them the tile's inside, borders aside.
     const label = fitText(row.label, r.w - (beside ? 12 : 16) - beside);
     const lw = measure(label);
-    const ly = tall ? r.y + r.h - 24 : r.y + Math.floor((r.h - ROW_H) / 2) - 2;
+    const ly = tall ? r.y + r.h - 24 : r.y + Math.floor((r.h - ROW_H) / 2);
     const lx = Math.round(r.x + beside + (r.w - beside - lw) / 2);
     c.drawText(label, lx, ly, row.disabled ? TEXT_GRAY : TEXT_DARK);
     const artX = tall || across ? Math.round(r.x + (r.w - artW) / 2) : lx - beside;
     const midY = (h: number) => Math.round(r.y + (r.h - h) / 2);
+    // A person stands in the lower two thirds of their 32-pixel frame: up, for the one you see
+    // to sit level with the words (Cam, 11-03: "make sure the sprites and text are aligned").
+    const personY = midY(32) - PERSON_LIFT;
     if (item !== undefined) {
       const iy = tall ? r.y + 6 : midY(n);
       const ix = across && !tall ? r.x + 16 : artX;
@@ -889,9 +908,9 @@ function paintTiles(c: EmeraldCanvas, y: number, rows: RowSpec[], room: number, 
     } else if (across) {
       // Either side of the words, close in, so the three read as one centred group
       // (Cam: "quick play text and sprites are center aligned").
-      gfx.forEach((g, k) => c.drawSprite(g, k === 0 ? lx - 16 - 12 : lx + lw + 12, midY(32), alpha));
+      gfx.forEach((g, k) => c.drawSprite(g, k === 0 ? lx - 16 - 12 : lx + lw + 12, personY, alpha));
     } else {
-      gfx.forEach((g, k) => c.drawSprite(g, artX + k * SPRITE_STEP, tall ? r.y + 4 : midY(32), alpha));
+      gfx.forEach((g, k) => c.drawSprite(g, artX + k * SPRITE_STEP, tall ? r.y + 4 : personY, alpha));
     }
     if (row.badge) {
       const b = { x: r.x + r.w - BADGE.w - 6, y: tall ? r.y + 6 : r.y - TILE_GAP, ...BADGE };
@@ -920,7 +939,7 @@ function paintTrainer(c: EmeraldCanvas, y: number, h: number, t: NonNullable<Men
   c.drawFrame(box);
   const sheet = skinSheet(t.skin);
   const pad = Math.floor((h - 32) / 2);
-  if (sheet) c.drawSprite(sheet.gfx, inset + 16, y + pad);
+  if (sheet) c.drawSprite(sheet.gfx, inset + 16, y + pad - PERSON_LIFT);
   // The name alone, level with the sprite: the "12 played" line under it read as wins
   // (HBR-51), and the trainer's own rows have the record.
   c.drawText(fitText(t.name, W - 56 - 2 * inset), inset + 40, y + pad + 8, TEXT_BLUE);

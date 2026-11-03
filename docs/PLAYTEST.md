@@ -26,6 +26,8 @@ comments give no position inside a picture, so "this text" below is my reading, 
 ids are the file names of `web/e2e/ui-tour.spec.ts`'s shots. UI work goes on `ui-walkthrough`;
 anything more than UI gets its own session.
 
+**Status, 11-03:** the list below is built, as asked, except SUMMARY's size and long press for a mon, which went to the battle session with its rebuilt SUMMARY. The `Seen on the tour` section has had no call from Cam and is untouched.
+
 ### UI work (this branch)
 
 **Words and rows**
