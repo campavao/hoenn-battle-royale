@@ -191,6 +191,7 @@ export class RomArt {
   private dv: DataView;
   private tilesets = new Map<number, Tileset>();
   private runsFor = new Map<string, TileRun[]>();
+  private looksOf = new Map<string, { sheet: HTMLCanvasElement; states: Uint8Array } | null>();
   private objPals: Map<number, number[]> | null = null;
 
   constructor(private rom: Uint8Array, readonly sym: (name: string) => number) {
@@ -370,6 +371,77 @@ export class RomArt {
       }
     }
     return { ground, cover, border: borderCv, anims };
+  }
+
+  /** A metatile's looks as the tile animations go round (tileset_anims.c), on this map's
+   *  tilesets: null if nothing in it moves. Kept, as every chunk of coast wants the same few. */
+  metatileLooks(group: number, num: number, mid: number): { sheet: HTMLCanvasElement; states: Uint8Array } | null {
+    const key = `${group}:${num}:${mid}`;
+    const had = this.looksOf.get(key);
+    if (had !== undefined) return had;
+    const layout = this.u32(this.u32(this.u32(this.sym('gMapGroups') + group * 4) + num * 4));
+    const priAt = this.u32(layout + 0x10), secAt = this.u32(layout + 0x14);
+    const pri = this.tileset(priAt), sec = this.tileset(secAt);
+    const ts = mid < 512 ? pri : sec, m = mid < 512 ? mid : mid - 512;
+    const tids = Array.from({ length: 8 }, (_, t) => this.u16(ts.metatiles + m * 16 + t * 2) & 0x3ff);
+    const used = this.runs(priAt, secAt).filter((r) => tids.some((tid) => tid >= r.at && tid < r.at + r.tiles));
+    let out: { sheet: HTMLCanvasElement; states: Uint8Array } | null = null;
+    if (used.length) {
+      const looks = new Map<string, number>();
+      const states = new Uint8Array(ANIM_COUNTER_MAX);
+      for (let c = 0; c < ANIM_COUNTER_MAX; c++) {
+        const k = used.map((r) => r.shown[c]).join(',');
+        if (!looks.has(k)) looks.set(k, c);
+        states[c] = [...looks.keys()].indexOf(k);
+      }
+      const steps = [...looks.values()];
+      const draw = this.blockDrawer(pri, sec);
+      const sheet = document.createElement('canvas');
+      sheet.width = steps.length * BLOCK;
+      sheet.height = BLOCK;
+      const ctx = sheet.getContext('2d')!;
+      const id = ctx.createImageData(sheet.width, BLOCK);
+      const px = new Uint32Array(id.data.buffer);
+      px.fill(0xff000000);
+      steps.forEach((c, n) => draw(px, sheet.width, n * BLOCK, 0, mid, false, (tid) => {
+        const r = used.find((q) => tid >= q.at && tid < q.at + q.tiles);
+        return r && r.shown[c] ? r.shown[c] + (tid - r.at) * 32 : 0;
+      }));
+      ctx.putImageData(id, 0, 0);
+      out = { sheet, states };
+    }
+    this.looksOf.set(key, out);
+    return out;
+  }
+
+  /** Cells that belong to no map (tools/br/export-fill.py), on a picture `w` x `h` cells, clear
+   *  where `at` says null: the page's sea shows through. */
+  cells(w: number, h: number, at: (x: number, y: number) => { group: number; num: number; id: number } | null): HTMLCanvasElement {
+    const cv = document.createElement('canvas');
+    cv.width = w * BLOCK;
+    cv.height = h * BLOCK;
+    const ctx = cv.getContext('2d')!;
+    const id = ctx.createImageData(cv.width, cv.height);
+    const px = new Uint32Array(id.data.buffer);
+    const drawers = new Map<string, ReturnType<RomArt['blockDrawer']>>();
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const c = at(x, y);
+        if (!c) continue;
+        const key = `${c.group}:${c.num}`;
+        let draw = drawers.get(key);
+        if (!draw) {
+          const layout = this.u32(this.u32(this.u32(this.sym('gMapGroups') + c.group * 4) + c.num * 4));
+          draw = this.blockDrawer(this.tileset(this.u32(layout + 0x10)), this.tileset(this.u32(layout + 0x14)));
+          drawers.set(key, draw);
+        }
+        // The bottom layer's colour 0 is the palette's backdrop, as on the map's own ground.
+        for (let row = 0; row < BLOCK; row++) px.fill(0xff000000, (y * BLOCK + row) * cv.width + x * BLOCK, (y * BLOCK + row) * cv.width + (x + 1) * BLOCK);
+        draw(px, cv.width, x * BLOCK, y * BLOCK, c.id, false);
+      }
+    }
+    ctx.putImageData(id, 0, 0);
+    return cv;
   }
 
   /** The metatile behaviour of cell (x, y) on map (group, num), as the layout ships it:
