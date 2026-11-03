@@ -167,7 +167,23 @@ ENGINE_SYMBOLS = [
     "gTileset_General", "gTilesetAnims_General_Flower", "gTilesetAnims_General_Water",
     "gTilesetAnims_General_SandWaterEdge", "gTilesetAnims_General_Waterfall",
     "gTilesetAnims_General_LandWaterEdge",
+    # A fight drawn by the page for whoever watches it (web/spike-b/battleview.ts), from the
+    # player's own ROM like everything else of spike B's art (romart.ts): a mon's front and
+    # back pictures and palettes and where they stand, a trainer's, the ground of the fight,
+    # the message box, the health boxes, and the small font their words are set in.
+    "gMonFrontPicTable", "gMonBackPicTable", "gMonPaletteTable", "gMonShinyPaletteTable",
+    "gMonFrontPicCoords", "gMonBackPicCoords", "gEnemyMonElevation",
+    "gTrainerFrontPicTable", "gTrainerFrontPicCoords", "gTrainerFrontPicPaletteTable",
+    "gTrainerBackPicTable", "gTrainerBackPicCoords", "gTrainerBackPicPaletteTable",
+    "gBattleTextboxTiles", "gBattleTextboxPalette", "gBattleTextboxTilemap",
+    "gHealthboxSinglesPlayerGfx", "gHealthboxSinglesOpponentGfx", "gHealthboxElementsGfxTable",
+    "gBattleInterface_BallStatusBarPal", "gBattleInterface_BallDisplayPal",
+    "gFontSmallLatinGlyphs", "gFontSmallLatinGlyphWidths", "gFontNormalLatinGlyphs", "gFontNormalLatinGlyphWidths", "gSpeciesNames",
 ]
+for _env in ("TallGrass", "LongGrass", "Sand", "Underwater", "Water", "PondWater", "Rock", "Cave", "Building", "Stadium"):
+    ENGINE_SYMBOLS += ["gBattleEnvironmentTiles_" + _env, "gBattleEnvironmentTilemap_" + _env]
+for _env in ("TallGrass", "LongGrass", "Sand", "Underwater", "Water", "PondWater", "Rock", "Cave", "Plain", "Building", "Frontier", "BuildingGym", "BuildingLeader"):
+    ENGINE_SYMBOLS.append("gBattleEnvironmentPalette_" + _env)
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"
 # The agbcc build takes RAM symbols from sym_*.ld, where the map shows them as "name = .".
