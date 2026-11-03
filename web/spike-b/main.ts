@@ -22,11 +22,11 @@ import type { PackedMon } from '../src/net/wire';
 import { FIELD_CUT, FIELD_STRENGTH, isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
 import { arrived, routeTo } from './tapwalk';
 import { loadPatches } from '../src/bots/patches';
-import { dealParty, rungForPhase } from '../src/bots/party';
+import { rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { battleItems } from '../src/bots/bag';
 import { DIR_EAST } from './sim';
-import { ATTENDANT, BOATS, DOCKS, MOORINGS, TIDAL_MAPS, TIDAL_SAILOR, islandMaps, type Cruise, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, FIELD_DIVE, diveTo, emptyBag, interiors, makeRoom, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
+import { ATTENDANT, BOATS, DOCKS, MOORINGS, TIDAL_MAPS, TIDAL_SAILOR, islandMaps, type Cruise, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, FIELD_DIVE, diveTo, emptyBag, interiors, makeRoom, botParty, legendMon, LEGEND_CATCH, LEGEND_FOE, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
@@ -1119,7 +1119,7 @@ async function peek(): Promise<void> {
   rom?.sound(SE_WIN_OPEN);
   const r = link.room;
   const team: FameMon[] = a.bot
-    ? wornParty(dealParty(r.seed, a.id, r.ring().phase + 1, a.m.spot.map, gradeOf(r.seed, a.id)), a.wear).map((m) => ({ species: m.species, level: m.level, hp: m.hp, maxHp: m.maxHp, moves: m.moves.map((v) => ({ id: v.id })) }))
+    ? wornParty(botParty(r.seed, a, r.ring().phase + 1), a.wear).map((m) => ({ species: m.species, level: m.level, hp: m.hp, maxHp: m.maxHp, moves: m.moves.map((v: { id: number }) => ({ id: v.id })) }))
     : link.teams.get(a.id) ?? [];
   const bag: PeekBag | undefined = a.bot ? { items: (a.loot?.items ?? []).map((s) => ({ id: s.id, n: s.n })), money: a.loot?.money ?? 0 } : link.bags.get(a.id);
   for (;;) {
@@ -1316,7 +1316,7 @@ function startFor(e: RoomEvent): void {
     }, (err) => { l.drop(key); throw err; }));
     return;
   }
-  if (e.type === 'bots') { void judgeBots(e.a, e.b); return; }
+  if (e.type === 'bots') { void judgeBots(e.a, e.b, e.legend); return; }
   if (e.type === 'boss') {
     // A gym leader (gyms.ts): their own battle in the hidden ROM; won, the gym's TM and purse.
     if (swapping) leaveScreen();
@@ -1345,7 +1345,7 @@ function startFor(e: RoomEvent): void {
     // Its grade too (roster.ts). No Zone pool: the ROM deals one at the Safari opening,
     // which this world has not got yet.
     // With the wounds its last fights left it (room.ts wear): bots wear down, as live.
-    const party = wornParty(dealParty(link.room.seed, foe.id, link.room.ring().phase + 1, foe.m.spot.map, gradeOf(link.room.seed, foe.id)), foe.wear);
+    const party = wornParty(botParty(link.room.seed, foe, link.room.ring().phase + 1), foe.wear);
     const fog = inFogNow(), l = link;
     // And its bag (POK-237): what it picked up, the fight's to spend.
     const items = battleItems(foe.loot?.items ?? []);
@@ -1383,28 +1383,33 @@ function startFor(e: RoomEvent): void {
   }
 }
 
-/** Two bots met and the room gave me their fight: both teams as the match deals them,
+/** Two bots met, or one at a legendary, and the room gave me their fight: both teams as the match deals them,
  *  fought out in the hidden ROM, and the winner told to the room. No answer (no ROM, a
  *  fight that would not end, a draw): 0, and both walk on. */
-async function judgeBots(ida: number, idb: number): Promise<void> {
+const LEGEND_SEAT = 255;
+async function judgeBots(ida: number, idb: number, legend?: { key: number; species: number }): Promise<void> {
   const l = link, r = l.room;
   const side = (id: number) => {
     const b = r.actor(id);
     // Each with its wounds and its bag, as in a fight with a trainer (brain.ts begin).
-    return { seat: id, party: b ? wornParty(dealParty(r.seed, id, r.ring().phase + 1, b.m.spot.map, gradeOf(r.seed, id)), b.wear) : [], items: battleItems(b?.loot?.items ?? []) };
+    return { seat: id, party: b ? wornParty(botParty(r.seed, b, r.ring().phase + 1), b.wear) : [], items: battleItems(b?.loot?.items ?? []) };
   };
-  const a = side(ida), b = side(idb);
+  // A legendary is a side of one, on a seat the ROM's wire can carry; nobody's in a room this size.
+  const a = side(ida), b = legend ? { seat: LEGEND_SEAT, party: [legendMon(r.spills.get(legend.key), legend.species, r.ring().phase + 1)], items: [] } : side(idb);
   // This meeting, not the pair: they can be let go (the room's own cap) and meet again,
   // and an answer for the old one would end the new one.
   const since = r.actor(ida)?.since;
-  const wanted = () => link === l && !!since && l.room.actor(ida)?.since === since && l.room.actor(idb)?.foe === ida;
+  const wanted = () => link === l && !!since && l.room.actor(ida)?.since === since && (legend ? l.room.actor(ida)?.foe === LEGEND_FOE : l.room.actor(idb)?.foe === ida);
   const out = judge ? await judge(a, b, wanted).catch(() => null) : null;
   if (!wanted()) return;
   if (!out) { l.bots(ida, idb, 0); return; }
   // What the winner has left, mon for mon (brain.ts settleAnswered), as shares.
-  const won = out.winner === ida ? a : b, left = out.winner === ida ? out.a : out.b;
+  // A legendary it brought low enough to catch is the bot's, however the rest of its team did.
+  const m0 = b.party[0];
+  const winner = legend && m0.maxHp > 0 && (out.b[0]?.hp ?? m0.hp) / m0.maxHp < LEGEND_CATCH ? ida : out.winner;
+  const won = winner === ida ? a : b, left = winner === ida ? out.a : out.b;
   const hp = won.party.map((m, i) => (m.maxHp > 0 ? Math.min(1, (left[i]?.hp ?? m.hp) / m.maxHp) : 0));
-  l.bots(ida, idb, out.winner, hp, [out.usedA, out.usedB]);
+  l.bots(ida, idb, winner === LEGEND_SEAT ? LEGEND_FOE : winner, hp, [out.usedA, out.usedB]);
 }
 
 /** Once a second, between battles: what my team could do on the field (SURF, CUT,
@@ -1937,7 +1942,7 @@ const SCREEN_WAIT_MS = 60_000;
 function championTeam(id: number): PackedMon[] {
   const a = link.room.actor(id), r = link.room;
   const name = (a?.name ?? '').slice(0, 7);
-  if (a?.bot) return wornParty(dealParty(r.seed, a.id, r.ring().phase + 1, a.m.spot.map, gradeOf(r.seed, a.id)), a.wear).map((m) => ({ ...m, ot: name }));
+  if (a?.bot) return wornParty(botParty(r.seed, a, r.ring().phase + 1), a.wear).map((m) => ({ ...m, ot: name }));
   return (link.teams.get(id) ?? []).map((m) => ({
     species: m.species, level: m.level, hp: m.hp ?? m.maxHp ?? 1, maxHp: m.maxHp ?? m.hp ?? 1, status: 0,
     moves: (m.moves ?? []).map((v) => ({ id: v.id, pp: 0, ppUps: 0 })), heldItem: 0,

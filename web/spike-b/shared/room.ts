@@ -30,10 +30,11 @@ import { clerkAt, type Clerk } from './marts';
 import { leaderAt } from './gyms';
 import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, draw, eventForRing } from '../../src/match/events';
 import { DOOR_Y, FINAL_CHANCE, STORIES, STORY_CHANCE, type Story, type StoryDoor } from '../../src/match/story';
-import { dealParty, rungForPhase } from '../../src/bots/party';
+import { dealParty, rungForPhase, tradedMon } from '../../src/bots/party';
 import { gradeOf } from '../../src/bots/roster';
+import type { PackedMon } from '../../src/net/wire';
 import { add, carried, purse, quaff, spend, type Stack } from '../../src/bots/bag';
-import { World, decodeGrid, type Spot, type WorldMap } from '../../src/bots/world';
+import { World, decodeGrid, type Spot, type WorldMap, sameSpot } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
 import { blueTm, scatterItem } from '../../src/match/scatter';
 import roomsJson from '../data/rooms.json';
@@ -99,6 +100,12 @@ export interface Actor {
   /** A bot's pickings: the balls and the bags' items and money it took on its way, which
    *  go into the bag it drops when it is out. */
   loot?: { items: Stack[]; money: number };
+  /** A bot's legendaries, by species, first (botParty). */
+  caught?: number[];
+  /** The legendary a bot is fighting (`foe` LEGEND_FOE), and those it has tried: one go each,
+   *  or one that lost would stand at it (brain.ts foughtLegends). */
+  legendKey?: number;
+  tried?: number[];
   /** The trainer a bot's last fight was with: theirs is the one word on its wounds. */
   foughtBy?: number;
   /** A bot's wounds: each slot's HP as a share of its most, as its last fight left it
@@ -114,6 +121,28 @@ export interface Actor {
 
 /** brain.ts QUAFF_COOLDOWN_MS: a bot drinks at most one medicine every 10 s. */
 const QUAFF_FRAMES = 600;
+
+/** `foe` and a `bots` fight's other side for a bot at an event's legendary: nobody's id. */
+export const LEGEND_FOE = -2;
+/** A bot's fight with a legendary is its to take once the mon is under this share: that is when a
+ *  trainer would throw. The fight's own numbers say so, not a roll. */
+export const LEGEND_CATCH = 1 / 3;
+/** What a catch leaves the mon it caught: the fight that wore it down was the catch. */
+const CAUGHT_WEAR = 0.5;
+/** What a bot beaten by a legendary has left, every slot, as it gets away: hurt, on to a CENTER,
+ *  never out (brain.ts fightLegend: "never fainted"). */
+const FLED_WEAR = 0.15;
+
+/** A legendary's mon as a bot's fight has it: at the rung, and as worn as the last bot left it. */
+export function legendMon(s: Pick<Spill, 'worn'> | undefined, species: number, phase: number): PackedMon {
+  return wornParty([tradedMon(species, phase)], s?.worn === undefined ? undefined : [s.worn])[0];
+}
+
+/** A bot's team: what it caught, then what the seed deals it at this rung on this map, six at most. */
+export function botParty(seed: number, a: Pick<Actor, 'id' | 'm' | 'caught'>, phase: number): PackedMon[] {
+  const dealt = dealParty(seed, a.id, phase, a.m.spot.map, gradeOf(seed, a.id));
+  return a.caught?.length ? [...a.caught.map((sp) => tradedMon(sp, phase)), ...dealt].slice(0, 6) : dealt;
+}
 
 /** A bot's team as the seed deals it, with the wounds its fights left it: a fainted slot
  *  stays down, a hurt one keeps its share (at least 1 HP), and the rest are whole. */
@@ -190,7 +219,7 @@ export type RoomEvent =
   | { type: 'boss'; tick: number; id: number; n: number }
   /** Two bots saw each other: `id`'s page fights `a` against `b` in a hidden ROM and
    *  says who won (`bots`). Nobody's coin flip (CLAUDE.md: simulate every battle). */
-  | { type: 'bots'; tick: number; id: number; a: number; b: number };
+  | { type: 'bots'; tick: number; id: number; a: number; b: number; legend?: { key: number; species: number } };
 
 /** What a trainer who is out carried: the bag's items (not its key items or machines),
  *  money, and their team. */
@@ -205,6 +234,9 @@ export interface Spill {
   person?: { gfx: number; name: string; wants?: number; gate?: number };
   /** A gate's other pieces: his own piece's key, which has to be gone first. */
   guard?: number;
+  /** A legendary's HP as a share, as the last bot that fought it left it: the next one takes up
+   *  from there, so a few goes bring it down (Cam, 11-02: "they're not getting cleaned up"). */
+  worn?: number;
 }
 
 /** The ferry (br_story.c): Lilycove's attendant sails to an island a live story is on,
@@ -753,6 +785,7 @@ export class Room {
       const a = this.actor(cmd.id);
       if (a?.battling && !a.foe) { a.battling = false; a.calm = this.tick + GRACE; }
     } else if (cmd.c === 'bots') {
+      if (cmd.b === LEGEND_FOE) return this.legendOver(cmd);
       const a = this.actor(cmd.a), b = this.actor(cmd.b);
       if (!a || !b || !a.bot || !b.bot || a.foe !== b.id || b.foe !== a.id || a.judge !== cmd.id || !a.battling) return;
       this.part(a);
@@ -1159,10 +1192,31 @@ export class Room {
    *  door (the cell they stand on just through one), which a solid bag would shut. */
   private fallen(a: Actor): Spot {
     const s = a.m.spot;
-    return this.world.warpAt(s.map, s.x, s.y) ? this.beside(a) ?? s : s;
+    // Nor on a piece somebody has not taken yet, which it would hide (POK-388): a bot steps over a
+    // bag of Pokémon, and a legendary out being fought comes back to its cell.
+    if (!this.world.warpAt(s.map, s.x, s.y) && !this.pieceOn(s)) return s;
+    return this.beside(a) ?? this.nearestBare(s) ?? s;
   }
 
   /** The bag lying on a cell, if any. */
+  /** A ball or a bag lying on the cell, or one that will be again: a fight's legendary or boss. */
+  private pieceOn(s: Spot): boolean {
+    if (this.groundAt(s.map, s.x, s.y)) return true;
+    for (const b of this.spills.values()) {
+      if (b.map === s.map && b.x === s.x && b.y === s.y && (!this.picked.has(b.key) || b.legend || b.person?.gate !== undefined)) return true;
+    }
+    return false;
+  }
+
+  /** The nearest plain cell of the map with nothing on it, for a bag with nowhere beside it. */
+  private nearestBare(s: Spot): Spot | undefined {
+    for (let d = 2; d <= 6; d++) for (let dx = -d; dx <= d; dx++) for (const dy of dx === -d || dx === d ? [0] : [d - Math.abs(dx), Math.abs(dx) - d]) {
+      const t = { map: s.map, x: s.x + dx, y: s.y + dy };
+      if (this.world.cell(t.map, t.x, t.y) === 0 && !this.world.warpAt(t.map, t.x, t.y) && !this.pieceOn(t) && !this.actors.some((o) => sameSpot(o.m.spot, t))) return t;
+    }
+    return undefined;
+  }
+
   spillAt(map: string, x: number, y: number): Spill | undefined {
     for (const b of this.spills.values()) if (b.map === map && b.x === x && b.y === y && !this.picked.has(b.key)) return b;
     return undefined;
@@ -1228,7 +1282,7 @@ export class Room {
       if (!a.bot || a.battling || !a.wear) continue;
       if (this.centreSteps().some((s) => s.map === a.m.spot.map && s.x === a.m.spot.x && s.y === a.m.spot.y)) { a.wear = undefined; continue; }
       if (!a.loot?.items.length || (this.tick + a.id * 13) % QUAFF_FRAMES !== 0 || this.inFog(a.m.spot, ring)) continue;
-      const party = wornParty(dealParty(this.seed, a.id, ring.phase + 1, a.m.spot.map, gradeOf(this.seed, a.id)), a.wear);
+      const party = wornParty(botParty(this.seed, a, ring.phase + 1), a.wear);
       if (quaff(party, a.loot.items) !== null) a.wear = party.map((m) => (m.maxHp > 0 ? m.hp / m.maxHp : 0));
     }
     const phase = this.phaseAt(this.tick);
@@ -1342,6 +1396,12 @@ export class Room {
 
   /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
   private part(a: Actor): void {
+    // A legendary it let go of stands again, for whoever comes next.
+    if (a.legendKey !== undefined) {
+      this.picked.delete(a.legendKey);
+      (a.tried ??= []).push(a.legendKey);
+      a.legendKey = undefined;
+    }
     a.battling = false;
     a.foe = a.judge = a.since = 0;
     a.calm = this.tick + GRACE;
@@ -1362,8 +1422,7 @@ export class Room {
     // 30 s to three minutes. Handed another every BOT_DUEL_GAP, the bots stood frozen in
     // its queue and the rest were told no at once: 21 fights handed out in Cam's last ten
     // minutes, 2 fought (2026-11-02). Until a page is free, they walk.
-    const judges = [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b) => !b.away)]
-      .filter((j) => !this.actors.some((a) => a.judge === j.id));
+    const judges = this.freeJudges();
     if (!this.simBots && !judges.length) return;
     const byMap = new Map<string, Actor[]>();
     for (const a of this.actors) {
@@ -1400,6 +1459,57 @@ export class Room {
     }
   }
 
+  /** The trainers whose pages could fight two bots out now (engageBots). */
+  private freeJudges(): { id: number }[] {
+    return [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b) => !b.away)]
+      .filter((j) => !this.actors.some((a) => a.judge === j.id));
+  }
+
+  /** A bot pressed A at a legendary (POK-410; Cam, 11-02: "the bots are not picking up the
+   *  legendaries"). A battle like a trainer's, off the ground for everybody while it lasts,
+   *  fought where a bot's fights are: the host's simulator or a trainer's hidden ROM. Nobody
+   *  to run it, and it waits for somebody. */
+  private botLegend(a: Actor, s: Spill, events: RoomEvent[]): void {
+    const species = s.bag.mons?.[0]?.species;
+    if (!species || this.ring().safari || this.tick < a.calm || a.tried?.includes(s.key)) return;
+    if (!this.simBots && this.tick < this.duelAfter) return;
+    const judges = this.simBots ? [] : this.freeJudges();
+    if (!this.simBots && !judges.length) return;
+    const judge = this.simBots ? HOST_JUDGE : judges[(this.tick >>> 3) % judges.length].id;
+    this.picked.set(s.key, a.id);
+    a.battling = true;
+    a.foe = LEGEND_FOE;
+    a.judge = judge;
+    a.since = this.tick;
+    a.legendKey = s.key;
+    a.keys = a.last = 0;
+    events.push({ type: 'bots', tick: this.tick, id: judge, a: a.id, b: LEGEND_FOE, legend: { key: s.key, species } });
+    if (!this.simBots) this.duelAfter = this.tick + BOT_DUEL_GAP;
+  }
+
+  /** How a bot's legendary went. Beaten, it is the bot's, and off the map for good. Lost, the bot
+   *  gets away hurt. Either way it never fights that one again; no answer, the same, and it stands. */
+  private legendOver(cmd: Extract<Command, { c: 'bots' }>): void {
+    const a = this.actor(cmd.a);
+    if (!a?.bot || a.foe !== LEGEND_FOE || a.judge !== cmd.id || !a.battling || a.legendKey === undefined) return;
+    if (cmd.used && a.loot) spend(a.loot.items, cmd.used[0].slice(0, 4));
+    const phase = this.ring().phase + 1;
+    if (cmd.winner === a.id) {
+      const species = this.spills.get(a.legendKey)?.bag.mons?.[0]?.species;
+      const left = cmd.hp?.slice(0, 5).map((v) => Math.min(1, Math.max(0, v))) ?? a.wear ?? [];
+      a.legendKey = undefined;
+      if (species) {
+        a.caught = [species, ...(a.caught ?? [])];
+        a.wear = [CAUGHT_WEAR, ...left];
+      }
+    } else if (cmd.winner === LEGEND_FOE) {
+      a.wear = botParty(this.seed, a, phase).map(() => FLED_WEAR);
+      const s = this.spills.get(a.legendKey), left = cmd.hp?.[0];
+      if (s && left !== undefined) s.worn = Math.min(1, Math.max(0, left));
+    }
+    this.part(a);
+  }
+
   /** `id` off the map, and everything that waited on them let go. */
   private remove(id: number): void {
     const a = this.actor(id);
@@ -1421,7 +1531,8 @@ export class Room {
     // So does a gate's boss whose fight they left: his pieces wait for the next.
     for (const [key, by] of this.picked) {
       const b = this.spills.get(key);
-      if (by === id && (b?.legend || b?.person?.gate !== undefined)) this.picked.delete(key);
+      // Not one they caught, which goes down in their bag (a bot's) or is theirs (a trainer's).
+      if (by === id && a?.battling && (b?.legend || b?.person?.gate !== undefined)) this.picked.delete(key);
     }
     for (const e of this.events) if (e.trader?.busy === id) e.trader.busy = 0;
     for (const h of this.homes) if (h.busy === id) h.busy = 0;
@@ -1433,7 +1544,7 @@ export class Room {
     if (!this.actor(a.id)) return;
     const phase = this.ring().phase + 1;
     const grade = gradeOf(this.seed, a.id);
-    const party = dealParty(this.seed, a.id, phase, a.m.spot.map, grade);
+    const party = botParty(this.seed, a, phase);
     // And whatever it picked up on its way (bots carry what they pick up, POK-322).
     const bag: Bag = { items: carried(party, a.loot?.items ?? []), money: purse(phase, grade) + (a.loot?.money ?? 0), mons: party.map((m) => ({ species: m.species, level: m.level })) };
     const key = SPILL_KEY + a.id, at = this.fallen(a);
@@ -1786,6 +1897,7 @@ export class Room {
           const b = g ? undefined : this.spillAt(a.m.spot.map, x, y);
           const loot = (a.loot ??= { items: [], money: 0 });
           if (g && !g.gift) { this.picked.set(g.key, a.id); add(loot.items, g.item); }
+          if (b?.legend && !b.person && b.guard === undefined) this.botLegend(a, b, events);
           if (b && !b.legend && !b.person && b.guard === undefined) {
             // Its items and money, as live bots empty a bag (brain.ts takePiece). The
             // Pokémon stay in it for whoever comes next (HBR-82), and the bot steps over it.
@@ -1991,7 +2103,7 @@ export class Room {
       mix(m.facing); mix(m.moveDir); mix(m.runningState); mix(m.run ? 1 : 0); mix(m.strides); mix(m.bike ? 1 + m.bikeSpeed * 4 + m.bikeCount * 16 : 0);
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
-      mix((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.bleedAt ?? 0); mix(a.boss ?? 0); mix(a.away ? 1 : 0); mix(a.pickBy ?? 0); mix(a.cruise ? (a.cruise.to === 'lilycove' ? 8 : 16) + LEGS.indexOf(a.cruise.leg) : 0); mix(a.cruise?.steps ?? 0); mix(a.loot?.money ?? 0); for (const st of a.loot?.items ?? []) { mix(st.id); mix(st.n); }
+      mix((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.bleedAt ?? 0); mix(a.boss ?? 0); mix(a.away ? 1 : 0); mix(a.pickBy ?? 0); mix(a.cruise ? (a.cruise.to === 'lilycove' ? 8 : 16) + LEGS.indexOf(a.cruise.leg) : 0); mix(a.cruise?.steps ?? 0); mix(a.loot?.money ?? 0); for (const sp of a.caught ?? []) mix(sp); mix(a.legendKey ?? 0); for (const st of a.loot?.items ?? []) { mix(st.id); mix(st.n); }
       if (a.meet) { mix(a.meet.foe); mix(a.meet.since); mix((a.meet.walk ? 1 : 0) | (a.meet.duel ? 2 : 0)); }
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }

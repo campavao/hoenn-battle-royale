@@ -146,13 +146,24 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
     }
     if (best) return { ...best.m.spot };
   }
-  const ev = room.events[room.events.length - 1];
-  if (ev && room.spills.has(ev.key) && !room.picked.has(ev.key) && rand(b) < 1 / 3 && !room.inFog({ map: ev.map, x: ev.x, y: ev.y })) {
+  // One thought in two after what lies about, or four with eight or fewer standing: always after
+  // the next ball, a small match's bots stopped meeting (seed 7, eight bots: 3.5 minutes between
+  // fights, room.test.ts 'still go about and meet').
+  // Off the frame, not its dice: a walk it would have taken anyway stays the walk it takes.
+  const lootMood = (Math.imul(room.tick + a.id, 0x9e3779b1) >>> 30) < (room.results.entrants.length - room.results.fallen.length > 8 ? 2 : 1);
+  // A legendary on this very map, before anything else it might do here.
+  const legend = lootMood ? lootGoal(room, a, b, true) : null;
+  if (legend) return legend;
+  // The newest event whose legendary still stands (and this bot has not tried), or the newest:
+  // once there, lootGoal has what lies about. Cam, 11-02: "Not sure why they're not getting cleaned up".
+  const standing = (e: Room['events'][number]) => room.spills.has(e.key) && !room.picked.has(e.key) && !room.inFog({ map: e.map, x: e.x, y: e.y });
+  const ev = [...room.events].reverse().find((e) => standing(e) && room.spills.get(e.key)?.legend && !a.tried?.includes(e.key)) ?? room.events[room.events.length - 1];
+  if (ev && standing(ev) && rand(b) < (lootMood && room.spills.get(ev.key)?.legend ? 1 : 1 / 3)) {
     const near = room.landedOn(ev.map).filter((s) => Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
     if (near.length) return near[Math.floor(rand(b) * near.length)];
   }
   const cells = insideNext(room);
-  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return wander(room, a, b);
+  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return (lootMood ? lootGoal(room, a, b) : null) ?? wander(room, a, b);
   const p = planeOf(room, a.m.spot);
   if (!p) return null;
   const { x, y } = p;
@@ -175,6 +186,32 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
   }
   const pool = near.filter((n) => n.h === bestH && n.d <= bestD + SPREAD);
   return pool.length ? pool[Math.floor(rand(b) * pool.length)].s : null;
+}
+
+/** How far along its own map a bot will go out of its way for a ball (a legendary, any way):
+ *  about a screen, so it is seen going for it and still gets on to the ring's heart. */
+const LOOT_NEAR = 14;
+
+/** Something on this map to go and take, as somebody playing would (brain.ts's "loot in the ring
+ *  beats wandering"; Cam, 11-02: bots should go and pick things up): one of the nearest balls and
+ *  bags with something in them it would take, and any legendary it has not tried. Not a gift
+ *  (those are the trainers'), a person, or a piece a boss guards; nothing in the fog. */
+function lootGoal(room: Room, a: Actor, b: Brain, legendOnly = false): Spot | null {
+  const { map, x, y } = a.m.spot;
+  const reach = room.world.reachOnMap(a.m.spot, true, true);
+  const near: { s: Spot; d: number }[] = [];
+  const see = (s: Spot, far: boolean) => {
+    const d = Math.abs(s.x - x) + Math.abs(s.y - y);
+    if (d && (far || d <= LOOT_NEAR) && reach.cell(s.x, s.y) && !room.inFog(s)) near.push({ s, d });
+  };
+  if (!legendOnly) for (const g of room.ground().values()) if (g.map === map && !g.gift && !room.picked.has(g.key)) see({ map, x: g.x, y: g.y }, false);
+  for (const p of room.spills.values()) {
+    if (p.map !== map || room.picked.has(p.key) || p.person || p.guard !== undefined) continue;
+    if (p.legend ? !a.tried?.includes(p.key) : !legendOnly && (p.bag.items.length > 0 || p.bag.money > 0)) see({ map, x: p.x, y: p.y }, !!p.legend);
+  }
+  if (!near.length) return null;
+  near.sort((p, q) => p.d - q.d);
+  return near[Math.floor(rand(b) * Math.min(3, near.length))].s;
 }
 
 /** goal: how much further than the nearest cell inside the ring a bot may aim. */
