@@ -665,8 +665,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
    *  running for a few frames first) and done. One that never fades waits FADE_IN_WAIT. */
   // A screen's fades, and all that comes before the page shows it, run at HURRY_SPEED and
   // quiet: from a tap to the PARTY was 1.46 s (Cam, 2026-11-01, "there is always a delay").
-  const hurryOn = () => { emu.setSpeed(HURRY_SPEED); setVolume(0); };
-  const hurryOff = () => { emu.setSpeed(1); setVolume(volume); };
+  const hurryOn = () => { emu.setSpeed(HURRY_SPEED); quieten(true); };
+  const hurryOff = () => { emu.setSpeed(1); quieten(false); };
   const settled = async () => {
     if (Number.isNaN(paletteAt)) return;
     hurryOn();
@@ -929,10 +929,13 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     try { return await f(); } finally { turns--; idled = true; sing(); }
   };
   /** The volume the page last asked for (its MUTE), so a hurried start can go quiet and
-   *  come back to it. */
+   *  come back to it. Asked for while quiet, it waits: Sound on during a catching up was the
+   *  song at eight times (POK-394). */
   let volume = 100;
+  let quiet = false;
   const setVolume = emu.setVolume.bind(emu);
-  emu.setVolume = (v: number) => { volume = v; setVolume(v); };
+  emu.setVolume = (v: number) => { volume = v; if (!quiet) setVolume(v); };
+  const quieten = (on: boolean) => { quiet = on; setVolume(on ? 0 : volume); };
   async function battle(fog: boolean, kick: () => void, going: () => boolean, over: () => boolean, onStart: () => void, after: () => Omit<Fought, 'ok'>, hurry = true): Promise<Fought> {
     if (broken) throw new Error('the parked ROM could not be restored');
     // Stopped by the stuck-fight net while it waited its turn: it never starts.
@@ -987,7 +990,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     // quiet, so the battle is up in a beat and not a second and a half later with the
     // player standing still (Cam, 10-31). Not a link battle: its blocks keep the other
     // side's time.
-    if (hurry) { emu.setSpeed(HURRY_SPEED); setVolume(0); }
+    if (hurry) { emu.setSpeed(HURRY_SPEED); quieten(true); }
     let shown = false;
     try {
       const took = await until(emu, () => going() || aborted(), 600);
@@ -997,7 +1000,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       shown = took && !aborted() && !over() && await until(emu, () => emu.read(mainFunc, 32) !== 0 || aborted(), 600) && !aborted();
       if (!shown && !aborted()) console.warn('spike: no battle', { took, ask: [...emu.bytes(askAt, 8)], fighting: emu.read(fightAt + 2, 8), callback2: emu.read(sym('gMain') + 4, 32).toString(16) });
     } finally {
-      if (hurry) { emu.setSpeed(1); setVolume(volume); }
+      if (hurry) { emu.setSpeed(1); quieten(false); }
     }
     count();
     lastStart = { ms: performance.now() - t0, frames: n };
@@ -1075,7 +1078,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         fightStep = 0;
         // Nothing holds it now: BrMusic_Tick finds the wrong song playing and puts the route's on.
         emu.write(musicAt + 8, 0, 8);
-        setVolume(volume);
+        quieten(false);
         return;
       }
       if (!singing || turns) return;
@@ -1093,7 +1096,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       // song; then, with its tracks running, `waiting` up, which holds it for as long as it plays.
       const taken = emu.read(musicAt + 10, 16) === 0;
       if (fightStep === 0) {
-        setVolume(0);
+        quieten(true);
         emu.write(musicAt + 10, MUS_HEAL, 16);
         fightStep = 1;
       } else if (fightStep === 1 && taken) {
@@ -1103,7 +1106,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         if (!songOn) fightStep = 0;
         else if (emu.read(sounds[1][0] + 4, 32) & 0xffff) {
           emu.write(musicAt + 8, 1, 8);
-          setVolume(volume);
+          quieten(false);
           fightStep = 3;
         }
       }
@@ -1592,7 +1595,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
           speed = to;
           emu.setSpeed(to);
           // The inner one: quiet for the catching up, then what the page asked for (its MUTE).
-          setVolume(to === CATCH_UP_SPEED ? 0 : volume);
+          quieten(to === CATCH_UP_SPEED);
         };
         const tick = emu.onFrame(() => {
           drain(() => undefined);
