@@ -2236,7 +2236,11 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
       face: { name: seat.name, skin: seat.skin, wins: m?.rec?.wins ?? 0, played: m?.rec?.played ?? 0, best: m?.rec?.best },
       note: seat.alive ? 'IN THE MATCH' : fell.has(at) ? `OUT (${ordinal(placed)})` : 'OUT',
       // The host's KICK holds in the match too, as /classic/'s does (service.ts "kick").
-      ...(room && room.owner === room.you && m && at !== room.you ? { onKick: () => { lobby?.kick(at); close(); } } : {}),
+      ...(room && room.owner === room.you && m && at !== room.you ? {
+        onKick: () => { lobby?.kick(at); close(); },
+        onMakeHost: () => { lobby?.makeHost(at); close(); },
+        onToBot: () => { lobby?.toBot(at); close(); },
+      } : {}),
       ...(out && seat.alive && !seat.isMe ? { onWatch: () => { follow = at; if (zoom < 1) zoom = playZoom(); lobby?.closeSheet(); } } : {}),
       onBack: close,
     };
@@ -4216,6 +4220,8 @@ async function boot(): Promise<void> {
       start: () => sock.start(),
       set: (set) => sock.set(set),
       kick: (id) => sock.kick(id),
+      makeHost: (id) => sock.makeHost(id),
+      toBot: (id) => sock.toBot(id),
       list: () => sock.list(),
       relayUrl: url.replace(/\/world$/, ''),
       // Out of the room for good: its link goes too, or the reload would walk back in.

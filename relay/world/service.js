@@ -12167,6 +12167,11 @@ var Room = class {
       if (cmd.on) {
         for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
       }
+    } else if (cmd.c === "bot") {
+      const a = this.actor(cmd.id);
+      if (!a || a.bot) return;
+      this.letGoOf(a);
+      Object.assign(a, { bot: true, battling: false, foe: 0, meet: void 0, boss: void 0, away: void 0, keys: 0, last: 0, calm: this.tick + GRACE });
     } else if (cmd.c === "wear") {
       const b2 = this.actor(cmd.bot);
       if (!b2?.bot || b2.foughtBy !== cmd.id) return;
@@ -12810,6 +12815,11 @@ var Room = class {
   /** `id` off the map, and everything that waited on them let go. */
   remove(id2) {
     const a = this.actor(id2);
+    this.letGoOf(a, id2);
+    this.actors = this.actors.filter((o) => o.id !== id2);
+  }
+  /** Everything that waited on trainer `id`, who has no page to answer for it now. */
+  letGoOf(a, id2 = a?.id ?? 0) {
     const foe = a?.foe ? this.actor(a.foe) : void 0;
     if (foe?.bot) foe.battling = false;
     for (const o of this.actors) if (o.meet?.foe === id2) this.unmeet(o);
@@ -12820,7 +12830,6 @@ var Room = class {
     }
     for (const e of this.events) if (e.trader?.busy === id2) e.trader.busy = 0;
     for (const h of this.homes) if (h.busy === id2) h.busy = 0;
-    this.actors = this.actors.filter((o) => o.id !== id2);
   }
   /** A bot is beaten (by `by`, '' the fog): out of the match and off the map, its team and
    *  purse in a bag where it stood, as the live bots' eliminate() drops theirs. */
@@ -13912,6 +13921,12 @@ var Host = class {
     this.players.delete(id2);
     this.pending.push({ c: "leave", id: id2 });
   }
+  /** The trainer plays on as a bot, the phone that had them gone (the host's REPLACE WITH BOT). */
+  toBot(id2) {
+    if (!this.players.delete(id2)) return;
+    this.brains.set(id2, { rng: id2 * 2654435761 >>> 0 || 1, wait: 30, dir: 1 });
+    this.pending.push({ c: "bot", id: id2 });
+  }
   /** How many inputs a phone has sent that no frame has used yet. */
   backlog(id2) {
     return this.players.get(id2)?.queue.length ?? 0;
@@ -14486,6 +14501,19 @@ var WorldService = class {
           this.drop(p);
           p.kicked = true;
           this.send(p.link, { t: "kicked" });
+        } else if (m.t === "host") {
+          const p = room.members.get(Number(m.id));
+          if (phone.id !== room.owner || !p || p === phone || p.away) return;
+          room.owner = p.id;
+          this.opts.log(`room ${room.code}: host ${who(phone)} stood down, ${who(p)} promoted`);
+          this.roster(room);
+        } else if (m.t === "bot") {
+          const p = room.members.get(Number(m.id));
+          if (phone.id !== room.owner || !p || p === phone) return;
+          this.opts.log(`room ${room.code}: ${who(p)} removed by host`);
+          this.drop(p, true);
+          p.kicked = true;
+          this.send(p.link, { t: "kicked" });
         } else if (m.t === "team") {
           const mons = teamOf(m.mons);
           if (!mons) return;
@@ -14581,12 +14609,13 @@ var WorldService = class {
     };
   }
   /** A phone gone for good: out of its room, and its trainer out of the match. */
-  drop(p) {
+  drop(p, toBot = false) {
     const room = this.where.get(p.id);
     this.where.delete(p.id);
     if (!room) return;
     room.members.delete(p.id);
-    room.host?.leave(p.id);
+    if (toBot) room.host?.toBot(p.id);
+    else room.host?.leave(p.id);
     room.streams.delete(p.id);
     this.closeLog(room, p.id);
     this.eyes(room, p.watching);
@@ -14945,4 +14974,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "5ad626f6697f";
+export const WORLD_HASH = "11bf62773e64";

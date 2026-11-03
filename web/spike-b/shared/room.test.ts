@@ -217,6 +217,44 @@ describe('comings and goings', () => {
   });
 });
 
+describe('REPLACE WITH BOT', () => {
+  it('leaves their trainer standing, walking as a bot, on every mirror, and lets go of what they were doing', () => {
+    const host = new Host(makeRoom(MAPS, PATCHES, 99), 0, MAPS);
+    const mirror = makeRoom(MAPS, PATCHES, 99);
+    const run = (n: number) => { for (let i = 0; i < n; i++) { play(mirror, host.advance().frame); expect(mirror.hash()).toBe(host.room.hash()); } };
+    const a = host.join('A', 0, { map: 'MAP_ROUTE101', x: 8, y: 10 }), b = host.join('B', 1, { map: 'MAP_ROUTE101', x: 3, y: 3 });
+    host.lock();
+    run(2);
+    for (const room of [host.room, mirror]) {
+      Object.assign(room.actor(a)!, { battling: true, foe: b });
+      Object.assign(room.actor(b)!, { battling: true, foe: a });
+    }
+    const before = { ...host.room.actor(a)!.m.spot };
+    host.toBot(a);
+    run(1);
+    const t = host.room.actor(a)!;
+    expect(t.bot).toBe(true);
+    expect(t.battling).toBe(false);
+    expect(t.foe).toBe(0);
+    expect(t.name).toBe('A');
+    expect(t.m.spot).toEqual(before);
+    // The other's page ends their side, its foe gone.
+    expect(host.room.actor(b)!.battling).toBe(true);
+    host.end(b);
+    run(1);
+    // A second word on it changes nothing; a page's late one finds nobody.
+    host.toBot(a);
+    host.input(a, 1, [KEY_UP]);
+    let moved = false;
+    for (let i = 0; i < 2000 && !moved; i++) {
+      run(1);
+      const s = host.room.actor(a)?.m.spot;
+      moved = !s || s.x !== before.x || s.y !== before.y;
+    }
+    expect(moved, 'it walks').toBe(true);
+  });
+});
+
 describe('late keys', () => {
   // The relay's walk is the thumb's: whenever the phone's inputs arrive (bunched, late,
   // after a dry spell), the relay's trainer ends where the phone's own replay of the same

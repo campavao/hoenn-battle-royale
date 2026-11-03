@@ -28,7 +28,7 @@ export const FILE_SECONDS = {
   'results-scroll.spec.ts': 2,
   'spikeb-menu.spec.ts': 149,
   'spikeb-windows.spec.ts': 452,
-  'spikeb-room.spec.ts': 81,
+  'spikeb-room.spec.ts': 110,
   'spikeb.spec.ts': 568,
   'spikeb-two.spec.ts': 102,
   'spikeb-passcode.spec.ts': 9,

@@ -40,6 +40,43 @@ test('a reload mid-match comes back as the same trainer, not a new one', async (
   expect(await s(page, (s) => s.link.me)).toBe(me);
 });
 
+test("the host's card on a trainer: MAKE HOST hands START on, and REPLACE WITH BOT takes them out of a match with a bot in their place", async ({ browser }) => {
+  test.setTimeout(420_000);
+  const [hc, gc] = [await browser.newContext({ viewport: { width: 1280, height: 720 } }), await browser.newContext()];
+  const [host, guest] = [await hc.newPage(), await gc.newPage()];
+  await host.goto(`/?rom=${romHashParam()}#host`);
+  await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 90_000 });
+  await guest.goto(`/?rom=${romHashParam()}${new URL(host.url()).hash}`);
+  await expect(host.locator('#room-roster li', { hasText: 'CAM' })).toHaveCount(2, { timeout: 90_000 });
+  const card = (page: Page, n: number) => page.locator('#room-roster li').nth(n).locator('button').click({ force: true });
+  await expect(guest.locator('#room-start')).toHaveCount(0);
+  await card(host, 1);
+  await expect(host.locator('#seat-host')).toBeVisible();
+  if (process.env.HOST_SHOT) await host.screenshot({ path: process.env.HOST_SHOT });
+  await host.locator('#seat-host').click();
+  await expect(guest.locator('#room-start')).toBeEnabled({ timeout: 10_000 });
+  await expect(host.locator('#room-start')).toHaveCount(0);
+  // Back again, then the match.
+  await card(guest, 0);
+  await expect(guest.locator('#seat-host')).toBeVisible();
+  await guest.locator('#seat-host').click();
+  await expect(host.locator('#room-start')).toBeEnabled({ timeout: 10_000 });
+  await host.locator('#room-start').click();
+  for (const p of [host, guest]) {
+    await p.waitForFunction(() => { const s = (window as any).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 180_000 });
+  }
+  const id = await guest.evaluate(() => (window as any).__spike.link.me);
+  const standing = () => host.evaluate((id) => { const a = (window as any).__spike.link.room.actor(id); return a ? { bot: a.bot, name: a.name } : null; }, id);
+  const was = await standing();
+  expect(was?.bot).toBe(false);
+  await host.evaluate((id) => (window as any).__spike.lobby.toBot(id), id);
+  await expect.poll(async () => (await standing())?.bot, { timeout: 15_000 }).toBe(true);
+  expect((await standing())?.name).toBe(was?.name);
+  await expect(guest.getByText('The host took you out of the room.')).toBeVisible({ timeout: 15_000 });
+  await hc.close();
+  await gc.close();
+});
+
 test('out of the match, the strip names who is watched, and the D-pad steps to the next', async ({ browser }) => {
   test.setTimeout(300_000);
   const ctx = await browser.newContext({ viewport: devices['Pixel 7'].viewport, isMobile: true, hasTouch: true });

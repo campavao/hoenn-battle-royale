@@ -146,6 +146,9 @@ export interface SeatModel {
   note?: string;
   onWatch?(): void;
   onKick?(): void;
+  /** The host's others (POK-381), on a row of their own: both labels are long. */
+  onMakeHost?(): void;
+  onToBot?(): void;
   onBack(): void;
 }
 
@@ -172,6 +175,11 @@ export function seatScreen(model: () => SeatModel): DrawnScreen {
       ];
       const pressable = paintButtons(c, y, buttons);
       widgets.push(pressable[pressable.length - 1], ...pressable.slice(0, -1));
+      const host: ButtonSpec[] = [
+        ...(m.onMakeHost ? [{ label: 'MAKE HOST', id: 'seat-host', parent: 'seat-card', onPress: m.onMakeHost }] : []),
+        ...(m.onToBot ? [{ label: 'REPLACE WITH BOT', id: 'seat-bot', parent: 'seat-card', onPress: m.onToBot }] : []),
+      ];
+      if (host.length) widgets.push(...paintButtons(c, y + 28, host));
       return { widgets, containers: [{ id: 'seat-card', cls: 'trainer-card' }] };
     },
   };
