@@ -32,7 +32,7 @@ export const FILE_SECONDS = {
   'spikeb-people.spec.ts': 125,
   'spikeb-windows.spec.ts': 452,
   'spikeb-room.spec.ts': 230,
-  'spikeb.spec.ts': 568,
+  'spikeb.spec.ts': 526,
   'spikeb-two.spec.ts': 102,
   'spikeb-passcode.spec.ts': 9,
   'watch-replay.spec.ts': 110,
@@ -51,7 +51,12 @@ export const FILE_SECONDS = {
 // whole match counted as one seventeenth of spikeb.spec.ts is why one shard ran twice as
 // long as two others (9.1 / 3.7 / 6.3 / 3.6 min, run 41526520443).
 export const SLOW_TESTS = {
-  'a hosted room with bots plays through to its results': 288,
+  // These four from one local run with the simulator on (2026-11-03), not yet ten of CI's.
+  'a hosted room with bots plays through to its results': 246,
+  'a watched bot fight, start to champion: drawn by the page, from one log, on the real relay': 216,
+  "the switch off (WORLD_SIM_BOTS=0): a trainer's page fights the bots on its hidden ROM, and its ROM shows it": 80,
+  // Skipped unless HBR_SIM_SOAK is set.
+  'the standard match: FILL on, default Safari and fog, to a champion, one page': 0,
   'a Safari catch, the drop on the fly map, and out of the Safari': 126,
 };
 export const UNKNOWN_SECONDS = 60;
