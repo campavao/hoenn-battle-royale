@@ -18,6 +18,67 @@ named; when one is created later, put its id at the top of the entry and leave t
 
 ---
 
+## 2026-11-02, Cam, comments on the UI walkthrough (0.3.85, rom dc179db)
+
+Left as comments on https://claude.ai/artifact/T2i2nKQCSynQBHoDKGoCdh, and more are coming: read
+them again with ArtifactComments before starting. 23 threads so far, none of them started. The
+comments give no position inside a picture, so "this text" below is my reading, marked `?`. Screen
+ids are the file names of `web/e2e/ui-tour.spec.ts`'s shots. UI work goes on `ui-walkthrough`;
+anything more than UI gets its own session.
+
+### UI work (this branch)
+
+**Words and rows**
+* `lobbies`: "We don't need to show the sprite name, and what does PASS mean? If it's locked we
+  should show a lock symbol if we have one." `lobby.ts` lobbies' rows swap the row's lock for the
+  word PASS. Look for a lock in the game's art.
+* `lobbies-empty`: "Just say No open rooms." `emptyNote` in `match/lobby.ts`.
+* `pass-entry`: "Remove this text." `?` "Room X is locked. Ask the host for it." or the key hint.
+* `trainer`: "Remove this text and center align options." `?` The right column of the five rows
+  ("sprite and lines", "every match so far"), though two of them are values (OVER MAP, ON).
+* `fog-field`: "I'm not sure we need the per-level messages." "All POKeMON are now Lv. N!",
+  `main.ts` `fogFrame`'s tick. Cam's call: remove or keep.
+* `fog-closed-msg`: "Not sure if we need the fog text now that we can see it easily." `?` "You are
+  in the fog! Safe X" and/or "The fog closes in on X", both in `main.ts`. Cam's call.
+
+**Layout**
+* `menu`: "Make sure the sprites and text are aligned."
+* `safari-battle`: "Reduce the height of these buttons? Feels like a lot of empty space." Safari's
+  four.
+* `chest-pick`: "Fix highlight." The orange focus box runs past the one slot, wider than its window.
+* `field-party`: "Remove the key." `?` The desktop's keys panel (`.bm-keys`). Asked on this one
+  screen, and it is on every window: ask if it goes everywhere.
+* `field-member`: "Make sure this goes responsive when the screen isn't large enough."
+* `rom-summary`: "Make this smaller so it doesn't take up the whole screen, like the battle screen."
+  `#battle.screen` has no size of its own on a desktop, where a battle has `--pic`.
+* `tm-pick`: "Put these on top." `?` "THIEF / Which POKeMON?", beside the slots on a desktop and
+  over them on a phone. Same head on every pick.
+
+**What's drawn**
+* `safari-field`, `bag-drop`: "Why is the bag green? Make it normal colour." Twice. `art.bagSprite()`
+  in `romart.ts`: check which palette it reads first.
+* `safari-field`: "Only the top half of the head is showing on the minimap." `miniFrame`.
+* `field-no-team`: "Show POKeMON sprite and name here instead." The chest's tag says POKeMON:
+  `nameOn` in `main.ts`. The tag draws text only so far.
+* `room-card`: "Can we show the trainer card here?" A seat's card in the room.
+
+**HOW TO PLAY's pictures** (`tools/br/export-howto.py` -> `web/public/ui/howto.png`)
+* `howto-3`: "Make this the center of the screen." `?` Which part: ask.
+* `howto-4`: "Bag is on a ledge." Move it.
+* `howto-5`: "Make each of these screenshots appear in a different area on the map, rather than all
+  at Route 101." Today Safari, Hoenn and Route 101 three times, then the desert.
+* `howto-8`: "Change it to display Rayquaza in the Sky Pillar." Today GROUDON in Route 111's desert.
+
+### More than UI (its own session, to investigate first)
+
+* `drop-team`: "In general, if we long press on something, maybe we get the summary screen? Also
+  make sure long press on controller/keyboard is supported." Windows only hold-press a move today
+  (`wireCell`). A mon on the ground isn't in the party, and SUMMARY is the ROM's reading the party,
+  which is why it's more than UI: find out how to show one that isn't, or build the page's own card,
+  which doesn't have every stat yet (11-02). Then hold on keys and pads for every window.
+
+---
+
 ## 2026-11-01, Cam, two narrated videos (live site, shell 0.3.69, rom e65c2fe)
 
 Desktop, spike B at `/`, quick play. Videos `C:/Users/cam95/hbr-playtests/2026-11-01-1552.mp4`
