@@ -67,6 +67,7 @@ import { Watch } from './watch';
 import { BattleView } from './battleview';
 import { coverScreen, curtainLines, raiseCurtain, type Cover } from './curtain';
 import { frameOf as fxFrame, grassUnderAsh, isFloor, MB_ASHGRASS, SHEETS as FX_SHEETS, stepEffects, type Effect, type FxKind } from './fieldfx';
+import { CHUNK, ChunkCache, WorldFill, chunksOver, type FillFile } from './worldfill';
 import { ROOM_GAP, clampZoom, loadZoom, nextZoom, pickedZoom, roomFloor, saveZoom, wheelSteps, zoomLabel, zoomRange } from './zoom';
 import { closingFade, fieldScale, FADE_COLOR_WORD, FADE_MODE_WORD, FADE_SELECTED, FADE_Y_WORD, FOG_EVA, FOG_EVB, fadeOf, keyPicture } from '../src/field';
 import { PadPrefsControl } from '../src/ui/padprefs';
@@ -152,6 +153,9 @@ function decode(grid: string, cells: number): Uint8Array {
  *  connection's offset along the shared edge (World.landAcross is the same sum backwards). */
 /** The ferry's islands (room.ts islandMaps): not a place to drop. */
 const ISLANDS = new Set<string>();
+/** The maps joined up by their seams: Hoenn's plane, which worldfill.ts carries on past the edges.
+ *  Everything else (the buildings, the islands, the Zone) stands alone on its own border. */
+const MAINLAND = new Set<string>();
 function layout(maps: WorldMap[]): Map<string, Placed> {
   const byId = new Map(maps.map((m) => [m.id, m]));
   const placed = new Map<string, Placed>();
@@ -173,6 +177,7 @@ function layout(maps: WorldMap[]): Map<string, Placed> {
       queue.push(to.id);
     }
   }
+  for (const id of placed.keys()) MAINLAND.add(id);
   // The buildings and caves, each on its own, in rows well east of Hoenn: drawn where the
   // camera follows a trainer in, and never in sight of the outdoors.
   let right = 0, top = Infinity;
@@ -4057,6 +4062,133 @@ function mapUnder(x: number, y: number): Placed | null {
   return best;
 }
 
+// ---- past the edge of a map (POK-431, worldfill.ts) ------------------------------------
+
+let worldFill: WorldFill | null = null;
+/** The sea's metatile (General's), whichever map's tilesets draw it. */
+const SEA_METATILE = 0x170;
+const fillCuts = new ChunkCache<{ cv: HTMLCanvasElement; anims: { sheet: HTMLCanvasElement; states: Uint8Array; cells: number[] }[] }>();
+/** A pattern per look of the sea, and a pattern per block of one forest or ridge: laid in the
+ *  world's coordinates, so they stay on the grid however the camera moves. */
+let seaLooks: { patterns: CanvasPattern[]; states: Uint8Array; tint: string } | null = null;
+const blockPatterns = new Map<number, { pattern: CanvasPattern; tint: string }>();
+/** Milliseconds of a frame to spend cutting chunks: at least one, so a slow phone still gets there. */
+const FILL_CUT_MS = 4;
+
+/** The map that draws a fill cell: its own if the block names one, else any on General. */
+function fillArtOf(ref: string | null): { group: number; num: number } {
+  const p = placed.get(ref ?? 'MAP_LITTLEROOT_TOWN')!;
+  return { group: p.m.group, num: p.m.num };
+}
+
+function seaOf(): typeof seaLooks {
+  if (seaLooks || !art) return seaLooks;
+  const home = fillArtOf(null);
+  const looks = art.metatileLooks(home.group, home.num, SEA_METATILE);
+  if (!looks) return null;
+  const patterns: CanvasPattern[] = [];
+  for (let n = 0; n * TILE < looks.sheet.width; n++) {
+    const c = document.createElement('canvas');
+    c.width = c.height = TILE;
+    c.getContext('2d')!.drawImage(looks.sheet, n * TILE, 0, TILE, TILE, 0, 0, TILE, TILE);
+    patterns.push(ctx.createPattern(c, 'repeat')!);
+  }
+  // Far out the maps are mips of their still ground (mipFor), so the sea's colour is that one's.
+  const still = art.cells(1, 1, () => ({ ...home, id: SEA_METATILE }));
+  seaLooks = { patterns, states: looks.states, tint: tint(still) };
+  return seaLooks;
+}
+
+/** A chunk of cells, cut from the ROM; `null` while there is no art. */
+function cutChunk(f: WorldFill, cx: number, cy: number): { cv: HTMLCanvasElement; anims: { sheet: HTMLCanvasElement; states: Uint8Array; cells: number[] }[] } | null {
+  if (!art) return null;
+  const x0 = cx * CHUNK, y0 = cy * CHUNK;
+  const cv = art.cells(CHUNK, CHUNK, (x, y) => {
+    const m = f.metatile(x0 + x, y0 + y);
+    return m ? { ...fillArtOf(m.ref), id: m.id } : null;
+  });
+  // What moves in it: the water in a coast's pieces, in step with the sea beside it.
+  const moving = new Map<number, { sheet: HTMLCanvasElement; states: Uint8Array; cells: number[] }>();
+  for (let y = 0; y < CHUNK; y++) {
+    for (let x = 0; x < CHUNK; x++) {
+      const m = f.metatile(x0 + x, y0 + y);
+      if (!m || m.ref) continue;
+      let a = moving.get(m.id);
+      if (a === undefined) {
+        const home = fillArtOf(null);
+        const looks = art.metatileLooks(home.group, home.num, m.id);
+        a = looks ? { ...looks, cells: [] } : { sheet: cv, states: new Uint8Array(0), cells: [] };
+        moving.set(m.id, a);
+      }
+      if (a.states.length) a.cells.push(y * CHUNK + x);
+    }
+  }
+  return { cv, anims: [...moving.values()].filter((a) => a.states.length) };
+}
+
+/** The holes in Hoenn and the sea past it, under the maps, in the world's coordinates. False if
+ *  this isn't the plane worldfill.ts covers (a building, the Zone), or the file isn't here yet. */
+function drawFill(vx0: number, vy0: number, vx1: number, vy1: number, far: boolean, step: number): boolean {
+  const f = worldFill;
+  const sea = f ? seaOf() : null;
+  if (!f || !sea || !art) return false;
+  ctx.fillStyle = far ? sea.tint : sea.patterns[sea.states[step]];
+  ctx.fillRect(vx0, vy0, vx1 - vx0, vy1 - vy0);
+  const size = CHUNK * TILE;
+  const { cx0, cy0, cx1, cy1 } = chunksOver(vx0, vy0, vx1, vy1);
+  const t0 = performance.now();
+  let cut = 0;
+  const keyOf = (cx: number, cy: number) => (cy + 4096) * 8192 + cx + 4096;
+  const cutOne = (cx: number, cy: number) => {
+    if (cut > 0 && performance.now() - t0 > FILL_CUT_MS) return undefined;
+    cut += 1;
+    const c = cutChunk(f, cx, cy) ?? undefined;
+    if (c) fillCuts.set(keyOf(cx, cy), c);
+    return c;
+  };
+  for (let cy = cy0; cy <= cy1; cy++) {
+    for (let cx = cx0; cx <= cx1; cx++) {
+      const c = f.chunk(cx, cy);
+      if (c.kind === 'sea') continue;
+      const x = cx * size, y = cy * size;
+      if (c.kind === 'block') {
+        let b = blockPatterns.get(c.block);
+        if (!b) {
+          const fb = f.blocks[c.block]!;
+          const pic = art.cells(2, 2, (ux, uy) => ({ ...fillArtOf(fb.ref), id: fb.ids[(uy << 1) | ux] }));
+          b = { pattern: ctx.createPattern(pic, 'repeat')!, tint: tint(pic) };
+          blockPatterns.set(c.block, b);
+        }
+        ctx.fillStyle = far ? b.tint : b.pattern;
+        ctx.fillRect(x, y, size, size);
+        continue;
+      }
+      const got = fillCuts.get(keyOf(cx, cy)) ?? cutOne(cx, cy);
+      if (!got) continue;
+      if (far) ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(got.cv, x, y, size, size);
+      if (far) { ctx.imageSmoothingEnabled = false; continue; }
+      for (const a of got.anims) {
+        const sx = a.states[step] * TILE;
+        for (const i of a.cells) ctx.drawImage(a.sheet, sx, 0, TILE, TILE, x + (i % CHUNK) * TILE, y + Math.floor(i / CHUNK) * TILE, TILE, TILE);
+      }
+    }
+  }
+  // The next ones a walk comes to, so the edge of the view is never waiting on them.
+  if (performance.now() - t0 < FILL_CUT_MS) {
+    const out = chunksOver(vx0, vy0, vx1, vy1, 1);
+    for (let cy = out.cy0; cy <= out.cy1; cy++) {
+      for (let cx = out.cx0; cx <= out.cx1; cx++) {
+        if ((cy >= cy0 && cy <= cy1 && cx >= cx0 && cx <= cx1) || f.chunk(cx, cy).kind !== 'cells' || fillCuts.get(keyOf(cx, cy))) continue;
+        if (performance.now() - t0 >= FILL_CUT_MS) return true;
+        const c = cutChunk(f, cx, cy);
+        if (c) fillCuts.set(keyOf(cx, cy), c);
+      }
+    }
+  }
+  return true;
+}
+
 function draw(): void {
   const all = actors();
   seamFrame(all);
@@ -4083,10 +4215,19 @@ function draw(): void {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#0d1a14';
   ctx.fillRect(0, 0, W, H);
-  // Past every map's edge the GBA repeats the map's 2x2 border block (Route 101's
-  // trees): tile the block of the map under the camera, aligned to its even coordinates.
   const home = mapUnder(cam.x, cam.y) ?? placed.get('MAP_LITTLEROOT_TOWN')!;
-  if (paint(home) && home.border && z < 0.5) {
+  // Whole-pixel camera at zoom >= 1, so tiles never shimmer.
+  const ox = Math.round(W / 2 - cam.x * z);
+  const oy = Math.round(H / 2 - cam.y * z);
+  const far = z < 0.5;
+  const vx0 = -ox / z, vy0 = -oy / z, vx1 = vx0 + W / z, vy1 = vy0 + H / z;
+  // Hoenn goes on past its maps (drawFill). Everywhere else, past every map's edge the GBA
+  // repeats the map's 2x2 border block (Route 101's trees): tile the block of the map under
+  // the camera, aligned to its even coordinates.
+  ctx.setTransform(z, 0, 0, z, ox, oy);
+  const filled = MAINLAND.has(home.m.id) && drawFill(vx0, vy0, vx1, vy1, far, frame % ANIM_COUNTER_MAX);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (filled) { /* the world is drawn */ } else if (paint(home) && home.border && z < 0.5) {
     // Far out the 32 px block is noise: one flat colour, its average.
     home.borderTint ??= tint(home.border);
     ctx.fillStyle = home.borderTint;
@@ -4098,14 +4239,9 @@ function draw(): void {
     ctx.fillStyle = pat;
     ctx.fillRect(0, 0, W, H);
   }
-  // Whole-pixel camera at zoom >= 1, so tiles never shimmer.
-  const ox = Math.round(W / 2 - cam.x * z);
-  const oy = Math.round(H / 2 - cam.y * z);
   ctx.setTransform(z, 0, 0, z, ox, oy);
   // Far out, each map is drawn from a quarter-size copy averaged once (mip), because
   // nearest-neighbour shrinking turns trees into static and smoothing every frame is slow.
-  const far = z < 0.5;
-  const vx0 = -ox / z, vy0 = -oy / z, vx1 = vx0 + W / z, vy1 = vy0 + H / z;
   const visible: Placed[] = [];
   let painted = 0;
   for (const p of placed.values()) {
@@ -4402,6 +4538,8 @@ async function boot(): Promise<void> {
   const hoenn = new WorldIndex(((await import('./data/world.json')).default as { maps: WorldMap[] }).maps);
   heights = new Heights((map, x, y) => hoenn.world.height(map, x, y));
   placed = layout(hoenn.maps);
+  // Past the maps' edges (worldfill.ts). Until it is here, or if it never comes, the border as ever.
+  void import('./data/world-fill.json').then((d) => { worldFill = new WorldFill(d.default as unknown as FillFile); }).catch((e) => console.warn('[world-fill]', e));
   let files: Awaited<ReturnType<typeof loadRom>>;
   try {
     files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; }, (emu) => importRom(emu, ''), devRomParam());
