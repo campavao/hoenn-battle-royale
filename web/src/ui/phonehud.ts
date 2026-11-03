@@ -428,7 +428,7 @@ export interface PhoneHudDeps {
   /** The field's windows as Cam drew them (11-01): a minimap in place of the fog window, and
    *  PARTY and BAG for the dock. /classic/ passes neither. */
   mini?: { draw(c: EmeraldCanvas, x: number, y: number, size: number): void; key(): string };
-  bumpers?: { onBag(): void; bag(): CanvasImageSource | null; keys?: { party: string; bag: string } };
+  bumpers?: { onBag(): void; bag(): CanvasImageSource | null; keys?: { party: string; bag: string; ctx?: string } };
 }
 
 /** The opaque part of a picture's cell, for fitting an icon by what is drawn. */
@@ -697,9 +697,12 @@ export class PhoneHud {
         if (bump.keys) drawKeycap(c, hintFor('r', bump.keys.bag), DOCK_W - 4, 4);
       });
       // Q and E on a keyboard, the pad's shoulders once a pad is what is being used.
-      if (bump.keys) onHintsChange(() => { this.party.redraw(); this.bag?.redraw(); });
+      if (bump.keys) onHintsChange(() => { this.party.redraw(); this.bag?.redraw(); this.ctx.redraw(); });
       this.ctx = new Win(this.buttons.ctx, CTX_ROUND, CTX_ROUND, (c, redo) => {
-        drawItemFitted(c, this.view?.ctx.item ?? ITEM_MACH_BIKE, CTX_ROUND / 2, CTX_ROUND / 2, 22, redo);
+        // A desktop's says its key over it, so the icon goes under that.
+        const key = bump.keys?.ctx;
+        drawItemFitted(c, this.view?.ctx.item ?? ITEM_MACH_BIKE, CTX_ROUND / 2, CTX_ROUND / 2 + (key ? 5 : 0), key ? 18 : 22, redo);
+        if (key) { const cap = hintFor('select', key); drawKeycap(c, cap, Math.round((CTX_ROUND + measure(cap) + 5) / 2), 1); }
       });
       this.buttons.ctx.classList.add('hud-ctx-round');
     }

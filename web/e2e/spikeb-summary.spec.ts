@@ -131,6 +131,7 @@ test('a long press is its SUMMARY, on the party, a dropped team and a gift: mous
   await page.keyboard.press('x');
   await expect(page.locator('#summary')).toBeHidden();
   // A press is still a press.
+  await page.waitForTimeout(200);
   await slot.click();
   await expect(page.locator('.bm-member')).toBeVisible();
   await page.keyboard.press('x');

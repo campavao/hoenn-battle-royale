@@ -48,7 +48,7 @@ export function eatLiftClick(): void {
   const done = () => {
     removeEventListener('pointerup', done, true);
     removeEventListener('pointercancel', done, true);
-    setTimeout(() => removeEventListener('click', eat, true), 120);
+    setTimeout(() => removeEventListener('click', eat, true), 80);
   };
   addEventListener('pointerup', done, true);
   addEventListener('pointercancel', done, true);
