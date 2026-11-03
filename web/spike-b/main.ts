@@ -965,7 +965,7 @@ function askForget(slot: number, move: number): Promise<number | null> {
       battleEl.classList.remove('panel');
       if (!wasOn) battleEl.classList.remove('on');
       resolve(row);
-    });
+    }, move);
   });
 }
 romAsks.forget = askForget;

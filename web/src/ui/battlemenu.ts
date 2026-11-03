@@ -276,6 +276,15 @@ const PARTY_H = 44;
 const MEMBER_CARD_H = 56;
 const MEMBER_HELD_H = 32;
 const MEMBER_MOVE_H = 56;
+/** A move to lose or to restore (paintUseMove): name, type and power, PP. */
+const USE_MOVE_H = 56;
+/** The forget window's head: the question, and the new move's type and numbers under it. */
+const FORGET_HEAD_H = 40;
+
+/** A move's power as the sheet writes it: "---" for one that does no damage of its own. */
+function powerText(m: MoveInfo): string {
+  return m.power ? String(m.power) : '---';
+}
 const ITEM_POKE_BALL = 4, ITEM_ESCAPE_ROPE = 85, ITEM_POKEBLOCK_CASE = 273, ITEM_TM_CASE = 364;
 const ICON_BOX = 15;
 const SLOT_MENU_PARTY = 2, SLOT_RUN = 3;
@@ -453,7 +462,7 @@ export class BattleMenu {
   private drop: { who: string; rows: PartyMember[]; take(at: number, give?: number): void; close(): void; pick: boolean } | null = null;
   private dropCan: ((m: PartyMember) => boolean) | null = null;
   private dropAt: number | null = null;
-  private forgetting: { name: string; done(row: number | null): void } | null = null;
+  private forgetting: { name: string; move: number; done(row: number | null): void } | null = null;
   private readonly forgetHead: HTMLElement;
   private readonly forgetHeadWin: Win;
   /** Off a battle, which screen BACK leaves from; null in one. */
@@ -652,6 +661,7 @@ export class BattleMenu {
             const v = this.team[i]?.moves[n];
             b.hidden = !v;
             b.setAttribute('aria-disabled', String(!v || v.pp >= v.maxPp));
+            b.setAttribute('aria-label', this.useMoveLabel(n));
             w.show(`${i}|${JSON.stringify(v)}`);
           });
           this.settleFocus(true);
@@ -680,13 +690,10 @@ export class BattleMenu {
     this.forgetHead.className = 'bm-forget-head';
     this.forgetHead.hidden = true;
     this.useMoveBox.appendChild(this.forgetHead);
-    this.forgetHeadWin = new Win(this.forgetHead, MENU_W, 18, (c) => {
-      c.fillRect({ x: 0, y: 0, w: MENU_W, h: 18 }, 'rgba(16,20,24,0.6)');
-      c.drawTextCentred(fitText(`Forget one for ${this.forgetting?.name ?? ''}?`, MENU_W - 8), MENU_W / 2, 3, TEXT_WHITE);
-    });
+    this.forgetHeadWin = new Win(this.forgetHead, MENU_W, FORGET_HEAD_H, (c, redo) => this.paintForgetHead(c, redo));
     for (let n = 0; n < 4; n++) {
       const b = button('bm-pick-move', this.useMoveBox);
-      const w = new Win(b, CELL_W, PARTY_H, (c) => this.paintUseMove(c, n));
+      const w = new Win(b, CELL_W, USE_MOVE_H, (c, redo) => this.paintUseMove(c, n, redo));
       this.useMoveWins.push({ b, w });
       b.addEventListener('click', () => {
         if (this.forgetting && b.getAttribute('aria-disabled') !== 'true') { this.forgetting.done(n); return; }
@@ -851,7 +858,7 @@ export class BattleMenu {
   }
 
   /** A new move and four known: which goes. BACK keeps the four. */
-  openForget(slot: number, name: string, done: (row: number | null) => void): void {
+  openForget(slot: number, name: string, done: (row: number | null) => void, move = 0): void {
     this.fieldHome = 'party';
     this.view = null;
     this.lastMenu = 0;
@@ -860,11 +867,13 @@ export class BattleMenu {
     this.swapFrom = null;
     this.giving = null;
     this.drop = null;
-    this.forgetting = { name, done };
+    this.forgetting = { name, move, done };
     this.team = this.deps.firstMoves?.readParty() ?? [];
     this.memberAt = slot;
     this.forgetHead.hidden = false;
-    this.forgetHeadWin.show(name);
+    const info = move && this.deps.rom ? moveInfo(this.deps.rom, move) : null;
+    this.forgetHead.setAttribute('aria-label', info ? `Forget one for ${name}? ${name}, ${info.typeName}, POWER ${powerText(info)}, ACCURACY ${info.accuracy || '---'}` : `Forget one for ${name}?`);
+    this.forgetHeadWin.show(`${name}|${move}`);
     this.setShown(true);
     this.mode = 'usemove';
     this.layout();
@@ -872,6 +881,7 @@ export class BattleMenu {
       const v = this.team[slot]?.moves[n];
       b.hidden = !v;
       b.setAttribute('aria-disabled', String(!v));
+      b.setAttribute('aria-label', this.useMoveLabel(n));
       w.show(`f${slot}|${JSON.stringify(v)}|${name}`);
     });
     this.settleFocus(true);
@@ -995,14 +1005,51 @@ export class BattleMenu {
     c.drawText(m.item ? m.itemName : 'Holds nothing', m.item ? 36 : 12, 9, m.item ? TEXT_DARK : TEXT_GRAY);
   }
 
-  private paintUseMove(c: EmeraldCanvas, i: number): void {
-    c.drawFrame({ x: 0, y: 0, w: CELL_W, h: PARTY_H });
+  /** One of the four moves a mon could lose (for a TM) or restore PP to (an ETHER): its name,
+   *  its type and power as the battle's own cells show them, and its PP. */
+  private paintUseMove(c: EmeraldCanvas, i: number, redo: () => void): void {
+    c.drawFrame({ x: 0, y: 0, w: CELL_W, h: USE_MOVE_H });
     const slot = this.team[this.memberAt]?.moves[i];
     const info = slot && this.deps.rom ? moveInfo(this.deps.rom, slot.id) : null;
     if (!slot || !info) return;
     const full = !this.forgetting && slot.pp >= slot.maxPp;
-    c.drawText(fitText(info.name, CELL_W - 16), 8, 6, full ? TEXT_GRAY : TEXT_DARK);
-    c.drawText(`PP ${slot.pp}/${slot.maxPp}`, 8, 22, slot.pp === 0 ? TEXT_RED : TEXT_GRAY);
+    c.drawText(fitText(info.name, CELL_W - 16), 8, 4, full ? TEXT_GRAY : TEXT_DARK);
+    drawType(c, info.type, 8, 19, redo);
+    const pow = powerText(info);
+    c.drawText('POWER', CELL_W - 8 - measure(pow) - 6 - measure('POWER'), 20, full ? TEXT_GRAY : TEXT_BLUE);
+    c.drawText(pow, CELL_W - 8 - measure(pow), 20, full ? TEXT_GRAY : TEXT_DARK);
+    c.drawText(`PP ${slot.pp}/${slot.maxPp}`, 8, 35, slot.pp === 0 ? TEXT_RED : full ? TEXT_GRAY : TEXT_DARK);
+  }
+
+  /** The new move a forget window asks about, over the four: its name, type, power and
+   *  accuracy, so the choice is made knowing what is being traded for. */
+  private paintForgetHead(c: EmeraldCanvas, redo: () => void): void {
+    c.fillRect({ x: 0, y: 0, w: MENU_W, h: FORGET_HEAD_H }, 'rgba(16,20,24,0.6)');
+    const f = this.forgetting;
+    if (!f) return;
+    c.drawTextCentred(fitText(`Forget one for ${f.name}?`, MENU_W - 8), MENU_W / 2, 3, TEXT_WHITE);
+    const info = f.move && this.deps.rom ? moveInfo(this.deps.rom, f.move) : null;
+    if (!info) return;
+    const pow = powerText(info), acc = info.accuracy ? String(info.accuracy) : '---';
+    const parts = [['POWER', pow], ['ACCURACY', acc]];
+    const w = 32 + parts.reduce((n, [k, v]) => n + 12 + measure(k) + 6 + measure(v), 0);
+    let x = Math.round((MENU_W - w) / 2);
+    drawType(c, info.type, x, 22, redo);
+    x += 32;
+    for (const [k, v] of parts) {
+      x += 12;
+      c.drawText(k, x, 23, TEXT_WHITE);
+      x += measure(k) + 6;
+      c.drawText(v, x, 23, TEXT_WHITE);
+      x += measure(v);
+    }
+  }
+
+  /** A move's type, power and PP in words, for a screen reader and the tests. */
+  private useMoveLabel(i: number): string {
+    const slot = this.team[this.memberAt]?.moves[i];
+    const info = slot && this.deps.rom ? moveInfo(this.deps.rom, slot.id) : null;
+    return slot && info ? `${info.name}, ${info.typeName}, POWER ${powerText(info)}, PP ${slot.pp}/${slot.maxPp}` : '';
   }
 
   private paintMemberMove(c: EmeraldCanvas, i: number): void {
@@ -1437,8 +1484,8 @@ export class BattleMenu {
     for (const w of this.actionWins) w.size(this.actionW, this.actionH, scale);
     if (this.keysWin) { this.keysWin.size(118, this.keysH, scale); this.keysWin.show('keys'); }
     this.useHeadWin.size(USE_HEAD_W, USE_HEAD_H, scale);
-    this.forgetHeadWin.size(MENU_W, 18, scale);
-    for (const { w } of this.useMoveWins) w.size(CELL_W, PARTY_H, scale);
+    this.forgetHeadWin.size(MENU_W, FORGET_HEAD_H, scale);
+    for (const { w } of this.useMoveWins) w.size(CELL_W, USE_MOVE_H, scale);
     for (const { w } of this.partyCells) w.size(CELL_W, PARTY_H, scale);
     for (const { w, ww, hh } of this.memberWins) w.size(ww, hh, scale);
     if (this.mode === 'bag' || this.mode === 'item') this.layout();
