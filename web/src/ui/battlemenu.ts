@@ -332,6 +332,8 @@ export interface BattleMenuDeps {
   /** USE in the page's bag: `item` out of `pocket`, through the ROM's BAG (ui/bag.ts).
    *  Without it BAG opens the ROM's own screen, as it used to. */
   useItem?(pocket: number, item: number): void;
+  /** A medicine pressed on somebody it would do nothing for. */
+  refused?(): void;
   /** The bag's pockets now, for the frame BAG is tapped (readBattleView reads them after). */
   readBag?(): Map<number, Stack[]>;
   /** The moves up first, with PARTY, BAG and RUN under them and the page's own party screens
@@ -635,6 +637,7 @@ export class BattleMenu {
       const w = new Win(b, CELL_W, PARTY_H, (c) => this.paintSlot(c, i));
       this.partyCells.push({ b, w });
       b.addEventListener('click', () => {
+        if (this.team[i] && this.using && b.getAttribute('aria-disabled') === 'true') this.deps.refused?.();
         if (!this.team[i] || b.getAttribute('aria-disabled') === 'true') return;
         if (this.drop) {
           const first = this.deps.firstMoves;
@@ -715,6 +718,7 @@ export class BattleMenu {
         if (held) { held = false; return; }
         if (this.forgetting && b.getAttribute('aria-disabled') !== 'true') { this.forgetting.done(n); return; }
         const using = this.using;
+        if (using && b.getAttribute('aria-disabled') === 'true') this.deps.refused?.();
         if (!using || b.getAttribute('aria-disabled') === 'true') return;
         const slot = this.memberAt;
         if (this.fieldHome) {
