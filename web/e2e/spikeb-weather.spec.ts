@@ -20,10 +20,11 @@ for (const [seed, mon, mask, name] of [[6, 404, 7, 'KYOGRE in the rain'], [7, 40
     // Somebody to fight with, out of the DAY CARE's chest, as the rung's spec does.
     await page.evaluate(() => { const s = (window as any).__spike, a = s.link.room.actor(s.link.me); a.m = { ...a.m, spot: { map: 'MAP_ROUTE117_POKEMON_DAY_CARE', x: 5, y: 6 }, facing: 2 }; a.calm = 0; });
     await page.waitForTimeout(800);
-    await tap(page, 'z'); await page.waitForTimeout(3000);
-    await tap(page, 'z'); await page.waitForTimeout(1200);
-    await tap(page, 'Enter'); await page.waitForTimeout(2000);
-    for (let i = 0; i < 10 && (await page.evaluate(() => (window as any).__spike.swapping)); i++) { await tap(page, 'x'); await page.waitForTimeout(1500); }
+    for (let i = 0; i < 40 && !(await page.evaluate(() => (window as any).__spike.rom.partyCount())); i++) {
+      if (await page.locator('.bm-slot').first().isVisible()) { await page.locator('.bm-slot').first().click(); await page.waitForTimeout(1500); }
+      else if (!(await page.evaluate(() => (window as any).__spike.swapping))) { await tap(page, 'z'); await page.waitForTimeout(1200); }
+      else await page.waitForTimeout(500);
+    }
     await page.waitForTimeout(1500);
     expect(await page.evaluate(() => (window as any).__spike.rom.partyCount())).toBeGreaterThan(0);
     // The story down in the city, and me a step from its legendary.
@@ -38,13 +39,15 @@ for (const [seed, mon, mask, name] of [[6, 404, 7, 'KYOGRE in the rain'], [7, 40
     await page.waitForTimeout(500);
     expect(await page.evaluate(() => { const s = (window as any).__spike; return s.link.room.weatherAt(s.link.room.actor(s.link.me).m.spot); })).toBe(!mask ? 0 : seed & 1 ? 12 : 13);
     // As the room's A at it does (Room.move): off the ground for the fight, and the page told.
-    await page.evaluate((mon) => {
+    // Against a mon with no weather of its own: KYOGRE's Drizzle and GROUDON's Drought set gBattleWeather
+    // themselves (5 and 96), whatever the field's, so they'd say nothing about the field's.
+    await page.evaluate((LATIAS) => {
       const s = (window as any).__spike, room = s.link.room, a = room.actor(s.link.me);
       const KEY = (1 << 21) + 3 * 16;
       room.picked.set(KEY, a.id);
       a.battling = true;
-      s.startFor({ type: 'legend', tick: room.tick, id: a.id, key: KEY, species: mon, level: 15 });
-    }, mon);
+      s.startFor({ type: 'legend', tick: room.tick, id: a.id, key: KEY, species: LATIAS, level: 15 });
+    }, 407);
     expect(await page.evaluate(() => !!(window as any).__spike.battle)).toBe(true);
     // gBattleWeather: B_WEATHER_RAIN (bits 0-2) or B_WEATHER_SUN (bits 5-6), once the switch-in has run.
     if (mask) await page.waitForFunction((mask) => ((window as any).__spike.rom.battleWeather() & mask) !== 0, mask, { timeout: 60_000 });

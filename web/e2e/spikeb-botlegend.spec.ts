@@ -9,7 +9,7 @@ test.skip(!romExists(), `no ROM at ${romPath()} -- set HBR_ROM or place pokeemer
 /* eslint-disable @typescript-eslint/no-explicit-any */
 test('a hidden ROM fights a bot and a legendary, and the room hears who took it', async ({ page }) => {
   test.setTimeout(420_000);
-  await page.goto(`/?rom=${romHashParam()}#solo&safari=2&fog=900&seed=7`);
+  await page.goto(`/?rom=${romHashParam()}#solo&nosim&safari=2&fog=900&seed=7`);
   await page.locator('#intro-go').click({ timeout: 90_000 });
   await page.waitForFunction(() => { const s = (window as any).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 120_000 });
   await page.waitForFunction(() => !(window as any).__spike.link.room.ring().safari, undefined, { timeout: 60_000 });
