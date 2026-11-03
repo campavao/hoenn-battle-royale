@@ -45,6 +45,11 @@ export type Entry =
    *  relay's hash `want` was not mine, `behind` too far back to play through. */
   | { k: 'net'; t: number; what: 'gap' | 'desync' | 'behind' | 'mirror-end' | 'log-fight'; tick: number; want?: number; got?: number }
   | { k: 'err'; t: number; what: 'console' | 'error' | 'rejection'; msg: string }
+  /** The stuck-fight net (stuck.ts) stopped a fight with no winner: `no-menu` a fight that did not
+   *  reach its first menu, `foe-ended` one whose other trainer stopped fighting me before it did,
+   *  `lost` the room saying I fight while this page had no fight up. `secs` how long, `foe` who
+   *  (0: none). */
+  | { k: 'stuck'; t: number; why: 'no-menu' | 'foe-ended' | 'lost'; foe: number; secs: number; frames?: number }
   | { k: 'spike'; t: number; ms: number }
   | { k: 'vis'; t: number; hidden: boolean };
 
@@ -169,6 +174,10 @@ export class Recorder {
 
   net(what: 'gap' | 'desync' | 'behind' | 'mirror-end' | 'log-fight', tick: number, want?: number, got?: number): void {
     this.push({ k: 'net', t: this.stamp(), what, tick, ...(want === undefined ? {} : { want, got }) });
+  }
+
+  stuck(why: 'no-menu' | 'foe-ended' | 'lost', foe: number, secs: number, frames?: number): void {
+    this.push({ k: 'stuck', t: this.stamp(), why, foe, secs: Math.round(secs), ...(frames === undefined ? {} : { frames }) });
   }
 
   error(what: 'console' | 'error' | 'rejection', msg: string): void {

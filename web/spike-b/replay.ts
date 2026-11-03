@@ -117,6 +117,7 @@ export function replay(file: Playtest, make: (seed: number) => Room, aroundMs = 
       case 'sp': say(e.t, `${e.m.t} ${e.dir} battle ${e.m.battle} (${e.m.data.length} bytes)${e.from ? ` from ${e.from}` : ''}${e.as ? ` as ${e.as}` : ''}`); break;
       case 'net': say(e.t, `link: ${e.what} at tick ${e.tick}${e.want === undefined ? '' : ` (relay ${e.want}, page ${e.got})`}`); break;
       case 'err': say(e.t, `${e.what}: ${e.msg}`); break;
+      case 'stuck': say(e.t, `a fight was stopped with no winner after ${e.secs} s (${e.why}${e.foe ? `, with #${e.foe}` : ''}${e.frames === undefined ? '' : `, ${e.frames} frames`})`); break;
       case 'spike': say(e.t, `frame took ${e.ms} ms`); break;
       case 'vis': say(e.t, e.hidden ? 'tab hidden' : 'tab shown'); break;
     }
