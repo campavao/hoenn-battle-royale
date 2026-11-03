@@ -29,7 +29,7 @@ import { FADE_COLOR_WORD, FADE_Y_WORD, fadeOf } from '../src/field';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 import { CATCH_UP_SPEED, seatBstart, spectatePace } from '../src/match/spectate';
 import { BAG_POSITION_POCKET } from '../src/ui/bag';
-import { withHeld } from './carry';
+import { withHeld, withMove } from './carry';
 import type { SpMsg } from './shared/wire';
 import { readTally, type MatchTally } from '../src/match/tally';
 import type { FameMon } from '../src/ui/results';
@@ -154,7 +154,6 @@ export interface MapLook {
 /** The page has asked already: the ROM's BAG and party are gone through unseen. A screen that
  *  is the ROM's alone (an evolution, the SUMMARY) is shown when it settles. */
 export type MenuWalk =
-  | { to: 'moves'; slot: number }
   | { to: 'use'; pocket: number; item: number; slot?: number; move?: number };
 
 /** What a walk needs the page to ask. `forget`: a new move and four known, which goes, by the
@@ -288,6 +287,8 @@ export interface RomBattles {
   reorder(a: number, b: number): Promise<void>;
   /** This one holds `item` now, 0 for nothing: what it held is not the bag's business here. */
   setHeld(slot: number, item: number): Promise<void>;
+  /** This one knows `move` in `moveSlot`, its PP full: the page's write, as setHeld is. */
+  setMove(slot: number, moveSlot: number, move: number, pp: number): Promise<void>;
   menu(action: number, onStart: () => void, onEnd: () => void, look?: MapLook, walk?: MenuWalk): Promise<{ up: boolean; said: string; flew?: { group: number; num: number; x: number; y: number } }>;
   /** The drop (br_pick.c): the fly map, "Drop where?", opened on `look`, every section a
    *  choice, its own twenty seconds. The section chosen, or 0 when the clock ran out on
@@ -714,29 +715,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
   };
   const screenIs = (cb: number | undefined) => cb !== undefined && ((emu.read(sym('gMain')! + 4, 32) ^ cb) & ~1) === 0;
   const walkMenu = async (walk: MenuWalk, onStart: () => void, onEnd: () => void) => {
-    const tap = async (k: GbaKey) => { emu.press(k); await frames(emu, 3); emu.release(k); await frames(emu, 3); };
     hurryOn();
-    if (walk.to !== 'use') {
-      // The party's row: MOVES under SUMMARY (party_menu.c SetPartyMonFieldSelectionActions).
-      // Its task is up before its screen is, and takes no keys until the fade is done.
-      await until(emu, () => choosing() && screenIs(partyScreen()) && !fade().active, 240);
-      emu.write(partyMenuAt + 9, walk.slot, 8);
-      await tap('a');
-      // Its little menu takes keys once "Do what with this" has printed.
-      await frames(emu, 45);
-      // MOVES says so for a frame (gBrCatch.movesSlot): at full speed, or the page misses it.
-      await tap('down');
-      hurryOff();
-      const partyCb = partyScreen();
-      for (let i = 0; i < 8 && screenIs(partyCb); i++) {
-        await tap('a');
-        await frames(emu, 30);
-      }
-      // Back on the field first: the relearner opens from there (BrCatch_Tick).
-      await until(emu, onField, 300);
-      hurryOff();
-      return;
-    }
     await pickLoop(walk.slot, walk.move, onStart, onEnd);
   };
   /** The ROM's BAG and party, unseen, until the field: who gets it, which move, and each line
@@ -1406,6 +1385,15 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         carried = last = next;
       });
     },
+    setMove(slot, moveSlot, move, pp) {
+      return inTurn(async () => {
+        if (broken) return;
+        const k = carried ?? kept();
+        const next = { ...k, party: withMove(k.party, slot, moveSlot, move, pp) as typeof k.party };
+        keep(next);
+        carried = last = next;
+      });
+    },
     menu(action, onStart, onEnd, look, walk) {
       return onCore(async () => {
         if (broken || !startMenu) return { up: false, said: '' };
@@ -1414,20 +1402,15 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         if (look) lookFrom(look);
         emu.resume();
         drain(() => undefined);
-        // MOVES off the team is noted as it is asked (gBrCatch.movesSlot), for the line its
-        // field says when there is nothing to learn. A on a town on the MAP, with somebody
+        // A on a town on the MAP, with somebody
         // who could learn FLY, is Emerald's own flight (br_map.c, POK-278): BrMap_TakeFlight
         // names the bird in gPartyMenu.slotId, which nothing else on a look writes.
-        let moves = false;
         if (look) emu.write(partyMenuAt + 9, 0xff, 8);
         if (walk?.to === 'use') {
           emu.write(sym('gBagPosition')! + BAG_POSITION_POCKET, walk.pocket, 8);
           emu.write(sym('gBrBag')!, walk.item, 16);
         }
-        const watch = emu.onFrame(() => {
-          drain(() => undefined);
-          if (!Number.isNaN(catchAt) && emu.read(catchAt + 2, 8) !== 0xff) moves = true;
-        });
+        const watch = emu.onFrame(() => drain(() => undefined));
         let flew: { group: number; num: number; x: number; y: number } | undefined;
         const tap = async (k: GbaKey) => { emu.press(k); await frames(emu, 3); emu.release(k); await frames(emu, 3); };
         let up = false;
@@ -1498,8 +1481,6 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
             await frames(emu, 12);
             await tap('b');
           } else back = again;
-          // MOVES with nothing to teach: BrCatch_Tick said so on the hidden field's HUD.
-          if (moves && !again) said = 'No new moves at this level.';
         }
         await frames(emu, 10);
         watch();

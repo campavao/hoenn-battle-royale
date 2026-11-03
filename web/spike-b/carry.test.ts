@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAG_AT, BAG_LEN, arrived, fameTeam, fieldOf, healed, partySettled, partyWhole, rekey, spillOf, tallySince, teamOf, withMoney, withHeld, teamMembers, spillShows } from './carry';
+import { BAG_AT, BAG_LEN, arrived, fameTeam, fieldOf, healed, partySettled, partyWhole, rekey, spillOf, tallySince, teamOf, withMoney, withHeld, withMove, teamMembers, spillShows } from './carry';
 import HMS from '../src/data/hms.json';
 
 describe('rekey', () => {
@@ -264,6 +264,22 @@ describe('what one of them holds', () => {
     const had = one();
     withHeld(had, 0, 0);
     expect(teamMembers(had, 1, () => 'X')[0].item).toBe(13);
+  });
+  it('teaches a move into a slot: its PP full, that slot only, and the checksum whole', () => {
+    const had = one();
+    const was = teamMembers(had, 1, () => 'X')[0];
+    for (const moveSlot of [0, 1, 2, 3]) {
+      const next = withMove(had, 0, moveSlot, 200 + moveSlot, 15 + moveSlot);
+      expect(partyWhole(next, 1), `slot ${moveSlot}`).toBe(true);
+      const m = teamMembers(next, 1, () => 'X')[0];
+      const moves = m.moves;
+      const got = moves.find((x) => x.id === 200 + moveSlot)!;
+      expect(got.pp).toBe(15 + moveSlot);
+      expect(m.species).toBe(was.species);
+      expect(m.item).toBe(was.item);
+      expect((m.ppBonuses >> (moveSlot * 2)) & 3).toBe(0);
+    }
+    expect(teamMembers(had, 1, () => 'X')[0], 'the party it was given alone').toEqual(was);
   });
 });
 
