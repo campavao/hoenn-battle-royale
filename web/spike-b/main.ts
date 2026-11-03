@@ -83,7 +83,7 @@ import { romAsks, type TeamRow } from './rom';
 import { HUD } from '../src/net/hud';
 import { ITEM_MACH_BIKE, MINI_MAP, PhoneHud, fieldMoves, fogPhase, signFor, type FieldMove } from '../src/ui/phonehud';
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
-import { cardFields } from '../src/ui/profile';
+import { seatScreen } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
 import { nameBstart } from '../src/match/spectate';
 import { LEADERS } from './shared/gyms';
@@ -256,7 +256,8 @@ function bagArtOf(): HTMLCanvasElement | null {
 /** A window's size on this screen, CSS pixels to a GBA pixel: a phone's from its width, a
  *  window with a mouse's whole, by its height. */
 function windowScale(): number {
-  return touchPad ? Math.min(2, Math.max(1, innerWidth / 250)) : Math.max(2, Math.min(4, Math.floor(innerHeight / 360)));
+  if (touchPad) return Math.min(2, Math.max(1, innerWidth / 250));
+  return Math.max(1, Math.min(Math.floor(innerWidth / 250), Math.max(2, Math.min(4, Math.floor(innerHeight / 360)))));
 }
 
 // The minimap: the MAP's own picture round where the trainer is, the fog on it, the trainer on
@@ -300,8 +301,9 @@ function miniFrame(a: Actor | undefined): string {
   const s = sheet(gfx);
   if (s) {
     c.imageSmoothingEnabled = false;
-    const w = SHEETS[String(gfx)].w;
-    c.drawImage(s, 0, 0, w, 16, Math.round(at.x - sx - w / 2), Math.round(at.y - sy - 8), w, 16);
+    const { w, h } = SHEETS[String(gfx)];
+    // The head, a frame's lower rows from the top: a person stands at the bottom of their frame.
+    c.drawImage(s, 0, Math.max(0, h - 26), w, 16, Math.round(at.x - sx - w / 2), Math.round(at.y - sy - 8), w, 16);
   }
   return key;
 }
@@ -644,8 +646,18 @@ function nameOn(map: string, x: number, y: number): string {
   const g = link.room.groundAt(map, x, y);
   if (g && !g.gift) return art.itemName(g.item) || '';
   const s = link.room.spillAt(map, x, y);
-  if (s && !s.person) return s.bag.mons?.length && !s.bag.items.length && !s.bag.money ? 'POKéMON' : `${s.name}'s BAG`;
+  if (s && !s.person) {
+    const mons = s.bag.mons ?? [];
+    // A POKeMON alone on the ground says which (Cam, 11-03); the tag draws it too (iconOn).
+    if (mons.length && !s.bag.items.length && !s.bag.money) return `${speciesName(mons[0].species)}${mons.length > 1 ? ` +${mons.length - 1}` : ''}`;
+    return `${s.name}'s BAG`;
+  }
   return '';
+}
+function iconOn(map: string, x: number, y: number): HTMLCanvasElement | null {
+  const s = link.room.groundAt(map, x, y) ? null : link.room.spillAt(map, x, y);
+  const mons = s && !s.person ? s.bag.mons ?? [] : [];
+  return mons.length && !s!.bag.items.length && !s!.bag.money ? monIconOf(mons[0].species) : null;
 }
 /** Where the mouse is, for the tag over what it rests on. */
 let hover: { x: number; y: number } | null = null;
@@ -684,7 +696,7 @@ function tagFrame(): void {
   const g = hit && global({ map: hit.map, x: hit.x, y: hit.y });
   if (!hit || !g) { itemTag.hide(); return; }
   const dpr = devicePixelRatio || 1;
-  itemTag.show(hit.text, ((g.gx * TILE + TILE / 2 - cam.x) * zoom) / dpr + innerWidth / 2, ((g.gy * TILE - cam.y) * zoom) / dpr + innerHeight / 2);
+  itemTag.show(hit.text, ((g.gx * TILE + TILE / 2 - cam.x) * zoom) / dpr + innerWidth / 2, ((g.gy * TILE - cam.y) * zoom) / dpr + innerHeight / 2, iconOn(hit.map, hit.x, hit.y));
 }
 
 /** How long a dug-up item's name holds the box (Cam, 11-01: "the found covers over what
@@ -899,7 +911,7 @@ async function lookAtMap(): Promise<void> {
   const place = await openMapWindow({
     verb: fly ? 'FLY' : null,
     can: (p) => !!spotOf(p),
-    prompt: () => (fly ? safe() : safe() || 'Nobody here can FLY.'),
+    prompt: safe,
     back: true,
   });
   const to = place && spotOf(place);
@@ -1499,7 +1511,7 @@ function tellTeam(): void {
  *  closed once the fog is on the town. */
 async function nurse(): Promise<void> {
   if (!rom || isOut || battle || swapping || asking) return;
-  if (inFogNow()) { say('The fog is here. This CENTER is closed.'); return; }
+  if (inFogNow()) { say('This CENTER is closed.'); return; }
   const c = await ask('HEAL your party?', [['YES', 'yes'], ['NO', '']]);
   if (c !== 'yes' || isOut || !rom) { say('Good luck.'); return; }
   await rom.heal();
@@ -1568,7 +1580,7 @@ async function mart(map: string): Promise<void> {
   if (!rom || !art || isOut || battle || swapping || asking) return;
   const clerk = CLERKS.find((c) => c.map === map);
   if (!clerk) return;
-  if (inFogNow()) { say('The fog is here. This MART is closed.'); return; }
+  if (inFogNow()) { say('This MART is closed.'); return; }
   const a = art;
   const name = (id: number) => a.itemName(id) || `item ${id}`;
   // shop.c's way: the shelf with the money box and what the picked item is, how many on
@@ -2242,7 +2254,6 @@ function leaveMatch(): void {
 /** The live match's sheet (ui/screens.ts sheetScreen) over the game: the room's line,
  *  the strip, the legendary's chip, everybody in it as their sprite (a tap opens their
  *  card: SPECTATE for somebody out), who I watch once out, LEAVE, the settings. */
-let sheetCard: number | null = null;
 let sheetLeave = false;
 const skinOf = new Map<number, number>();
 /** A phone's D-pad and A/B, moved, faded or hidden from the sheet (the live game's). */
@@ -2264,7 +2275,6 @@ watchLeave.addEventListener('click', () => { openSheet(); sheetLeave = true; lob
 function openSheet(): void {
   if (!lobby || !matchOn || lobby.shown) return;
   held.clear();
-  sheetCard = null;
   sheetLeave = false;
   lobby.sheetOver(sheetModel, () => { held.clear(); pressed.clear(); calmUntil = frame + 30; });
   // The sheet's line and seats move with the match: redrawn while it is up.
@@ -2282,24 +2292,21 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
   const secs = Math.ceil(ring.left / 60);
   const left = seats.filter((p) => p.alive).length;
   const strip = `${ring.safari ? 'SAFARI' : (ringMap?.place(ring) || 'HOENN').toUpperCase()}${left ? ` · ${left} left` : ''} · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
-  const card = sheetCard === null ? null : (() => {
-    const seat = seats.find((p) => p.seat === sheetCard);
-    if (!seat) return null;
-    const m = room?.members.find((x) => x.id === seat.seat);
-    const placed = ids.length - res.fallen.findIndex((f) => f.id === seat.seat);
+  const openCard = (at: number) => lobby?.stage.push(seatScreen(() => {
+    const seat = seats.find((p) => p.seat === at)!;
+    const m = room?.members.find((x) => x.id === at);
+    const placed = ids.length - res.fallen.findIndex((f) => f.id === at);
+    const close = () => lobby?.stage.pop();
     return {
-      seat: seat.seat,
-      skin: seat.skin,
-      lines: [
-        { label: 'NAME', value: seat.name },
-        ...(m?.rec ? cardFields({ name: m.name, skin: m.skin, wins: m.rec.wins, played: m.rec.played, best: m.rec.best }) : []),
-        { label: 'NOW', value: seat.alive ? 'IN' : fell.has(seat.seat) ? `OUT (${ordinal(placed)})` : 'OUT' },
-      ],
+      look: 'overlay',
+      face: { name: seat.name, skin: seat.skin, wins: m?.rec?.wins ?? 0, played: m?.rec?.played ?? 0, best: m?.rec?.best },
+      note: seat.alive ? 'IN THE MATCH' : fell.has(at) ? `OUT (${ordinal(placed)})` : 'OUT',
       // The host's KICK holds in the match too, as /classic/'s does (service.ts "kick").
-      canKick: !!room && room.owner === room.you && !!m && seat.seat !== room.you,
-      canWatch: out && seat.alive && !seat.isMe,
+      ...(room && room.owner === room.you && m && at !== room.you ? { onKick: () => { lobby?.kick(at); close(); } } : {}),
+      ...(out && seat.alive && !seat.isMe ? { onWatch: () => { follow = at; if (zoom < 1) zoom = playZoom(); lobby?.closeSheet(); } } : {}),
+      onBack: close,
     };
-  })();
+  }));
   return {
     look: 'overlay',
     status: reconnecting ? 'Reconnecting…' : room ? `Room ${room.code}` : 'SOLO VS BOTS',
@@ -2308,22 +2315,22 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
     match: res.round,
     note: '',
     seats,
-    card,
+    card: null,
     watch: out ? { name: follow && follow !== link.me ? nameOf(follow) : null } : null,
     canLeave: true,
     leaveAsk: sheetLeave,
     muted,
     remapping: remap.on,
     remapLine: remap.line,
-    help: touchPad ? ['Pinch the map to zoom.'] : ['Arrows move  Z: A  X: B  M: MENU', 'R: this sheet  V: spectate  K: mark', '+ -  or the wheel: zoom'],
+    help: touchPad ? ['Pinch the map to zoom.'] : ['Arrows move  Z: A  X: B  M: MENU', 'R: this sheet  V: spectate  K: mark', "SHIFT: a move's details", '+ -  or the wheel: zoom'],
     zoom: zoomLabel(playZoom(), zoomChoices()),
     onZoom: () => { chooseZoom(nextZoom(playZoom(), zoomChoices())); lobby?.stage.redraw(); },
     version: versionLine,
-    onSeat: (seat) => { sheetCard = seat; lobby?.stage.redraw(); },
-    onKick: (seat) => { lobby?.kick(seat); sheetCard = null; lobby?.stage.redraw(); },
-    onCloseCard: () => { sheetCard = null; lobby?.stage.redraw(); },
+    onSeat: openCard,
+    onKick: (seat) => { lobby?.kick(seat); lobby?.stage.redraw(); },
+    onCloseCard: () => {},
     onWatch: (dir) => { watch.step(dir); lobby?.stage.redraw(); },
-    onWatchSeat: (seat) => { follow = seat; if (zoom < 1) zoom = playZoom(); sheetCard = null; lobby?.closeSheet(); },
+    onWatchSeat: (seat) => { follow = seat; if (zoom < 1) zoom = playZoom(); lobby?.closeSheet(); },
     onStopWatch: () => { follow = 0; lobby?.stage.redraw(); },
     onLeave: () => { sheetLeave = true; lobby?.stage.redraw(); },
     onStay: () => { sheetLeave = false; lobby?.stage.redraw(); },
@@ -2348,6 +2355,8 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
  *  how many are left, which way is safe), and PARTY, MAP, START and the room under it. */
 /** br_hud.h BR_HUD_FOG_FRAMES: how long the fog window flashes FOG! on going outside. */
 const BR_HUD_FOG_FRAMES = 60;
+/** A desktop's side-by-side windows, GBA pixels across (their rules in index.html). */
+const DESK_WIDE_W = 480;
 let hudFogged = false;
 let fogFlashTo = 0;
 /** `desk`: a computer's, as /classic/ shows it in the picture (br_hud.c): the place's
@@ -2379,6 +2388,8 @@ function wirePhoneHud(desk = false): void {
     // sort of hidden", and a TM's name in it went unread).
     const s = windowScale();
     document.documentElement.style.setProperty('--s', String(s));
+    // One of them, its moves beside it, is the widest a battle's windows go.
+    document.body.classList.toggle('desk-wide', desk && innerWidth >= DESK_WIDE_W * s);
     hud.setScale(s);
     msgBox.setScale(s);
     itemTag.setScale(s);
@@ -2910,17 +2921,7 @@ function hudFrame(): void {
 function fogFrame(): void {
   const ring = link.room.ring();
   if (ring.phase !== lastPhase) {
-    // The ring phase is the level rung (br_levels.c): the host numbers phases from 1.
-    const rung = rungForPhase(ring.phase + 1);
-    // The ROM's lines for it (br_ring.c, br_levels.c): where it closes, then the level
-    // every POKeMON is at now when the rung moved; the last phase, that it is everywhere.
-    if (lastPhase >= 0 && ring.phase > 0) {
-      if (ring.last) tick('The fog covers all of HOENN!', true);
-      else {
-        tick(`The fog closes in on ${(ringMap?.place(ring) || 'HOENN').toUpperCase()}`, true);
-        if (rung > rungForPhase(lastPhase + 1)) tick(`All POKéMON are now Lv. ${rung}!`, true);
-      }
-    }
+    // No line for the fog or the level any more: the fog is there to see (Cam, 11-03).
     // An event dropped with the ring (DESIGN §Events): the ticker says what and where.
     const evs = link.room.events;
     if (toldEvents > evs.length) toldEvents = 0;
@@ -2945,7 +2946,7 @@ function fogFrame(): void {
     return;
   }
   const fog = inFogNow();
-  if (fog && !wasInFog) { const way = safeWay(); say(`You are in the fog!${way ? ` Safe ${way}` : ''}`); fogTimer = FOG_TICK; }
+  if (fog && !wasInFog) fogTimer = FOG_TICK;
   wasInFog = fog;
   if (!fog || --fogTimer > 0) return;
   fogTimer = FOG_TICK;

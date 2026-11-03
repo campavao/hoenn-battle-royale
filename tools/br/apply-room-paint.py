@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Adds a room painting (web/rooms/, the COPY or SHARE of /rooms/) to room-paint.json, which
+"""Adds a room painting (the COPY or SHARE of the painter that was at /rooms/ until 11-03) to room-paint.json, which
 floors.py lays over what it picks, then rewrites br_balls.c's sRooms, the one table the live
 match and spike B both read, and remakes spike B's rooms.json.
 

@@ -39,7 +39,7 @@ test('a wrong passcode is asked again, and the right one seats the guest', async
     await expect(lobbies).toBeEnabled({ timeout: 90_000 });
     await lobbies.click();
     const row = guest.locator('#lobby-rooms button').first();
-    await expect(row).toContainText('PASS', { timeout: 30_000 });
+    await expect(row).toContainText('LOCKED', { timeout: 30_000 });
     await row.click();
     await expect(guest.locator('#entry-title')).toHaveText('PASSCODE');
     await guest.keyboard.type('ZZZZ');

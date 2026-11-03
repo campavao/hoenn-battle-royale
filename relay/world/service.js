@@ -120,7 +120,7 @@ var init_roster = __esm({
       "ROXANNE",
       "BRAWLY",
       "WATTSON",
-      "FLANNERY",
+      "BRINEY",
       "NORMAN",
       "WINONA",
       "TATE",
@@ -134,7 +134,7 @@ var init_roster = __esm({
       "WALLACE",
       "ARCHIE",
       "MAXIE",
-      "COURTNEY",
+      "STERN",
       "TABITHA",
       "SHELLY",
       "MATT",
@@ -14945,4 +14945,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "8f5bb517bc46";
+export const WORLD_HASH = "5ad626f6697f";

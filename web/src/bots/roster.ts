@@ -70,11 +70,12 @@ export interface Bot {
   y: number;
 }
 
-/** Ten characters is the ROM's name field, and these are read off a HUD at a glance. */
+/** Seven letters at most: the most a trainer's name holds in the ROM (PLAYER_NAME_LENGTH), and
+ *  COURTNEY and FLANNERY showed cut off in every battle (Cam, 11-03). */
 export const NAMES = [
-  'BRENDAN', 'MAY', 'WALLY', 'ROXANNE', 'BRAWLY', 'WATTSON', 'FLANNERY', 'NORMAN',
+  'BRENDAN', 'MAY', 'WALLY', 'ROXANNE', 'BRAWLY', 'WATTSON', 'BRINEY', 'NORMAN',
   'WINONA', 'TATE', 'LIZA', 'JUAN', 'SIDNEY', 'PHOEBE', 'GLACIA', 'DRAKE',
-  'STEVEN', 'WALLACE', 'ARCHIE', 'MAXIE', 'COURTNEY', 'TABITHA', 'SHELLY', 'MATT',
+  'STEVEN', 'WALLACE', 'ARCHIE', 'MAXIE', 'STERN', 'TABITHA', 'SHELLY', 'MATT',
   'RILEY', 'CAMERON', 'DEVON', 'BIRCH', 'LANETTE', 'BILL', 'SCOTT', 'GABBY',
 ];
 

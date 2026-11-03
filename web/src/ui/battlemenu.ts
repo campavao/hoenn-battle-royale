@@ -18,7 +18,7 @@ import { MAIN_CALLBACK2 } from '../field';
 import { effectWords, effectiveness, moveInfo, type MoveInfo, type Rom } from '../battle/movebook';
 import { BATTLE_MENU, MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU_MOVE, MENU_PARTY, MENU_SAFARI, MENU_TARGET, localBattler } from '../touch';
 import { EmeraldCanvas, TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_GREEN, TEXT_RED, TEXT_WHITE, fitText, measure, wrapText, type TextColor } from './emerald';
-import { hintFor, legendRows, onHintsChange } from './hints';
+import { hintFor, onHintsChange } from './hints';
 import { ITEMS_POCKET, Win, bagHolds, drawFitted, drawIcon, drawItemFitted, drawKeycap, picture } from './phonehud';
 import { nextFocus, type Dir } from './focus';
 import { BAG_POCKETS, FIELD_POCKETS, POCKET_BALLS, asksMove, asksWhoInField, isMachine, itemEffect, itemInfo, medicineHelps, takesMachine, readBattleBag, usableInField, usedOnOne, type Stack } from './bag';
@@ -279,8 +279,11 @@ const MEMBER_HELD_H = 32;
 const MEMBER_MOVE_H = 56;
 /** A move to lose or to restore (paintUseMove): name, type and power, PP. */
 const USE_MOVE_H = 56;
-/** The forget window's head: the question, and the new move's type and numbers under it. */
-const FORGET_HEAD_H = 40;
+/** The forget window's head: the question, a move's type and numbers, its description (Cam,
+ *  11-03: "we need a way to see the descriptions of moves"). */
+const FORGET_HEAD_H = 40 + 3 * 14;
+/** The Safari's four: a word and an icon, no more (Cam, 11-03: "a lot of empty space"). */
+const SAFARI_H = 40;
 
 /** A move's power as the sheet writes it: "---" for one that does no damage of its own. */
 function powerText(m: MoveInfo): string {
@@ -696,7 +699,20 @@ export class BattleMenu {
       const b = button('bm-pick-move', this.useMoveBox);
       const w = new Win(b, CELL_W, USE_MOVE_H, (c, redo) => this.paintUseMove(c, n, redo));
       this.useMoveWins.push({ b, w });
+      // Which goes: the mouse on it, the keys on it, or a thumb held on it says what it does.
+      let holding: ReturnType<typeof setTimeout> | null = null;
+      let held = false;
+      const letGo = () => { if (holding) clearTimeout(holding); holding = null; };
+      b.addEventListener('pointerdown', () => {
+        held = false;
+        if (this.forgetting) holding = setTimeout(() => { held = true; this.showForgetDesc(n); }, HOLD_MS);
+      });
+      for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, letGo);
+      b.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') this.showForgetDesc(n); });
+      b.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') this.showForgetDesc(null); });
+      b.addEventListener('contextmenu', (ev) => ev.preventDefault());
       b.addEventListener('click', () => {
+        if (held) { held = false; return; }
         if (this.forgetting && b.getAttribute('aria-disabled') !== 'true') { this.forgetting.done(n); return; }
         const using = this.using;
         if (!using || b.getAttribute('aria-disabled') === 'true') return;
@@ -764,24 +780,7 @@ export class BattleMenu {
     });
     this.movesBtn = rowButton('MOVES', () => TEXT_DARK, (c, cx, cy, redo) => drawItemFitted(c, ITEM_TM_CASE, cx, cy, ICON_BOX, redo), () => first?.field?.moves(this.memberAt));
     this.setPartyHidden();
-    if (first?.keys) {
-      // The keys, by the windows they drive: the keyboard's and a pad's.
-      const el = doc.createElement('div');
-      el.className = 'bm-keys';
-      deps.root.appendChild(el);
-      const keyboard: [string, string][] = [['ARROWS', 'move'], ['Z  A', 'choose'], ['X  B', 'back'], ['Q  L', 'PARTY'], ['E  R', 'BAG'], ['SHIFT', 'details']];
-      const h = keyboard.length * 17 + 8;
-      this.keysWin = new Win(el, 118, h, (c) => {
-        c.fillRect({ x: 0, y: 0, w: 118, h }, 'rgba(16,20,24,0.6)');
-        // The keyboard's caps, or the pad's own button names once a pad is what is in use.
-        legendRows(keyboard).forEach(([k, what], i) => {
-          drawKeycap(c, k, 6 + measure(k) + 5, 5 + i * 17);
-          c.drawText(what, 62, 4 + i * 17, TEXT_WHITE);
-        });
-      });
-      this.keysH = h;
-      onHintsChange(() => { this.keysWin?.redraw(); this.actionWins[0]?.redraw(); this.actionWins[1]?.redraw(); });
-    }
+    if (first?.keys) onHintsChange(() => { this.actionWins[0]?.redraw(); this.actionWins[1]?.redraw(); });
     deps.root.addEventListener('pointerdown', () => {
       if (deps.focusFirst) return;
       this.showFocus = false;
@@ -791,8 +790,9 @@ export class BattleMenu {
   }
 
   private selectBtn: HTMLButtonElement | null = null;
-  private keysWin: Win | null = null;
-  private keysH = 0;
+  /** Which of the four the forget window's head is telling of; null is the new move. */
+  private forgetShown: number | null = null;
+  private forgetMoved = false;
   private actionW = ACTION_W;
   private actionH = BACK_H;
 
@@ -871,12 +871,14 @@ export class BattleMenu {
     this.giving = null;
     this.drop = null;
     this.forgetting = { name, move, done };
+    this.forgetShown = null;
+    this.forgetMoved = false;
     this.team = this.deps.firstMoves?.readParty() ?? [];
     this.memberAt = slot;
     this.forgetHead.hidden = false;
     const info = move && this.deps.rom ? moveInfo(this.deps.rom, move) : null;
     this.forgetHead.setAttribute('aria-label', info ? `Forget one for ${name}? ${name}, ${info.typeName}, POWER ${powerText(info)}, ACCURACY ${info.accuracy || '---'}` : `Forget one for ${name}?`);
-    this.forgetHeadWin.show(`${name}|${move}`);
+    this.forgetHeadWin.show(`${name}|${move}|null`);
     this.setShown(true);
     this.mode = 'usemove';
     this.layout();
@@ -1030,9 +1032,13 @@ export class BattleMenu {
     c.fillRect({ x: 0, y: 0, w: MENU_W, h: FORGET_HEAD_H }, 'rgba(16,20,24,0.6)');
     const f = this.forgetting;
     if (!f) return;
+    // The new move, until one of the four is what's being looked at.
+    const known = this.forgetShown === null ? undefined : this.team[this.memberAt]?.moves[this.forgetShown];
+    const id = known?.id ?? f.move;
+    const info = id && this.deps.rom ? moveInfo(this.deps.rom, id) : null;
     c.drawTextCentred(fitText(`Forget one for ${f.name}?`, MENU_W - 8), MENU_W / 2, 3, TEXT_WHITE);
-    const info = f.move && this.deps.rom ? moveInfo(this.deps.rom, f.move) : null;
     if (!info) return;
+    wrapText(`${info.name}: ${info.desc ?? ''}`, MENU_W - 16).slice(0, 3).forEach((line, i) => c.drawTextCentred(line, MENU_W / 2, 40 + i * 14, TEXT_WHITE));
     const pow = powerText(info), acc = info.accuracy ? String(info.accuracy) : '---';
     const parts = [['POWER', pow], ['ACCURACY', acc]];
     const w = 32 + parts.reduce((n, [k, v]) => n + 12 + measure(k) + 6 + measure(v), 0);
@@ -1078,6 +1084,18 @@ export class BattleMenu {
   private paintFocus(): void {
     for (const b of this.deps.root.querySelectorAll('.bm-focus')) b.classList.remove('bm-focus');
     if (this.showFocus && this.focused?.isConnected) this.focused.classList.add('bm-focus');
+    // The new move first: the keys start on the first row, but nobody has asked about it yet.
+    if (this.forgetting && this.showFocus && this.forgetMoved) {
+      const at = this.useMoveWins.findIndex(({ b }) => b === this.focused);
+      this.showForgetDesc(at < 0 ? null : at);
+    }
+  }
+
+  private showForgetDesc(at: number | null): void {
+    const f = this.forgetting;
+    if (!f) return;
+    this.forgetShown = at;
+    this.forgetHeadWin.show(`${f.name}|${f.move}|${at}`);
   }
 
   /** Back on the first button of whatever is on show, or kept where it was. */
@@ -1092,6 +1110,7 @@ export class BattleMenu {
    *  r, select. False when it is nobody's here, for the ROM. */
   key(k: string): boolean {
     if (!this.shown) return false;
+    this.forgetMoved = true;
     if (!this.showFocus) { this.showFocus = true; this.settleFocus(true); if (k !== 'a' && k !== 'b') return true; }
     if (this.mode === 'bag') return this.bagKey(k);
     if (k === 'up' || k === 'down' || k === 'left' || k === 'right') {
@@ -1473,7 +1492,7 @@ export class BattleMenu {
   setScale(scale: number): void {
     if (!(scale > 0) || scale === this.scale) return;
     this.scale = scale;
-    for (const c of this.cells) c.w.size(CELL_W, CELL_H, scale);
+    for (const c of this.cells) c.w.size(CELL_W, this.cellH(), scale);
     this.backWin.size(MENU_W, BACK_H, scale);
     this.hint.size(MENU_W, 16, scale);
     this.sheetWin.size(INFO_W, this.infoHeight(), scale);
@@ -1485,7 +1504,6 @@ export class BattleMenu {
     this.bagBackWin.size(BAG_BACK_W, BACK_H, scale);
     this.bagUseWin.size(MENU_W - BAG_BACK_W - GAP, BACK_H, scale);
     for (const w of this.actionWins) w.size(this.actionW, this.actionH, scale);
-    if (this.keysWin) { this.keysWin.size(118, this.keysH, scale); this.keysWin.show('keys'); }
     this.useHeadWin.size(USE_HEAD_W, USE_HEAD_H, scale);
     this.forgetHeadWin.size(MENU_W, FORGET_HEAD_H, scale);
     for (const { w } of this.useMoveWins) w.size(CELL_W, USE_MOVE_H, scale);
@@ -1606,6 +1624,7 @@ export class BattleMenu {
       b.setAttribute('aria-disabled', String(!enabled));
       const m = moves ? this.moveInfoAt(i) : null;
       b.setAttribute('aria-label', moves ? (m ? `${m.name}, ${m.typeName}, PP ${slot!.pp}/${slot!.maxPp}` : 'No move') : (labels[i]?.label ?? ''));
+      if (w.c.height !== this.cellH()) w.size(CELL_W, this.cellH(), this.scale);
       w.show(moves ? `m|${slot?.id}|${slot?.pp}|${slot?.maxPp}|${v?.foe.types}` : `a|${JSON.stringify(labels[i] ?? null)}`);
     });
     this.backBtn.hidden = this.forced ? true : first ? !(bag || party || usemove) : (!moves || info) && !bag;
@@ -1656,9 +1675,14 @@ export class BattleMenu {
     if (root.getBoundingClientRect().bottom > innerHeight) root.classList.add('bm-lift');
   }
 
+  /** How tall a cell is now: a move's four lines, or the Safari's word. */
+  private cellH(): number {
+    return this.deps.firstMoves && this.mode === 'action' ? SAFARI_H : CELL_H;
+  }
+
   private paintCell(c: EmeraldCanvas, i: number, redo: () => void): void {
     const v = this.view;
-    c.drawFrame({ x: 0, y: 0, w: CELL_W, h: CELL_H });
+    c.drawFrame({ x: 0, y: 0, w: CELL_W, h: this.cellH() });
     if (!v) return;
     if (this.mode === 'action') {
       const l = actionLabels(v)[i];
@@ -1668,7 +1692,7 @@ export class BattleMenu {
         return;
       }
       // The Safari's four, in the windows' own look: BALL, POKeBLOCK, GO NEAR, RUN.
-      iconButton(c, CELL_W, CELL_H, (cx, cy, box) => {
+      iconButton(c, CELL_W, SAFARI_H, (cx, cy, box) => {
         if (i === 2) { c.fillRect({ x: cx - 6, y: cy - 1, w: 8, h: 3 }, ARROW_RED); for (let n = 0; n < 5; n++) c.fillRect({ x: cx + 6 - n, y: cy - n, w: 1, h: 2 * n + 1 }, ARROW_RED); }
         else drawItemFitted(c, i === 0 ? ITEM_POKE_BALL : i === 1 ? ITEM_POKEBLOCK_CASE : ITEM_ESCAPE_ROPE, cx, cy, box, redo);
       }, l.label, l.enabled ? TEXT_DARK : TEXT_GRAY);

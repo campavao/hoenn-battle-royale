@@ -62,15 +62,6 @@ async function useFromBag(page: Page, item: number): Promise<void> {
 }
 
 const shot = (page: Page, name: string) => page.screenshot({ path: test.info().outputPath(`${name}.png`) });
-/** The keys' hints sit on no window of the battle's, in whichever of them is up. */
-const keysClear = (page: Page) => page.evaluate(() => {
-  const keys = document.querySelector('.bm-keys')!.getBoundingClientRect();
-  return [...document.querySelectorAll('#battle canvas')]
-    .filter((c) => !c.closest('.bm-keys'))
-    .map((c) => ({ c, b: c.getBoundingClientRect() }))
-    .filter(({ b }) => b.width > 0 && b.left < keys.right && keys.left < b.right && b.top < keys.bottom && keys.top < b.bottom)
-    .map(({ c, b }) => `${c.parentElement!.className} ${Math.round(b.left)},${Math.round(b.top)} ${Math.round(b.width)}x${Math.round(b.height)}`);
-});
 const leadIndex = (page: Page) => spike(page, (s) => s.rom.emu.read(s.art.sym('gBattlerPartyIndexes'), 16));
 
 test('by the keys alone: moves first, PARTY and one of them, sent out, BAG, a move', async ({ browser }) => {
@@ -87,13 +78,11 @@ test('by the keys alone: moves first, PARTY and one of them, sent out, BAG, a mo
   await shot(page, 'desk-battle');
   // The hidden ROM's card and swirl run quiet and fast; the sound comes back for the fight.
   await expect.poll(() => spike(page, (s) => s.rom.emu.m.getVolume()), { message: "the battle's sound" }).toBe(1);
-  expect(await keysClear(page), 'the moves').toEqual([]);
 
   // The moves are up, with the focus on the first.
   await expect(page.locator('.bm-cell')).toHaveCount(4);
   await expect(page.locator('.bm-cell').first()).toHaveClass(/bm-focus/);
   await expect(page.locator('.bm-actions')).toBeVisible();
-  await expect(page.locator('.bm-keys')).toBeVisible();
   // ...and the arrows go where the screen says: right, right to PARTY in its column.
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('.bm-cell').nth(1)).toHaveClass(/bm-focus/);
@@ -107,12 +96,10 @@ test('by the keys alone: moves first, PARTY and one of them, sent out, BAG, a mo
   await expect(page.locator('.bm-slot')).toHaveCount(6);
   await expect(page.locator('.bm-slot').first()).toBeVisible();
   await shot(page, 'desk-party');
-  expect(await keysClear(page), 'the party').toEqual([]);
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('z');
   await expect(page.locator('.bm-member')).toBeVisible();
   await shot(page, 'desk-member');
-  expect(await keysClear(page), 'one of them').toEqual([]);
   expect(await leadIndex(page)).toBe(0);
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('ArrowRight');
@@ -134,7 +121,6 @@ test('by the keys alone: moves first, PARTY and one of them, sent out, BAG, a mo
   await page.keyboard.press('e');
   await expect(page.locator('.bm-bag-head')).toBeVisible();
   await shot(page, 'desk-bag');
-  expect(await keysClear(page), 'the bag').toEqual([]);
   await page.keyboard.press('x');
   await expect(page.locator('.bm-cell').first()).toBeVisible();
 
@@ -805,7 +791,6 @@ test('the key hints are the pad\'s once a pad is what was last used, and the key
   expect(await padLast(), 'a key of the keyboard').toBe(false);
   await expect(page.locator('#keys')).toBeVisible();
   await intoBattle(page);
-  await expect(page.locator('.bm-keys')).toBeVisible();
   await snap('battle-keyboard');
   await tapPad(14);
   expect(await padLast()).toBe(true);

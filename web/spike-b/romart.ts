@@ -58,6 +58,9 @@ export function lz77(rom: Uint8Array, at: number): Uint8Array {
   return out;
 }
 
+/** bag.pal's ramp from light to dark and its highlight, in brown. */
+const BAG_LEATHER = [[238, 200, 136], [222, 176, 112], [198, 148, 88], [172, 122, 70], [142, 98, 54], [112, 74, 40], [84, 54, 30], [56, 34, 18], [28, 16, 8], [255, 228, 170]];
+
 /** BGR555 to the 8-bit RGBA the canvas wants, packed little-endian for a Uint32Array. */
 function rgba(c: number): number {
   const r = (c & 31) << 3, g = ((c >> 5) & 31) << 3, b = ((c >> 10) & 31) << 3;
@@ -465,6 +468,9 @@ export class RomArt {
     const tiles = lz77(this.rom, at - ROM), pal = lz77(this.rom, palAt - ROM);
     const colours: number[] = [];
     for (let c = 0; c < 16; c++) colours.push(rgba(pal[c * 2] | (pal[c * 2 + 1] << 8)));
+    // The ROM's bag is green, its ten greens at 1..10: a leather one instead (Cam, 11-03). The
+    // grays of its buckles stay.
+    BAG_LEATHER.forEach(([r, g, b], i) => { colours[i + 1] = (0xff << 24) | (b << 16) | (g << 8) | r; });
     const cv = document.createElement('canvas');
     cv.width = cv.height = 64;
     const ctx = cv.getContext('2d')!;

@@ -18,6 +18,121 @@ named; when one is created later, put its id at the top of the entry and leave t
 
 ---
 
+## 2026-11-02, Cam, comments on the UI walkthrough (0.3.85, rom dc179db)
+
+Left as comments on https://claude.ai/artifact/T2i2nKQCSynQBHoDKGoCdh, and more are coming: read
+them again with ArtifactComments before starting. 32 threads so far, none of them started. The
+comments give no position inside a picture, so "this text" below is my reading, marked `?`. Screen
+ids are the file names of `web/e2e/ui-tour.spec.ts`'s shots. UI work goes on `ui-walkthrough`;
+anything more than UI gets its own session.
+
+**Status, 11-03:** the list below is built, as asked, except SUMMARY's size and long press for a mon, which went to the battle session with its rebuilt SUMMARY. The `Seen on the tour` section has had no call from Cam and is untouched.
+
+### UI work (this branch)
+
+**Words and rows**
+* `lobbies`: "We don't need to show the sprite name, and what does PASS mean? If it's locked we
+  should show a lock symbol if we have one." `lobby.ts` lobbies' rows swap the row's lock for the
+  word PASS. Look for a lock in the game's art.
+* `lobbies-empty`: "Just say No open rooms." `emptyNote` in `match/lobby.ts`.
+* `pass-entry`: "Remove this text." Cam: "Ask the host for it". `lobby.ts` has it twice (`askPass`,
+  and the row's `passEntry`).
+* `trainer`: "Remove this text and center align options." The right column of the five rows goes.
+  Cam, on BATTLE BACKDROP's value: "change the option text when that is true. No Backdrop vs
+  Backdrop." SEND PLAY COUNT's ON/OFF needs the same treatment.
+* `fog-field`: "I'm not sure we need the per-level messages." "All POKeMON are now Lv. N!",
+  `main.ts` `fogFrame`'s tick. Cam: cut.
+* `fog-closed-msg`: "Not sure if we need the fog text now that we can see it easily." Cam: "'The fog
+  is here' text, and more generally all of them now that we can easily see the fog." Goes: "You
+  are in the fog! Safe X", "The fog closes in on X". The CENTER and MART lines still need to say
+  closed, or A does nothing: "This CENTER is closed."
+* `mini-map`: "I don't think we need the text 'Nobody here can FLY', seems odd." `main.ts`
+  `lookAtMap`'s prompt. Greyed FLY says it.
+* `trainer-party`: "Make sure the full trainer name is seen here, this looks to be cut off."
+  COURTNE: a name is 7 letters everywhere the ROM has it (`short` in `match/ticker.ts`, `name[8]` in
+  `br_bot.h`), and the ROM's own "TRAINER COURTNE would like to battle!" too. Only COURTNEY and
+  FLANNERY are over (`NAMES` in `bots/roster.ts`). Cam: swap those two bots for BRINEY and STERN.
+
+**Layout**
+* `menu`: "Make sure the sprites and text are aligned."
+* `safari-battle`: "Reduce the height of these buttons? Feels like a lot of empty space." Safari's
+  four.
+* `chest-pick`: "Fix highlight." The orange focus box runs past the one slot, wider than its window.
+* `field-party`: "Remove the key." The desktop's keys panel (`.bm-keys`), everywhere (Cam: yeah).
+  It is the only place SHIFT for a move's details is written down.
+* `field-member`, `battle-member`: "Make sure this goes responsive when the screen isn't large
+  enough"; "Likely can default to mobile styling, otherwise it gets cut off." `main.ts` picks the
+  layout by the kind of pointer (`touchPad`, `wirePhoneHud(true)`), never by width, so a narrow
+  window with a mouse gets the wide one. Not reproduced yet: it fit at 1280x720. Find the width.
+* `sheet-card`: "This screen can replace the lobby screen instead of a dialog on top." With
+  `room-card` below: a seat opens a whole screen, not a box over the list.
+* `rom-summary`: "Make this smaller so it doesn't take up the whole screen, like the battle screen."
+  `#battle.screen` has no size of its own on a desktop, where a battle has `--pic`.
+* `tm-pick`: "Put these on top." Cam: "THIEF / Which POKeMON?" goes over the options on a desktop
+  too, not to their left. Same head on every pick.
+
+**What's drawn**
+* `safari-field`, `bag-drop`: "Why is the bag green? Make it normal colour." Twice. `art.bagSprite()`
+  in `romart.ts`: check which palette it reads first.
+* `safari-field`: "Only the top half of the head is showing on the minimap." `miniFrame`.
+* `field-no-team`: "Show POKeMON sprite and name here instead." The chest's tag says POKeMON:
+  `nameOn` in `main.ts`. The tag draws text only so far.
+* `room-card`: "Can we show the trainer card here?" A seat's card in the room. A bot has no record
+  (`m.rec`) to show.
+* `tm-forget`: "We need a way to see the descriptions of moves." The battle's hold has them
+  (`wireCell`, `info`); the forget window shows power and accuracy only.
+* `crown-3`: "We don't need to show the level here." The ROM's Hall of Fame, `hall_of_fame.c`'s
+  `gText_Level` lines, under the `#if !BR` just below them. A ROM change: agbcc build, a driver, and
+  the release waits for no live match.
+
+**Taken out**
+* `other-rooms`: "I think we can get rid of this screen." `/rooms/`, `rooms-page.ts`, `roompaint.ts`,
+  their tests and spec, the `vite.config.ts` input. First: a painting that was never sent stays on
+  Cam's phone only (COPY or SHARE). `tools/br/room-paint.json` and its apply script stay.
+
+**Questions Cam asked, answered**
+* `stall`: "How do we even get into this state?" `emu/watchdog.ts`: no emulated frame for 3 s, the
+  ROM's heartbeat still for 180 frames, or the core crashing. Added after POK-328's black screen.
+  Takes itself back if the game recovers. Keep it; give it the game's look.
+* `battle-run`: "Why is background showing up here?" The CLASSIC backdrop, which the tour switched
+  on for that shot. Not the default.
+
+**HOW TO PLAY's pictures** (`tools/br/export-howto.py` -> `web/public/ui/howto.png`)
+* `howto-3`: "Make this the center of the screen." Cam: the scene itself: the character is near the
+  top, a little left. Centre on the character.
+* `howto-4`: "Bag is on a ledge." Move it.
+* `howto-5`: "Make each of these screenshots appear in a different area on the map, rather than all
+  at Route 101." Today Safari, Hoenn and Route 101 three times, then the desert.
+* `howto-8`: "Change it to display Rayquaza in the Sky Pillar." Today GROUDON in Route 111's desert.
+
+### More than UI (its own session, to investigate first)
+
+* `drop-team`: "In general, if we long press on something, maybe we get the summary screen? Also
+  make sure long press on controller/keyboard is supported." Windows only hold-press a move today
+  (`wireCell`). A mon on the ground isn't in the party, and SUMMARY is the ROM's reading the party,
+  which is why it's more than UI: find out how to show one that isn't, or build the page's own card,
+  which doesn't have every stat yet (11-02). Then hold on keys and pads for every window. Proposed
+  rule: hold anything for its details. A move's is page-only and could go on this branch with
+  `tm-forget`; a mon's is this session's.
+
+### Seen on the tour, no call from Cam yet
+
+* `land-battle`: a phone on its side: the windows cover the whole fight, neither mon nor HP in view.
+* `watch-no-menu`: out on a phone there is no ☰: `dock.hidden = !mine` in `wirePhoneHud`. No sheet,
+  so no mute, zoom or feedback.
+* `sheet`: TRAINER CARD still opens the ROM's card (`onCard`), taken off START on 11-02. "spike B" is
+  on the last line for every player (`rom.ts`). Twelve rows in no order.
+* `room-no-fill`, `room-playing`, `room-ready`: the note is cut off mid-word.
+* `battle-forced-later`: "Use next POKeMON? Yes/No" stays in the picture behind the party windows.
+  One run caught a frame of it as a solid black shape.
+* `mart-count`, `mart-confirm`, `trade-offer`: the dock drops PARTY and BAG, leaving ☰ alone. The
+  nurse keeps them.
+* Lower: START floats by the trainer and carries SAVE LOG; the MAP is 240 px across on a 390 px
+  phone; the watch strip and SAVE LOG are in the old web look; the place sign never fades;
+  `#solo`'s "Engine preview" card and YOU WIN box are dead for players.
+
+---
+
 ## 2026-11-01, Cam, two narrated videos (live site, shell 0.3.69, rom e65c2fe)
 
 Desktop, spike B at `/`, quick play. Videos `C:/Users/cam95/hbr-playtests/2026-11-01-1552.mp4`

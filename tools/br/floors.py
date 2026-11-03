@@ -22,7 +22,7 @@ the tide out: the high-tide layouts its scripts swap in put some of these cells 
 
 Both stand where floor.py's Pick says: on a floor tile you can walk to from a door, from
 the middle of the room outward, unless Cam has put them somewhere by hand: room-paint.json,
-from the painter at /rooms/ (apply-room-paint.py), goes over what this picks.
+from the room painter, gone since 11-03 (apply-room-paint.py), goes over what this picks.
 
   tools/br/floors.py           print the census
   tools/br/floors.py --write   rewrite sRooms in src/br/br_balls.c
