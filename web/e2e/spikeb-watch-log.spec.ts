@@ -425,3 +425,30 @@ test("a watched fight's song is the ROM's own, and the route's comes back", asyn
   expect(e.waiting).toBe(0);
   expect(e.playing).toBe(route);
 });
+
+test("a fight's song isn't lost to a sound that lands while it starts (CI, 11-03: the route's played on)", async ({ page }) => {
+  test.setTimeout(180_000);
+  const sym = loadSymbols();
+  const rom = fs.readFileSync(romPath());
+  const header = (id: number) => rom.readUInt32LE(sym.gSongTable - 0x08000000 + 8 * id);
+  await page.goto(`/?rom=${romHashParam()}#solo&nobots&safari=600&seed=7`);
+  await page.locator('#intro-go').click({ timeout: 90_000 });
+  await page.waitForFunction(() => { const s = (window as any).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 120_000 });
+  const engine = () => page.evaluate(([music, player]) => {
+    const e = (window as any).__spike.rom.emu;
+    return { playing: e.read(music + 6, 16), waiting: e.read(music + 8, 8), header: e.read(player, 32) >>> 0 };
+  }, [sym.gBrMusic, sym.gMPlayInfo_BGM]);
+  await expect.poll(async () => (await engine()).playing, { timeout: 15_000 }).toBeGreaterThan(0);
+  // As watch.ts on the frames a fight opens: the song asked for, then a send-out's sound after it.
+  await page.evaluate(() => {
+    const w = window as any;
+    let n = 0;
+    w.__asking = setInterval(() => { w.__spike.rom.fightSong(true); if (n++ < 8) w.__spike.rom.sound(13); }, 16);
+  });
+  await page.waitForTimeout(6000);
+  const e = await engine();
+  expect(e.waiting, 'held').toBe(1);
+  expect(e.header, 'the battle\'s song, not the route\'s').toBe(header(476));
+  expect(await page.evaluate(() => (window as any).__spike.rom.emu.m.getVolume()), 'heard').toBe(1);
+  await page.evaluate(() => clearInterval((window as any).__asking));
+});
