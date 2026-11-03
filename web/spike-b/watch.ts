@@ -70,6 +70,12 @@ export function nextAfter(ids: readonly number[], gone: number): number | null {
   return ids.find((id) => id > gone) ?? ids[0] ?? null;
 }
 
+/** One fight, off its BSTART: the battle id is only the two seats, so a rematch has the same
+ *  one, and the seed (the message's first four bytes) tells them apart. */
+export function fightKey(from: number, start: SpMsg): string {
+  return `${from}:${start.battle}:${start.data.slice(0, 4).join()}`;
+}
+
 /** A trainer's sprite is 32 pixels tall on a 16-pixel cell, and the camera sits on the
  *  cell's middle: the head is 24 pixels above it. Two more for air. */
 const HEAD_ABOVE = 26;
@@ -93,6 +99,8 @@ export class Watch {
   private publisher: RomBattles | null = null;
   /** Loot keys looked at already (pickedBy). */
   private seen = new Set<number>();
+  /** Fights whose replay I have gone back into (rejoin), by fightKey. */
+  private rejoined = new Set<string>();
 
   constructor(private host: WatchHost) {
     this.strip = document.getElementById('watch')!;
@@ -136,8 +144,10 @@ export class Watch {
     this.strip.hidden = !on;
     let id = this.host.follow();
     // The trainer watched is out (off the map): on to the next one still in, rather than
-    // a camera left on the cell they fell on until NEXT.
-    if (on && id && !this.host.trainers().some((t) => t.id === id)) {
+    // a camera left on the cell they fell on until NEXT. Not under the replay of the fight
+    // that put them out: the proxy fights at eight times the pace, so the room has it over
+    // while the replay is turns from the end, and moving on would cut it off there.
+    if (on && id && !this.mirroring && !this.host.trainers().some((t) => t.id === id)) {
       id = nextAfter(this.others(), id) ?? 0;
       this.host.setFollow(id);
     }
@@ -181,6 +191,7 @@ export class Watch {
       this.told = 0;
       this.eyes = 0;
       this.queue = [];
+      this.rejoined.clear();
       // What was taken before this page came in is nobody's news.
       this.seen = new Set(link ? link.room.picked.keys() : []);
       if (link) {
@@ -234,12 +245,29 @@ export class Watch {
     void rom.mirror(feed, () => this.battleEl.classList.add('on')).finally(() => {
       this.mirroring = false;
       // Why a replay ended, for a recording of one that stopped mid-fight (Cam 11-01, 14:05).
-      recorder.net('mirror-end', this.told !== watched ? 1 : this.host.link() !== link ? 2 : !this.host.idle() ? 3 : feed.over() ? 4 : 5, from, this.queue.length);
+      const why = this.told !== watched ? 1 : this.host.link() !== link ? 2 : !this.host.idle() ? 3 : feed.over() ? 4 : 5;
+      recorder.net('mirror-end', why, from, this.queue.length);
       this.battleEl.classList.remove('on');
       // Whatever is left of that fight goes with it (its BSTART too, when the ROM never
       // took it).
       if (first && this.queue[0] === head) this.queue.shift();
       while (this.queue.length && this.queue[0].from === from && this.queue[0].m.t !== 'bstart') this.queue.shift();
+      if (why === 5) this.rejoin(link, watched, fightKey(from, head.m), fighter?.name ?? '');
     });
+  }
+
+  /** The replay ended itself and the fight goes on (mirror-end 5): nothing else brings it back,
+   *  the TURNs still coming being the tail of a fight with no start here ("I want to watch this
+   *  battle. It looks like I can't.", Cam, 11-02). The relay sends a new watch the whole fight,
+   *  which the replay catches up on and drops me into where it stands. Once a fight: a replay
+   *  the ROM ended for showing another fight (BR_SPECTATE_CHECK) would only end again. */
+  private rejoin(link: WorldLink, watched: number, fight: string, name: string): void {
+    if (this.rejoined.has(fight)) {
+      this.host.tell(`${name}'s battle can't be shown.`);
+      return;
+    }
+    this.rejoined.add(fight);
+    link.watch(0);
+    link.watch(watched);
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ProxyDuels, type ProxyEmulator } from './proxy';
+import { ProxyDuels, stageForReplay, type ProxyEmulator } from './proxy';
 import { MAILBOX } from '../net/mailbox';
 import { BR_CONT_FLAG, BR_MSG, packSlot } from '../net/slots';
 import type { Msg, PackedMon } from '../net/wire';
@@ -224,6 +224,41 @@ describe('the proxy duel instance', () => {
       frames: 3,
       ranMs: expect.any(Number),
     });
+  });
+
+  it('makes the instance ready for its watchers before each duel goes in', async () => {
+    const inst = fakeInstance();
+    inst.answerWith({ t: 'dresult', seatA: 4, seatB: 7, winner: 1, a: [{ hp: 0, status: 0 }], b: [{ hp: 11, status: 0 }] });
+    const duelsThen: number[] = [];
+    const proxy = new ProxyDuels({
+      boot: async () => inst.emu,
+      mailboxBase: BASE,
+      writeBoot: () => {},
+      wakeFrames: 5,
+      beforeDuel: () => void duelsThen.push(inst.duels),
+    });
+    await settle(proxy.fight({ seat: 4, party: [mon()] }, { seat: 7, party: [mon()] }), inst);
+    expect(duelsThen).toEqual([0]);
+    expect(inst.duels).toBe(1);
+  });
+
+  it('takes the last fight\'s seed and side A\'s four stat badges off it, and nothing else', () => {
+    const SEED = 0x0203bd30, PTR = 0x030059bc, SAVE1 = 0x02025a00;
+    const flags = SAVE1 + 0x1270;
+    const mem = new Map<number, number>([[SEED, 0x2db8bb1f], [PTR, SAVE1], [flags + 0x10c, 0xff], [flags + 0x10d, 0xff], [flags + 0x10b, 0xff], [flags + 0x10e, 0xff]]);
+    stageForReplay({ read: (a) => mem.get(a) ?? 0, write: (a, v) => void mem.set(a, v) }, SEED, PTR);
+    expect(mem.get(SEED), 'the ROM waits on 0 for this fight\'s own').toBe(0);
+    expect(mem.get(flags + 0x10c), 'BADGE01, attack').toBe(0x7f);
+    // BADGE03, 05, 07 go; 02, 04, 06 and 08 stay (08 is what keeps a traded mon obedient).
+    expect(mem.get(flags + 0x10d)).toBe(0b1101_0101);
+    expect(mem.get(flags + 0x10b)).toBe(0xff);
+    expect(mem.get(flags + 0x10e)).toBe(0xff);
+  });
+
+  it('leaves alone what a sidecar from an older build does not name', () => {
+    const writes: number[] = [];
+    stageForReplay({ read: () => 0, write: (a) => void writes.push(a) }, NaN, NaN);
+    expect(writes).toEqual([]);
   });
 
   it('taps A rather than holding it, because a held button is one press', async () => {
