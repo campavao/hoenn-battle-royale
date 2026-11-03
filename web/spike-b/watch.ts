@@ -174,6 +174,11 @@ export class Watch {
     if (next !== null) this.host.setFollow(next);
   }
 
+  /** The trainer watched is in a fight that isn't up: the relay sends a new watch the whole of it. */
+  askAgain(): void {
+    if (this.told && !this.replaying) { const link = this.host.link(); link?.watch(0); link?.watch(this.told); }
+  }
+
   /** A key while spectating: left and right step once somebody is watched. True when
    *  it was taken. */
   key(k: string): boolean {

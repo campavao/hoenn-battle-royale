@@ -45,7 +45,8 @@ export class Tag {
     this.c.resize(w, h + POINT, this.scale);
     this.c.clearAll();
     this.c.drawFrame({ x: 0, y: 0, w, h });
-    if (icon) this.c.drawImageTo(icon, 0, 0, icon.width, icon.height, 6, 3, ICON, ICON);
+    // Its own size, whole pixels: a mon's icon is the box, an item's sheet cell is smaller.
+    if (icon) this.c.drawImageTo(icon, 0, 0, icon.width, icon.height, 6 + (ICON - icon.width >> 1), 3 + (ICON - icon.height >> 1), icon.width, icon.height);
     this.c.drawTextCentred(this.text, icon ? (w + ICON + 6) / 2 : w / 2, Math.floor((h - 14) / 2), TEXT_DARK);
     for (let i = 0; i < POINT; i++) this.c.fillRect({ x: w / 2 - POINT + i, y: h - 1 + i, w: 2 * (POINT - i), h: 1 }, '#5a5a78');
   }

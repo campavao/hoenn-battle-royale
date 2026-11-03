@@ -235,10 +235,19 @@ export function withHeld(party: Uint8Array, slot: number, item: number): Uint8Ar
 
 /** Whether a piece on the ground is drawn. One somebody has taken up is not; a bag I have open
  *  still lies there while I look in it (Cam, 11-02: "seems to disappear while interacting with
- *  it"), but not a legendary or a person, who are in the fight the taking started. */
+ *  it"), but not a legendary, who is in the fight the taking started. A person stays, whoever
+ *  took what they held (Room.spentAt). */
 export function spillShows(s: { legend?: boolean; person?: unknown }, pickedBy: number | undefined, me: number): boolean {
-  if (pickedBy === undefined) return true;
-  return pickedBy === me && !s.legend && !s.person;
+  if (pickedBy === undefined || s.person) return true;
+  return pickedBy === me && !s.legend;
+}
+
+/** What somebody who has given away what they held says (Room.spentAt). Cam, 11-02: "come talk
+ *  to them later to say like, sorry, like, somebody took it". */
+export function spentLine(e: { by: number; busy?: string; beaten?: string }, me: number): string {
+  if (e.beaten !== undefined) return e.beaten ? `${e.beaten} already beat me.` : 'You already beat me.';
+  if (e.busy) return `${e.busy} is fighting me for it.`;
+  return e.by === me ? "That's all I had. Take care of it!" : 'Sorry, somebody took it.';
 }
 
 /** Who in a team could FLY: knows it, or could learn HM02 (br_hm.c BrHm_Slot, Cam's 10-19

@@ -34,7 +34,7 @@ import { over } from './shared/over';
 import { Lobby, me, seeThrough, type RoomInfo } from './lobby';
 import { loadCareer, ordinal, recordMatch } from '../src/match/career';
 import type { MatchTally } from '../src/match/tally';
-import { couldFly, tallySince, teamMembers, PARTY_LEN, spillShows } from './carry';
+import { couldFly, tallySince, teamMembers, PARTY_LEN, spentLine, spillShows } from './carry';
 import { BagPanel } from './bagpanel';
 import { Tag } from './tag';
 import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, startStickLearn, stickKeys, stickLearnStep, type AxisSense, type StickMap } from '../src/pad';
@@ -87,6 +87,7 @@ import { seatScreen } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
 import { nameBstart } from '../src/match/spectate';
 import { LEADERS } from './shared/gyms';
+import uiData from '../src/data/ui.json';
 import { CLERKS, priceOf, shelf } from './shared/marts';
 import { KEY_BIT, type GbaKey } from '../src/emu';
 import { KeyLegend } from '../src/ui/keys';
@@ -643,10 +644,18 @@ const itemTag = new Tag(document.getElementById('item-tag') as HTMLCanvasElement
 /** What is on a cell, as its tag says it. */
 function nameOn(map: string, x: number, y: number): string {
   if (!art) return '';
+  // Somebody with a POKeMON to give or trade says which (Cam, 11-02: "when you walk up to a
+  // person and they have an item or a Pokemon, we show the sprite in the tooltip").
+  const tr = link.room.traderAt(map, x, y);
+  if (tr?.t.species) return speciesName(tr.t.species);
   const g = link.room.groundAt(map, x, y);
-  if (g && !g.gift) return art.itemName(g.item) || '';
+  if (g) return art.itemName(g.item) || '';
   const s = link.room.spillAt(map, x, y);
-  if (s && !s.person) {
+  if (s?.person) {
+    const row = s.bag.items[0], mon = s.bag.mons?.[0];
+    return row ? art.itemName(row.id) || '' : mon ? speciesName(mon.species) : '';
+  }
+  if (s) {
     const mons = s.bag.mons ?? [];
     // A POKeMON alone on the ground says which (Cam, 11-03); the tag draws it too (iconOn).
     if (mons.length && !s.bag.items.length && !s.bag.money) return `${speciesName(mons[0].species)}${mons.length > 1 ? ` +${mons.length - 1}` : ''}`;
@@ -655,9 +664,29 @@ function nameOn(map: string, x: number, y: number): string {
   return '';
 }
 function iconOn(map: string, x: number, y: number): HTMLCanvasElement | null {
-  const s = link.room.groundAt(map, x, y) ? null : link.room.spillAt(map, x, y);
-  const mons = s && !s.person ? s.bag.mons ?? [] : [];
+  const tr = link.room.traderAt(map, x, y);
+  if (tr?.t.species) return monIconOf(tr.t.species);
+  const g = link.room.groundAt(map, x, y);
+  if (g) return itemIconOf(g.item);
+  const s = link.room.spillAt(map, x, y);
+  if (s?.person) return s.bag.items[0] ? itemIconOf(s.bag.items[0].id) : s.bag.mons?.[0] ? monIconOf(s.bag.mons[0].species) : null;
+  const mons = s ? s.bag.mons ?? [] : [];
   return mons.length && !s!.bag.items.length && !s!.bag.money ? monIconOf(mons[0].species) : null;
+}
+/** An item's picture off the sheet the BAG draws from, as a canvas the tag can hold on to. */
+const itemSheet = new Image();
+itemSheet.src = '/ui/items.png';
+const itemIcons = new Map<number, HTMLCanvasElement>();
+function itemIconOf(item: number): HTMLCanvasElement | null {
+  let c = itemIcons.get(item);
+  if (c) return c;
+  if (!itemSheet.complete || !itemSheet.naturalWidth) return null;
+  const { cell, cols } = uiData.itemIcons as { cell: number; cols: number };
+  c = document.createElement('canvas');
+  c.width = c.height = cell;
+  c.getContext('2d')!.drawImage(itemSheet, (item % cols) * cell, Math.floor(item / cols) * cell, cell, cell, 0, 0, cell, cell);
+  itemIcons.set(item, c);
+  return c;
 }
 /** Where the mouse is, for the tag over what it rests on. */
 let hover: { x: number; y: number } | null = null;
@@ -672,6 +701,16 @@ if (matchMedia('(pointer: fine)').matches) {
 function tagFrame(): void {
   const blocked = !art || !link || battle || swapping || asking || casting || battleEl.classList.contains('on');
   let hit: { text: string; map: string; x: number; y: number } | null = null;
+  watchOffer = 0;
+  if (!blocked && spectating && !watch.replaying) {
+    const f = fightOffer();
+    if (f) {
+      watchOffer = f.id;
+      const dpr = devicePixelRatio || 1;
+      itemTag.show('WATCH', ((f.x - cam.x) * zoom) / dpr + innerWidth / 2, ((f.y - cam.y) * zoom) / dpr + innerHeight / 2);
+      return;
+    }
+  }
   if (!blocked) {
     const dpr = devicePixelRatio || 1;
     if (hover) {
@@ -697,6 +736,36 @@ function tagFrame(): void {
   if (!hit || !g) { itemTag.hide(); return; }
   const dpr = devicePixelRatio || 1;
   itemTag.show(hit.text, ((g.gx * TILE + TILE / 2 - cam.x) * zoom) / dpr + innerWidth / 2, ((g.gy * TILE - cam.y) * zoom) / dpr + innerHeight / 2, iconOn(hit.map, hit.x, hit.y));
+}
+
+/** The trainer the WATCH tag is over, for A (0: none up). */
+let watchOffer = 0;
+/** How near the camera, in world pixels, a fight has to be for the tag without a mouse on it. */
+const WATCH_NEAR = 6 * TILE;
+/** The fight a trainer watching could go into (Cam, 11-02: "let's just show a tooltip that says
+ *  watch that will flag to the player"): the one under the mouse, or else the nearest the camera.
+ *  One tag between the two of them, over their heads. */
+function fightOffer(): { id: number; x: number; y: number } | null {
+  const dpr = devicePixelRatio || 1;
+  const mouse = hover ? { x: cam.x + (hover.x * dpr - devW / 2) / zoom, y: cam.y + (hover.y * dpr - devH / 2) / zoom } : null;
+  let best: Actor | null = null;
+  let bestD = Infinity;
+  for (const a of actors()) {
+    if (!a.battling) continue;
+    const p = pixelOf(a);
+    const d = Math.min(mouse ? Math.hypot(p.x + TILE / 2 - mouse.x, p.y - mouse.y) * WATCH_NEAR / (24 / Math.min(1, zoom)) : Infinity, Math.hypot(p.x + TILE / 2 - cam.x, p.y - cam.y));
+    if (d < bestD && d <= WATCH_NEAR) { best = a; bestD = d; }
+  }
+  if (!best) return null;
+  const p = pixelOf(best);
+  const foe = best.foe ? actors().find((o) => o.id === best!.foe) : undefined;
+  const q = foe && Math.hypot(pixelOf(foe).x - p.x, pixelOf(foe).y - p.y) <= 3 * TILE ? pixelOf(foe) : p;
+  return { id: best.id, x: (p.x + q.x) / 2 + TILE / 2, y: Math.min(p.y, q.y) - TILE };
+}
+/** A at the tag: the camera on them, and their fight comes up. */
+function takeWatchOffer(): void {
+  if (follow === watchOffer) watch.askAgain();
+  else { follow = watchOffer; if (zoom < 1) zoom = playZoom(); }
 }
 
 /** How long a dug-up item's name holds the box (Cam, 11-01: "the found covers over what
@@ -1275,6 +1344,7 @@ function startFor(e: RoomEvent): void {
   if (e.type === 'trade') { void (e.gives ? gift(e.n, e.species) : trade(e.n, e.species)); return; }
   if (e.type === 'door') { void door(e.n, e.how, !!e.opened); return; }
   if (e.type === 'guarded') { say(`${e.name} guards it!`); return; }
+  if (e.type === 'spent') { say(spentLine(e, link.me)); return; }
   if (e.type === 'fish') { cast(e.map, e.x, e.y); return; }
   if (e.type === 'ferry') { void ferry(e.to, !!e.home, !!e.briney, e.cable); return; }
   if (e.type === 'cruise') { void cruise(e.say, e.cruise, !!e.bed); return; }
@@ -3687,14 +3757,14 @@ function drawClerks(visible: Placed[]): void {
   }
   // People at home and floor traders (br_balls.c), facing down: a gift-giver's people.
   for (const h of link.room.homes) {
-    const p = !h.gone && placed.get(h.map);
+    const p = placed.get(h.map);
     const img = p && visible.includes(p) ? giftArt(h.n) : null;
     if (p && img) ctx.drawImage(img, (p.gx + h.x) * TILE + (TILE - img.width) / 2, (p.gy + h.y) * TILE + TILE - img.height);
   }
   for (const p of visible) {
-    // The gym leaders nobody has beaten yet, facing down (a beaten one has left the gym).
+    // The gym leaders, beaten or not, facing down.
     for (const l of LEADERS) {
-      if (l.map !== p.m.id || link.room.bossDown(l.n)) continue;
+      if (l.map !== p.m.id) continue;
       l.cells.forEach(([cx, cy], i) => {
         const gfx = l.gfx[i];
         let img = clerkArt.get(gfx);
@@ -3730,7 +3800,8 @@ function drawGround(x0: number, y0: number, x1: number, y1: number): void {
     if (x < x0 - TILE || x > x1 || y < y0 - TILE || y > y1) return;
     ctx.drawImage(img, x + (TILE - img.width) / 2, y + TILE - img.height);
   };
-  for (const g of link.room.ground().values()) if (!link.room.picked.has(g.key)) put(g.gift ? giftArt(g.key) : tinted(g.item), g.map, g.x, g.y);
+  // A gift-giver stands there still when it is gone (Room.spentAt).
+  for (const g of link.room.ground().values()) if (g.gift || !link.room.picked.has(g.key)) put(g.gift ? giftArt(g.key) : tinted(g.item), g.map, g.x, g.y);
   for (const b of link.room.spills.values()) {
     if (!spillShows(b, link.room.picked.get(b.key), link.me)) continue;
     // An event's legendary stands as itself (br_legend.c's sLegends); a piece with one mon
@@ -4052,7 +4123,8 @@ function loop(now: number): void {
     gymFrame();
     hudFrame();
     fishFrame();
-    if (pressed.has('a')) dig();
+    if (pressed.has('a') && watchOffer) takeWatchOffer();
+    else if (pressed.has('a')) dig();
     // Not while a box is up (the peek's): left and right are its keys then.
     if (!asking) for (const k of pressed) watch.key(k);
     pressed.clear();

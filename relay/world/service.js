@@ -12221,7 +12221,10 @@ var Room = class {
       if (!t7 || t7.busy !== cmd.id) return;
       t7.busy = 0;
       if (t7.gives) {
-        if (cmd.given) t7.gone = true;
+        if (cmd.given) {
+          t7.gone = true;
+          t7.by = cmd.id;
+        }
       } else if (cmd.given > 0 && cmd.given < 412) t7.species = cmd.given;
       const a = this.actor(cmd.id);
       if (a?.battling && !a.foe) {
@@ -12581,6 +12584,20 @@ var Room = class {
   groundAt(map, x2, y) {
     const g = this.ground().get(`${map}:${x2}:${y}`);
     return g && !this.picked.has(g.key) ? g : void 0;
+  }
+  /** Somebody standing on a cell who has given away what they held: a gift-giver, somebody at
+   *  home, a story's person, a beaten leader. They stay (Cam, 11-02: "I don't think we should
+   *  ever disappear a person"), still in the way, and say so when talked to. Whoever took it
+   *  did it through the room, so every page has them standing the same. */
+  spentAt(map, x2, y) {
+    const g = this.ground().get(`${map}:${x2}:${y}`);
+    if (g?.gift && this.picked.has(g.key)) return { by: this.picked.get(g.key) };
+    for (const h of this.homes) if (h.gone && h.map === map && h.x === x2 && h.y === y) return { by: h.by ?? 0 };
+    for (const b2 of this.spills.values()) {
+      if (b2.person && b2.map === map && b2.x === x2 && b2.y === y && this.picked.has(b2.key)) return { by: this.picked.get(b2.key), ...b2.person.gate !== void 0 ? { gate: true } : {} };
+    }
+    const boss = leaderAt(map, x2, y);
+    return boss && this.bossDown(boss.n) ? { by: 0, beaten: this.gyms.find(([n]) => n === boss.n)?.[1] ?? "" } : void 0;
   }
   /** A free cell beside a trainer, facing first, then round: walkable for them, not a
    *  door, a ledge, a ball or a bag, nor one of `used`. */
@@ -13273,6 +13290,7 @@ var Room = class {
         const foe = g || b2 ? void 0 : this.facing(a);
         const tr = foe ? void 0 : this.traderAt(a.m.spot.map, x2, y);
         const boss = foe || tr ? void 0 : leaderAt(a.m.spot.map, x2, y);
+        const spent = g || b2 || foe || tr ? void 0 : this.spentAt(a.m.spot.map, x2, y);
         const dive = g || b2 || foe || tr || boss ? void 0 : diveTo(this.maps, this.world, a.m.spot, a.field ?? 0);
         if (boss && !this.bossDown(boss.n)) {
           a.battling = true;
@@ -13283,6 +13301,9 @@ var Room = class {
           a.battling = true;
           events.push({ type: "trade", tick: this.tick, id: a.id, n: tr.n, species: tr.t.species, ...tr.t.gives ? { gives: true } : {} });
         } else if (tr) {
+        } else if (spent) {
+          const busy = spent.gate ? this.actor(spent.by) : void 0;
+          events.push({ type: "spent", tick: this.tick, id: a.id, by: spent.by, ...busy?.battling ? { busy: busy.name } : {}, ...spent.beaten !== void 0 ? { beaten: spent.beaten === a.name ? "" : spent.beaten } : {} });
         } else if (g) {
           this.picked.set(g.key, a.id);
           events.push({ type: "item", tick: this.tick, id: a.id, key: g.key, item: g.item, ...g.gift ? { gift: true } : {} });
@@ -13361,7 +13382,8 @@ var Room = class {
       if (this.groundAt(t7.map, t7.x, t7.y) || clerkAt(t7.map, t7.x, t7.y) || this.traderAt(t7.map, t7.x, t7.y) || ferryAt(t7.map, t7.x, t7.y)) return null;
       if (from.map.startsWith(SAFARI) !== t7.map.startsWith(SAFARI) && this.ring().safari) return null;
       const boss = leaderAt(t7.map, t7.x, t7.y);
-      if (boss && !this.bossDown(boss.n)) return null;
+      if (boss) return null;
+      if (this.spentAt(t7.map, t7.x, t7.y)) return null;
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t7.map && o.m.spot.x === t7.x && o.m.spot.y === t7.y)) return null;
       return r;
     };
@@ -14945,4 +14967,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "5ad626f6697f";
+export const WORLD_HASH = "ce4f28b31205";
