@@ -5,6 +5,8 @@ import type { PatchTable } from '../../src/bots/patches';
 import worldJson from '../data/world.json';
 import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
+import { soloLink } from '../net';
+import { WorldIndex } from '../../src/bots/hoenn';
 import { logMs, type BattleEvent } from './battlelog';
 import { HOST_JUDGE, makeRoom, BOT_DUEL_GAP, type Room } from './room';
 
@@ -90,6 +92,37 @@ describe('Room.simBots', () => {
     }
     expect(mirror.hash()).toBe(room.hash());
   });
+
+  it('a solo page: the log reaches its own watcher once, where the fight stands, and the bots stay busy for it', async () => {
+    const link = soloLink(MAPS, PATCHES, new WorldIndex(MAPS).world, 99, { bots: 12, simBots: true, ringFrames: 7200, openingFrames: 1 });
+    const room = link.room;
+    await import('./battlesim');
+    const heard: { from: number; f: number; events: BattleEvent[]; ago?: number }[] = [];
+    link.onBattleLog = (from, f, events, ago) => heard.push({ from, f, events, ago });
+    const fighters = () => room.actors.filter((a) => a.bot && a.battling);
+    const step = () => { link.frame(0); };
+    for (let i = 0; i < 60 * 600 && !fighters().length; i++) step();
+    const a = fighters()[0];
+    expect(a, 'bots met').toBeTruthy();
+    const [ida, idb, since] = [a.id, a.foe, a.since!];
+    link.watch(idb);
+    for (let i = 0; i < 300 && !heard.length; i++) step();
+    expect(heard, 'one fight, though the host says it for each seat').toHaveLength(1);
+    expect(heard[0].ago).toBeCloseTo(Math.max(0, room.tick - since) * (1000 / 60), 3);
+    expect(heard[0].events[0].e).toBe('start');
+    const frames = Math.ceil((logMs(heard[0].events) / 1000) * 60);
+    // A watcher who comes later is told how far in it is, and it is the same fight.
+    while (room.tick < since + Math.floor(frames / 2)) step();
+    link.watch(0);
+    link.watch(ida);
+    expect(heard).toHaveLength(2);
+    expect(heard[1].f).toBe(heard[0].f);
+    expect(heard[1].ago).toBeCloseTo((room.tick - since) * (1000 / 60), 3);
+    // Busy until the log has played out, and not long after.
+    while (room.tick < since + frames - 2) { expect(room.actor(ida)?.foe, 'held for the whole log').toBe(idb); step(); }
+    for (let i = 0; i < 6; i++) step();
+    expect(room.actor(ida)?.foe === idb && room.actor(ida)?.since === since).toBe(false);
+  }, 60_000);
 
   it('runs the same fight for the same match', async () => {
     const fight = async () => {

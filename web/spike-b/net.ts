@@ -102,8 +102,28 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
   if (opts.ringFrames) room.ringPhase = opts.ringFrames;
   room.opening = opts.openingFrames ?? room.ringPhase; // the Safari opening, as a match has it
   if (opts.simBots) room.simBots = true;
+  // The bots' fights this page simulates (Room.simBots), as the relay keeps them (service.ts
+  // publishLog): a trainer who is out here watches through the same door as online.
+  const logs = new Map<number, { f: number; foe: number; since: number; events: BattleEvent[] }>();
+  let nextFight = 0;
+  const agoOf = (since: number) => Math.max(0, room.tick - since) * (1000 / 60);
+  const logOf = (id: number) => {
+    const a = room.actor(id);
+    if (!a?.battling) return undefined;
+    const own = logs.get(id);
+    if (own && own.foe === a.foe && own.since === (a.since ?? 0)) return { from: id, l: own };
+    const theirs = a.foe ? logs.get(a.foe) : undefined;
+    return theirs && theirs.foe === id && theirs.since === (a.since ?? 0) ? { from: a.foe, l: theirs } : undefined;
+  };
+  const onLog = (seat: number, events: BattleEvent[]) => {
+    const a = room.actor(seat);
+    if (!a || logOf(seat)) return;
+    const l = { f: ++nextFight & 0xffff, foe: a.foe, since: a.since ?? 0, events };
+    logs.set(seat, l);
+    if (watching === seat || watching === a.foe) link.onBattleLog?.(seat, l.f, events, agoOf(l.since));
+  };
   // The live game's offline QUICK PLAY: you and BOT_FILL bots.
-  const host = new Host(room, opts.bots ?? BOT_FILL, maps, 0);
+  const host = new Host(room, opts.bots ?? BOT_FILL, maps, 0, { onLog });
   const me = host.join(opts.name || 'YOU', opts.skin ?? 0);
   recorder.start('solo', me, host.room);
   recorder.frame(host.advance().frame, host.room);
@@ -151,6 +171,8 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
       watching = id;
       const from = fightOf(id);
       if (from !== undefined) for (const m of streams.get(from)!.sent) link.onSp?.(from, m);
+      const lg = logOf(id);
+      if (lg) link.onBattleLog?.(lg.from, lg.l.f, lg.l.events, agoOf(lg.l.since));
     },
     sp: (m, as) => {
       recorder.sp('out', m, as === undefined ? {} : { as });
@@ -160,7 +182,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
       if (watching && fightOf(watching) === as) link.onSp?.(as, m);
     },
     onSp: null,
-    // A solo world has no relay to carry a log, and its bots' fights are judged on the page.
+    // A solo world has nobody to tell of its own trainer's fights.
     bl: () => undefined,
     onBattleLog: null,
     onEyes: null,

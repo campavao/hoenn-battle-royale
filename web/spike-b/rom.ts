@@ -33,7 +33,7 @@ import { withHeld } from './carry';
 import type { SpMsg } from './shared/wire';
 import { readTally, type MatchTally } from '../src/match/tally';
 import type { FameMon } from '../src/ui/results';
-import { MUSIC_ASKED, MUSIC_QUIET, type MusicAsk } from './music';
+import { MUSIC_ASKED, MUSIC_QUIET, MUS_HEAL, MUS_VS_TRAINER, type MusicAsk } from './music';
 
 /** SaveBlock2's options halfword (include/global.h). */
 const OPTIONS_AT = 0x14;
@@ -329,6 +329,10 @@ export interface RomBattles {
   /** The song for where the page's trainer is (music.ts), played by the hidden ROM
    *  between battles (br_music.h); null for none, and the ROM stands still between them. */
   music(ask: MusicAsk | null): void;
+  /** A battle's song in place of the route's, while the page draws somebody's fight on the field
+   *  (watch.ts): the player's ROM's own, played by its parked field's sound engine. Asked again
+   *  until the ROM is singing; off, the route's comes back from the top. */
+  fightSong(on: boolean): void;
   /** A sound of the field's (music.ts SE_*, MUS_* fanfares), played once by the hidden
    *  ROM on its field (gBrMusic.sound); nothing on a patch without it, or with no song. */
   sound(id: number): void;
@@ -858,6 +862,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
   if (!Number.isNaN(musicAt) && !Number.isNaN(carryAt))
     for (let at = carryAt - ROM_BASE; romView.getUint32(at, true); at += 8) sounds.push([romView.getUint32(at, true), romView.getUint32(at + 4, true)]);
   let tune: MusicAsk | null = null;
+  let fightSong = false;
+  let fightStep = 0;
   // Running between turns; and run since the parked state was last put back.
   let singing = false;
   let idled = false;
@@ -1024,12 +1030,45 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       // Only while the song plays: a ROM standing still would play it when it next ran.
       if (sounds.length && tune && singing && !turns) emu.write(musicAt + 10, id & 0xffff, 16);
     },
+    fightSong(on) {
+      if (!sounds.length) return;
+      if (!on) {
+        if (!fightSong) return;
+        fightSong = false;
+        fightStep = 0;
+        // Nothing holds it now: BrMusic_Tick finds the wrong song playing and puts the route's on.
+        emu.write(musicAt + 8, 0, 8);
+        setVolume(volume);
+        return;
+      }
+      if (!singing || turns || fightStep === 3) return;
+      fightSong = true;
+      // br_music.c has no way to ask for a battle's song, but gBrMusic.sound is PlaySE, which starts
+      // any song by its number on that song's player (sound.c). BrMusic_Tick would put the route's
+      // straight back, in the same call: it reads a song just started as stopped, until the next
+      // VBlank. So: a fanfare first, silent, whose task holds that off for its 160 frames; then the
+      // song; then, with its tracks running, `waiting` up, which holds it for as long as it plays.
+      const taken = emu.read(musicAt + 10, 16) === 0;
+      if (fightStep === 0) {
+        setVolume(0);
+        emu.write(musicAt + 10, MUS_HEAL, 16);
+        fightStep = 1;
+      } else if (fightStep === 1 && taken) {
+        emu.write(musicAt + 10, MUS_VS_TRAINER, 16);
+        fightStep = 2;
+      } else if (fightStep === 2 && taken && emu.read(sounds[1][0] + 4, 32) & 0xffff) {
+        emu.write(musicAt + 8, 1, 8);
+        setVolume(volume);
+        fightStep = 3;
+      }
+    },
     music(ask) {
       tune = ask;
       if (!sounds.length) return;
       if (turns) { if (ask) writeTune(); return; }
       if (!ask) { if (singing) emu.pause(); singing = false; return; }
-      if (singing) writeTune();
+      // Held through a fight song: a new song asked for would end it.
+      if (singing) { if (!fightSong) writeTune(); }
       else sing();
     },
     fight(name, mons, skin, onStart, fog = false, lines, items) {

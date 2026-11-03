@@ -61,6 +61,7 @@ import { AskBox } from './askbox';
 import { ANIM_COUNTER_MAX } from '../src/tile-anims';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
+import { BattleView } from './battleview';
 import { raiseCurtain } from './curtain';
 import { frameOf as fxFrame, grassUnderAsh, isFloor, MB_ASHGRASS, SHEETS as FX_SHEETS, stepEffects, type Effect, type FxKind } from './fieldfx';
 import { ROOM_GAP, clampZoom, loadZoom, nextZoom, pickedZoom, roomFloor, saveZoom, wheelSteps, zoomLabel, zoomRange } from './zoom';
@@ -2828,7 +2829,7 @@ function hudFrame(): void {
   const now = performance.now();
   // A battle's picture has the top of the screen: the news waits for the field, as the
   // live match's ticker does (br_hud.c drops its windows off the overworld).
-  if (battleEl.classList.contains('on')) {
+  if (battleEl.classList.contains('on') || watch.viewing) {
     if (tickUntil) { tickUntil = 0; msgBox.hide(); }
   } else if (!sayUntil && !casting && now >= tickUntil) {
     const next = ticks.shift();
@@ -3249,7 +3250,28 @@ const watch = new Watch({
     return `${s.name}'s bag`;
   },
   tell: (text) => tick(text),
+  view: (side) => {
+    if (!art) return null;
+    const v: BattleView = new BattleView(document.getElementById('battleview-host')!, { art, behind: () => fieldBehind(v.canvas) }, { follow: side, levels: false });
+    return v;
+  },
 });
+
+/** The field under a watched fight, as the battle's own canvas sits over it: the camera is on the
+ *  trainer watched, so this is where they stand, dimmed as #battle.see dims a trainer's own. */
+const behindCanvas = document.createElement('canvas');
+behindCanvas.width = 240;
+behindCanvas.height = 160;
+function fieldBehind(over: HTMLCanvasElement): HTMLCanvasElement {
+  const g = behindCanvas.getContext('2d')!;
+  const r = over.getBoundingClientRect(), w = canvas.getBoundingClientRect();
+  const kx = canvas.width / (w.width || 1), ky = canvas.height / (w.height || 1);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(canvas, (r.left - w.left) * kx, (r.top - w.top) * ky, r.width * kx, r.height * ky, 0, 0, 240, 160);
+  g.fillStyle = '#0007';
+  g.fillRect(0, 0, 240, 160);
+  return behindCanvas;
+}
 
 // Drag and pinch / wheel, spectating only. A tap on a trainer follows them.
 const pointers = new Map<number, { x: number; y: number }>();
@@ -4235,7 +4257,7 @@ async function boot(): Promise<void> {
     }
   }
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; } };
+  (window as unknown as { __spike: unknown }).__spike = { watch, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; } };
 }
 
 void boot();

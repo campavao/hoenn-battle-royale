@@ -522,7 +522,8 @@ export class WorldService {
     r.ringPhase = Math.round(room.set.fogSecs * 60);
     if (this.opts.simBots) r.simBots = true;
     r.opening = Math.round(room.set.safariSecs * 60);
-    const host = new Host(r, bots, this.opts.maps);
+    // A simulated fight's log, to whoever watches either of its bots (the whole of it at once).
+    const host = new Host(r, bots, this.opts.maps, undefined, { onLog: (seat, log) => { this.publishLog(room.code, seat, log); } });
     for (const p of room.members.values()) { host.join(p.name, p.skin, undefined, p.id); p.heard = room.t0 = this.opts.now(); }
     host.lock();
     room.host = host;
@@ -651,8 +652,9 @@ export class WorldService {
       if (l.events.length < LOG_STREAM_EVENTS && l.chars + n <= LOG_STREAM_CHARS) { l.events.push(ev); l.chars += n; }
       if (ev.e === 'end') l.ended = true;
     }
-    // A message that begins a fight says it began now (ago 0), so a view plays it as a join's.
-    const text = JSON.stringify({ t: 'bl', from: l.from, f: l.f, events, ...(events[0]?.e === 'start' ? { ago: 0 } : {}) } satisfies WorldDown);
+    // A message that begins a fight says how long ago it began (a fighter's: just now), so a view
+    // plays it as a join's.
+    const text = JSON.stringify({ t: 'bl', from: l.from, f: l.f, events, ...(events[0]?.e === 'start' ? { ago: Math.max(0, this.opts.now() - l.t0) } : {}) } satisfies WorldDown);
     for (const w of room.members.values()) {
       if (w !== not && w.watching && (w.watching === l.from || w.watching === l.foe)) w.link.send(text);
     }
@@ -669,15 +671,22 @@ export class WorldService {
 
   /** For the server's simulator (a bots' fight it played out, battlesim.ts): the WHOLE log of the
    *  fight `seat` is in, `log` from its `start` to its `end`, to everybody watching either side
-   *  of it, and to anybody who comes to watch it later (they are told how long ago it began). It
-   *  replaces whatever log `seat` had. False when nothing was published: no such room, no such
-   *  actor, or a log that does not begin with its `start`. */
+   *  of it, and to anybody who comes to watch it later (they are told how long ago it began). The
+   *  fight is timed from the frame the room began it, not from when it was worked out, so a watcher
+   *  lands where it stands. The host says each log once a seat: the second finds the first's, which
+   *  logOf gives a watcher of either. It replaces whatever log `seat` had. False when nothing was
+   *  published: no such room, no such actor, or a log that does not begin with its `start`. */
   publishLog(code: string, seat: number, log: readonly BattleEvent[]): boolean {
     const room = this.rooms.get(String(code).toUpperCase());
     const a = room?.host?.room.actor(seat);
     const events = cleanEvents(log, LOG_STREAM_EVENTS);
     if (!room || !a || events[0]?.e !== 'start') return false;
-    const l: FightLog = { f: ++this.nextFight & 0xffff, from: seat, foe: a.foe, since: a.since ?? 0, t0: this.opts.now(), events: [], chars: 0, ended: false };
+    const since = a.since ?? 0;
+    const foe = a.foe ? room.host!.room.actor(a.foe) : undefined;
+    const theirs = foe ? room.logs.get(foe.id) : undefined;
+    if (theirs && theirs.foe === seat && theirs.since === since && foe!.since === since) return true;
+    const ago = a.battling && since ? Math.max(0, room.host!.room.tick - since) * FRAME_MS : 0;
+    const l: FightLog = { f: ++this.nextFight & 0xffff, from: seat, foe: a.foe, since, t0: this.opts.now() - ago, events: [], chars: 0, ended: false };
     room.logs.set(seat, l);
     this.putEvents(room, l, events);
     return true;

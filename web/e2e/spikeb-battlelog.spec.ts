@@ -351,3 +351,136 @@ test('a fight is a log: the watcher ends where the fighter\'s ROM did, and a lat
     await room0.close();
   }
 });
+
+/** A watcher's page, every frame: the view it has up (the last it showed of each fight), and whether
+ *  its ROM's battle screen ever came up. */
+async function watchSampler(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as any;
+    w.__views = { fights: {}, mirror: 0, order: [] };
+    const battle = document.getElementById('battle')!;
+    const frame = () => {
+      requestAnimationFrame(frame);
+      const s = w.__spike, on = s.watch.showing;
+      if (battle.classList.contains('on')) w.__views.mirror++;
+      if (!on) return;
+      const key = `${on.from}:${on.f}`;
+      const snap = on.view.snapshot();
+      const e = w.__views.fights[key] ??= { side: on.side, firstMs: snap.ms, texts: [], lastNext: 0, events: 0, near: null, far: null, ended: false };
+      if (!w.__views.order.includes(key)) w.__views.order.push(key);
+      e.lastNext = snap.next;
+      e.events = on.events.length;
+      e.near = snap.near ?? e.near;
+      e.far = snap.far ?? e.far;
+      e.ended = e.ended || snap.ended;
+      e.lastMs = snap.ms;
+      if (snap.text && e.texts.at(-1) !== snap.text) e.texts.push(snap.text);
+    };
+    requestAnimationFrame(frame);
+  });
+}
+
+/** The view's last word on a fight, against the fighter's ROM. `near` is the side followed. */
+function expectViewEndsOnRom(view: any, oracle: Awaited<ReturnType<typeof takeOracle>>, near: 0 | 1, what: string): void {
+  const hpOf = (side: number) => { const slot = oracle.field[side].at(-1)!; return oracle.hp[side][slot]; };
+  // What was out last on each side: a mon that fainted goes off the view at its faint, and its bar
+  // stood at what the ROM's did until then.
+  const was = (v: any, side: number) => {
+    if (hpOf(side) === 0) return; // fainted: the log's 0, and the view shows it sink
+    expect(v?.hp, `${what}: the view's bar for side ${side}`).toBe(hpOf(side));
+  };
+  was(view.near, near);
+  was(view.far, near === 0 ? 1 : 0);
+}
+
+test("a trainer's real fight on a second page: its view, no ROM replay, and it ends on the fighter's ROM's HP", async ({ browser }) => {
+  test.setTimeout(900_000);
+  const room0 = await bootRoom(browser);
+  const { r, host, guest, hostId } = room0;
+  try {
+    await giveTeam(host, TEAM);
+    await spike(guest, (s) => s.goOut('out'));
+    await expect.poll(() => spike(guest, (s) => s.spectating), { timeout: 30_000 }).toBeTruthy();
+    await guest.evaluate((id) => (window as any).__spike.watch.host.setFollow(id), hostId);
+    await watchSampler(guest);
+    await guest.waitForTimeout(500);
+    const bots = r.room().actors.filter((a: any) => a.bot).map((a: any) => a.id as number);
+    const room = r.room();
+    Object.assign(room.actor(hostId), { battling: true, foe: bots[0] });
+    Object.assign(room.actor(bots[0]), { battling: true, foe: hostId, foughtBy: hostId });
+    await installOracle(host);
+    await host.evaluate((ev) => (window as any).__spike.startFor(ev), { type: 'fight', tick: 0, id: hostId, foe: bots[0] } as any);
+    const playing = play(host, 4);
+    // Up from the fight's first event: the page's own view, in the battle screen's place.
+    await expect.poll(() => guest.evaluate(() => Object.keys((window as any).__views.fights).length), { timeout: 60_000 }).toBeGreaterThan(0);
+    const during = await guest.evaluate(() => ({ dim: document.getElementById('battleview-dim')!.hidden, strip: document.getElementById('watch')!.hidden }));
+    expect(during, 'the view up, the strip over it').toEqual({ dim: false, strip: false });
+    if (SCRATCH) await guest.screenshot({ path: path.join(SCRATCH, 'human-fight-view.png') });
+    await playing;
+    const oracle = await takeOracle(host);
+    step(`played; the view catches up`);
+    // The fight's over for the fighter; the watcher's page plays it at the log's pace.
+    await expect.poll(() => guest.evaluate(() => (window as any).__spike.watch.showing === null && Object.keys((window as any).__views.fights).length > 0), { timeout: 240_000 }).toBe(true);
+    const views = await guest.evaluate(() => (window as any).__views);
+    const view = views.fights[views.order[0]];
+    console.log(`[view of a real fight] ${JSON.stringify({ views: views.order.length, mirror: views.mirror, side: view.side, firstMs: view.firstMs, lastMs: view.lastMs, lastNext: view.lastNext, events: view.events, near: view.near, far: view.far, oracleHp: oracle.hp, oracleField: oracle.field, lines: view.texts.length })}`);
+    if (SCRATCH) fs.writeFileSync(path.join(SCRATCH, 'human-fight.json'), JSON.stringify({ view, oracle }, null, 1));
+    expect(views.mirror, 'no ROM replay').toBe(0);
+    expect(view.side, 'the trainer I watch').toBe(0);
+    expect(view.lastNext, 'played to its end').toBeGreaterThanOrEqual(view.events - 1);
+    expectViewEndsOnRom(view, oracle, 0, 'real fight');
+    // Every line the fighter saw, in order, as the watcher's own screen read it.
+    expect(view.texts.filter((t: string) => !/would like to battle/.test(t))).toEqual(oracle.lines.filter((l: string) => !/would like to battle/.test(l)).filter((l: string, i: number, a: string[]) => a[i - 1] !== l));
+  } finally {
+    await room0.close();
+  }
+});
+
+test('two real trainers walk into a real duel, a third page watches: its view ends on the ROMs', async ({ browser }) => {
+  test.setTimeout(900_000);
+  const room0 = await bootRoom(browser);
+  const { r, host, guest, hostId, guestId, code } = room0;
+  const wc = await browser.newContext();
+  const third = await wc.newPage();
+  try {
+    // Hard hitters with little to lose: two ROMs and a third on one machine make a long fight long.
+    const SHORT: Craft[] = [{ species: 258, name: 'MUDKIP', level: 20, moves: [33], hp: 14, stats: [90, 15, 12, 12, 12], personality: 2222 }];
+    await giveTeam(host, SHORT);
+    await giveTeam(guest, SHORT);
+    await third.goto(`/?rom=${romHashParam()}&world=${encodeURIComponent(WORLD)}#join=${code}`);
+    await expect.poll(() => spike(third, (s) => !!s?.rom && !!s.link?.room), { timeout: 180_000 }).toBe(true);
+    await expect.poll(() => spike(third, (s) => s.spectating), { timeout: 60_000 }).toBeTruthy();
+    await third.evaluate((id) => (window as any).__spike.watch.host.setFollow(id), hostId);
+    await watchSampler(third);
+    // The room's own rule from here: two trainers who see each other fight. The spec stands them in
+    // one line on the relay's room (a page corrects to it by its hash), and they meet.
+    await expect.poll(() => {
+      const t = r.room().actor(hostId), g = r.room().actor(guestId);
+      if (t.battling) return true;
+      const map = 'MAP_LITTLEROOT_TOWN';
+      t.m = { ...t.m, spot: { map, x: 9, y: 12 }, facing: 4, moveDir: 4, action: undefined };
+      g.m = { ...g.m, spot: { map, x: 11, y: 12 }, facing: 3, moveDir: 3, action: undefined };
+      t.calm = g.calm = 0;
+      return false;
+    }, { timeout: 30_000 }).toBe(true);
+    step('they met');
+    await expect.poll(() => spike(host, (s) => !!s.battle), { timeout: 60_000 }).toBe(true);
+    await expect.poll(() => spike(guest, (s) => !!s.battle), { timeout: 60_000 }).toBe(true);
+    await installOracle(host);
+    const playing = Promise.all([play(host), play(guest)]);
+    await expect.poll(() => third.evaluate(() => Object.keys((window as any).__views.fights).length), { timeout: 120_000 }).toBeGreaterThan(0);
+    await playing;
+    const oracle = await takeOracle(host);
+    await expect.poll(() => third.evaluate(() => (window as any).__spike.watch.showing === null), { timeout: 300_000 }).toBe(true);
+    const views = await third.evaluate(() => (window as any).__views);
+    const view = views.fights[views.order[0]];
+    console.log(`[view of a duel] ${JSON.stringify({ views: views.order.length, mirror: views.mirror, side: view.side, firstMs: view.firstMs, lastNext: view.lastNext, events: view.events, near: view.near, far: view.far, oracleHp: oracle.hp, oracleField: oracle.field })}`);
+    if (SCRATCH) fs.writeFileSync(path.join(SCRATCH, 'duel.json'), JSON.stringify({ view, oracle }, null, 1));
+    expect(views.mirror, 'no ROM replay').toBe(0);
+    expect(view.lastNext).toBeGreaterThanOrEqual(view.events - 1);
+    expectViewEndsOnRom(view, oracle, view.side as 0 | 1, 'duel');
+  } finally {
+    await wc.close();
+    await room0.close();
+  }
+});

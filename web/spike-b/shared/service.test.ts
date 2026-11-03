@@ -851,6 +851,66 @@ describe('world rooms', () => {
       }
     });
 
+    it("the simulator's log is one fight to a watcher of either bot, and timed from the frame it began", () => {
+      const r = rig(2);
+      try {
+        const [x, y] = r.room.host.room.actors.filter((o) => o.bot);
+        const room = r.room.host.room as unknown as { tick: number };
+        const since = room.tick - 60;
+        Object.assign(x, { battling: true, foe: y.id, judge: -1, since });
+        Object.assign(y, { battling: true, foe: x.id, judge: -1, since });
+        r.sb.onText(JSON.stringify({ t: 'watch', id: y.id }));
+        const log = [start(x.id, y.id) as never, { e: 'text', text: 'on' } as never, { e: 'end', winner: x.id } as never];
+        // The host says it once for each seat (host.ts onLog).
+        expect(r.svc.publishLog(r.code, x.id, log)).toBe(true);
+        expect(r.svc.publishLog(r.code, y.id, log)).toBe(true);
+        const got = r.bl(r.b);
+        expect(got, 'one fight, not two').toHaveLength(1);
+        expect(got[0].from).toBe(x.id);
+        expect(got[0].ago, 'a second in when it was worked out').toBeCloseTo(1000, 5);
+        expect(got[0].events.map((e) => e.e)).toEqual(['start', 'text', 'end']);
+        // Who comes later lands later, on either bot.
+        r.t(4000);
+        r.sc.onText(JSON.stringify({ t: 'watch', id: x.id }));
+        expect(r.bl(r.c)).toHaveLength(1);
+        expect(r.bl(r.c)[0].ago).toBeCloseTo(5000, 5);
+        r.sc.onText(JSON.stringify({ t: 'watch', id: y.id }));
+        expect(r.bl(r.c)[1].ago).toBeCloseTo(5000, 5);
+        expect(r.bl(r.c)[1].f).toBe(got[0].f);
+      } finally {
+        r.svc.stop();
+      }
+    });
+
+    it('a match on the switch hands its logs on: START to a watcher, on the real room', async () => {
+      let t = 0;
+      const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 8, cap: 30, now: () => t, log: () => undefined, simBots: true, ringSecs: 120, safariSecs: 0 });
+      try {
+        const [a, b] = [phone(), phone()];
+        const sa = svc.open(a.link), sb = svc.open(b.link);
+        sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+        const code = (a.got.at(-1) as unknown as { code: string }).code;
+        sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 1, code }));
+        sa.onText(JSON.stringify({ t: 'start' }));
+        const room = [...(svc as unknown as { rooms: Map<string, { host: { room: { actors: Actor[] }; simReady(): Promise<void> } }> }).rooms.values()][0];
+        await room.host.simReady();
+        const fights = () => room.host.room.actors.filter((o) => o.bot && o.battling);
+        for (let i = 0; i < 60 * 300 && !fights().length; i++) { t += 1000 / 60; svc.pump(); }
+        const fighter = fights()[0];
+        expect(fighter, 'bots met').toBeTruthy();
+        sb.onText(JSON.stringify({ t: 'watch', id: fighter.id }));
+        for (let i = 0; i < 120; i++) { t += 1000 / 60; svc.pump(); }
+        const bl = b.got.filter((m) => m.t === 'bl') as unknown as { from: number; events: { e: string }[]; ago?: number }[];
+        expect(bl.length).toBeGreaterThan(0);
+        expect(bl[0].events[0].e).toBe('start');
+        expect(bl[0].events.at(-1)!.e).toBe('end');
+        expect(typeof bl[0].ago).toBe('number');
+        expect(bl[0].from === fighter.id || bl[0].from === fighter.foe).toBe(true);
+      } finally {
+        svc.stop();
+      }
+    }, 60_000);
+
     it('publishLog (for the simulator) refuses what is not a fight of this room', () => {
       const r = rig(2);
       try {

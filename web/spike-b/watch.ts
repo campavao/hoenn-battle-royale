@@ -12,11 +12,19 @@
 // spectator does (rom.ts mirror), the trainer watched near the camera, back to us (Cam,
 // 2026-10-26). Joined late, the relay sends the fight from its start and the replay
 // catches up at 8x, silent, as in the match.
+//
+// That was every fight. Now a fight with a log (battlelog.ts) -- a simulated one of two bots, or a
+// trainer's their page reads off its ROM -- is drawn by this page (battleview.ts) in the battle
+// screen's place, with the strip over it, and the ROM's replay is only for a fight with none. Joined
+// late it stands where the fight stands, with nothing to catch up on. The song is the ROM's battle
+// song and its hit, send-out and faint sounds, on the parked field's sound engine (rom.ts fightSong).
 
 import type { Actor } from './shared/room';
 import type { WorldLink } from './net';
 import type { MirrorFeed, RomBattles } from './rom';
 import type { SpMsg } from './shared/wire';
+import { logMs, type BattleEvent, type Side } from './shared/battlelog';
+import { SE_BALL_OPEN, SE_EFFECTIVE, SE_FAINT } from './music';
 import { recorder } from './recorder';
 
 /** screens.ts's cycleWatch (not imported: it would bring the match's UI sheets along):
@@ -26,6 +34,16 @@ function cycleWatch(ids: readonly number[], on: number | null, dir: 1 | -1): num
   const at = on === null ? -1 : ids.indexOf(on);
   if (at < 0) return dir > 0 ? ids[0] : ids[ids.length - 1];
   return ids[(at + dir + ids.length) % ids.length];
+}
+
+/** What a watcher needs of a battleview.ts, new each fight. */
+export interface LogView {
+  play(log: readonly BattleEvent[], ms: number): void;
+  add(events: readonly BattleEvent[]): void;
+  /** Where the playhead is, and whether a fight's over or waits on more of its log. */
+  snapshot(): { next: number; ended: boolean; waiting: boolean };
+  redraw(): void;
+  close(): void;
 }
 
 export interface WatchHost {
@@ -49,6 +67,8 @@ export interface WatchHost {
   describe(key: number): string | null;
   /** A line on the ticker. */
   tell(text: string): void;
+  /** A battle view on the page, its back to us on side `follow`; null until the ROM's art is in. */
+  view(follow: Side): LogView | null;
 }
 
 /** The loot `picked` (room.ts: key, and who took it) gained since the last look that
@@ -76,6 +96,23 @@ export function fightKey(from: number, start: SpMsg): string {
   return `${from}:${start.battle}:${start.data.slice(0, 4).join()}`;
 }
 
+/** A BSTART from a trainer's page waits this long for that page's log of the fight (it reads the
+ *  ROM's battle once it is up) before the ROM's replay of it starts. A bot's has no log coming. */
+const LOG_GRACE_MS = 3000;
+/** A log with no end, its fight long over in the room (a late joiner past the kept log's cap, or a
+ *  socket's hiccup): the screen stops waiting for the rest of it. */
+const LOG_LOST_MS = 5000;
+
+/** The sound of an event of a watched fight (constants/songs.h), as a fight sounds it. */
+function soundOf(ev: BattleEvent | undefined): number {
+  switch (ev?.e) {
+    case 'hit': return SE_EFFECTIVE;
+    case 'send': return SE_BALL_OPEN;
+    case 'faint': return SE_FAINT;
+    default: return 0;
+  }
+}
+
 /** A trainer's sprite is 32 pixels tall on a 16-pixel cell, and the camera sits on the
  *  cell's middle: the head is 24 pixels above it. Two more for air. */
 const HEAD_ABOVE = 26;
@@ -92,10 +129,17 @@ export class Watch {
   /** How many watch me, as the relay last said. */
   eyes = 0;
   /** What has come of the watched trainer's battles, not yet replayed. */
-  private queue: { from: number; m: SpMsg }[] = [];
+  private queue: { from: number; m: SpMsg; at: number }[] = [];
   private mirroring = false;
+  /** The fight the trainer watched is in, as a log, and the view of it once there can be one. */
+  private fight: { from: number; f: number; side: Side; events: BattleEvent[]; began: number; view: LogView | null; next: number; lostAt: number } | null = null;
+  private viewEl: HTMLElement;
   /** A battle of the trainer watched is on my screen now (the results wait for it). */
-  get replaying(): boolean { return this.mirroring; }
+  get replaying(): boolean { return this.mirroring || !!this.fight; }
+  /** The page is drawing it. */
+  get viewing(): boolean { return !!this.fight?.view; }
+  /** What it is drawing, for whoever asks (a spec). */
+  get showing() { return this.fight?.view ? this.fight : null; }
   private publisher: RomBattles | null = null;
   /** Loot keys looked at already (pickedBy). */
   private seen = new Set<number>();
@@ -108,6 +152,7 @@ export class Watch {
     this.label = document.getElementById('watch-label')!;
     this.eyesEl = document.getElementById('eyes')!;
     this.battleEl = document.getElementById('battle')!;
+    this.viewEl = document.getElementById('battleview-dim')!;
     document.getElementById('watch-prev')!.addEventListener('click', () => this.step(-1));
     document.getElementById('watch-next')!.addEventListener('click', () => this.step(1));
     document.getElementById('watch-stop')!.addEventListener('click', () => this.host.setFollow(0));
@@ -138,6 +183,7 @@ export class Watch {
    *  the name over the head the camera is on. */
   frame(): void {
     this.wire();
+    this.logFrame();
     this.mirror();
     this.eyesEl.hidden = this.eyes <= 0 || this.host.spectating();
     const on = this.host.spectating();
@@ -147,7 +193,7 @@ export class Watch {
     // a camera left on the cell they fell on until NEXT. Not under the replay of the fight
     // that put them out: the proxy fights at eight times the pace, so the room has it over
     // while the replay is turns from the end, and moving on would cut it off there.
-    if (on && id && !this.mirroring && !this.host.trainers().some((t) => t.id === id)) {
+    if (on && id && !this.replaying && !this.host.trainers().some((t) => t.id === id)) {
       id = nextAfter(this.others(), id) ?? 0;
       this.host.setFollow(id);
     }
@@ -155,7 +201,7 @@ export class Watch {
     const a = on && id ? this.host.trainers().find((t) => t.id === id) : undefined;
     this.who.textContent = a ? `WATCHING ${a.name}` : on ? 'Drag to look around' : '';
     (document.getElementById('watch-stop') as HTMLButtonElement).hidden = !a;
-    this.label.hidden = !a;
+    this.label.hidden = !a || this.viewing;
     if (!a) return;
     if (this.label.textContent !== a.name) this.label.textContent = a.name;
     // The camera is glued to the watched trainer, so their head is straight up from the
@@ -185,7 +231,8 @@ export class Watch {
     const link = this.host.link();
     if (link !== this.wired) {
       // A new match: nobody watched yet, nobody watching me, nothing of the last one's.
-      if (this.wired) { this.wired.onSp = null; this.wired.onEyes = null; }
+      if (this.wired) { this.wired.onSp = null; this.wired.onEyes = null; this.wired.onBattleLog = null; }
+      this.endFight();
       this.wired = link;
       this.publisher = null;
       this.told = 0;
@@ -197,11 +244,13 @@ export class Watch {
       if (link) {
         link.onEyes = (n) => { this.eyes = n; this.eyesEl.textContent = `👁 ${n}`; };
         link.onSp = (from, m) => {
-          // A fight of somebody I have stopped watching, still on its way: not mine.
-          if (!this.told) return;
+          // A fight of somebody I have stopped watching, still on its way: not mine. Nor the ROM's
+          // stream of one whose log I have.
+          if (!this.told || this.fight) return;
           if (this.queue.length > 2000) return;
-          this.queue.push({ from, m });
+          this.queue.push({ from, m, at: performance.now() });
         };
+        link.onBattleLog = (from, f, events, ago) => this.onLog(from, f, events, ago);
       }
     }
     // My own battles, published for whoever watches me.
@@ -211,13 +260,81 @@ export class Watch {
     if (link && t !== this.told) {
       this.told = t;
       this.queue = [];
+      this.endFight();
       link.watch(t);
+    }
+  }
+
+  /** More of a fight's log, or the start of one (`ago` said: net.ts onBattleLog). */
+  private onLog(from: number, f: number, events: BattleEvent[], ago?: number): void {
+    if (!this.told) return;
+    if (ago === undefined) {
+      if (this.fight?.from === from && this.fight.f === f) {
+        this.fight.events.push(...events);
+        this.fight.view?.add(events);
+      }
+      return;
+    }
+    const s = events[0];
+    if (s?.e !== 'start') return;
+    // Not one of the trainer watched: on its way as I moved on.
+    const side: Side | null = s.a.seat === this.told ? 0 : s.b.seat === this.told ? 1 : null;
+    if (side === null) return;
+    this.endFight();
+    this.queue = [];
+    this.fight = { from, f, side, events: [...events], began: performance.now() - ago, view: null, next: -1, lostAt: 0 };
+    recorder.net('log-fight', from, f, Math.round(ago));
+  }
+
+  /** Once a frame: the fight's view on the screen when it can be, and off it when the fight is over. */
+  private logFrame(): void {
+    const fight = this.fight;
+    if (!fight) return;
+    const now = performance.now();
+    // Not over anything of my own: it comes up where the fight stands by then.
+    if (!fight.view && this.host.idle() && !this.mirroring) {
+      // Shown first: the view sizes itself to the room it finds.
+      this.viewEl.hidden = false;
+      fight.view = this.host.view(fight.side);
+      if (fight.view) fight.view.play(fight.events, now - fight.began);
+      else this.viewEl.hidden = true;
+    }
+    if (!fight.view) {
+      // Nothing of it on screen, and it has played out meanwhile.
+      if (now - fight.began > logMs(fight.events)) this.endFight();
+      return;
+    }
+    const rom = this.host.rom();
+    rom?.fightSong(true);
+    fight.view.redraw();
+    const at = fight.view.snapshot();
+    if (at.next !== fight.next) {
+      // The sound of what has just begun; nothing for what was over before I came.
+      const sound = fight.next >= 0 ? soundOf(fight.events[at.next]) : 0;
+      if (sound) rom?.sound(sound);
+      fight.next = at.next;
+    }
+    if (at.waiting && !this.host.link()?.room.actor(this.told)?.battling) {
+      fight.lostAt ||= now;
+      if (now - fight.lostAt > LOG_LOST_MS) at.ended = true;
+    } else fight.lostAt = 0;
+    if (at.ended) this.endFight();
+  }
+
+  private endFight(): void {
+    const fight = this.fight;
+    if (!fight) return;
+    this.fight = null;
+    fight.view?.close();
+    if (fight.view) {
+      this.viewEl.hidden = true;
+      this.host.rom()?.fightSong(false);
     }
   }
 
   /** The watched trainer's battle, replayed on my hidden ROM once its BSTART is here. */
   private mirror(): void {
-    if (this.mirroring) return;
+    if (this.mirroring || this.fight) return;
     // Anything before a BSTART is the tail of a fight there is no start of.
     while (this.queue.length && this.queue[0].m.t !== 'bstart') this.queue.shift();
     const rom = this.host.rom(), link = this.host.link();
@@ -226,6 +343,8 @@ export class Watch {
     const { from } = head;
     const watched = this.told;
     const fighter = link.room.actor(from);
+    // A trainer's page is reading this fight off its ROM too: its log, not my ROM, if it comes.
+    if (fighter && !fighter.bot && performance.now() - head.at < LOG_GRACE_MS) return;
     const foe = fighter?.foe ? link.room.actor(fighter.foe) : undefined;
     // Their ROM's own BSTART first, then its TURNs: up to the next fight's BSTART.
     let first = true;
@@ -237,7 +356,7 @@ export class Watch {
         const a = link.room.actor(from);
         return !a?.battling || (this.queue.length > 0 && !own());
       },
-      stopped: () => this.told !== watched || this.host.link() !== link || !this.host.idle(),
+      stopped: () => this.told !== watched || this.host.link() !== link || !this.host.idle() || !!this.fight,
       turned: watched !== from,
       skins: [fighter?.skin ?? 0, foe?.skin ?? 0],
     };
@@ -252,7 +371,7 @@ export class Watch {
       // took it).
       if (first && this.queue[0] === head) this.queue.shift();
       while (this.queue.length && this.queue[0].from === from && this.queue[0].m.t !== 'bstart') this.queue.shift();
-      if (why === 5) this.rejoin(link, watched, fightKey(from, head.m), fighter?.name ?? '');
+      if (why === 5 && !this.fight) this.rejoin(link, watched, fightKey(from, head.m), fighter?.name ?? '');
     });
   }
 

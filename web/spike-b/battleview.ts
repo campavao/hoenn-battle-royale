@@ -13,9 +13,9 @@
 // where the fight stands, with no catching up.
 
 import { EmeraldCanvas, glyphIds, type TextColor } from '../src/ui/emerald';
-import type { BattleEvent, Side } from './shared/battlelog';
+import type { BattleEvent, LogMon, Side } from './shared/battlelog';
 import { HB, type BattleEnv, type HealthboxArt, type RomArt, type RomFont } from './romart';
-import { H, W, advance, envFor, fitScale, revealed, sceneAt, slotOf, type Scene, type SideScene, type Slot } from './battlescene';
+import { H, W, advance, envFor, fitScale, readsFor, revealed, sceneAt, slotOf, type Scene, type SideScene, type Slot } from './battlescene';
 import { logMs } from './shared/battlelog';
 
 /** What the view needs from the ROM's art: RomArt, or a stand-in in a test. */
@@ -202,8 +202,29 @@ export class BattleView {
     this.root.remove();
   }
 
+  /** Draw again next frame, nothing having changed here: what shows through the ground has. */
+  redraw(): void {
+    this.dirty = true;
+  }
+
   scene(): Scene {
-    return sceneAt(this.log, this.t, this.following);
+    const s = sceneAt(this.log, this.t, this.following);
+    s.text = this.worded(s.text);
+    return s;
+  }
+
+  /** The log's line as it reads from the side followed (readsFor), the last one remembered: this
+   *  is asked every draw, and the line changes every second or so. */
+  private wordedFrom = '';
+  private wordedTo = '';
+  private worded(text: string): string {
+    const start = this.log[0];
+    if (this.following === 0 || start?.e !== 'start' || !text) return text;
+    if (text === this.wordedFrom) return this.wordedTo;
+    const names = (team: readonly LogMon[]) => team.map((m) => m.nickname || this.deps.art.speciesName(m.species));
+    this.wordedFrom = text;
+    this.wordedTo = readsFor(text, [start.a.name, start.b.name], [names(start.a.team), names(start.b.team)]);
+    return this.wordedTo;
   }
 
   snapshot(): ViewSnapshot {

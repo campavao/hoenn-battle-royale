@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { eventMs, logMs, stateAt, type BattleEvent } from './shared/battlelog';
 import { CANNED_LOG } from './fixtures/battlelog-canned';
-import { BLINK_MS, CHAR_MS, advance, boxLines, envFor, fitScale, introLine, revealed, sceneAt, sideOf, slotOf } from './battlescene';
+import { BLINK_MS, CHAR_MS, advance, boxLines, envFor, fitScale, introLine, readsFor, revealed, sceneAt, sideOf, slotOf } from './battlescene';
 import { barColour, barPixels, statusKind, trainerPicFor } from './battleview';
 
 /** The ms at which event `i` of the canned log starts. */
@@ -252,5 +252,52 @@ describe('the trainers pictures', () => {
     expect(trainerPicFor(15, 'far')).toEqual({ pic: 77, back: false, flip: false });
     expect(trainerPicFor(0, 'far')).toEqual({ pic: 71, back: false, flip: false });
     expect(trainerPicFor(99, 'far').pic).toBe(71);
+  });
+});
+
+describe('a line of a log, for a watcher following side 1', () => {
+  const trainers: [string, string] = ['MAY', 'BOB'];
+  const names: [string[], string[]] = [['TREECKO', 'KADABRA'], ['GLOOM', 'ABRA']];
+  const read = (t: string, n = names) => readsFor(t, trainers, n);
+
+  it('their mon loses the Foe and the other side\'s gets it', () => {
+    expect(read('Foe GLOOM used TOXIC!')).toBe('GLOOM used TOXIC!');
+    expect(read('TREECKO used POUND!')).toBe('Foe TREECKO used POUND!');
+    expect(read('Foe GLOOM fainted!')).toBe('GLOOM fainted!');
+    expect(read('GLOOM is hurt by the fog!')).toBe('GLOOM is hurt by the fog!');
+    expect(read('TREECKO is hurt by the fog!')).toBe('Foe TREECKO is hurt by the fog!');
+    expect(read('Foe GLOOM drained TREECKO!')).toBe('GLOOM drained Foe TREECKO!');
+    expect(read('A critical hit!')).toBe('A critical hit!');
+  });
+
+  it('a name in a longer name is no name', () => {
+    expect(read('Foe ABRA used CONFUSION!')).toBe('ABRA used CONFUSION!');
+    expect(readsFor('ABRA is fast. KADABRA is faster.', trainers, [['ABRA'], ['GLOOM']])).toBe('Foe ABRA is fast. KADABRA is faster.');
+  });
+
+  it('the same species on both sides: the log\'s "Foe" says whose it is', () => {
+    const same: [string[], string[]] = [['GLOOM'], ['GLOOM']];
+    expect(read('Foe GLOOM used TOXIC!', same)).toBe('GLOOM used TOXIC!');
+    expect(read('GLOOM used POUND!', same)).toBe('Foe GLOOM used POUND!');
+    expect(read('Foe GLOOM drained GLOOM!', same)).toBe('GLOOM drained Foe GLOOM!');
+  });
+
+  it('a name only they have stays bare, and a Foe with no name in the teams goes', () => {
+    expect(read('Foe DITTO transformed into GLOOM!', [['DITTO'], ['GLOOM']])).toBe('DITTO transformed into GLOOM!');
+    expect(read('DITTO transformed into GLOOM!', [['DITTO'], ['GLOOM']])).toBe('Foe DITTO transformed into GLOOM!');
+    expect(read('Foe MYSTERY used TACKLE!')).toBe('MYSTERY used TACKLE!');
+    expect(readsFor('A wild thing!', trainers, [[], []])).toBe('A wild thing!');
+  });
+
+  it('who sends out, and whose team, turned round', () => {
+    expect(read('Go! TREECKO!')).toBe('MAY sent out TREECKO!');
+    expect(read('BOB sent out GLOOM!')).toBe('Go! GLOOM!');
+    expect(read('Your team\'s REFLECT raised DEFENSE!')).toBe("Foe's team's REFLECT raised DEFENSE!");
+    expect(read("Foe's team's MIST wore off!")).toBe("Your team's MIST wore off!");
+  });
+
+  it('a name with a stop or a quote in it is taken as it stands', () => {
+    expect(readsFor('MR. MIME used BARRIER!', trainers, [['MR. MIME'], ['GLOOM']])).toBe('Foe MR. MIME used BARRIER!');
+    expect(readsFor("FARFETCH'D used CUT!", trainers, [["FARFETCH'D"], ['GLOOM']])).toBe("Foe FARFETCH'D used CUT!");
   });
 });
