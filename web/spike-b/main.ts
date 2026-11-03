@@ -45,7 +45,7 @@ import { OUT_BATCH_MS, event, felled, opening, outs, won } from '../src/match/ti
 import { MessageBox } from './msgbox';
 import { Fishing, fishPose, rodOf, type Rod } from './fish';
 import { Ticks } from './ticks';
-import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_CONTEST_CURTAIN_RISE, SE_DOOR, SE_EXIT, SE_FIELD_POISON, SE_LEDGE, SE_M_FLY, SE_SELECT, SE_SHOP, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
+import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_CONTEST_CURTAIN_FALL, SE_CONTEST_CURTAIN_RISE, SE_DOOR, SE_EXIT, SE_FIELD_POISON, SE_LEDGE, SE_M_FLY, SE_SELECT, SE_SHOP, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { devRomParam, importRom } from './import';
 import { askToKeepStorage, registerServiceWorker } from '../src/pwa';
@@ -63,7 +63,7 @@ import { ANIM_COUNTER_MAX } from '../src/tile-anims';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
 import { BattleView } from './battleview';
-import { raiseCurtain } from './curtain';
+import { coverScreen, curtainLines, raiseCurtain, type Cover } from './curtain';
 import { frameOf as fxFrame, grassUnderAsh, isFloor, MB_ASHGRASS, SHEETS as FX_SHEETS, stepEffects, type Effect, type FxKind } from './fieldfx';
 import { ROOM_GAP, clampZoom, loadZoom, nextZoom, pickedZoom, roomFloor, saveZoom, wheelSteps, zoomLabel, zoomRange } from './zoom';
 import { closingFade, fieldScale, FADE_COLOR_WORD, FADE_MODE_WORD, FADE_SELECTED, FADE_Y_WORD, FOG_EVA, FOG_EVB, fadeOf, keyPicture } from '../src/field';
@@ -2105,9 +2105,23 @@ let dropRound = -1;
 /** The round the buzzer last pulled me out of a screen in: once a round. */
 let buzzRound = -1;
 const buzzedRound = (round: number): boolean => { if (buzzRound === round) return true; buzzRound = round; return false; };
+/** The curtain over a cut, until `ready`; none on a patch too old to draw it. */
+function cover(ready: () => boolean): Cover | null {
+  const c = art?.contestCurtain();
+  return c ? coverScreen(c, document.body, ready, { fall: () => rom?.sound(SE_CONTEST_CURTAIN_FALL), rise: () => rom?.sound(SE_CONTEST_CURTAIN_RISE) }) : null;
+}
+let buzzerRound = -1;
+let buzzerCover: Cover | null = null;
 function safariFrame(ring: Ring): void {
   const me = link.room.actor(link.me);
-  if (!me || isOut || !rom || dropRound === ring.round || !me.m.spot.map.startsWith(SAFARI)) return;
+  if (!me || isOut || !rom || !me.m.spot.map.startsWith(SAFARI)) return;
+  // Time's up: the curtain first, and the battle, the menu and the map all happen behind it.
+  if (!ring.safari && buzzerRound !== ring.round) {
+    buzzerRound = ring.round;
+    buzzerCover = cover(() => !!mapWindow || isOut || !link.room.actor(link.me)?.m.spot.map.startsWith(SAFARI));
+  }
+  if (buzzerCover && !buzzerCover.isDown()) return;
+  if (dropRound === ring.round) return;
   if (ring.safari && rom.safariBalls() > 0) return;
   // The battle, the menu or the question on screen first: the map comes up after it. At
   // the buzzer they are pulled out of it, as live (BrMatch_BuzzerClosing, the menus' B),
@@ -2218,10 +2232,11 @@ function startMatch(l: WorldLink): void {
   lobby?.hide();
   // Into a match, not back into one after a reload.
   const curtain = l.online && token()?.id === l.me ? null : art?.contestCurtain();
-  if (curtain) raiseCurtain(curtain, document.body, () => rom?.sound(SE_CONTEST_CURTAIN_RISE));
+  if (curtain) raiseCurtain(curtain, document.body, () => rom?.sound(SE_CONTEST_CURTAIN_RISE), curtainLines(l.room.results.entrants.length || l.room.actors.length, l.room.seed));
   isOut = waiting = shownWin = false;
   // Every match's rounds count from 0: what was told or recorded of the last one is not.
-  seenRound = lastPhase = recordedRound = dropRound = hudRound = dugRound = toldOpening = -1;
+  seenRound = lastPhase = recordedRound = dropRound = hudRound = dugRound = toldOpening = buzzerRound = -1;
+  buzzerCover = null;
   teamSent = '';
   tallyFrom = rom?.tally() ?? null;
   myStepsN = 0;
@@ -3352,6 +3367,8 @@ const watch = new Watch({
     return `${s.name}'s bag`;
   },
   tell: (text) => tick(text),
+  cover,
+  lastRing: () => !!link?.room.ring().last,
   view: (side) => {
     if (!art) return null;
     const v: BattleView = new BattleView(document.getElementById('battleview-host')!, { art, behind: () => fieldBehind(v.canvas) }, { follow: side, levels: false });
