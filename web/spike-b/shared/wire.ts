@@ -25,6 +25,9 @@ export type WorldUp =
   | { t: 'kick'; id: number }
   /** LOBBIES: the rooms somebody hosted, answered by `rooms` (before a join, or in one). */
   | { t: 'list' }
+  /** How smooth the match looked from this page (jank.ts), one line in the relay's log. Counts
+   *  only: `v` is the ROM's sha1 in seven characters. */
+  | { t: 'jank'; v: string; watched: number; snaps: number; cam: number; lost: number; stalls: number; longest: number; checks: number; drifts: number }
   /** Still here: a hidden tab sends no frames (no requestAnimationFrame), so it says so,
    *  or the relay takes its silence for a phone gone (QUIET_MS). */
   | { t: 'here' }

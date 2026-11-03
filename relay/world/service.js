@@ -14348,6 +14348,7 @@ var STREAM_MAX = 64 * 1024;
 var ROOM_MAX = 30;
 var AUTO_START_MS = 6e4;
 var AWAY_MS = 6e4;
+var JANK_APART_MS = 3e4;
 var NOWHERE = { send: () => void 0, close: () => void 0 };
 var FIRST_ID = 1e3;
 function who(p) {
@@ -14486,6 +14487,13 @@ var WorldService = class {
           this.drop(p);
           p.kicked = true;
           this.send(p.link, { t: "kicked" });
+        } else if (m.t === "jank") {
+          const now = this.opts.now();
+          if (now - (phone.jankAt ?? -Infinity) < JANK_APART_MS) return;
+          phone.jankAt = now;
+          const n = (v2) => Number.isFinite(v2) ? Math.max(0, Math.min(65535, Math.floor(v2))) : 0;
+          const version = typeof m.v === "string" && /^[\w.+-]{1,16}$/.test(m.v) ? m.v : "?";
+          this.opts.log(`jank ${room.code} v${version} | watched ${n(m.watched)}s | snaps ${n(m.snaps)} cam ${n(m.cam)} lost ${n(m.lost)} | stalls ${n(m.stalls)} longest ${n(m.longest)}s | checks ${n(m.checks)} drifts ${n(m.drifts)}`);
         } else if (m.t === "team") {
           const mons = teamOf(m.mons);
           if (!mons) return;
@@ -14945,4 +14953,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "8f5bb517bc46";
+export const WORLD_HASH = "ade03b078feb";

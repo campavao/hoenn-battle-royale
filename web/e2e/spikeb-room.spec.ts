@@ -40,6 +40,53 @@ test('a reload mid-match comes back as the same trainer, not a new one', async (
   expect(await s(page, (s) => s.link.me)).toBe(me);
 });
 
+test('a step over a seam that does not meet in the plane is a glide, not a jump of the camera', async ({ page }) => {
+  test.setTimeout(240_000);
+  await solo(page, true);
+  const west = () => page.evaluate(() => {
+    const w = window as any, s = w.__spike;
+    const a = s.link.room.actor(s.link.me), spot = { map: 'MAP_FALLARBOR_TOWN', x: 1, y: 10 };
+    a.m = { ...a.m, spot, prev: spot, facing: 3, moveDir: 3, action: null, px: 0, py: 0 };
+    w.__ys = [];
+    const look = () => { w.__ys.push([s.cam.y, s.link.room.actor(s.link.me).m.spot.map]); requestAnimationFrame(look); };
+    look();
+  });
+  await west();
+  await expect.poll(() => s(page, (s) => s.link.room.actor(s.link.me)?.m.spot.map)).toBe('MAP_FALLARBOR_TOWN');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { (window as any).__ys.length = 0; });
+  await key(page, KEY[3], true);
+  await expect.poll(() => s(page, (s) => s.link.room.actor(s.link.me)?.m.spot.map), { timeout: 20_000 }).toBe('MAP_ROUTE114');
+  await page.waitForTimeout(500);
+  await key(page, KEY[3], false);
+  const ys = await page.evaluate(() => (window as any).__ys as [number, string][]);
+  const crossed = ys.findIndex(([, map]) => map === 'MAP_ROUTE114');
+  expect(crossed, 'over the seam').toBeGreaterThan(0);
+  const worst = Math.max(...ys.slice(1).map(([y], i) => Math.abs(y - ys[i][0])));
+  console.log(`[seam] the camera's worst move in a frame: ${worst} px, ${ys.length} frames`);
+  expect(worst).toBeLessThan(8);
+});
+
+test('out of the match, watching the bots walk for a minute: nobody jumps and the Room never leaves the relay', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  await hosted(page);
+  const counts = () => page.evaluate(() => (window as unknown as { __spike: { jank: { counts(): Record<string, number> } } }).__spike.jank.counts());
+  await s(page, (s) => s.goOut());
+  await expect.poll(() => s(page, (s) => s.spectating), { timeout: 30_000 }).toBeTruthy();
+  await page.waitForTimeout(60_000);
+  const j = await counts();
+  console.log(`[jank] ${JSON.stringify(j)}`);
+  expect(j.watched, 'it was watching').toBeGreaterThan(30);
+  expect(j.checks, 'the frames carry their hash').toBeGreaterThan(0);
+  expect(j.drifts, 'the same Room as the relay').toBe(0);
+  expect(j.lost, 'no resync').toBe(0);
+  expect(j.snaps, 'nobody jumped').toBe(0);
+  expect(j.cam).toBe(0);
+  await ctx.close();
+});
+
 test('out of the match, the strip names who is watched, and the D-pad steps to the next', async ({ browser }) => {
   test.setTimeout(300_000);
   const ctx = await browser.newContext({ viewport: devices['Pixel 7'].viewport, isMobile: true, hasTouch: true });

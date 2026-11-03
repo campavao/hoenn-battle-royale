@@ -139,6 +139,8 @@ const ROOM_MAX = 30;
 const AUTO_START_MS = 60_000;
 /** A page gone mid-match (a reload) keeps its trainer this long (Cam, 2026-10-20). */
 const AWAY_MS = 60_000;
+/** A page's `jank` lines this far apart at the most: a line a match, not a line a keystroke. */
+const JANK_APART_MS = 30_000;
 /** Where an away phone's frames go meanwhile. */
 const NOWHERE: Link = { send: () => undefined, close: () => undefined };
 /** Ids for trainers, clear of the bots' 1..n. */
@@ -150,6 +152,8 @@ interface Phone {
   skin: number;
   link: Link;
   heard: number;
+  /** Its last `jank` line, for JANK_APART_MS. */
+  jankAt?: number;
   synced: number;
   /** What a reload comes back in with (Again), and since when it has been gone (0: here). */
   key: string;
@@ -312,6 +316,15 @@ export class WorldService {
           this.drop(p);
           p.kicked = true;
           this.send(p.link, { t: 'kicked' });
+        } else if (m.t === 'jank') {
+          // The line relay/server.js logs for classic's pages (POK-376), which play-log.mjs reads.
+          // A page's own numbers, clamped, and a match or so's worth of them at most.
+          const now = this.opts.now();
+          if (now - (phone.jankAt ?? -Infinity) < JANK_APART_MS) return;
+          phone.jankAt = now;
+          const n = (v: unknown) => (Number.isFinite(v) ? Math.max(0, Math.min(65535, Math.floor(v as number))) : 0);
+          const version = typeof m.v === 'string' && /^[\w.+-]{1,16}$/.test(m.v) ? m.v : '?';
+          this.opts.log(`jank ${room.code} v${version} | watched ${n(m.watched)}s | snaps ${n(m.snaps)} cam ${n(m.cam)} lost ${n(m.lost)} | stalls ${n(m.stalls)} longest ${n(m.longest)}s | checks ${n(m.checks)} drifts ${n(m.drifts)}`);
         } else if (m.t === 'team') {
           const mons = teamOf(m.mons);
           if (!mons) return;

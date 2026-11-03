@@ -24,6 +24,36 @@ const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
 
 describe('shared room', () => {
+  it("no bot jumps: over a long match every move is a step, a hop or a warp (POK-376, Cam, 10-18: 'teleporting')", () => {
+    for (const seed of [11, 222, 3333]) {
+      const r = makeRoom(MAPS, PATCHES, seed);
+      r.ringPhase = 40 * 60;
+      r.opening = 20 * 60;
+      const host = new Host(r, 29, MAPS);
+      host.lock();
+      const was = new Map<number, { spot: { map: string; x: number; y: number }; m: unknown }>();
+      const place = (spot: { map: string; x: number; y: number }) => {
+        const p = r.places.get(spot.map);
+        return p ? { x: p.gx + spot.x, y: p.gy + spot.y } : null;
+      };
+      const jumps: string[] = [];
+      for (let f = 0; f < 15_000; f++) {
+        host.advance();
+        for (const a of r.actors) {
+          const w = was.get(a.id);
+          was.set(a.id, { spot: { ...a.m.spot }, m: a.m });
+          if (!w || w.m !== a.m || a.m.action?.kind === 'warp') continue;
+          const from = place(w.spot), to = place(a.m.spot);
+          const far = w.spot.map === a.m.spot.map ? Math.abs(w.spot.x - a.m.spot.x) + Math.abs(w.spot.y - a.m.spot.y)
+            : from && to ? Math.abs(from.x - to.x) + Math.abs(from.y - to.y) : Infinity;
+          // Three: a step over one of the seams that close two tiles out (seamglide.ts).
+          if (far > 3) jumps.push(`seed ${seed} frame ${r.tick} bot ${a.id}: ${w.spot.map} ${w.spot.x},${w.spot.y} -> ${a.m.spot.map} ${a.m.spot.x},${a.m.spot.y}`);
+        }
+      }
+      expect(jumps.slice(0, 8)).toEqual([]);
+    }
+  }, 300_000);
+
   it('mirrors the host frame for frame', () => {
     const seed = 12345;
     const host = new Host(makeRoom(MAPS, PATCHES, seed), 64, MAPS);
