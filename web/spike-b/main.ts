@@ -60,7 +60,9 @@ import hiddenJson from './data/hidden.json';
 import { RomArt, type MapAnim } from './romart';
 import { AskBox } from './askbox';
 import { ANIM_COUNTER_MAX } from '../src/tile-anims';
+import { JankMeter } from './jank';
 import { RingMap } from './ringmap';
+import { SeamGlide, seamOff } from './seamglide';
 import { Watch } from './watch';
 import { BattleView } from './battleview';
 import { raiseCurtain } from './curtain';
@@ -2206,7 +2208,10 @@ function startMatch(l: WorldLink): void {
   // (the hold gone, in again as a watcher) is a match come into afresh.
   if (resuming && matchOn && l.me === link.me) { resumeMatch(l); return; }
   resuming = reconnecting = false;
+  sendJank();
   link = l;
+  jank = new JankMeter();
+  jankSent = false;
   // The room's battle pace (the host's TEXT and ANIM); ?solo keeps the parked FAST, none.
   if (room) rom?.pace(room.set.textSpeed, room.set.animations);
   // A patch whose symbols predate the MAP's (gRegionMapEntries, gPlttBufferFaded) has none.
@@ -2264,6 +2269,7 @@ let knockedWithPass = false;
 /** LEAVE: the relay takes me out (the standings say "left"), and the menu is back. */
 function leaveMatch(): void {
   if (!lobby) return;
+  sendJank();
   worldSock?.leave();
   // Not matchOver: no standings for a match I walked out of.
   forget();
@@ -2778,6 +2784,7 @@ function legendChip(): string | null {
 }
 
 function matchOver(): void {
+  sendJank();
   forget();
   matchOn = false;
   endingAt = performance.now();
@@ -3456,7 +3463,19 @@ function followAt(clientX: number, clientY: number): void {
 /** An actor's tile top-left in world pixels, mid-step included. */
 function pixelOf(a: Actor): { x: number; y: number; lift: number } {
   const g = global(a.m.spot)!;
-  return { x: g.gx * TILE + a.m.px, y: g.gy * TILE + a.m.py, lift: -a.m.lift };
+  const off = seamGlide.offset(a.id, frame);
+  return { x: (g.gx + off.x) * TILE + a.m.px, y: (g.gy + off.y) * TILE + a.m.py, lift: -a.m.lift };
+}
+
+/** A step over a seam that doesn't meet in the plane is a glide, not a jump (seamglide.ts). */
+const seamGlide = new SeamGlide();
+function seamFrame(all: readonly Actor[]): void {
+  for (const a of all) {
+    seamGlide.look(a.id, a.m.spot.map, frame, (from, to) => {
+      const p = placed.get(from), q = placed.get(to);
+      return p && q ? seamOff(p, q) : null;
+    });
+  }
 }
 
 /** The walk anim's frame. A step plays half the anim, one foot (SetStepAnimHandleAlternation
@@ -3574,6 +3593,35 @@ function clearAsh(p: Placed, x: number, y: number): void {
   g.imageSmoothingEnabled = false;
   g.drawImage(art.blockArt(p.m.group, p.m.num, grassUnderAsh(art.blockAt(p.m.group, p.m.num, x, y))), x * TILE, y * TILE);
   p.mips = undefined;
+}
+
+// ---- how smooth it looked (jank.ts) -------------------------------------------------------
+let jank = new JankMeter();
+let jankSent = false;
+let jankAt = 0;
+let romSeven = '?';
+
+/** The match's line to the relay's log: as it ends, as I leave it, as the page goes. */
+function sendJank(): void {
+  if (jankSent || !matchOn || !link?.jank) return;
+  jankSent = true;
+  link.jank(jank.counts(), romSeven);
+}
+addEventListener('pagehide', sendJank);
+
+/** A frame drawn: who is where in the Room (not my predicted trainer, a new copy each frame), its
+ *  clock, and what the link has noticed. */
+function jankFrame(): void {
+  const h = link.health?.();
+  jank.look(link.room.actors.flatMap((a) => {
+    const p = placed.get(a.m.spot.map);
+    return p ? [{ id: a.id, x: p.gx + a.m.spot.x, y: p.gy + a.m.spot.y, warp: a.m.action?.kind === 'warp', m: a.m }] : [];
+  }), follow, h?.resyncs ?? 0);
+  const now = performance.now();
+  jank.clock(link.room.tick, now, document.hidden);
+  if (h) jank.checked(h.checks, h.drifts);
+  if (follow && follow !== link.me && !document.hidden) jank.watching(Math.min(now - jankAt, 1000));
+  jankAt = now;
 }
 
 /** Everybody's new steps, and the ash whose time has come. */
@@ -3990,6 +4038,7 @@ function mapUnder(x: number, y: number): Placed | null {
 
 function draw(): void {
   const all = actors();
+  seamFrame(all);
   const followed = follow ? all.find((a) => a.id === follow) : undefined;
   flightFrame(all);
   // Whoever the camera goes with is seen off where they were; it follows them through the fade.
@@ -4053,6 +4102,7 @@ function draw(): void {
   if (!far) drawGround(vx0, vy0, vx1, vy1);
   if (!far) drawProps(visible, all);
   stepFrame(all);
+  jankFrame();
   tagFrame();
   if (!far) drawEffects((e) => isFloor(e.kind), vx0, vy0, vx1, vy1);
   const people = all
@@ -4338,6 +4388,7 @@ async function boot(): Promise<void> {
     versionLine = files.version;
     recorder.setVersion({ line: files.version, romSha1: files.romSha, world: WORLD_HASH_SHORT });
   battlesOn(files.romSha);
+  romSeven = files.romSha;
     wireBattleMenu(files);
     if (touchPad) wirePhoneHud();
     else {
@@ -4476,7 +4527,7 @@ async function boot(): Promise<void> {
     }
   }
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { watch, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; } };
+  (window as unknown as { __spike: unknown }).__spike = { watch, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; } };
 }
 
 void boot();

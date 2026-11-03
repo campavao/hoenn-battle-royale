@@ -680,6 +680,28 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it("a page's jank report is one line in the log, clamped, the line play-log.mjs reads, and no more than one a match", () => {
+    const lines: string[] = [];
+    let now = 1000;
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, cap: 8, bots: 0, now: () => now, log: (l) => lines.push(l) });
+    try {
+    const a = phone();
+    const s = svc.open(a.link);
+    s.onText(JSON.stringify({ t: 'join', name: 'A', skin: 0, host: true }));
+    const j = { t: 'jank', v: 'dc179db', watched: 120.7, snaps: 2, cam: 1, lost: 0, stalls: 1e9, longest: 31, checks: 500, drifts: -3 };
+    s.onText(JSON.stringify(j));
+    const code = (a.got.find((m) => m.t === 'room') as unknown as { code: string }).code;
+    expect(lines.filter((l) => l.startsWith('jank'))).toEqual([`jank ${code} vdc179db | watched 120s | snaps 2 cam 1 lost 0 | stalls 65535 longest 31s | checks 500 drifts 0`]);
+    s.onText(JSON.stringify(j));
+    expect(lines.filter((l) => l.startsWith('jank'))).toHaveLength(1);
+    now += 31_000;
+    s.onText(JSON.stringify({ ...j, v: 'not a version!' }));
+    expect(lines.filter((l) => l.startsWith('jank'))[1]).toContain('v? |');
+    } finally {
+      svc.stop();
+    }
+  });
+
   describe('battle logs (bl)', () => {
     const mon = { species: 280, level: 12, hp: 31, maxHp: 31, status: 0 };
     const start = (seat = 1, foe = 2) => ({ e: 'start', a: { seat, name: 'A', skin: 0, team: [mon] }, b: { seat: foe, name: 'B', skin: 1, team: [mon] }, map: 'MAP_ROUTE101' });
