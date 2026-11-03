@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { learnsByNow, relearnable, speciesFacts, statusWord } from './monfacts';
+import { learnList, machineTag } from './movesbox';
+import { TMHM_MOVES } from './tmhm';
 import { pageScale } from './pagewin';
 import { statRows, type SummaryMon } from './summary';
 
@@ -91,5 +93,25 @@ describe('a box on the screen', () => {
   it("is the windows' scale on a phone, or what fits", () => {
     expect(pageScale(232, 344, 1.56, true, { w: 390, h: 844 })).toBeCloseTo(1.56);
     expect(pageScale(232, 344, 1.5, true, { w: 375, h: 400 })).toBeCloseTo(384 / 344);
+  });
+});
+
+describe('what MOVES lists', () => {
+  const r = rom([[1, 33], [10, 22]]);
+  const m = { species: 3, level: 20, moves: [{ id: 33 }] };
+  it('is its own learnset, then the machines in the bag in their order', () => {
+    expect(learnList(r, m, [289 + 25, 339 + 2])).toEqual([{ move: 22, machine: 0 }, { move: TMHM_MOVES[25], machine: 314 }, { move: TMHM_MOVES[52], machine: 341 }]);
+  });
+  it('leaves out a machine for a move it knows, or that its learnset lists, and anything else in the pocket', () => {
+    const tm = TMHM_MOVES[0];
+    expect(learnList(r, { ...m, moves: [{ id: 33 }, { id: tm }] }, [289, 13])).toEqual([{ move: 22, machine: 0 }]);
+    const own = rom([[1, tm]]);
+    expect(learnList(own, { species: 3, level: 5, moves: [] }, [289])).toEqual([{ move: tm, machine: 0 }]);
+  });
+  it('names a machine as the bag does', () => {
+    expect(machineTag(0)).toBe('');
+    expect(machineTag(289)).toBe('TM01');
+    expect(machineTag(338)).toBe('TM50');
+    expect(machineTag(339)).toBe('HM01');
   });
 });

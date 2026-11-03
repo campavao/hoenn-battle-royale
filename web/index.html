@@ -366,6 +366,9 @@
       #page-win[hidden], #page-win > [hidden], #page-win .bm-btn[hidden] { display: none; }
       #page-win canvas { display: block; }
       body:has(#page-win:not([hidden])) #battle-menu { visibility: hidden; }
+      #moves-box { display: grid; justify-content: center; gap: calc(var(--s, 1.5) * 4px); }
+      .mv-top, .mv-row { display: flex; justify-content: center; gap: calc(var(--s, 1.5) * 4px); }
+      .mv-list { overflow-y: auto; touch-action: pan-y; scrollbar-width: none; cursor: pointer; }
       #summary { display: grid; justify-content: center; gap: calc(var(--s, 1.5) * 4px); }
       .sum-moves { display: grid; grid-template-columns: auto auto; column-gap: calc(var(--s, 1.5) * 8px); row-gap: calc(var(--s, 1.5) * 4px); }
       .sum-row { display: flex; justify-content: center; gap: calc(var(--s, 1.5) * 4px); }

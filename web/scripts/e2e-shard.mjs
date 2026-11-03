@@ -30,7 +30,7 @@ export const FILE_SECONDS = {
   'spikeb-menu.spec.ts': 149,
   'spikeb-banners.spec.ts': 275,
   'spikeb-people.spec.ts': 125,
-  'spikeb-summary.spec.ts': 85,
+  'spikeb-summary.spec.ts': 130,
   'spikeb-windows.spec.ts': 452,
   'spikeb-room.spec.ts': 230,
   'spikeb.spec.ts': 526,
