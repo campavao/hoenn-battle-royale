@@ -11005,6 +11005,13 @@ var GROUDON = 405;
 var RAYQUAZA = 406;
 var LATIAS = 407;
 var LATIOS = 408;
+var WEATHER_DROUGHT = 12;
+var WEATHER_DOWNPOUR = 13;
+var clashWeather = (seed) => seed & 1 ? WEATHER_DROUGHT : WEATHER_DOWNPOUR;
+function legendOf(pick, seed, rng) {
+  if (pick.includes(KYOGRE) && pick.includes(GROUDON)) return clashWeather(seed) === WEATHER_DROUGHT ? GROUDON : KYOGRE;
+  return pick[Math.min(pick.length - 1, Math.floor(rng() * pick.length))];
+}
 var LEGENDS = [
   [REGIROCK, REGICE, REGISTEEL],
   [LATIAS, LATIOS],
@@ -12703,7 +12710,7 @@ var Room = class {
     const cells = all.filter((s) => s.map === f.map && d(s) <= 8 && d(s) !== 1).sort((p, q2) => d(p) - d(q2) || p.y - q2.y || p.x - q2.x).slice(0, 1 + EVENT_RARES + EVENT_GOLD + 2);
     const level = rungForPhase(ring.phase + 1);
     const legends = LEGENDS[Math.min(n, LEGENDS.length - 1)];
-    const species = [legends[Math.min(legends.length - 1, Math.floor(rng() * legends.length))], ...draw(rng, RARES, EVENT_RARES)];
+    const species = [legendOf(legends, this.seed, rng), ...draw(rng, RARES, EVENT_RARES)];
     const bags = [...draw(rng, GOLD, EVENT_GOLD).map((id2) => [{ id: id2, n: 1 }]), SUPPLIES.map((r) => ({ ...r }))];
     const spot = cells.length > species.length + bags.length ? cells.pop() : void 0;
     const offers = RARES.filter((r) => !species.includes(r));
@@ -12727,7 +12734,7 @@ var Room = class {
    *  rung, its rares, its items, the supplies, and the trader past them. */
   tellStory(n, ring, story, rng) {
     const level = rungForPhase(ring.phase + 1);
-    const species = [...(story.mons ?? []).map((pick) => pick[Math.floor(rng() * pick.length)]), ...draw(rng, RARES, story.rares ?? 0)];
+    const species = [...(story.mons ?? []).map((pick) => legendOf(pick, this.seed, rng)), ...draw(rng, RARES, story.rares ?? 0)];
     const bags = [...(story.items ?? []).map((pick) => [{ id: pick[Math.floor(rng() * pick.length)], n: 1 }]), SUPPLIES.map((r) => ({ ...r }))];
     const cells = story.cells.map((c) => ({ map: c.map ?? story.map, x: c.x, y: c.y }));
     const pieces = species.length + bags.length;
@@ -12806,6 +12813,19 @@ var Room = class {
         }
       }
     }
+  }
+  /** The weather a fight starts in, standing at `s`: KYOGRE's rain or GROUDON's drought, the seed's
+   *  pick, in SOOTOPOLIS from the frame its story drops until its piece is gone, and the fight for
+   *  it is in it too (br_story.c BrStory_Weather; POK-384). 0 anywhere else. The room's, so nothing
+   *  waits a frame for a ROM's task to notice, and every seat has the one answer. */
+  weatherAt(s) {
+    if (s.map !== "MAP_SOOTOPOLIS_CITY") return 0;
+    const live = this.events.some((e) => {
+      if (e.story !== "sootopolis" || !this.spills.has(e.key)) return false;
+      const by = this.picked.get(e.key);
+      return by === void 0 || !!this.actor(by)?.battling;
+    });
+    return live ? clashWeather(this.seed) : 0;
   }
   /** `id` off the map, and everything that waited on them let go. */
   remove(id2) {
@@ -13122,8 +13142,9 @@ var Room = class {
       w.meet = o.meet = void 0;
       const [h, f] = w.bot ? [o, w] : o.bot ? [w, o] : w.id < o.id ? [w, o] : [o, w];
       if (m.duel) {
-        events.push({ type: "duel", tick: this.tick, id: h.id, foe: f.id, first: true });
-        events.push({ type: "duel", tick: this.tick, id: f.id, foe: h.id, first: false });
+        const weather = this.weatherAt(h.m.spot);
+        events.push({ type: "duel", tick: this.tick, id: h.id, foe: f.id, first: true, ...weather ? { weather } : {} });
+        events.push({ type: "duel", tick: this.tick, id: f.id, foe: h.id, first: false, ...weather ? { weather } : {} });
       } else {
         f.foughtBy = h.id;
         events.push({ type: "fight", tick: this.tick, id: h.id, foe: f.id });
@@ -14945,4 +14966,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "8f5bb517bc46";
+export const WORLD_HASH = "44438fecf55d";
