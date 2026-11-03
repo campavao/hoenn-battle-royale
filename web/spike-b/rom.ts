@@ -950,9 +950,22 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     // However long it takes: a battle is never pulled out from under the player.
     if (shown) {
       onStart();
-      const calm = hurry ? briskFades() : () => undefined;
+      // Seen from here, so at the game's own speed from here (Cam, 11-02: "once something is about
+      // to paint onto the screen for the first time, the animation should be normal"). The quick
+      // steps were for what nobody sees; a fade is hurried again once the first menu is up.
+      let calm: () => void = () => undefined;
+      let unarmed: () => void = () => undefined;
+      if (hurry) {
+        emu.write(sym('gBrBattle') + BATTLE_HURRY, 0, 8);
+        unarmed = emu.onFrame(() => {
+          if (!emu.read(sym('gBrBattle') + BATTLE_MENU_AT, 8)) return;
+          unarmed();
+          calm = briskFades();
+        });
+      }
       // ...but for the stuck-fight net (stuck.ts), which ends one that never reached its menu.
       await until(emu, () => over() || aborted(), Infinity);
+      unarmed();
       calm();
       if (buzzed) { emu.write(match, BR_PHASE_PLAY, 8); buzzed = false; }
       // The ring is the battle's: back on the field nothing of it is left to bleed the

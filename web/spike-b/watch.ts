@@ -27,6 +27,7 @@ import type { SpMsg } from './shared/wire';
 import { logMs, type BattleEvent, type Side } from './shared/battlelog';
 import { SE_BALL_OPEN, SE_EFFECTIVE, SE_FAINT } from './music';
 import { recorder } from './recorder';
+import type { Cover } from './curtain';
 
 /** screens.ts's cycleWatch (not imported: it would bring the match's UI sheets along):
  *  round the list from `on`, or from an end when `on` is not in it. */
@@ -68,6 +69,10 @@ export interface WatchHost {
   describe(key: number): string | null;
   /** A line on the ticker. */
   tell(text: string): void;
+  /** The curtain over a cut until `ready` (curtain.ts); null when it can't be drawn. */
+  cover(ready: () => boolean): Cover | null;
+  /** The final ring is on. */
+  lastRing(): boolean;
   /** A battle view on the page, its back to us on side `follow`; null until the ROM's art is in. */
   view(follow: Side): LogView | null;
 }
@@ -137,7 +142,9 @@ export class Watch {
   private queue: { from: number; m: SpMsg; at: number }[] = [];
   private mirroring = false;
   /** The fight the trainer watched is in, as a log, and the view of it once there can be one. */
-  private fight: { from: number; f: number; side: Side; events: BattleEvent[]; began: number; view: LogView | null; next: number; lostAt: number; heard: number } | null = null;
+  private fight: { from: number; f: number; side: Side; events: BattleEvent[]; began: number; view: LogView | null; next: number; lostAt: number; heard: number; cover?: Cover | null } | null = null;
+  /** Fights I have had up, by from:f: one I come back to comes in under the curtain. */
+  private shown = new Set<string>();
   private viewEl: HTMLElement;
   /** A battle of the trainer watched is on my screen now (the results wait for it). */
   get replaying(): boolean { return this.mirroring || !!this.fight; }
@@ -244,6 +251,7 @@ export class Watch {
       this.eyes = 0;
       this.queue = [];
       this.rejoined.clear();
+      this.shown.clear();
       // What was taken before this page came in is nobody's news.
       this.seen = new Set(link ? link.room.picked.keys() : []);
       if (link) {
@@ -299,6 +307,12 @@ export class Watch {
     const now = performance.now();
     // Not over anything of my own: it comes up where the fight stands by then.
     if (!fight.view && this.host.idle() && !this.mirroring) {
+      // The curtain first, in the final ring and coming back to a fight (Cam, 11-02: "we can have
+      // that banner slide down and then it shows. Okay we're back in the battle").
+      const k = `${fight.from}:${fight.f}`;
+      if (fight.cover === undefined) fight.cover = this.host.lastRing() || this.shown.has(k) ? this.host.cover(() => !!fight.view || this.fight !== fight) : null;
+      if (fight.cover && !fight.cover.isDown()) return;
+      this.shown.add(k);
       // Shown first: the view sizes itself to the room it finds.
       this.viewEl.hidden = false;
       fight.view = this.host.view(fight.side);

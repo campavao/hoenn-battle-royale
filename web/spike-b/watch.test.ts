@@ -74,6 +74,8 @@ describe('a replay that ends itself', () => {
       idle: () => true,
       describe: () => null,
       tell: (t) => void told.push(t),
+      cover: () => null,
+      lastRing: () => false,
       view: () => null,
     });
     return {
@@ -168,6 +170,8 @@ describe('a fight with a log is drawn by the page', () => {
     const rom = { publish: () => {}, mirror: () => { mirrors.push(1); return new Promise<void>(() => {}); }, fightSong: (on: boolean) => songs.push(on), sound: (id: number) => sounds.push(id) };
     let cameInAt = 0;
     const views: { follow: number; played?: [unknown[], number]; added: unknown[]; closed: boolean; at: { next: number; ended: boolean; waiting: boolean } }[] = [];
+    let lastRing = false;
+    let curtain: { isDown(): boolean } | null = null;
     const watch = new Watch({
       trainers: () => [{ id: 2, name: 'BRENDAN' }, { id: 3, name: 'MAY' }] as never,
       me: () => 1003,
@@ -180,13 +184,15 @@ describe('a fight with a log is drawn by the page', () => {
       idle: () => idle,
       describe: () => null,
       tell: () => undefined,
+      cover: () => curtain,
+      lastRing: () => lastRing,
       view: (side) => {
         const v: (typeof views)[number] = { follow: side, added: [], closed: false, at: { next: cameInAt, ended: false, waiting: false } };
         views.push(v);
         return { play: (log, ms) => { v.played = [[...log], ms]; }, add: (ev) => { v.added.push(...ev); }, snapshot: () => v.at, redraw: () => undefined, close: () => { v.closed = true; } };
       },
     });
-    return { comeInAt: (n: number) => { cameInAt = n; }, watch, link, asked, mirrors, songs, sounds, views, dim: () => els.get('battleview-dim')!, setFollow: (id: number) => { follow = id; }, setIdle: (on: boolean) => { idle = on; }, fightOver: () => { battling = false; }, otherFoe: () => { foe = 9; }, crowned: () => { results.winner = 7; } };
+    return { setLastRing: (on: boolean) => { lastRing = on; }, setCurtain: (c: { isDown(): boolean } | null) => { curtain = c; }, comeInAt: (n: number) => { cameInAt = n; }, watch, link, asked, mirrors, songs, sounds, views, dim: () => els.get('battleview-dim')!, setFollow: (id: number) => { follow = id; }, setIdle: (on: boolean) => { idle = on; }, fightOver: () => { battling = false; }, otherFoe: () => { foe = 9; }, crowned: () => { results.winner = 7; } };
   }
 
   it('in the battle screen\'s place, from where the fight stands, its back to us on the side followed', () => {
@@ -204,6 +210,37 @@ describe('a fight with a log is drawn by the page', () => {
     expect(r.songs).toEqual([true]);
     r.watch.frame();
     expect(r.views, 'one view').toHaveLength(1);
+  });
+
+  it('in the final ring it comes up under the curtain, once that is down', () => {
+    const r = rig();
+    let down = false;
+    r.setLastRing(true);
+    r.setCurtain({ isDown: () => down });
+    r.watch.frame();
+    r.link.onBattleLog(2, 7, [start()], 0);
+    r.watch.frame();
+    expect(r.views, 'not until it is down').toHaveLength(0);
+    down = true;
+    r.watch.frame();
+    expect(r.views).toHaveLength(1);
+  });
+
+  it('a fight first seen before the final ring comes straight up; one I come back to, under the curtain', () => {
+    const r = rig();
+    r.setCurtain({ isDown: () => false });
+    r.watch.frame();
+    r.link.onBattleLog(2, 7, [start()], 0);
+    r.watch.frame();
+    expect(r.views, 'straight up').toHaveLength(1);
+    // Away, and back to the same fight.
+    r.setFollow(0);
+    r.watch.frame();
+    r.setFollow(2);
+    r.watch.frame();
+    r.link.onBattleLog(2, 7, [start()], 3000);
+    r.watch.frame();
+    expect(r.views, 'behind the curtain').toHaveLength(1);
   });
 
   it('never starts the ROM\'s replay of a fight with a log; a stream that comes along is dropped', () => {
