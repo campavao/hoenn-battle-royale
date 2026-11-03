@@ -37,7 +37,7 @@ export const FILE_SECONDS = {
   'battleview.spec.ts': 70,
   'spikeb-battlelog.spec.ts': 450,
   'spikeb-watch-log.spec.ts': 420,
-  'spikeb-stuck.spec.ts': 165,
+  'spikeb-stuck.spec.ts': 255,
   // Skipped in CI: these need the deployed site, or HBR_SOAK.
   'live-room.spec.ts': 0,
   'live.spec.ts': 0,

@@ -13861,6 +13861,7 @@ var CATCH_UP = 3;
 var MAX_QUEUE = 600;
 var SIM_BUDGET_MS = 4;
 var SIM_LAST_FRAME = BOT_DUEL_MAX - 60;
+var LET_GO_FRAMES = 60 * 60;
 var Host = class {
   /** `jitter` 0 is the page hosting itself: a key is used the frame it is pressed. */
   constructor(room, bots, maps, jitter = JITTER, opts = {}) {
@@ -13888,6 +13889,8 @@ var Host = class {
   simulation = null;
   simLoad = null;
   simFailed = false;
+  /** Who has been fighting nobody, and since which frame (LET_GO_FRAMES). */
+  alone = /* @__PURE__ */ new Map();
   onLog;
   /** A new trainer, in Littleroot by the truck (or at `spot`), standing on the next frame
    *  (or on the bench until the next round, when the fog has closed on this one). No name:
@@ -14005,6 +14008,7 @@ var Host = class {
   /** One frame. The record goes to every mirror; `acks` is each phone's last input used. */
   advance() {
     const room = this.room;
+    this.letGoAlone();
     const cmds = this.pending;
     this.pending = [];
     for (const c of cmds) room.apply(c);
@@ -14062,6 +14066,25 @@ var Host = class {
     if (ins.length) frame.ins = ins;
     if (stall.length) frame.stall = stall;
     return { frame, acks, events };
+  }
+  /** The end of a fight the other side has left, for a page that will never say it: no winner,
+   *  and kept apart a while, as a fight run from is. An `end` in the frame's commands, so every
+   *  mirror has it too. */
+  letGoAlone() {
+    const room = this.room;
+    for (const a of room.actors) {
+      const foe = a.foe ? room.actor(a.foe) : void 0;
+      if (a.bot || !a.battling || !a.foe || a.meet || foe?.battling && foe.foe === a.id) {
+        this.alone.delete(a.id);
+        continue;
+      }
+      const since = this.alone.get(a.id) ?? room.tick;
+      this.alone.set(a.id, since);
+      if (room.tick - since >= LET_GO_FRAMES) {
+        this.alone.delete(a.id);
+        this.pending.push({ c: "end", id: a.id, fled: true });
+      }
+    }
   }
   loadSim() {
     this.simLoad ??= Promise.resolve().then(() => (init_battlesim(), battlesim_exports)).then(
@@ -14945,4 +14968,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "8f5bb517bc46";
+export const WORLD_HASH = "29eed9b675b6";

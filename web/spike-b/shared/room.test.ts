@@ -14,7 +14,7 @@ import worldJson from '../data/world.json';
 import sectionsJson from '../../../src/data/region_map/region_map_sections.json';
 import { STORIES } from '../../src/match/story';
 import patchJson from '../../src/data/patches.json';
-import { Host, play } from './host';
+import { Host, LET_GO_FRAMES, play } from './host';
 import { over } from './over';
 import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, isTm, within } from './items';
 import { HURT, botKeys, health } from './bots';
@@ -24,6 +24,41 @@ const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
 
 describe('shared room', () => {
+  it('lets go of a trainer whose foe has let go of the fight, a minute on: a page that froze holds nobody', () => {
+    const seed = 99;
+    const host = new Host(makeRoom(MAPS, PATCHES, seed), 0, MAPS);
+    const mirror = makeRoom(MAPS, PATCHES, seed);
+    const run = (n: number) => { for (let i = 0; i < n; i++) { play(mirror, host.advance().frame); expect(mirror.hash()).toBe(host.room.hash()); } };
+    const a = host.join('A', 0), b = host.join('B', 1);
+    host.lock();
+    run(2);
+    const fight = () => {
+      for (const room of [host.room, mirror]) {
+        Object.assign(room.actor(a)!, { battling: true, foe: b });
+        Object.assign(room.actor(b)!, { battling: true, foe: a });
+      }
+    };
+    // Both still in it: the room never ends a fight that is going on, however long.
+    fight();
+    run(LET_GO_FRAMES + 10);
+    expect(host.room.actor(a)!.battling && host.room.actor(b)!.battling).toBe(true);
+    // A's page ends it; B's never says.
+    host.end(a, true);
+    run(1);
+    expect(host.room.actor(a)!.battling).toBe(false);
+    run(LET_GO_FRAMES - 10);
+    expect(host.room.actor(b)!.battling, 'its page has a minute to say so').toBe(true);
+    run(20);
+    const freed = host.room.actor(b)!;
+    expect(freed.battling).toBe(false);
+    expect(freed.foe).toBe(0);
+    expect(freed.shun, 'kept apart, as a fight run from').toBe(a);
+    // Its page turning up late changes nothing.
+    host.end(b);
+    run(1);
+    expect(host.room.actor(b)!.battling).toBe(false);
+  });
+
   it('mirrors the host frame for frame', () => {
     const seed = 12345;
     const host = new Host(makeRoom(MAPS, PATCHES, seed), 64, MAPS);
