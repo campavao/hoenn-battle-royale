@@ -78,19 +78,20 @@ import { MapWindow } from './mapwindow';
 import { FLY_SPOTS } from './flyspots';
 import { ARRIVES, FLIGHT_LEN, POISON_COLOUR, dollShows, flew, flightFade, flightPose, poisonBeat, poisonLook } from './looks';
 import type { MapPlace } from './ringmap';
-import { BACK_H, BATTLE_TYPE_RECORDED, BattleMenu, CELL_H, battleWantsNoPad, ppWithBonus, readBattleView, type PartyMember } from '../src/ui/battlemenu';
+import { BACK_H, BATTLE_TYPE_RECORDED, BattleMenu, CELL_H, HOLD_MS, battleWantsNoPad, ppWithBonus, readBattleView, type PartyMember } from '../src/ui/battlemenu';
 import { BATTLE_TYPE_TRAINER, CARD_H, SidesView } from '../src/ui/sides';
 import { BAG_POSITION_POCKET, POCKET_BALLS, POCKET_TMHM, isMachine, readBattleBag, readFieldBag, readPocket, takesMachine } from '../src/ui/bag';
 import type { Rom } from '../src/battle/movebook';
 import { BATTLE_MENU, MENU_ACTION, MENU_PARTY, TouchLayer } from '../src/touch';
 import { romAsks, type TeamRow } from './rom';
-import { pageWin } from '../src/ui/pagewin';
+import { eatLiftClick, pageWin } from '../src/ui/pagewin';
 import { SummaryWindow } from '../src/ui/summary';
+import { Radial, type DialItem } from '../src/ui/radial';
 import { ITEM_HM01, ITEM_TM01, MovesBox, learnList, type LearnRow } from '../src/ui/movesbox';
 import { learnsByNow } from '../src/ui/monfacts';
 import { TMHM_MOVES } from '../src/ui/tmhm';
 import { HUD } from '../src/net/hud';
-import { ITEM_ACRO_BIKE, ITEM_MACH_BIKE, MINI_MAP, PhoneHud, fieldMoves, fogPhase, itemCut, signFor, type FieldMove } from '../src/ui/phonehud';
+import { bagHolds, fieldMoves, fogPhase, ITEM_ACRO_BIKE, ITEM_MACH_BIKE, ITEM_TOWN_MAP, itemCut, KEYITEMS_POCKET, MINI_MAP, PhoneHud, signFor, type FieldMove } from '../src/ui/phonehud';
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
 import { seatScreen } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
@@ -443,6 +444,11 @@ const markCap = document.createElement('div');
 markCap.className = 'k k-mark';
 markCap.innerHTML = `<b>${MARK_KEY.toUpperCase()}</b><i>MARK</i>`;
 keysEl.append(markCap);
+// C held: the key items' dial, a pad's right trigger on the keyboard.
+const dialCap = document.createElement('div');
+dialCap.className = 'k k-dial';
+dialCap.innerHTML = '<b>C</b><i>ITEMS</i>';
+keysEl.append(dialCap);
 // A long press is a held button, never a page's selection, callout or drag (HBR-98).
 const typing = (t: EventTarget | null) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
 for (const type of ['contextmenu', 'selectstart', 'dragstart']) document.addEventListener(type, (e) => { if (!typing(e.target)) e.preventDefault(); });
@@ -480,8 +486,9 @@ addEventListener('keydown', (e) => {
 }, true);
 addEventListener('keyup', (e) => { const k = windowKey(e.key); if (k) battleMenu?.release(k); }, true);
 addEventListener('keydown', (e) => {
-  if (intro()) return;
+  if (intro() || pageWin.up) return;
   if (e.key === 'v' || e.key === 'V') { toggleSpectate(); return; }
+  if (e.key.toLowerCase() === RADIAL_KEY && !e.repeat && !e.ctrlKey && !e.metaKey) { openDial(); return; }
   if ((e.key === 'm' || e.key === 'M' || e.key === 'Escape') && !e.repeat) { void openMenu(); return; }
   if ((e.key === 'f' || e.key === 'F') && !e.repeat) { itemfinder(); return; }
   if ((e.key === 'r' || e.key === 'R') && !e.repeat) { openSheet(); return; }
@@ -496,8 +503,8 @@ addEventListener('keydown', (e) => {
   if (!held.has(k)) pressed.add(k);
   held.add(k);
 });
-addEventListener('keyup', (e) => { const k = KEYMAP[e.key]; if (k) held.delete(k); });
-addEventListener('blur', () => held.clear());
+addEventListener('keyup', (e) => { const k = KEYMAP[e.key]; if (k) held.delete(k); if (e.key.toLowerCase() === RADIAL_KEY) radial.release(); });
+addEventListener('blur', () => { held.clear(); radial.close(); });
 // ---- the room ------------------------------------------------------------------------
 
 let placed: Map<string, Placed>;
@@ -529,7 +536,7 @@ function actors(): Actor[] {
 let selectUntil = 0;
 let toldLoading = false;
 function myBits(): number {
-  if (spectating || battle || swapping || romUp || asking || casting || intro() || flights.some((f) => f.id === link.me)) return 0;
+  if (spectating || battle || swapping || romUp || asking || casting || intro() || pageWin.up || flights.some((f) => f.id === link.me)) return 0;
   // The battle ROM still booting (a match started seconds after the page opened): a
   // marked spot or a trainer stepped into now could only say "still loading" and spend
   // the spot, so the trainer waits for it, once told why.
@@ -1137,6 +1144,68 @@ async function openMenu(): Promise<void> {
 let panelUp = false;
 let summaryWin: SummaryWindow | null = null;
 let movesBox: MovesBox | null = null;
+
+// ---- the key items' dial (ui/radial.ts): a pad's right trigger, C, the round button held -----
+const ITEM_ITEMFINDER = 261;
+/** A pad's right trigger in the standard layout, unless a remap has put a button of the game's on it. */
+const PAD_RT = 7;
+const RADIAL_KEY = 'c';
+const radial = new Radial({ scale: windowScale, sound: () => rom?.sound(SE_SELECT) });
+/** Riding, or the bike in the bag: SELECT gets on or off where a bike may go (sim.ts). */
+function bikeNow(me: Actor): { item: number; label: string; enabled: boolean } {
+  const has = rom ? bagHolds(rom.emu, romTables.sym, KEYITEMS_POCKET, [ITEM_MACH_BIKE, ITEM_ACRO_BIKE]) : new Set<number>();
+  return {
+    item: has.has(ITEM_MACH_BIKE) || !has.size ? ITEM_MACH_BIKE : ITEM_ACRO_BIKE,
+    label: me.m.bike ? 'WALK' : 'BIKE',
+    enabled: me.m.bike || !!link.room.stepFor(me).cycling?.(me.m.spot),
+  };
+}
+/** What SELECT would do with the rod here: casts it facing water, on foot or surfing (room.ts). */
+const rodReady = (me: Actor) => !me.m.bike && classAt(aheadOf(me)) === CLASS_WATER;
+const pressSelect = () => { selectUntil = frame + 40; };
+/** The key items that do something on the field, each on its own side of the dial. */
+function dialItems(me: Actor): DialItem[] {
+  const out: DialItem[] = [];
+  const bike = bikeNow(me);
+  out.push({ side: 'up', ...bike, why: "Can't ride here.", go: pressSelect });
+  const rod = rom?.rod() ?? 0;
+  if (rodOf(rod) >= 0) out.push({ side: 'right', item: rod, label: 'FISH', enabled: rodReady(me), why: me.m.bike ? 'Off the bike first.' : 'Face the water.', go: pressSelect });
+  // The MAP and FLY are one screen (lookAtMap): one side, named for what it will do.
+  if (ringMap && !link.room.ring().safari) out.push({ side: 'down', item: ITEM_TOWN_MAP, label: couldFly(readTeam()) ? 'FLY' : 'MAP', enabled: true, go: () => void lookAtMap() });
+  if (rom && bagHolds(rom.emu, romTables.sym, KEYITEMS_POCKET, [ITEM_ITEMFINDER]).size) out.push({ side: 'left', item: ITEM_ITEMFINDER, label: 'ITEMFINDER', enabled: true, go: itemfinder });
+  return out;
+}
+function openDial(finger?: { x: number; y: number }): void {
+  const me = link?.room.actor(link.me);
+  if (!me || !rom || isOut || spectating || battle || swapping || romUp || asking || casting || intro() || lobby?.shown || me.battling) return;
+  held.clear();
+  pressed.clear();
+  rom.sound(SE_WIN_OPEN);
+  radial.open(dialItems(me));
+  if (finger) radial.fingerFrom(finger.x, finger.y);
+}
+/** A key item USEd off the BAG that works on this world, not the hidden ROM's field, where it
+ *  did nothing to see (Cam, 11-02: "Acro bike use. Is it doing anything?"): out, and do it. */
+function useKeyItem(item: number): boolean {
+  const me = link?.room.actor(link.me);
+  if (!me) return false;
+  if (item === ITEM_MACH_BIKE || item === ITEM_ACRO_BIKE) {
+    closePanel();
+    if (bikeNow(me).enabled) pressSelect(); else say("There's a time and place for everything! But not now.");
+    return true;
+  }
+  if (item === ITEM_ITEMFINDER) {
+    closePanel();
+    itemfinder();
+    return true;
+  }
+  if (rodOf(item) >= 0) {
+    closePanel();
+    if (rodReady(me)) pressSelect(); else say('Face the water to fish.');
+    return true;
+  }
+  return false;
+}
 /** The party as the windows read it. */
 let readTeam: () => PartyMember[] = () => [];
 /** What this one could learn now: its learnset, then the machines in the bag (ui/movesbox.ts). */
@@ -2617,6 +2686,21 @@ const BR_HUD_FOG_FRAMES = 60;
 const DESK_WIDE_W = 480;
 let hudFogged = false;
 let fogFlashTo = 0;
+/** The round button held: the dial, from where the finger or the mouse is. A press is SELECT. */
+function wireDialHold(b: HTMLElement): void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const end = () => { if (timer) clearTimeout(timer); timer = null; };
+  b.addEventListener('pointerdown', (e) => {
+    const at = { x: e.clientX, y: e.clientY };
+    timer = setTimeout(() => {
+      end();
+      eatLiftClick();
+      openDial(at);
+    }, HOLD_MS);
+  });
+  for (const ev of ['pointerup', 'pointercancel']) b.addEventListener(ev, end);
+}
+
 /** `desk`: a computer's, as /classic/ shows it in the picture (br_hud.c): the place's
  *  sign and the fog window in Emerald's own frames in place of the plain corner, the
  *  buttons kept, and no dock (the keyboard has PARTY, MAP and START). */
@@ -2638,10 +2722,12 @@ function wirePhoneHud(desk = false): void {
     bumpers: {
       onBag: () => void runMenu('2'),
       bag: () => bagArtOf(),
-      keys: desk ? { party: 'Q', bag: 'E' } : undefined,
+      keys: desk ? { party: 'Q', bag: 'E', ctx: 'SHIFT' } : undefined,
     },
   });
   document.getElementById('hud-menu')!.addEventListener('click', () => openSheet());
+  wireDialHold(hud.buttons.ctx);
+  if (desk) hud.buttons.ctx.title = 'Hold for the key items';
   const scale = () => {
     // A window with a mouse: whole pixels, by its height (Cam, 11-01: the bar "feels very
     // sort of hidden", and a TM's name in it went unread).
@@ -2695,20 +2781,6 @@ function wirePhoneHud(desk = false): void {
     });
   };
   setInterval(refreshHud, 100);
-}
-
-/** A bike's USE in the BAG (item_use.c ItemUseOutOfBattle_Bike): the window shuts and I'm on it, or
- *  off it, the dock's BIKE by another way. It went to the hidden ROM, whose rider nobody sees, and
- *  came back "It won't have any effect" (Cam, 11-02, at Jagged Pass: "Is it doing anything?"). This
- *  world has the one way of riding (sim.ts, the MACH's), whichever bike is asked. Facing water
- *  SELECT is the rod's (room.ts), which isn't what was asked for. */
-function bikeFromBag(): void {
-  closePanel();
-  const me = link.room.actor(link.me);
-  if (!me) return;
-  const can = me.m.bike || (!!link.room.stepFor(me).cycling?.(me.m.spot) && classAt(me.m.spot) !== CLASS_WATER && classAt(aheadOf(me)) !== CLASS_WATER);
-  if (can) selectUntil = frame + 40;
-  else say("There's a time and place for everything! But not now.");
 }
 
 /** gBrHmView's bits (include/br/br_hm.h): HM n+1's move at bit n. */
@@ -2931,7 +3003,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
         give: async (slot, item) => { if (await rom?.take(item)) await rom?.setHeld(slot, item); },
         take: async (slot, item) => { await rom?.setHeld(slot, 0); await rom?.give(item, 1); },
         use: (pocket, item, slot, move) => {
-          if (item === ITEM_MACH_BIKE || item === ITEM_ACRO_BIKE) { bikeFromBag(); return; }
+          if (useKeyItem(item)) return;
           const count = () => readPocket(emu, sym, pocket).find((x) => x.item === item)?.n ?? 0;
           const was = count();
           void panelWalk((r) => r.menu(2, panelShow, panelHide, { to: 'use', pocket, item, slot, move })).then(() => {
@@ -3483,6 +3555,7 @@ if (typeof navigator.getGamepads === 'function') {
   let padHeld = new Set<string>();
   let buttonsHeld = new Set<number>();
   let padId = '';
+  let triggerHeld = false, triggerPad = '';
   setInterval(() => {
     const now = new Set<string>();
     const pressedNow = new Set<number>();
@@ -3502,12 +3575,24 @@ if (typeof navigator.getGamepads === 'function') {
         continue;
       }
       for (const i of pressedNow) if (padKeys[i]) now.add(padKeys[i]);
+      // The dial up: the right stick leans too, and its lean is nobody's walk.
+      if (radial.isOpen) {
+        const dx = (pad.axes[2] ?? 0) - (base[2] ?? 0), dy = (pad.axes[3] ?? 0) - (base[3] ?? 0);
+        if (Math.hypot(dx, dy) > 0.5) radial.aim(dx, dy);
+      }
+      if (pad.buttons[PAD_RT]?.pressed) triggerPad = pad.id;
       for (const k of padStick ? stickKeys(pad.axes, base, padStick) : guessedStickKeys(pad.axes, base).keys) if (GBA_KEY[k]) now.add(k);
       const hat = pad.axes.length >= 10 ? pad.axes[9] : 9;
       if (hat >= -1.1 && hat <= 1.1) for (const k of PAD_HAT[Math.round((hat + 1) * 3.5) % 8]) now.add(k);
       if (now.size) padId = pad.id;
     }
     buttonsHeld = pressedNow;
+    // The right trigger: held for the dial, and it goes on the way up.
+    const rt = pressedNow.has(PAD_RT) && !padKeys[PAD_RT];
+    if (rt !== triggerHeld) {
+      triggerHeld = rt;
+      if (rt) { inputPad(triggerPad, padKeys); openDial(); } else radial.release();
+    }
     // A fresh press (not a drifting stick) is what makes the key hints a pad's.
     if ([...now].some((k) => !padHeld.has(k))) inputPad(padId, padKeys);
     for (const k of now) if (!padHeld.has(k)) padDown(k);
@@ -5017,7 +5102,7 @@ async function boot(): Promise<void> {
     }
   }
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { watch, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, get movesBox() { return movesBox; } };
+  (window as unknown as { __spike: unknown }).__spike = { watch, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, get movesBox() { return movesBox; }, radial };
 }
 
 void boot();

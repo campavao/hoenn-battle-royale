@@ -196,6 +196,8 @@ export class MovesBox implements PageWindow {
   }
 
   private mon(): PartyMember | undefined {
+    // Its windows paint as they're made, before there's a ROM to read a party off.
+    if (this.box.hidden) return undefined;
     return this.deps.team()[this.slot];
   }
 

@@ -163,7 +163,14 @@
       .hud-ctx-round { position: fixed; right: calc(env(safe-area-inset-right) + 24px); bottom: calc(env(safe-area-inset-bottom) + var(--s, 1.5) * 52px + 88px); width: calc(var(--s, 1.5) * 36px); height: calc(var(--s, 1.5) * 36px); border-radius: 50%; background: rgba(32, 38, 44, 0.45) !important; }
       .hud-ctx-round[aria-disabled="true"] { opacity: 0.45; }
       body.desk-hud #pad { display: grid; pointer-events: none; }
-      body.desk-hud #pad .dpad, body.desk-hud #pad .ab, body.desk-hud #pad .st, body.desk-hud .hud-ctx-round { display: none; }
+      body.desk-hud #pad .dpad, body.desk-hud #pad .ab, body.desk-hud #pad .st { display: none; }
+      /* A desktop's quick action beside the BAG (Cam, 11-02, 10:31: "we don't see the quick action
+         button"), PARTY, the room and BAG still in the middle. */
+      body.desk-hud #pdock.hud-bumpers:not([hidden]) { grid-template-columns: 1fr auto auto auto 1fr; justify-content: stretch; }
+      body.desk-hud #pdock.hud-bumpers #hud-party { grid-area: 1 / 2; }
+      body.desk-hud #pdock.hud-bumpers .hud-menu { grid-area: 1 / 3; }
+      body.desk-hud #pdock.hud-bumpers #hud-bag { grid-area: 1 / 4; }
+      body.desk-hud #pdock.hud-bumpers .hud-ctx-round { position: static; grid-area: 1 / 5; justify-self: start; }
       body.desk-hud #hud > button { display: none; }
       body.desk-hud .hud-sign { top: calc(var(--s, 1.5) * 4px); }
       .bm-hold { position: absolute; inset: calc(var(--s, 1.5) * 3px); background: #b8d8f8; mix-blend-mode: multiply; transform-origin: left; transform: scaleX(0); pointer-events: none; }
@@ -319,7 +326,7 @@
           grid-template-columns: repeat(7, 26px);
           grid-template-rows: 24px 26px 26px 26px 24px;
           grid-template-areas:
-            ".     .     .     .     .     .     mark"
+            "dial  .     .     .     .     .     mark"
             ".     up    .     .     .     .     a"
             "left  .     right .     b     .     ."
             ".     down  .     .     .     .     ."
@@ -345,6 +352,7 @@
         #keys .k-a { grid-area: a; } #keys .k-b { grid-area: b; }
         #keys .k-select { grid-area: sel; } #keys .k-start { grid-area: start; }
         #keys .k-mark { grid-area: mark; }
+        #keys .k-dial { grid-area: dial; }
       }
       /* The play-test's marks and its file (spike-b/recorder.ts): K, or the room sheet's MARK
          on a phone, and the results have the file's button. */
@@ -369,6 +377,13 @@
       #moves-box { display: grid; justify-content: center; gap: calc(var(--s, 1.5) * 4px); }
       .mv-top, .mv-row { display: flex; justify-content: center; gap: calc(var(--s, 1.5) * 4px); }
       .mv-list { overflow-y: auto; touch-action: pan-y; scrollbar-width: none; cursor: pointer; }
+      .hud-ctx-round { touch-action: none; }
+      #radial { display: grid; grid-template-columns: auto auto auto; grid-template-rows: auto auto auto; gap: calc(var(--s, 1.5) * 4px); place-items: center; }
+      .rad-up { grid-area: 1 / 2; }
+      .rad-left { grid-area: 2 / 1; }
+      .rad-right { grid-area: 2 / 3; }
+      .rad-down { grid-area: 3 / 2; }
+      .rad-mid { grid-area: 2 / 2; pointer-events: none; }
       #summary { display: grid; justify-content: center; gap: calc(var(--s, 1.5) * 4px); }
       .sum-moves { display: grid; grid-template-columns: auto auto; column-gap: calc(var(--s, 1.5) * 8px); row-gap: calc(var(--s, 1.5) * 4px); }
       .sum-row { display: flex; justify-content: center; gap: calc(var(--s, 1.5) * 4px); }
