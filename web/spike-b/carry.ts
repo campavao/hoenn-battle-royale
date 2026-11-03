@@ -239,6 +239,33 @@ export function withHeld(party: Uint8Array, slot: number, item: number): Uint8Ar
   return out;
 }
 
+/** `party` with this one knowing `move` in `moveSlot`, its PP full and that slot's PP Ups gone
+ *  (pokemon.c SetMonMoveSlot, RemoveMonPPBonus), and the slot marked as the player's pick, which
+ *  a rung's lift keeps (br_moves.c BrMoves_Placed: a bit of the unused ribbons, 27 up). */
+export function withMove(party: Uint8Array, slot: number, moveSlot: number, move: number, pp: number): Uint8Array {
+  const out = party.slice();
+  const v = new DataView(out.buffer, out.byteOffset, out.byteLength);
+  const at = slot * 100;
+  const personality = v.getUint32(at, true);
+  const key = (personality ^ v.getUint32(at + 4, true)) >>> 0;
+  const order = ORDERS[personality % 24];
+  const sub = (s: string) => at + 32 + 12 * order.indexOf(s);
+  const edit = (off: number, f: (w: number) => number) => v.setUint32(off, (f((v.getUint32(off, true) ^ key) >>> 0) ^ key) >>> 0, true);
+  const half = moveSlot & 1 ? 16 : 0;
+  edit(sub('A') + (moveSlot >> 1) * 4, (w) => ((w & ~(0xffff << half)) | (move << half)) >>> 0);
+  edit(sub('A') + 8, (w) => ((w & ~(0xff << (moveSlot * 8))) | (pp << (moveSlot * 8))) >>> 0);
+  edit(sub('G') + 8, (w) => (w & ~(3 << (moveSlot * 2))) >>> 0);
+  edit(sub('M') + 8, (w) => (w | (1 << (27 + moveSlot))) >>> 0);
+  // pokemon.c's CalculateBoxMonChecksum: the 16-bit sum of the plain block.
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    const w = (v.getUint32(at + 32 + i * 4, true) ^ key) >>> 0;
+    sum = (sum + (w & 0xffff) + (w >>> 16)) & 0xffff;
+  }
+  v.setUint16(at + 28, sum, true);
+  return out;
+}
+
 /** Whether a piece on the ground is drawn. One somebody has taken up is not; a bag I have open
  *  still lies there while I look in it (Cam, 11-02: "seems to disappear while interacting with
  *  it"), but not a legendary, who is in the fight the taking started. A person stays, whoever

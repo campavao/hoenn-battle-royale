@@ -231,6 +231,103 @@ test('in a battle: SUMMARY and a held mon leave the fight as it was; a held move
   await ctx.close();
 });
 
+/** The ROM's own party bytes for the first mon, as the windows read them. */
+const moveIds = (page: Page, slot: number) => spike(page, new Function('s', `return s.battleMenu.deps.firstMoves.readParty()[${slot}].moves.map((m) => m.id)`) as (s: any) => number[]);
+
+test('MOVES is a small box: a learnset move, a TM spent, four known asks which goes, and the ROM agrees', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext(DESK);
+  const page = await ctx.newPage();
+  await page.goto(`/?rom=${romHashParam()}#solo&nobots&safari=600&seed=7`);
+  await page.locator('#intro-go').click({ timeout: 90_000 });
+  await page.waitForFunction(() => { const s = (window as any).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 120_000 });
+  await spike(page, (s) => s.startFor({ type: 'bag', tick: 0, id: s.link.me, key: 0x7e0001, name: 'MAY', bag: { items: [], money: 0, mons: [{ species: 277, level: 30 }] } }));
+  await expect(page.locator('.bm-slot').first()).toBeVisible({ timeout: 15_000 });
+  await page.locator('.bm-slot').first().click();
+  await expect.poll(() => spike(page, (s) => s.rom.partyCount()), { timeout: 15_000 }).toBe(1);
+  await expect.poll(() => spike(page, (s) => s.swapping), { timeout: 30_000 }).toBe(false);
+  // A TM in the bag: TM26, EARTHQUAKE.
+  await spike(page, (s) => s.rom.give(314, 1));
+  await page.waitForTimeout(500);
+  const count = (id: number) => spike(page, new Function('s', `return s.battleMenu.deps.firstMoves.field.readBag().get(2)?.find((x) => x.item === ${id})?.n ?? 0`) as (s: any) => number);
+
+  await page.keyboard.press('q');
+  await page.locator('.bm-slot').first().click();
+  await expect(page.locator('.bm-member')).toBeVisible();
+  await page.locator('.bm-m-btn', { hasNot: page.locator('[hidden]') }).nth(4).click();
+  await expect(page.locator('#moves-box')).toBeVisible();
+  await expect(page.locator('#gba'), 'no ROM screen').toBeHidden();
+  const box = (await page.locator('#moves-box').boundingBox())!;
+  expect(box.width / 1920, 'a box, not the screen').toBeLessThan(0.3);
+  expect(box.height / 1080).toBeLessThan(0.6);
+  await page.waitForTimeout(300);
+  await shot(page, 'desk-moves');
+  const before = await moveIds(page, 0);
+  expect(before).toHaveLength(4);
+  // The cursor's numbers and words under the list.
+  const one = await page.locator('.mv-detail').getAttribute('aria-label');
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('.mv-detail')).not.toHaveAttribute('aria-label', one!);
+
+  // The last row is the TM. Four known: which goes, on the windows; BACK keeps the four.
+  const rows = await spike(page, (s) => s.movesBox.rows.length) as number;
+  for (let i = 1; i < rows; i++) await page.keyboard.press('ArrowDown');
+  await expect(page.locator('.mv-learn')).toHaveAttribute('aria-label', 'Learn EARTHQUAKE');
+  await page.keyboard.press('z');
+  await expect(page.locator('.bm-pick-move').first()).toBeVisible();
+  await expect(page.locator('#moves-box')).toBeHidden();
+  await page.keyboard.press('x');
+  await expect(page.locator('#moves-box')).toBeVisible();
+  expect(await moveIds(page, 0), 'BACK kept the four').toEqual(before);
+  expect(await count(314)).toBe(1);
+  // Now a slot: it goes in that slot, the TM is spent, and the box stays.
+  await page.keyboard.press('z');
+  await page.locator('.bm-pick-move').nth(2).click();
+  await expect(page.locator('#moves-box')).toBeVisible();
+  await expect.poll(() => moveIds(page, 0)).toEqual([before[0], before[1], 89, before[3]]);
+  expect(await count(314), 'the TM spent').toBe(0);
+  const pp = await spike(page, (s) => s.battleMenu.deps.firstMoves.readParty()[0].moves[2]) as any;
+  expect(pp.pp).toBe(10);
+  // The ROM runs on what was written, and still sees a whole mon, no BAD EGG: its flag is set by
+  // the ROM's own read of a block whose checksum is off (pokemon.c DecryptBoxMon's callers).
+  await spike(page, (s) => s.rom.give(13, 1));
+  expect(await spike(page, (s) => s.rom.emu.read(s.art.sym('gPlayerParty') + 19, 8) & 1), 'not a BAD EGG').toBe(0);
+  expect((await spike(page, (s) => s.rom.fameTeam()) as any)[0].moves.map((m: any) => m.id), 'the ROM has it').toContain(89);
+  // A learnset move: free.
+  await page.keyboard.press('z');
+  await page.locator('.bm-pick-move').nth(3).click();
+  await expect.poll(async () => (await moveIds(page, 0))[3]).not.toBe(before[3]);
+  // BACK: the member, with what it learned.
+  await page.keyboard.press('x');
+  await expect(page.locator('#moves-box')).toBeHidden();
+  await expect(page.locator('.bm-member')).toBeVisible();
+  await ctx.close();
+});
+
+test('MOVES on a phone: tap a row, LEARN', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const ctx = await browser.newContext(PHONE);
+  const page = await ctx.newPage();
+  await page.goto(`/?rom=${romHashParam()}#solo&nobots&safari=600&seed=7`);
+  await page.locator('#intro-go').click({ timeout: 90_000 });
+  await page.waitForFunction(() => { const s = (window as any).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 120_000 });
+  await spike(page, (s) => s.startFor({ type: 'bag', tick: 0, id: s.link.me, key: 0x7e0001, name: 'MAY', bag: { items: [], money: 0, mons: [{ species: 277, level: 30 }] } }));
+  await expect(page.locator('.bm-slot').first()).toBeVisible({ timeout: 15_000 });
+  await page.locator('.bm-slot').first().tap();
+  await expect.poll(() => spike(page, (s) => s.swapping), { timeout: 30_000 }).toBe(false);
+  await page.locator('#hud-party').tap();
+  await page.locator('.bm-slot').first().tap();
+  await page.locator('.bm-m-btn', { hasNot: page.locator('[hidden]') }).nth(4).tap();
+  await expect(page.locator('#moves-box')).toBeVisible();
+  const box = (await page.locator('#moves-box').boundingBox())!;
+  expect(box.height / 844, 'not full screen').toBeLessThan(0.65);
+  await page.waitForTimeout(300);
+  await shot(page, 'phone-moves');
+  await page.locator('.mv-back').tap();
+  await expect(page.locator('.bm-member')).toBeVisible();
+  await ctx.close();
+});
+
 test('by a thumb: the same window fits a phone, and a finger held on a mon opens it', async ({ browser }) => {
   test.setTimeout(240_000);
   const ctx = await browser.newContext(PHONE);

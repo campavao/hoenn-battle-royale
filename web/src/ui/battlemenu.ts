@@ -873,6 +873,17 @@ export class BattleMenu {
     this.settleFocus(true);
   }
 
+  /** One of the party's page, as it stands now. */
+  showMember(slot: number): void {
+    this.memberAt = slot;
+    this.team = this.deps.firstMoves?.readParty() ?? [];
+    this.setMode('member');
+  }
+
+  readTeam(): PartyMember[] {
+    return this.deps.firstMoves?.readParty() ?? [];
+  }
+
   /** What this one of the party holds now. */
   heldBy(slot: number): number {
     return this.deps.firstMoves?.readParty()[slot]?.item ?? 0;

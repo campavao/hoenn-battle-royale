@@ -45,7 +45,7 @@ import { OUT_BATCH_MS, event, felled, opening, outs, won } from '../src/match/ti
 import { MessageBox } from './msgbox';
 import { Fishing, fishPose, rodOf, type Rod } from './fish';
 import { Ticks } from './ticks';
-import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_CONTEST_CURTAIN_FALL, SE_CONTEST_CURTAIN_RISE, SE_DOOR, SE_EXIT, SE_FAILURE, SE_FIELD_POISON, SE_LEDGE, SE_M_FLY, SE_SELECT, SE_SHOP, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
+import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_CONTEST_CURTAIN_FALL, SE_CONTEST_CURTAIN_RISE, SE_DOOR, SE_EXIT, SE_FAILURE, SE_FIELD_POISON, SE_LEDGE, SE_M_FLY, SE_SELECT, SE_SHOP, SE_USE_ITEM, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { devRomParam, importRom } from './import';
 import { askToKeepStorage, registerServiceWorker } from '../src/pwa';
@@ -86,6 +86,9 @@ import { BATTLE_MENU, MENU_ACTION, MENU_PARTY, TouchLayer } from '../src/touch';
 import { romAsks, type TeamRow } from './rom';
 import { pageWin } from '../src/ui/pagewin';
 import { SummaryWindow } from '../src/ui/summary';
+import { ITEM_HM01, ITEM_TM01, MovesBox, learnList, type LearnRow } from '../src/ui/movesbox';
+import { learnsByNow } from '../src/ui/monfacts';
+import { TMHM_MOVES } from '../src/ui/tmhm';
 import { HUD } from '../src/net/hud';
 import { ITEM_ACRO_BIKE, ITEM_MACH_BIKE, MINI_MAP, PhoneHud, fieldMoves, fogPhase, itemCut, signFor, type FieldMove } from '../src/ui/phonehud';
 import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens';
@@ -1133,6 +1136,45 @@ async function openMenu(): Promise<void> {
 // ---- PARTY and BAG on the field, on the battle's own windows ------------------------------
 let panelUp = false;
 let summaryWin: SummaryWindow | null = null;
+let movesBox: MovesBox | null = null;
+/** The party as the windows read it. */
+let readTeam: () => PartyMember[] = () => [];
+/** What this one could learn now: its learnset, then the machines in the bag (ui/movesbox.ts). */
+function learnRows(m: { species: number; level: number; moves: readonly { id: number }[] }): LearnRow[] {
+  return learnList(romTables, m, rom ? readPocket(rom.emu, romTables.sym, POCKET_TMHM).map((s) => s.item) : []);
+}
+/** One learned, by the page's own write (br_moves.c and move_relearner.c's rules): four known asks
+ *  which goes, on the windows, and a move that only a TM gave goes back in the bag; a TM that
+ *  taught it is spent, an HM is not. BACK at the question keeps the four. */
+async function teach(slot: number, row: LearnRow, menu: BattleMenu): Promise<void> {
+  const r = rom;
+  const m = readTeam()[slot];
+  if (!r || !m) return;
+  let at = m.moves.length;
+  if (at >= 4) {
+    const up = panelUp;
+    const pick = await askForget(slot, row.move);
+    if (!panelUp || !up) return;
+    // Its windows closed themselves: back behind the box.
+    battleEl.classList.add('panel');
+    menu.openField('party');
+    menu.showMember(slot);
+    if (pick === null) return;
+    at = pick;
+  }
+  const gone = at < m.moves.length ? m.moves[at].id : 0;
+  await r.setMove(slot, at, row.move, moveInfo(romTables, row.move)?.pp ?? 0);
+  if (gone) {
+    const tm = TMHM_MOVES.indexOf(gone) + ITEM_TM01;
+    const isTm = tm >= ITEM_TM01 && tm < ITEM_HM01;
+    if (isTm && !learnsByNow(romTables, m.species, m.level, gone) && !readPocket(r.emu, romTables.sym, POCKET_TMHM).some((s) => s.item === tm)) {
+      await r.give(tm, 1);
+      say(`${moveInfo(romTables, gone)?.name ?? 'It'} went in the BAG.`);
+    }
+  }
+  if (row.machine && row.machine < ITEM_HM01) await r.take(row.machine);
+  r.sound(SE_USE_ITEM);
+}
 function openPanel(home: 'party' | 'bag'): void {
   if (!battleMenu) return;
   swapping = true;
@@ -2880,10 +2922,11 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       field: {
         close: closePanel,
         readBag: () => readFieldBag(emu, sym),
-        moves: (slot) => void panelWalk(async (r) => {
-          const { said } = await r.menu(1, panelShow, panelHide, { to: 'moves', slot });
-          if (said) say(said);
-        }),
+        moves: (slot) => {
+          const m = readTeam()[slot];
+          if (!m || !learnRows(m).length) { say('No new moves at this level.'); return; }
+          movesBox?.open(slot, () => panelUp, (at) => { if (panelUp) menu.showMember(at); });
+        },
         swap: async (a, b) => { await rom?.reorder(a, b); },
         give: async (slot, item) => { if (await rom?.take(item)) await rom?.setHeld(slot, item); },
         take: async (slot, item) => { await rom?.setHeld(slot, 0); await rom?.give(item, 1); },
@@ -2905,6 +2948,16 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     refused: () => { rom?.sound(SE_FAILURE); say("It won't have any effect."); },
   });
   battleMenu = menu;
+  movesBox = new MovesBox({
+    rom: tables,
+    icon: (species) => monIconOf(species),
+    team: () => readTeam(),
+    list: learnRows,
+    teach: (slot, row) => teach(slot, row, menu),
+    scale: windowScale,
+    touch: touchPad,
+  });
+  readTeam = () => menu.readTeam();
   summaryWin = new SummaryWindow({ rom: tables, pic: (species) => art?.monPic(species, false) ?? null, speciesName, scale: windowScale, touch: touchPad });
   // A window with a mouse: the windows at their whole-pixel size, under a picture fitted to what
   // they leave. A phone's follow its picture.
@@ -4964,7 +5017,7 @@ async function boot(): Promise<void> {
     }
   }
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { watch, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; } };
+  (window as unknown as { __spike: unknown }).__spike = { watch, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, get movesBox() { return movesBox; } };
 }
 
 void boot();
