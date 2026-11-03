@@ -193,3 +193,129 @@ test('a phone walks the same world', async ({ browser }) => {
   console.log(`[world-edges ${TAG}] phone draw: sea ${sea} ms, land ${land} ms, far ${far} ms`);
   await ctx.close();
 });
+
+// ---- POK-442: a room over the world ----------------------------------------------------
+
+/** Through the door of `map` that leads to `to`, walking; returns once inside. */
+async function throughDoor(page: Page, map: string, to: string): Promise<{ x: number; y: number }> {
+  const door = await page.evaluate(([map, to]) => {
+    const s = (window as unknown as { __spike: { link: { me: number; room: any }; placed: Map<string, { m: { warps?: { x: number; y: number; to: string }[] } }> } }).__spike;
+    const w = s.placed.get(map as string)!.m.warps!.find((q) => q.to.includes(to as string))!;
+    const a = s.link.room.actor(s.link.me), spot = { map, x: w.x, y: w.y + 1 };
+    a.m = { ...a.m, spot, prev: spot, facing: 2, action: null, px: 0, py: 0 };
+    return { x: w.x, y: w.y };
+  }, [map, to] as const);
+  await page.waitForTimeout(400);
+  return door;
+}
+
+const mapNow = (page: Page) => page.evaluate(() => { const s = (window as unknown as { __spike: S }).__spike; return s.link.room.actor(s.link.me).m.spot.map as string; });
+
+/** Canvas colours at some points round the window's rim. */
+async function rimPixels(page: Page, shift: number): Promise<number[][]> {
+  return page.evaluate((shift) => {
+    const cv = document.getElementById('world') as HTMLCanvasElement, c = cv.getContext('2d')!;
+    const out: number[][] = [];
+    for (const [fx, fy] of [[0.04, 0.2], [0.04, 0.5], [0.04, 0.8], [0.96, 0.2], [0.96, 0.5], [0.96, 0.8], [0.5, 0.04], [0.3, 0.97], [0.7, 0.97]]) {
+      out.push(Array.from(c.getImageData(Math.floor(cv.width * fx), Math.floor(cv.height * fy) + shift, 1, 1).data));
+    }
+    return out;
+  }, shift);
+}
+
+test('a room sits over the world it is in, dimmed like a battle, the door where it was', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await inMatch(page, 'stats&');
+  await throughDoor(page, 'MAP_OLDALE_TOWN', 'POKEMON_CENTER');
+  // Standing under the door. Through it the trainer walks one step on (sim.ts walkOn), so the
+  // camera ends two cells north of here over the world: the same screen spot is two cells up.
+  const scale = await page.evaluate(() => { const s = (window as unknown as { __spike: S }).__spike; const dpr = devicePixelRatio || 1; return s.zoom / (s.zoom < dpr ? dpr : Math.max(1, s.zoom)); });
+  const outside = await rimPixels(page, -32 * scale);
+  await shot(page, 'room-720p-outside');
+  await page.keyboard.down('ArrowUp');
+  await expect.poll(() => mapNow(page), { timeout: 5000, intervals: [30] }).toContain('POKEMON_CENTER');
+  await page.keyboard.up('ArrowUp');
+  await page.waitForTimeout(160);
+  await shot(page, 'room-720p-door-mid');
+  await page.waitForTimeout(700);
+  await shot(page, 'room-720p-inside');
+  const inside = await rimPixels(page, 0);
+  // #battle.see's #0007 over the same pixels of the world.
+  const DIM = 1 - 0x77 / 255;
+  const dimmed = inside.filter((px, i) => px.slice(0, 3).every((v, j) => Math.abs(v - outside[i][j] * DIM) <= 12));
+  expect(dimmed.length, `rim ${JSON.stringify(inside)} over ${JSON.stringify(outside)}`).toBeGreaterThanOrEqual(6);
+  const roomMs = await drawMs(page);
+  // The fog stays what it is on both layers: over the world by the ring, in the room by its door.
+  if (SHOTS) {
+    await page.evaluate(() => {
+      const r = (window as unknown as { __spike: S }).__spike.link.room, ring = r.ring.bind(r);
+      r.ring = () => ({ ...ring(), r: 0, cx: 0, cy: 0 });
+      setTimeout(() => { delete r.ring; }, 500);
+    });
+    await page.waitForTimeout(250);
+    await shot(page, 'room-720p-fog');
+    await page.waitForTimeout(400);
+  }
+  // ...and the room itself is at full strength: its middle isn't dim.
+  const middle = await page.evaluate(() => { const cv = document.getElementById('world') as HTMLCanvasElement; return Array.from(cv.getContext('2d')!.getImageData(cv.width >> 1, (cv.height >> 1) - 40, 1, 1).data); });
+  expect(Math.max(...middle.slice(0, 3))).toBeGreaterThan(120);
+  // Out again: the world back at full strength.
+  await page.keyboard.down('ArrowDown');
+  await expect.poll(() => mapNow(page), { timeout: 8000, intervals: [30] }).toBe('MAP_OLDALE_TOWN');
+  await page.keyboard.up('ArrowDown');
+  await page.waitForTimeout(160);
+  await shot(page, 'room-720p-out-mid');
+  await page.waitForTimeout(800);
+  await shot(page, 'room-720p-back-outside');
+  console.log(`[world-edges ${TAG}] room draw 720p: ${roomMs} ms`);
+});
+
+test('rooms at 1080p, on a phone, and on a watched trainer\'s page', async ({ browser }) => {
+  test.setTimeout(420_000);
+  const rooms: [string, string, string][] = [['center', 'MAP_OLDALE_TOWN', 'POKEMON_CENTER'], ['mart', 'MAP_OLDALE_TOWN', 'MART'], ['gym', 'MAP_RUSTBORO_CITY', 'GYM'], ['house', 'MAP_LITTLEROOT_TOWN', 'HOUSE'], ['cave', 'MAP_ROUTE116', 'RUSTURF']];
+  const within = async (page: Page, name: string, ms: boolean) => {
+    const costs: string[] = [];
+    await inMatch(page, 'stats&');
+    for (const [room, map, to] of rooms) {
+      await throughDoor(page, map, to);
+      await page.keyboard.down('ArrowUp');
+      await expect.poll(() => mapNow(page), { timeout: 5000, intervals: [30] }).not.toBe(map);
+      await page.keyboard.up('ArrowUp');
+      await page.waitForTimeout(800);
+      await shot(page, `room-${name}-${room}`);
+      if (ms && room === 'center') costs.push(`${await drawMs(page)} ms`);
+    }
+    if (ms) console.log(`[world-edges ${TAG}] room draw ${name}: ${costs.join(', ')}`);
+  };
+  const desk = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  await within(await desk.newPage(), '1080p', true);
+  await desk.close();
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  await within(await phone.newPage(), 'phone', true);
+  await phone.close();
+
+  // Out of the match, following a bot, and the bot goes indoors.
+  const watch = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await watch.newPage();
+  await page.goto(`/?stats&rom=${romHashParam()}#solo&safari=0&fog=900&seed=7`);
+  await page.locator('#intro-go').click({ timeout: 90_000 });
+  await page.waitForFunction(() => {
+    const s = (window as unknown as { __spike?: { rom?: unknown; link?: { me: number; room: { actor(id: number): unknown } } } }).__spike;
+    return !!s?.rom && !!s.link?.room.actor(s.link.me);
+  }, undefined, { timeout: 120_000 });
+  await page.waitForFunction(() => { const s = (window as unknown as { __spike: { link: { room: { actors: { bot?: boolean }[] } } } }).__spike; return s.link.room.actors.some((a) => a.bot); }, undefined, { timeout: 60_000 });
+  await page.evaluate(() => { (window as unknown as { __spike: { goOut(w: string): void } }).__spike.goOut('watching'); });
+  await page.waitForFunction(() => !!(window as unknown as { __spike: { spectating: unknown } }).__spike.spectating, undefined, { timeout: 30_000 });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => {
+    const s = (window as unknown as { __spike: { link: { room: { actors: { id: number; bot?: boolean; m: unknown }[] } } } }).__spike;
+    for (const a of s.link.room.actors) if (a.bot) {
+      const spot = { map: 'MAP_OLDALE_TOWN_POKEMON_CENTER_1F', x: 5, y: 5 };
+      a.m = { ...(a.m as object), spot, prev: spot, action: null, px: 0, py: 0 };
+    }
+  });
+  await page.waitForTimeout(120);
+  await shot(page, 'room-watched');
+  await watch.close();
+});

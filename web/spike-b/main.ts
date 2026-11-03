@@ -135,6 +135,10 @@ interface Placed {
   classes: Uint8Array;
   /** The cut trees and Strength boulders standing on it: [x, y, gfx]. */
   props?: [number, number, number][];
+  /** A building or cave of Hoenn's (POK-442): the cell of Hoenn it stands over, where its door
+   *  is, and its own cell `entry` that lies on it. drawRoom's window. */
+  door?: { x: number; y: number };
+  entry?: { x: number; y: number };
 }
 
 function decode(grid: string, cells: number): Uint8Array {
@@ -190,6 +194,8 @@ function layout(maps: WorldMap[]): Map<string, Placed> {
     x += m.w + GAP;
     rowH = Math.max(rowH, m.h);
   }
+  // Where each one stands on Hoenn, door by door, a room up a stair over the stair below it.
+  for (const id of MAINLAND) inDoors(placed, id);
   // The ferry's islands, each on its own, in the row past the buildings'.
   x = right + 200; y += rowH + GAP; rowH = 0;
   for (const m of islandMaps(maps)) {
@@ -249,6 +255,17 @@ function layout(maps: WorldMap[]): Map<string, Placed> {
     }
   }
   return placed;
+}
+
+function inDoors(placed: Map<string, Placed>, id: string): void {
+  const p = placed.get(id)!;
+  for (const w of p.m.warps ?? []) {
+    const r = placed.get(w.to);
+    if (!r || r.door || MAINLAND.has(w.to)) continue;
+    r.door = p.door ? { x: p.door.x + w.x - p.entry!.x, y: p.door.y + w.y - p.entry!.y } : { x: p.gx + w.x, y: p.gy + w.y };
+    r.entry = { x: w.toX, y: w.toY };
+    inDoors(placed, w.to);
+  }
 }
 
 let art: RomArt | null = null;
@@ -346,7 +363,35 @@ function paint(p: Placed): boolean {
   p.cover = a.cover;
   p.border = a.border;
   p.anims = a.anims;
+  if (p.door) clearVoid(a.ground, a.cover);
   return true;
+}
+
+/** The black round a room (its corners, its padding), so the world shows there: every pixel of
+ *  near-black joined to the picture's edge goes clear, and a black floor in the room stays. A
+ *  room's bottom corners are its top layer's black, over floor. */
+function clearVoid(ground: HTMLCanvasElement, cover: HTMLCanvasElement): void {
+  const w = ground.width, h = ground.height;
+  const gc = ground.getContext('2d')!, cc = cover.getContext('2d')!;
+  const gd = gc.getImageData(0, 0, w, h), cd = cc.getImageData(0, 0, w, h);
+  const gp = new Uint32Array(gd.data.buffer), cp = new Uint32Array(cd.data.buffer);
+  const dark = (v: number) => (v & 0xff) + ((v >> 8) & 0xff) + ((v >> 16) & 0xff) < 48;
+  const stack: number[] = [];
+  const push = (i: number) => {
+    const shown = cp[i] >>> 24 ? cp[i] : gp[i];
+    if (shown >>> 24 && dark(shown)) { gp[i] = cp[i] = 0; stack.push(i); }
+  };
+  for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+  while (stack.length) {
+    const i = stack.pop()!, x = i % w;
+    if (x > 0) push(i - 1);
+    if (x < w - 1) push(i + 1);
+    if (i >= w) push(i - w);
+    if (i < (h - 1) * w) push(i + w);
+  }
+  gc.putImageData(gd, 0, 0);
+  cc.putImageData(cd, 0, 0);
 }
 
 /** The map's animated cells in view (romart.ts anims), each in the look tileset_anims.c's
@@ -4189,6 +4234,27 @@ function drawFill(vx0: number, vy0: number, vx1: number, vy1: number, far: boole
   return true;
 }
 
+/** #battle.see's #0007: a battle's dim over the field, and a room's. */
+const ROOM_DIM = 0x77 / 255;
+/** What a scene is for: the world under a room, the room itself (only it, clipped to it, faded
+ *  in by `alpha` as its door opens), or neither, the field as it is. */
+interface Scene { under?: boolean; room?: Placed; alpha?: number }
+
+/** The world's camera under a room: as far from the door as the trainer is from the cell the
+ *  door lands on, so the room stands over the building and nothing jumps at the door. */
+function underRoom(r: Placed, x: number, y: number): { x: number; y: number } {
+  return { x: (r.door!.x - r.entry!.x - r.gx) * TILE + x, y: (r.door!.y - r.entry!.y - r.gy) * TILE + y };
+}
+
+/** A trainer just through a door: the room stands over that door, of the several it may have. */
+function noteDoor(a: Actor, dir: number): void {
+  const r = placed.get(a.m.spot.map), from = placed.get(a.m.prev.map);
+  if (!r?.door || !from || (!MAINLAND.has(from.m.id) && !from.door)) return;
+  const x = a.m.prev.x + (dir === 3 ? -1 : dir === 4 ? 1 : 0), y = a.m.prev.y + (dir === 1 ? 1 : dir === 2 ? -1 : 0);
+  r.door = from.door ? { x: from.door.x + x - from.entry!.x, y: from.door.y + y - from.entry!.y } : { x: from.gx + x, y: from.gy + y };
+  r.entry = { x: a.m.spot.x, y: a.m.spot.y };
+}
+
 function draw(): void {
   const all = actors();
   seamFrame(all);
@@ -4219,52 +4285,128 @@ function draw(): void {
   // Whole-pixel camera at zoom >= 1, so tiles never shimmer.
   const ox = Math.round(W / 2 - cam.x * z);
   const oy = Math.round(H / 2 - cam.y * z);
+  const going = followed?.m.action?.kind === 'warp' ? followed.m.action : null;
+  const open = going ? going.t / going.len : 1;
+  if (going && going.t < 2 && followed) noteDoor(followed, going.dir);
+  const left = going && followed ? placed.get(followed.m.prev.map) : undefined;
+  if (home.door) {
+    // A room is a window over the world it is in, the world going on dimmed behind it (Cam,
+    // 11-02: "the room is shown like in the same instance but maybe just a layer on top ...
+    // and so the background is dimmed"), instead of a box on black.
+    const out = underRoom(home, cam.x, cam.y);
+    drawScene(all, out.x, out.y, W, H, z, { under: true });
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // Coming in from outside, the dim comes up as the door opens; between two rooms it stays.
+    ctx.fillStyle = `rgba(0, 0, 0, ${ROOM_DIM * (going && !left?.door ? open : 1)})`;
+    ctx.fillRect(0, 0, W, H);
+    drawScene(all, cam.x, cam.y, W, H, z, { room: home, alpha: open });
+  } else {
+    drawScene(all, cam.x, cam.y, W, H, z, {});
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (going && left?.door && home.m.outdoor) {
+      // Back out through the door: the room lets go, and the world comes back up. The room stands
+      // where the camera has just come from.
+      ctx.fillStyle = `rgba(0, 0, 0, ${ROOM_DIM * (1 - open)})`;
+      ctx.fillRect(0, 0, W, H);
+      ctx.setTransform(z, 0, 0, z, ox, oy);
+      ctx.globalAlpha = 1 - open;
+      const rx = (left.door.x - left.entry!.x) * TILE, ry = (left.door.y - left.entry!.y) * TILE;
+      if (left.ground) ctx.drawImage(left.ground, rx, ry);
+      if (left.cover) ctx.drawImage(left.cover, rx, ry);
+      ctx.globalAlpha = 1;
+    } else if (going) {
+      // A door to nowhere on Hoenn (the Zone's, an island's): the screen fades out and back in.
+      ctx.fillStyle = `rgba(0, 0, 0, ${1 - Math.abs(open * 2 - 1)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+  if (flight) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = `rgba(0, 0, 0, ${flightFade(frame - flight.start)})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+  // Zoomed far out, the sprites are specks: mark every trainer with a dot.
+  if (z < 0.6) {
+    // in canvas pixels, whole ones, so the squares stay sharp
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // mine last, on top
+    for (const a of [...all.filter((o) => o.id !== link.me), ...all.filter((o) => o.id === link.me)]) {
+      const p = pixelOf(a);
+      const mine = a.id === link.me;
+      ctx.fillStyle = mine ? '#ff3b3b' : a.battling ? '#ffd34d' : a.bot ? '#ffffff' : '#5ec8ff';
+      const r = mine ? 5 : a.bot ? 3 : 4;
+      ctx.fillRect(Math.round(ox + (p.x + 8) * z) - r, Math.round(oy + (p.y + 8) * z) - r, r * 2, r * 2);
+    }
+  }
+}
+
+/** The field as a camera at (camX, camY) sees it. */
+function drawScene(all: Actor[], camX: number, camY: number, W: number, H: number, z: number, scene: Scene): void {
+  const room = scene.room;
+  const home = room ?? mapUnder(camX, camY) ?? placed.get('MAP_LITTLEROOT_TOWN')!;
+  const ox = Math.round(W / 2 - camX * z);
+  const oy = Math.round(H / 2 - camY * z);
   const far = z < 0.5;
   const vx0 = -ox / z, vy0 = -oy / z, vx1 = vx0 + W / z, vy1 = vy0 + H / z;
   // Hoenn goes on past its maps (drawFill). Everywhere else, past every map's edge the GBA
   // repeats the map's 2x2 border block (Route 101's trees): tile the block of the map under
   // the camera, aligned to its even coordinates.
-  ctx.setTransform(z, 0, 0, z, ox, oy);
-  const filled = MAINLAND.has(home.m.id) && drawFill(vx0, vy0, vx1, vy1, far, frame % ANIM_COUNTER_MAX);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  if (filled) { /* the world is drawn */ } else if (paint(home) && home.border && z < 0.5) {
-    // Far out the 32 px block is noise: one flat colour, its average.
-    home.borderTint ??= tint(home.border);
-    ctx.fillStyle = home.borderTint;
-    ctx.fillRect(0, 0, W, H);
-  } else if (home.border) {
-    const pat = ctx.createPattern(home.border, 'repeat')!;
-    const bx = home.gx * TILE, by = home.gy * TILE;
-    pat.setTransform(new DOMMatrix([z, 0, 0, z, Math.round(W / 2 - cam.x * z) + bx * z, Math.round(H / 2 - cam.y * z) + by * z]));
-    ctx.fillStyle = pat;
-    ctx.fillRect(0, 0, W, H);
+  if (!room) {
+    ctx.setTransform(z, 0, 0, z, ox, oy);
+    const filled = MAINLAND.has(home.m.id) && drawFill(vx0, vy0, vx1, vy1, far, frame % ANIM_COUNTER_MAX);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (filled) { /* the world is drawn */ } else if (paint(home) && home.border && far) {
+      // Far out the 32 px block is noise: one flat colour, its average.
+      home.borderTint ??= tint(home.border);
+      ctx.fillStyle = home.borderTint;
+      ctx.fillRect(0, 0, W, H);
+    } else if (home.border) {
+      const pat = ctx.createPattern(home.border, 'repeat')!;
+      const bx = home.gx * TILE, by = home.gy * TILE;
+      pat.setTransform(new DOMMatrix([z, 0, 0, z, ox + bx * z, oy + by * z]));
+      ctx.fillStyle = pat;
+      ctx.fillRect(0, 0, W, H);
+    }
   }
   ctx.setTransform(z, 0, 0, z, ox, oy);
+  // A room shows itself and what is in it: a spectator's wide view stops at its walls, the other
+  // rooms in their rows stay out of it. (A head may stand a cell over its top row.)
+  if (room) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(room.gx * TILE, (room.gy - 1) * TILE, room.m.w * TILE, (room.m.h + 1) * TILE);
+    ctx.clip();
+  }
+  const alpha = room ? scene.alpha ?? 1 : 1;
   // Far out, each map is drawn from a quarter-size copy averaged once (mip), because
   // nearest-neighbour shrinking turns trees into static and smoothing every frame is slow.
   const visible: Placed[] = [];
   let painted = 0;
-  for (const p of placed.values()) {
+  for (const p of room ? [room] : placed.values()) {
     const x = p.gx * TILE, y = p.gy * TILE;
     if (x > vx1 || y > vy1 || x + p.m.w * TILE < vx0 || y + p.m.h * TILE < vy0) continue;
     visible.push(p);
-    if ((p.ground || painted++ < 2) && paint(p)) {
+    if ((p.ground || p === room || painted++ < 2) && paint(p)) {
+      ctx.globalAlpha = alpha;
       if (far) ctx.drawImage(mipFor(p, z), x, y, p.m.w * TILE, p.m.h * TILE);
-      else { ctx.drawImage(p.ground!, x, y); drawAnims(ctx, p, vx0, vy0, vx1, vy1); }
+      else { ctx.drawImage(p.ground!, x, y); if (alpha === 1) drawAnims(ctx, p, vx0, vy0, vx1, vy1); }
+      ctx.globalAlpha = 1;
     }
   }
-  const block = far ? 0 : poisonBlock(z);
+  const block = far || scene.under ? 0 : poisonBlock(z);
   if (block) pixelate(canvas, block);
   if (!far) for (const p of visible) drawPatches(p);
   if (!far) drawGround(vx0, vy0, vx1, vy1);
   if (!far) drawProps(visible, all);
-  stepFrame(all);
-  jankFrame();
-  tagFrame();
+  if (!scene.under) {
+    stepFrame(all);
+    jankFrame();
+    tagFrame();
+  }
   if (!far) drawEffects((e) => isFloor(e.kind), vx0, vy0, vx1, vy1);
   const people = all
     .map((a) => ({ a, p: pixelOf(a) }))
-    .filter(({ p }) => p.x > vx0 - 32 && p.x < vx1 + 32 && p.y > vy0 - 48 && p.y < vy1 + 32)
+    .filter(({ a, p }) => (!room || a.m.spot.map === room.m.id) && p.x > vx0 - 32 && p.x < vx1 + 32 && p.y > vy0 - 48 && p.y < vy1 + 32)
     .sort((u, v) => u.p.y - v.p.y);
   // Each, while they stand in the fog: the shake now, and the blend once the fog's over everything.
   const ring = link.room.ring();
@@ -4350,7 +4492,11 @@ function draw(): void {
     ctx.drawImage(coverCanvas, 0, 0);
     ctx.restore();
   } else for (const p of visible) {
-    if (p.cover && !far) ctx.drawImage(p.cover, p.gx * TILE, p.gy * TILE);
+    if (p.cover && !far) {
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(p.cover, p.gx * TILE, p.gy * TILE);
+      ctx.globalAlpha = 1;
+    }
   }
   onTop.forEach(drawPerson);
   drawNurses(visible);
@@ -4358,34 +4504,20 @@ function draw(): void {
   for (const { a, p } of people) if (a.meet?.walk && link.room.tick - a.meet.since < WALKUP_BANG) drawBang(p.x, p.y - p.lift, link.room.tick - a.meet.since);
   // Not over me, nor over whoever I watch, who I can see is fighting (br_ghosts.c SeatMark).
   for (const { a, p } of people) if (a.battling && a.id !== link.me && a.id !== follow) drawVs(p.x, p.y - p.lift);
-  drawFog(vx0, vy0, vx1, vy1, home);
+  if (room) {
+    // The fog inside is the fog at the door: on the room, not on the cell of heads over it.
+    ctx.restore();
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(room.gx * TILE, room.gy * TILE, room.m.w * TILE, room.m.h * TILE);
+    ctx.clip();
+    drawFog(vx0, vy0, vx1, vy1, home);
+    ctx.restore();
+  } else drawFog(vx0, vy0, vx1, vy1, home);
   drawFogLine(home, z);
   for (const b of blends) b();
   for (const { a, p } of people) if (dollShows(a, link.room.tick, frame)) drawDoll(p.x, p.y - p.lift);
   drawFlights();
-  if (flight) {
-    ctx.fillStyle = `rgba(0, 0, 0, ${flightFade(frame - flight.start)})`;
-    ctx.fillRect(vx0, vy0, vx1 - vx0, vy1 - vy0);
-  }
-  // A door: the screen fades out and back in over the followed trainer's warp.
-  const going = followed?.m.action?.kind === 'warp' ? followed.m.action : null;
-  if (going) {
-    ctx.fillStyle = `rgba(0, 0, 0, ${1 - Math.abs((going.t / going.len) * 2 - 1)})`;
-    ctx.fillRect(vx0, vy0, vx1 - vx0, vy1 - vy0);
-  }
-  // Zoomed far out, the sprites are specks: mark every trainer with a dot.
-  if (z < 0.6) {
-    // in canvas pixels, whole ones, so the squares stay sharp
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    // mine last, on top
-    for (const a of [...all.filter((o) => o.id !== link.me), ...all.filter((o) => o.id === link.me)]) {
-      const p = pixelOf(a);
-      const mine = a.id === link.me;
-      ctx.fillStyle = mine ? '#ff3b3b' : a.battling ? '#ffd34d' : a.bot ? '#ffffff' : '#5ec8ff';
-      const r = mine ? 5 : a.bot ? 3 : 4;
-      ctx.fillRect(Math.round(ox + (p.x + 8) * z) - r, Math.round(oy + (p.y + 8) * z) - r, r * 2, r * 2);
-    }
-  }
 }
 
 // ---- loop: a fixed 60 Hz sim, drawn on rAF --------------------------------------------
