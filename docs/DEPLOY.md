@@ -158,14 +158,17 @@ and dispatches BR CI when all of these are true:
 - the head's tree has both green stamps (below);
 - no release is running, and this commit has not failed twice already (a red run stays red
   for someone to read; the next commit starts again);
-- `/health` says `"locked":0` and `"world":0`. `locked` is only the old rooms: a match of the
-  game itself is on `/world`, whose connected trainers are `world`. No answer counts as no.
+- `/health` says `"locked":0`, and `"world":0` too if `relay/`, `web/spike-b/shared/` or the ROM
+  changed since the highest tag (`tools/br/release-needs-empty.sh`). `locked` is only the old
+  rooms: a match of the game itself is on `/world`, whose connected trainers are `world`. A
+  site deploy that changes none of those can't touch a running match, so it goes out with
+  people on. No answer counts as no.
 
 The version is the next patch after the highest tag. It is read at dispatch and the tag is
 made only once the release job's gates pass, so a run that fails early leaves no hole and no
 commit bumps a version. `AUTO_RELEASE=off` (Settings -> Variables -> Actions) stops it. An
-open tab holds `world` at 1 or more, so it holds a release back too: dispatch by hand with
-`ignore_match` to go anyway.
+open tab holds `world` at 1 or more, so a release that has to ask it can wait a long time:
+dispatch by hand with `ignore_match` to go anyway.
 
 ### Reusing a green run
 

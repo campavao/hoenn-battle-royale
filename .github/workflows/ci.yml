@@ -791,13 +791,17 @@ jobs:
 
       # Asked again here: the build took minutes, and auto-release.yml asked before it.
       # `locked` is the old rooms alone; a match of the game itself is on /world, whose
-      # trainers are `world`. Before the tag: a run that gives up has published nothing.
+      # trainers are `world`, and any open tab counts there. So only a release that changes what
+      # a running match stands on (the relay, shared/, the ROM) asks it.
+      # Before the tag: a run that gives up has published nothing.
       - name: No match is live
         if: inputs.ignore_match != true
         run: |
+          want='.locked == 0'
+          if [ "$(bash tools/br/release-needs-empty.sh)" = yes ]; then want='.locked == 0 and .world == 0'; fi
           for _ in $(seq 60); do
             health="$(curl -fsS --max-time 15 https://hoenn-relay-production.up.railway.app/health || true)"
-            if printf '%s' "$health" | jq -e '.locked == 0 and .world == 0' >/dev/null 2>&1; then exit 0; fi
+            if printf '%s' "$health" | jq -e "$want" >/dev/null 2>&1; then exit 0; fi
             echo "waiting: ${health:-no answer}"
             sleep 30
           done
