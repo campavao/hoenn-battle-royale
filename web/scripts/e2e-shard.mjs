@@ -33,6 +33,7 @@ export const FILE_SECONDS = {
   'spikeb.spec.ts': 568,
   'spikeb-two.spec.ts': 102,
   'spikeb-passcode.spec.ts': 9,
+  'spikeb-battlelog.spec.ts': 280,
   // Skipped in CI: these need the deployed site, or HBR_SOAK.
   'live-room.spec.ts': 0,
   'live.spec.ts': 0,

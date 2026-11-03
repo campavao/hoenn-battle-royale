@@ -4482,6 +4482,102 @@ var BOT_FILL = 8;
 var FOG_STEPS = [30, 60, 90, 120, 180];
 var SAFARI_STEPS = [0, 60, 120, 180];
 
+// web/spike-b/shared/logwire.ts
+var LOG_MSG_EVENTS = 80;
+var LOG_MSG_CHARS = 3800;
+var LOG_TEXT_MAX = 160;
+var LOG_STREAM_EVENTS = 1500;
+var LOG_STREAM_CHARS = 96 * 1024;
+var int = (v, lo, hi) => typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi ? v : void 0;
+function line(v, max) {
+  if (typeof v !== "string") return void 0;
+  return v.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, max);
+}
+var sideOf = (v) => v === 0 || v === 1 ? v : void 0;
+function monOf(m) {
+  if (!m || typeof m !== "object") return void 0;
+  const o = m;
+  const species = int(o.species, 1, 1023), level = int(o.level, 1, 100), hp2 = int(o.hp, 0, 9999), maxHp = int(o.maxHp, 1, 9999), status = int(o.status, 0, 255);
+  if (species === void 0 || level === void 0 || hp2 === void 0 || maxHp === void 0 || status === void 0) return void 0;
+  const gender = int(o.gender, 0, 2), nick = line(o.nickname, 12);
+  return {
+    species,
+    level,
+    hp: Math.min(hp2, maxHp),
+    maxHp,
+    status,
+    ...o.shiny === true ? { shiny: true } : {},
+    ...gender !== void 0 ? { gender } : {},
+    ...nick ? { nickname: nick } : {}
+  };
+}
+function sideTeam(s) {
+  if (!s || typeof s !== "object") return void 0;
+  const o = s;
+  const seat = int(o.seat, 0, 2147483647), skin = int(o.skin, 0, 255), name = line(o.name, 24);
+  if (seat === void 0 || skin === void 0 || name === void 0 || !Array.isArray(o.team) || o.team.length > 6) return void 0;
+  const team = [];
+  for (const m of o.team) {
+    const mon2 = monOf(m);
+    if (!mon2) return void 0;
+    team.push(mon2);
+  }
+  return { seat, name, skin, team };
+}
+function cleanEvent(raw) {
+  if (!raw || typeof raw !== "object") return void 0;
+  const o = raw;
+  switch (o.e) {
+    case "start": {
+      const a = sideTeam(o.a), b = sideTeam(o.b), map = line(o.map, 64);
+      return a && b && map !== void 0 ? { e: "start", a, b, map } : void 0;
+    }
+    case "send": {
+      const side = sideOf(o.side), slot = int(o.slot, 0, 5);
+      return side !== void 0 && slot !== void 0 ? { e: "send", side, slot } : void 0;
+    }
+    case "back": {
+      const side = sideOf(o.side);
+      return side !== void 0 ? { e: "back", side } : void 0;
+    }
+    case "text": {
+      const text = line(o.text, LOG_TEXT_MAX);
+      return text ? { e: "text", text } : void 0;
+    }
+    case "hit": {
+      const side = sideOf(o.side), move = int(o.move, 0, 65535);
+      return side !== void 0 ? { e: "hit", side, ...move ? { move } : {} } : void 0;
+    }
+    case "hp": {
+      const side = sideOf(o.side), hp2 = int(o.hp, 0, 9999);
+      return side !== void 0 && hp2 !== void 0 ? { e: "hp", side, hp: hp2 } : void 0;
+    }
+    case "status": {
+      const side = sideOf(o.side), status = int(o.status, 0, 255);
+      return side !== void 0 && status !== void 0 ? { e: "status", side, status } : void 0;
+    }
+    case "faint": {
+      const side = sideOf(o.side);
+      return side !== void 0 ? { e: "faint", side } : void 0;
+    }
+    case "end": {
+      const winner = int(o.winner, 0, 2147483647);
+      return winner !== void 0 ? { e: "end", winner } : void 0;
+    }
+    default:
+      return void 0;
+  }
+}
+function cleanEvents(raw, max = LOG_MSG_EVENTS) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (let i = 0; i < raw.length && out.length < max; i++) {
+    const ev = cleanEvent(raw[i]);
+    if (ev) out.push(ev);
+  }
+  return out;
+}
+
 // web/spike-b/shared/over.ts
 function over(room) {
   const r = room.results;
@@ -4501,29 +4597,29 @@ function recOf(r) {
   const n = (v) => Number.isInteger(v) && v >= 0 && v < 1e6 ? v : void 0;
   const { wins, played, best, intro, win, lose } = r;
   const w = n(wins), p = n(played), b = n(best);
-  const line = (v) => Number.isInteger(v) && v >= 0 && v < 1e3 ? v : void 0;
-  const i = line(intro), wl = line(win), l = line(lose);
+  const line2 = (v) => Number.isInteger(v) && v >= 0 && v < 1e3 ? v : void 0;
+  const i = line2(intro), wl = line2(win), l = line2(lose);
   return w === void 0 || p === void 0 ? {} : { rec: { wins: w, played: p, ...b ? { best: b } : {}, ...i !== void 0 ? { intro: i } : {}, ...wl !== void 0 ? { win: wl } : {}, ...l !== void 0 ? { lose: l } : {} } };
 }
 var isPass = (s) => s.length === 4 && [...s.toUpperCase()].every((c) => CODE_ALPHABET.includes(c));
 function teamOf(t) {
   if (!Array.isArray(t) || t.length > 6) return void 0;
-  const int = (v, max) => Number.isInteger(v) && v >= 0 && v <= max ? v : void 0;
+  const int2 = (v, max) => Number.isInteger(v) && v >= 0 && v <= max ? v : void 0;
   const out = [];
   for (const m of t) {
     if (!m || typeof m !== "object") return void 0;
-    const species = int(m.species, 65535), level = int(m.level, 100);
+    const species = int2(m.species, 65535), level = int2(m.level, 100);
     if (!species || level === void 0) return void 0;
-    const moves = Array.isArray(m.moves) ? m.moves.slice(0, 4).map((v) => int(v?.id, 65535)).filter((id) => !!id).map((id) => ({ id })) : [];
+    const moves = Array.isArray(m.moves) ? m.moves.slice(0, 4).map((v) => int2(v?.id, 65535)).filter((id) => !!id).map((id) => ({ id })) : [];
     out.push({
       species,
       level,
       ...typeof m.nickname === "string" ? { nickname: m.nickname.slice(0, 10) } : {},
-      ...int(m.hp, 999) !== void 0 ? { hp: m.hp } : {},
-      ...int(m.maxHp, 999) !== void 0 ? { maxHp: m.maxHp } : {},
+      ...int2(m.hp, 999) !== void 0 ? { hp: m.hp } : {},
+      ...int2(m.maxHp, 999) !== void 0 ? { maxHp: m.maxHp } : {},
       ...m.shiny === true ? { shiny: true } : {},
-      ...int(m.personality, 4294967295) !== void 0 ? { personality: m.personality } : {},
-      ...int(m.otId, 4294967295) !== void 0 ? { otId: m.otId } : {},
+      ...int2(m.personality, 4294967295) !== void 0 ? { personality: m.personality } : {},
+      ...int2(m.otId, 4294967295) !== void 0 ? { otId: m.otId } : {},
       moves
     });
   }
@@ -4574,6 +4670,7 @@ var WorldService = class {
   where = /* @__PURE__ */ new Map();
   timer = null;
   nextId = FIRST_ID;
+  nextFight = 0;
   /** Trainers on this relay, in every room. */
   get players() {
     return this.where.size;
@@ -4729,9 +4826,11 @@ var WorldService = class {
           if ([m.a, m.b, m.w].every(Number.isInteger)) host.bots(phone.id, m.a, m.b, m.w, sharesOf(m.hp) ? m.hp : void 0, [itemsOf(m.ua), itemsOf(m.ub)]);
         } else if (m.t === "end") {
           room.streams.delete(phone.id);
+          this.closeLog(room, phone.id);
           host.end(phone.id, m.fled === true, m.won === true);
         } else if (m.t === "out") {
           room.streams.delete(phone.id);
+          this.closeLog(room, phone.id);
           host.out(phone.id, cleanBag(m.bag) ?? void 0, Number.isInteger(m.by) && m.by > 0 ? m.by : void 0, m.wild === true);
         } else if (m.t === "drop") {
           if (Number.isInteger(m.k)) host.drop(phone.id, m.k, cleanBag(m.rest) ?? void 0);
@@ -4744,6 +4843,8 @@ var WorldService = class {
           if (to) this.send(to.link, { t: "bt", q: m.q & 65535, d: m.d.map((v) => (Number(v) | 0) & 255) });
         } else if (m.t === "sp") {
           this.publish(room, phone, m.m, m.as);
+        } else if (m.t === "bl") {
+          if (text.length <= LOG_MSG_CHARS) this.publishBl(room, phone, m);
         } else if (m.t === "watch") {
           if (!Number.isInteger(m.id) || m.id < 0 || m.id === phone.id || m.id === phone.watching) return;
           const was = phone.watching;
@@ -4752,6 +4853,8 @@ var WorldService = class {
           this.eyes(room, m.id);
           const s = this.streamOf(room, m.id);
           if (s) for (const text2 of s.sent) link.send(text2);
+          const lg = this.logOf(room, m.id);
+          if (lg) link.send(JSON.stringify({ t: "bl", from: lg.from, f: lg.f, events: lg.events, ago: Math.max(0, this.opts.now() - lg.t0) }));
         } else if (m.t === "sync") {
           const now = this.opts.now();
           if (now - phone.synced < SYNC_MS) return;
@@ -4770,6 +4873,7 @@ var WorldService = class {
         p.watching = 0;
         if (room) {
           room.streams.delete(p.id);
+          this.closeLog(room, p.id);
           this.eyes(room, was);
         }
         const benched = !me && room?.host?.room.bench.some((x) => x.id === p.id);
@@ -4792,6 +4896,7 @@ var WorldService = class {
     room.members.delete(p.id);
     room.host?.leave(p.id);
     room.streams.delete(p.id);
+    this.closeLog(room, p.id);
     this.eyes(room, p.watching);
     if (room.owner === p.id) room.owner = [...room.members.values()].find((q) => !q.away)?.id ?? 0;
     this.opts.log(`world: #${p.id} out of room ${room.code} (${room.members.size} there)`);
@@ -4864,7 +4969,7 @@ var WorldService = class {
     } while (this.rooms.has(code));
     const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
     const set = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: BOT_FILL, door: "open", textSpeed: 5, animations: false };
-    const room = { rom, pass: "", code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map(), set, banned: /* @__PURE__ */ new Set() };
+    const room = { rom, pass: "", code, quick, owner: 0, members: /* @__PURE__ */ new Map(), startsAt: quick ? this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS) : null, host: null, t0: 0, streams: /* @__PURE__ */ new Map(), logs: /* @__PURE__ */ new Map(), set, banned: /* @__PURE__ */ new Set() };
     this.rooms.set(code, room);
     return room;
   }
@@ -4909,6 +5014,7 @@ var WorldService = class {
     if (room.host) this.opts.log(`match ${room.code} ended after ${Math.round((this.opts.now() - room.t0) / 1e3)}s`);
     room.host = null;
     room.streams.clear();
+    room.logs.clear();
     for (const p of room.members.values()) p.watching = 0;
     if (room.quick) {
       room.played = true;
@@ -4938,7 +5044,7 @@ var WorldService = class {
     if (!me?.battling) return;
     const m = { t: raw.t, battle: raw.battle & 65535, data: raw.data.map((v) => (Number(v) | 0) & 255) };
     let s = room.streams.get(me.id);
-    if (m.t === "bstart") room.streams.set(me.id, s = { battle: m.battle, sent: [], bytes: 0, foe: me.foe });
+    if (m.t === "bstart") room.streams.set(me.id, s = { battle: m.battle, sent: [], bytes: 0, foe: me.foe, since: me.since ?? 0 });
     if (!s || s.battle !== m.battle) return;
     const text = JSON.stringify({ t: "sp", from: me.id, m });
     if (s.bytes + text.length <= STREAM_MAX) {
@@ -4956,10 +5062,85 @@ var WorldService = class {
     const a = r?.actor(id);
     if (!r || !a?.battling) return void 0;
     const own = room.streams.get(id);
-    if (own && own.foe === a.foe) return own;
+    if (own && own.foe === a.foe && own.since === (a.since ?? 0)) return own;
     const foe = a.foe ? r.actor(a.foe) : void 0;
     const theirs = foe?.battling && foe.foe === id ? room.streams.get(foe.id) : void 0;
-    return theirs && theirs.foe === id ? theirs : void 0;
+    return theirs && theirs.foe === id && theirs.since === (foe.since ?? 0) ? theirs : void 0;
+  }
+  /** The log of the fight trainer `id` is in now: their page's, or their foe's (a link battle is
+   *  logged by one side only), and only this meeting's, as streamOf has it. */
+  logOf(room, id) {
+    const r = room.host?.room;
+    const a = r?.actor(id);
+    if (!r || !a?.battling) return void 0;
+    const own = room.logs.get(id);
+    if (own && own.foe === a.foe && own.since === (a.since ?? 0)) return own;
+    const foe = a.foe ? r.actor(a.foe) : void 0;
+    const theirs = foe?.battling && foe.foe === id ? room.logs.get(foe.id) : void 0;
+    return theirs && theirs.foe === id && theirs.since === (foe.since ?? 0) ? theirs : void 0;
+  }
+  /** A fighter's page's events, a turn at a time: a fight begins at its `start` (one log a
+   *  fighter, the last), and the rest follows it with the same `f`. Only from a trainer in a
+   *  battle, and only one side of a fight between two trainers logs it (the first to start). */
+  publishBl(room, phone, raw) {
+    if (!Number.isInteger(raw.f)) return;
+    const me = room.host?.room.actor(phone.id);
+    if (!me?.battling) return;
+    let events = cleanEvents(raw.events, LOG_STREAM_EVENTS);
+    const f = raw.f & 65535;
+    let l = room.logs.get(me.id);
+    const begin2 = events.findIndex((e) => e.e === "start");
+    if (begin2 >= 0) {
+      events = events.slice(begin2);
+      const foe = me.foe ? room.host.room.actor(me.foe) : void 0;
+      const theirs = foe && !foe.bot ? room.logs.get(foe.id) : void 0;
+      if (theirs && !theirs.ended && theirs.foe === me.id) return;
+      const s = events[0];
+      s.a.seat = me.id;
+      s.b.seat = me.foe;
+      room.logs.set(me.id, l = { f, from: me.id, foe: me.foe, since: me.since ?? 0, t0: this.opts.now(), events: [], chars: 0, ended: false });
+    }
+    if (!l || l.f !== f || l.ended || !events.length) return;
+    this.putEvents(room, l, events, phone);
+  }
+  /** `events` on the end of a log, kept (within the cap) and on to everybody watching either
+   *  side of it (but `not`, the one who said them). */
+  putEvents(room, l, events, not) {
+    for (const ev of events) {
+      const n = JSON.stringify(ev).length;
+      if (l.events.length < LOG_STREAM_EVENTS && l.chars + n <= LOG_STREAM_CHARS) {
+        l.events.push(ev);
+        l.chars += n;
+      }
+      if (ev.e === "end") l.ended = true;
+    }
+    const text = JSON.stringify({ t: "bl", from: l.from, f: l.f, events, ...events[0]?.e === "start" ? { ago: 0 } : {} });
+    for (const w of room.members.values()) {
+      if (w !== not && w.watching && (w.watching === l.from || w.watching === l.foe)) w.link.send(text);
+    }
+  }
+  /** The fight a trainer's log is of is over (their `end`, their `out`, their page gone): a log
+   *  that has not said so ends with nobody the winner, and goes. */
+  closeLog(room, id) {
+    const l = room.logs.get(id);
+    if (!l) return;
+    room.logs.delete(id);
+    if (!l.ended) this.putEvents(room, l, [{ e: "end", winner: 0 }]);
+  }
+  /** For the server's simulator (a bots' fight it played out, battlesim.ts): the WHOLE log of the
+   *  fight `seat` is in, `log` from its `start` to its `end`, to everybody watching either side
+   *  of it, and to anybody who comes to watch it later (they are told how long ago it began). It
+   *  replaces whatever log `seat` had. False when nothing was published: no such room, no such
+   *  actor, or a log that does not begin with its `start`. */
+  publishLog(code, seat, log) {
+    const room = this.rooms.get(String(code).toUpperCase());
+    const a = room?.host?.room.actor(seat);
+    const events = cleanEvents(log, LOG_STREAM_EVENTS);
+    if (!room || !a || events[0]?.e !== "start") return false;
+    const l = { f: ++this.nextFight & 65535, from: seat, foe: a.foe, since: a.since ?? 0, t0: this.opts.now(), events: [], chars: 0, ended: false };
+    room.logs.set(seat, l);
+    this.putEvents(room, l, events);
+    return true;
   }
   /** Every team the room's trainers have told, to one phone just in (the legendary's
    *  chip and the champion's hall of fame read them). */
@@ -5061,4 +5242,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "f3db971ad277";
+export const WORLD_HASH = "b5a2d9fbec2b";

@@ -18,6 +18,8 @@ import { tick } from './sim';
 import { Host, play } from './shared/host';
 import { BOT_FILL } from '../src/match/room';
 import { recorder } from './recorder';
+import type { BattleEvent } from './shared/battlelog';
+import { LOG_STREAM_EVENTS, chunkEvents, cleanEvents } from './shared/logwire';
 import { keysOf, makeRoom, type Actor, type Bag, type Room, type RoomEvent } from './shared/room';
 import type { FameMon } from '../src/ui/results';
 import type { Again, CardRecord, Listed, PeekBag, Settings, SpMsg, WireFrame, WorldDown, WorldUp } from './shared/wire';
@@ -69,6 +71,15 @@ export interface WorldLink {
   sp(m: SpMsg, as?: number): void;
   /** The battle the trainer I watch is in, message by message from its start. */
   onSp: ((from: number, m: SpMsg) => void) | null;
+  /** What my page read of the battle I am in (battlereader.ts), a turn at a time: fight `f` (my
+   *  page's own counter), whose first events are its `start`. Online only. */
+  bl(f: number, events: BattleEvent[]): void;
+  /** The fight the trainer I watch is in, as events (battlelog.ts), as they happen. A call with
+   *  `ago` begins a fight for this watcher: the events from its `start`, and how many ms ago that
+   *  was (0: it begins now; more: a join's whole log so far) -- the view's `play(events, ago)`.
+   *  A call without it follows on from the last, in order -- `add(events)`. `f` tells one fight
+   *  of `from` from the next. Events are already checked: any that were bad are gone. */
+  onBattleLog: ((from: number, f: number, events: BattleEvent[], ago?: number) => void) | null;
   /** How many are watching me. */
   onEyes: ((n: number) => void) | null;
   /** My team as it stands, for the hall of fame if I win; my bag for a watcher. */
@@ -148,6 +159,9 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
       if (watching && fightOf(watching) === as) link.onSp?.(as, m);
     },
     onSp: null,
+    // A solo world has no relay to carry a log, and its bots' fights are judged on the page.
+    bl: () => undefined,
+    onBattleLog: null,
     onEyes: null,
     teams,
     bags,
@@ -185,6 +199,7 @@ export class Online implements WorldLink {
   private closed = false;
   onBt: ((q: number, d: number[]) => void) | null = null;
   onSp: ((from: number, m: SpMsg) => void) | null = null;
+  onBattleLog: ((from: number, f: number, events: BattleEvent[], ago?: number) => void) | null = null;
   onEyes: ((n: number) => void) | null = null;
   readonly teams = new Map<number, FameMon[]>();
   readonly bags = new Map<number, PeekBag>();
@@ -223,6 +238,10 @@ export class Online implements WorldLink {
     } else if (m.t === 'sp') {
       recorder.sp('in', m.m, { from: m.from });
       this.onSp?.(m.from, m.m);
+    } else if (m.t === 'bl') {
+      // Off a network: rebuilt event by event (logwire.ts), and a message of none is none.
+      const events = cleanEvents(m?.events, LOG_STREAM_EVENTS);
+      if (events.length && Number.isInteger(m.from) && Number.isInteger(m.f)) this.onBattleLog?.(m.from, m.f, events, typeof m.ago === 'number' && m.ago >= 0 ? m.ago : undefined);
     } else if (m.t === 'eyes') {
       this.onEyes?.(m.n);
     } else if (m.t === 'team') {
@@ -348,6 +367,9 @@ export class Online implements WorldLink {
     recorder.sp('out', m, as === undefined ? {} : { as });
     this.send({ t: 'sp', m, ...(as === undefined ? {} : { as }) });
   }
+
+  // In messages the relay's socket takes (4096 bytes a frame), in order.
+  bl(f: number, events: BattleEvent[]): void { for (const run of chunkEvents(events)) this.send({ t: 'bl', f: f & 0xffff, events: run }); }
 
   status(): string {
     if (this.closed) return 'the relay closed the connection: reload to rejoin';
