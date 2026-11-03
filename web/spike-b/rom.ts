@@ -21,6 +21,8 @@ import { PROTOCOL, type Dir, type Lines, type Msg, type PackedMon } from '../src
 import { voice } from '../src/match/ticker';
 import { loadCheckedRelease } from '../src/release';
 import { isPrePatched, sha1Hex } from '../src/rom/emerald';
+import { BattleReader, type ReaderCtx, type ReaderStats } from './battlereader';
+import type { BattleEvent } from './shared/battlelog';
 import { type PartySeen, BAG_AT, BAG_LEN, DEX2_AT, DEX2_LEN, KEY_AT, PARTY_LEN, SEEN1_AT, SEEN2_AT, SEEN_LEN, arrived, fameTeam, fieldOf, healed, partySettled, rekey, spillOf, teamOf, withMoney, withoutItem } from './carry';
 import { startMenuTable } from '../src/touch';
 import { FADE_COLOR_WORD, FADE_Y_WORD, fadeOf } from '../src/field';
@@ -31,7 +33,7 @@ import { withHeld } from './carry';
 import type { SpMsg } from './shared/wire';
 import { readTally, type MatchTally } from '../src/match/tally';
 import type { FameMon } from '../src/ui/results';
-import { MUSIC_ASKED, MUSIC_QUIET, type MusicAsk } from './music';
+import { MUSIC_ASKED, MUSIC_QUIET, MUS_HEAL, MUS_VS_TRAINER, type MusicAsk } from './music';
 
 /** SaveBlock2's options halfword (include/global.h). */
 const OPTIONS_AT = 0x14;
@@ -57,6 +59,8 @@ const BR_PHASE_PLAY = 2;
 const LEGEND_KEY = 0xb000;
 /** Event 0's trader (BR_EVENT_TRADER_KEY), and below it his claim key. */
 const TRADER_KEY = 0xb00f;
+/** struct BrNetlink's myId and recvFlags (br_netlink.h). */
+const BT_MY_ID = 1, BT_RECV_FLAGS = 3;
 /** Ours while a mirror runs: seat 0 is then the publisher's, a ghost with their look. */
 const MIRROR_SEAT = 29;
 /** global.h's ObjectEvent: 0x24 bytes, currentCoords at 0x10, facing in 0x18's low bits. */
@@ -80,6 +84,8 @@ const WILD_ASKED_FISH = 7;
 const WILD_FISH_SAFARI = 0x80;
 // gBattleOutcome.
 const LOST = 2;
+/** gBattleOutcome's B_OUTCOME_CAUGHT. */
+const CAUGHT_OUTCOME = 7;
 // include/br/br_ring.h: BR_FOG_TICK_FRAMES.
 const FOG_TICK = 240;
 /** gBrRing's first ten bytes (active, phase, cx, cy, r, outside, applied, out,
@@ -100,6 +106,8 @@ const BATTLE_HURRY = 13;
 /** `gBrBattle.autoText`: a battle's text turns its own pages, on a desktop too (Cam, 11-01:
  *  "dialogue boxes should automatically progress"). */
 const BATTLE_AUTO_TEXT = 14;
+/** `gBrBattle.menu` (include/br/br_battle.h): which choice menu is up, 0 for none. */
+const BATTLE_MENU_AT = 8;
 /** gBrLevels.lifting (br_levels.h): set while the ROM lifts the party to a new rung. */
 const LEVELS_LIFTING = 3;
 /** br_event.h's BR_EVENT_MAX: the events gBrEvents has room for. */
@@ -283,6 +291,13 @@ export interface RomBattles {
   /** Where what this ROM publishes of its own battles goes (a BSTART, then its TURNs):
    *  to the relay, for whoever watches. */
   publish(to: ((m: SpMsg) => void) | null): void;
+  /** Where my next battle is read to (battlereader.ts): the page sets it before the battle it
+   *  starts, and the ROM's memory is read every frame of it, said as battlelog.ts events to
+   *  `emit`, a third of a second at a time, ending with an `end`. It stands for one battle; null
+   *  for none. Nothing on a patch without the symbols it reads. */
+  logTo(to: { ctx: ReaderCtx; emit(events: BattleEvent[]): void } | null): void;
+  /** What reading the last logged battle cost the page, per frame (battlereader.ts). */
+  logStats(): ReaderStats | null;
   /** A screen the page put up (menu, team) closes now: B until it is back on the field
    *  (a challenge closes a menu in the match, br_netlink.c). */
   leave(): void;
@@ -316,6 +331,10 @@ export interface RomBattles {
   /** The song for where the page's trainer is (music.ts), played by the hidden ROM
    *  between battles (br_music.h); null for none, and the ROM stands still between them. */
   music(ask: MusicAsk | null): void;
+  /** A battle's song in place of the route's, while the page draws somebody's fight on the field
+   *  (watch.ts): the player's ROM's own, played by its parked field's sound engine. Asked again
+   *  until the ROM is singing; off, the route's comes back from the top. */
+  fightSong(on: boolean): void;
   /** A sound of the field's (music.ts SE_*, MUS_* fanfares), played once by the hidden
    *  ROM on its field (gBrMusic.sound); nothing on a patch without it, or with no song. */
   sound(id: number): void;
@@ -571,6 +590,21 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
 
   // A battle of ours, as the ROM publishes it for a spectator (BrSpectate_Publishing).
   let publishTo: ((m: SpMsg) => void) | null = null;
+  // ...and the battle read off the ROM's memory for a watcher, for the next battle only.
+  let logOut: { ctx: ReaderCtx; emit(events: BattleEvent[]): void } | null = null;
+  let lastLog: ReaderStats | null = null;
+  // gSpeciesInfo's genderRatio (0x1C bytes a species, at 0x10), from the cartridge: 0xFF has none,
+  // 0xFE is always female, 0 always male, else the personality's low byte against it.
+  const speciesInfoAt = sym('gSpeciesInfo');
+  const genderOf = (species: number, personality: number) => {
+    const ratio = romByte(speciesInfoAt + species * 0x1c + 0x10);
+    return ratio === 0xff ? 2 : ratio === 0xfe ? 1 : ratio === 0 ? 0 : (personality & 0xff) >= ratio ? 0 : 1;
+  };
+  const readerSyms = () => {
+    const s = { mons: sym('gBattleMons'), partyIdx: sym('gBattlerPartyIndexes'), text: sym('gDisplayedStringBattle'), player: partyAt, enemy: sym('gEnemyParty'),
+      count: sym('gBattlersCount'), mainFunc, flags: sym('gBattleTypeFlags'), positions: sym('gBattlerPositions'), move: sym('gCurrentMove'), menu: sym('gBrBattle') + BATTLE_MENU_AT };
+    return [s.mons, s.partyIdx, s.text, s.player, s.enemy].every((a) => a !== undefined && !Number.isNaN(a)) ? s : null;
+  };
   // ...and a duel's link blocks, to the trainer it is with: whichever drain hears them.
   let blocksTo: ((seq: number, data: number[]) => void) | null = null;
   // ...and a PICKUP the battle's own kick waits on (a legendary's claim): the drain above
@@ -830,6 +864,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
   if (!Number.isNaN(musicAt) && !Number.isNaN(carryAt))
     for (let at = carryAt - ROM_BASE; romView.getUint32(at, true); at += 8) sounds.push([romView.getUint32(at, true), romView.getUint32(at + 4, true)]);
   let tune: MusicAsk | null = null;
+  let fightSong = false;
+  let fightStep = 0;
   // Running between turns; and run since the parked state was last put back.
   let singing = false;
   let idled = false;
@@ -905,6 +941,12 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     const released: { species: number; level: number }[] = [];
     let foe: Fought['foe'];
     let spent: number[] | undefined;
+    // The battle read for a watcher, from before it starts to its end (once only: a battle's own).
+    const out = logOut;
+    logOut = null;
+    const syms = out ? readerSyms() : null;
+    const reader = out && syms ? new BattleReader(emu, syms, { ...out.ctx, genderOf }, out.emit, () => performance.now()) : null;
+    const readerOff = reader ? emu.onFrame(() => reader.frame()) : () => undefined;
     const pub = emu.onFrame(() => drain((m) => {
       if (m.t === 'spill' && m.seat === ME && !m.bag) for (const r of m.mons) released.push({ species: r.species, level: r.level });
       else if (m.t === 'party' && m.seat === FOE_SEAT) foe = m.mons.map((r) => ({ hp: r.hp, maxHp: r.maxHp }));
@@ -947,6 +989,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       fighting = false;
       lay(false, at);
       result = { ok: true, ...after(), released, ...(foe ? { foe } : {}), ...(spent?.length ? { spent } : {}) };
+      // The end of the fight, said at once: a catch's prompt after it can take a while. Won or
+      // caught, the page's trainer; lost, the foe's seat (none for a wild one); a run, nobody.
+      if (reader && out) reader.finish(result.outcome === 1 || result.outcome === CAUGHT_OUTCOME ? out.ctx.me.seat : result.outcome === LOST ? out.ctx.foe.seat : 0);
       // A catch with a full party: back on its field the ROM asks which one makes room
       // (br_catch.c). The player answers it on the ROM's screen, as in a match.
       // Ten seconds with the prompt never put up (asked, byte 1, still 0) is a stall, not
@@ -965,6 +1010,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     }
     fighting = false;
     pub();
+    readerOff();
+    if (reader) { reader.finish(0); lastLog = reader.stats; }
     await partyDone();
     emu.pause();
     // A ROM that could not be put back would start the next battle from whatever this
@@ -985,12 +1032,45 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       // Only while the song plays: a ROM standing still would play it when it next ran.
       if (sounds.length && tune && singing && !turns) emu.write(musicAt + 10, id & 0xffff, 16);
     },
+    fightSong(on) {
+      if (!sounds.length) return;
+      if (!on) {
+        if (!fightSong) return;
+        fightSong = false;
+        fightStep = 0;
+        // Nothing holds it now: BrMusic_Tick finds the wrong song playing and puts the route's on.
+        emu.write(musicAt + 8, 0, 8);
+        setVolume(volume);
+        return;
+      }
+      if (!singing || turns || fightStep === 3) return;
+      fightSong = true;
+      // br_music.c has no way to ask for a battle's song, but gBrMusic.sound is PlaySE, which starts
+      // any song by its number on that song's player (sound.c). BrMusic_Tick would put the route's
+      // straight back, in the same call: it reads a song just started as stopped, until the next
+      // VBlank. So: a fanfare first, silent, whose task holds that off for its 160 frames; then the
+      // song; then, with its tracks running, `waiting` up, which holds it for as long as it plays.
+      const taken = emu.read(musicAt + 10, 16) === 0;
+      if (fightStep === 0) {
+        setVolume(0);
+        emu.write(musicAt + 10, MUS_HEAL, 16);
+        fightStep = 1;
+      } else if (fightStep === 1 && taken) {
+        emu.write(musicAt + 10, MUS_VS_TRAINER, 16);
+        fightStep = 2;
+      } else if (fightStep === 2 && taken && emu.read(sounds[1][0] + 4, 32) & 0xffff) {
+        emu.write(musicAt + 8, 1, 8);
+        setVolume(volume);
+        fightStep = 3;
+      }
+    },
     music(ask) {
       tune = ask;
       if (!sounds.length) return;
       if (turns) { if (ask) writeTune(); return; }
       if (!ask) { if (singing) emu.pause(); singing = false; return; }
-      if (singing) writeTune();
+      // Held through a fight song: a new song asked for would end it.
+      if (singing) { if (!fightSong) writeTune(); }
       else sing();
     },
     fight(name, mons, skin, onStart, fog = false, lines, items) {
@@ -1052,14 +1132,18 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         blocksTo = (seq, data) => link.send(seq, data);
         const watch = emu.onFrame(() => {
           drain(published);
-          while (inbox.length && emu.read(netAt, 8)) {
-            const b = inbox[0];
-            // The fight's first block carries their name (TakePeerName): RIVAL otherwise.
-            const slots = packSlot({ t: 'bt', seat: FOE_SEAT, seq: b.seq, data: b.data, ...(b.seq === 1 ? { name: foe } : {}) });
-            if (MAILBOX.RING_SLOTS - box.pending() < slots.length) break;
-            for (const sl of slots) box.push(sl.type, sl.payload);
-            inbox.shift();
-          }
+          // One block at a time, and only once the ROM has taken the last. It has one buffer and
+          // one flag for the other side (br_netlink.c Deliver), so a second that lands before the
+          // first is read replaces it, and each side then waits for ever for a block the other has
+          // sent: the fight stood at the VS cards, or under its intro. Two arrive that close
+          // whenever this page or the network falls behind for a moment.
+          if (!inbox.length || !emu.read(netAt, 8) || box.pending()) return;
+          if (emu.read(netAt + BT_RECV_FLAGS, 8) & (1 << (emu.read(netAt + BT_MY_ID, 8) ^ 1))) return;
+          const b = inbox[0];
+          // The fight's first block carries their name (TakePeerName): RIVAL otherwise.
+          const slots = packSlot({ t: 'bt', seat: FOE_SEAT, seq: b.seq, data: b.data, ...(b.seq === 1 ? { name: foe } : {}) });
+          for (const sl of slots) box.push(sl.type, sl.payload);
+          inbox.shift();
         });
         try {
           return await battle(fog, () => {
@@ -1546,6 +1630,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       });
     },
     publish(to) { publishTo = to; },
+    logTo(to) { logOut = to; },
+    logStats() { return lastLog; },
     leave() { leaving = true; },
     reseed(s) { seedNow = s >>> 0; },
     fresh() {

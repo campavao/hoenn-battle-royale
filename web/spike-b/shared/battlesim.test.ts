@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { applyEvent, emptyState, logMs, type BattleEvent } from './battlelog';
 import { movesFor, simulate, simulation, TURN_CAP, type SimSide } from './battlesim';
 import { heldId } from './simnames';
+import { LEVEL_UP } from './engine/gen3.mjs';
+import FIXES from './learnset-fixes.json';
 import { dealParty } from '../../src/bots/party';
 import { Grade } from '../../src/bots/roster';
 import type { PackedMon } from '../../src/net/wire';
@@ -168,6 +170,16 @@ describe('battlesim', () => {
     const moves = movesFor('sceptile', 75, { atk: 200, spa: 220, types: ['Grass'] });
     expect(moves).toContain(348);
     expect(moves.length).toBe(4);
+  });
+
+  it("knows the ROM's learnset where the engine has another game's", () => {
+    // tools/br/learnset-fixes.mjs (pinned to the headers in scripts/learnset-fixes.test.ts): the
+    // engine's CACTURNE has REVENGE, and the ROM's has none and PIN MISSILE.
+    const moves = movesFor('cacturne', 50, { atk: 120, spa: 120, types: ['Grass', 'Dark'] });
+    expect(moves).toContain(42);
+    expect(moves).not.toContain(279);
+    expect(LEVEL_UP.cacturne).toContain(279);
+    expect((FIXES as Record<string, number[]>).cacturne).not.toContain(279);
   });
 
   it('maps the ROM item table to the engine', () => {

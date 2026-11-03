@@ -680,4 +680,271 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  describe('battle logs (bl)', () => {
+    const mon = { species: 280, level: 12, hp: 31, maxHp: 31, status: 0 };
+    const start = (seat = 1, foe = 2) => ({ e: 'start', a: { seat, name: 'A', skin: 0, team: [mon] }, b: { seat: foe, name: 'B', skin: 1, team: [mon] }, map: 'MAP_ROUTE101' });
+    type Actor = { id: number; bot: boolean; battling: boolean; foe: number; since?: number; judge?: number };
+    function rig(bots = 0) {
+      let t = 0;
+      const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots, cap: 30, now: () => t, log: () => undefined });
+      const [a, b, c] = [phone(), phone(), phone()];
+      const sa = svc.open(a.link), sb = svc.open(b.link), sc = svc.open(c.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 1, code }));
+      sc.onText(JSON.stringify({ t: 'join', name: 'carol', skin: 2, code }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      const alice = (a.got.find((m) => m.t === 'hello') as unknown as { id: number }).id;
+      const bob = (b.got.find((m) => m.t === 'hello') as unknown as { id: number }).id;
+      t += 200;
+      svc.pump();
+      const room = [...(svc as unknown as { rooms: Map<string, { host: { room: { actors: Actor[]; actor(id: number): Actor } } }> }).rooms.values()][0];
+      const bl = (p: ReturnType<typeof phone>) => p.got.filter((m) => m.t === 'bl') as unknown as { from: number; f: number; events: { e: string; text?: string; [k: string]: unknown }[]; ago?: number }[];
+      return { svc, t: (ms: number) => { t += ms; }, code, a, b, c, sa, sb, sc, alice, bob, room, bl };
+    }
+
+    it("hands a fighter's events to who watches them, and the whole log so far, with its age, to who comes late", () => {
+      const r = rig();
+      try {
+        r.sb.onText(JSON.stringify({ t: 'watch', id: r.alice }));
+        // Not in a battle: nothing is kept or sent.
+        r.sa.onText(JSON.stringify({ t: 'bl', f: 5, events: [start()] }));
+        expect(r.bl(r.b)).toHaveLength(0);
+        r.room.host.room.actor(r.alice).battling = true;
+        // Events with no start before them are of no fight.
+        r.sa.onText(JSON.stringify({ t: 'bl', f: 5, events: [{ e: 'text', text: 'lost' }] }));
+        expect(r.bl(r.b)).toHaveLength(0);
+        r.sa.onText(JSON.stringify({ t: 'bl', f: 5, events: [start(77, 88), { e: 'send', side: 0, slot: 0 }] }));
+        r.t(3000);
+        r.sa.onText(JSON.stringify({ t: 'bl', f: 5, events: [{ e: 'text', text: 'Foe used TACKLE!' }, { e: 'nonsense' }, null, { e: 'hp', side: 0, hp: 20 }] }));
+        const got = r.bl(r.b);
+        expect(got.map((m) => m.events.map((e) => e.e))).toEqual([['start', 'send'], ['text', 'hp']]);
+        expect(got[0].from).toBe(r.alice);
+        // The seats are the room's, not the page's.
+        expect((got[0].events[0] as unknown as { a: { seat: number } }).a.seat).toBe(r.alice);
+        expect((got[0].events[0] as unknown as { b: { seat: number } }).b.seat).toBe(0);
+        // Another fight's id is not this one's.
+        r.sa.onText(JSON.stringify({ t: 'bl', f: 6, events: [{ e: 'text', text: 'stray' }] }));
+        expect(r.bl(r.b)).toHaveLength(2);
+        // The fighter hears nothing of its own fight back.
+        expect(r.bl(r.a)).toHaveLength(0);
+
+        r.sc.onText(JSON.stringify({ t: 'watch', id: r.alice }));
+        const late = r.bl(r.c);
+        expect(late).toHaveLength(1);
+        expect(late[0].events.map((e) => e.e)).toEqual(['start', 'send', 'text', 'hp']);
+        expect(late[0].ago).toBe(3000);
+
+        // Its end, and the next watcher has nothing to start from.
+        r.sa.onText(JSON.stringify({ t: 'bl', f: 5, events: [{ e: 'end', winner: r.alice }] }));
+        r.sa.onText(JSON.stringify({ t: 'end' }));
+        expect(r.bl(r.b).at(-1)!.events).toEqual([{ e: 'end', winner: r.alice }]);
+        expect(r.bl(r.b)).toHaveLength(3);
+        const before = r.bl(r.c).length;
+        r.sc.onText(JSON.stringify({ t: 'watch', id: 0 }));
+        r.sc.onText(JSON.stringify({ t: 'watch', id: r.alice }));
+        expect(r.bl(r.c)).toHaveLength(before);
+      } finally {
+        r.svc.stop();
+      }
+    });
+
+    it('survives any junk a phone sends, and keeps within its caps', () => {
+      const r = rig();
+      try {
+        r.room.host.room.actor(r.alice).battling = true;
+        r.sb.onText(JSON.stringify({ t: 'watch', id: r.alice }));
+        for (const junk of [{ t: 'bl' }, { t: 'bl', f: 'x', events: [] }, { t: 'bl', f: 1, events: 'no' }, { t: 'bl', f: 1, events: [null, 4, {}] }, { t: 'bl', f: 1, events: [{ e: 'start', a: 5, b: 6 }] }]) {
+          expect(() => r.sa.onText(JSON.stringify(junk))).not.toThrow();
+        }
+        expect(r.bl(r.b)).toHaveLength(0);
+        // A whole message past the cap (the socket's own is 4096 bytes) is none.
+        r.sa.onText(JSON.stringify({ t: 'bl', f: 1, events: [start(), ...Array.from({ length: 2000 }, () => ({ e: 'text', text: 'x'.repeat(100) }))] }));
+        expect(r.bl(r.b)).toHaveLength(0);
+        // The log kept for a late watcher is capped, though every event still goes live.
+        r.sa.onText(JSON.stringify({ t: 'bl', f: 2, events: [start()] }));
+        for (let i = 0; i < 80; i++) r.sa.onText(JSON.stringify({ t: 'bl', f: 2, events: Array.from({ length: 40 }, () => ({ e: 'text', text: 'y'.repeat(60) })) }));
+        expect(r.bl(r.b).flatMap((m) => m.events)).toHaveLength(1 + 3200);
+        r.sc.onText(JSON.stringify({ t: 'watch', id: r.alice }));
+        const kept = r.bl(r.c)[0].events.length;
+        expect(kept).toBeGreaterThan(100);
+        expect(kept).toBeLessThanOrEqual(1500);
+      } finally {
+        r.svc.stop();
+      }
+    });
+
+    it('ends a log whose page went (a reload) or left the fight without saying so', () => {
+      const r = rig();
+      try {
+        r.sb.onText(JSON.stringify({ t: 'watch', id: r.alice }));
+        r.room.host.room.actor(r.alice).battling = true;
+        r.sa.onText(JSON.stringify({ t: 'bl', f: 1, events: [start()] }));
+        r.sa.onClose();
+        expect(r.bl(r.b).at(-1)!.events).toEqual([{ e: 'end', winner: 0 }]);
+      } finally {
+        r.svc.stop();
+      }
+      // ...and a trainer put out says so too.
+      const r2 = rig();
+      try {
+        r2.sb.onText(JSON.stringify({ t: 'watch', id: r2.alice }));
+        r2.room.host.room.actor(r2.alice).battling = true;
+        r2.sa.onText(JSON.stringify({ t: 'bl', f: 1, events: [start()] }));
+        r2.sa.onText(JSON.stringify({ t: 'out' }));
+        expect(r2.bl(r2.b).at(-1)!.events).toEqual([{ e: 'end', winner: 0 }]);
+      } finally {
+        r2.svc.stop();
+      }
+    });
+
+    it('one side of a fight between two trainers logs it: the first to start', () => {
+      const r = rig();
+      try {
+        const [x, y] = [r.room.host.room.actor(r.alice), r.room.host.room.actor(r.bob)];
+        Object.assign(x, { battling: true, foe: r.bob });
+        Object.assign(y, { battling: true, foe: r.alice });
+        r.sc.onText(JSON.stringify({ t: 'watch', id: r.bob }));
+        r.sa.onText(JSON.stringify({ t: 'bl', f: 1, events: [start(), { e: 'text', text: 'from alice' }] }));
+        r.sb.onText(JSON.stringify({ t: 'bl', f: 1, events: [start(), { e: 'text', text: 'from bob' }] }));
+        r.sb.onText(JSON.stringify({ t: 'bl', f: 1, events: [{ e: 'text', text: 'more from bob' }] }));
+        // Watching bob, carol gets alice's log of their fight, once.
+        expect(r.bl(r.c).map((m) => [m.from, m.events.map((e) => e.e)])).toEqual([[r.alice, ['start', 'text']]]);
+      } finally {
+        r.svc.stop();
+      }
+    });
+
+    it("serves a rematch of the same pair its own fight, not the old one's (the room's `since`)", () => {
+      const r = rig(2);
+      try {
+        const [x, y] = r.room.host.room.actors.filter((o) => o.bot);
+        const meet = (since: number) => {
+          Object.assign(x, { battling: true, foe: y.id, judge: r.alice, since });
+          Object.assign(y, { battling: true, foe: x.id, judge: r.alice, since });
+        };
+        meet(100);
+        // A bots' fight, judged by alice's page, as the old stream and the new log both carry it.
+        r.sa.onText(JSON.stringify({ t: 'sp', as: x.id, m: { t: 'bstart', battle: 9, data: [1] } }));
+        r.sb.onText(JSON.stringify({ t: 'watch', id: x.id }));
+        expect(r.svc.publishLog(r.code, x.id, [start(x.id, y.id) as never, { e: 'text', text: 'first meeting' }])).toBe(true);
+        const sp = (p: ReturnType<typeof phone>) => p.got.filter((m) => m.t === 'sp');
+        expect(sp(r.b)).toHaveLength(1);
+        expect(r.bl(r.b)).toHaveLength(1);
+        // The same two meet again: the room says so by `since`, no BSTART or start yet.
+        meet(900);
+        r.sc.onText(JSON.stringify({ t: 'watch', id: x.id }));
+        expect(sp(r.c), 'no old stream').toHaveLength(0);
+        expect(r.bl(r.c), 'no old log').toHaveLength(0);
+        // The new fight's own, once it is published, is what a later watcher gets.
+        r.sa.onText(JSON.stringify({ t: 'sp', as: x.id, m: { t: 'bstart', battle: 10, data: [2] } }));
+        expect(r.svc.publishLog(r.code, x.id, [start(x.id, y.id) as never, { e: 'text', text: 'second meeting' }])).toBe(true);
+        expect(sp(r.c).map((m) => (m as unknown as { m: { battle: number } }).m.battle)).toEqual([10]);
+        expect(r.bl(r.c)[0].events.map((e) => e.text ?? e.e)).toEqual(['start', 'second meeting']);
+        const d = phone();
+        const sd = r.svc.open(d.link);
+        sd.onText(JSON.stringify({ t: 'join', name: 'dan', skin: 3, code: r.code }));
+        sd.onText(JSON.stringify({ t: 'watch', id: y.id }));
+        expect(r.bl(d)[0].events.map((e) => e.text ?? e.e), 'watching the other bot of it').toEqual(['start', 'second meeting']);
+      } finally {
+        r.svc.stop();
+      }
+    });
+
+    it('a match that ends under a fight still being read ends its log for whoever watches', () => {
+      const r = rig(2);
+      try {
+        const me = r.room.host.room.actor(r.alice);
+        Object.assign(me, { battling: true, foe: 0 });
+        r.sb.onText(JSON.stringify({ t: 'watch', id: r.alice }));
+        r.sa.onText(JSON.stringify({ t: 'bl', f: 7, events: [start(r.alice, 0)] }));
+        r.sa.onText(JSON.stringify({ t: 'bl', f: 7, events: [{ e: 'text', text: 'still fighting' }] }));
+        expect(r.bl(r.b).flatMap((m) => m.events).map((e) => e.e)).toEqual(['start', 'text']);
+        const live = r.room.host.room as unknown as { results: { winner: number } };
+        live.results.winner = r.bob;
+        r.t(50);
+        r.svc.pump();
+        expect(r.bl(r.b).flatMap((m) => m.events).map((e) => e.e)).toEqual(['start', 'text', 'end']);
+      } finally {
+        r.svc.stop();
+      }
+    });
+
+    it("the simulator's log is one fight to a watcher of either bot, and timed from the frame it began", () => {
+      const r = rig(2);
+      try {
+        const [x, y] = r.room.host.room.actors.filter((o) => o.bot);
+        const room = r.room.host.room as unknown as { tick: number };
+        const since = room.tick - 60;
+        Object.assign(x, { battling: true, foe: y.id, judge: -1, since });
+        Object.assign(y, { battling: true, foe: x.id, judge: -1, since });
+        r.sb.onText(JSON.stringify({ t: 'watch', id: y.id }));
+        const log = [start(x.id, y.id) as never, { e: 'text', text: 'on' } as never, { e: 'end', winner: x.id } as never];
+        // The host says it once for each seat (host.ts onLog).
+        expect(r.svc.publishLog(r.code, x.id, log)).toBe(true);
+        expect(r.svc.publishLog(r.code, y.id, log)).toBe(true);
+        const got = r.bl(r.b);
+        expect(got, 'one fight, not two').toHaveLength(1);
+        expect(got[0].from).toBe(x.id);
+        expect(got[0].ago, 'a second in when it was worked out').toBeCloseTo(1000, 5);
+        expect(got[0].events.map((e) => e.e)).toEqual(['start', 'text', 'end']);
+        // Who comes later lands later, on either bot.
+        r.t(4000);
+        r.sc.onText(JSON.stringify({ t: 'watch', id: x.id }));
+        expect(r.bl(r.c)).toHaveLength(1);
+        expect(r.bl(r.c)[0].ago).toBeCloseTo(5000, 5);
+        r.sc.onText(JSON.stringify({ t: 'watch', id: y.id }));
+        expect(r.bl(r.c)[1].ago).toBeCloseTo(5000, 5);
+        expect(r.bl(r.c)[1].f).toBe(got[0].f);
+      } finally {
+        r.svc.stop();
+      }
+    });
+
+    it('a match on the switch hands its logs on: START to a watcher, on the real room', async () => {
+      let t = 0;
+      const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 8, cap: 30, now: () => t, log: () => undefined, simBots: true, ringSecs: 120, safariSecs: 0 });
+      try {
+        const [a, b] = [phone(), phone()];
+        const sa = svc.open(a.link), sb = svc.open(b.link);
+        sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+        const code = (a.got.at(-1) as unknown as { code: string }).code;
+        sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 1, code }));
+        sa.onText(JSON.stringify({ t: 'start' }));
+        const room = [...(svc as unknown as { rooms: Map<string, { host: { room: { actors: Actor[] }; simReady(): Promise<void> } }> }).rooms.values()][0];
+        await room.host.simReady();
+        // Two bots' (the judge is the host's): a bot can meet one of these pageless trainers first, a
+        // fight nobody logs.
+        const fights = () => room.host.room.actors.filter((o) => o.bot && o.battling && o.judge === -1);
+        for (let i = 0; i < 60 * 300 && !fights().length; i++) { t += 1000 / 60; svc.pump(); }
+        const fighter = fights()[0];
+        expect(fighter, 'bots met').toBeTruthy();
+        sb.onText(JSON.stringify({ t: 'watch', id: fighter.id }));
+        const heard = () => b.got.filter((m) => m.t === 'bl') as unknown as { from: number; events: { e: string }[]; ago?: number }[];
+        for (let i = 0; i < 60 * 60 && !heard().length; i++) { t += 1000 / 60; svc.pump(); }
+        const bl = heard();
+        expect(bl.length).toBeGreaterThan(0);
+        expect(bl[0].events[0].e).toBe('start');
+        expect(bl[0].events.at(-1)!.e).toBe('end');
+        expect(typeof bl[0].ago).toBe('number');
+        expect(bl[0].from === fighter.id || bl[0].from === fighter.foe).toBe(true);
+      } finally {
+        svc.stop();
+      }
+    }, 60_000);
+
+    it('publishLog (for the simulator) refuses what is not a fight of this room', () => {
+      const r = rig(2);
+      try {
+        const x = r.room.host.room.actors.find((o) => o.bot)!;
+        expect(r.svc.publishLog('NOPE', x.id, [start() as never])).toBe(false);
+        expect(r.svc.publishLog(r.code, 999999, [start() as never])).toBe(false);
+        expect(r.svc.publishLog(r.code, x.id, [{ e: 'text', text: 'no start' }])).toBe(false);
+        expect(r.svc.publishLog(r.code, x.id, [])).toBe(false);
+        expect(r.svc.publishLog(r.code.toLowerCase(), x.id, [start() as never])).toBe(true);
+      } finally {
+        r.svc.stop();
+      }
+    });
+  });
 });

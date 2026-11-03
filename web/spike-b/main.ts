@@ -62,6 +62,7 @@ import { AskBox } from './askbox';
 import { ANIM_COUNTER_MAX } from '../src/tile-anims';
 import { RingMap } from './ringmap';
 import { Watch } from './watch';
+import { BattleView } from './battleview';
 import { raiseCurtain } from './curtain';
 import { frameOf as fxFrame, grassUnderAsh, isFloor, MB_ASHGRASS, SHEETS as FX_SHEETS, stepEffects, type Effect, type FxKind } from './fieldfx';
 import { ROOM_GAP, clampZoom, loadZoom, nextZoom, pickedZoom, roomFloor, saveZoom, wheelSteps, zoomLabel, zoomRange } from './zoom';
@@ -537,7 +538,8 @@ const handoff: number[] = []; // ms from the trigger to the ROM's first battle f
 
 /** A battle the ROM fights, the page showing it from its first frame and taking the
  *  screen back when it is over. */
-function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>): void {
+let logFight = 0;
+function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>, opts: { log?: boolean; label?: { name: string; skin: number } } = {}): void {
   // One battle at a time: one still running from the match before (its ROM is busy with
   // it) turns this one down, or its end would be credited to this foe.
   if (battle) { link.end(); return; }
@@ -550,6 +552,16 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
     return;
   }
   battleNote.textContent = '';
+  // The fight, read off the ROM and told to the relay for whoever watches it (battlereader.ts);
+  // a link battle is told by the side that challenged only.
+  const me = link.mine();
+  if (link.online && me && opts.log !== false) {
+    const l = link, f = ++logFight & 0xffff;
+    rom.logTo({
+      ctx: { me: { seat: l.me, name: me.name, skin: me.skin }, foe: { seat: foe?.id ?? 0, name: foe?.name ?? opts.label?.name ?? '', skin: foe?.skin ?? opts.label?.skin ?? 0 }, map: me.m.spot.map },
+      emit: (events) => l.bl(f, events),
+    });
+  }
   const t0 = performance.now();
   const firstFrame = rom.emu.onFrame(() => { handoff.push(performance.now() - t0); firstFrame(); });
   // The page keeps the screen until the ROM's battle is up: before that the hidden ROM
@@ -1264,7 +1276,7 @@ function startFor(e: RoomEvent): void {
         giveNext();
       } else l.drop(key);
       return f;
-    }, (err) => { l.drop(key); throw err; }));
+    }, (err) => { l.drop(key); throw err; }), { label: { name: e.name, skin: 0 } });
     return;
   }
   if (e.type === 'legend') {
@@ -1288,7 +1300,7 @@ function startFor(e: RoomEvent): void {
     handOff(null, (r, onStart) => r.boss(e.n, onStart, fog).then((f) => {
       if (!f.ok && f.outcome === 0) say(`${leader.name}: Come back with two POKéMON that can battle!`);
       return f;
-    }));
+    }), { label: { name: leader.name, skin: 0 } });
     battle!.boss = e.n;
     return;
   }
@@ -1338,7 +1350,7 @@ function startFor(e: RoomEvent): void {
         if (take) for (const [q, d] of early.splice(0)) take(q, d);
       },
     };
-    handOff(foe, (r, onStart) => r.duel(me.name, foe.name, foe.skin, e.first, wire, onStart, fog, voiceOfMember(foe.id)));
+    handOff(foe, (r, onStart) => r.duel(me.name, foe.name, foe.skin, e.first, wire, onStart, fog, voiceOfMember(foe.id)), { log: e.first });
   } else {
     const m = placed.get(e.map)!.m;
     const fog = inFogNow();
@@ -2510,13 +2522,22 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
         const out = sym('gBattlerPartyIndexes');
         const lead = out === undefined ? 0 : emu.read(out, 16);
         const count = emu.read(countAt, 8);
-        return teamMembers(emu.bytes(partyAt, PARTY_LEN).slice(), count, speciesName).map((m, i) => ({
+        const rows = teamMembers(emu.bytes(partyAt, PARTY_LEN).slice(), count, speciesName).map((m) => ({
           ...m,
           moves: m.moves.map((v, n) => ({ ...v, maxPp: ppWithBonus(moveInfo(tables, v.id)?.pp ?? 0, m.ppBonuses, n) })),
           itemName: art?.itemName(m.item) ?? '',
           ability: art?.abilityName(m.species, m.ability) ?? '',
-          active: !panelUp && partyId(i) === lead,
+          active: false,
         }));
+        if (panelUp) return rows;
+        // A slot here is a slot of the ROM's party screen, which shows the battle's order, the one out
+        // first. The party is only in that order while that screen is up (party_menu.c
+        // UpdatePartyToBattleOrder); in the battle it is in the field's. Read as if it always were, a
+        // switch left the wrong one marked as out, and when the one switched in fainted, the other
+        // could not be chosen: the fight stood there for good.
+        const main = sym('gMain'), fight = sym('BattleMainCB2');
+        const onItsScreen = main !== undefined && fight !== undefined && ((emu.read(main + 4, 32) ^ fight) & ~1) !== 0;
+        return rows.map((_, slot) => ({ ...rows[onItsScreen ? slot : partyId(slot)], active: partyId(slot) === lead }));
       },
       icon: (species) => monIconOf(species),
       bag: () => bagArtOf(),
@@ -2789,7 +2810,7 @@ function hudFrame(): void {
   const now = performance.now();
   // A battle's picture has the top of the screen: the news waits for the field, as the
   // live match's ticker does (br_hud.c drops its windows off the overworld).
-  if (battleEl.classList.contains('on')) {
+  if (battleEl.classList.contains('on') || watch.viewing) {
     if (tickUntil) { tickUntil = 0; msgBox.hide(); }
   } else if (!sayUntil && !casting && now >= tickUntil) {
     const next = ticks.shift();
@@ -3210,7 +3231,28 @@ const watch = new Watch({
     return `${s.name}'s bag`;
   },
   tell: (text) => tick(text),
+  view: (side) => {
+    if (!art) return null;
+    const v: BattleView = new BattleView(document.getElementById('battleview-host')!, { art, behind: () => fieldBehind(v.canvas) }, { follow: side, levels: false });
+    return v;
+  },
 });
+
+/** The field under a watched fight, as the battle's own canvas sits over it: the camera is on the
+ *  trainer watched, so this is where they stand, dimmed as #battle.see dims a trainer's own. */
+const behindCanvas = document.createElement('canvas');
+behindCanvas.width = 240;
+behindCanvas.height = 160;
+function fieldBehind(over: HTMLCanvasElement): HTMLCanvasElement {
+  const g = behindCanvas.getContext('2d')!;
+  const r = over.getBoundingClientRect(), w = canvas.getBoundingClientRect();
+  const kx = canvas.width / (w.width || 1), ky = canvas.height / (w.height || 1);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(canvas, (r.left - w.left) * kx, (r.top - w.top) * ky, r.width * kx, r.height * ky, 0, 0, 240, 160);
+  g.fillStyle = '#0007';
+  g.fillRect(0, 0, 240, 160);
+  return behindCanvas;
+}
 
 // Drag and pinch / wheel, spectating only. A tap on a trainer follows them.
 const pointers = new Map<number, { x: number; y: number }>();
@@ -4196,7 +4238,7 @@ async function boot(): Promise<void> {
     }
   }
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; } };
+  (window as unknown as { __spike: unknown }).__spike = { watch, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; } };
 }
 
 void boot();

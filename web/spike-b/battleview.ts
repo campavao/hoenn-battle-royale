@@ -13,9 +13,9 @@
 // where the fight stands, with no catching up.
 
 import { EmeraldCanvas, glyphIds, type TextColor } from '../src/ui/emerald';
-import type { BattleEvent, Side } from './shared/battlelog';
+import type { BattleEvent, LogMon, Side } from './shared/battlelog';
 import { HB, type BattleEnv, type HealthboxArt, type RomArt, type RomFont } from './romart';
-import { H, W, advance, envFor, fitScale, revealed, sceneAt, slotOf, type Scene, type SideScene, type Slot } from './battlescene';
+import { BOX_FROM, H, W, advance, envFor, fitScale, namesShown, readsFor, revealed, sceneAt, slotOf, type Scene, type SideScene, type Slot } from './battlescene';
 import { logMs } from './shared/battlelog';
 
 /** What the view needs from the ROM's art: RomArt, or a stand-in in a test. */
@@ -202,8 +202,29 @@ export class BattleView {
     this.root.remove();
   }
 
+  /** Draw again next frame, nothing having changed here: what shows through the ground has. */
+  redraw(): void {
+    this.dirty = true;
+  }
+
   scene(): Scene {
-    return sceneAt(this.log, this.t, this.following);
+    const s = sceneAt(this.log, this.t, this.following);
+    s.text = this.worded(s.text);
+    return s;
+  }
+
+  /** The log's line as it reads from the side followed (readsFor), the last one remembered: this
+   *  is asked every draw, and the line changes every second or so. */
+  private wordedFrom = '';
+  private wordedTo = '';
+  private worded(text: string): string {
+    const start = this.log[0];
+    if (this.following === 0 || start?.e !== 'start' || !text) return text;
+    if (text === this.wordedFrom) return this.wordedTo;
+    const names = (team: readonly LogMon[]) => team.map((m) => m.nickname || this.deps.art.speciesName(m.species));
+    this.wordedFrom = text;
+    this.wordedTo = readsFor(text, [start.a.name, start.b.name], [names(start.a.team), names(start.b.team)]);
+    return this.wordedTo;
   }
 
   snapshot(): ViewSnapshot {
@@ -269,8 +290,8 @@ export class BattleView {
       this.drawGround(sc);
       this.drawSide(art, sc.far, 'far');
       this.drawSide(art, sc.near, 'near');
-      if (sc.far.mon && sc.far.appear > 0.3) this.drawBox(art, sc.far, 'far');
-      if (sc.near.mon && sc.near.appear > 0.3) this.drawBox(art, sc.near, 'near');
+      if (sc.far.mon && sc.far.appear > BOX_FROM) this.drawBox(art, sc.far, 'far');
+      if (sc.near.mon && sc.near.appear > BOX_FROM) this.drawBox(art, sc.near, 'near');
       this.drawMessage(art, sc);
       this.drawNames(sc);
     }
@@ -487,8 +508,9 @@ export class BattleView {
   /** The trainers' names, while their pictures are on the screen. */
   private drawNames(sc: Scene): void {
     const white = this.ink('rgb(255,255,255)', 'rgb(49,49,49)');
-    if (sc.far.trainerDx !== null && sc.far.name) this.ec.drawTextCentred(sc.far.name, FAR_TRAINER.x + sc.far.trainerDx, 2, white);
-    if (sc.near.trainerDx !== null && sc.near.name) this.ec.drawTextCentred(sc.near.name, NEAR_TRAINER.x + sc.near.trainerDx, 34, white);
+    const shown = namesShown(sc);
+    if (shown.far) this.ec.drawTextCentred(sc.far.name, FAR_TRAINER.x + sc.far.trainerDx!, 2, white);
+    if (shown.near) this.ec.drawTextCentred(sc.near.name, NEAR_TRAINER.x + sc.near.trainerDx!, 34, white);
   }
 
   /** Which slot a side is in now, for whoever asks (a spec). */

@@ -204,6 +204,15 @@
       .startmenu { position: fixed; z-index: 2; image-rendering: pixelated; touch-action: none; }
       .startmenu[hidden] { display: none; }
       #battle { z-index: 2; position: fixed; inset: 0; display: none; place-items: center; background: #000; }
+      /* Somebody's fight, drawn by the page (battleview.ts), where a battle stands: the field dimmed
+         round it as in a trainer's own, the strip and the corner over it (so it is before them in the
+         page, with no z-index), and a drag or a tap goes through to the world. */
+      #battleview-dim { position: fixed; inset: 0; background: #0007; pointer-events: none; }
+      #battleview-dim[hidden] { display: none; }
+      #battleview-host { position: absolute; inset: 0; }
+      /* A phone held upright: under the strip and the corner, which stay up for PREV and NEXT. */
+      @media (orientation: portrait) { #battleview-host { bottom: auto; top: calc(env(safe-area-inset-top) + 136px); height: calc(100vw * 2 / 3); } }
+      @media (orientation: landscape) and (pointer: coarse) { #battleview-host { left: calc(env(safe-area-inset-left) + 200px); right: calc(env(safe-area-inset-left) + 200px); } }
       /* A phone held upright: the battle at the top, the pad (which drives it) below. */
       @media (orientation: portrait) { #battle { place-items: start center; align-content: start; padding-top: calc(env(safe-area-inset-top) + 56px); } }
       #intro { z-index: 4; position: fixed; inset: 0; display: grid; place-items: center; background: #000c; padding: 16px; }
@@ -358,6 +367,7 @@
   </head>
   <body>
     <canvas id="world"></canvas>
+    <div id="battleview-dim" hidden><div id="battleview-host"></div></div>
     <div id="hud">
       <div id="stats">loading…</div>
       <button id="menu" type="button">Menu (M)</button>

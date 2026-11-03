@@ -19,6 +19,7 @@ import type { BattleEvent, LogMon, LogSide, Side } from './battlelog';
 import { decide, pickNext } from './simbrain';
 import { translate, STATUS_BITS } from './simlog';
 import { BAG_ITEMS, heldId, type BagItem } from './simnames';
+import LEARNSET_FIXES from './learnset-fixes.json';
 
 export interface SimSide {
   /** The trainer's actor id on the room. */
@@ -195,7 +196,8 @@ function teach(who: Learner, moves: number[], num: number): void {
  *  fresh), then the walk from the bottom that swaps for a better four; or, for a ROM's own set,
  *  that set walked the same way. */
 export function movesFor(speciesId: string, level: number, who: Learner, known: number[] = []): number[] {
-  const row = LEVEL_UP[speciesId] ?? [];
+  // Emerald's list where the engine's is another game's (tools/br/learnset-fixes.mjs).
+  const row = (LEARNSET_FIXES as Record<string, number[]>)[speciesId] ?? LEVEL_UP[speciesId] ?? [];
   const moves = [0, 0, 0, 0];
   for (let i = 0; i < 4; i++) moves[i] = known[i] ?? 0;
   if (!known.length) {

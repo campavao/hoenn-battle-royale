@@ -29,6 +29,7 @@ export const SOUND_FANFARE = 0x8000;
 export const SE_SELECT = 5, SE_WIN_OPEN = 6, SE_WALL_HIT = 7, SE_DOOR = 8, SE_EXIT = 9, SE_LEDGE = 10;
 export const SE_CONTEST_CURTAIN_RISE = 97;
 export const SE_FIELD_POISON = 79, SE_SHOP = 95;
+export const SE_EFFECTIVE = 13, SE_BALL_OPEN = 15, SE_FAINT = 16, MUS_VS_TRAINER = 476;
 export const MUS_HEAL = 368 | SOUND_FANFARE, MUS_OBTAIN_ITEM = 370 | SOUND_FANFARE, MUS_OBTAIN_TMHM = 372 | SOUND_FANFARE;
 
 /** gBrMusic's page half. */

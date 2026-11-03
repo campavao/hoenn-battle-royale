@@ -136,6 +136,14 @@ simulator (`web/spike-b/shared/battlesim.ts`: Pokemon Showdown's MIT Gen 3 engin
 `tools/br/build-sim.mjs`), any number at once, off the room's step, and holds both bots for as long
 as the log (`battlelog.ts`) takes to play. Nothing of the ROM's goes in: public tables and our own
 rules (`br_bot.c`'s build, `br_levels.c`'s learnset walk), and a bot brain of its own (`simbrain.ts`).
+The engine's learnsets are corrected to Emerald's by `tools/br/learnset-fixes.mjs`.
+
+**A fight with a log is watched from the log.** Whoever knows what happened says so (`battlelog.ts`):
+the server's simulator for two bots, the fighter's page reading its ROM for a trainer
+(`battlereader.ts`). The relay keeps it for whoever comes late and says how long ago it began, and a
+watcher's page draws it (`battleview.ts`, in `watch.ts`) in the battle screen's place, over the field
+at the fight's spot, with the WATCHING strip over it. Nothing is worked out twice, so nothing can
+drift. A fight with no log still replays on the watcher's ROM as above, and `/classic/` always does.
 
 **Bot vs player is a trainer battle.** A bot has no ROM, so the host stages its team:
 `trainer` builds the card straight into `gEnemyParty` (`br_bot.c`; HP is a share of the

@@ -164,6 +164,23 @@ export function introLine(farName: string): string {
   return `${farName} would like to battle!`;
 }
 
+/** A line of a log as it reads for a watcher following side 1. A log says things from side 0's
+ *  seat: its mons bare, side 1's "Foe X", "Go! X!" for side 0's send-out and "NAME sent out X!" for
+ *  side 1's, "Your team" and "Foe's team". So this turns those round: "Foe X" goes bare, and a name
+ *  of side 0's team with no "Foe" before it gets one. (Both sides can have the same species, which
+ *  the "Foe" in the line tells apart. A name only side 1 has, bare, is side 1's: leave it.)
+ *  `trainers` and `names` are [side 0, side 1]. */
+export function readsFor(text: string, trainers: readonly [string, string], names: readonly [readonly string[], readonly string[]]): string {
+  if (text.startsWith('Go! ')) return `${trainers[0]} sent out ${text.slice(4)}`;
+  if (text.startsWith(`${trainers[1]} sent out `)) return `Go! ${text.slice(trainers[1].length + 10)}`;
+  const team = text.replace(/\bFoe's team\b|\bYour team\b/g, (m) => (m === 'Your team' ? "Foe's team" : 'Your team'));
+  const theirs = new Set(names[0]);
+  const all = [...new Set([...names[0], ...names[1]])].filter(Boolean).sort((a, b) => b.length - a.length);
+  // A name on its own, not the end of a longer word: "ABRA" in "KADABRA" is no ABRA.
+  const pick = new RegExp(`(^|[^A-Za-z0-9.'])(Foe )?(${all.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') || '$^'})(?![A-Za-z0-9'])`, 'g');
+  return team.replace(pick, (_m, before: string, foe: string | undefined, name: string) => `${before}${!foe && theirs.has(name) ? 'Foe ' : ''}${name}`).replace(/\bFoe (?=\S)(?!(?:'|[a-z]))/g, (m, at: number, s: string) => (all.some((n) => s.startsWith(n, at + 4)) ? m : ''));
+}
+
 /** The scene `ms` into `log` for a watcher following side `follow`. */
 export function sceneAt(log: readonly BattleEvent[], ms: number, follow: Side = 0): Scene {
   const { state, next } = stateAt(log, ms);
@@ -218,6 +235,20 @@ export function sceneAt(log: readonly BattleEvent[], ms: number, follow: Side = 
   }
   const ended = next >= log.length && state.winner !== null;
   return { ms, next, ev, elapsed, p, state, near, far, map: ev?.e === 'start' ? ev.map : state.map, text, chars, ended, waiting: next >= log.length && !ended };
+}
+
+/** A health box is up from this far through its mon's coming out. */
+export const BOX_FROM = 0.3;
+
+/** Which trainers' names have room over their pictures. The ROM has no such labels, so they make way:
+ *  each goes as its trainer sends their first mon out and slides off the edge with its name cut, and
+ *  the near one's, which sits where the far health box goes (its line, y 34, is inside the box's),
+ *  goes once that box is up. */
+export function namesShown(s: Scene): { near: boolean; far: boolean } {
+  return {
+    far: s.far.trainerDx !== null && !!s.far.name && !s.far.mon,
+    near: s.near.trainerDx !== null && !!s.near.name && !s.near.mon && !(s.far.mon && s.far.appear > BOX_FROM),
+  };
 }
 
 /** What a spec (or a person) can say about a scene without a screenshot. */
