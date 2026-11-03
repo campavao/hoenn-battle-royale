@@ -156,9 +156,9 @@ jobs:
     needs: scope
     if: needs.scope.outputs.rom == 'true'
     runs-on: ubuntu-latest
-    # Two clean agbcc builds (~9 min each uncached), then 412 drivers. Without a ceiling
-    # a hung ROM holds a runner for the platform's six hours.
-    timeout-minutes: 45
+    # Two clean agbcc builds (~9 min each uncached), 412 drivers, then the modern compile.
+    # Without a ceiling a hung ROM holds a runner for the platform's six hours.
+    timeout-minutes: 50
     outputs:
       rom-sha1: ${{ steps.fork-rom.outputs.sha1 }}
       patch-size: ${{ steps.patch.outputs.size }}
@@ -287,6 +287,15 @@ jobs:
         # driver with no expect, so each one carries expects, a `# checked-by:` script
         # (objects-band -> objects-band.py) or an explicit `# capture-only:`.
         run: tools/br/drive-all.sh pokeemerald.gba
+
+      # The dev build. Nothing ships or drives it, so it rotted from #29 until #80 with nobody
+      # noticing (POK-426). Compiled here, beside the ROM it shares nothing but assets with;
+      # not on a run that reused the drivers, which an earlier run compiled this tree for.
+      - name: make modern still compiles
+        if: needs.scope.outputs.driven-rom == ''
+        run: |
+          sudo apt-get install -y --no-install-recommends libnewlib-arm-none-eabi
+          make modern -j"$(nproc)"
 
   # The Playwright suite, in four shards side by side. One at a time it is about an hour
   # (2026-10-29): the tests run serially by design (one ROM file, fixed ports;
