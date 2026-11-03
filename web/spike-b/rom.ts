@@ -866,6 +866,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
   let tune: MusicAsk | null = null;
   let fightSong = false;
   let fightStep = 0;
+  const fightHeader = sounds.length ? romView.getUint32(sym('gSongTable') - ROM_BASE + 8 * MUS_VS_TRAINER, true) : 0;
   // Running between turns; and run since the parked state was last put back.
   let singing = false;
   let idled = false;
@@ -1030,6 +1031,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     release: (k) => emu.release(k),
     sound(id) {
       // Only while the song plays: a ROM standing still would play it when it next ran.
+      // Nor while a battle's song is starting, silent anyway: the ROM takes one request at a time,
+      // and one of the song's lost to this left the route's playing for the whole fight.
+      if (fightSong && fightStep < 3) return;
       if (sounds.length && tune && singing && !turns) emu.write(musicAt + 10, id & 0xffff, 16);
     },
     fightSong(on) {
@@ -1043,7 +1047,13 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         setVolume(volume);
         return;
       }
-      if (!singing || turns || fightStep === 3) return;
+      if (!singing || turns) return;
+      // Running tracks alone don't say it: the route's are running too.
+      const songOn = (emu.read(sounds[1][0], 32) >>> 0) === fightHeader;
+      if (fightStep === 3) {
+        if (songOn) return;
+        fightStep = 0;
+      }
       fightSong = true;
       // br_music.c has no way to ask for a battle's song, but gBrMusic.sound is PlaySE, which starts
       // any song by its number on that song's player (sound.c). BrMusic_Tick would put the route's
@@ -1058,10 +1068,13 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       } else if (fightStep === 1 && taken) {
         emu.write(musicAt + 10, MUS_VS_TRAINER, 16);
         fightStep = 2;
-      } else if (fightStep === 2 && taken && emu.read(sounds[1][0] + 4, 32) & 0xffff) {
-        emu.write(musicAt + 8, 1, 8);
-        setVolume(volume);
-        fightStep = 3;
+      } else if (fightStep === 2 && taken) {
+        if (!songOn) fightStep = 0;
+        else if (emu.read(sounds[1][0] + 4, 32) & 0xffff) {
+          emu.write(musicAt + 8, 1, 8);
+          setVolume(volume);
+          fightStep = 3;
+        }
       }
     },
     music(ask) {
