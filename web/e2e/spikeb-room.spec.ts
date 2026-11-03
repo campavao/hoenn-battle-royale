@@ -140,3 +140,37 @@ test("a phone's battle is the battle menu, with the pad off the glass", async ({
   await expect(page.locator('#dpad-surface'), 'the pad gives way').toBeHidden();
   await ctx.close();
 });
+
+// Cam 11-02: "it doesn't look like I can leave except for reloading". Out of the match the dock
+// (and its room button) went with the trainer, and R was the only way to the sheet's LEAVE.
+for (const [name, ctxOpts] of [
+  ['a phone', { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }],
+  ['a desktop', { viewport: { width: 1280, height: 720 } }],
+] as const) {
+  test(`out of the match, ${name} can reach LEAVE from the screen, and leaves`, async ({ browser }) => {
+    test.setTimeout(300_000);
+    const ctx = await browser.newContext(ctxOpts);
+    const page = await ctx.newPage();
+    const snap = (n: string) => page.screenshot({ path: `${process.env.HBR_SHOTS ?? test.info().outputDir}/${n}.png` });
+    await hosted(page);
+    await s(page, (s) => s.goOut());
+    await expect.poll(() => s(page, (s) => s.isOut), { timeout: 30_000 }).toBe(true);
+    await expect(page.getByText(/^WATCHING /)).toBeVisible({ timeout: 30_000 });
+    await page.waitForTimeout(800);
+    await snap(`out-${name.replace(' ', '-')}`);
+    // LEAVE on the watch strip, by mouse or thumb: it asks first, and STAY keeps the match.
+    await expect(page.locator('#watch-leave'), 'a way out on the screen').toBeVisible();
+    await page.locator('#watch-leave').click();
+    await expect(page.locator('#match-leave-sure')).toBeVisible();
+    await snap(`sheet-${name.replace(' ', '-')}`);
+    await page.locator('#match-stay').click();
+    await expect(page.locator('#match-leave')).toBeVisible();
+    await page.locator('#drawer-close').click();
+    await expect(page.locator('#watch-leave')).toBeVisible();
+    await page.locator('#watch-leave').click();
+    await page.locator('#match-leave-sure').click();
+    await expect.poll(() => s(page, (s) => s.lobby?.shown), { timeout: 15_000 }).toBe(true);
+    await expect.poll(() => s(page, (s) => s.isOut), { timeout: 5_000 }).toBe(false);
+    await ctx.close();
+  });
+}

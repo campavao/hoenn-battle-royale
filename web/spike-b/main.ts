@@ -2112,6 +2112,10 @@ const padPrefs = new PadPrefsControl({
 const touchPad = matchMedia('(pointer: coarse)').matches;
 const sheetBtn = document.getElementById('sheet')!;
 sheetBtn.addEventListener('click', () => openSheet());
+// Out of the match there is no dock (so no ☰) and a phone has no R: LEAVE sits on the watch
+// strip, and opens the sheet at its "Leave the match?" (Cam, 11-02: "except for reloading").
+const watchLeave = document.getElementById('watch-leave')!;
+watchLeave.addEventListener('click', () => { openSheet(); sheetLeave = true; lobby?.stage.redraw(); });
 function openSheet(): void {
   if (!lobby || !matchOn || lobby.shown) return;
   held.clear();
@@ -4084,7 +4088,7 @@ async function boot(): Promise<void> {
       },
     });
     worldSock = sock;
-    sheetBtn.hidden = false;
+    sheetBtn.hidden = watchLeave.hidden = false;
     const joinAs = (how: { code?: string; host?: boolean; pass?: string }) => {
       knockedWithPass = !!how.pass;
       const c = loadCareer();
