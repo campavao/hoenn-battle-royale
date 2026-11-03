@@ -7,6 +7,7 @@ import { GOLD } from '../../src/match/events';
 import ballsC from '../../../src/br/br_balls.c?raw';
 import zoneC from '../../../src/br/br_zone.c?raw';
 import roomsJson from '../data/rooms.json';
+import tableBallsJson from '../data/table-balls.json';
 import { describe, expect, it } from 'vitest';
 import { decodeGrid, type WorldMap } from '../../src/bots/world';
 import type { PatchTable } from '../../src/bots/patches';
@@ -661,11 +662,12 @@ describe('item balls', () => {
   it('every house and floor with a cache in the live match has its ball: a machine, or gold', () => {
     const room = makeRoom(MAPS, PATCHES, 4242);
     const rooms = roomsJson as [string, number, number, boolean, boolean, number, number, boolean][];
+    const tableBalls = tableBallsJson as [string, number, number][];
     const g = [...room.ground().values()];
     const caches = g.filter((b) => !room.places.has(b.map) && !b.map.startsWith(SAFARI));
     expect(caches.length).toBeGreaterThan(20);
     for (const b of caches) {
-      expect(rooms.some(([m, x, y, , cache]) => cache && m === b.map && x === b.x && y === b.y)).toBe(true);
+      expect(rooms.some(([m, x, y, , cache]) => cache && m === b.map && x === b.x && y === b.y) || tableBalls.some(([m, x, y]) => m === b.map && x === b.x && y === b.y)).toBe(true);
       expect(isTm(b.item) || GOLD.includes(b.item)).toBe(true);
     }
     // ...and the table is br_balls.c's as it stands (tools/br/spike-rooms.py makes it).
