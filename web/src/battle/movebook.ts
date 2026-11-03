@@ -60,7 +60,7 @@ function u32(rom: Rom, addr: number): number {
 
 /** EOS-ended text at `addr`, at most `max` bytes. The summary screen's line breaks
  *  (0xFE) are spaces, but for a word it hyphenated across them ("full-|body"). */
-function text(rom: Rom, addr: number, max: number): string {
+export function text(rom: Rom, addr: number, max: number): string {
   const out: number[] = [];
   for (let i = 0; i < max; i++) {
     const c = u8(rom, addr + i);
