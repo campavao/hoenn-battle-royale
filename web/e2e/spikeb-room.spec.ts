@@ -40,6 +40,90 @@ test('a reload mid-match comes back as the same trainer, not a new one', async (
   expect(await s(page, (s) => s.link.me)).toBe(me);
 });
 
+test('a step over a seam that does not meet in the plane is a glide, not a jump of the camera', async ({ page }) => {
+  test.setTimeout(240_000);
+  await solo(page, true);
+  const west = () => page.evaluate(() => {
+    const w = window as any, s = w.__spike;
+    const a = s.link.room.actor(s.link.me), spot = { map: 'MAP_FALLARBOR_TOWN', x: 1, y: 10 };
+    a.m = { ...a.m, spot, prev: spot, facing: 3, moveDir: 3, action: null, px: 0, py: 0 };
+    w.__ys = [];
+    const look = () => { w.__ys.push([s.cam.y, s.link.room.actor(s.link.me).m.spot.map]); requestAnimationFrame(look); };
+    look();
+  });
+  await west();
+  await expect.poll(() => s(page, (s) => s.link.room.actor(s.link.me)?.m.spot.map)).toBe('MAP_FALLARBOR_TOWN');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { (window as any).__ys.length = 0; });
+  await key(page, KEY[3], true);
+  await expect.poll(() => s(page, (s) => s.link.room.actor(s.link.me)?.m.spot.map), { timeout: 20_000 }).toBe('MAP_ROUTE114');
+  await page.waitForTimeout(500);
+  await key(page, KEY[3], false);
+  const ys = await page.evaluate(() => (window as any).__ys as [number, string][]);
+  const crossed = ys.findIndex(([, map]) => map === 'MAP_ROUTE114');
+  expect(crossed, 'over the seam').toBeGreaterThan(0);
+  const worst = Math.max(...ys.slice(1).map(([y], i) => Math.abs(y - ys[i][0])));
+  console.log(`[seam] the camera's worst move in a frame: ${worst} px, ${ys.length} frames`);
+  expect(worst).toBeLessThan(8);
+});
+
+test('out of the match, watching the bots walk for a minute: nobody jumps and the Room never leaves the relay', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  await hosted(page);
+  const counts = () => page.evaluate(() => (window as unknown as { __spike: { jank: { counts(): Record<string, number> } } }).__spike.jank.counts());
+  await s(page, (s) => s.goOut());
+  await expect.poll(() => s(page, (s) => s.spectating), { timeout: 30_000 }).toBeTruthy();
+  await page.waitForTimeout(60_000);
+  const j = await counts();
+  console.log(`[jank] ${JSON.stringify(j)}`);
+  expect(j.watched, 'it was watching').toBeGreaterThan(30);
+  expect(j.checks, 'the frames carry their hash').toBeGreaterThan(0);
+  expect(j.drifts, 'the same Room as the relay').toBe(0);
+  expect(j.lost, 'no resync').toBe(0);
+  expect(j.snaps, 'nobody jumped').toBe(0);
+  expect(j.cam).toBe(0);
+  await ctx.close();
+});
+
+test("the host's card on a trainer: MAKE HOST hands START on, and REPLACE WITH BOT takes them out of a match with a bot in their place", async ({ browser }) => {
+  test.setTimeout(420_000);
+  const [hc, gc] = [await browser.newContext({ viewport: { width: 1280, height: 720 } }), await browser.newContext()];
+  const [host, guest] = [await hc.newPage(), await gc.newPage()];
+  await host.goto(`/?rom=${romHashParam()}#host`);
+  await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 90_000 });
+  await guest.goto(`/?rom=${romHashParam()}${new URL(host.url()).hash}`);
+  await expect(host.locator('#room-roster li', { hasText: 'CAM' })).toHaveCount(2, { timeout: 90_000 });
+  const card = (page: Page, n: number) => page.locator('#room-roster li').nth(n).locator('button').click({ force: true });
+  await expect(guest.locator('#room-start')).toHaveCount(0);
+  await card(host, 1);
+  await expect(host.locator('#seat-host')).toBeVisible();
+  if (process.env.HOST_SHOT) await host.screenshot({ path: process.env.HOST_SHOT });
+  await host.locator('#seat-host').click();
+  await expect(guest.locator('#room-start')).toBeEnabled({ timeout: 10_000 });
+  await expect(host.locator('#room-start')).toHaveCount(0);
+  // Back again, then the match.
+  await card(guest, 0);
+  await expect(guest.locator('#seat-host')).toBeVisible();
+  await guest.locator('#seat-host').click();
+  await expect(host.locator('#room-start')).toBeEnabled({ timeout: 10_000 });
+  await host.locator('#room-start').click();
+  for (const p of [host, guest]) {
+    await p.waitForFunction(() => { const s = (window as any).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 180_000 });
+  }
+  const id = await guest.evaluate(() => (window as any).__spike.link.me);
+  const standing = () => host.evaluate((id) => { const a = (window as any).__spike.link.room.actor(id); return a ? { bot: a.bot, name: a.name } : null; }, id);
+  const was = await standing();
+  expect(was?.bot).toBe(false);
+  await host.evaluate((id) => (window as any).__spike.lobby.toBot(id), id);
+  await expect.poll(async () => (await standing())?.bot, { timeout: 15_000 }).toBe(true);
+  expect((await standing())?.name).toBe(was?.name);
+  await expect(guest.getByText('The host took you out of the room.')).toBeVisible({ timeout: 15_000 });
+  await hc.close();
+  await gc.close();
+});
+
 test('out of the match, the strip names who is watched, and the D-pad steps to the next', async ({ browser }) => {
   test.setTimeout(300_000);
   const ctx = await browser.newContext({ viewport: devices['Pixel 7'].viewport, isMobile: true, hasTouch: true });

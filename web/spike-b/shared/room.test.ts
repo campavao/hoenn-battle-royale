@@ -14,7 +14,7 @@ import worldJson from '../data/world.json';
 import sectionsJson from '../../../src/data/region_map/region_map_sections.json';
 import { STORIES } from '../../src/match/story';
 import patchJson from '../../src/data/patches.json';
-import { Host, play } from './host';
+import { Host, LET_GO_FRAMES, play } from './host';
 import { over } from './over';
 import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, isTm, within } from './items';
 import { HURT, botKeys, health } from './bots';
@@ -24,6 +24,70 @@ const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
 
 describe('shared room', () => {
+  it("no bot jumps: over a long match every move is a step, a hop or a warp (POK-376, Cam, 10-18: 'teleporting')", () => {
+    for (const seed of [11, 222, 3333]) {
+      const r = makeRoom(MAPS, PATCHES, seed);
+      r.ringPhase = 40 * 60;
+      r.opening = 20 * 60;
+      const host = new Host(r, 29, MAPS);
+      host.lock();
+      const was = new Map<number, { spot: { map: string; x: number; y: number }; m: unknown }>();
+      const place = (spot: { map: string; x: number; y: number }) => {
+        const p = r.places.get(spot.map);
+        return p ? { x: p.gx + spot.x, y: p.gy + spot.y } : null;
+      };
+      const jumps: string[] = [];
+      for (let f = 0; f < 15_000; f++) {
+        host.advance();
+        for (const a of r.actors) {
+          const w = was.get(a.id);
+          was.set(a.id, { spot: { ...a.m.spot }, m: a.m });
+          if (!w || w.m !== a.m || a.m.action?.kind === 'warp') continue;
+          const from = place(w.spot), to = place(a.m.spot);
+          const far = w.spot.map === a.m.spot.map ? Math.abs(w.spot.x - a.m.spot.x) + Math.abs(w.spot.y - a.m.spot.y)
+            : from && to ? Math.abs(from.x - to.x) + Math.abs(from.y - to.y) : Infinity;
+          // Three: a step over one of the seams that close two tiles out (seamglide.ts).
+          if (far > 3) jumps.push(`seed ${seed} frame ${r.tick} bot ${a.id}: ${w.spot.map} ${w.spot.x},${w.spot.y} -> ${a.m.spot.map} ${a.m.spot.x},${a.m.spot.y}`);
+        }
+      }
+      expect(jumps.slice(0, 8)).toEqual([]);
+    }
+  }, 300_000);
+  it('lets go of a trainer whose foe has let go of the fight, a minute on: a page that froze holds nobody', () => {
+    const seed = 99;
+    const host = new Host(makeRoom(MAPS, PATCHES, seed), 0, MAPS);
+    const mirror = makeRoom(MAPS, PATCHES, seed);
+    const run = (n: number) => { for (let i = 0; i < n; i++) { play(mirror, host.advance().frame); expect(mirror.hash()).toBe(host.room.hash()); } };
+    const a = host.join('A', 0), b = host.join('B', 1);
+    host.lock();
+    run(2);
+    const fight = () => {
+      for (const room of [host.room, mirror]) {
+        Object.assign(room.actor(a)!, { battling: true, foe: b });
+        Object.assign(room.actor(b)!, { battling: true, foe: a });
+      }
+    };
+    // Both still in it: the room never ends a fight that is going on, however long.
+    fight();
+    run(LET_GO_FRAMES + 10);
+    expect(host.room.actor(a)!.battling && host.room.actor(b)!.battling).toBe(true);
+    // A's page ends it; B's never says.
+    host.end(a, true);
+    run(1);
+    expect(host.room.actor(a)!.battling).toBe(false);
+    run(LET_GO_FRAMES - 10);
+    expect(host.room.actor(b)!.battling, 'its page has a minute to say so').toBe(true);
+    run(20);
+    const freed = host.room.actor(b)!;
+    expect(freed.battling).toBe(false);
+    expect(freed.foe).toBe(0);
+    expect(freed.shun, 'kept apart, as a fight run from').toBe(a);
+    // Its page turning up late changes nothing.
+    host.end(b);
+    run(1);
+    expect(host.room.actor(b)!.battling).toBe(false);
+  });
+
   it('mirrors the host frame for frame', () => {
     const seed = 12345;
     const host = new Host(makeRoom(MAPS, PATCHES, seed), 64, MAPS);
@@ -214,6 +278,44 @@ describe('comings and goings', () => {
     const a = host.join('A', 0), b = host.join('B', 1);
     host.advance();
     expect(host.room.actor(a)!.m.spot).not.toEqual(host.room.actor(b)!.m.spot);
+  });
+});
+
+describe('REPLACE WITH BOT', () => {
+  it('leaves their trainer standing, walking as a bot, on every mirror, and lets go of what they were doing', () => {
+    const host = new Host(makeRoom(MAPS, PATCHES, 99), 0, MAPS);
+    const mirror = makeRoom(MAPS, PATCHES, 99);
+    const run = (n: number) => { for (let i = 0; i < n; i++) { play(mirror, host.advance().frame); expect(mirror.hash()).toBe(host.room.hash()); } };
+    const a = host.join('A', 0, { map: 'MAP_ROUTE101', x: 8, y: 10 }), b = host.join('B', 1, { map: 'MAP_ROUTE101', x: 3, y: 3 });
+    host.lock();
+    run(2);
+    for (const room of [host.room, mirror]) {
+      Object.assign(room.actor(a)!, { battling: true, foe: b });
+      Object.assign(room.actor(b)!, { battling: true, foe: a });
+    }
+    const before = { ...host.room.actor(a)!.m.spot };
+    host.toBot(a);
+    run(1);
+    const t = host.room.actor(a)!;
+    expect(t.bot).toBe(true);
+    expect(t.battling).toBe(false);
+    expect(t.foe).toBe(0);
+    expect(t.name).toBe('A');
+    expect(t.m.spot).toEqual(before);
+    // The other's page ends their side, its foe gone.
+    expect(host.room.actor(b)!.battling).toBe(true);
+    host.end(b);
+    run(1);
+    // A second word on it changes nothing; a page's late one finds nobody.
+    host.toBot(a);
+    host.input(a, 1, [KEY_UP]);
+    let moved = false;
+    for (let i = 0; i < 2000 && !moved; i++) {
+      run(1);
+      const s = host.room.actor(a)?.m.spot;
+      moved = !s || s.x !== before.x || s.y !== before.y;
+    }
+    expect(moved, 'it walks').toBe(true);
   });
 });
 

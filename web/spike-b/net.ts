@@ -17,6 +17,7 @@ import type { PatchTable } from '../src/bots/patches';
 import { tick } from './sim';
 import { Host, play } from './shared/host';
 import { BOT_FILL } from '../src/match/room';
+import type { JankCounts } from './jank';
 import { recorder } from './recorder';
 import type { BattleEvent } from './shared/battlelog';
 import { LOG_STREAM_EVENTS, chunkEvents, cleanEvents } from './shared/logwire';
@@ -38,6 +39,10 @@ export interface WorldLink {
   mine(): Actor | undefined;
   /** My battle is over (`fled`: it never got going, or was run from; `won`: I beat a bot). */
   end(fled?: boolean, won?: boolean): void;
+  /** The link's own account (jank.ts): Rooms loaded again, and the frames' hashes compared. */
+  health?(): { resyncs: number; checks: number; drifts: number };
+  /** How smooth the match looked from here, to the relay's log. */
+  jank?(j: JankCounts, v: string): void;
   /** What my team could do on the field now (FIELD_*). */
   field(bits: number): void;
   /** The bots the room gave me to fight: `winner` won (0, no answer). */
@@ -216,6 +221,8 @@ export class Online implements WorldLink {
   private syncing = false;
   private syncAt = 0;
   private resyncs = 0;
+  private checks = 0;
+  private drifts = 0;
   private rtt = 0;
   private lastSend = new Map<number, number>();
   private predicted: Actor | null = null;
@@ -315,7 +322,8 @@ export class Online implements WorldLink {
         if (t !== undefined) this.rtt = this.rtt ? this.rtt * 0.9 + (performance.now() - t) * 0.1 : performance.now() - t;
         this.acked = f.a;
       }
-      if (f.h !== undefined && f.h !== this.room.hash()) { recorder.net('desync', this.room.tick, f.h, this.room.hash()); this.resync(); break; }
+      if (f.h !== undefined) this.checks += 1;
+      if (f.h !== undefined && f.h !== this.room.hash()) { this.drifts += 1; recorder.net('desync', this.room.tick, f.h, this.room.hash()); this.resync(); break; }
     }
     if (!this.queue.length) this.playing = false;
     while (this.sent.length && this.sent[0].seq <= this.acked) this.sent.shift();
@@ -331,6 +339,12 @@ export class Online implements WorldLink {
     this.queue = [];
     this.send({ t: 'sync' });
   }
+
+  health(): { resyncs: number; checks: number; drifts: number } {
+    return { resyncs: this.resyncs, checks: this.checks, drifts: this.drifts };
+  }
+
+  jank(j: JankCounts, v: string): void { this.send({ t: 'jank', v, ...j }); }
 
   mine(): Actor | undefined {
     if (this.predicted) return this.predicted;
@@ -415,6 +429,10 @@ export interface WorldSocket {
   set(set: Partial<Settings> & { pass?: string }): void;
   /** The host takes trainer `id` out of the room. */
   kick(id: number): void;
+  /** MAKE HOST: the room's yours, `id`. */
+  makeHost(id: number): void;
+  /** REPLACE WITH BOT: out, and a bot plays on in their place. */
+  toBot(id: number): void;
   close(): void;
 }
 
@@ -512,13 +530,15 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
     });
     return true;
   };
-  if (!open()) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, list: () => undefined, set: () => undefined, kick: () => undefined, leave: () => undefined, close: () => undefined }; }
+  if (!open()) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, list: () => undefined, set: () => undefined, kick: () => undefined, makeHost: () => undefined, toBot: () => undefined, leave: () => undefined, close: () => undefined }; }
   return {
     join: (name, skin, how) => send({ t: 'join', name, skin, ...how, ...(WORLD ? { w: WORLD } : {}), ...(ROM_SHA ? { r: ROM_SHA } : {}) }),
     start: () => send({ t: 'start' }),
     list: () => send({ t: 'list' }),
     set: (set) => send({ t: 'set', set }),
     kick: (id) => send({ t: 'kick', id }),
+    makeHost: (id) => send({ t: 'host', id }),
+    toBot: (id) => send({ t: 'bot', id }),
     leave: () => send({ t: 'leave' }),
     close: () => { closed = true; ws?.close(); },
   };

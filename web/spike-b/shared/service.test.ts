@@ -680,6 +680,72 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it("a page's jank report is one line in the log, clamped, the line play-log.mjs reads, and no more than one a match", () => {
+    const lines: string[] = [];
+    let now = 1000;
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, cap: 8, bots: 0, now: () => now, log: (l) => lines.push(l) });
+    try {
+    const a = phone();
+    const s = svc.open(a.link);
+    s.onText(JSON.stringify({ t: 'join', name: 'A', skin: 0, host: true }));
+    const j = { t: 'jank', v: 'dc179db', watched: 120.7, snaps: 2, cam: 1, lost: 0, stalls: 1e9, longest: 31, checks: 500, drifts: -3 };
+    s.onText(JSON.stringify(j));
+    const code = (a.got.find((m) => m.t === 'room') as unknown as { code: string }).code;
+    expect(lines.filter((l) => l.startsWith('jank'))).toEqual([`jank ${code} vdc179db | watched 120s | snaps 2 cam 1 lost 0 | stalls 65535 longest 31s | checks 500 drifts 0`]);
+    s.onText(JSON.stringify(j));
+    expect(lines.filter((l) => l.startsWith('jank'))).toHaveLength(1);
+    now += 31_000;
+    s.onText(JSON.stringify({ ...j, v: 'not a version!' }));
+    expect(lines.filter((l) => l.startsWith('jank'))[1]).toContain('v? |');
+    } finally {
+      svc.stop();
+    }
+  });
+
+  describe("the host's actions on a trainer's card", () => {
+    const opened = () => {
+      const lines: string[] = [];
+      const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: (l) => lines.push(l) });
+      const [a, b] = [phone(), phone()];
+      const [sa, sb] = [svc.open(a.link), svc.open(b.link)];
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const room = () => a.got.filter((m) => m.t === 'room').at(-1) as unknown as { code: string; you: number; owner: number; members: { id: number }[] };
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 1, code: room().code }));
+      const bob = (b.got.filter((m) => m.t === 'room').at(-1) as unknown as { you: number }).you;
+      return { svc, lines, a, b, sa, sb, room, bob, alice: room().you };
+    };
+
+    it('MAKE HOST hands the room on, once and only from the host', () => {
+      const { svc, lines, b, sa, sb, room, bob, alice } = opened();
+      try {
+        sb.onText(JSON.stringify({ t: 'host', id: bob }));
+        expect(room().owner, 'a guest cannot take it').toBe(alice);
+        sa.onText(JSON.stringify({ t: 'host', id: bob }));
+        expect(room().owner).toBe(bob);
+        expect((b.got.filter((m) => m.t === 'room').at(-1) as unknown as { owner: number }).owner).toBe(bob);
+        expect(lines.join('\n')).toMatch(/host alice#\d+ stood down, bob#\d+ promoted$/im);
+        sa.onText(JSON.stringify({ t: 'host', id: alice }));
+        expect(room().owner, 'alice is a guest now').toBe(bob);
+      } finally {
+        svc.stop();
+      }
+    });
+
+    it("REPLACE WITH BOT before a match frees the seat, and doesn't keep them out as KICK does", () => {
+      const { svc, b, sa, room, bob } = opened();
+      try {
+        sa.onText(JSON.stringify({ t: 'bot', id: bob }));
+        expect(room().members.map((m) => m.id)).not.toContain(bob);
+        expect(b.got.at(-1)!.t).toBe('kicked');
+        const again = phone();
+        svc.open(again.link).onText(JSON.stringify({ t: 'join', name: 'bob', skin: 1, code: room().code }));
+        expect(again.got.at(-1)!.t).toBe('room');
+      } finally {
+        svc.stop();
+      }
+    });
+  });
+
   describe('battle logs (bl)', () => {
     const mon = { species: 280, level: 12, hp: 31, maxHp: 31, status: 0 };
     const start = (seat = 1, foe = 2) => ({ e: 'start', a: { seat, name: 'A', skin: 0, team: [mon] }, b: { seat: foe, name: 'B', skin: 1, team: [mon] }, map: 'MAP_ROUTE101' });

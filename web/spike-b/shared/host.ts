@@ -73,6 +73,12 @@ export interface HostOptions {
   onLog?: (seat: number, events: BattleEvent[]) => void;
 }
 
+/** A trainer still fighting somebody who has let go of that fight, for this long: the room lets
+ *  go too. Their page ends it in seconds when it runs (the foe's OUT, or stuck.ts). One that
+ *  doesn't is frozen, and a hidden tab's `here` keeps the relay from dropping it (Cam, 11-03, on
+ *  the same net: "like a minute"). */
+export const LET_GO_FRAMES = 60 * 60;
+
 export class Host {
   readonly room: Room;
   private players = new Map<number, Player>();
@@ -86,6 +92,8 @@ export class Host {
   private simulation: typeof Simulation | null = null;
   private simLoad: Promise<void> | null = null;
   private simFailed = false;
+  /** Who has been fighting nobody, and since which frame (LET_GO_FRAMES). */
+  private alone = new Map<number, number>();
   onLog?: HostOptions['onLog'];
 
   /** `jitter` 0 is the page hosting itself: a key is used the frame it is pressed. */
@@ -129,6 +137,13 @@ export class Host {
   leave(id: number): void {
     this.players.delete(id);
     this.pending.push({ c: 'leave', id });
+  }
+
+  /** The trainer plays on as a bot, the phone that had them gone (the host's REPLACE WITH BOT). */
+  toBot(id: number): void {
+    if (!this.players.delete(id)) return;
+    this.brains.set(id, { rng: (id * 2654435761) >>> 0 || 1, wait: 30, dir: 1 });
+    this.pending.push({ c: 'bot', id });
   }
 
   /** How many inputs a phone has sent that no frame has used yet. */
@@ -233,6 +248,7 @@ export class Host {
   /** One frame. The record goes to every mirror; `acks` is each phone's last input used. */
   advance(): { frame: Frame; acks: Map<number, number>; events: RoomEvent[] } {
     const room = this.room;
+    this.letGoAlone();
     const cmds = this.pending;
     this.pending = [];
     for (const c of cmds) room.apply(c);
@@ -288,6 +304,20 @@ export class Host {
     if (ins.length) frame.ins = ins;
     if (stall.length) frame.stall = stall;
     return { frame, acks, events };
+  }
+
+  /** The end of a fight the other side has left, for a page that will never say it: no winner,
+   *  and kept apart a while, as a fight run from is. An `end` in the frame's commands, so every
+   *  mirror has it too. */
+  private letGoAlone(): void {
+    const room = this.room;
+    for (const a of room.actors) {
+      const foe = a.foe ? room.actor(a.foe) : undefined;
+      if (a.bot || !a.battling || !a.foe || a.meet || (foe?.battling && foe.foe === a.id)) { this.alone.delete(a.id); continue; }
+      const since = this.alone.get(a.id) ?? room.tick;
+      this.alone.set(a.id, since);
+      if (room.tick - since >= LET_GO_FRAMES) { this.alone.delete(a.id); this.pending.push({ c: 'end', id: a.id, fled: true }); }
+    }
   }
 
   private loadSim(): Promise<void> {

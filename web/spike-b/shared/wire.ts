@@ -23,8 +23,16 @@ export type WorldUp =
   | { t: 'leave' }
   /** The host takes a trainer out of the room, before its match. */
   | { t: 'kick'; id: number }
+  /** The host hands the room on to `id`: START, the settings, KICK, all of it. */
+  | { t: 'host'; id: number }
+  /** The host takes a trainer out as KICK does, kept out of nothing, and a bot plays on in their
+   *  place: their trainer, where they stand, in a match; the seat FILL gives one, before it. */
+  | { t: 'bot'; id: number }
   /** LOBBIES: the rooms somebody hosted, answered by `rooms` (before a join, or in one). */
   | { t: 'list' }
+  /** How smooth the match looked from this page (jank.ts), one line in the relay's log. Counts
+   *  only: `v` is the ROM's sha1 in seven characters. */
+  | { t: 'jank'; v: string; watched: number; snaps: number; cam: number; lost: number; stalls: number; longest: number; checks: number; drifts: number }
   /** Still here: a hidden tab sends no frames (no requestAnimationFrame), so it says so,
    *  or the relay takes its silence for a phone gone (QUIET_MS). */
   | { t: 'here' }

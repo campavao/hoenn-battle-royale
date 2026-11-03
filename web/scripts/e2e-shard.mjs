@@ -30,7 +30,7 @@ export const FILE_SECONDS = {
   'spikeb-menu.spec.ts': 149,
   'spikeb-banners.spec.ts': 275,
   'spikeb-windows.spec.ts': 452,
-  'spikeb-room.spec.ts': 81,
+  'spikeb-room.spec.ts': 230,
   'spikeb.spec.ts': 568,
   'spikeb-two.spec.ts': 102,
   'spikeb-passcode.spec.ts': 9,
@@ -38,7 +38,7 @@ export const FILE_SECONDS = {
   'battleview.spec.ts': 70,
   'spikeb-battlelog.spec.ts': 450,
   'spikeb-watch-log.spec.ts': 420,
-  'spikeb-stuck.spec.ts': 165,
+  'spikeb-stuck.spec.ts': 255,
   // Skipped in CI: these need the deployed site, or HBR_SOAK.
   'live-room.spec.ts': 0,
   'live.spec.ts': 0,
