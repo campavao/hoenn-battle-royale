@@ -480,6 +480,9 @@ export type Command =
   | { c: 'wear'; id: number; bot: number; hp: number[]; spent?: number[] }
   /** `id` sails to story `to`'s island, or ('') from an island back to Lilycove. */
   | { c: 'sail'; id: number; to: string }
+  /** Trainer `id` plays on as a bot, with the team a bot of theirs would be dealt: a page's team
+   *  and bag went with the page. */
+  | { c: 'bot'; id: number }
   /** `id`'s page went (a reload), or came back. */
   | { c: 'away'; id: number; on: boolean }
   /** Drop `id` on `map` when the Safari ends. */
@@ -673,6 +676,11 @@ export class Room {
       // A page that went took its hidden ROM with it, and a new one is never told: the fight
       // it was running lets its bots go, or they would stand there for all of BOT_DUEL_MAX.
       if (cmd.on) for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
+    } else if (cmd.c === 'bot') {
+      const a = this.actor(cmd.id);
+      if (!a || a.bot) return;
+      this.letGoOf(a);
+      Object.assign(a, { bot: true, battling: false, foe: 0, meet: undefined, boss: undefined, away: undefined, keys: 0, last: 0, calm: this.tick + GRACE });
     } else if (cmd.c === 'wear') {
       // Once, from the trainer it last fought (out by now, if it won), and only a bot
       // still in: its next fight is with the team that one left it (classic's setParty,
@@ -1395,6 +1403,12 @@ export class Room {
   /** `id` off the map, and everything that waited on them let go. */
   private remove(id: number): void {
     const a = this.actor(id);
+    this.letGoOf(a, id);
+    this.actors = this.actors.filter((o) => o.id !== id);
+  }
+
+  /** Everything that waited on trainer `id`, who has no page to answer for it now. */
+  private letGoOf(a: Actor | undefined, id = a?.id ?? 0): void {
     // A trainer they were fighting is still in that battle: their page ends it (their
     // ROM wins it, BrNetlink_PeerOut) and says so.
     const foe = a?.foe ? this.actor(a.foe) : undefined;
@@ -1411,7 +1425,6 @@ export class Room {
     }
     for (const e of this.events) if (e.trader?.busy === id) e.trader.busy = 0;
     for (const h of this.homes) if (h.busy === id) h.busy = 0;
-    this.actors = this.actors.filter((o) => o.id !== id);
   }
 
   /** A bot is beaten (by `by`, '' the fog): out of the match and off the map, its team and

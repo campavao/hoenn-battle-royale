@@ -139,6 +139,13 @@ export class Host {
     this.pending.push({ c: 'leave', id });
   }
 
+  /** The trainer plays on as a bot, the phone that had them gone (the host's REPLACE WITH BOT). */
+  toBot(id: number): void {
+    if (!this.players.delete(id)) return;
+    this.brains.set(id, { rng: (id * 2654435761) >>> 0 || 1, wait: 30, dir: 1 });
+    this.pending.push({ c: 'bot', id });
+  }
+
   /** How many inputs a phone has sent that no frame has used yet. */
   backlog(id: number): number {
     return this.players.get(id)?.queue.length ?? 0;

@@ -325,6 +325,20 @@ export class WorldService {
           const n = (v: unknown) => (Number.isFinite(v) ? Math.max(0, Math.min(65535, Math.floor(v as number))) : 0);
           const version = typeof m.v === 'string' && /^[\w.+-]{1,16}$/.test(m.v) ? m.v : '?';
           this.opts.log(`jank ${room.code} v${version} | watched ${n(m.watched)}s | snaps ${n(m.snaps)} cam ${n(m.cam)} lost ${n(m.lost)} | stalls ${n(m.stalls)} longest ${n(m.longest)}s | checks ${n(m.checks)} drifts ${n(m.drifts)}`);
+        } else if (m.t === 'host') {
+          // play-log.mjs reads the line: the room's host as the old rooms hand it on.
+          const p = room.members.get(Number(m.id));
+          if (phone.id !== room.owner || !p || p === phone || p.away) return;
+          room.owner = p.id;
+          this.opts.log(`room ${room.code}: host ${who(phone)} stood down, ${who(p)} promoted`);
+          this.roster(room);
+        } else if (m.t === 'bot') {
+          const p = room.members.get(Number(m.id));
+          if (phone.id !== room.owner || !p || p === phone) return;
+          this.opts.log(`room ${room.code}: ${who(p)} removed by host`);
+          this.drop(p, true);
+          p.kicked = true;
+          this.send(p.link, { t: 'kicked' });
         } else if (m.t === 'team') {
           const mons = teamOf(m.mons);
           if (!mons) return;
@@ -427,12 +441,13 @@ export class WorldService {
   }
 
   /** A phone gone for good: out of its room, and its trainer out of the match. */
-  private drop(p: Phone): void {
+  private drop(p: Phone, toBot = false): void {
     const room = this.where.get(p.id);
     this.where.delete(p.id);
     if (!room) return;
     room.members.delete(p.id);
-    room.host?.leave(p.id);
+    if (toBot) room.host?.toBot(p.id);
+    else room.host?.leave(p.id);
     room.streams.delete(p.id);
     this.closeLog(room, p.id);
     this.eyes(room, p.watching);

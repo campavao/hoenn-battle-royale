@@ -31,6 +31,8 @@ export interface LobbyHooks {
   /** The host changed a setting for the room's next match. */
   set(set: Partial<Settings> & { pass?: string }): void;
   kick(id: number): void;
+  makeHost(id: number): void;
+  toBot(id: number): void;
   /** Out of the room, back to the menu. */
   leave(): void;
   /** LOBBIES: ask the relay for its hosted rooms (answered through `listed`). */
@@ -308,6 +310,10 @@ export class Lobby {
     return this.inSheet && this.stage.active;
   }
 
+  /** The host's MAKE HOST and REPLACE WITH BOT from the match's sheet. */
+  makeHost(seat: number): void { this.hooks.makeHost(seat); }
+  toBot(seat: number): void { this.hooks.toBot(seat); }
+
   /** The host's KICK from the match's sheet (the room screen's card has its own). */
   kick(seat: number): void {
     this.hooks.kick(seat);
@@ -435,7 +441,11 @@ export class Lobby {
       const m = r.members.find((x) => x.id === seat);
       return {
         face: { name: m?.name ?? '', skin: m?.skin ?? 0, wins: m?.rec?.wins ?? 0, played: m?.rec?.played ?? 0, best: m?.rec?.best },
-        ...(r.owner === r.you && seat !== r.you ? { onKick: () => { this.hooks.kick(seat); this.stage.pop(); } } : {}),
+        ...(r.owner === r.you && seat !== r.you ? {
+          onKick: () => { this.hooks.kick(seat); this.stage.pop(); },
+          onMakeHost: () => { this.hooks.makeHost(seat); this.stage.pop(); },
+          onToBot: () => { this.hooks.toBot(seat); this.stage.pop(); },
+        } : {}),
         onBack: () => this.stage.pop(),
       };
     });

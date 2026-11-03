@@ -429,6 +429,10 @@ export interface WorldSocket {
   set(set: Partial<Settings> & { pass?: string }): void;
   /** The host takes trainer `id` out of the room. */
   kick(id: number): void;
+  /** MAKE HOST: the room's yours, `id`. */
+  makeHost(id: number): void;
+  /** REPLACE WITH BOT: out, and a bot plays on in their place. */
+  toBot(id: number): void;
   close(): void;
 }
 
@@ -526,13 +530,15 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
     });
     return true;
   };
-  if (!open()) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, list: () => undefined, set: () => undefined, kick: () => undefined, leave: () => undefined, close: () => undefined }; }
+  if (!open()) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, list: () => undefined, set: () => undefined, kick: () => undefined, makeHost: () => undefined, toBot: () => undefined, leave: () => undefined, close: () => undefined }; }
   return {
     join: (name, skin, how) => send({ t: 'join', name, skin, ...how, ...(WORLD ? { w: WORLD } : {}), ...(ROM_SHA ? { r: ROM_SHA } : {}) }),
     start: () => send({ t: 'start' }),
     list: () => send({ t: 'list' }),
     set: (set) => send({ t: 'set', set }),
     kick: (id) => send({ t: 'kick', id }),
+    makeHost: (id) => send({ t: 'host', id }),
+    toBot: (id) => send({ t: 'bot', id }),
     leave: () => send({ t: 'leave' }),
     close: () => { closed = true; ws?.close(); },
   };

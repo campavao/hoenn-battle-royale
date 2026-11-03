@@ -700,6 +700,48 @@ describe('world rooms', () => {
     } finally {
       svc.stop();
     }
+  describe("the host's actions on a trainer's card", () => {
+    const opened = () => {
+      const lines: string[] = [];
+      const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: (l) => lines.push(l) });
+      const [a, b] = [phone(), phone()];
+      const [sa, sb] = [svc.open(a.link), svc.open(b.link)];
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const room = () => a.got.filter((m) => m.t === 'room').at(-1) as unknown as { code: string; you: number; owner: number; members: { id: number }[] };
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 1, code: room().code }));
+      const bob = (b.got.filter((m) => m.t === 'room').at(-1) as unknown as { you: number }).you;
+      return { svc, lines, a, b, sa, sb, room, bob, alice: room().you };
+    };
+
+    it('MAKE HOST hands the room on, once and only from the host', () => {
+      const { svc, lines, b, sa, sb, room, bob, alice } = opened();
+      try {
+        sb.onText(JSON.stringify({ t: 'host', id: bob }));
+        expect(room().owner, 'a guest cannot take it').toBe(alice);
+        sa.onText(JSON.stringify({ t: 'host', id: bob }));
+        expect(room().owner).toBe(bob);
+        expect((b.got.filter((m) => m.t === 'room').at(-1) as unknown as { owner: number }).owner).toBe(bob);
+        expect(lines.join('\n')).toMatch(/host alice#\d+ stood down, bob#\d+ promoted$/im);
+        sa.onText(JSON.stringify({ t: 'host', id: alice }));
+        expect(room().owner, 'alice is a guest now').toBe(bob);
+      } finally {
+        svc.stop();
+      }
+    });
+
+    it("REPLACE WITH BOT before a match frees the seat, and doesn't keep them out as KICK does", () => {
+      const { svc, b, sa, room, bob } = opened();
+      try {
+        sa.onText(JSON.stringify({ t: 'bot', id: bob }));
+        expect(room().members.map((m) => m.id)).not.toContain(bob);
+        expect(b.got.at(-1)!.t).toBe('kicked');
+        const again = phone();
+        svc.open(again.link).onText(JSON.stringify({ t: 'join', name: 'bob', skin: 1, code: room().code }));
+        expect(again.got.at(-1)!.t).toBe('room');
+      } finally {
+        svc.stop();
+      }
+    });
   });
 
   describe('battle logs (bl)', () => {
