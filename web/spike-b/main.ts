@@ -66,6 +66,7 @@ import { frameOf as fxFrame, grassUnderAsh, isFloor, MB_ASHGRASS, SHEETS as FX_S
 import { clampZoom, loadZoom, nextZoom, pickedZoom, saveZoom, wheelSteps, zoomLabel, zoomRange } from './zoom';
 import { fieldScale, FADE_COLOR_WORD, FADE_Y_WORD, FOG_EVA, FOG_EVB, fadeOf, keyPicture } from '../src/field';
 import { PadPrefsControl } from '../src/ui/padprefs';
+import { inputKeyboard, inputPad } from '../src/ui/hints';
 import { wireDpad } from './dpad';
 import { StartMenu } from './startmenu';
 import { BACK_H, BATTLE_TYPE_RECORDED, BattleMenu, CELL_H, battleWantsNoPad, ppWithBonus, readBattleView, type PartyMember } from '../src/ui/battlemenu';
@@ -384,6 +385,7 @@ const intro = () => document.getElementById('intro') !== null;
 // live game's stage takes them, and a keyboard's letters for an entry.
 const STAGE_KEY: Record<string, GbaKey> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', z: 'a', x: 'b', Z: 'a', X: 'b', Enter: 'start', Escape: 'b' };
 addEventListener('keydown', (e) => {
+  inputKeyboard();
   if (e.key === 'Escape' && remap.cancel) { remap.cancel(); e.stopImmediatePropagation(); return; }
   if (!lobby?.shown) return;
   e.stopImmediatePropagation();
@@ -2995,6 +2997,7 @@ if (typeof navigator.getGamepads === 'function') {
   const rest = new Map<number, readonly number[]>();
   let padHeld = new Set<string>();
   let buttonsHeld = new Set<number>();
+  let padId = '';
   setInterval(() => {
     const now = new Set<string>();
     const pressedNow = new Set<number>();
@@ -3017,8 +3020,11 @@ if (typeof navigator.getGamepads === 'function') {
       for (const k of padStick ? stickKeys(pad.axes, base, padStick) : guessedStickKeys(pad.axes, base).keys) if (GBA_KEY[k]) now.add(k);
       const hat = pad.axes.length >= 10 ? pad.axes[9] : 9;
       if (hat >= -1.1 && hat <= 1.1) for (const k of PAD_HAT[Math.round((hat + 1) * 3.5) % 8]) now.add(k);
+      if (now.size) padId = pad.id;
     }
     buttonsHeld = pressedNow;
+    // A fresh press (not a drifting stick) is what makes the key hints a pad's.
+    if ([...now].some((k) => !padHeld.has(k))) inputPad(padId, padKeys);
     for (const k of now) if (!padHeld.has(k)) padDown(k);
     for (const k of padHeld) if (!now.has(k)) padUp(k);
     padHeld = now;

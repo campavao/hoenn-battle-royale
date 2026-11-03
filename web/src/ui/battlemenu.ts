@@ -18,6 +18,7 @@ import { MAIN_CALLBACK2 } from '../field';
 import { effectWords, effectiveness, moveInfo, type MoveInfo, type Rom } from '../battle/movebook';
 import { BATTLE_MENU, MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU_MOVE, MENU_PARTY, MENU_SAFARI, MENU_TARGET, localBattler } from '../touch';
 import { EmeraldCanvas, TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_GREEN, TEXT_RED, TEXT_WHITE, fitText, measure, wrapText, type TextColor } from './emerald';
+import { hintFor, legendRows, onHintsChange } from './hints';
 import { ITEMS_POCKET, Win, bagHolds, drawFitted, drawIcon, drawItemFitted, drawKeycap, picture } from './phonehud';
 import { nextFocus, type Dir } from './focus';
 import { BAG_POCKETS, FIELD_POCKETS, POCKET_BALLS, asksMove, asksWhoInField, isMachine, itemEffect, itemInfo, medicineHelps, takesMachine, readBattleBag, usableInField, usedOnOne, type Stack } from './bag';
@@ -601,7 +602,7 @@ export class BattleMenu {
           else drawItemFitted(c, i === 0 ? ITEM_POKE_BALL : ITEM_ESCAPE_ROPE, cx, cy, box, redo);
         }, label, color);
         const key = i === 0 ? first?.keys?.party : i === 1 ? first?.keys?.bag : undefined;
-        if (key) drawKeycap(c, key, this.actionW - 3, 3);
+        if (key) drawKeycap(c, hintFor(i === 0 ? 'l' : 'r', key), this.actionW - 3, 3);
       });
       this.actionWins.push(w);
       b.addEventListener('click', () => {
@@ -768,16 +769,18 @@ export class BattleMenu {
       const el = doc.createElement('div');
       el.className = 'bm-keys';
       deps.root.appendChild(el);
-      const rows: [string, string][] = [['ARROWS', 'move'], ['Z  A', 'choose'], ['X  B', 'back'], ['Q  L', 'PARTY'], ['E  R', 'BAG'], ['SHIFT', 'details']];
-      const h = rows.length * 17 + 8;
+      const keyboard: [string, string][] = [['ARROWS', 'move'], ['Z  A', 'choose'], ['X  B', 'back'], ['Q  L', 'PARTY'], ['E  R', 'BAG'], ['SHIFT', 'details']];
+      const h = keyboard.length * 17 + 8;
       this.keysWin = new Win(el, 118, h, (c) => {
         c.fillRect({ x: 0, y: 0, w: 118, h }, 'rgba(16,20,24,0.6)');
-        rows.forEach(([k, what], i) => {
+        // The keyboard's caps, or the pad's own button names once a pad is what is in use.
+        legendRows(keyboard).forEach(([k, what], i) => {
           drawKeycap(c, k, 6 + measure(k) + 5, 5 + i * 17);
           c.drawText(what, 62, 4 + i * 17, TEXT_WHITE);
         });
       });
       this.keysH = h;
+      onHintsChange(() => { this.keysWin?.redraw(); this.actionWins[0]?.redraw(); this.actionWins[1]?.redraw(); });
     }
     deps.root.addEventListener('pointerdown', () => {
       if (deps.focusFirst) return;
