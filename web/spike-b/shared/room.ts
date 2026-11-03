@@ -30,7 +30,7 @@ import { clerkAt, type Clerk } from './marts';
 import { leaderAt } from './gyms';
 import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, draw, eventForRing } from '../../src/match/events';
 import { DOOR_Y, FINAL_CHANCE, STORIES, STORY_CHANCE, type Story, type StoryDoor } from '../../src/match/story';
-import { dealParty, rungForPhase, tradedMon } from '../../src/bots/party';
+import { dealParty, rungForPhase, teamField, teamFlies, tradedMon } from '../../src/bots/party';
 import { gradeOf } from '../../src/bots/roster';
 import type { PackedMon } from '../../src/net/wire';
 import { add, carried, purse, quaff, spend, type Stack } from '../../src/bots/bag';
@@ -137,6 +137,9 @@ const FLED_WEAR = 0.15;
 export function legendMon(s: Pick<Spill, 'worn'> | undefined, species: number, phase: number): PackedMon {
   return wornParty([tradedMon(species, phase)], s?.worn === undefined ? undefined : [s.worn])[0];
 }
+
+/** Room.mainland, once per world. */
+const MAINLANDS = new Map<string, ReadonlySet<string>>();
 
 /** A bot's team: what it caught, then what the seed deals it at this rung on this map, six at most. */
 export function botParty(seed: number, a: Pick<Actor, 'id' | 'm' | 'caught'>, phase: number): PackedMon[] {
@@ -720,7 +723,9 @@ export class Room {
       // To a town of the match's own Hoenn, on a cell a trainer could stand on, and not
       // out of the Zone before the drop (its gate is shut both ways).
       const a = this.actor(cmd.id), t = cmd.to;
-      if (!a || a.bot || a.battling || a.m.action || this.ring().safari || !this.places.has(t.map)) return;
+      if (!a || a.battling || a.m.action || this.ring().safari || !this.places.has(t.map)) return;
+      // A bot's flight is the host's call (bots.ts flyGoal); its team has to be able to, as a trainer's.
+      if (a.bot && !teamFlies(botParty(this.seed, a, this.ring().phase + 1))) return;
       if (this.world.cell(t.map, t.x, t.y) !== 0 || this.actors.some((o) => o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return;
       a.m = newMover({ map: t.map, x: t.x, y: t.y }, 1);
     } else if (cmd.c === 'sail') {
@@ -801,6 +806,7 @@ export class Room {
       // The fog has closed on this round: in from the next.
       if (this.results.entrants.length && !cmd.bot) { this.bench.push({ id: cmd.id, name: cmd.name, skin: cmd.skin }); return; }
       const a: Actor = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, foe: 0, calm: this.tick + JOIN_GRACE, shun: 0, shunUntil: 0, arriving: false };
+      if (a.bot) this.botLearns(a);
       // Ordered by id, on every machine: who moves first decides who gets a contested cell.
       this.actors.push(a);
       this.actors.sort((p, q) => p.id - q.id);
@@ -1234,11 +1240,12 @@ export class Room {
     if (end !== undefined && this.tick >= end + AFTER_WIN) this.newRound(r.round + 1);
     // The Safari is over: the bots drop at once, anywhere (they have no fly map).
     else if (was.safari && !ring.safari) {
-      for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) this.dropOne(a);
+      for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) { this.dropOne(a); this.botLearns(a); }
     }
     else if (ring.phase !== was.phase) {
       // ISLAND CAVE's wall opens by itself once the ring has moved on a phase (br_story.c).
       for (const e of this.events) if (e.story && DOORS[e.story] === 'wait' && ring.phase > (e.phase ?? 0)) e.opened = true;
+      for (const a of this.actors) if (a.bot) this.botLearns(a);
       // The fog closes for the first time: who is on the map is the match.
       if (ring.phase === 1 && !r.entrants.length) r.entrants = this.actors.map((a) => [a.id, a.name]);
       const n = eventForRing(ring.phase);
@@ -1451,6 +1458,13 @@ export class Room {
     }
   }
 
+  /** What a bot's team could do on the field, in `field` as a trainer's page says theirs (POK-437;
+   *  Cam said yes, 10-20). Asked when it joins, each phase and after a catch; never forgotten in a
+   *  round, since the team it is dealt turns with the map under it and it must not lose SURF at sea. */
+  private botLearns(a: Actor): void {
+    a.field = (a.field ?? 0) | teamField(botParty(this.seed, a, this.ring().phase + 1));
+  }
+
   /** The trainers whose pages could fight two bots out now (engageBots). */
   private freeJudges(): { id: number }[] {
     return [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b) => !b.away)]
@@ -1493,6 +1507,7 @@ export class Room {
       if (species) {
         a.caught = [species, ...(a.caught ?? [])];
         a.wear = [CAUGHT_WEAR, ...left];
+        this.botLearns(a);
       }
     } else if (cmd.winner === LEGEND_FOE) {
       a.wear = botParty(this.seed, a, phase).map(() => FLED_WEAR);
@@ -1678,6 +1693,49 @@ export class Room {
     return OPENS.get(id)!;
   }
 
+  /** The landing cells that walk to a harbour with no HM at all, the boats counted: nobody dealt
+   *  one is stranded behind water, a tree or a boulder (POK-437). The rest are MOSSDEEP, EVER GRANDE
+   *  and the far end of ROUTE 115 (hm-reach.test.ts). */
+  mainland(): ReadonlySet<string> {
+    const id = 'mainland:' + [...this.maps.keys()].join();
+    const hit = MAINLANDS.get(id);
+    if (hit) return hit;
+    const index = new Map<string, number>(), spots: Spot[] = [], back: number[][] = [];
+    const node = (s: Spot) => {
+      const k = `${s.map}:${s.x}:${s.y}:${s.z ?? ''}`;
+      let n = index.get(k);
+      if (n === undefined) { n = spots.length; index.set(k, n); spots.push(s); back.push([]); }
+      return n;
+    };
+    for (const m of this.maps.values()) {
+      if (m.id.startsWith(SAFARI)) continue;
+      for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (this.world.standable(m.id, x, y)) node({ map: m.id, x, y });
+    }
+    for (let n = 0; n < spots.length; n++) {
+      for (let dir = 1; dir <= 4; dir++) {
+        const r = this.base(spots[n], dir as Facing);
+        if (r && this.maps.has(r.to.map) && !r.to.map.startsWith(SAFARI)) back[node(r.to)].push(n);
+      }
+    }
+    // A boat is a step from beside its boatman to where it lands.
+    const SIDES = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+    const boats: { at: { map: string; x: number; y: number }; to: string[] }[] = [...BOATS.map((b) => ({ at: b, to: b.to })), { at: ATTENDANT, to: ['slateport'] }];
+    for (const b of boats) for (const to of b.to) for (const [dx, dy] of SIDES) {
+      const from = index.get(`${b.at.map}:${b.at.x + dx}:${b.at.y + dy}:`);
+      if (from !== undefined) back[node(PORTS[to].land)].push(from);
+    }
+    const ok = new Uint8Array(spots.length), queue: number[] = [];
+    for (let n = 0; n < spots.length; n++) if (spots[n].map === ATTENDANT.map || spots[n].map === PORTS.slateport.land.map) { ok[n] = 1; queue.push(n); }
+    while (queue.length) for (const u of back[queue.pop()!]) if (!ok[u]) { ok[u] = 1; queue.push(u); }
+    const out = new Set<string>();
+    for (const k of this.landing()) {
+      const [map, x, y] = k.split(':');
+      if ([`${map}:${x}:${y}:`, ...this.world.levels(map, +x, +y).map((z) => `${map}:${x}:${y}:${z}`)].some((q) => { const n = index.get(q); return n !== undefined && ok[n]; })) out.add(k);
+    }
+    MAINLANDS.set(id, out);
+    return out;
+  }
+
   /** The fly map's time (PICK_WAIT after the Safari, or after a battle fought in the
    *  Zone since): whoever is still there, having chosen nowhere, drops anywhere outdoors
    *  (br_pick.c's timeout). */
@@ -1698,12 +1756,16 @@ export class Room {
     // A bot anywhere a trainer may land, as /classic/ deals them (Cam, 11-01: all of Hoenn,
     // as classic): the rings are anywhere too, and a bot crosses water (stepFor).
     // A trainer only on ground joined to LANDING cells (Room.landing): no walled-in pocket.
-    const land = this.landing();
-    let landed = LANDED.get(land);
-    if (!landed) LANDED.set(land, landed = new Set([...land].map((k) => k.slice(0, k.indexOf(':')))));
+    const main = this.mainland();
+    let landed = LANDED.get(main);
+    if (!landed) LANDED.set(main, landed = new Set([...main].map((k) => k.slice(0, k.indexOf(':')))));
     const maps = [...this.places.keys()].filter((m) => !m.startsWith(SAFARI) && landed.has(m)).sort();
     for (let tries = 0; tries < 4; tries++) {
-      const map = tries === 0 && want ? want : maps[Math.floor(rng() * maps.length)];
+      const picked = tries === 0 && want;
+      const map = picked ? want : maps[Math.floor(rng() * maps.length)];
+      // What was asked for, off the fly map, is theirs (MOSSDEEP's an island, and a town on the
+      // map). Dealt by the room, it is somewhere with a way on for a team that can do nothing yet.
+      const land = picked ? this.landing() : main;
       const m = this.maps.get(map);
       if (!m) continue;
       const cells: Spot[] = [];
@@ -1746,7 +1808,7 @@ export class Room {
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
     // A bot's pickings were the old round's, as are `picked` and the spills cleared below.
-    for (const a of this.actors) if (a.bot) { a.bites = 0; a.bleedAt = undefined; a.loot = undefined; if (a.judge) this.part(a); a.caught = a.tried = undefined; }
+    for (const a of this.actors) if (a.bot) { a.bites = 0; a.bleedAt = undefined; a.loot = undefined; if (a.judge) this.part(a); a.caught = a.tried = a.field = undefined; this.botLearns(a); }
     // The bots open in the Zone with everybody, as the live host deals them (bots/host.ts).
     if (safari) for (const a of this.actors) if (a.bot) a.m = newMover(this.zone(a.id)[0] ?? a.m.spot, a.m.facing);
     // A walk-up the old round left half done starts no battle in this one.
@@ -2049,9 +2111,9 @@ export class Room {
    *  two can't both walk into one cell). */
   stepFor(a: Actor, onWay = false): StepFn {
     const fn: StepFn = (from, dir) => {
-      // A bot can go anywhere a team could (Kanto's bots cross water): a wanderer keeps
-      // to land and off ledges all the same (Room.move).
-      const bits = a.bot ? 7 : a.field ?? 0;
+      // A bot goes where its team could, as a trainer does (POK-437; a wanderer keeps to land and
+      // off ledges all the same, Room.move).
+      const bits = a.field ?? 0;
       const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir) : this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
       // A townsperson stays out in the street, or in the Zone's (live's bots wander the
