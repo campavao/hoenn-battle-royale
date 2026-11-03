@@ -362,9 +362,11 @@ const KEY_TO: Record<number, number> = { 1: KEY_DOWN, 2: KEY_UP, 3: KEY_LEFT, 4:
  *  DUEL_COOLDOWN_MS): every pair that could see each other fighting at once decided a
  *  full room before the first ring moved. */
 export const BOT_DUEL_GAP = 60 * 12;
-/** A bot-vs-bot fight nobody has answered for this long lets them go (the proxy's own
- *  wall-clock cap is 90 s). */
-export const BOT_DUEL_MAX = 60 * 120;
+/** A bot-vs-bot fight nobody has answered for this long lets them go: a page gone quiet
+ *  with its socket open. Past the proxy's own limit (36,000 of its frames, at the 70 a
+ *  second it gets behind a busy page), because a fight let go of is fought again from the
+ *  start: at two minutes, Cam's last two bots never finished one (2026-11-02). */
+export const BOT_DUEL_MAX = 60 * 60 * 10;
 /** The fog bites a bot every BOT_BITE frames it stands in it, and the BOT_BITES-th takes
  *  it: the live bots' bleed, a tenth of the team every four seconds (brain.ts FOG_TICK_MS,
  *  FOG_BITE), whatever the room's FOG. Each bot on its own clock from when it walked in,
@@ -659,6 +661,9 @@ export class Room {
     } else if (cmd.c === 'away') {
       const a = this.actor(cmd.id) ?? this.bench.find((b) => b.id === cmd.id);
       if (a && !('bot' in a && a.bot)) a.away = cmd.on || undefined;
+      // A page that went took its hidden ROM with it, and a new one is never told: the fight
+      // it was running lets its bots go, or they would stand there for all of BOT_DUEL_MAX.
+      if (cmd.on) for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
     } else if (cmd.c === 'wear') {
       // Once, from the trainer it last fought (out by now, if it won), and only a bot
       // still in: its next fight is with the team that one left it (classic's setParty,
@@ -1336,7 +1341,12 @@ export class Room {
     // busy); or one on the bench, out and watching (or in for the next match), which is
     // still here: a phone that goes leaves the bench too. Otherwise, once the last trainer
     // was out, the bots only ever bled out in the fog and nobody was crowned.
-    const judges = [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b) => !b.away)];
+    // And not one with a fight in hand: a page has one hidden ROM, and a fight takes it
+    // 30 s to three minutes. Handed another every BOT_DUEL_GAP, the bots stood frozen in
+    // its queue and the rest were told no at once: 21 fights handed out in Cam's last ten
+    // minutes, 2 fought (2026-11-02). Until a page is free, they walk.
+    const judges = [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b) => !b.away)]
+      .filter((j) => !this.actors.some((a) => a.judge === j.id));
     if (!judges.length) return;
     const byMap = new Map<string, Actor[]>();
     for (const a of this.actors) {

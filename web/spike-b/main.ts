@@ -1385,8 +1385,12 @@ async function judgeBots(ida: number, idb: number): Promise<void> {
     return { seat: id, party: b ? wornParty(dealParty(r.seed, id, r.ring().phase + 1, b.m.spot.map, gradeOf(r.seed, id)), b.wear) : [], items: battleItems(b?.loot?.items ?? []) };
   };
   const a = side(ida), b = side(idb);
-  const out = judge ? await judge(a, b).catch(() => null) : null;
-  if (link !== l) return;
+  // This meeting, not the pair: they can be let go (the room's own cap) and meet again,
+  // and an answer for the old one would end the new one.
+  const since = r.actor(ida)?.since;
+  const wanted = () => link === l && !!since && l.room.actor(ida)?.since === since && l.room.actor(idb)?.foe === ida;
+  const out = judge ? await judge(a, b, wanted).catch(() => null) : null;
+  if (!wanted()) return;
   if (!out) { l.bots(ida, idb, 0); return; }
   // What the winner has left, mon for mon (brain.ts settleAnswered), as shares.
   const won = out.winner === ida ? a : b, left = out.winner === ida ? out.a : out.b;

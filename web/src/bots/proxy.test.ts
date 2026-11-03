@@ -174,12 +174,12 @@ function fakeInstance(opts: { wakes?: boolean; answers?: boolean; afterFrames?: 
   };
 }
 
-function proxyOver(inst: ReturnType<typeof fakeInstance>, notes: string[] = [], deadlineMs = 50) {
+function proxyOver(inst: ReturnType<typeof fakeInstance>, notes: string[] = [], deadlineFrames = 100) {
   return new ProxyDuels({
     boot: async () => inst.emu,
     mailboxBase: BASE,
     writeBoot: () => {},
-    deadlineMs,
+    deadlineFrames,
     wakeFrames: 5,
     onNote: (w) => void notes.push(w),
   });
@@ -228,7 +228,7 @@ describe('the proxy duel instance', () => {
 
   it('taps A rather than holding it, because a held button is one press', async () => {
     const inst = fakeInstance({ afterFrames: 40 });
-    const proxy = proxyOver(inst, [], 5_000);
+    const proxy = proxyOver(inst);
     await settle(proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] }), inst);
     // Several separate presses over those frames, not one long hold.
     expect(inst.taps.length).toBeGreaterThan(1);
@@ -279,7 +279,7 @@ describe('the proxy duel instance', () => {
       },
       mailboxBase: BASE,
       writeBoot: () => {},
-      deadlineMs: 50,
+      deadlineFrames: 100,
       wakeFrames: 5,
       onNote: (w) => void notes.push(w),
     });
@@ -332,7 +332,7 @@ describe('the proxy duel instance', () => {
       boot: async () => inst.emu,
       mailboxBase: BASE,
       writeBoot: (emu, base) => emu.write(base + MAILBOX.OFF_BOOT, 1, 8),
-      deadlineMs: 2_000,
+      stallMs: 2_000,
       wakeFrames: 100,
     });
     const out = await settle(proxy.fight({ seat: 4, party: [mon()] }, { seat: 7, party: [mon()] }), inst);
@@ -352,7 +352,7 @@ describe('the proxy duel instance', () => {
       mailboxBase: BASE,
       writeBoot: () => {},
       deadlineFrames: 50,
-      deadlineMs: 60_000,
+      stallMs: 60_000,
       wakeFrames: 5,
       onNote: (w) => void notes.push(w),
     });
@@ -361,6 +361,110 @@ describe('the proxy duel instance', () => {
     expect(out).toBeNull();
     // ...and says which fight, and how far it got in its own frames.
     expect(notes).toContain('duel timed out: seat 1 vs seat 2, 51 frames');
+  });
+
+  // Cam's page, 2026-11-02: one frame per turn of a busy main thread, 70 a second, and
+  // the last two bots cut off at ninety seconds every time.
+  it('lets a slow fight finish however long it takes in seconds, as long as frames come', async () => {
+    const inst = fakeInstance({ afterFrames: 30 });
+    const proxy = new ProxyDuels({ boot: async () => inst.emu, mailboxBase: BASE, writeBoot: () => {}, stallMs: 60, wakeFrames: 5 });
+    const running = settle(proxy.fight({ seat: 4, party: [mon()] }, { seat: 7, party: [mon()] }), inst, 1);
+    const began = Date.now();
+    let out = null;
+    let done = false;
+    void running.then((v) => { out = v; done = true; });
+    for (let i = 0; i < 60 && !done; i++) {
+      inst.frame();
+      await new Promise((r) => setTimeout(r, 15)); // well inside the stall, far past it in all
+    }
+    expect(Date.now() - began, 'the fight outlasted the cap').toBeGreaterThan(60);
+    expect(out, 'and it was answered').not.toBeNull();
+  });
+
+  it('calls an instance that stops sending frames stalled, without one more frame', async () => {
+    const inst = fakeInstance({ answers: false });
+    const notes: string[] = [];
+    const proxy = new ProxyDuels({ boot: async () => inst.emu, mailboxBase: BASE, writeBoot: () => {}, stallMs: 40, wakeFrames: 5, onNote: (w) => void notes.push(w) });
+    const running = proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] });
+    for (let i = 0; i < 3; i++) {
+      inst.frame();
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    expect(await running).toBeNull();
+    expect(notes.some((n) => n.startsWith('duel stalled: seat 1 vs seat 2'))).toBe(true);
+  });
+
+  it('does not sit out the deadline on a duel the ROM says nothing about', async () => {
+    const inst = fakeInstance({ answers: false });
+    const notes: string[] = [];
+    const proxy = new ProxyDuels({ boot: async () => inst.emu, mailboxBase: BASE, writeBoot: () => {}, quietFrames: 20, wakeFrames: 5, onNote: (w) => void notes.push(w) });
+    expect(await settle(proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] }), inst, 60)).toBeNull();
+    expect(notes.some((n) => n.startsWith('duel went quiet: seat 1 vs seat 2, 2'))).toBe(true);
+  });
+
+  // The DUEL that vanished: ten mons is two frames of slots, and the map's heap reset
+  // between them loses it. rom dc179db, straight after a restart: 29 of 40 without this
+  // wait, 0 of 40 with it.
+  it('holds a DUEL back until the instance is on the field, after a boot and after a duel', async () => {
+    const inst = fakeInstance();
+    let field = false;
+    const proxy = new ProxyDuels({ boot: async () => inst.emu, mailboxBase: BASE, writeBoot: () => {}, onField: () => field, wakeFrames: 50 });
+    const first = proxy.fight({ seat: 4, party: [mon()] }, { seat: 7, party: [mon()] });
+    for (let i = 0; i < 20; i++) {
+      inst.frame();
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    expect(inst.duels, 'still loading its map').toBe(0);
+    field = true;
+    expect(await settle(first, inst)).not.toBeNull();
+    expect(inst.duels).toBe(1);
+    // Back from a battle it loads the map again.
+    field = false;
+    const second = proxy.fight({ seat: 5, party: [mon()] }, { seat: 6, party: [mon()] });
+    for (let i = 0; i < 20; i++) {
+      inst.frame();
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    expect(inst.duels, 'back from the last battle, loading').toBe(1);
+    field = true;
+    expect(await settle(second, inst)).not.toBeNull();
+    expect(inst.duels).toBe(2);
+  });
+
+  it('starts an instance over if it never reaches the field', async () => {
+    const inst = fakeInstance();
+    const notes: string[] = [];
+    let restarts = 0;
+    const proxy = new ProxyDuels({ boot: async () => inst.emu, restart: async () => { restarts++; inst.reboot(); }, mailboxBase: BASE, writeBoot: () => {}, onField: () => restarts > 0, wakeFrames: 5, onNote: (w) => void notes.push(w) });
+    expect(await settle(proxy.fight({ seat: 4, party: [mon()] }, { seat: 7, party: [mon()] }), inst)).toBeNull();
+    expect(inst.duels).toBe(0);
+    expect(notes.some((n) => n.startsWith('duel never reached the field: seat 4 vs seat 7'))).toBe(true);
+    expect(await settle(proxy.fight({ seat: 4, party: [mon()] }, { seat: 7, party: [mon()] }), inst)).not.toBeNull();
+    expect(restarts).toBe(1);
+  });
+
+  it('drops a duel the room has let go of: waiting behind another, or running', async () => {
+    const inst = fakeInstance({ afterFrames: 200 });
+    const notes: string[] = [];
+    let restarts = 0;
+    const proxy = new ProxyDuels({ boot: async () => inst.emu, restart: async () => { restarts++; inst.reboot(); }, mailboxBase: BASE, writeBoot: () => {}, wakeFrames: 5, onNote: (w) => void notes.push(w) });
+    let wantFirst = true;
+    let wantSecond = true;
+    const first = proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] }, () => wantFirst);
+    const second = proxy.fight({ seat: 3, party: [mon()] }, { seat: 4, party: [mon()] }, () => wantSecond);
+    for (let i = 0; i < 10; i++) {
+      inst.frame();
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    expect(inst.duels).toBe(1);
+    wantSecond = false;
+    wantFirst = false;
+    expect(await settle(first, inst, 100), 'called off inside a second of frames').toBeNull();
+    expect(notes.some((n) => n.startsWith('duel called off: seat 1 vs seat 2'))).toBe(true);
+    expect(await second).toBeNull();
+    expect(notes).toContain('seat 3 vs seat 4: called off while it waited');
+    expect(inst.duels, 'the second never went in').toBe(1);
+    expect(proxy.stats.fellBack).toBe(2);
   });
 
   it('sends no duel with a side that has nothing standing, and does not wait on one (POK-247)', async () => {
@@ -383,7 +487,7 @@ describe('the proxy duel instance', () => {
       boot: async () => (boots++, inst.emu),
       mailboxBase: BASE,
       writeBoot: () => {},
-      deadlineMs: 5_000,
+      stallMs: 5_000,
       wakeFrames: 5,
     });
     await settle(proxy.warm(), inst);

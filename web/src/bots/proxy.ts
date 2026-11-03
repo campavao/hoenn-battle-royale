@@ -93,10 +93,18 @@ export interface ProxyOptions {
   /** Give up on a duel after this many of the instance's own frames and let the caller
    *  fall back. */
   deadlineFrames?: number;
-  /** ...or after this long, whatever the frames: an instance that stops sending any. */
-  deadlineMs?: number;
+  /** ...or after this many of them with the ROM saying nothing: no BSTART, no TURN. */
+  quietFrames?: number;
+  /** ...or after this long since its last frame: an instance that stops sending any.
+   *  Never a limit on the fight: how long that takes in seconds is the page's load. */
+  stallMs?: number;
   /** Frames to wait for the mailbox to wake before giving up on the instance. */
   wakeFrames?: number;
+  /** Is the instance on the field, past the map's load? A DUEL goes in only then. It can
+   *  span two frames (16 slots a frame, 61 bytes a slot: ten mons is over), and the load's
+   *  heap reset between them loses it whole with nothing said (BrDuel_HeapReset): the
+   *  ROM stood on the field, fought nothing, and the deadline was all that ended it. */
+  onField?: (emu: ProxyEmulator) => boolean;
   /** Told about anything worth knowing: a timeout, a crash, a fallback. */
   onNote?: (what: string) => void;
   /** The fight as it happens (POK-300): the instance publishes its duel the way a
@@ -117,17 +125,27 @@ const TAP_HELD_FRAMES = 4;
  *  It was thirty seconds, which at 8x is 14,400 frames on a desktop -- and on a 4x-
  *  throttled one, where the instance runs at about 250 frames a second, 7,500: a 2v2
  *  at level 75 still trading blows was cut off and the instance power-cycled. The
- *  longest fight measured at full speed took 10,834 frames (3v4, level 75); five
- *  minutes of game time is room for six-a-side. */
-const DEADLINE_FRAMES = 18_000;
-/** And the wall-clock cap, for an instance that stops sending frames at all. */
-const DEADLINE_MS = 90_000;
+ *  longest fight measured at full speed took 10,834 frames (3v4, level 75); at level
+ *  100 Cam's last two bots take 19,148 (5v6, 2026-11-02). Ten minutes of game time is
+ *  room for six-a-side. */
+const DEADLINE_FRAMES = 36_000;
+/** The ROM speaks every turn. This long without a word is a duel that never started or
+ *  a battle that stopped, and there is no reason to sit out the deadline on it. */
+const QUIET_FRAMES = 3_600;
+/** The wall-clock cap, for an instance that stops sending frames at all. It was ninety
+ *  seconds for the whole fight, and a headless core runs in step with the page (one frame
+ *  per turn of the main thread): behind a busy page it runs at 70 frames a second, not
+ *  480, and no fight past 6,300 frames could finish: Cam's last two bots never did
+ *  (2026-11-02). Theirs takes 256 s at 75 frames a second. */
+const STALL_MS = 30_000;
 /** How many duels may be waiting behind the one in flight before the rest are sent to
  *  the seeded resolver. One instance fights one battle at a time and a battle takes
  *  real seconds; a room where everybody meets at once would otherwise leave half the
  *  field standing still, which is worse than a coin flip nobody can see. */
 const MAX_QUEUED = 2;
 const WAKE_FRAMES = 600;
+/** How often a running fight asks whether anybody still wants it. */
+const WANTED_EVERY_FRAMES = 30;
 
 /** Anything in the team still able to fight. */
 function standing(party: PackedMon[]): boolean {
@@ -164,14 +182,16 @@ export class ProxyDuels {
   }
 
   /** Fights one, or answers null when the proxy could not (and the caller should fall
-   *  back to the seeded resolver). Duels queue: one instance, one fight at a time. */
-  async fight(a: DuelSide, b: DuelSide): Promise<DuelOutcome | null> {
-    const out = await this.attempt(a, b);
+   *  back to the seeded resolver). Duels queue: one instance, one fight at a time.
+   *  `wanted`: does anybody still want this one? It is asked before it starts and while
+   *  it runs: a fight the room has let go of is not worth the instance. */
+  async fight(a: DuelSide, b: DuelSide, wanted?: () => boolean): Promise<DuelOutcome | null> {
+    const out = await this.attempt(a, b, wanted);
     if (!out) this.counts.fellBack++;
     return out;
   }
 
-  private async attempt(a: DuelSide, b: DuelSide): Promise<DuelOutcome | null> {
+  private async attempt(a: DuelSide, b: DuelSide, wanted?: () => boolean): Promise<DuelOutcome | null> {
     if (this.broken || a.party.length === 0 || b.party.length === 0) return null;
     // A side with nothing standing is no fight: the ROM stages none (br_duel.c's
     // ParseDuel, BrBot_AnyStanding) and says nothing, so the duel sat out the whole
@@ -187,7 +207,11 @@ export class ProxyDuels {
     if (this.busy) await new Promise<void>((resolve) => this.queue.push(resolve));
     this.busy = true;
     try {
-      return await this.run(a, b);
+      if (wanted && !wanted()) {
+        this.note(`seat ${a.seat} vs seat ${b.seat}: called off while it waited`);
+        return null;
+      }
+      return await this.run(a, b, wanted);
     } catch (err) {
       this.note(`duel failed: ${String(err)}`);
       return null;
@@ -231,29 +255,39 @@ export class ProxyDuels {
     this.opts.onNote?.(what);
   }
 
-  private async run(a: DuelSide, b: DuelSide): Promise<DuelOutcome | null> {
+  private async run(a: DuelSide, b: DuelSide, wanted?: () => boolean): Promise<DuelOutcome | null> {
     await this.ensure();
     const emu = this.emu;
     const mailbox = this.mailbox;
     if (!emu || !mailbox) return null;
 
-    // Drain whatever the instance said while it was idle -- it walks around Littleroot
-    // like any other boot and has been talking to nobody.
-    mailbox.poll();
-    const duel: Msg = { t: 'duel', seatA: a.seat, seatB: b.seat, a: a.party, b: b.party };
-    if (a.items?.length) (duel as { itemsA?: number[] }).itemsA = a.items;
-    if (b.items?.length) (duel as { itemsB?: number[] }).itemsB = b.items;
-    for (const slot of packSlot(duel)) {
-      if (!mailbox.push(slot.type, slot.payload)) {
-        this.note('mailbox full: the instance is not draining');
-        return null;
-      }
-    }
-
     const from = this.counts.frames;
     const began = Date.now();
     emu.resume();
-    const result = await this.awaitResult(emu, mailbox, [a.seat, b.seat], this.opts.deadlineFrames ?? DEADLINE_FRAMES, this.opts.deadlineMs ?? DEADLINE_MS);
+    // On the field, then the DUEL: an instance just booted, or just back from the last
+    // duel, is still loading its map.
+    const onField = this.opts.onField;
+    const ready = onField ? await this.awaitField(emu, onField) : true;
+    let result: DresultMsg | null = null;
+    let why = 'never reached the field';
+    if (ready) {
+      // Drain whatever the instance said while it was idle -- it walks around Littleroot
+      // like any other boot and has been talking to nobody.
+      mailbox.poll();
+      const duel: Msg = { t: 'duel', seatA: a.seat, seatB: b.seat, a: a.party, b: b.party };
+      if (a.items?.length) (duel as { itemsA?: number[] }).itemsA = a.items;
+      if (b.items?.length) (duel as { itemsB?: number[] }).itemsB = b.items;
+      for (const slot of packSlot(duel)) {
+        if (!mailbox.push(slot.type, slot.payload)) {
+          if (this.emu === emu) emu.pause();
+          this.note('mailbox full: the instance is not draining');
+          return null;
+        }
+      }
+      const answer = await this.awaitResult(emu, mailbox, [a.seat, b.seat], wanted);
+      result = answer.msg;
+      why = answer.why;
+    }
     // Idle until the next meeting. Here, after the await, and not in the frame listener
     // that finished the duel: a pause from in there would wait on its own caller.
     if (this.emu === emu) emu.pause();
@@ -261,8 +295,8 @@ export class ProxyDuels {
       // A fight that will not end is worse than no proxy at all: the instance is left
       // in a battle nobody can finish, so the next duel starts it over first.
       // Which fight, and how long it ran in its own frames: a soak's only lead on a
-      // fight that runs past five minutes of game time, or one that stopped.
-      this.note(`duel timed out: seat ${a.seat} vs seat ${b.seat}, ${this.counts.frames - from} frames`);
+      // fight that runs past the deadline, or one that stopped.
+      this.note(`duel ${why}: seat ${a.seat} vs seat ${b.seat}, ${this.counts.frames - from} frames`);
       this.counts.timedOut++;
       if (this.opts.restart && this.emu === emu) this.stale = true;
       else this.dispose();
@@ -287,38 +321,71 @@ export class ProxyDuels {
     };
   }
 
-  /** Runs the instance until a `dresult` comes back or the deadline passes -- its own
-   *  frames, or the wall clock for an instance that stopped -- tapping A through the
-   *  boxes the whole time. */
-  private awaitResult(emu: ProxyEmulator, mailbox: Mailbox, sides: [number, number], deadlineFrames: number, deadlineMs: number): Promise<DresultMsg | null> {
+  /** Until the instance is on the field: false for one that does not get there. Frames
+   *  run meanwhile, so a dispose or a stopped core is the stall's to end. */
+  private awaitField(emu: ProxyEmulator, onField: (emu: ProxyEmulator) => boolean): Promise<boolean> {
     return new Promise((resolve) => {
       let frames = 0;
+      let last = Date.now();
+      const limit = this.opts.wakeFrames ?? WAKE_FRAMES;
+      const stallMs = this.opts.stallMs ?? STALL_MS;
+      const finish = (value: boolean) => {
+        stop();
+        clearInterval(watch);
+        resolve(value);
+      };
+      const watch = setInterval(() => {
+        if (Date.now() - last > stallMs) finish(false);
+      }, Math.min(1_000, stallMs / 2));
+      const stop = emu.onFrame(() => {
+        last = Date.now();
+        if (onField(emu)) finish(true);
+        else if (++frames > limit) finish(false);
+      });
+    });
+  }
+
+  /** Runs the instance until a `dresult` comes back or a limit passes -- its own frames
+   *  in all, its own frames with the ROM saying nothing, the wall clock since its last
+   *  frame -- tapping A through the boxes the whole time. `why` says which. */
+  private awaitResult(emu: ProxyEmulator, mailbox: Mailbox, sides: [number, number], wanted?: () => boolean): Promise<{ msg: DresultMsg | null; why: string }> {
+    const deadlineFrames = this.opts.deadlineFrames ?? DEADLINE_FRAMES;
+    const quietFrames = this.opts.quietFrames ?? QUIET_FRAMES;
+    const stallMs = this.opts.stallMs ?? STALL_MS;
+    return new Promise((resolve) => {
+      let frames = 0;
+      let quiet = 0;
+      let last = Date.now();
       // Slots of a message that spans several, held until the last one lands -- one
       // run per type, since a bstart spans a dozen slots and a turn can land between.
       let parts: BinarySlot[] = [];
       const streamParts = new Map<number, BinarySlot[]>();
-      const finish = (value: DresultMsg | null) => {
+      const finish = (msg: DresultMsg | null, why = 'timed out') => {
         stop();
-        clearTimeout(cap);
+        clearInterval(watch);
         this.unframe = null;
         try {
           emu.release('a');
         } catch {
           /* the instance has already gone */
         }
-        resolve(value);
+        resolve({ msg, why });
       };
       // A dispose while this is in flight -- the page tearing the room down, or the
       // timeout below on an earlier duel -- stops the emulator, and a stopped emulator
       // sends no more frames: without this the promise would never settle and `busy`
       // would hold the queue shut for the rest of the match.
-      this.unframe = () => finish(null);
-      const cap = setTimeout(() => finish(null), deadlineMs);
+      this.unframe = () => finish(null, 'let go');
+      const watch = setInterval(() => {
+        if (Date.now() - last > stallMs) finish(null, 'stalled');
+      }, Math.min(1_000, stallMs / 2));
       const stop = emu.onFrame(() => {
+        last = Date.now();
         this.tap(emu);
         for (const raw of mailbox.poll()) {
           const base = raw.type & ~BR_CONT_FLAG;
           if (base === BR_MSG.BSTART || base === BR_MSG.TURN) {
+            quiet = 0;
             const run = streamParts.get(base) ?? [];
             run.push({ type: raw.type, payload: raw.payload });
             streamParts.set(base, run);
@@ -345,6 +412,8 @@ export class ProxyDuels {
           return;
         }
         if (++frames > deadlineFrames) finish(null);
+        else if (++quiet > quietFrames) finish(null, 'went quiet');
+        else if (wanted && frames % WANTED_EVERY_FRAMES === 0 && !wanted()) finish(null, 'called off');
       });
     });
   }

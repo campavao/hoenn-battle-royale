@@ -2443,7 +2443,7 @@ var WALKUP_BANG = 30;
 var APPROACH_FRAMES = (SIGHT_RANGE + 1) * 16 + 90;
 var KEY_TO = { 1: KEY_DOWN, 2: KEY_UP, 3: KEY_LEFT, 4: KEY_RIGHT };
 var BOT_DUEL_GAP = 60 * 12;
-var BOT_DUEL_MAX = 60 * 120;
+var BOT_DUEL_MAX = 60 * 60 * 10;
 var BOT_BITE = 240;
 var BOT_BITES = 10;
 var ROOMS = rooms_default;
@@ -2597,6 +2597,9 @@ var Room = class {
     } else if (cmd.c === "away") {
       const a = this.actor(cmd.id) ?? this.bench.find((b) => b.id === cmd.id);
       if (a && !("bot" in a && a.bot)) a.away = cmd.on || void 0;
+      if (cmd.on) {
+        for (const o of this.actors) if (o.bot && o.judge === cmd.id) this.part(o);
+      }
     } else if (cmd.c === "wear") {
       const b = this.actor(cmd.bot);
       if (!b?.bot || b.foughtBy !== cmd.id) return;
@@ -3202,7 +3205,7 @@ var Room = class {
   engageBots(events) {
     if (this.ring().safari) return;
     if (this.tick < this.duelAfter || this.tick % 8) return;
-    const judges = [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b) => !b.away)];
+    const judges = [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b) => !b.away)].filter((j) => !this.actors.some((a) => a.judge === j.id));
     if (!judges.length) return;
     const byMap = /* @__PURE__ */ new Map();
     for (const a of this.actors) {
@@ -5058,4 +5061,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "e0e5b5a68a8b";
+export const WORLD_HASH = "f3db971ad277";
