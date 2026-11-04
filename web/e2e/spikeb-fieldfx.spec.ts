@@ -321,21 +321,28 @@ test('a bot run from with a POKe DOLL: the doll over the runner, blinking', asyn
   await spike(page, (s) => { s.link.room.opening = 0; });
   await spike(page, (s) => s.give(80));
   await page.waitForTimeout(1500);
-  // A bot a step away, in the open: the room's own engage.
-  await spike(page, (s) => {
-    const room = s.link.room, a = room.actor(s.link.me), map = 'MAP_ROUTE101';
-    const bot = room.actors.find((o: any) => o.bot && !o.battling);
-    for (let y = 1; y < 19; y++) for (let x = 1; x < 18; x++) {
-      if (!room.world.cell(map, x, y) && !room.world.cell(map, x + 1, y) && !room.patchesOn(map).some((q: any) => q.x === x && q.y === y)) {
-        const me = { map, x, y }, it = { map, x: x + 1, y };
-        a.m = { ...a.m, spot: me, prev: me, facing: 4, moveDir: 4, action: null, px: 0, py: 0 };
-        bot.m = { ...bot.m, spot: it, prev: it, facing: 3, moveDir: 3, action: null, px: 0, py: 0 };
-        a.calm = bot.calm = 0;
-        return;
+  // A bot a step away, in the open: the room's own engage. Again until it has: a bot can step off
+  // before the room looks, and the A that follows must not find a wild patch instead.
+  await expect.poll(async () => {
+    await spike(page, (s) => {
+      const room = s.link.room, a = room.actor(s.link.me), map = 'MAP_ROUTE101';
+      if (a.foe) return;
+      const bot = room.actors.find((o: any) => o.bot && !o.battling);
+      // A ZIGZAGOON in front: a lead with Shadow Tag or Arena Trap leaves nothing to run with.
+      bot.caught = [288];
+      for (let y = 1; y < 19; y++) for (let x = 1; x < 18; x++) {
+        if (!room.world.cell(map, x, y) && !room.world.cell(map, x + 1, y) && !room.patchesOn(map).some((q: any) => q.y === y && (q.x === x || q.x === x + 1))) {
+          const me = { map, x, y }, it = { map, x: x + 1, y };
+          a.m = { ...a.m, spot: me, prev: me, facing: 4, moveDir: 4, action: null, px: 0, py: 0 };
+          bot.m = { ...bot.m, spot: it, prev: it, facing: 3, moveDir: 3, action: null, px: 0, py: 0 };
+          a.calm = bot.calm = 0;
+          return;
+        }
       }
-    }
-  });
-  await page.waitForTimeout(300);
+    });
+    await page.waitForTimeout(200);
+    return spike(page, (s) => !!s.link.room.actor(s.link.me).foe);
+  }, { timeout: 30_000 }).toBe(true);
   await page.keyboard.press('z', { delay: 150 });
   await page.waitForFunction(() => (window as any).__spike.battleMenu?.isShown, undefined, { timeout: 60_000 });
   await page.waitForTimeout(500);
