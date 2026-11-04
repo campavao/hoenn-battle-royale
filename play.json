@@ -1,7 +1,59 @@
 {
- "readAt": "2026-11-03T15:38:40.717Z",
+ "readAt": "2026-11-04T01:22:49.574Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "SP3Q2Q",
+   "at": "2026-11-04T00:48:04.371Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-04T00:48:06.738Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "PM4XAB",
+   "at": "2026-11-03T23:35:50.140Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-03T23:35:58.066Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": 1196
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "PNRCVB",
    "at": "2026-11-03T00:25:43.273Z",
@@ -3519,7 +3571,7 @@
   {
    "id": "6144a717",
    "first": "2026-10-17T02:37:29.310Z",
-   "last": "2026-11-02T21:47:52.376Z",
+   "last": "2026-11-04T00:47:19.303Z",
    "since": "2026-10-15",
    "versions": [
     "2",
@@ -3529,11 +3581,13 @@
     "world-9b83a194",
     "world-8ba64750",
     "world-75271896",
-    "world-e0e5b5a6"
+    "world-e0e5b5a6",
+    "world-5ad626f6",
+    "world-3267210a"
    ],
    "solo": 2,
-   "checkins": 27,
-   "v": "world-e0e5b5a6"
+   "checkins": 29,
+   "v": "world-3267210a"
   }
  ],
  "solo": [
@@ -3659,6 +3713,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-04T00:55:04.327Z",
+   "code": "SP3Q2Q",
+   "v": "1b56e69",
+   "watched": 274,
+   "snaps": 7,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 3,
+   "checks": 417,
+   "drifts": 0,
+   "deploy": "17fa84fb"
+  },
   {
    "t": "2026-10-29T16:21:02.208Z",
    "code": "7FWME6",
