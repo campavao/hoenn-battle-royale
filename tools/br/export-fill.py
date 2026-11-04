@@ -21,6 +21,9 @@ seams):
   3. Each kind is cut from General's own pieces, the ones the real maps use: sand on water
      for an open coast (then grass, then whole trees), a ridge's rim, faces and foot on
      whatever is next to it. Same metatiles, same palettes, so it reads as one map.
+  4. Nobody can stand on any of it, so near where somebody can stand it doesn't look as if they
+     could (Cam, 11-04: "it almost looks like I can walk over here but I can't"): no grass or
+     sand within WALK_GAP cells of a map's walkable cell, trees instead.
 
 What ships is metatile numbers, from the pret tree, as the rest of the world's data does; the
 page cuts the pictures from the player's own ROM (romart.ts fillChunk). Nothing here is
@@ -49,6 +52,9 @@ SEA = 0x170
 LAND_REACH = 18
 # Cells of sea or land kept past the world's rectangle before the page's own endless sea.
 MARGIN = 72
+
+# room.ts LOOSE_SEAM: the walk that lays the plane doesn't cross it.
+LOOSE_SEAM = {'MAP_PETALBURG_CITY', 'MAP_ROUTE102'}
 
 _spec = importlib.util.spec_from_file_location('render_maps', os.path.join(ROOT, 'tools', 'br', 'render-maps.py'))
 rm = importlib.util.module_from_spec(_spec)
@@ -96,7 +102,7 @@ class Plane:
             gx, gy = self.at[i]
             for s in m['seams']:
                 t = self.maps.get(s['to'])
-                if not t or not t.get('outdoor') or t['id'] in self.at:
+                if not t or not t.get('outdoor') or t['id'] in self.at or {i, t['id']} == LOOSE_SEAM:
                     continue
                 o, d = s['offset'], s['dir']
                 self.at[t['id']] = (gx + o, gy - t['h']) if d == 'north' else (gx + o, gy + m['h']) if d == 'south' else (gx - t['w'], gy + o) if d == 'west' else (gx + m['w'], gy + o)
@@ -113,6 +119,35 @@ class Plane:
             self.blocks[i] = struct.unpack(f'<{w * h}H', raw[: w * h * 2])
         self.tilesets = {}
         self.kinds = {}
+        self.grids = {}
+
+    def classes(self, map_id):
+        """The map's walk classes, a cell at a time."""
+        if map_id not in self.grids:
+            out = []
+            for run in self.maps[map_id]['grid'].split(';'):
+                if run:
+                    n, v = run.split('x')
+                    out += [int(v)] * int(n)
+            self.grids[map_id] = out
+        return self.grids[map_id]
+
+    def cell_kind(self, map_id, x, y):
+        """kind() at a cell. A blue roof or a town's paving has water's colours and isn't water, which
+        made a sea of VERDANTURF's west edge: colours that say water count only with water in reach
+        (a rock in the sea)."""
+        m = self.maps[map_id]
+        w, h = m['w'], m['h']
+        k = self.kind(map_id, self.blocks[map_id][y * w + x] & 0x3ff)
+        if k != WATER:
+            return k
+        g = self.classes(map_id)
+        for dy in range(-4, 5):
+            for dx in range(-4, 5):
+                u, v = x + dx, y + dy
+                if 0 <= u < w and 0 <= v < h and g[v * w + u] == CLASS_WATER:
+                    return WATER
+        return GRASS
 
     def ts(self, map_id):
         l = self.layouts[map_id]
@@ -175,6 +210,10 @@ SHORE_RUN = 6
 # Sand this thick on an open coast, then grass, then the trees.
 BEACH = 3
 MEADOW = 5
+# Cells from anywhere a trainer can stand before the fill may be open ground.
+WALK_GAP = 4
+# world.json's walk classes (bots/world.ts).
+CLASS_WALL, CLASS_WATER = 1, 2
 
 
 def slice_of(table, here):
@@ -209,7 +248,7 @@ def edge_runs(plane):
         for line in lines:
             run = []
             for c in line + [None]:
-                wet = c is None or plane.kind(i, plane.blocks[i][c[1] * w + c[0]] & 0x3ff) == WATER
+                wet = c is None or plane.cell_kind(i, c[0], c[1]) == WATER
                 if not wet:
                     run.append(c)
                 elif run:
@@ -242,6 +281,7 @@ def generate():
     W, H = plane.x1 - plane.x0 + 2 * MARGIN, plane.y1 - plane.y0 + 2 * MARGIN
     owner = np.full((H, W), -1, dtype=int)
     kind = np.full((H, W), -1, dtype=int)
+    stands = np.zeros((H, W), dtype=bool)
     ids = list(plane.at)
     for n, i in enumerate(ids):
         gx, gy = plane.at[i]
@@ -249,7 +289,8 @@ def generate():
         for y in range(m['h']):
             for x in range(m['w']):
                 owner[gy + y - y0, gx + x - x0] = n
-                kind[gy + y - y0, gx + x - x0] = plane.kind(i, plane.blocks[i][y * m['w'] + x] & 0x3ff)
+                kind[gy + y - y0, gx + x - x0] = plane.cell_kind(i, x, y)
+                stands[gy + y - y0, gx + x - x0] = plane.classes(i)[y * m['w'] + x] not in (CLASS_WALL, CLASS_WATER)
     runs = edge_runs(plane)
     blank = owner < 0
 
@@ -383,6 +424,13 @@ def generate():
             if 0 <= u < W and 0 <= v < H and dcoast[v, u] > dcoast[y, x] + 1:
                 dcoast[v, u] = dcoast[y, x] + 1
                 frontier.append((u, v))
+    near = stands.copy()
+    for _ in range(WALK_GAP):
+        grown = near.copy()
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                grown |= np.roll(np.roll(near, dy, 0), dx, 1)
+        near = grown
     cover = {}
     for y in range(H):
         for x in range(W):
@@ -391,7 +439,7 @@ def generate():
             i, mid, k, _ = source.get((x, y), ('MAP_LITTLEROOT_TOWN', 0x1D4, TREE, 0))
             if k == SAND and dland[y, x] > 3:
                 k = TREE
-            if k == GRASS and dland[y, x] > 2:
+            if k == GRASS:
                 k = TREE
             if k == ROCK and forest_of(plane, i, mid)[0] == 'own':
                 # ROUTE 114's ash: its rock has no pieces in General's colours; its ashen
@@ -404,31 +452,12 @@ def generate():
                     k = SAND
                 elif dcoast[y, x] <= MEADOW + wob and k == TREE:
                     k = GRASS
+                if near[y, x]:
+                    k = TREE
             grid[y, x] = k
             cover[(x, y)] = (i, mid, k)
-    # Grass round a ridge, where trees would run straight into its foot.
-    near_rock = grid == ROCK
-    grown = near_rock.copy()
-    for dy in (-1, 0, 1):
-        for dx in (-1, 0, 1):
-            grown |= np.roll(np.roll(near_rock, dy, 0), dx, 1)
-    grid[blank & grown & (grid == TREE)] = GRASS
-
-    # The forests in whole trees, on a lattice of 2 x 2: anything left over is grass.
-    forest = {}
-    for (x, y), (i, mid, k) in cover.items():
-        if grid[y, x] == TREE:
-            forest[(x, y)] = forest_of(plane, i, mid)
-    whole = {}
-    for (x, y), f in forest.items():
-        tx, ty = (x + x0) & ~1, (y + y0) & ~1
-        cells = [(tx - x0 + a, ty - y0 + b) for a in (0, 1) for b in (0, 1)]
-        whole[(x, y)] = all(forest.get(c) == f or (c[0] < W and c[1] < H and not blank[c[1], c[0]] and kind[c[1], c[0]] == TREE) for c in cells)
-    for c, ok in whole.items():
-        if not ok:
-            grid[c[1], c[0]] = GRASS
-            forest.pop(c, None)
-    # A ridge is as thick as its pieces need, the same way: three by three, or it is grass.
+    # A ridge is as thick as its pieces need, as the land is: three by three, or it is trees. (A
+    # house on a map's edge has a cliff's colours: its "ridge" is a sliver, and goes.)
     solid = grid == ROCK
     square = np.ones((H, W), dtype=bool)
     for dy in (-1, 0, 1):
@@ -438,7 +467,46 @@ def generate():
     for dy in (-1, 0, 1):
         for dx in (-1, 0, 1):
             kept |= np.roll(np.roll(square, dy, 0), dx, 1)
-    grid[blank & (grid == ROCK) & ~kept] = GRASS
+    grid[blank & (grid == ROCK) & ~kept] = TREE
+    # Grass round a ridge, where trees would run straight into its foot, away from anybody.
+    near_rock = grid == ROCK
+    grown = near_rock.copy()
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            grown |= np.roll(np.roll(near_rock, dy, 0), dx, 1)
+    grid[blank & grown & ~near & (grid == TREE)] = GRASS
+
+    # The forests in whole trees, on a lattice of 2 x 2: anything left over is grass.
+    forest = {}
+    for (x, y), (i, mid, k) in cover.items():
+        if grid[y, x] == TREE:
+            forest[(x, y)] = forest_of(plane, i, mid)
+    # Where two forests meet, a tree is all one of them, or the line between them is a row of holes.
+    lattice = {}
+    for (x, y), f in sorted(forest.items(), key=lambda c: c[0][::-1]):
+        lattice.setdefault(((x + x0) & ~1, (y + y0) & ~1), f)
+    for (x, y) in forest:
+        forest[(x, y)] = lattice[((x + x0) & ~1, (y + y0) & ~1)]
+    whole = {}
+    for (x, y), f in forest.items():
+        tx, ty = (x + x0) & ~1, (y + y0) & ~1
+        cells = [(tx - x0 + a, ty - y0 + b) for a in (0, 1) for b in (0, 1)]
+        whole[(x, y)] = all(forest.get(c) == f or (c[0] < W and c[1] < H and not blank[c[1], c[0]] and kind[c[1], c[0]] == TREE) for c in cells)
+    for c, ok in whole.items():
+        if not ok:
+            grid[c[1], c[0]] = GRASS
+            forest.pop(c, None)
+    # A tileset's own forest is a block that repeats (ROUTE 114's ash): what's left over beside it is
+    # more of it. General's grass is the wrong colour there.
+    grow = collections.deque(c for c, f in forest.items() if f[0] == 'own')
+    while grow:
+        x, y = grow.popleft()
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)):
+            u, v = x + dx, y + dy
+            if 0 <= u < W and 0 <= v < H and blank[v, u] and grid[v, u] == GRASS and (u, v) not in forest:
+                grid[v, u] = TREE
+                forest[(u, v)] = forest[(x, y)]
+                grow.append((u, v))
     # A neck of sand has no piece either.
     for _ in range(2):
         for y in range(1, H - 1):
