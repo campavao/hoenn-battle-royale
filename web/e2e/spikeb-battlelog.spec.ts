@@ -40,6 +40,9 @@ async function setOption(page: Page, id: string, want: string): Promise<void> {
   await expect(b).toHaveText(want);
 }
 
+/** A bot's `calm` here: past any frame a spec reaches. */
+const NO_FIGHT = 2 ** 30;
+
 /** The relay's own code (relay/world.js over the bundled service), served here. */
 async function relay(bots = 3) {
   process.env.WORLD_BOTS = String(bots);
@@ -49,6 +52,15 @@ async function relay(bots = 3) {
   const { createWorld } = (await import('../../relay/world.js' as string)) as any;
   const { WORLD_HASH } = (await import('../../relay/world/service.js' as string)) as any;
   const world = createWorld({ log: (l: string) => step(`relay: ${l}`) });
+  // Every fight here is staged on the relay's room (fight below) and played by the spec. A bot left to
+  // itself walks up in the middle of that: the room dealt the host a second fight while the page was in
+  // the staged one, the page turned it down with an `end` (main.ts handOff), and the relay, told the host
+  // was out of a fight, took none of the log of the one still on its screen (41 said, 0 heard, run
+  // 41745539774). Or it had the host out before the first fight, or left no bot free for it. So no bot
+  // here starts a fight (Room's `calm`; a frame's hash brings the pages' copies over).
+  const calm = setInterval(() => {
+    for (const room of (world.service as any)?.rooms.values() ?? []) for (const a of room.host?.room.actors ?? []) if (a.bot && a.calm < NO_FIGHT) a.calm = NO_FIGHT;
+  }, 100);
   const server = http.createServer((_, res) => res.end('ok'));
   server.on('upgrade', (req, socket, head) => world.handle(req, socket, head, '127.0.0.1'));
   await new Promise<void>((ok) => server.listen(PORT, ok));
@@ -56,7 +68,7 @@ async function relay(bots = 3) {
     hash: WORLD_HASH as string,
     room: () => [...(world.service as any).rooms.values()][0].host.room as any,
     match: () => [...(world.service as any).rooms.values()][0] as any,
-    close: async () => { world.close(); await new Promise((ok) => server.close(ok)); },
+    close: async () => { clearInterval(calm); world.close(); await new Promise((ok) => server.close(ok)); },
   };
 }
 
@@ -111,8 +123,9 @@ async function installOracle(page: Page): Promise<void> {
 /** What the ROM's buffer holds besides the box's lines: a healthbox's name, and the move menu's
  *  PP and type windows. Judged here on its own, so the reader's own filter is held to it. */
 // Sampled every frame it catches that buffer half rewritten too ("18/3SH", "1P"), which is why a
-// word on its own with nothing to end it is no line, whatever it says.
-const NOT_A_LINE = /^(\S*[^\s!?…]|(NORMAL|FIGHT|FLYING|POISON|GROUND|ROCK|BUG|GHOST|STEEL|FIRE|WATER|GRASS|ELECTR|PSYCHC|ICE|DRAGON|DARK)\b[ ./\d]*)$/;
+// word on its own with nothing to end it is no line, whatever it says. And the menu's "PP " going in
+// over SPLASH, for a frame: "PP ASH".
+const NOT_A_LINE = /^(\S*[^\s!?…]|PP .*|(NORMAL|FIGHT|FLYING|POISON|GROUND|ROCK|BUG|GHOST|STEEL|FIRE|WATER|GRASS|ELECTR|PSYCHC|ICE|DRAGON|DARK)\b[ ./\d]*)$/;
 const takeOracle = (page: Page) => page.evaluate(() => { const o = (window as any).__oracle; o.off(); return { lines: o.lines as string[], hp: o.hp as Record<number, number>[], field: o.field as number[][] }; }).then((o) => ({ ...o, lines: o.lines.filter((l) => !NOT_A_LINE.test(l)) }));
 
 /** Folds events the way a watcher's view would. */
@@ -189,7 +202,8 @@ async function play(page: Page, switchAt = 0): Promise<void> {
   // Q, the slot, SEND OUT: the windows' own keys).
   let turns = 0;
   let tried = 0;
-  for (let i = 0; i < 400; i++) {
+  // Plenty: a Lv3 MAGIKARP's TACKLEs can take three minutes, and 400 tries ran out on one with the fight on its last line.
+  for (let i = 0; i < 800; i++) {
     if (!(await spike(page, (s) => !!s.battle))) return;
     if (i % 20 === 3) step(`play ${i}: ${JSON.stringify(await spike(page, (s) => ({ menu: s.battleMenu?.isShown, lead: s.rom.emu.read(s.art.sym('gBattlerPartyIndexes'), 16) })))} cells ${await page.locator('.bm-cell').count()} slots ${await page.locator('.bm-slot').count()}`);
     if (await page.locator('.bm-m-btn').first().isVisible().catch(() => false)) {
