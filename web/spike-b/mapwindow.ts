@@ -24,8 +24,8 @@ export interface MapWindowDeps {
   /** The place on a cell of the grid. */
   placeAt(cx: number, cy: number): MapPlace | null;
   plots(): MapPlots;
-  /** A person's standing sprite, with its width. */
-  head(gfx: number): { img: CanvasImageSource; w: number } | null;
+  /** A person's standing sprite, with its frame's size. */
+  head(gfx: number): { img: HTMLCanvasElement; w: number; h: number } | null;
   /** The buttons' word, null for none: a MAP with nobody to FLY only looks. */
   verb: string | null;
   /** Whether the verb can be pressed on this place. */
@@ -40,9 +40,31 @@ export interface MapWindowDeps {
   start: { x: number; y: number };
 }
 
-function head(c: EmeraldCanvas, deps: MapWindowDeps, gfx: number, x: number, y: number): void {
+const greys = new Map<HTMLCanvasElement, HTMLCanvasElement>();
+/** A sprite sheet in grey, for a leader beaten (br_gym.c BrGym_Gray), by hand: Safari's canvas has no filter. */
+function greyOf(img: HTMLCanvasElement): HTMLCanvasElement {
+  let out = greys.get(img);
+  if (out) return out;
+  out = document.createElement('canvas');
+  out.width = img.width;
+  out.height = img.height;
+  const c = out.getContext('2d')!;
+  c.drawImage(img, 0, 0);
+  const d = c.getImageData(0, 0, out.width, out.height);
+  for (let i = 0; i < d.data.length; i += 4) {
+    const v = (d.data[i] * 3 + d.data[i + 1] * 6 + d.data[i + 2]) / 10;
+    d.data[i] = d.data[i + 1] = d.data[i + 2] = v;
+  }
+  c.putImageData(d, 0, 0);
+  greys.set(img, out);
+  return out;
+}
+
+/** A person's head, the 16 rows that have it: they stand at the bottom of a frame, the head some way
+ *  down it (as the minimap's, main.ts miniFrame). */
+function head(c: EmeraldCanvas, deps: MapWindowDeps, gfx: number, x: number, y: number, grey = false): void {
   const s = deps.head(gfx);
-  if (s) c.drawImageTo(s.img, 0, 0, s.w, 16, Math.round(x - s.w / 2), Math.round(y - 8), s.w, 16);
+  if (s) c.drawImageTo(grey ? greyOf(s.img) : s.img, 0, Math.max(0, s.h - 26), s.w, 16, Math.round(x - s.w / 2), Math.round(y - 8), s.w, 16);
 }
 
 /** How near, in the picture's pixels, a mark has to be to take the cursor; and in cells, a place. */
@@ -261,7 +283,7 @@ export class MapWindow {
       drawItemFitted(c, ITEM_POKE_BALL, e.x, e.y, 10, redo);
       c.setFilter('none');
     }
-    for (const g of plots.gyms) head(c, this.deps, g.gfx, g.x, g.y);
+    for (const g of plots.gyms) head(c, this.deps, g.gfx, g.x, g.y, g.beaten);
     if (plots.me) head(c, this.deps, plots.me.gfx, plots.me.x, plots.me.y);
     // The cursor over all of it, region_map.c's red box, breathing.
     const x = GRID_X + this.cx * CELL, y = GRID_Y + this.cy * CELL, n = CELL;

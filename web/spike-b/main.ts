@@ -1026,7 +1026,7 @@ function openMapWindow(o: { verb: string | null; can(p: MapPlace): boolean; prom
       plots: () => map.plots({ spot: me.m.spot, gfx: gfxOf(me.skin) }),
       head: (gfx) => {
         const s = sheet(gfx);
-        return s ? { img: s, w: SHEETS[String(gfx)].w } : null;
+        return s ? { img: s, w: SHEETS[String(gfx)].w, h: SHEETS[String(gfx)].h } : null;
       },
       verb: o.verb,
       can: o.can,
