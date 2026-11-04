@@ -307,8 +307,14 @@ export interface RomBattles {
   /** A new round: the team, bag and Pokédex the game booted with, after whatever is
    *  on the ROM now. */
   fresh(): Promise<void>;
+  /** This one's four, as a mon just made has them: nobody's picks, each at its full PP. */
+  dealMoves(slot: number, moves: { id: number; pp: number }[]): Promise<void>;
   /** A new match's seed (the national stand-ins on the routes are the match's). */
   reseed(seed: number): void;
+  /** The match's seed, as a ball makes its mon from it (br_loot.c MakeTaken). */
+  matchSeed(): number;
+  /** The hour of the ROM's clock (gLocalTime), which an EEVEE evolves by. */
+  localHour(): number;
   /** Money out of somebody's bag (br_loot.c's Take pays it). */
   addMoney(n: number): Promise<void>;
   /** One `item` out of the bag (a person wanted it); false when there is none. */
@@ -1435,6 +1441,17 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         carried = last = next;
       });
     },
+    dealMoves(slot, moves) {
+      return inTurn(async () => {
+        if (broken) return;
+        const k = carried ?? kept();
+        let party: Uint8Array = k.party;
+        for (let n = 0; n < 4; n++) party = withMove(party, slot, n, moves[n]?.id ?? 0, moves[n]?.pp ?? 0, false);
+        const next = { ...k, party: party as typeof k.party };
+        keep(next);
+        carried = last = next;
+      });
+    },
     menu(action, onStart, onEnd, walk) {
       return onCore(async () => {
         if (broken || !startMenu) return { up: false, said: '' };
@@ -1643,6 +1660,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     logStats() { return lastLog; },
     leave() { leaving = true; },
     reseed(s) { seedNow = s >>> 0; },
+    matchSeed: () => seedNow,
+    localHour() { const at = sym('gLocalTime'); return at === undefined ? 12 : emu.read(at + 2, 8); },
     fresh() {
       return inTurn(async () => {
         if (broken) return;

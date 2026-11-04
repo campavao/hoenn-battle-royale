@@ -191,6 +191,49 @@ test('a long press is its SUMMARY, on the party, a dropped team and a gift: mous
   await ctx.close();
 });
 
+test('SUMMARY of one not on a team says its moves, and those are the moves it joins with (Cam, 11-04)', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  await page.goto(`/?rom=${romHashParam()}#solo&nobots&safari=0&fog=900&seed=11`);
+  await page.locator('#intro-go').click({ timeout: 90_000 });
+  await page.waitForFunction(() => { const s = (window as any).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 120_000 });
+  await page.waitForTimeout(3000);
+  // A trade's evolution, a stat's, a personality's, the clock's, and none, in places other than the
+  // first: a VBlank in CreateMon moves their IVs differently (ui/taken.ts).
+  const mons = [64, 236, 290, 133, 385];
+  await spike(page, new Function('s', `return s.startFor({ type: 'bag', tick: 0, id: s.link.me, key: 0x7e0001, name: 'MAY', bag: { items: [], money: 0, mons: ${JSON.stringify(mons.map((species) => ({ species, level: 30 })))} } })`) as never);
+  for (let i = 0; i < mons.length; i++) {
+    await expect(page.locator('.bm-slot').first()).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(150);
+    const at = (i * 2) % (mons.length - i);
+    const b = (await page.locator('.bm-slot').nth(at).boundingBox())!;
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await page.mouse.down();
+    await expect(page.locator('#summary')).toBeVisible({ timeout: 3000 });
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+    const said = await page.evaluate(() => ({
+      who: document.querySelector('#summary')!.getAttribute('aria-label'),
+      moves: [...document.querySelectorAll('.sum-move')].map((m) => m.getAttribute('aria-label')!.split(',')[0]).filter((m) => m !== 'No move'),
+    }));
+    expect(said.moves.length, `${said.who} has moves to show`).toBeGreaterThan(0);
+    await page.locator('.sum-back').click();
+    await page.waitForTimeout(100);
+    const was = await spike(page, (s) => s.battleMenu.readTeam().length) as number;
+    await page.locator('.bm-slot').nth(at).click();
+    await expect.poll(() => spike(page, (s) => s.rom.partyCount()), { timeout: 20_000 }).toBeGreaterThan(was);
+    await page.waitForTimeout(300);
+    const got = await page.evaluate((w) => {
+      const s = (window as any).__spike, m = s.battleMenu.readTeam()[w];
+      return { who: m.name, moves: m.moves.map((v: any) => s.moveName(v.id)) };
+    }, was);
+    expect(said.who).toBe(`Summary of ${got.who}`);
+    expect(said.moves, got.who).toEqual(got.moves);
+  }
+  await ctx.close();
+});
+
 test('in a battle: SUMMARY and a held mon leave the fight as it was; a held move still shows its details', async ({ browser }) => {
   test.setTimeout(240_000);
   const ctx = await browser.newContext(DESK);

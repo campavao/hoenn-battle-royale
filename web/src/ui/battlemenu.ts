@@ -270,6 +270,8 @@ export interface PartyMember {
   moves: { id: number; pp: number; maxPp: number }[];
   /** Out in the battle now. */
   active: boolean;
+  /** Not on a team yet: what SUMMARY says of it, as taking it would make it (ui/taken.ts). */
+  joins?: Pick<PartyMember, 'species' | 'name' | 'level' | 'moves'>;
 }
 
 /** The buttons under the moves (Cam's sketch, 11-01), three across MENU_W. */

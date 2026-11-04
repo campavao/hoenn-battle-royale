@@ -37,6 +37,7 @@ ENGINE_SYMBOLS = [
     "gMonIconTable", "gMonIconPaletteIndices", "gMonIconPaletteTable", "gBagMaleTiles", "gBagPalette", "gSpeciesInfo", "gAbilityNames", "gBattlerPartyIndexes", "gBattlePartyCurrentOrder", "gTasks",
     # What the page's SUMMARY and MOVES windows say of a species (web/src/ui/monfacts.ts).
     "gAbilityDescriptionPointers", "gNatureNamePointers", "gLevelUpLearnsets",
+    "gEvolutionTable", "gNatureStatTable", "gExperienceTables", "gLocalTime",
     # The curtain into a match (web/spike-b/curtain.ts).
     "gContestCurtainTilemap", "gContestInterfaceGfx", "gContestInterfaceAudiencePalette",
     "gWeatherPtr", "gBattleTypeFlags", "gBattleWeather", "gBattleEnvironment", "gBattleOutcome", "gBattleMainFunc", "gBattlerControllerFuncs",

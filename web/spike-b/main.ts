@@ -89,6 +89,7 @@ import { SummaryWindow } from '../src/ui/summary';
 import { Radial, type DialItem } from '../src/ui/radial';
 import { ITEM_HM01, ITEM_TM01, MovesBox, learnList, type LearnRow } from '../src/ui/movesbox';
 import { learnsByNow } from '../src/ui/monfacts';
+import { fullPp, takenMon, teamSeed } from '../src/ui/taken';
 import { TMHM_MOVES } from '../src/ui/tmhm';
 import { HUD } from '../src/net/hud';
 import { bagHolds, fieldMoves, fogPhase, ITEM_ACRO_BIKE, ITEM_MACH_BIKE, ITEM_TOWN_MAP, itemCut, KEYITEMS_POCKET, MINI_MAP, PhoneHud, signFor, type FieldMove } from '../src/ui/phonehud';
@@ -1277,12 +1278,30 @@ function closePanel(): void {
   calmUntil = frame + 30;
   panelDone?.();
 }
+/** What taking this one would make of it (ui/taken.ts), for its SUMMARY: `at` is its place on the team
+ *  screen, whose key seeds it, or null for a trader's, which the ROM rolls when he hands it over. Under
+ *  the rung it comes up to the rung (br_loot.c MakeTaken). */
+function joinsAs(species: number, level: number, at: number | null): NonNullable<PartyMember['joins']> {
+  const was = Math.max(level, rungForPhase(link.room.ring().phase + 1));
+  const t = takenMon(romTables, species, was, at === null || !rom ? null : teamSeed(rom.matchSeed(), at), rom?.localHour());
+  if (!t) return { species, name: speciesName(species), level: was, moves: [] };
+  return { species: t.species, name: speciesName(t.species), level: t.level, moves: t.moves.map((id) => { const pp = fullPp(romTables, id); return { id, pp, maxPp: pp }; }) };
+}
+/** The one who just joined knows what its SUMMARY said (ui/taken.ts says why it might not yet): by the
+ *  party against what it was, unless it came out another species, which SUMMARY got wrong anyway. */
+async function sayWhatItSaid(before: PartyMember[], joins: NonNullable<PartyMember['joins']>): Promise<void> {
+  const after = readTeam();
+  const slot = after.findIndex((m, i) => m.species !== before[i]?.species || JSON.stringify(m.moves) !== JSON.stringify(before[i]?.moves));
+  const m = after[slot];
+  if (!rom || !m || m.species !== joins.species || m.moves.map((v) => v.id).join() === joins.moves.map((v) => v.id).join()) return;
+  await rom.dealMoves(slot, joins.moves);
+}
 /** A dropped team on the windows: taken one at a time, each through the ROM's own screen unseen.
  *  What is still on the ground comes back. */
 let panelDone: (() => void) | null = null;
 function dropPanel(who: string, mons: TeamRow[]): Promise<TeamRow[]> {
   let left = mons;
-  const rows = () => left.map((m) => ({ species: m.species, name: speciesName(m.species), level: m.level, hp: 1, maxHp: 1, status: 0, item: 0, itemName: '', ability: '', moves: [], active: false }));
+  const rows = () => left.map((m, at) => ({ species: m.species, name: speciesName(m.species), level: m.level, hp: 1, maxHp: 1, status: 0, item: 0, itemName: '', ability: '', moves: [], active: false, joins: joinsAs(tradedInto(m.species), m.level, at) }));
   return new Promise((resolve) => {
     if (!battleMenu || !rom) { resolve(left); return; }
     swapping = true;
@@ -1295,8 +1314,10 @@ function dropPanel(who: string, mons: TeamRow[]): Promise<TeamRow[]> {
     const show = () => battleMenu!.openDrop(who, rows(), take, closePanel);
     const take = (at: number, give?: number) => {
       battleMenu!.hideField();
-      void rom!.team(left, who, () => {}, () => {}, { take: at, give }).then((rest) => {
+      const before = readTeam(), joins = rows()[at]?.joins;
+      void rom!.team(left, who, () => {}, () => {}, { take: at, give }).then(async (rest) => {
         left = rest;
+        if (joins) await sayWhatItSaid(before, joins);
         if (!panelUp) return;
         if (left.length) show(); else closePanel();
       });
@@ -1843,14 +1864,13 @@ async function nurse(): Promise<void> {
 
 /** Somebody's offer of a mon: yes or no, and its SUMMARY first if I want to see it. Nobody's
  *  party holds it, so that is what the wire says, its species, at the rung it would come at. */
-async function askLooking(title: string, yes: string, species: number): Promise<string> {
+async function askLooking(title: string, yes: string, species: number, joins: () => NonNullable<PartyMember['joins']>): Promise<string> {
   for (;;) {
     const c = await ask(title, [[yes, 'y'], ['SUMMARY', 'look'], ['NO, THANKS', '']]);
     if (c !== 'look') return c;
-    const level = rungForPhase(link.room.ring().phase + 1);
     swapping = true;
     await new Promise<void>((done) => {
-      summaryWin?.open([{ species, name: speciesName(species), level, hp: 1, maxHp: 1, status: 0, item: 0, itemName: '', ability: '', moves: [], active: false }], 0, () => !isOut && !battle, done);
+      summaryWin?.open([{ hp: 1, maxHp: 1, status: 0, item: 0, itemName: '', ability: '', active: false, ...joins() }], 0, () => !isOut && !battle, done);
     });
     swapping = false;
     calmUntil = frame + 30;
@@ -1867,17 +1887,19 @@ async function trade(n: number, species: number): Promise<void> {
     if (swapping) leaveScreen();
     asking?.done('');
     const name = speciesName(species);
-    const c = await askLooking(`I'll trade you my ${name} for one of yours. Which one?`, 'CHOOSE', species);
     // Somebody at home's goes through a trade's evolution on the way over (br_loot.c's
     // BrLoot_HomeTrade); an event's trader's does not (br_event.c's Swap).
     const got = n >= HOME_N ? tradedInto(species) : species;
+    const c = await askLooking(`I'll trade you my ${name} for one of yours. Which one?`, 'CHOOSE', species, () => joinsAs(got, 0, null));
     if (c !== 'y' || !rom || isOut) return;
     const slot = await askParty(`For ${name}`);
     if (slot === null || !rom || isOut) return;
     swapping = true;
     held.clear();
     try {
+      const before = readTeam(), joins = joinsAs(got, 0, null);
       given = await rom.trade(got, () => battleEl.classList.add('on'), slot);
+      if (given) await sayWhatItSaid(before, joins);
     } finally {
       swapping = false;
       battleEl.classList.remove('on');
@@ -1900,7 +1922,7 @@ async function gift(n: number, species: number): Promise<void> {
     if (!rom || isOut || battle || swapping) return;
     asking?.done('');
     const name = speciesName(species);
-    const c = await askLooking(`Will you look after my ${name} for me?`, 'YES', species);
+    const c = await askLooking(`Will you look after my ${name} for me?`, 'YES', species, () => joinsAs(tradedInto(species), 0, 0));
     if (c !== 'y' || !rom || isOut) return;
     const left = await dropPanel('GIFT', [{ species, level: rungForPhase(link.room.ring().phase + 1) }]);
     if (!left.some((m) => m.species === species)) taken = species;
@@ -3026,7 +3048,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       bag: () => bagArtOf(),
       keys: touchPad ? undefined : { party: 'Q', bag: 'E' },
       switchTo: (slot) => walkParty(slot),
-      showMon: (rows, at) => summaryWin?.open(rows, at, () => menu.isShown),
+      showMon: (rows, at) => summaryWin?.open(rows.map((r) => (r.joins ? { ...r, ...r.joins } : r)), at, () => menu.isShown),
       useOn,
       sendOut: (slot) => { walk = { slot, step: 0, frames: 0, item: false, forced: true }; },
       field: {
@@ -5132,7 +5154,7 @@ async function boot(): Promise<void> {
     }
   }
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { watch, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, get movesBox() { return movesBox; }, radial };
+  (window as unknown as { __spike: unknown }).__spike = { watch, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, get movesBox() { return movesBox; }, radial, moveName: (id: number) => moveInfo(romTables, id)?.name ?? '' };
 }
 
 void boot();
