@@ -132,6 +132,8 @@ export interface Ctx {
   label: 'FISH' | 'BIKE' | 'WALK';
   item: number;
   enabled: boolean;
+  /** What it toggles is in use now: on the bike. */
+  on?: boolean;
 }
 
 /** What the HUD shows, read off the ROM. */
@@ -763,6 +765,7 @@ export class PhoneHud {
     const ctx = this.buttons.ctx;
     ctx.setAttribute('aria-disabled', String(!v.ctx.enabled));
     ctx.setAttribute('aria-label', `Select: ${v.ctx.label}`);
+    ctx.classList.toggle('hud-on', !!v.ctx.on);
     this.ctx.show(`${v.ctx.label}|${v.ctx.item}|${v.ctx.enabled}`);
   }
 }

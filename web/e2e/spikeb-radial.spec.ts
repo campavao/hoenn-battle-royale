@@ -58,8 +58,15 @@ test('a desktop has the round button, and SHIFT named on it; it gets on the bike
   expect(box.x, 'beside the BAG').toBeGreaterThanOrEqual(bag.x + bag.width);
   await shot(page, 'desk-field-round');
   expect(await riding(page)).toBe(false);
+  await expect(round, 'not lit on foot').not.toHaveClass(/hud-on/);
   await round.click();
   await expect.poll(() => riding(page)).toBe(true);
+  await expect(round, 'lit while it is in use (Cam, 11-04)').toHaveClass(/hud-on/);
+  await shot(page, 'desk-round-lit');
+  await page.waitForTimeout(600);
+  await round.click();
+  await expect.poll(() => riding(page)).toBe(false);
+  await expect(round).not.toHaveClass(/hud-on/);
   await ctx.close();
 });
 

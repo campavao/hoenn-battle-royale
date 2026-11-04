@@ -1154,7 +1154,7 @@ const PAD_RT = 7;
 const RADIAL_KEY = 'c';
 const radial = new Radial({ scale: windowScale, sound: () => rom?.sound(SE_SELECT) });
 /** Riding, or the bike in the bag: SELECT gets on or off where a bike may go (sim.ts). */
-function bikeNow(me: Actor): { item: number; label: 'BIKE' | 'WALK'; enabled: boolean } {
+function bikeNow(me: Actor): { item: number; label: 'BIKE' | 'WALK'; enabled: boolean; on: boolean } {
   const has = rom ? bagHolds(rom.emu, romTables.sym, KEYITEMS_POCKET, [ITEM_MACH_BIKE, ITEM_ACRO_BIKE]) : new Set<number>();
   const step = link.room.stepFor(me), spot = me.m.spot;
   // The one that SELECT would get on (sim.ts begin), or is on.
@@ -1164,6 +1164,8 @@ function bikeNow(me: Actor): { item: number; label: 'BIKE' | 'WALK'; enabled: bo
     label: me.m.bike ? 'WALK' : 'BIKE',
     // No getting off on a rail.
     enabled: me.m.bike ? (step.acroAt?.(spot) ?? 0) < 2 : !!step.cycling?.(spot) || !!step.acroCycling?.(spot),
+    // Lit while riding, on a desktop and a phone (Cam, 11-04: "let's have it highlight to show that it's in use").
+    on: !!me.m.bike,
   };
 }
 /** What SELECT would do with the rod here: casts it facing water, on foot or surfing (room.ts). */
