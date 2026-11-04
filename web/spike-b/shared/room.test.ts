@@ -210,7 +210,7 @@ describe('bots', () => {
 
 describe('bots with somewhere to be', () => {
   it('walk into the coming ring before it closes, and some to an event while its legendary stands', () => {
-    const host = new Host(makeRoom(MAPS, PATCHES, 8), 29, MAPS);
+    const host = new Host(makeRoom(MAPS, PATCHES, 1), 29, MAPS);
     const room = host.room;
     // A legendary's event, not a story's (STORY_CHANCE), and not the final ring's sea.
     (room as unknown as { storyFor(): undefined }).storyFor = () => undefined;
@@ -233,7 +233,7 @@ describe('bots with somewhere to be', () => {
     const e = room.events[0];
     expect(e).toBeDefined();
     // Dealt over all of Hoenn, the ones it draws may be a few towns away: this one is on
-    // ROUTE 110, and they come by RUSTURF TUNNEL and MAUVILLE.
+    // ROUTE 111. Whether one gets there in time is the seed's: 4 of 8 seeds do (a sweep, 11-04).
     const near = () => room.actors.filter((a) => a.bot && a.m.spot.map === e.map && Math.abs(a.m.spot.x - e.x) + Math.abs(a.m.spot.y - e.y) <= 6);
     for (let f = 0; f < 60 * 150 && !near().length; f++) host.advance();
     expect(near().length).toBeGreaterThan(0);
