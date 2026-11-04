@@ -34,6 +34,8 @@ const MON_STATUS = 80;
 const MON_HP = 86;
 const MON_MAX_HP = 88;
 const PARTY_SIZE = 6;
+/** struct Main: which screen is on top (src/br/br_pins.c). */
+const MAIN_CALLBACK2 = 4;
 
 const PIC = 64;
 const NAME_H = 14;
@@ -115,7 +117,7 @@ export interface SidesRead {
 
 /** What to show this frame, or null. `shown` is the serial of the fight the first choice
  *  has come up in: until then the opponent is still in the picture. */
-export function readSides(emu: SidesRead, sym: (name: string) => number | undefined, shown: { serial: number }): Sides | null {
+export function readSides(emu: SidesRead, sym: (name: string) => number | undefined, shown: { serial: number; mine?: Ball[] }): Sides | null {
   const main = sym('gMain');
   const flags = sym('gBattleTypeFlags');
   const sides = sym('gBrSides');
@@ -132,6 +134,14 @@ export function readSides(emu: SidesRead, sym: (name: string) => number | undefi
   if (serial === 0) return null;
   if (emu.read(br! + BATTLE_MENU, 8) !== 0) shown.serial = serial;
   if (shown.serial !== serial) return null;
+  // Each ball stays with its mon. While a screen the battle put up is on top, unseen behind the
+  // picture for an item or a send-out, gPlayerParty is in the battle's order, not the field's
+  // (party_menu.c UpdatePartyToBattleOrder): the balls swapped places and back (Cam, 11-04: "the
+  // pokeball just moved"). They wait for the battle.
+  const fight = sym('BattleMainCB2');
+  const onTop = fight !== undefined && ((emu.read(main! + MAIN_CALLBACK2, 32) ^ fight) & ~1) !== 0;
+  const mine = onTop && shown.mine ? shown.mine : partyBalls(emu.bytes(party!, PARTY_SIZE * MON_SIZE), emu.read(partyCount!, 8));
+  shown.mine = mine;
   return {
     foe: {
       pic: raw[SIDES_FOE_PIC],
@@ -143,7 +153,7 @@ export function readSides(emu: SidesRead, sym: (name: string) => number | undefi
     mine: {
       pic: raw[SIDES_MINE_PIC],
       name: romName(raw.subarray(SIDES_MINE_NAME, SIDES_SERIAL)),
-      balls: partyBalls(emu.bytes(party!, PARTY_SIZE * MON_SIZE), emu.read(partyCount!, 8)),
+      balls: mine,
     },
   };
 }

@@ -44,6 +44,7 @@ export const FILE_SECONDS = {
   'watch-replay.spec.ts': 110,
   'battleview.spec.ts': 70,
   'spikeb-battlelog.spec.ts': 540,
+  'spikeb-party-order.spec.ts': 300,
   'spikeb-botlegend.spec.ts': 300,
   'spikeb-weather.spec.ts': 180,
   'spikeb-watch-log.spec.ts': 420,
