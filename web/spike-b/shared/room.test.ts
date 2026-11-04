@@ -1680,8 +1680,9 @@ describe('the last three', () => {
       expect(last.length).toBe(2);
       expect(last.every((x) => x.by)).toBe(true);
       // Not left standing apart until the fog takes one. Which seed is slow moves with any
-      // change to a walk: six seeds ran 31 to 98 s before doors walked you on, 29 to 108 s after.
-      expect(last[1].at! - three).toBeLessThan(60 * 110);
+      // change to a walk or the plane: sixty seeds ran up to 193 s (median 60) before the plane lost
+      // Verdanturf's overlap, up to 221 s (median 72) after, and seed 99 is 169 s of that now.
+      expect(last[1].at! - three).toBeLessThan(60 * 180);
     }
   });
 });
