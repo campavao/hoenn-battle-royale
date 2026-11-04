@@ -33,7 +33,7 @@ export const FILE_SECONDS = {
   'spikeb-flow.spec.ts': 250,
   'spikeb-radial.spec.ts': 130,
   'spikeb-summary.spec.ts': 130,
-  'spikeb-windows.spec.ts': 452,
+  'spikeb-windows.spec.ts': 542,
   'spikeb-room.spec.ts': 230,
   'spikeb.spec.ts': 526,
   'spikeb-two.spec.ts': 102,

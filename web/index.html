@@ -111,6 +111,10 @@
       .bm-forget-head { grid-column: 1 / -1; justify-self: center; pointer-events: none; }
       .bm-forget-head[hidden] { display: none; }
       .bm-forget-head canvas { display: block; }
+      .bm-catch-head, .bm-catch { grid-column: 1 / -1; justify-self: center; }
+      .bm-catch-head { pointer-events: none; }
+      .bm-catch-head[hidden] { display: none; }
+      .bm-catch-head canvas { display: block; }
       .bm-party { grid-column: 1 / -1; display: grid; grid-template-columns: auto auto; gap: calc(var(--s, 1.5) * 8px); }
       /* Its own width, not its column's: the focus box goes round the window (Cam, 11-03). */
       .bm-slot { justify-self: start; }
