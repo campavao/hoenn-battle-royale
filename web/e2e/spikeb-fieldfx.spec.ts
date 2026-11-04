@@ -321,21 +321,28 @@ test('a bot run from with a POKe DOLL: the doll over the runner, blinking', asyn
   await spike(page, (s) => { s.link.room.opening = 0; });
   await spike(page, (s) => s.give(80));
   await page.waitForTimeout(1500);
-  // A bot a step away, in the open: the room's own engage.
-  await spike(page, (s) => {
-    const room = s.link.room, a = room.actor(s.link.me), map = 'MAP_ROUTE101';
-    const bot = room.actors.find((o: any) => o.bot && !o.battling);
-    for (let y = 1; y < 19; y++) for (let x = 1; x < 18; x++) {
-      if (!room.world.cell(map, x, y) && !room.world.cell(map, x + 1, y) && !room.patchesOn(map).some((q: any) => q.x === x && q.y === y)) {
-        const me = { map, x, y }, it = { map, x: x + 1, y };
-        a.m = { ...a.m, spot: me, prev: me, facing: 4, moveDir: 4, action: null, px: 0, py: 0 };
-        bot.m = { ...bot.m, spot: it, prev: it, facing: 3, moveDir: 3, action: null, px: 0, py: 0 };
-        a.calm = bot.calm = 0;
-        return;
+  // A bot a step away, in the open: the room's own engage. Again until it has: a bot can step off
+  // before the room looks, and the A that follows must not find a wild patch instead.
+  await expect.poll(async () => {
+    await spike(page, (s) => {
+      const room = s.link.room, a = room.actor(s.link.me), map = 'MAP_ROUTE101';
+      if (a.foe) return;
+      const bot = room.actors.find((o: any) => o.bot && !o.battling);
+      // A ZIGZAGOON in front: a lead with Shadow Tag or Arena Trap leaves nothing to run with.
+      bot.caught = [288];
+      for (let y = 1; y < 19; y++) for (let x = 1; x < 18; x++) {
+        if (!room.world.cell(map, x, y) && !room.world.cell(map, x + 1, y) && !room.patchesOn(map).some((q: any) => q.y === y && (q.x === x || q.x === x + 1))) {
+          const me = { map, x, y }, it = { map, x: x + 1, y };
+          a.m = { ...a.m, spot: me, prev: me, facing: 4, moveDir: 4, action: null, px: 0, py: 0 };
+          bot.m = { ...bot.m, spot: it, prev: it, facing: 3, moveDir: 3, action: null, px: 0, py: 0 };
+          a.calm = bot.calm = 0;
+          return;
+        }
       }
-    }
-  });
-  await page.waitForTimeout(300);
+    });
+    await page.waitForTimeout(200);
+    return spike(page, (s) => !!s.link.room.actor(s.link.me).foe);
+  }, { timeout: 30_000 }).toBe(true);
   await page.keyboard.press('z', { delay: 150 });
   await page.waitForFunction(() => (window as any).__spike.battleMenu?.isShown, undefined, { timeout: 60_000 });
   await page.waitForTimeout(500);
@@ -507,7 +514,7 @@ test.describe('the ACRO BIKE on its own ground', () => {
     await expect(page.locator('.bm-bag-head')).toBeHidden();
   };
 
-  test('hops up the rocks of Jagged Pass, B held, where a walker and the MACH BIKE stop', async ({ browser }) => {
+  test('hops up the rocks of Jagged Pass, B held, where a walker and the MACH BIKE stop', async ({ browser }, testInfo) => {
     test.setTimeout(240_000);
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const page = await ctx.newPage();
@@ -520,6 +527,15 @@ test.describe('the ACRO BIKE on its own ground', () => {
     await hold(page, ['ArrowUp'], () => page.waitForTimeout(700));
     expect(await rider(page)).toMatchObject({ x: 22, y: 19, bike: false });
     await shot(page, 'acro-rock-foot');
+    // Beside the rock, the quick action is the ACRO BIKE (Cam, 11-04), with its own picture.
+    await page.waitForTimeout(300);
+    await page.locator('#hud-ctx').screenshot({ path: testInfo.outputPath('acro-near-button.png') });
+    await page.keyboard.press('Shift', { delay: 120 });
+    await expect.poll(async () => (await rider(page)).bike, { timeout: 5_000 }).toBe(true);
+    expect((await rider(page)).acro).toBe(true);
+    await page.waitForTimeout(300);
+    await page.keyboard.press('Shift', { delay: 120 });
+    await expect.poll(async () => (await rider(page)).bike, { timeout: 5_000 }).toBe(false);
     // The MACH BIKE: a wall, B or no B.
     await useBike(page, 259);
     await expect.poll(async () => (await rider(page)).bike, { timeout: 5_000 }).toBe(true);

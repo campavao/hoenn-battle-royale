@@ -191,7 +191,9 @@ function reportOf(t: ReturnType<typeof tap>, got: any, errors: string[]) {
     answers: t.answers.length,
     judges: [...new Set(t.answers.map((a) => a.id))],
     allHost: t.answers.every((a) => a.id === -1),
-    winnersAgree: t.fights.filter((f) => { const a = answered.get(f.key); return a && (f.log.at(-1).winner === a.winner); }).length,
+    // Two bots': one beaten on a marked spot is nobody's win to the room, and the log's to whoever watches.
+    duels: t.fights.filter((f) => f.log[0].b.seat > 0).length,
+    winnersAgree: t.fights.filter((f) => { const a = answered.get(f.key); return f.log[0].b.seat > 0 && a && (f.log.at(-1).winner === a.winner); }).length,
     loserGone: t.answers.filter((a) => a.loserGone === true).length,
     noWinner: t.answers.filter((a) => !a.winner).length,
     heldMaxOff: held.length ? Math.max(...held.map((h) => Math.abs(h.heldFrames - h.logFrames))) : null,
@@ -309,7 +311,8 @@ test('a watched bot fight, start to champion: drawn by the page, from one log, o
           await host.waitForTimeout(250);
           const after = await spike(host, (s) => ({ who: document.getElementById('watch-who')!.textContent, dim: document.getElementById('battleview-dim')!.hidden, v: s.watch.showing ? `${s.watch.showing.from}:${s.watch.showing.f}` : null }));
           await host.locator('#watch-prev').click({ timeout: 2000 });
-          await expect.poll(() => spike(host, (s) => !!s.watch.showing), { timeout: 3000 }).toBe(true);
+          // Its own fight: NEXT can land on a trainer fighting too, whose view is still up a frame on.
+          await expect.poll(() => host.evaluate((key) => { const v = (window as any).__spike.watch.showing; return !!v && `${v.from}:${v.f}` === key; }, `${on.from}:${on.f}`), { timeout: 3000 }).toBe(true);
           const back = await spike(host, (s) => { const v = s.watch.showing; return { key: `${v.from}:${v.f}`, ms: v.view.snapshot().ms, side: v.side }; });
           moved = { before: on, after, back, gone: Date.now() - t };
           step(`moved ${JSON.stringify(moved)}`);
@@ -372,7 +375,7 @@ test('a watched bot fight, start to champion: drawn by the page, from one log, o
     expect(report.allHost, 'every fight the host\'s').toBe(true);
     expect(report.fights).toBeGreaterThan(2);
     expect(report.answers).toBeGreaterThanOrEqual(report.fights);
-    expect(report.winnersAgree, 'the room took the log\'s winner').toBe(report.fights);
+    expect(report.winnersAgree, 'the room took the log\'s winner').toBe(report.duels);
     expect(report.overlapOnPage, 'fights at once').toBeGreaterThan(1);
     expect(report.views, 'watched some').toBeGreaterThan(1);
     expect(report.mirrorFramesInViews, 'no ROM mirror under a view').toBe(0);
@@ -465,7 +468,7 @@ test('the standard match: FILL on, default Safari and fog, to a champion, one pa
     if (SCRATCH) fs.writeFileSync(path.join(SCRATCH, 'standard-match.json'), JSON.stringify(report, null, 1));
     expect(errors, 'no page errors').toEqual([]);
     expect(report.allHost, 'every fight the host\'s').toBe(true);
-    expect(report.winnersAgree, 'the room took the log\'s winner').toBe(report.fights);
+    expect(report.winnersAgree, 'the room took the log\'s winner').toBe(report.duels);
     expect(report.mirrorCalls, 'no ROM mirror at all').toBe(0);
     expect(report.clearFightsWithLines, 'no fog in a fight begun clear of it').toBe(0);
     expect(res.winner, 'a champion').toBeTruthy();
@@ -506,23 +509,25 @@ test('the switch off (WORLD_SIM_BOTS=0): a trainer\'s page fights the bots on it
     // made of it, so the event is handed to it here: everything after that is the page's own.
     const until = Date.now() + 240_000;
     let turn = 0, handed = false;
-    while (Date.now() < until && !seen.answers.length) {
+    // Two bots': one on a marked spot is the page's to answer too, the Safari's before any of these.
+    const duels = () => seen.answers.filter((x: any) => !x.key.startsWith('-'));
+    while (Date.now() < until && !duels().length) {
       const room = hosted.room;
-      const going = room.actors.find((x: any) => x.bot && x.battling);
+      const going = room.actors.find((x: any) => x.bot && x.battling && x.foe > 0);
       if (!going) {
         const free = room.actors.filter((x: any) => x.bot && !x.battling && !x.meet);
         if (free.length >= 2 && room.tick >= room.duelAfter) {
           await host.evaluate((id) => (window as any).__spike.watch.host.setFollow(id), free[0].id);
           standTogether(free[0], free[1], turn++);
         }
-      } else if (!handed && (await spike(host, (s) => s.link.room.actors.filter((x: any) => x.bot && x.battling).length)) === 2) {
+      } else if (!handed && (await spike(host, (s) => s.link.room.actors.filter((x: any) => x.bot && x.battling && x.foe > 0).length)) === 2) {
         handed = true;
         await host.evaluate(({ me, a, b }) => (window as any).__spike.startFor({ type: 'bots', tick: 0, id: me, a, b }), { me, a: going.id, b: going.foe });
         step(`handed ${going.id} v ${going.foe}`);
       }
       await host.waitForTimeout(250);
     }
-    const a = seen.answers[0];
+    const a = duels()[0];
     const got = await pageNumbers(host);
     console.log(JSON.stringify({ answers: seen.answers, mirrorCalls: got.mirrorCalls, screens: got.screens.length, views: got.sessions.length }));
     expect(errors).toEqual([]);

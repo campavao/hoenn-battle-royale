@@ -362,7 +362,7 @@ export function lifetimeLines(t: CareerTotals | undefined, names: TallyNames): R
     { label: 'STEPS WALKED', value: n('steps') },
     { label: 'ITEMS USED', value: n('items') },
     { label: 'TRAINERS BEATEN', value: n('trainers') },
-    { label: 'DUELS WON', value: n('duelsWon') },
+    { label: 'PLAYERS BEATEN', value: n('duelsWon') }, // people, knocked out: a bot's fight is not a duel (Cam, 11-04: 0)
     { label: 'LOOT TAKEN', value: n('took') },
   ];
   const mon = t ? favourite(t.mons) : undefined;

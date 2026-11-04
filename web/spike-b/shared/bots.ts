@@ -10,7 +10,8 @@ import { findPath, findPathToAny, type Path } from '../../src/bots/path';
 import { NAMES } from '../../src/bots/roster';
 import { teamFlies } from '../../src/bots/party';
 import { mulberry32, pickIndex } from '../../src/match/clock';
-import { FIELD_SURF, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, botParty, type Actor, type Room } from './room';
+import { hasBall } from '../../src/bots/bag';
+import { ATTENDANT, BOATS, FIELD_SURF, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, PORTS, SAFARI, TIDAL, TIDAL_BEDS, TIDAL_SAILOR, botParty, type Actor, type Room } from './room';
 
 // The wardrobe (br_ghosts.c sSkinGraphics, career.ts SKINS): a bot wears a skin so the
 // trainer you walk up to is the trainer the ROM puts in the battle.
@@ -20,7 +21,11 @@ export const botSkin = (n: number) => 4 + (n % 12);
 /** `wait`: frames left to stand; `dir`: the way it went last. A bot with somewhere to be
  *  (inside the coming ring, or at an event) walks `steps` there; `plan` is the round and
  *  phase it last chose for, and `stuck` the frames it has pressed without moving. */
-export interface Brain { rng: number; wait: number; dir: number; plan?: string; goal?: Spot | null; steps?: { dir: SeamDir; to: Spot }[]; stuck?: number; legs?: number; avoid?: Set<number>; flyTo?: Spot; flyAfter?: number }
+export interface Brain { rng: number; wait: number; dir: number; plan?: string; goal?: Spot | null; steps?: { dir: SeamDir; to: Spot }[]; stuck?: number; legs?: number; avoid?: Set<number>; flyTo?: Spot; flyAfter?: number;
+  /** `goal` may be over the water, by the boats (rideFor). */
+  byBoat?: boolean;
+  /** Where to ask the boatman it faces to sail to, next frame (Host.advance, as `flyTo`). */
+  sail?: string }
 
 // B held: a match runs unless B is held (br_boot.c / field_player_avatar.c), and a
 // townsperson walks.
@@ -78,9 +83,17 @@ export function health(a: Actor): number {
   return w?.length ? w.reduce((s, v) => s + v, 0) / w.length : 1;
 }
 
-/** The CENTER a hurt bot walks to (brain.ts centreRoute): the doorstep fewest map
+/** The counter inside a CENTER, where a trainer talks to the nurse (Room.move). */
+function counterOf(room: Room, map: string): Spot | null {
+  const c = room.maps.get(map)?.centre;
+  return c ? { map, x: c.counterX, y: c.counterY } : null;
+}
+
+/** The CENTER a hurt bot walks to (brain.ts centreRoute): its counter, through the door fewest map
  *  crossings away, then nearest, out of the fog; none and it goes on as it was. */
 function centreFor(room: Room, a: Actor): Spot | null {
+  const inside = counterOf(room, a.m.spot.map);
+  if (inside) return inside;
   const p = room.places.get(a.m.spot.map);
   if (!p) return null;
   let best: Spot | null = null, bestH = Infinity, bestD = Infinity;
@@ -92,7 +105,9 @@ function centreFor(room: Room, a: Actor): Spot | null {
     const d = Math.abs(q.gx + s.x - p.gx - a.m.spot.x) + Math.abs(q.gy + s.y - p.gy - a.m.spot.y);
     if (h < bestH || d < bestD) { bestH = h; bestD = d; best = s; }
   }
-  return best;
+  // Up from its doorstep, through the door.
+  const door = best && room.world.map(best.map)?.warps?.find((w) => w.x === best!.x && w.y === best!.y - 1 && room.world.map(w.to)?.centre);
+  return door ? counterOf(room, door.to) : null;
 }
 
 /** Where a bot goes this phase, or null to wander (Kanto's bots: into the ring before it
@@ -114,7 +129,8 @@ function planeOf(room: Room, s: Spot): { x: number; y: number } | null {
 function safariGoal(room: Room, a: Actor, b: Brain): Spot | null {
   const { map, x, y } = a.m.spot;
   const reach = room.world.reachOnMap(a.m.spot, surfs(a), cuts(a));
-  const spots: { x: number; y: number }[] = [...room.patchesOn(map)];
+  // Grass nobody has been through yet, while it has room for what it catches: taken, it shows nothing.
+  const spots: { x: number; y: number }[] = partyRoom(room, a) ? room.patchesOn(map).filter((p) => !room.isTaken(p.key)) : [];
   for (const g of room.ground().values()) if (g.map === map && !g.gift && !room.picked.has(g.key)) spots.push(g);
   const near = spots
     .filter((s) => (s.x !== x || s.y !== y) && reach.cell(s.x, s.y))
@@ -127,9 +143,11 @@ function safariGoal(room: Room, a: Actor, b: Brain): Spot | null {
 }
 
 function goal(room: Room, a: Actor, b: Brain): Spot | null {
+  b.byBoat = false;
   if (room.ring().safari) return safariGoal(room, a, b);
-  // Hurt: a CENTER first (brain.ts, HURT), as long as there is one out of the fog.
-  if (health(a) < HURT) {
+  // Hurt: a CENTER first (brain.ts, HURT), as long as there is one out of the fog; in the fog, out
+  // of it first, which is on the way to any of them.
+  if (health(a) < HURT && !room.inFog(a.m.spot)) {
     const c = centreFor(room, a);
     if (c) return c;
   }
@@ -147,7 +165,8 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
       const d = Math.abs(q.x - p.x) + Math.abs(q.y - p.y);
       if (d < bestD) { bestD = d; best = o; }
     }
-    if (best) return { ...best.m.spot };
+    // However far: the last three would otherwise wait for the fog across the water from each other.
+    if (best) { b.byBoat = true; return { ...best.m.spot }; }
   }
   // One thought in two after what lies about, or four with eight or fewer standing: always after
   // the next ball, a small match's bots stopped meeting (seed 7, eight bots: 3.5 minutes between
@@ -188,7 +207,89 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
     if (d <= bestD + SPREAD) near.push({ s, h, d });
   }
   const pool = near.filter((n) => n.h === bestH && n.d <= bestD + SPREAD);
-  return pool.length ? pool[Math.floor(rand(b) * pool.length)].s : null;
+  if (pool.length) return pool[Math.floor(rand(b) * pool.length)].s;
+  // No way there on foot: a boat, as a trainer would, to the nearest of it the boats go to.
+  const rides = ridesFrom(room, a);
+  const nearest = new Map<string, { s: Spot; d: number } | null>();
+  for (const s of cells) {
+    let n = nearest.get(s.map);
+    if (n === undefined) nearest.set(s.map, (n = rides.some((r) => room.world.hops(r.from.map, s.map, surfs(a), cuts(a)) !== undefined) ? { s, d: Infinity } : null));
+    if (!n) continue;
+    const q = room.places.get(s.map)!;
+    const d = Math.abs(q.gx + s.x - x) + Math.abs(q.gy + s.y - y);
+    if (d < n.d) { n.s = s; n.d = d; }
+  }
+  const ways = [...nearest.values()].filter((n): n is { s: Spot; d: number } => !!n).sort((p, q) => p.d - q.d).slice(0, 8);
+  for (const { s } of ways) if (rides.some((r) => walks(room, a, r.from, s))) { b.byBoat = true; return s; }
+  return null;
+}
+
+/** The boats (Room's BOATS and ATTENDANT, as Room.mainland counts them): each row a boatman and one
+ *  place he sails to. Not the runs to a story's islands: no walk of a bot's is ever going there. */
+const RIDES: { map: string; x: number; y: number; to: string }[] = [...BOATS.flatMap((o) => o.to.map((to) => ({ map: o.map, x: o.x, y: o.y, to }))), { ...ATTENDANT, to: 'slateport' }];
+
+/** The cells beside `who` (a boatman, a bed) that somebody could stand on, and the way to face them. */
+function besideOf(room: Room, who: Spot): { at: Spot; face: number }[] {
+  const out: { at: Spot; face: number }[] = [];
+  for (const [dx, dy, face] of [[0, 1, 2], [0, -1, 1], [1, 0, 3], [-1, 0, 4]]) {
+    if (room.world.standable(who.map, who.x + dx, who.y + dy)) out.push({ at: { map: who.map, x: who.x + dx, y: who.y + dy }, face });
+  }
+  return out;
+}
+
+/** `to` can be walked to from `from`, by this team. */
+function walks(room: Room, a: Actor, from: Spot, to: Spot): boolean {
+  const w = room.world, surf = surfs(a), cut = cuts(a);
+  if (from.map === to.map && w.reachOnMap(from, surf, cut).cell(to.x, to.y)) return true;
+  return !!w.firstCrossing(from, to.map, surf, cut, (r) => r.cell(to.x, to.y))?.length;
+}
+
+type Ride = { to: string; beside: { at: Spot; face: number }[] };
+
+/** Everywhere the boats land this bot, fewest boats first, each with the first boat on the way and
+ *  the cells it can walk to beside his boatman. Asked only of a walk that has no way on foot. */
+function ridesFrom(room: Room, a: Actor): { from: Spot; first: Ride }[] {
+  const out: { from: Spot; first: Ride }[] = [];
+  const used = new Set<number>();
+  let front: { from: Spot; first: Ride | null }[] = [{ from: a.m.spot, first: null }];
+  while (front.length) {
+    const next: { from: Spot; first: Ride }[] = [];
+    for (const f of front) {
+      RIDES.forEach((r, i) => {
+        if (used.has(i)) return;
+        const beside = besideOf(room, r).filter((c) => walks(room, a, f.from, c.at));
+        if (!beside.length) return;
+        used.add(i);
+        next.push({ from: PORTS[r.to].land, first: f.first ?? { to: r.to, beside } });
+      });
+    }
+    out.push(...next);
+    front = next;
+  }
+  return out;
+}
+
+/** The first boat on the way to `to`; none, when there is no way even by boat. */
+function rideFor(room: Room, a: Actor, to: Spot): Ride | null {
+  return ridesFrom(room, a).find((r) => walks(room, a, r.from, to))?.first ?? null;
+}
+
+/** Aboard the SS TIDAL, as a trainer has it (Room's cruise): a rest in cabin No. 2 moves the crossing
+ *  on, and once she has made land the sailor sees it off. The keys when it is there; undefined, walk. */
+function aboard(room: Room, a: Actor, b: Brain): number | undefined {
+  const c = a.cruise!;
+  const stands = c.leg === 'land' ? besideOf(room, TIDAL_SAILOR).filter((s) => s.at.x === TIDAL.x && s.at.y === TIDAL.y) : TIDAL_BEDS.flatMap((bed) => besideOf(room, bed));
+  const here = stands.find((s) => sameSpot(s.at, a.m.spot));
+  b.steps = here ? undefined : b.steps;
+  if (here) {
+    b.goal = null;
+    // A press, then let go (A is a press, on a bed as on anything).
+    if ((room.tick + a.id * 7) % 30) return 0;
+    if (c.leg === 'land') { b.sail = c.to; b.plan = undefined; }
+    return KEY_OF[here.face] | KEY_A;
+  }
+  if (!b.goal || !stands.some((s) => sameSpot(s.at, b.goal!))) { b.goal = stands[0].at; b.steps = undefined; b.legs = 0; }
+  return undefined;
 }
 
 /** What this bot's team could cross, as the world's searches ask it (POK-437): a bot goes where a
@@ -204,7 +305,7 @@ const FLY_CLEAR = { x: 9, y: 7 };
 /** Out of the fog the fast way, for a team that could FLY (brain.ts tryFly): a landing cell in the
  *  heart of the ring. Not at the end, when the ring is one section and a bird lands in a fight. */
 function flyGoal(room: Room, a: Actor, b: Brain): Spot | null {
-  if (hunting(room) || room.tick < (b.flyAfter ?? 0) || !teamFlies(botParty(room.seed, a, room.ring().phase + 1))) return null;
+  if (a.cruise || hunting(room) || room.tick < (b.flyAfter ?? 0) || !teamFlies(botParty(room.seed, a, room.ring().phase + 1))) return null;
   const seen = (s: Spot) => room.actors.some((o) => o !== a && o.m.spot.map === s.map && Math.abs(o.m.spot.x - s.x) <= FLY_CLEAR.x && Math.abs(o.m.spot.y - s.y) <= FLY_CLEAR.y);
   const main = room.mainland();
   const home = heart(room).filter((s) => main.has(`${s.map}:${s.x}:${s.y}`) && room.places.has(s.map) && room.world.cell(s.map, s.x, s.y) === 0 && !room.groundAt(s.map, s.x, s.y) && !room.spillAt(s.map, s.x, s.y));
@@ -234,12 +335,15 @@ function lootGoal(room: Room, a: Actor, b: Brain, legendOnly = false): Spot | nu
   if (!legendOnly) for (const g of room.ground().values()) if (g.map === map && !g.gift && !room.picked.has(g.key)) see({ map, x: g.x, y: g.y }, false);
   for (const p of room.spills.values()) {
     if (p.map !== map || room.picked.has(p.key) || p.person || p.guard !== undefined) continue;
-    if (p.legend ? !a.tried?.includes(p.key) : !legendOnly && (p.bag.items.length > 0 || p.bag.money > 0)) see({ map, x: p.x, y: p.y }, !!p.legend);
+    // A legendary only with a ball to catch it and a team fit to try: a loss is the match.
+    if (p.legend ? !a.tried?.includes(p.key) && hasBall(a.loot?.items ?? []) && health(a) >= HURT : !legendOnly && (p.bag.items.length > 0 || p.bag.money > 0 || (!!p.bag.mons?.length && partyRoom(room, a)))) see({ map, x: p.x, y: p.y }, !!p.legend);
   }
   if (!near.length) return null;
   near.sort((p, q) => p.d - q.d);
   return near[Math.floor(rand(b) * Math.min(3, near.length))].s;
 }
+
+const partyRoom = (room: Room, a: Actor) => botParty(room.seed, a, room.ring().phase + 1).length < 6;
 
 /** goal: how much further than the nearest cell inside the ring a bot may aim. */
 const SPREAD = 6;
@@ -284,6 +388,16 @@ function leg(room: Room, a: Actor, to: Spot, avoid?: ReadonlySet<number>): Path 
   return over?.length ? findPathToAny(w, from, over, 6000, surf, cut, avoid) : null;
 }
 
+/** A trainer sees the marked grass and can go round it, and one with somewhere to be does: hurt, in
+ *  the fog, or hunting the last of them. A wild mon that costs it the match is no way to go. */
+function pastPatches(room: Room, a: Actor, b: Brain): ReadonlySet<number> | undefined {
+  if (!hunting(room) && health(a) >= HURT && !room.inFog(a.m.spot)) return b.avoid;
+  const out = new Set(b.avoid);
+  const { map } = a.m.spot;
+  for (const p of room.patchesOn(map)) if (!room.isTaken(p.key)) out.add(room.world.key({ map, x: p.x, y: p.y }));
+  return out;
+}
+
 /** brain.ts HUNT_AT: under this many still standing, the hunt. */
 const HUNT_AT = 3;
 function hunting(room: Room): boolean {
@@ -304,12 +418,19 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
     b.goal = null;
     b.steps = undefined;
   }
-  // Healed on a CENTER's doorstep (Room.step): a moment inside before it goes on.
-  if (b.goal && !a.wear && sameSpot(a.m.spot, b.goal) && room.centreSteps().some((s) => sameSpot(s, a.m.spot))) {
+  // At the counter: A at the nurse while it is hurt and she is open (Room.move), a moment, and on.
+  const counter = b.goal && sameSpot(a.m.spot, b.goal) ? counterOf(room, a.m.spot.map) : null;
+  if (counter && sameSpot(a.m.spot, counter)) {
+    if (a.wear && !room.inFog(a.m.spot)) return KEY_UP | KEY_B | KEY_A;
     b.goal = null;
     b.steps = undefined;
     b.wait = 120;
     return 0;
+  }
+  // Aboard, the crossing is its plan until it is off.
+  if (a.cruise) {
+    const keys = aboard(room, a, b);
+    if (keys !== undefined) return keys;
   }
   // A new phase or event: each bot rethinks on its own frame of the next half second, so
   // sixty-four searches never land on one frame.
@@ -318,12 +439,14 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
   const hunt = hunting(room) && (!b.steps?.length || (room.tick + a.id * 7) % 240 === 0);
   // There, or given up: on somewhere else after a few seconds (brain.ts's next wander).
   const idle = !b.goal && !b.steps?.length && (room.tick + a.id * 7) % (ring.safari ? 60 : 300) === 0;
-  if ((b.plan !== at || hunt || idle || (!b.goal && room.inFog(a.m.spot, ring))) && (room.tick + a.id * 7) % 30 === 0) {
+  if (!a.cruise && (b.plan !== at || hunt || idle || (!b.goal && room.inFog(a.m.spot, ring))) && (room.tick + a.id * 7) % 30 === 0) {
+    // A hunter looking again has nowhere new to be: what it gave up on stays given up on. A trader in
+    // a corridor had one walking into him, forgetting him every 4 s, until the fog came (seed 4242).
+    if (b.plan !== at) b.avoid = undefined;
     b.plan = at;
     b.goal = goal(room, a, b);
     b.steps = undefined;
     b.legs = 0;
-    b.avoid = undefined;
   }
   // The fog has it and its team could FLY: out at once, wherever its walk was going.
   if (!ring.safari && (room.tick + a.id * 7) % 30 === 0 && room.inFog(a.m.spot, ring)) {
@@ -338,7 +461,16 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
   }
   // Between legs, on its own frame: the next one, until it is there (or has tried enough).
   if (b.goal && !b.steps?.length && (room.tick + a.id * 7) % 30 === 0) {
-    const path = !sameSpot(a.m.spot, b.goal) && (b.legs = (b.legs ?? 0) + 1) <= 24 ? leg(room, a, b.goal, b.avoid) : null;
+    let path = !sameSpot(a.m.spot, b.goal) && (b.legs = (b.legs ?? 0) + 1) <= 24 ? leg(room, a, b.goal, pastPatches(room, a, b)) : null;
+    // No way round: through it.
+    if (!path?.found && !sameSpot(a.m.spot, b.goal) && (b.legs ?? 0) <= 24) path = leg(room, a, b.goal, b.avoid);
+    // No way on foot: the boat on the way, up to its boatman and his word, as a trainer does.
+    if (!path?.found && b.byBoat && !a.cruise && (b.legs ?? 0) <= 24) {
+      const ride = rideFor(room, a, b.goal);
+      const here = ride?.beside.find((s) => sameSpot(s.at, a.m.spot));
+      if (here) { b.sail = ride!.to; return KEY_OF[here.face] | KEY_A; }
+      path = ride ? leg(room, a, ride.beside[0].at, b.avoid) : null;
+    }
     b.steps = path?.found ? path.steps : undefined;
     // A hunt ends beside its quarry, in its eyeline, not on it.
     const end = b.steps?.[b.steps.length - 1]?.to;

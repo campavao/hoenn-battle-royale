@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BATTLE_ITEMS,
+  FIGHT_ITEMS,
   ITEM,
   battleItems,
   carried,
@@ -14,6 +15,33 @@ import {
   units,
 } from './bag';
 import { Grade } from './roster';
+import { BAG_ITEMS } from '../../spike-b/shared/simnames';
+
+describe('what a fight can spend (Cam, 11-04: "a bunch of question marks")', () => {
+  // gItemEffectTable ends at the ENIGMA BERRY, and gBattleStruct->chosenItem is a byte. A TM on the
+  // card was read past the table's end, taken for a cure, and cut to a byte: TM28 is 316, 60 is
+  // nothing, so "used ????????!", "cured paralysis!" and PAR on the box, the TM gone from the bag.
+  it('a machine or a key item stays in the bag: it never goes on the card', () => {
+    const tm28 = 316;
+    expect(battleItems([{ id: tm28, n: 1 }])).toEqual([]);
+    const bag = [{ id: tm28, n: 1 }, { id: ITEM.X_ATTACK, n: 1 }];
+    expect(battleItems(bag)).toEqual([ITEM.X_ATTACK]);
+    expect(units(bag), 'still there for whoever beats it').toBe(2);
+  });
+
+  it('nor a hold item, nor what the AI has no script for (it stops at one and looks no further)', () => {
+    const LEFTOVERS = 200, ETHER = 34, REVIVE = 24, RARE_CANDY = 68;
+    expect(battleItems([{ id: LEFTOVERS, n: 1 }, { id: ETHER, n: 1 }, { id: REVIVE, n: 1 }, { id: RARE_CANDY, n: 1 }])).toEqual([]);
+    expect(battleItems([{ id: ETHER, n: 1 }, { id: ITEM.X_SPEED, n: 1 }]), 'an ETHER does not stand in the way').toEqual([ITEM.X_SPEED]);
+  });
+
+  it('a real cure goes on it, and every row of the simulator\'s table can', () => {
+    const LUM = 141;
+    expect(battleItems([{ id: LUM, n: 1 }])).toEqual([LUM]);
+    for (const id of Object.keys(BAG_ITEMS).map(Number)) expect(battleItems([{ id, n: 1 }]), BAG_ITEMS[id].name).toEqual([id]);
+    expect([...FIGHT_ITEMS].sort((p, q) => p - q)).toEqual(Object.keys(BAG_ITEMS).map(Number));
+  });
+});
 import type { PackedMon } from '../net/wire';
 
 function mon(hp: number, maxHp: number): PackedMon {

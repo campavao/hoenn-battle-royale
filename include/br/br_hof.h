@@ -26,8 +26,14 @@ void BrHof_PrintPlayer(u8 windowId, const u8 *colors);
 // A mon's name on its card: `nickname` (an EOS-ended copy), then "/SPECIES" only when
 // somebody renamed it, then its gender a space off.
 void BrHof_PrintMonName(u8 windowId, const u8 *nickname, u16 species, u32 personality, const u8 *colors);
-// The last screen, `frames` in: somebody else's parade moves on by itself after a few
-// seconds (a watcher is not made to press A to get their results); our own waits for A.
+// How long the parade dwells, in frames (Cam, 11-04: "let's make this a little faster"; a
+// team of six took 34 seconds on Emerald's numbers). Each mon still comes on and does its
+// animation, which takes about as long again as its name stays up.
+#define BR_HOF_MON_FRAMES 36      // Emerald's 120: a mon's name, up, before the next comes on
+#define BR_HOF_CONFETTI_FRAMES 190 // Emerald's 400: "Welcome to the HALL OF FAME!"; the last 110 let it land
+#define BR_HOF_CONFETTI_EVERY 1   // Emerald's 3: a piece every other frame, in the shorter time
+#define BR_HOF_PLAYER_FRAMES 30   // Emerald's 120: the trainer, before stepping aside
+// The last screen, `frames` in: it moves on by itself after a moment, or at A.
 bool8 BrHof_LetGo(u16 frames);
 // The parade is over: let go of the champion's team.
 void BrHof_Done(void);

@@ -68,6 +68,19 @@ const HEAL: Record<number, number> = {
 /** Emerald's MAX_TRAINER_ITEMS: the AI reads four and no more. */
 export const BATTLE_ITEMS = 2;
 
+/** MASTER BALL to PREMIER BALL (include/constants/items.h). */
+const isBall = (id: number) => id >= 1 && id <= 12;
+
+/** A ball to throw: what a wild fight is for. */
+export function hasBall(bag: readonly Stack[]): boolean {
+  return bag.some((s) => isBall(s.id) && s.n > 0);
+}
+
+/** The balls in here, the MASTER BALL first. */
+export function ballsIn(bag: readonly Stack[]): Stack[] {
+  return bag.filter((s) => isBall(s.id) && s.n > 0).map((s) => ({ ...s })).sort((p, q) => p.id - q.id);
+}
+
 /** Is this something a quaff could drink? */
 export function isMedicine(id: number): boolean {
   return HEAL[id] !== undefined;
@@ -203,10 +216,25 @@ export function battleItems(bag: Stack[]): number[] {
   };
 
   pour((id) => isMedicine(id), MEDICINE_FIRST);
-  pour((id) => !isMedicine(id));
+  // Only what does something in a fight: not a ball, no use against a trainer's, and not a TM
+  // (Cam, 11-04: "a bunch of question marks and it said it cured the paralysis"; FIGHT_ITEMS).
+  pour((id) => !isMedicine(id) && FIGHT_ITEMS.has(id));
   pour((id) => isMedicine(id));
   return out;
 }
+
+/** What Emerald's AI can use (ShouldUseItem) and what using it does (simnames.ts BAG_ITEMS, which a
+ *  test holds this to). Anything else a bot took stays in its bag for whoever beats it. The ROM takes
+ *  what the card says: past the ENIGMA BERRY gItemEffectTable has ended, so a TM's "effects" are
+ *  whatever lies behind it, and gBattleStruct->chosenItem is a byte, so TM28 (316) is item 60, which
+ *  has no name and does nothing: "used ????????!", "cured paralysis!", and the TM spent. An ETHER has
+ *  an entry but no script, and the AI stops looking at the first of those. */
+export const FIGHT_ITEMS: ReadonlySet<number> = new Set([
+  13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, // POTION to FULL HEAL
+  26, 27, 28, 29, 30, 31, 32, 38, 44, // the drinks, the powders, LAVA COOKIE, BERRY JUICE
+  73, 74, 75, 76, 77, 78, 79, // GUARD SPEC. to X SPECIAL
+  133, 134, 135, 136, 137, 139, 140, 141, 142, // the berries that cure or heal
+]);
 
 /** How many of the two go to medicine before the boosters get a look in. */
 const MEDICINE_FIRST = 1;

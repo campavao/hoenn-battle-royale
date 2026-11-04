@@ -102,8 +102,42 @@ test('C held: the dial, the arrows lean, and letting go uses it', async ({ brows
   await page.waitForTimeout(300);
   await page.keyboard.down('c');
   await page.keyboard.press('ArrowDown');
+  // The dial reads the arrow on its next frame: let go before that, and it was let go on nothing.
+  await expect(page.locator('#radial')).toHaveAttribute('data-on', 'down');
   await page.keyboard.up('c');
   await expect(page.locator('#map-window')).toBeVisible({ timeout: 10_000 });
+  await ctx.close();
+});
+
+test('a mouse at rest where the dial comes up leans on nothing, and the arrows still lean', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const ctx = await browser.newContext(DESK);
+  const page = await ctx.newPage();
+  await onRoute(page);
+  // Where the dial's left cell comes up, with the mouse left there.
+  await page.keyboard.down('c');
+  await expect(page.locator('#radial')).toBeVisible();
+  const cell = (await page.locator('.rad-left').boundingBox())!;
+  await page.keyboard.up('c');
+  await expect(page.locator('#radial')).toBeHidden();
+  const x = cell.x + cell.width / 2, y = cell.y + cell.height / 2;
+  await page.mouse.move(x, y);
+  await page.waitForTimeout(300);
+
+  await page.keyboard.down('c');
+  await expect(page.locator('#radial')).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(await page.locator('#radial').getAttribute('data-on'), 'nobody leaned').toBe('');
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('#radial')).toHaveAttribute('data-on', 'down');
+  await page.waitForTimeout(500);
+  await expect(page.locator('#radial'), 'and it stays leaned there').toHaveAttribute('data-on', 'down');
+  // The mouse moved onto a cell is a lean, as ever.
+  await page.mouse.move(x + 200, y + 200);
+  await page.mouse.move(x, y);
+  await expect(page.locator('#radial')).toHaveAttribute('data-on', 'left');
+  await page.keyboard.press('Escape');
+  await page.keyboard.up('c');
   await ctx.close();
 });
 

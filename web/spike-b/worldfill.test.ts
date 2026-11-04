@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import fillFile from './data/world-fill.json';
 import world from './data/world.json';
+import type { WorldMap } from '../src/bots/world';
+import { layout } from './shared/room';
 import { CHUNK, ChunkCache, WorldFill, chunksOver, type FillFile } from './worldfill';
 
 const small: FillFile = { x0: -2, y0: -2, w: 4, h: 2, blocks: [[], [null, 1, 2, 3, 4]], rows: '5x0;3x1' };
@@ -91,5 +93,43 @@ describe('the file export-fill.py wrote', () => {
       }
     }
     expect(cut / total).toBeLessThan(0.5);
+  });
+});
+
+// Cam, 11-04: "it almost looks like I can walk over here but I can't". Nobody stands on the fill.
+describe('beside where a trainer can stand', () => {
+  it('the fill reads as trees, rock or sea: open ground off 3 of 367 edge cells', () => {
+    const maps = (world as unknown as { maps: WorldMap[] }).maps;
+    const fill = new WorldFill(fillFile as unknown as FillFile);
+    // General's grass, and its sand pieces (export-fill.py SAND_ON_WATER, SAND_ON_GRASS).
+    const open = (id: number) => id === 0x1 || (id >= 0x118 && id <= 0x12d) || id === 0x13d || id === 0x13e || id === 0x145 || id === 0x146;
+    const placed = [...layout(maps).values()];
+    const owned = new Set<string>();
+    for (const p of placed) for (let y = 0; y < p.m.h; y++) for (let x = 0; x < p.m.w; x++) owned.add(`${p.gx + x},${p.gy + y}`);
+    let edge = 0;
+    const onOpen: string[] = [];
+    for (const p of placed) {
+      const grid: number[] = [];
+      for (const run of p.m.grid.split(';')) {
+        if (!run) continue;
+        const [n, v] = run.split('x').map(Number);
+        for (let i = 0; i < n; i++) grid.push(v);
+      }
+      for (let y = 0; y < p.m.h; y++) {
+        for (let x = 0; x < p.m.w; x++) {
+          const c = grid[y * p.m.w + x];
+          if (c === 1 || c === 2) continue; // a wall, or water
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const wx = p.gx + x + dx, wy = p.gy + y + dy;
+            if (owned.has(`${wx},${wy}`)) continue;
+            edge += 1;
+            const m = fill.metatile(wx, wy);
+            if (m && !m.ref && open(m.id)) onOpen.push(`${p.m.id} ${x},${y}`);
+          }
+        }
+      }
+    }
+    expect(edge).toBeGreaterThan(300);
+    expect(onOpen.length, onOpen.join('; ')).toBeLessThanOrEqual(3);
   });
 });

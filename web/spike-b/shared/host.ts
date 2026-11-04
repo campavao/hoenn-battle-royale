@@ -9,8 +9,11 @@ import { BOT_DUEL_MAX, HOST_JUDGE, LEGEND_CATCH, LEGEND_FOE, Room, botParty, leg
 import { within } from './items';
 import { logMs, type BattleEvent } from './battlelog';
 import { speciesName } from '../../src/bots/party';
-import { battleItems } from '../../src/bots/bag';
+import { ballsIn, battleItems, type Stack } from '../../src/bots/bag';
+import { WEATHER_DOWNPOUR, WEATHER_DROUGHT } from '../../src/match/events';
+import type { FameMon } from '../../src/ui/results';
 import type { SimOutcome, SimSide, simulation as Simulation } from './battlesim';
+import { catchRateOf, patchBalls, wildMon, zoneBalls, zoneFight } from './wild';
 
 /** One frame as a mirror needs it: what changed before anybody moved, the bots whose
  *  keys changed, and the trainers' inputs the frame used. Most frames a trainer uses one
@@ -53,8 +56,9 @@ interface SimFight {
   b: number;
   /** The meeting, as the room has it: an answer for an earlier one must not end a later one. */
   since: number;
-  /** `b` LEGEND_FOE: the legendary it is, not a bot. */
-  legend?: { key: number; species: number };
+  /** `b` LEGEND_FOE: the legendary it is, or what lived on the spot it stepped on (`patch`; `zone`, in
+   *  the Safari), not a bot. */
+  legend?: { key: number; species: number; patch?: boolean; zone?: boolean };
   /** The fight, a turn at a time. */
   run?: Generator<void, SimOutcome, void>;
   /** The answer and the frame it is due, once it has run. */
@@ -135,16 +139,28 @@ export class Host {
     this.pending.push({ c: 'lock' });
   }
 
+  /** The joins and the lock in now, not on the next frame: the state a match's first `hello` carries
+   *  is the match, or a page's curtain counts its bots and nobody else (Cam, 11-04: "29 TRAINERS"). */
+  settle(): void {
+    for (const c of this.pending.splice(0)) this.room.apply(c);
+  }
+
   leave(id: number): void {
     this.players.delete(id);
     this.pending.push({ c: 'leave', id });
   }
 
-  /** The trainer plays on as a bot, the phone that had them gone (the host's REPLACE WITH BOT). */
-  toBot(id: number): void {
+  /** The trainer plays on as a bot, the phone that had them gone (the host's REPLACE WITH BOT), with
+   *  the team and bag it last told the room (Cam, 11-03: "the same rules as a player"). */
+  toBot(id: number, team?: readonly FameMon[], bag?: { items: readonly Stack[]; money: number }): void {
     if (!this.players.delete(id)) return;
     this.brains.set(id, { rng: (id * 2654435761) >>> 0 || 1, wait: 30, dir: 1 });
-    this.pending.push({ c: 'bot', id });
+    this.pending.push({
+      c: 'bot',
+      id,
+      ...(team?.length ? { team: team.map((m) => ({ species: m.species, hp: m.maxHp ? (m.hp ?? m.maxHp) / m.maxHp : 1, moves: (m.moves ?? []).map((v) => v.id) })) } : {}),
+      ...(bag ? { items: bag.items.map((st) => ({ id: st.id, n: st.n })), money: bag.money } : {}),
+    });
   }
 
   /** How many inputs a phone has sent that no frame has used yet. */
@@ -270,6 +286,8 @@ export class Host {
         if (bits !== a.keys) { keys.push([a.id, bits]); a.keys = bits; }
         // Its team can FLY and the fog has it (bots.ts flyGoal): a `fly` for every mirror, next frame.
         if (brain?.flyTo) { this.pending.push({ c: 'fly', id: a.id, to: brain.flyTo }); brain.flyTo = undefined; }
+        // At its boatman (bots.ts rideFor), as FLY is: a `sail` for every mirror, next frame.
+        if (brain?.sail !== undefined) { this.pending.push({ c: 'sail', id: a.id, to: brain.sail }); brain.sail = undefined; }
         continue;
       }
       const p = this.players.get(a.id);
@@ -351,12 +369,20 @@ export class Host {
       skin: b?.skin ?? 0,
       party: b ? wornParty(botParty(r.seed, b, r.ring().phase + 1), b.wear) : [],
       items: battleItems(b?.loot?.items ?? []),
+      balls: ballsIn(b?.loot?.items ?? []),
     };
   }
 
   /** A legendary's side: its one mon at the rung. */
-  private legendSide({ key, species }: { key: number; species: number }): SimSide {
-    return { seat: LEGEND_FOE, name: speciesName(species), skin: 0, party: [legendMon(this.room.spills.get(key), species, this.room.ring().phase + 1)] };
+  private legendSide({ species, patch }: { key: number; species: number; patch?: boolean }): SimSide {
+    const phase = this.room.ring().phase + 1;
+    return { seat: LEGEND_FOE, name: speciesName(species), skin: 0, party: [patch ? wildMon(species, phase) : legendMon(species, phase)] };
+  }
+
+  /** A bot's side on a marked spot: `simSide` with the balls it would throw there. */
+  private patchSide(id: number, zone?: boolean): SimSide {
+    const side = this.simSide(id);
+    return { ...side, ...(zone ? { items: [], balls: zoneBalls(side.party.length, this.room.actor(id)?.zoneThrown) } : { balls: patchBalls(side.party.length, side.balls ?? []) }) };
   }
 
   /** The meeting this fight is for is still on. */
@@ -395,15 +421,20 @@ export class Host {
   private simRun(f: SimFight): void {
     const r = this.room;
     try {
+      // Every number in it from the match: a fight can be run again from its seed.
+      const seed = (Math.imul(r.seed ^ f.since, 0x9e3779b1) ^ Math.imul(f.a, 0x85ebca6b) ^ Math.imul(f.b, 0xc2b2ae35)) >>> 0;
+      if (!f.run && f.legend?.zone) f.run = zoneRun(this.patchSide(f.a, true), f.legend.species, { seed, map: r.actor(f.a)?.m.spot.map ?? '' });
       if (!f.run) {
-        // Every number in it from the match: a fight can be run again from its seed.
-        const seed = (Math.imul(r.seed ^ f.since, 0x9e3779b1) ^ Math.imul(f.a, 0x85ebca6b) ^ Math.imul(f.b, 0xc2b2ae35)) >>> 0;
         // In the fog where they stand, it bites them as it does a trainer in a fight (Cam, 11-02),
         // from the turn the ring gets there: the fight plays out from the frame they met, so the ring
         // of the frame a turn ends on is known now (Cam, 11-03).
         const at = r.actor(f.a)?.m.spot, since = f.since;
         const fog = (ms: number) => !!at && r.inFog(at, r.ring(since + Math.ceil((ms / 1000) * 60)));
-        f.run = this.simulation!(this.simSide(f.a), f.legend ? this.legendSide(f.legend) : this.simSide(f.b), { seed, map: at?.map ?? '', fog });
+        // The weather a trainer would fight in here (room.ts weatherAt, br_story.c's), for all of it.
+        const w = at ? r.weatherAt(at) : 0;
+        const weather = w === WEATHER_DOWNPOUR ? 'raindance' : w === WEATHER_DROUGHT ? 'sunnyday' : undefined;
+        const mine = f.legend?.patch ? this.patchSide(f.a) : this.simSide(f.a);
+        f.run = this.simulation!(mine, f.legend ? this.legendSide(f.legend) : this.simSide(f.b), { seed, map: at?.map ?? '', fog, ...(weather ? { weather } as const : {}), ...(f.legend ? { wild: { catchRate: catchRateOf(f.legend.species), catchAt: LEGEND_CATCH, ...(f.legend.patch ? { patch: true } : {}) } } : {}) });
       }
       const step = f.run.next();
       if (!step.done) return;
@@ -424,9 +455,10 @@ export class Host {
   private simAnswer(f: SimFight): void {
     const out = f.out;
     if (!out) { this.pending.push({ c: 'bots', id: HOST_JUDGE, a: f.a, b: f.b, winner: 0 }); return; }
-    // A legendary it brought low enough to catch is the bot's, however the rest of its team did.
-    const winner = f.legend && out.shareB[0] < LEGEND_CATCH ? f.a : out.winner;
-    const hp = winner === f.a ? out.shareA : winner === f.b ? out.shareB : undefined;
+    // A legendary is the bot's when a ball took it, and only then, as for a trainer: knocked out or
+    // run from, it stands again. Out of turns it is nobody's fight.
+    const winner = !f.legend ? out.winner : out.caught ? f.a : out.winner === f.b && !out.capped ? f.b : 0;
+    const hp = winner === f.a ? out.shareA : !f.legend && winner === f.b ? out.shareB : undefined;
     this.pending.push({
       c: 'bots',
       id: HOST_JUDGE,
@@ -434,9 +466,18 @@ export class Host {
       b: f.b,
       winner,
       ...(hp ? { hp } : {}),
+      // Nobody's hurt in the Zone.
+      ...(winner || f.legend?.zone ? {} : { drew: [out.shareA, out.shareB] as [number[], number[]] }),
+      ...(out.caught ? { caught: out.shareB[0] } : {}),
       ...(out.usedA.length || out.usedB.length ? { used: [out.usedA, out.usedB] as [number[], number[]] } : {}),
     });
   }
+}
+
+/** A Zone battle as a fight the host runs: all at once, it has no engine in it to wait for. */
+// eslint-disable-next-line require-yield
+function* zoneRun(side: SimSide, species: number, opts: { seed: number; map: string }): Generator<void, SimOutcome, void> {
+  return zoneFight(side, species, opts);
 }
 
 /** A mirror's frame: the same order the host used. */
