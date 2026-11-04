@@ -353,6 +353,8 @@ export class WorldService {
           host.input(phone.id, m.s, m.k.map((v) => (Number(v) | 0) & 127));
         } else if (m.t === 'field') {
           if (Number.isInteger(m.bits)) host.field(phone.id, m.bits);
+        } else if (m.t === 'ride') {
+          host.ride(phone.id, m.acro === true);
         } else if (m.t === 'pick') {
           if (typeof m.map === 'string') host.pick(phone.id, m.map.slice(0, 64));
         } else if (m.t === 'sail') {

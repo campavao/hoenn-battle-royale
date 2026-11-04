@@ -41,6 +41,7 @@ export type WorldUp =
   /** My battle is over (`fled`: it never got going, or was run from). */
   | { t: 'end'; fled?: boolean; won?: boolean }
   | { t: 'field'; bits: number }
+  | { t: 'ride'; acro: boolean }
   /** The two bots the room gave me to fight (a `bots` event), and who won: 0, nobody. */
   | { t: 'bots'; a: number; b: number; w: number; hp?: number[]; ua?: number[]; ub?: number[] }
   /** My trade with event `n`'s trader is over: I gave him `sp` (0, nothing). */

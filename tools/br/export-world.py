@@ -130,10 +130,11 @@ IMPASSABLE_BEHAVIORS = {name for name in MB if name.startswith("MB_IMPASSABLE")}
 
 # The ACRO BIKE's own ground: its rails and white bars, and the bumpy slope it hops up
 # (Jagged Pass). On foot they are walls -- CheckAcroBikeCollision turns all of them into
-# a collision unless the player is on the ACRO BIKE (field_player_avatar.c) -- and the
+# a collision unless the player is on the ACRO BIKE (field_player_avatar.c) -- and this
 # world has no ACRO BIKE, so a wall (Cam, 10-31: "I can walk on bike-only pathing"). Not
-# in the Safari Zone: the opening's spawn cells lie past its rails, and no bike is ridden
-# there, so its rails stay ground (safari.test.ts walks them all).
+# in the Safari Zone: the opening's spawn cells lie past its rails and /classic/ rides no
+# bike there, so its rails stay ground (safari.test.ts walks them all). The page's world
+# does have an ACRO BIKE: tools/br/export-acro.py adds its ground, the Zone's walled too.
 ACRO_BEHAVIORS = {
     "MB_BUMPY_SLOPE", "MB_ISOLATED_VERTICAL_RAIL", "MB_ISOLATED_HORIZONTAL_RAIL",
     "MB_VERTICAL_RAIL", "MB_HORIZONTAL_RAIL",

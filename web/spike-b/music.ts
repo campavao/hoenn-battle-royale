@@ -27,7 +27,7 @@ export interface Where { group: number; num: number; x: number; surf: boolean; b
  *  hidden ROM plays once on its field. A fanfare holds the song and gives it back. */
 export const SOUND_FANFARE = 0x8000;
 export const SE_FAILURE = 32;
-export const SE_USE_ITEM = 1, SE_SELECT = 5, SE_WIN_OPEN = 6, SE_WALL_HIT = 7, SE_DOOR = 8, SE_EXIT = 9, SE_LEDGE = 10;
+export const SE_USE_ITEM = 1, SE_SELECT = 5, SE_WIN_OPEN = 6, SE_WALL_HIT = 7, SE_DOOR = 8, SE_EXIT = 9, SE_LEDGE = 10, SE_BIKE_HOP = 34;
 /** songs.h: FLY's swoop (Task_FlyOut). */
 export const SE_M_FLY = 158;
 export const SE_CONTEST_CURTAIN_RISE = 97;

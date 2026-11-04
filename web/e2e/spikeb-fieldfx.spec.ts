@@ -481,3 +481,124 @@ test('the ACRO BIKE and the MACH BIKE from the BAG: the window shuts and I ride,
   expect(await riding()).toBe(false);
   await ctx.close();
 });
+
+// Cam, 11-03, "Yes, make them work": the rocks of Jagged Pass and the Safari Zone's rails, on the
+// real page and its real ROM, by the keys. Everything below the teleport to each start is a keypress.
+test.describe('the ACRO BIKE on its own ground', () => {
+  const rider = (page: Page) => spike(page, (s) => { const m = s.link.room.actor(s.link.me).m; return { map: m.spot.map, x: m.spot.x, y: m.spot.y, bike: m.bike, acro: m.acro, state: m.acroState, lift: m.lift, kind: m.action?.kind, facing: m.facing }; });
+  const at = (page: Page, x: number, y: number, t = 8_000) => page.waitForFunction(([x, y]) => { const m = (window as any).__spike.link.room.actor((window as any).__spike.link.me).m; return m.spot.x === x && m.spot.y === y && !m.action; }, [x, y], { timeout: t });
+  /** In the air, on the way to (x, y): the rider's coords are there from the jump's first frame. */
+  const inAir = (page: Page, x: number, y: number, t = 8_000) => page.waitForFunction(([x, y]) => { const m = (window as any).__spike.link.room.actor((window as any).__spike.link.me).m; return m.spot.x === x && m.spot.y === y && m.lift <= -4; }, [x, y], { timeout: t, polling: 16 });
+  const hold = async (page: Page, keys: string[], fn: () => Promise<unknown>) => {
+    for (const k of keys) await key(page, k, true);
+    try { await fn(); } finally { for (const k of keys) await key(page, k, false); }
+  };
+  const useBike = async (page: Page, item: number) => {
+    await page.keyboard.press('e', { delay: 120 });
+    await expect(page.locator('.bm-bag-head')).toBeVisible();
+    await page.evaluate((item) => {
+      const m = (window as any).__spike.battleMenu;
+      for (let i = 0; i < 6 && !m.stacks().some((x: any) => x.item === item); i++) m.stepPocket(1);
+      m.picked = item;
+      m.setMode('item');
+    }, item);
+    await page.waitForTimeout(150);
+    await page.locator('.bm-bag-use').click();
+    await expect(page.locator('.bm-bag-head')).toBeHidden();
+  };
+
+  test('hops up the rocks of Jagged Pass, B held, where a walker and the MACH BIKE stop', async ({ browser }) => {
+    test.setTimeout(240_000);
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await ctx.newPage();
+    await intoMatch(page);
+    await fromChest(page);
+    await spike(page, (s) => { s.link.room.opening = 0; });
+    // On foot: a wall.
+    await stand(page, 'MAP_JAGGED_PASS', 22, 19, 2);
+    await page.waitForTimeout(500);
+    await hold(page, ['ArrowUp'], () => page.waitForTimeout(700));
+    expect(await rider(page)).toMatchObject({ x: 22, y: 19, bike: false });
+    await shot(page, 'acro-rock-foot');
+    // The MACH BIKE: a wall, B or no B.
+    await useBike(page, 259);
+    await expect.poll(async () => (await rider(page)).bike, { timeout: 5_000 }).toBe(true);
+    expect((await rider(page)).acro).toBe(false);
+    await hold(page, ['ArrowUp', 'x'], () => page.waitForTimeout(1500));
+    expect(await rider(page)).toMatchObject({ x: 22, y: 19 });
+    await shot(page, 'acro-rock-mach');
+    // The ACRO BIKE out of the BAG changes bikes there.
+    await useBike(page, 272);
+    await expect.poll(async () => (await rider(page)).acro, { timeout: 5_000 }).toBe(true);
+    await page.waitForTimeout(300);
+    await hold(page, ['ArrowUp'], () => page.waitForTimeout(600));
+    expect(await rider(page)).toMatchObject({ x: 22, y: 19, bike: true, acro: true });
+    await shot(page, 'acro-rock-acro-stopped');
+    // Hold B: the wheelie, then, 40 frames on, the bunny hop on the spot.
+    await key(page, 'x', true);
+    await expect.poll(async () => (await rider(page)).state, { timeout: 5_000 }).toBe(2);
+    await page.waitForTimeout(150);
+    await shot(page, 'acro-rock-wheelie');
+    await expect.poll(async () => (await rider(page)).state, { timeout: 5_000 }).toBe(3);
+    // And up, a rock at a time, with the rider off the ground.
+    await key(page, 'ArrowUp', true);
+    await inAir(page, 22, 17);
+    await shot(page, 'acro-rock-in-the-air');
+    await at(page, 22, 15);
+    await key(page, 'ArrowUp', false);
+    await key(page, 'x', false);
+    expect((await rider(page)).map).toBe('MAP_JAGGED_PASS');
+    await page.waitForTimeout(300);
+    await shot(page, 'acro-rock-top');
+    await ctx.close();
+  });
+
+  test('rides the Safari Zone rails in the opening, jumping the isolated pieces, where a walker stops', async ({ browser }) => {
+    test.setTimeout(240_000);
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await ctx.newPage();
+    await intoMatch(page, '#solo&nobots&fog=900&seed=7');
+    expect(await spike(page, (s) => !!s.link.room.ring().safari), 'the opening').toBe(true);
+    await stand(page, 'MAP_SAFARI_ZONE_SOUTH', 16, 7, 4);
+    await page.waitForTimeout(500);
+    await hold(page, ['ArrowRight'], () => page.waitForTimeout(700));
+    expect(await rider(page)).toMatchObject({ x: 16, y: 7, bike: false });
+    await shot(page, 'acro-rail-foot');
+    // The MACH BIKE is no bike for the Zone.
+    await useBike(page, 259);
+    await expect(page.locator('#msg')).toHaveAttribute('data-text', /time and place/, { timeout: 5_000 });
+    expect((await rider(page)).bike).toBe(false);
+    await page.waitForTimeout(2800);
+    await useBike(page, 272);
+    await expect.poll(async () => (await rider(page)).bike, { timeout: 5_000 }).toBe(true);
+    expect((await rider(page)).acro).toBe(true);
+    await hold(page, ['ArrowRight'], async () => {
+      await page.waitForFunction(() => { const m = (window as any).__spike.link.room.actor((window as any).__spike.link.me).m; return m.spot.x === 18; }, undefined, { polling: 16 });
+      await shot(page, 'acro-rail-riding');
+      await at(page, 20, 7);
+    });
+    // Off a rail there is no getting off, and no leaving it by pushing crosswise.
+    await page.waitForTimeout(200);
+    await hold(page, ['ArrowUp'], () => page.waitForTimeout(400));
+    expect(await rider(page)).toMatchObject({ x: 20, y: 7, facing: 4 });
+    await useBike(page, 272);
+    await expect(page.locator('#msg')).toHaveAttribute('data-text', /dismount/, { timeout: 5_000 });
+    expect((await rider(page)).bike).toBe(true);
+    // B and up: over, facing east still, a piece at a time.
+    await hold(page, ['x', 'ArrowUp'], async () => {
+      await inAir(page, 20, 6);
+      await shot(page, 'acro-rail-jump');
+      await at(page, 20, 5);
+    });
+    await page.waitForTimeout(200);
+    await hold(page, ['ArrowRight'], () => at(page, 22, 5));
+    await page.waitForTimeout(200);
+    await hold(page, ['x', 'ArrowUp'], () => at(page, 22, 3));
+    await page.waitForTimeout(200);
+    await hold(page, ['ArrowRight'], () => at(page, 26, 3));
+    await page.waitForTimeout(300);
+    expect(await rider(page)).toMatchObject({ map: 'MAP_SAFARI_ZONE_SOUTH', x: 26, y: 3, bike: true, acro: true });
+    await shot(page, 'acro-rail-across');
+    await ctx.close();
+  });
+});

@@ -45,6 +45,7 @@ export interface WorldLink {
   jank?(j: JankCounts, v: string): void;
   /** What my team could do on the field now (FIELD_*). */
   field(bits: number): void;
+  ride(acro: boolean): void;
   /** The bots the room gave me to fight: `winner` won (0, no answer). */
   bots(a: number, b: number, winner: number, hp?: number[], used?: [number[], number[]]): void;
   /** Where to drop me when the Safari ends. */
@@ -160,6 +161,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
     mine: () => host.room.actor(me),
     end: (fled, won) => host.end(me, fled, won),
     field: (bits) => host.field(me, bits),
+    ride: (acro) => host.ride(me, acro),
     bots: (a, b, winner, hp, used) => host.bots(me, a, b, winner, hp, used),
     traded: (n, given) => host.traded(me, n, given),
     released: (mons) => host.released(me, mons),
@@ -372,6 +374,7 @@ export class Online implements WorldLink {
 
   end(fled = false, won = false): void { this.send({ t: 'end', ...(fled ? { fled } : {}), ...(won ? { won } : {}) }); }
   field(bits: number): void { this.send({ t: 'field', bits }); }
+  ride(acro: boolean): void { this.send({ t: 'ride', acro }); }
 
   team(mons: FameMon[], bag?: PeekBag): void {
     this.teams.set(this.me, mons);
