@@ -114,6 +114,31 @@ test("/world: a page of another world is told to reload, and nothing else", asyn
   }
 });
 
+test("/world: the relay simulates its bots' fights, unless WORLD_SIM_BOTS=0", async () => {
+  try {
+    for (const [env, want] of [[undefined, true], ["1", true], ["0", undefined]]) {
+      if (env === undefined) delete process.env.WORLD_SIM_BOTS;
+      else process.env.WORLD_SIM_BOTS = env;
+      const relay = createRelay({});
+      const { port } = await relay.listen(0, "127.0.0.1");
+      try {
+        const a = phone(port);
+        await a.open();
+        a.send({ t: "join", name: "alice", skin: 0, host: true });
+        await a.until((m) => m.t === "room");
+        a.send({ t: "start" });
+        const { state } = await a.until((m) => m.t === "hello");
+        assert.equal(state.simBots, want, `WORLD_SIM_BOTS=${env}`);
+        a.ws.close();
+      } finally {
+        await relay.close();
+      }
+    }
+  } finally {
+    delete process.env.WORLD_SIM_BOTS;
+  }
+});
+
 test("/world: a code nobody has, and quick play's count", async () => {
   process.env.WORLD_AUTOSTART_SECS = "1";
   const relay = createRelay({});

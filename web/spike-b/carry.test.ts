@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAG_AT, BAG_LEN, arrived, fameTeam, fieldOf, healed, partySettled, partyWhole, rekey, spillOf, tallySince, teamOf, withMoney, withHeld, teamMembers, spillShows } from './carry';
+import { BAG_AT, BAG_LEN, arrived, fameTeam, fieldOf, healed, partySettled, partyWhole, rekey, spillOf, tallySince, teamOf, withMoney, withHeld, teamMembers, spentLine, spillShows } from './carry';
 import HMS from '../src/data/hms.json';
 
 describe('rekey', () => {
@@ -259,6 +259,17 @@ describe('what one of them holds', () => {
   });
 });
 
+describe('somebody who has given it away', () => {
+  it('says somebody took it, or that you did', () => {
+    expect(spentLine({ by: 2 }, 1)).toBe('Sorry, somebody took it.');
+    expect(spentLine({ by: 0 }, 1)).toBe('Sorry, somebody took it.');
+    expect(spentLine({ by: 1 }, 1)).toBe("That's all I had. Take care of it!");
+    expect(spentLine({ by: 2, busy: 'WALLY' }, 1)).toBe('WALLY is fighting me for it.');
+    expect(spentLine({ by: 0, beaten: 'WALLY' }, 1)).toBe('WALLY already beat me.');
+    expect(spentLine({ by: 0, beaten: '' }, 1)).toBe('You already beat me.');
+  });
+});
+
 describe('a piece on the ground while it is taken up', () => {
   it('a bag I have open stays, nobody else\'s does', () => {
     expect(spillShows({}, undefined, 1, false)).toBe(true);
@@ -267,8 +278,12 @@ describe('a piece on the ground while it is taken up', () => {
     expect(spillShows({}, 1, 1, false)).toBe(false);
     expect(spillShows({}, 2, 1, false)).toBe(false);
   });
-  it('a legendary or a person I am fighting does not stand there too', () => {
+  it('a legendary I am fighting does not stand there too', () => {
     expect(spillShows({ legend: true }, 1, 1, true)).toBe(false);
-    expect(spillShows({ person: {} }, 1, 1, true)).toBe(false);
+  });
+  it('a person stays, whoever took what they held', () => {
+    expect(spillShows({ person: {} }, undefined, 1, true)).toBe(true);
+    expect(spillShows({ person: {} }, 1, 1, true)).toBe(true);
+    expect(spillShows({ person: {} }, 2, 1, true)).toBe(true);
   });
 });

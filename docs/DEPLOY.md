@@ -143,8 +143,9 @@ so no env var is needed. Watch it come up:
 railway logs
 ```
 
-`WORLD_SIM_BOTS=1` in the relay's Railway variables makes it simulate its bots' fights and hand
-watchers the logs (`docs/DESIGN.md`); unset, as it is now, bot fights go through a trainer's page.
+The relay simulates its bots' fights and hands watchers the logs (`docs/DESIGN.md`). To turn that
+off with no code change, set `WORLD_SIM_BOTS=0` in its Railway variables: bot fights go back to a
+trainer's page, on its hidden ROM, one at a time.
 
 The relay's test suite is `cd relay && node --test`. Both sides of a link battle must run
 the same build, and the relay gates rooms on the sha1 of the ROM each tab runs and on

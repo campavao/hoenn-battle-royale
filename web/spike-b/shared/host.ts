@@ -5,11 +5,10 @@
 
 import type { Spot, WorldMap } from '../../src/bots/world';
 import { botKeys, botSpawns, type Brain } from './bots';
-import { BOT_DUEL_MAX, HOST_JUDGE, Room, wornParty, type Bag, type Command, type RoomEvent } from './room';
+import { BOT_DUEL_MAX, HOST_JUDGE, LEGEND_CATCH, LEGEND_FOE, Room, botParty, legendMon, wornParty, type Bag, type Command, type RoomEvent } from './room';
 import { within } from './items';
 import { logMs, type BattleEvent } from './battlelog';
-import { dealParty } from '../../src/bots/party';
-import { gradeOf } from '../../src/bots/roster';
+import { speciesName } from '../../src/bots/party';
 import { battleItems } from '../../src/bots/bag';
 import type { SimOutcome, SimSide, simulation as Simulation } from './battlesim';
 
@@ -54,6 +53,8 @@ interface SimFight {
   b: number;
   /** The meeting, as the room has it: an answer for an earlier one must not end a later one. */
   since: number;
+  /** `b` LEGEND_FOE: the legendary it is, not a bot. */
+  legend?: { key: number; species: number };
   /** The fight, a turn at a time. */
   run?: Generator<void, SimOutcome, void>;
   /** The answer and the frame it is due, once it has run. */
@@ -262,6 +263,8 @@ export class Host {
         const brain = this.brains.get(a.id);
         const bits = brain && !a.battling ? botKeys(room, a, brain) : 0;
         if (bits !== a.keys) { keys.push([a.id, bits]); a.keys = bits; }
+        // Its team can FLY and the fog has it (bots.ts flyGoal): a `fly` for every mirror, next frame.
+        if (brain?.flyTo) { this.pending.push({ c: 'fly', id: a.id, to: brain.flyTo }); brain.flyTo = undefined; }
         continue;
       }
       const p = this.players.get(a.id);
@@ -341,14 +344,20 @@ export class Host {
       seat: id,
       name: b?.name ?? '',
       skin: b?.skin ?? 0,
-      party: b ? wornParty(dealParty(r.seed, id, r.ring().phase + 1, b.m.spot.map, gradeOf(r.seed, id)), b.wear) : [],
+      party: b ? wornParty(botParty(r.seed, b, r.ring().phase + 1), b.wear) : [],
       items: battleItems(b?.loot?.items ?? []),
     };
+  }
+
+  /** A legendary's side: its one mon at the rung. */
+  private legendSide({ key, species }: { key: number; species: number }): SimSide {
+    return { seat: LEGEND_FOE, name: speciesName(species), skin: 0, party: [legendMon(this.room.spills.get(key), species, this.room.ring().phase + 1)] };
   }
 
   /** The meeting this fight is for is still on. */
   private simWanted(f: SimFight): boolean {
     const a = this.room.actor(f.a), b = this.room.actor(f.b);
+    if (f.legend) return !!a && a.since === f.since && a.judge === HOST_JUDGE && a.foe === LEGEND_FOE;
     return !!a && !!b && a.since === f.since && a.judge === HOST_JUDGE && a.foe === f.b && b.foe === f.a;
   }
 
@@ -356,7 +365,7 @@ export class Host {
    *  due goes in as an ordinary `bots` command on the next frame, so every mirror applies it. */
   private simFrame(events: readonly RoomEvent[]): void {
     const r = this.room;
-    for (const e of events) if (e.type === 'bots' && e.id === HOST_JUDGE) this.fights.push({ a: e.a, b: e.b, since: r.actor(e.a)?.since ?? e.tick });
+    for (const e of events) if (e.type === 'bots' && e.id === HOST_JUDGE) this.fights.push({ a: e.a, b: e.b, since: r.actor(e.a)?.since ?? e.tick, ...(e.legend ? { legend: e.legend } : {}) });
     if (!this.fights.length) return;
     this.fights = this.fights.filter((f) => this.simWanted(f));
     if (this.simFailed) {
@@ -386,7 +395,7 @@ export class Host {
         const seed = (Math.imul(r.seed ^ f.since, 0x9e3779b1) ^ Math.imul(f.a, 0x85ebca6b) ^ Math.imul(f.b, 0xc2b2ae35)) >>> 0;
         // In the fog where they stand, it bites them as it does a trainer in a fight (Cam, 11-02).
         const at = r.actor(f.a)?.m.spot;
-        f.run = this.simulation!(this.simSide(f.a), this.simSide(f.b), { seed, map: at?.map ?? '', fog: !!at && r.inFog(at) });
+        f.run = this.simulation!(this.simSide(f.a), f.legend ? this.legendSide(f.legend) : this.simSide(f.b), { seed, map: at?.map ?? '', fog: !!at && r.inFog(at) });
       }
       const step = f.run.next();
       if (!step.done) return;
@@ -401,19 +410,21 @@ export class Host {
     const frames = Math.ceil((logMs(f.out.log) / 1000) * 60);
     f.due = Math.max(r.tick, Math.min(f.since + frames, f.since + SIM_LAST_FRAME));
     this.onLog?.(f.a, f.out.log);
-    this.onLog?.(f.b, f.out.log);
+    if (!f.legend) this.onLog?.(f.b, f.out.log);
   }
 
   private simAnswer(f: SimFight): void {
     const out = f.out;
     if (!out) { this.pending.push({ c: 'bots', id: HOST_JUDGE, a: f.a, b: f.b, winner: 0 }); return; }
-    const hp = out.winner === f.a ? out.shareA : out.winner === f.b ? out.shareB : undefined;
+    // A legendary it brought low enough to catch is the bot's, however the rest of its team did.
+    const winner = f.legend && out.shareB[0] < LEGEND_CATCH ? f.a : out.winner;
+    const hp = winner === f.a ? out.shareA : winner === f.b ? out.shareB : undefined;
     this.pending.push({
       c: 'bots',
       id: HOST_JUDGE,
       a: f.a,
       b: f.b,
-      winner: out.winner,
+      winner,
       ...(hp ? { hp } : {}),
       ...(out.usedA.length || out.usedB.length ? { used: [out.usedA, out.usedB] as [number[], number[]] } : {}),
     });

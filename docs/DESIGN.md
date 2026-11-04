@@ -130,13 +130,14 @@ action bytes, once every battler has chosen) and `shot` (the clock). A spectator
 replays it as `BATTLE_TYPE_RECORDED_LINK` a turn behind (`br_spectate.c`, the BR block in
 `recorded_battle.c`). This is Kanto's `mirror.lua` with the engine doing the replay.
 
-**Bot vs bot can run with no ROM at all (`Room.simBots`, off by default).** Behind the switch
-(`WORLD_SIM_BOTS=1` on the relay, `#simbots` on a solo page) the host fights a meeting itself in a
-simulator (`web/spike-b/shared/battlesim.ts`: Pokemon Showdown's MIT Gen 3 engine, cut down by
-`tools/br/build-sim.mjs`), any number at once, off the room's step, and holds both bots for as long
+**Bot vs bot runs with no ROM at all (`Room.simBots`).** The host, the relay or a solo page, fights a
+meeting itself in a simulator (`web/spike-b/shared/battlesim.ts`: Pokemon Showdown's MIT Gen 3 engine, cut down by
+`tools/br/build-sim.mjs`), any number at once with no gap between them, off the room's step, and holds both bots for as long
 as the log (`battlelog.ts`) takes to play. Nothing of the ROM's goes in: public tables and our own
 rules (`br_bot.c`'s build, `br_levels.c`'s learnset walk), and a bot brain of its own (`simbrain.ts`).
-The engine's learnsets are corrected to Emerald's by `tools/br/learnset-fixes.mjs`.
+The engine's learnsets are corrected to Emerald's by `tools/br/learnset-fixes.mjs`. To turn it off with
+no code change: `WORLD_SIM_BOTS=0` on the relay, `#nosim` on a solo page; a meeting then goes to a
+trainer's page, one at a time, in its hidden ROM (`judge.ts`), and is watched on the watcher's ROM.
 
 **A fight with a log is watched from the log.** Whoever knows what happened says so (`battlelog.ts`):
 the server's simulator for two bots, the fighter's page reading its ROM for a trainer

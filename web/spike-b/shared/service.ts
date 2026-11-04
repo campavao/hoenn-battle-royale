@@ -116,7 +116,7 @@ export interface ServiceOptions {
   safariSecs?: number;
   /** A quick room's count to its own start (match/room.ts's AUTO_START_MS). */
   autoStartMs?: number;
-  /** Room.simBots: this relay simulates its bots' fights (WORLD_SIM_BOTS=1). */
+  /** Room.simBots: this relay simulates its bots' fights (relay/world.js: unless WORLD_SIM_BOTS=0). */
   simBots?: boolean;
 }
 

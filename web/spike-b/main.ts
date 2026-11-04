@@ -22,11 +22,11 @@ import type { PackedMon } from '../src/net/wire';
 import { FIELD_CUT, FIELD_STRENGTH, isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
 import { arrived, routeTo } from './tapwalk';
 import { loadPatches } from '../src/bots/patches';
-import { dealParty, rungForPhase } from '../src/bots/party';
+import { rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { battleItems } from '../src/bots/bag';
 import { DIR_EAST } from './sim';
-import { ATTENDANT, BOATS, DOCKS, MOORINGS, TIDAL_MAPS, TIDAL_SAILOR, islandMaps, type Cruise, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, FIELD_DIVE, diveTo, emptyBag, interiors, makeRoom, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
+import { ATTENDANT, BOATS, DOCKS, MOORINGS, TIDAL_MAPS, TIDAL_SAILOR, islandMaps, type Cruise, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, FIELD_DIVE, diveTo, emptyBag, interiors, makeRoom, botParty, legendMon, LEGEND_CATCH, LEGEND_FOE, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
@@ -34,7 +34,7 @@ import { over } from './shared/over';
 import { Lobby, me, seeThrough, type RoomInfo } from './lobby';
 import { loadCareer, ordinal, recordMatch } from '../src/match/career';
 import type { MatchTally } from '../src/match/tally';
-import { couldFly, tallySince, teamMembers, PARTY_LEN, spillShows } from './carry';
+import { couldFly, tallySince, teamMembers, PARTY_LEN, spentLine, spillShows } from './carry';
 import { BagPanel } from './bagpanel';
 import { Tag } from './tag';
 import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, startStickLearn, stickKeys, stickLearnStep, type AxisSense, type StickMap } from '../src/pad';
@@ -90,6 +90,7 @@ import { seatScreen } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
 import { nameBstart } from '../src/match/spectate';
 import { LEADERS } from './shared/gyms';
+import uiData from '../src/data/ui.json';
 import { CLERKS, priceOf, shelf } from './shared/marts';
 import { KEY_BIT, type GbaKey } from '../src/emu';
 import { KeyLegend } from '../src/ui/keys';
@@ -545,13 +546,15 @@ const handoff: number[] = []; // ms from the trigger to the ROM's first battle f
 /** A battle the ROM fights, the page showing it from its first frame and taking the
  *  screen back when it is over. */
 let logFight = 0;
-function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>, opts: { log?: boolean; label?: { name: string; skin: number } } = {}): void {
+function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>, opts: { log?: boolean; weather?: number; label?: { name: string; skin: number } } = {}): void {
   // One battle at a time: one still running from the match before (its ROM is busy with
   // it) turns this one down, or its end would be credited to this foe.
   if (battle) { link.end(); return; }
   held.clear();
   battle = { foe, shownAt: performance.now(), round: link.room.results.round, link, net: new FirstMenuNet() };
   const mine = battle;
+  const standing = link.mine()?.m.spot;
+  rom?.fieldWeather(opts.weather ?? (standing ? link.room.weatherAt(standing) : 0));
   if (!rom) {
     battleEl.classList.add('on');
     battleNote.textContent = 'The game is still loading. Try again in a moment.';
@@ -646,10 +649,18 @@ const itemTag = new Tag(document.getElementById('item-tag') as HTMLCanvasElement
 /** What is on a cell, as its tag says it. */
 function nameOn(map: string, x: number, y: number): string {
   if (!art) return '';
+  // Somebody with a POKeMON to give or trade says which (Cam, 11-02: "when you walk up to a
+  // person and they have an item or a Pokemon, we show the sprite in the tooltip").
+  const tr = link.room.traderAt(map, x, y);
+  if (tr?.t.species) return speciesName(tr.t.species);
   const g = link.room.groundAt(map, x, y);
-  if (g && !g.gift) return art.itemName(g.item) || '';
+  if (g) return art.itemName(g.item) || '';
   const s = link.room.spillAt(map, x, y);
-  if (s && !s.person) {
+  if (s?.person) {
+    const row = s.bag.items[0], mon = s.bag.mons?.[0];
+    return row ? art.itemName(row.id) || '' : mon ? speciesName(mon.species) : '';
+  }
+  if (s) {
     const mons = s.bag.mons ?? [];
     // A POKeMON alone on the ground says which (Cam, 11-03); the tag draws it too (iconOn).
     if (mons.length && !s.bag.items.length && !s.bag.money) return `${speciesName(mons[0].species)}${mons.length > 1 ? ` +${mons.length - 1}` : ''}`;
@@ -658,9 +669,29 @@ function nameOn(map: string, x: number, y: number): string {
   return '';
 }
 function iconOn(map: string, x: number, y: number): HTMLCanvasElement | null {
-  const s = link.room.groundAt(map, x, y) ? null : link.room.spillAt(map, x, y);
-  const mons = s && !s.person ? s.bag.mons ?? [] : [];
+  const tr = link.room.traderAt(map, x, y);
+  if (tr?.t.species) return monIconOf(tr.t.species);
+  const g = link.room.groundAt(map, x, y);
+  if (g) return itemIconOf(g.item);
+  const s = link.room.spillAt(map, x, y);
+  if (s?.person) return s.bag.items[0] ? itemIconOf(s.bag.items[0].id) : s.bag.mons?.[0] ? monIconOf(s.bag.mons[0].species) : null;
+  const mons = s ? s.bag.mons ?? [] : [];
   return mons.length && !s!.bag.items.length && !s!.bag.money ? monIconOf(mons[0].species) : null;
+}
+/** An item's picture off the sheet the BAG draws from, as a canvas the tag can hold on to. */
+const itemSheet = new Image();
+itemSheet.src = '/ui/items.png';
+const itemIcons = new Map<number, HTMLCanvasElement>();
+function itemIconOf(item: number): HTMLCanvasElement | null {
+  let c = itemIcons.get(item);
+  if (c) return c;
+  if (!itemSheet.complete || !itemSheet.naturalWidth) return null;
+  const { cell, cols } = uiData.itemIcons as { cell: number; cols: number };
+  c = document.createElement('canvas');
+  c.width = c.height = cell;
+  c.getContext('2d')!.drawImage(itemSheet, (item % cols) * cell, Math.floor(item / cols) * cell, cell, cell, 0, 0, cell, cell);
+  itemIcons.set(item, c);
+  return c;
 }
 /** Where the mouse is, for the tag over what it rests on. */
 let hover: { x: number; y: number } | null = null;
@@ -675,6 +706,16 @@ if (matchMedia('(pointer: fine)').matches) {
 function tagFrame(): void {
   const blocked = !art || !link || battle || swapping || asking || casting || battleEl.classList.contains('on');
   let hit: { text: string; map: string; x: number; y: number } | null = null;
+  watchOffer = 0;
+  if (!blocked && spectating && !watch.replaying) {
+    const f = fightOffer();
+    if (f) {
+      watchOffer = f.id;
+      const dpr = devicePixelRatio || 1;
+      itemTag.show('WATCH', ((f.x - cam.x) * zoom) / dpr + innerWidth / 2, ((f.y - cam.y) * zoom) / dpr + innerHeight / 2);
+      return;
+    }
+  }
   if (!blocked) {
     const dpr = devicePixelRatio || 1;
     if (hover) {
@@ -700,6 +741,36 @@ function tagFrame(): void {
   if (!hit || !g) { itemTag.hide(); return; }
   const dpr = devicePixelRatio || 1;
   itemTag.show(hit.text, ((g.gx * TILE + TILE / 2 - cam.x) * zoom) / dpr + innerWidth / 2, ((g.gy * TILE - cam.y) * zoom) / dpr + innerHeight / 2, iconOn(hit.map, hit.x, hit.y));
+}
+
+/** The trainer the WATCH tag is over, for A (0: none up). */
+let watchOffer = 0;
+/** How near the camera, in world pixels, a fight has to be for the tag without a mouse on it. */
+const WATCH_NEAR = 6 * TILE;
+/** The fight a trainer watching could go into (Cam, 11-02: "let's just show a tooltip that says
+ *  watch that will flag to the player"): the one under the mouse, or else the nearest the camera.
+ *  One tag between the two of them, over their heads. */
+function fightOffer(): { id: number; x: number; y: number } | null {
+  const dpr = devicePixelRatio || 1;
+  const mouse = hover ? { x: cam.x + (hover.x * dpr - devW / 2) / zoom, y: cam.y + (hover.y * dpr - devH / 2) / zoom } : null;
+  let best: Actor | null = null;
+  let bestD = Infinity;
+  for (const a of actors()) {
+    if (!a.battling) continue;
+    const p = pixelOf(a);
+    const d = Math.min(mouse ? Math.hypot(p.x + TILE / 2 - mouse.x, p.y - mouse.y) * WATCH_NEAR / (24 / Math.min(1, zoom)) : Infinity, Math.hypot(p.x + TILE / 2 - cam.x, p.y - cam.y));
+    if (d < bestD && d <= WATCH_NEAR) { best = a; bestD = d; }
+  }
+  if (!best) return null;
+  const p = pixelOf(best);
+  const foe = best.foe ? actors().find((o) => o.id === best!.foe) : undefined;
+  const q = foe && Math.hypot(pixelOf(foe).x - p.x, pixelOf(foe).y - p.y) <= 3 * TILE ? pixelOf(foe) : p;
+  return { id: best.id, x: (p.x + q.x) / 2 + TILE / 2, y: Math.min(p.y, q.y) - TILE };
+}
+/** A at the tag: the camera on them, and their fight comes up. */
+function takeWatchOffer(): void {
+  if (follow === watchOffer) watch.askAgain();
+  else { follow = watchOffer; if (zoom < 1) zoom = playZoom(); }
 }
 
 /** How long a dug-up item's name holds the box (Cam, 11-01: "the found covers over what
@@ -1119,7 +1190,7 @@ async function peek(): Promise<void> {
   rom?.sound(SE_WIN_OPEN);
   const r = link.room;
   const team: FameMon[] = a.bot
-    ? wornParty(dealParty(r.seed, a.id, r.ring().phase + 1, a.m.spot.map, gradeOf(r.seed, a.id)), a.wear).map((m) => ({ species: m.species, level: m.level, hp: m.hp, maxHp: m.maxHp, moves: m.moves.map((v) => ({ id: v.id })) }))
+    ? wornParty(botParty(r.seed, a, r.ring().phase + 1), a.wear).map((m) => ({ species: m.species, level: m.level, hp: m.hp, maxHp: m.maxHp, moves: m.moves.map((v: { id: number }) => ({ id: v.id })) }))
     : link.teams.get(a.id) ?? [];
   const bag: PeekBag | undefined = a.bot ? { items: (a.loot?.items ?? []).map((s) => ({ id: s.id, n: s.n })), money: a.loot?.money ?? 0 } : link.bags.get(a.id);
   for (;;) {
@@ -1283,6 +1354,7 @@ function startFor(e: RoomEvent): void {
   if (e.type === 'trade') { void (e.gives ? gift(e.n, e.species) : trade(e.n, e.species)); return; }
   if (e.type === 'door') { void door(e.n, e.how, !!e.opened); return; }
   if (e.type === 'guarded') { say(`${e.name} guards it!`); return; }
+  if (e.type === 'spent') { say(spentLine(e, link.me)); return; }
   if (e.type === 'fish') { cast(e.map, e.x, e.y); return; }
   if (e.type === 'ferry') { void ferry(e.to, !!e.home, !!e.briney, e.cable); return; }
   if (e.type === 'cruise') { void cruise(e.say, e.cruise, !!e.bed); return; }
@@ -1316,7 +1388,7 @@ function startFor(e: RoomEvent): void {
     }, (err) => { l.drop(key); throw err; }));
     return;
   }
-  if (e.type === 'bots') { void judgeBots(e.a, e.b); return; }
+  if (e.type === 'bots') { void judgeBots(e.a, e.b, e.legend); return; }
   if (e.type === 'boss') {
     // A gym leader (gyms.ts): their own battle in the hidden ROM; won, the gym's TM and purse.
     if (swapping) leaveScreen();
@@ -1345,7 +1417,7 @@ function startFor(e: RoomEvent): void {
     // Its grade too (roster.ts). No Zone pool: the ROM deals one at the Safari opening,
     // which this world has not got yet.
     // With the wounds its last fights left it (room.ts wear): bots wear down, as live.
-    const party = wornParty(dealParty(link.room.seed, foe.id, link.room.ring().phase + 1, foe.m.spot.map, gradeOf(link.room.seed, foe.id)), foe.wear);
+    const party = wornParty(botParty(link.room.seed, foe, link.room.ring().phase + 1), foe.wear);
     const fog = inFogNow(), l = link;
     // And its bag (POK-237): what it picked up, the fight's to spend.
     const items = battleItems(foe.loot?.items ?? []);
@@ -1375,7 +1447,7 @@ function startFor(e: RoomEvent): void {
         if (take) for (const [q, d] of early.splice(0)) take(q, d);
       },
     };
-    handOff(foe, (r, onStart) => r.duel(me.name, foe.name, foe.skin, e.first, wire, onStart, fog, voiceOfMember(foe.id)), { log: e.first });
+    handOff(foe, (r, onStart) => r.duel(me.name, foe.name, foe.skin, e.first, wire, onStart, fog, voiceOfMember(foe.id)), { log: e.first, weather: e.weather ?? 0 });
   } else {
     const m = placed.get(e.map)!.m;
     const fog = inFogNow();
@@ -1383,28 +1455,33 @@ function startFor(e: RoomEvent): void {
   }
 }
 
-/** Two bots met and the room gave me their fight: both teams as the match deals them,
+/** Two bots met, or one at a legendary, and the room gave me their fight: both teams as the match deals them,
  *  fought out in the hidden ROM, and the winner told to the room. No answer (no ROM, a
  *  fight that would not end, a draw): 0, and both walk on. */
-async function judgeBots(ida: number, idb: number): Promise<void> {
+const LEGEND_SEAT = 255;
+async function judgeBots(ida: number, idb: number, legend?: { key: number; species: number }): Promise<void> {
   const l = link, r = l.room;
   const side = (id: number) => {
     const b = r.actor(id);
     // Each with its wounds and its bag, as in a fight with a trainer (brain.ts begin).
-    return { seat: id, party: b ? wornParty(dealParty(r.seed, id, r.ring().phase + 1, b.m.spot.map, gradeOf(r.seed, id)), b.wear) : [], items: battleItems(b?.loot?.items ?? []) };
+    return { seat: id, party: b ? wornParty(botParty(r.seed, b, r.ring().phase + 1), b.wear) : [], items: battleItems(b?.loot?.items ?? []) };
   };
-  const a = side(ida), b = side(idb);
+  // A legendary is a side of one, on a seat the ROM's wire can carry; nobody's in a room this size.
+  const a = side(ida), b = legend ? { seat: LEGEND_SEAT, party: [legendMon(r.spills.get(legend.key), legend.species, r.ring().phase + 1)], items: [] } : side(idb);
   // This meeting, not the pair: they can be let go (the room's own cap) and meet again,
   // and an answer for the old one would end the new one.
   const since = r.actor(ida)?.since;
-  const wanted = () => link === l && !!since && l.room.actor(ida)?.since === since && l.room.actor(idb)?.foe === ida;
+  const wanted = () => link === l && !!since && l.room.actor(ida)?.since === since && (legend ? l.room.actor(ida)?.foe === LEGEND_FOE : l.room.actor(idb)?.foe === ida);
   const out = judge ? await judge(a, b, wanted).catch(() => null) : null;
   if (!wanted()) return;
   if (!out) { l.bots(ida, idb, 0); return; }
   // What the winner has left, mon for mon (brain.ts settleAnswered), as shares.
-  const won = out.winner === ida ? a : b, left = out.winner === ida ? out.a : out.b;
+  // A legendary it brought low enough to catch is the bot's, however the rest of its team did.
+  const m0 = b.party[0];
+  const winner = legend && m0.maxHp > 0 && (out.b[0]?.hp ?? m0.hp) / m0.maxHp < LEGEND_CATCH ? ida : out.winner;
+  const won = winner === ida ? a : b, left = winner === ida ? out.a : out.b;
   const hp = won.party.map((m, i) => (m.maxHp > 0 ? Math.min(1, (left[i]?.hp ?? m.hp) / m.maxHp) : 0));
-  l.bots(ida, idb, out.winner, hp, [out.usedA, out.usedB]);
+  l.bots(ida, idb, winner === LEGEND_SEAT ? LEGEND_FOE : winner, hp, [out.usedA, out.usedB]);
 }
 
 /** Once a second, between battles: what my team could do on the field (SURF, CUT,
@@ -1937,7 +2014,7 @@ const SCREEN_WAIT_MS = 60_000;
 function championTeam(id: number): PackedMon[] {
   const a = link.room.actor(id), r = link.room;
   const name = (a?.name ?? '').slice(0, 7);
-  if (a?.bot) return wornParty(dealParty(r.seed, a.id, r.ring().phase + 1, a.m.spot.map, gradeOf(r.seed, a.id)), a.wear).map((m) => ({ ...m, ot: name }));
+  if (a?.bot) return wornParty(botParty(r.seed, a, r.ring().phase + 1), a.wear).map((m) => ({ ...m, ot: name }));
   return (link.teams.get(id) ?? []).map((m) => ({
     species: m.species, level: m.level, hp: m.hp ?? m.maxHp ?? 1, maxHp: m.maxHp ?? m.hp ?? 1, status: 0,
     moves: (m.moves ?? []).map((v) => ({ id: v.id, pp: 0, ppUps: 0 })), heldItem: 0,
@@ -3810,14 +3887,14 @@ function drawClerks(visible: Placed[]): void {
   }
   // People at home and floor traders (br_balls.c), facing down: a gift-giver's people.
   for (const h of link.room.homes) {
-    const p = !h.gone && placed.get(h.map);
+    const p = placed.get(h.map);
     const img = p && visible.includes(p) ? giftArt(h.n) : null;
     if (p && img) ctx.drawImage(img, (p.gx + h.x) * TILE + (TILE - img.width) / 2, (p.gy + h.y) * TILE + TILE - img.height);
   }
   for (const p of visible) {
-    // The gym leaders nobody has beaten yet, facing down (a beaten one has left the gym).
+    // The gym leaders, beaten or not, facing down.
     for (const l of LEADERS) {
-      if (l.map !== p.m.id || link.room.bossDown(l.n)) continue;
+      if (l.map !== p.m.id) continue;
       l.cells.forEach(([cx, cy], i) => {
         const gfx = l.gfx[i];
         let img = clerkArt.get(gfx);
@@ -3853,7 +3930,8 @@ function drawGround(x0: number, y0: number, x1: number, y1: number): void {
     if (x < x0 - TILE || x > x1 || y < y0 - TILE || y > y1) return;
     ctx.drawImage(img, x + (TILE - img.width) / 2, y + TILE - img.height);
   };
-  for (const g of link.room.ground().values()) if (!link.room.picked.has(g.key)) put(g.gift ? giftArt(g.key) : tinted(g.item), g.map, g.x, g.y);
+  // A gift-giver stands there still when it is gone (Room.spentAt).
+  for (const g of link.room.ground().values()) if (g.gift || !link.room.picked.has(g.key)) put(g.gift ? giftArt(g.key) : tinted(g.item), g.map, g.x, g.y);
   for (const b of link.room.spills.values()) {
     if (!spillShows(b, link.room.picked.get(b.key), link.me, b.key === bagOpen)) continue;
     // An event's legendary stands as itself (br_legend.c's sLegends); a piece with one mon
@@ -4294,7 +4372,8 @@ function loop(now: number): void {
     gymFrame();
     hudFrame();
     fishFrame();
-    if (pressed.has('a')) dig();
+    if (pressed.has('a') && watchOffer) takeWatchOffer();
+    else if (pressed.has('a')) dig();
     // Not while a box is up (the peek's): left and right are its keys then.
     if (!asking) for (const k of pressed) watch.key(k);
     pressed.clear();
@@ -4455,7 +4534,8 @@ async function boot(): Promise<void> {
       ...(ring ? { ringFrames: Math.round(ring * 60) } : {}),
       ...(pace?.safariSecs !== undefined || ring ? { openingFrames: Math.round((pace?.safariSecs ?? ring!) * 60) } : {}),
       ...(new URLSearchParams(location.hash.slice(1)).has('nobots') ? { bots: 0 } : {}),
-      ...(new URLSearchParams(location.hash.slice(1)).has('simbots') ? { simBots: true } : {}),
+      // The bots' fights in the simulator, as the relay has them; #nosim, on this page's hidden ROM.
+      simBots: !new URLSearchParams(location.hash.slice(1)).has('nosim'),
       name: me().name, skin: me().skin,
     });
   };

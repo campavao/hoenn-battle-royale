@@ -8,8 +8,9 @@
 import { decodeGrid, sameSpot, type SeamDir, type Spot, type WorldMap } from '../../src/bots/world';
 import { findPath, findPathToAny, type Path } from '../../src/bots/path';
 import { NAMES } from '../../src/bots/roster';
+import { teamFlies } from '../../src/bots/party';
 import { mulberry32, pickIndex } from '../../src/match/clock';
-import { KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, type Actor, type Room } from './room';
+import { FIELD_SURF, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, SAFARI, botParty, type Actor, type Room } from './room';
 
 // The wardrobe (br_ghosts.c sSkinGraphics, career.ts SKINS): a bot wears a skin so the
 // trainer you walk up to is the trainer the ROM puts in the battle.
@@ -19,7 +20,7 @@ export const botSkin = (n: number) => 4 + (n % 12);
 /** `wait`: frames left to stand; `dir`: the way it went last. A bot with somewhere to be
  *  (inside the coming ring, or at an event) walks `steps` there; `plan` is the round and
  *  phase it last chose for, and `stuck` the frames it has pressed without moving. */
-export interface Brain { rng: number; wait: number; dir: number; plan?: string; goal?: Spot | null; steps?: { dir: SeamDir; to: Spot }[]; stuck?: number; legs?: number; avoid?: Set<number> }
+export interface Brain { rng: number; wait: number; dir: number; plan?: string; goal?: Spot | null; steps?: { dir: SeamDir; to: Spot }[]; stuck?: number; legs?: number; avoid?: Set<number>; flyTo?: Spot; flyAfter?: number }
 
 // B held: a match runs unless B is held (br_boot.c / field_player_avatar.c), and a
 // townsperson walks.
@@ -85,7 +86,7 @@ function centreFor(room: Room, a: Actor): Spot | null {
   let best: Spot | null = null, bestH = Infinity, bestD = Infinity;
   for (const s of room.centreSteps()) {
     if (room.inFog(s)) continue;
-    const h = room.world.hops(a.m.spot.map, s.map, true, true);
+    const h = room.world.hops(a.m.spot.map, s.map, surfs(a), cuts(a));
     if (h === undefined || h > bestH) continue;
     const q = room.places.get(s.map)!;
     const d = Math.abs(q.gx + s.x - p.gx - a.m.spot.x) + Math.abs(q.gy + s.y - p.gy - a.m.spot.y);
@@ -112,7 +113,7 @@ function planeOf(room: Room, s: Spot): { x: number; y: number } | null {
  *  actually doing something"). */
 function safariGoal(room: Room, a: Actor, b: Brain): Spot | null {
   const { map, x, y } = a.m.spot;
-  const reach = room.world.reachOnMap(a.m.spot, true, true);
+  const reach = room.world.reachOnMap(a.m.spot, surfs(a), cuts(a));
   const spots: { x: number; y: number }[] = [...room.patchesOn(map)];
   for (const g of room.ground().values()) if (g.map === map && !g.gift && !room.picked.has(g.key)) spots.push(g);
   const near = spots
@@ -140,19 +141,32 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
     let best: Actor | undefined, bestD = Infinity;
     for (const o of room.actors) {
       const q = planeOf(room, o.m.spot);
-      if (o === a || o.away || !p || !q || room.inFog(o.m.spot)) continue;
+      // Not one in a fight: it went and stood by them until it was over, a minute and more (Cam,
+      // 11-02: "Bots stand next to each other without fighting").
+      if (o === a || o.away || o.battling || !p || !q || room.inFog(o.m.spot)) continue;
       const d = Math.abs(q.x - p.x) + Math.abs(q.y - p.y);
       if (d < bestD) { bestD = d; best = o; }
     }
     if (best) return { ...best.m.spot };
   }
-  const ev = room.events[room.events.length - 1];
-  if (ev && room.spills.has(ev.key) && !room.picked.has(ev.key) && rand(b) < 1 / 3 && !room.inFog({ map: ev.map, x: ev.x, y: ev.y })) {
+  // One thought in two after what lies about, or four with eight or fewer standing: always after
+  // the next ball, a small match's bots stopped meeting (seed 7, eight bots: 3.5 minutes between
+  // fights, room.test.ts 'still go about and meet').
+  // Off the frame, not its dice: a walk it would have taken anyway stays the walk it takes.
+  const lootMood = (Math.imul(room.tick + a.id, 0x9e3779b1) >>> 30) < (room.results.entrants.length - room.results.fallen.length > 8 ? 2 : 1);
+  // A legendary on this very map, before anything else it might do here.
+  const legend = lootMood ? lootGoal(room, a, b, true) : null;
+  if (legend) return legend;
+  // The newest event whose legendary still stands (and this bot has not tried), or the newest:
+  // once there, lootGoal has what lies about. Cam, 11-02: "Not sure why they're not getting cleaned up".
+  const standing = (e: Room['events'][number]) => room.spills.has(e.key) && !room.picked.has(e.key) && !room.inFog({ map: e.map, x: e.x, y: e.y });
+  const ev = [...room.events].reverse().find((e) => standing(e) && room.spills.get(e.key)?.legend && !a.tried?.includes(e.key)) ?? room.events[room.events.length - 1];
+  if (ev && standing(ev) && rand(b) < (lootMood && room.spills.get(ev.key)?.legend ? 1 : 1 / 3)) {
     const near = room.landedOn(ev.map).filter((s) => Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
     if (near.length) return near[Math.floor(rand(b) * near.length)];
   }
   const cells = insideNext(room);
-  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return wander(room, a, b);
+  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return (lootMood ? lootGoal(room, a, b) : null) ?? wander(room, a, b);
   const p = planeOf(room, a.m.spot);
   if (!p) return null;
   const { x, y } = p;
@@ -164,7 +178,7 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
   const near: { s: Spot; h: number; d: number }[] = [];
   let bestH = Infinity, bestD = Infinity;
   for (const s of cells) {
-    if (!hops.has(s.map)) hops.set(s.map, room.world.hops(a.m.spot.map, s.map, true, true));
+    if (!hops.has(s.map)) hops.set(s.map, room.world.hops(a.m.spot.map, s.map, surfs(a), cuts(a)));
     const h = hops.get(s.map);
     if (h === undefined || h > bestH) continue;
     const q = room.places.get(s.map)!;
@@ -175,6 +189,56 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
   }
   const pool = near.filter((n) => n.h === bestH && n.d <= bestD + SPREAD);
   return pool.length ? pool[Math.floor(rand(b) * pool.length)].s : null;
+}
+
+/** What this bot's team could cross, as the world's searches ask it (POK-437): a bot goes where a
+ *  trainer with that team could, no further. */
+const surfs = (a: Actor) => ((a.field ?? 0) & FIELD_SURF) !== 0;
+const cuts = (a: Actor) => (a.field ?? 0) & 3;
+
+/** brain.ts FLY_COOLDOWN_MS and FLY_CLEAR: a flight at most this often, and never onto somebody's
+ *  screen. */
+const FLY_EVERY = 60 * 60;
+const FLY_CLEAR = { x: 9, y: 7 };
+
+/** Out of the fog the fast way, for a team that could FLY (brain.ts tryFly): a landing cell in the
+ *  heart of the ring. Not at the end, when the ring is one section and a bird lands in a fight. */
+function flyGoal(room: Room, a: Actor, b: Brain): Spot | null {
+  if (hunting(room) || room.tick < (b.flyAfter ?? 0) || !teamFlies(botParty(room.seed, a, room.ring().phase + 1))) return null;
+  const seen = (s: Spot) => room.actors.some((o) => o !== a && o.m.spot.map === s.map && Math.abs(o.m.spot.x - s.x) <= FLY_CLEAR.x && Math.abs(o.m.spot.y - s.y) <= FLY_CLEAR.y);
+  const main = room.mainland();
+  const home = heart(room).filter((s) => main.has(`${s.map}:${s.x}:${s.y}`) && room.places.has(s.map) && room.world.cell(s.map, s.x, s.y) === 0 && !room.groundAt(s.map, s.x, s.y) && !room.spillAt(s.map, s.x, s.y));
+  for (let i = 0; i < 8 && home.length; i++) {
+    const s = home[Math.floor(rand(b) * home.length)];
+    if (!seen(s)) return s;
+  }
+  return null;
+}
+
+/** How far along its own map a bot will go out of its way for a ball (a legendary, any way):
+ *  about a screen, so it is seen going for it and still gets on to the ring's heart. */
+const LOOT_NEAR = 14;
+
+/** Something on this map to go and take, as somebody playing would (brain.ts's "loot in the ring
+ *  beats wandering"; Cam, 11-02: bots should go and pick things up): one of the nearest balls and
+ *  bags with something in them it would take, and any legendary it has not tried. Not a gift
+ *  (those are the trainers'), a person, or a piece a boss guards; nothing in the fog. */
+function lootGoal(room: Room, a: Actor, b: Brain, legendOnly = false): Spot | null {
+  const { map, x, y } = a.m.spot;
+  const reach = room.world.reachOnMap(a.m.spot, surfs(a), cuts(a));
+  const near: { s: Spot; d: number }[] = [];
+  const see = (s: Spot, far: boolean) => {
+    const d = Math.abs(s.x - x) + Math.abs(s.y - y);
+    if (d && (far || d <= LOOT_NEAR) && reach.cell(s.x, s.y) && !room.inFog(s)) near.push({ s, d });
+  };
+  if (!legendOnly) for (const g of room.ground().values()) if (g.map === map && !g.gift && !room.picked.has(g.key)) see({ map, x: g.x, y: g.y }, false);
+  for (const p of room.spills.values()) {
+    if (p.map !== map || room.picked.has(p.key) || p.person || p.guard !== undefined) continue;
+    if (p.legend ? !a.tried?.includes(p.key) : !legendOnly && (p.bag.items.length > 0 || p.bag.money > 0)) see({ map, x: p.x, y: p.y }, !!p.legend);
+  }
+  if (!near.length) return null;
+  near.sort((p, q) => p.d - q.d);
+  return near[Math.floor(rand(b) * Math.min(3, near.length))].s;
 }
 
 /** goal: how much further than the nearest cell inside the ring a bot may aim. */
@@ -213,11 +277,11 @@ function wander(room: Room, a: Actor, b: Brain): Spot | null {
  *  crossing on the way, region by region (World.firstCrossing, the live match's own): a
  *  map's halves can be joined only through another, as Route 104's are through PETALBURG
  *  WOODS, and a route across Hoenn is too long for one search. */
-function leg(room: Room, from: Spot, to: Spot, avoid?: ReadonlySet<number>): Path | null {
-  const w = room.world;
-  if (from.map === to.map && w.reachOnMap(from, true, true).cell(to.x, to.y)) return findPath(w, from, to, 6000, true, true, avoid);
-  const over = w.firstCrossing(from, to.map, true, true, (r) => r.cell(to.x, to.y));
-  return over?.length ? findPathToAny(w, from, over, 6000, true, true, avoid) : null;
+function leg(room: Room, a: Actor, to: Spot, avoid?: ReadonlySet<number>): Path | null {
+  const w = room.world, from = a.m.spot, surf = surfs(a), cut = cuts(a);
+  if (from.map === to.map && w.reachOnMap(from, surf, cut).cell(to.x, to.y)) return findPath(w, from, to, 6000, surf, cut, avoid);
+  const over = w.firstCrossing(from, to.map, surf, cut, (r) => r.cell(to.x, to.y));
+  return over?.length ? findPathToAny(w, from, over, 6000, surf, cut, avoid) : null;
 }
 
 /** brain.ts HUNT_AT: under this many still standing, the hunt. */
@@ -230,6 +294,8 @@ function hunting(room: Room): boolean {
 export function botKeys(room: Room, a: Actor, b: Brain): number {
   // One frame of the key is one tile (or one turn to face a shut way): then let go.
   if (a.m.action) return 0;
+  // Somebody in its eyes, mid-step: the fight is as soon as they land.
+  if (room.sightsWalker(a)) return 0;
   const ring = room.ring();
   // Hurt is a plan of its own: it rethinks the moment a fight leaves it under HURT.
   const at = `${ring.round}:${ring.phase}:${room.events.length}${health(a) < HURT ? ':hurt' : ''}`;
@@ -259,9 +325,20 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
     b.legs = 0;
     b.avoid = undefined;
   }
+  // The fog has it and its team could FLY: out at once, wherever its walk was going.
+  if (!ring.safari && (room.tick + a.id * 7) % 30 === 0 && room.inFog(a.m.spot, ring)) {
+    const to = flyGoal(room, a, b);
+    if (to) {
+      b.flyTo = to;
+      b.flyAfter = room.tick + FLY_EVERY;
+      b.goal = null;
+      b.steps = undefined;
+      return 0;
+    }
+  }
   // Between legs, on its own frame: the next one, until it is there (or has tried enough).
   if (b.goal && !b.steps?.length && (room.tick + a.id * 7) % 30 === 0) {
-    const path = !sameSpot(a.m.spot, b.goal) && (b.legs = (b.legs ?? 0) + 1) <= 24 ? leg(room, a.m.spot, b.goal, b.avoid) : null;
+    const path = !sameSpot(a.m.spot, b.goal) && (b.legs = (b.legs ?? 0) + 1) <= 24 ? leg(room, a, b.goal, b.avoid) : null;
     b.steps = path?.found ? path.steps : undefined;
     // A hunt ends beside its quarry, in its eyeline, not on it.
     const end = b.steps?.[b.steps.length - 1]?.to;
@@ -275,9 +352,16 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
   if (!b.steps?.length && (room.tick + a.id * 7) % 30 === 0 && room.tick >= a.calm && !ring.safari && !room.inFog(a.m.spot, ring)) {
     const here = (o: Actor) => o !== a && !o.battling && !o.away && room.tick >= o.calm && o.m.spot.map === a.m.spot.map;
     const dx = (o: Actor) => Math.abs(o.m.spot.x - a.m.spot.x), dy = (o: Actor) => Math.abs(o.m.spot.y - a.m.spot.y);
+    // Another bot may be over a seam: the page draws the two maps as one street.
+    const p = planeOf(room, a.m.spot);
+    const near = (o: Actor) => {
+      if (o === a || o.battling || o.away || room.tick < o.calm) return false;
+      const q = planeOf(room, o.m.spot);
+      return !!p && !!q && (o.m.spot.map === a.m.spot.map || !!room.maps.get(a.m.spot.map)?.seams.some((s) => s.to === o.m.spot.map)) && Math.abs(q.x - p.x) + Math.abs(q.y - p.y) <= NEAR_TILES;
+    };
     const o = room.actors.find((o) => !o.bot && here(o) && dx(o) <= NEAR_PLAYER.x && dy(o) <= NEAR_PLAYER.y) ??
-      (room.tick >= room.duelAfter ? room.actors.find((o) => o.bot && here(o) && dx(o) + dy(o) <= NEAR_TILES) : undefined);
-    const path = o ? findPath(room.world, a.m.spot, o.m.spot, 2000, true, true) : null;
+      (room.tick >= room.duelAfter ? room.actors.find((o) => o.bot && near(o)) : undefined);
+    const path = o ? findPath(room.world, a.m.spot, o.m.spot, 2000, surfs(a), cuts(a)) : null;
     if (path?.found && path.steps.length >= 2) { b.steps = path.steps.slice(0, -1); b.stuck = 0; }
   }
   if (b.steps?.length) {
@@ -289,7 +373,8 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
     // bot leaves for the trainers), a person. The cell it gave up at is gone round from
     // then on, until it has somewhere new to be: Oldale's ball at the north exit held a
     // hunter there for the rest of the match.
-    else if ((b.stuck = (b.stuck ?? 0) + 1) > 90) {
+    // Two in a fight in the way will be there for a minute: round them from the first.
+    else if ((b.stuck = (b.stuck ?? 0) + 1) > 90 || room.actors.some((o) => o.battling && sameSpot(o.m.spot, b.steps![0].to))) {
       const k = room.world.key(b.steps[0].to);
       if (k >= 0) (b.avoid ??= new Set()).add(k);
       b.steps = undefined;
@@ -326,11 +411,13 @@ export function botSpawns(room: Room, maps: readonly WorldMap[], count: number):
   for (const [x, y] of [[7, 12], [13, 13], [11, 16]].slice(0, count)) add({ map: 'MAP_LITTLEROOT_TOWN', x, y }, 1, botSkin(out.length * 7 + 1));
   // Anywhere a trainer may land, as the live match deals them (bots/host.ts: its spawns
   // are its targets): the ring closes anywhere in Hoenn (Room.centre), and a bot SURFs
-  // and CUTs its way to it, region by region (leg).
+  // and CUTs its way to it if its team could, region by region (leg). Nowhere that strands a
+  // team that cannot (Room.mainland).
+  const main = room.mainland();
   const cells = room.landed().filter((s) => {
     const m = grids.get(s.map);
     const c = m?.[s.y * room.maps.get(s.map)!.w + s.x];
-    return m && (c === 0 || c === 7) && !room.groundAt(s.map, s.x, s.y) &&
+    return m && (c === 0 || c === 7) && !room.groundAt(s.map, s.x, s.y) && (c !== 0 || main.has(`${s.map}:${s.x}:${s.y}`)) &&
       !(s.map === 'MAP_LITTLEROOT_TOWN' && s.x >= 7 && s.x <= 13 && s.y >= 9 && s.y <= 13);
   });
   for (let tries = 0; out.length < count && cells.length && tries < 50000; tries++) {

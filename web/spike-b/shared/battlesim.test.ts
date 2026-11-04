@@ -29,6 +29,64 @@ describe('battlesim', () => {
     expect(others.some((l) => JSON.stringify(l) !== JSON.stringify(one.log))).toBe(true);
   });
 
+  it('a team with a mon already down loses when its last one faints, not at the turn cap', () => {
+    // The fight after a fight: the engine counts a team when it starts, wounds or no, so the last
+    // mon's faint left it one short of over. Nobody on the field, no switch to make, and the winner
+    // used every move on nothing ("But it failed!") until TURN_CAP: 11% of the fights in a standard
+    // match, 39% of their time on screen (2026-11-03).
+    const out = simulate(side(1, [card(16, 5, { hp: 0 }), card(16, 5)]), side(2, [card(130, 50)]), { seed: 9 }); // PIDGEY, GYARADOS
+    expect(out.winner).toBe(2);
+    expect(out.capped).toBe(false);
+    expect(out.turns).toBeLessThan(10);
+    const said = out.log.filter((e) => e.e === 'text').map((e) => (e as { text: string }).text);
+    expect(said.filter((x) => x === 'But it failed!')).toEqual([]);
+    // ...and the same the other way round: the side with the gap is the winner's.
+    const back = simulate(side(1, [card(130, 50, { hp: 0 }), card(130, 50)]), side(2, [card(16, 5)]), { seed: 9 });
+    expect(back.winner).toBe(1);
+    expect(back.capped).toBe(false);
+  });
+
+  describe('a mon with nothing left that does anything', () => {
+    const said = (out: { log: BattleEvent[] }) => out.log.filter((e) => e.e === 'text').map((e) => (e as { text: string }).text);
+    const nothing = /But it failed|doesn't affect|won't go (lower|higher)/;
+
+    it('STRUGGLEs, and does not spend its PP a turn at a time', () => {
+      // Level 5 PLUSLE and MINUN know GROWL and THUNDER WAVE and no more: sixty PP each, then STRUGGLE,
+      // eight minutes of screen. Now a turn or two past THUNDER WAVE and the bottom of GROWL.
+      for (let seed = 1; seed <= 20; seed++) {
+        const out = simulate(side(1, [card(353, 5)]), side(2, [card(354, 5)]), { seed });
+        expect(out.capped, `seed ${seed}`).toBe(false);
+        expect(out.turns, `seed ${seed}`).toBeLessThan(40);
+        expect(said(out).filter((x) => x.includes('STRUGGLE')).length, `seed ${seed}`).toBeGreaterThan(0);
+        expect(said(out).filter((x) => nothing.test(x)).length, `seed ${seed}: at most the odd miss of judgement`).toBeLessThan(10);
+      }
+    });
+
+    it('does not throw POISONPOWDER at an ODDISH until it runs out', () => {
+      // ODDISH v ODDISH at 15 ran the ten minutes: ABSORB's twenty PP, then thirty-five of a move that
+      // does nothing to its own kind.
+      for (let seed = 1; seed <= 10; seed++) {
+        const out = simulate(side(1, [card(43, 15)]), side(2, [card(43, 15)]), { seed });
+        expect(out.capped, `seed ${seed}`).toBe(false);
+        expect(said(out).filter((x) => /doesn't affect/.test(x)), `seed ${seed}`).toEqual([]);
+        expect(logMs(out.log), `seed ${seed}`).toBeLessThan(8 * 60_000);
+      }
+    });
+
+    it('goes for a mate who can still hit, and is there for what it can work on', () => {
+      // GASTLY's moves bounce off nothing here, so the ghost's foe is the one: a level 5 ZIGZAGOON's
+      // TACKLE and GROWL into a SHEDINJA-free ghost do nothing, and its mate with a real move goes in.
+      const out = simulate(side(1, [card(263, 5), card(25, 30)]), side(2, [card(92, 30)]), { seed: 4 }); // ZIGZAGOON, PIKACHU; GASTLY
+      expect(out.capped).toBe(false);
+      expect(out.winner).toBeGreaterThan(0);
+    });
+
+    it('is the same for the same seed', () => {
+      const run = () => simulate(side(1, [card(353, 5)]), side(2, [card(354, 5)]), { seed: 7 });
+      expect(run()).toEqual(run());
+    });
+  });
+
   it('a turn at a time is the same fight', () => {
     const [a, b] = dealt(5, 7);
     const run = simulation(a, b, { seed: 44 });
@@ -128,7 +186,7 @@ describe('battlesim', () => {
     // A fight nobody has touched is level: nobody won.
     const untouched = simulate(side(1, [card(44, 100)]), side(2, [card(16, 100)]), { seed: 9, turnCap: 0 });
     expect(untouched).toMatchObject({ capped: true, winner: 0, loser: 0 });
-    expect(TURN_CAP).toBe(100);
+    expect(TURN_CAP).toBe(60);
   });
 
   it('the fog hurts but never finishes anybody (br_ring.c)', () => {

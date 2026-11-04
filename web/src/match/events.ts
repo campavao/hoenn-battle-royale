@@ -152,6 +152,19 @@ const RAYQUAZA = 406;
 const LATIAS = 407;
 const LATIOS = 408;
 
+/** WEATHER_DROUGHT and WEATHER_DOWNPOUR (constants/weather.h): SOOTOPOLIS's clash, one of the two
+ *  for a whole match by its seed, which every seat shares (br_story.c BrStory_Weather). */
+export const WEATHER_DROUGHT = 12;
+export const WEATHER_DOWNPOUR = 13;
+export const clashWeather = (seed: number) => (seed & 1 ? WEATHER_DROUGHT : WEATHER_DOWNPOUR);
+
+/** One of a choice of legendaries for this match: KYOGRE or GROUDON is always the one whose
+ *  weather the match has, never KYOGRE in GROUDON's drought (POK-384); anything else, `rng`'s. */
+export function legendOf(pick: readonly number[], seed: number, rng: () => number): number {
+  if (pick.includes(KYOGRE) && pick.includes(GROUDON)) return clashWeather(seed) === WEATHER_DROUGHT ? GROUDON : KYOGRE;
+  return pick[Math.min(pick.length - 1, Math.floor(rng() * pick.length))];
+}
+
 /** Each event's legendary, one of these: the golems first, the weather trio's last word
  *  at the end. Jirachi and Deoxys are event Pokemon in Emerald and stay that way. */
 export const LEGENDS: readonly (readonly number[])[] = [

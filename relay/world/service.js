@@ -158,6 +158,20 @@ var init_encounters = __esm({
   }
 });
 
+// web/src/data/hms.json
+var hms_default;
+var init_hms = __esm({
+  "web/src/data/hms.json"() {
+    hms_default = {
+      cut: "7e8018f807f83c00e00308000c100d880020a0ff070040c03180d103080038090000e00703f80820c4000003007802c1c1b8a105",
+      fly: "400067000000000000003800000000000040a70018020500400000000a000006000000000000630000600000c00002000020c001",
+      surf: "800300800400c0700083c10c0c10f9034dbcb8c0070c80058c0088c0450022030000003883034006f88fe1400000e0200100d001",
+      strength: "fe0390ff9f01c06f1cfc01c2cc9f0be00dc0e0b60500b04788f8f77ba0311e070000e0bf021b18b6d3f8ff0238f41bd9a1b87f04",
+      dive: "800300000000c0700083c10c0c00f0034c2ca0c0010c80058c000880450020020000003800030006b80fe0000000e0200000d001"
+    };
+  }
+});
+
 // web/src/bots/party.ts
 function evolutionOf(species) {
   const row = EXPORTED.evolve[String(species)];
@@ -175,6 +189,19 @@ function grownUp(species, level) {
 function rungForPhase(phase) {
   const i = phase === 0 ? 0 : phase - 1;
   return LADDER[Math.min(i, LADDER.length - 1)];
+}
+function couldDo(team, hm, move) {
+  return team.some((m) => {
+    if (m.moves.some((v2) => v2.id === move)) return true;
+    const byte = parseInt(hms_default[hm].substr((m.species >> 3) * 2, 2), 16);
+    return !Number.isNaN(byte) && (byte >> (m.species & 7) & 1) === 1;
+  });
+}
+function teamField(team) {
+  return (couldDo(team, "cut", MOVE_CUT) ? 1 : 0) | (couldDo(team, "strength", MOVE_STRENGTH) ? 2 : 0) | (couldDo(team, "surf", MOVE_SURF) ? 4 : 0);
+}
+function teamFlies(team) {
+  return couldDo(team, "fly", MOVE_FLY);
 }
 function hp(level) {
   return Math.max(10, Math.floor(level * 2.2) + 10);
@@ -230,6 +257,25 @@ function mon(level, rng, mapId, from = []) {
     ot: "BR"
   };
 }
+function tradedMon(species, phase) {
+  const level = rungForPhase(phase);
+  const grown = grownUp(species, level);
+  const max = hp(level);
+  return {
+    species: grown,
+    level,
+    hp: max,
+    maxHp: max,
+    status: 0,
+    moves: [{ id: 33, pp: 25, ppUps: 0 }],
+    heldItem: 0,
+    otId: 0,
+    personality: species * 2654435761 >>> 0,
+    exp: 0,
+    nickname: speciesName(grown),
+    ot: "BR"
+  };
+}
 function dealParty(seed, seat, phase, mapId, grade = 1 /* Regular */, pool = []) {
   const rng = mulberry32((seed ^ seat * 40503) >>> 0);
   const level = rungForPhase(phase);
@@ -239,19 +285,21 @@ function dealParty(seed, seat, phase, mapId, grade = 1 /* Regular */, pool = [])
   for (let i = 0; i < count; i++) party.push(mon(level, rng, mapId, i === 0 ? pool : []));
   return party;
 }
-var EXPORTED, ENCOUNTERS, LADDER, MOVE_SURF, MOVE_CUT, MOVE_FLY, SURF_RUNG, CUT_RUNG, FLY_RUNG, POOL;
+var EXPORTED, ENCOUNTERS, LADDER, MOVE_SURF, MOVE_CUT, MOVE_FLY, MOVE_STRENGTH, SURF_RUNG, CUT_RUNG, FLY_RUNG, POOL;
 var init_party = __esm({
   "web/src/bots/party.ts"() {
     "use strict";
     init_clock();
     init_roster();
     init_encounters();
+    init_hms();
     EXPORTED = encounters_default;
     ENCOUNTERS = EXPORTED.maps;
     LADDER = [5, 15, 30, 50, 75, 100];
     MOVE_SURF = 57;
     MOVE_CUT = 15;
     MOVE_FLY = 19;
+    MOVE_STRENGTH = 70;
     SURF_RUNG = 30;
     CUT_RUNG = 20;
     FLY_RUNG = 25;
@@ -8209,6 +8257,7 @@ function useless(b2, u, f, m) {
   if (m.volatileStatus === "confusion" && (f.volatiles.confusion || f.ability === "owntempo" || foeSide.sideConditions.safeguard)) return true;
   if (id2 === "leechseed" && (f.volatiles.leechseed || f.hasType("Grass"))) return true;
   if (id2 === "attract" && (f.volatiles.attract || f.ability === "oblivious" || u.gender === "N" || f.gender === "N" || u.gender === f.gender)) return true;
+  if (CHANGES_HANDS.has(id2)) return !canHit(b2, f, u);
   if (id2 === "dreameater" || id2 === "nightmare") return f.status !== "slp" && f.ability !== "comatose";
   if (id2 === "snore" || id2 === "sleeptalk") return u.status !== "slp";
   if (id2 === "fakeout") return u.activeTurns > 1;
@@ -8324,6 +8373,13 @@ function pickMove(b2, u, f, slots, rng) {
   }
   return pool[Math.floor(rng() * pool.length)];
 }
+function spent(b2, u, f, slots) {
+  return slots.every((slot) => {
+    if (slot.disabled || slot.pp !== void 0 && slot.pp <= 0) return true;
+    const m = b2.dex.moves.get(slot.id);
+    return useless(b2, u, f, m) || m.category !== "Status" && !CHANGES_HANDS.has(m.id) && damageOf(b2, u, f, m) <= 0;
+  });
+}
 function pickNext(b2, side, foe) {
   const bench = side.pokemon.filter((p) => p.hp > 0 && !p.isActive);
   if (!bench.length) return void 0;
@@ -8381,15 +8437,18 @@ function decide(b2, side, request, bag, lastHit, rng) {
   const row = request.active[0];
   const locked = row.moves.length === 1 && (!!u.getLockedMove?.() || row.moves[0].id === "recharge" || row.moves[0].id === "struggle");
   if (!u || !f || u.hp <= 0 || locked) return { kind: "move", slot: 0 };
+  const done = spent(b2, u, f, row.moves);
   if (!row.trapped && !row.maybeTrapped) {
-    const to = pickSwitch(b2, side, u, f, lastHit, rng);
+    const mate = done ? side.pokemon.filter((p) => p.hp > 0 && !p.isActive && canHit(b2, p, f)) : [];
+    const to = mate.length ? pickNext(b2, { pokemon: mate }, f) : pickSwitch(b2, side, u, f, lastHit, rng);
     if (to) return { kind: "switch", to };
   }
   const item = pickItem(u, side, bag);
   if (item >= 0) return { kind: "item", index: item };
+  if (done) return { kind: "struggle" };
   return { kind: "move", slot: pickMove(b2, u, f, row.moves, rng) };
 }
-var STAGE, boosted, ABSORB, RECHARGE, TWO_TURN, SELF_KO, CHANGES_HANDS, RECOVERY, SETUP_LATE_OK, WASTED, FIXED, PHYSICAL, hasSuperEffective, bestDamage;
+var STAGE, boosted, ABSORB, RECHARGE, TWO_TURN, SELF_KO, CHANGES_HANDS, RECOVERY, SETUP_LATE_OK, WASTED, FIXED, PHYSICAL, hasSuperEffective, bestDamage, canHit;
 var init_simbrain = __esm({
   "web/spike-b/shared/simbrain.ts"() {
     "use strict";
@@ -8407,9 +8466,10 @@ var init_simbrain = __esm({
     PHYSICAL = /* @__PURE__ */ new Set(["Normal", "Fighting", "Flying", "Poison", "Ground", "Rock", "Bug", "Ghost", "Steel", "???"]);
     hasSuperEffective = (b2, mon2, foe) => mon2.moveSlots.some((s) => {
       const m = b2.dex.moves.get(s.id);
-      return m.category !== "Status" && !shutOut(b2, typeOf(mon2, m), m, foe) && b2.dex.getEffectiveness(typeOf(mon2, m), foe) > 0;
+      return s.pp > 0 && m.category !== "Status" && !shutOut(b2, typeOf(mon2, m), m, foe) && b2.dex.getEffectiveness(typeOf(mon2, m), foe) > 0;
     });
-    bestDamage = (b2, mon2, foe) => Math.max(0, ...mon2.moveSlots.map((s) => damageOf(b2, mon2, foe, b2.dex.moves.get(s.id))));
+    bestDamage = (b2, mon2, foe) => Math.max(0, ...mon2.moveSlots.map((s) => s.pp > 0 ? damageOf(b2, mon2, foe, b2.dex.moves.get(s.id)) : 0));
+    canHit = (b2, mon2, foe) => bestDamage(b2, mon2, foe) > 0;
   }
 });
 
@@ -9573,6 +9633,7 @@ function* simulation(a, b2, opts) {
   };
   battle.setPlayer("p1", { name: "A", team: teamA.sets });
   battle.setPlayer("p2", { name: "B", team: teamB.sets });
+  for (const s of battle.sides) s.pokemonLeft = s.pokemon.filter((m) => !m.fainted).length;
   if (opts.fog) {
     battle.onEvent("Residual", battle.format, (mon2) => {
       const bite = Math.min(Math.max(1, Math.floor(mon2.maxhp / 10)), mon2.hp - 1);
@@ -9611,6 +9672,15 @@ function* simulation(a, b2, opts) {
         useItem(battle, side, bags[n][d.index]);
         battle.skip.push(side.active[0]);
         battle.choose(side.id, "default");
+      } else if (d.kind === "struggle") {
+        const slots = side.active[0].moveSlots;
+        const left2 = slots.map((slot) => slot.pp);
+        for (const slot of slots) slot.pp = 0;
+        const ok = battle.choose(side.id, "move 1");
+        slots.forEach((slot, i) => {
+          slot.pp = left2[i];
+        });
+        if (!ok) battle.choose(side.id, "default");
       } else if (!battle.choose(side.id, `move ${d.slot + 1}`)) battle.choose(side.id, "default");
     }
     if (!acted && !battle.ended) {
@@ -9684,7 +9754,7 @@ var init_battlesim = __esm({
     init_simlog();
     init_simnames();
     init_learnset_fixes();
-    TURN_CAP = 100;
+    TURN_CAP = 60;
     dex = I.forFormat("gen3customgame");
     NATURES = ["Hardy", "Lonely", "Brave", "Adamant", "Naughty", "Bold", "Docile", "Relaxed", "Impish", "Lax", "Timid", "Hasty", "Serious", "Jolly", "Naive", "Modest", "Mild", "Quiet", "Bashful", "Rash", "Calm", "Gentle", "Sassy", "Careful", "Quirky"];
     moveByNum = /* @__PURE__ */ new Map();
@@ -10919,6 +10989,7 @@ function findPathToAny(world, from, goals, maxVisited = DEFAULT_BUDGET, surf = f
 
 // web/spike-b/shared/bots.ts
 init_roster();
+init_party();
 init_clock();
 
 // web/spike-b/shared/marts.ts
@@ -11005,6 +11076,13 @@ var GROUDON = 405;
 var RAYQUAZA = 406;
 var LATIAS = 407;
 var LATIOS = 408;
+var WEATHER_DROUGHT = 12;
+var WEATHER_DOWNPOUR = 13;
+var clashWeather = (seed) => seed & 1 ? WEATHER_DROUGHT : WEATHER_DOWNPOUR;
+function legendOf(pick, seed, rng) {
+  if (pick.includes(KYOGRE) && pick.includes(GROUDON)) return clashWeather(seed) === WEATHER_DROUGHT ? GROUDON : KYOGRE;
+  return pick[Math.min(pick.length - 1, Math.floor(rng() * pick.length))];
+}
 var LEGENDS = [
   [REGIROCK, REGICE, REGISTEEL],
   [LATIAS, LATIOS],
@@ -11585,6 +11663,9 @@ function scatterItem(rng) {
 // web/spike-b/data/rooms.json
 var rooms_default = [["MAP_DEWFORD_TOWN_HOUSE1", 4, 3, true, true, 6, 4, false], ["MAP_DEWFORD_TOWN_HOUSE2", 8, 4, true, true, 6, 5, false], ["MAP_FALLARBOR_TOWN_COZMOS_HOUSE", 6, 4, true, true, 4, 5, false], ["MAP_FALLARBOR_TOWN_MOVE_RELEARNERS_HOUSE", 5, 4, true, true, 7, 4, false], ["MAP_FORTREE_CITY_HOUSE1", 2, 2, true, true, 6, 3, false], ["MAP_FORTREE_CITY_HOUSE2", 6, 4, true, true, 1, 3, false], ["MAP_FORTREE_CITY_HOUSE3", 1, 4, true, true, 6, 3, false], ["MAP_FORTREE_CITY_HOUSE4", 6, 3, true, true, 7, 3, false], ["MAP_FORTREE_CITY_HOUSE5", 6, 2, true, true, 1, 3, false], ["MAP_LAVARIDGE_TOWN_HOUSE", 4, 3, true, true, 6, 3, false], ["MAP_LILYCOVE_CITY_HOUSE1", 2, 4, true, true, 6, 4, false], ["MAP_LILYCOVE_CITY_HOUSE2", 1, 3, true, true, 6, 4, false], ["MAP_LILYCOVE_CITY_HOUSE3", 2, 4, true, true, 4, 4, false], ["MAP_LILYCOVE_CITY_HOUSE4", 6, 4, true, true, 1, 5, false], ["MAP_LILYCOVE_CITY_MOVE_DELETERS_HOUSE", 6, 4, true, true, 4, 5, false], ["MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_1F", 2, 4, true, true, 6, 2, false], ["MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_2F", 6, 4, true, true, 5, 3, false], ["MAP_LITTLEROOT_TOWN_MAYS_HOUSE_1F", 7, 4, true, true, 9, 4, false], ["MAP_LITTLEROOT_TOWN_MAYS_HOUSE_2F", 2, 4, true, true, 5, 5, false], ["MAP_MAUVILLE_CITY_HOUSE1", 9, 1, true, true, 4, 5, false], ["MAP_MAUVILLE_CITY_HOUSE2", 7, 2, true, true, 6, 2, false], ["MAP_MOSSDEEP_CITY_HOUSE1", 3, 2, true, true, 9, 2, false], ["MAP_MOSSDEEP_CITY_HOUSE2", 9, 3, true, true, 1, 7, false], ["MAP_MOSSDEEP_CITY_HOUSE3", 6, 4, true, true, 6, 2, false], ["MAP_MOSSDEEP_CITY_HOUSE4", 8, 4, true, true, 4, 3, false], ["MAP_MOSSDEEP_CITY_STEVENS_HOUSE", 4, 3, true, true, 5, 5, false], ["MAP_OLDALE_TOWN_HOUSE1", 0, 2, true, true, 8, 6, false], ["MAP_OLDALE_TOWN_HOUSE2", 9, 1, true, true, 10, 2, false], ["MAP_PACIFIDLOG_TOWN_HOUSE1", 7, 1, true, true, 3, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE2", 4, 4, true, true, 6, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE3", 0, 6, true, true, 6, 4, false], ["MAP_PACIFIDLOG_TOWN_HOUSE4", 5, 4, true, true, 6, 2, false], ["MAP_PACIFIDLOG_TOWN_HOUSE5", 4, 2, true, true, 3, 5, false], ["MAP_PETALBURG_CITY_HOUSE1", 9, 3, true, true, 1, 4, false], ["MAP_PETALBURG_CITY_HOUSE2", 5, 4, true, true, 4, 3, false], ["MAP_PETALBURG_CITY_WALLYS_HOUSE", 6, 4, true, true, 4, 4, false], ["MAP_ROUTE104_MR_BRINEYS_HOUSE", 7, 4, true, true, 5, 4, false], ["MAP_ROUTE109_SEASHORE_HOUSE", 4, 2, true, true, 8, 2, false], ["MAP_ROUTE111_WINSTRATE_FAMILYS_HOUSE", 6, 4, true, true, 5, 3, false], ["MAP_ROUTE114_FOSSIL_MANIACS_HOUSE", 8, 4, true, true, 3, 2, false], ["MAP_ROUTE114_LANETTES_HOUSE", 8, 2, true, true, 3, 4, false], ["MAP_ROUTE116_TUNNELERS_REST_HOUSE", 7, 4, true, true, 0, 4, false], ["MAP_ROUTE119_HOUSE", 2, 4, true, true, 5, 2, false], ["MAP_ROUTE123_BERRY_MASTERS_HOUSE", 6, 4, true, true, 4, 4, false], ["MAP_ROUTE124_DIVING_TREASURE_HUNTERS_HOUSE", 3, 4, true, true, 8, 2, false], ["MAP_RUSTBORO_CITY_CUTTERS_HOUSE", 8, 4, true, true, 2, 4, false], ["MAP_RUSTBORO_CITY_HOUSE1", 4, 4, true, true, 10, 2, false], ["MAP_RUSTBORO_CITY_HOUSE2", 1, 4, true, true, 9, 2, false], ["MAP_RUSTBORO_CITY_HOUSE3", 2, 4, true, true, 7, 4, false], ["MAP_SLATEPORT_CITY_HOUSE", 9, 1, true, true, 1, 4, false], ["MAP_SLATEPORT_CITY_NAME_RATERS_HOUSE", 8, 4, true, true, 4, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE1", 6, 4, true, true, 2, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE2", 6, 5, true, true, 3, 4, false], ["MAP_SOOTOPOLIS_CITY_HOUSE3", 1, 4, true, true, 6, 2, false], ["MAP_SOOTOPOLIS_CITY_HOUSE4", 6, 3, true, true, 1, 3, false], ["MAP_SOOTOPOLIS_CITY_HOUSE5", 1, 4, true, true, 3, 4, false], ["MAP_SOOTOPOLIS_CITY_HOUSE6", 3, 2, true, true, 4, 2, false], ["MAP_SOOTOPOLIS_CITY_HOUSE7", 4, 3, true, true, 2, 3, false], ["MAP_SOOTOPOLIS_CITY_LOTAD_AND_SEEDOT_HOUSE", 4, 3, true, true, 2, 3, false], ["MAP_VERDANTURF_TOWN_FRIENDSHIP_RATERS_HOUSE", 2, 3, true, true, 4, 5, false], ["MAP_VERDANTURF_TOWN_HOUSE", 6, 4, true, true, 1, 4, false], ["MAP_VERDANTURF_TOWN_WANDAS_HOUSE", 13, 4, true, true, 15, 4, false], ["MAP_ABANDONED_SHIP_CORRIDORS_1F", 3, 10, false, true, 11, 10, false], ["MAP_ABANDONED_SHIP_CORRIDORS_B1F", 2, 6, false, true, 6, 5, false], ["MAP_ABANDONED_SHIP_DECK", 10, 10, false, true, 15, 11, false], ["MAP_ABANDONED_SHIP_HIDDEN_FLOOR_CORRIDORS", 11, 2, false, true, 1, 2, false], ["MAP_ABANDONED_SHIP_HIDDEN_FLOOR_ROOMS", 7, 12, false, true, 20, 5, true], ["MAP_ABANDONED_SHIP_ROOMS_1F", 11, 12, false, true, 7, 6, true], ["MAP_ALTERING_CAVE", 26, 11, false, true, 27, 11, true], ["MAP_ANCIENT_TOMB", 8, 25, false, true, 9, 21, true], ["MAP_AQUA_HIDEOUT_1F", 6, 8, false, true, 20, 2, true], ["MAP_AQUA_HIDEOUT_B1F", 9, 7, false, true, 6, 8, true], ["MAP_AQUA_HIDEOUT_B2F", 26, 18, false, true, 16, 11, true], ["MAP_CAVE_OF_ORIGIN_1F", 11, 15, false, true, 13, 5, false], ["MAP_CAVE_OF_ORIGIN_B1F", 9, 13, false, true, 10, 3, false], ["MAP_CAVE_OF_ORIGIN_ENTRANCE", 9, 17, false, true, 10, 7, false], ["MAP_DESERT_RUINS", 6, 25, false, true, 10, 25, true], ["MAP_DESERT_UNDERPASS", 10, 10, false, true, 132, 10, true], ["MAP_DEWFORD_TOWN_HALL", 16, 8, false, true, 12, 3, false], ["MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F", 15, 8, false, true, 8, 2, true], ["MAP_FIERY_PATH", 26, 22, false, true, 23, 2, true], ["MAP_FORTREE_CITY_DECORATION_SHOP", 5, 4, false, true, 2, 4, false], ["MAP_GRANITE_CAVE_1F", 11, 10, false, true, 37, 9, true], ["MAP_GRANITE_CAVE_B1F", 7, 7, false, true, 24, 16, true], ["MAP_GRANITE_CAVE_B2F", 15, 12, false, true, 26, 18, true], ["MAP_GRANITE_CAVE_STEVENS_ROOM", 7, 7, false, true, 7, 6, false], ["MAP_ISLAND_CAVE", 7, 23, false, true, 10, 8, true], ["MAP_JAGGED_PASS", 16, 10, false, true, 15, 19, true], ["MAP_LAVARIDGE_TOWN_HERB_SHOP", 8, 4, false, true, 6, 2, false], ["MAP_LILYCOVE_CITY_CONTEST_HALL", 24, 17, false, true, 25, 17, true], ["MAP_LILYCOVE_CITY_CONTEST_LOBBY", 25, 7, false, true, 11, 8, true], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_1F", 8, 4, false, true, 3, 2, false], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_2F", 8, 3, false, true, 7, 2, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_1F", 16, 4, false, true, 8, 4, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_2F", 0, 7, false, true, 6, 3, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_3F", 17, 7, false, true, 4, 2, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_4F", 5, 7, false, true, 17, 5, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_5F", 0, 7, false, true, 15, 2, false], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_ROOFTOP", 8, 1, false, true, 9, 2, false], ["MAP_LILYCOVE_CITY_HARBOR", 6, 11, false, true, 10, 11, false], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_1F", 2, 3, false, true, 17, 11, true], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F", 7, 4, false, true, 15, 4, true], ["MAP_LILYCOVE_CITY_POKEMON_TRAINER_FAN_CLUB", 7, 3, false, true, 9, 9, false], ["MAP_MAGMA_HIDEOUT_1F", 20, 25, false, true, 25, 12, true], ["MAP_MAGMA_HIDEOUT_2F_1R", 12, 26, false, true, 15, 19, true], ["MAP_MAGMA_HIDEOUT_2F_2R", 10, 17, false, true, 28, 6, true], ["MAP_MAGMA_HIDEOUT_2F_3R", 16, 2, false, true, 15, 11, false], ["MAP_MAGMA_HIDEOUT_3F_1R", 9, 17, false, true, 15, 10, true], ["MAP_MAGMA_HIDEOUT_4F", 45, 9, false, true, 26, 10, true], ["MAP_MARINE_CAVE_END", 13, 5, false, true, 14, 25, true], ["MAP_MARINE_CAVE_ENTRANCE", 7, 7, false, true, 8, 6, true], ["MAP_MAUVILLE_CITY_BIKE_SHOP", 7, 1, false, true, 5, 4, false], ["MAP_MAUVILLE_CITY_GAME_CORNER", 17, 5, false, true, 8, 2, false], ["MAP_METEOR_FALLS_1F_1R", 6, 20, false, true, 13, 17, true], ["MAP_METEOR_FALLS_1F_2R", 17, 28, false, true, 8, 17, true], ["MAP_METEOR_FALLS_B1F_1R", 14, 19, false, true, 15, 18, true], ["MAP_METEOR_FALLS_STEVENS_CAVE", 10, 26, false, true, 17, 16, true], ["MAP_MIRAGE_TOWER_1F", 13, 13, false, true, 5, 12, false], ["MAP_MIRAGE_TOWER_2F", 14, 4, false, true, 17, 9, false], ["MAP_MIRAGE_TOWER_3F", 17, 10, false, true, 4, 2, false], ["MAP_MIRAGE_TOWER_4F", 4, 3, false, true, 7, 7, false], ["MAP_MOSSDEEP_CITY_GAME_CORNER_1F", 1, 4, false, true, 9, 2, false], ["MAP_MOSSDEEP_CITY_GAME_CORNER_B1F", 6, 5, false, true, 5, 5, false], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_1F", 8, 5, false, true, 10, 2, false], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_2F", 7, 5, false, true, 4, 2, false], ["MAP_MT_CHIMNEY", 24, 34, false, true, 10, 6, true], ["MAP_MT_CHIMNEY_CABLE_CAR_STATION", 10, 9, false, true, 3, 8, false], ["MAP_MT_PYRE_1F", 17, 9, false, true, 15, 7, false], ["MAP_MT_PYRE_EXTERIOR", 9, 44, false, true, 17, 27, true], ["MAP_MT_PYRE_SUMMIT", 23, 6, false, true, 24, 19, true], ["MAP_NEW_MAUVILLE_ENTRANCE", 4, 4, false, true, 5, 2, false], ["MAP_PETALBURG_WOODS", 15, 34, false, true, 26, 21, true], ["MAP_ROUTE104_PRETTY_PETAL_FLOWER_SHOP", 9, 3, false, true, 2, 3, false], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_NORTH_ENTRANCE", 12, 2, false, true, 2, 2, false], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_SOUTH_ENTRANCE", 2, 2, false, true, 12, 2, false], ["MAP_ROUTE111_OLD_LADYS_REST_STOP", 8, 4, false, true, 1, 4, false], ["MAP_ROUTE112_CABLE_CAR_STATION", 2, 9, false, true, 11, 8, false], ["MAP_ROUTE113_GLASS_WORKSHOP", 6, 3, false, true, 7, 2, false], ["MAP_ROUTE114_FOSSIL_MANIACS_TUNNEL", 7, 19, false, true, 5, 3, false], ["MAP_ROUTE117_POKEMON_DAY_CARE", 10, 5, false, true, 7, 2, false], ["MAP_ROUTE119_WEATHER_INSTITUTE_1F", 11, 5, false, true, 2, 3, true], ["MAP_ROUTE119_WEATHER_INSTITUTE_2F", 11, 6, false, true, 2, 5, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_1F", 14, 6, false, true, 5, 2, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_2F", 5, 4, false, true, 9, 4, false], ["MAP_RUSTBORO_CITY_DEVON_CORP_3F", 13, 5, false, true, 4, 2, false], ["MAP_RUSTBORO_CITY_FLAT1_1F", 7, 4, false, true, 4, 2, false], ["MAP_RUSTBORO_CITY_FLAT1_2F", 3, 4, false, true, 10, 2, false], ["MAP_RUSTBORO_CITY_FLAT2_1F", 9, 3, false, true, 2, 2, false], ["MAP_RUSTBORO_CITY_FLAT2_2F", 9, 4, false, true, 10, 3, false], ["MAP_RUSTBORO_CITY_FLAT2_3F", 9, 3, false, true, 12, 2, false], ["MAP_RUSTBORO_CITY_POKEMON_SCHOOL", 9, 3, false, true, 5, 3, false], ["MAP_RUSTURF_TUNNEL", 6, 8, false, true, 18, 15, true], ["MAP_SEAFLOOR_CAVERN_ENTRANCE", 7, 7, false, true, 8, 7, true], ["MAP_SEAFLOOR_CAVERN_ROOM1", 10, 2, false, true, 4, 10, false], ["MAP_SEAFLOOR_CAVERN_ROOM2", 10, 3, false, true, 5, 2, false], ["MAP_SEAFLOOR_CAVERN_ROOM3", 3, 11, false, true, 12, 6, false], ["MAP_SEAFLOOR_CAVERN_ROOM4", 9, 5, false, true, 10, 11, false], ["MAP_SEAFLOOR_CAVERN_ROOM5", 15, 10, false, true, 9, 5, false], ["MAP_SEAFLOOR_CAVERN_ROOM6", 11, 20, false, true, 3, 2, true], ["MAP_SEAFLOOR_CAVERN_ROOM7", 3, 19, false, true, 4, 2, false], ["MAP_SEAFLOOR_CAVERN_ROOM8", 6, 11, false, true, 4, 11, false], ["MAP_SEAFLOOR_CAVERN_ROOM9", 12, 9, false, true, 13, 23, true], ["MAP_SEALED_CHAMBER_INNER_ROOM", 10, 11, false, true, 9, 10, true], ["MAP_SEALED_CHAMBER_OUTER_ROOM", 8, 9, false, true, 15, 16, true], ["MAP_SHOAL_CAVE_LOW_TIDE_ENTRANCE_ROOM", 16, 25, false, true, 26, 16, true], ["MAP_SHOAL_CAVE_LOW_TIDE_ICE_ROOM", 16, 26, false, true, 10, 15, true], ["MAP_SHOAL_CAVE_LOW_TIDE_INNER_ROOM", 31, 21, false, true, 23, 19, true], ["MAP_SHOAL_CAVE_LOW_TIDE_LOWER_ROOM", 28, 3, false, true, 12, 2, false], ["MAP_SKY_PILLAR_1F", 12, 4, false, true, 5, 11, false], ["MAP_SKY_PILLAR_2F", 12, 3, false, true, 6, 2, false], ["MAP_SKY_PILLAR_3F", 12, 4, false, true, 1, 5, false], ["MAP_SKY_PILLAR_4F", 13, 9, false, true, 2, 4, false], ["MAP_SKY_PILLAR_5F", 11, 3, false, true, 6, 2, false], ["MAP_SKY_PILLAR_ENTRANCE", 6, 8, false, true, 9, 2, false], ["MAP_SKY_PILLAR_OUTSIDE", 14, 15, false, true, 13, 6, false], ["MAP_SKY_PILLAR_TOP", 12, 16, false, true, 11, 10, false], ["MAP_SLATEPORT_CITY_HARBOR", 15, 13, false, true, 1, 6, false], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_1F", 12, 4, false, true, 5, 2, false], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F", 16, 6, false, true, 14, 2, false], ["MAP_SLATEPORT_CITY_POKEMON_FAN_CLUB", 5, 2, false, true, 6, 5, false], ["MAP_SLATEPORT_CITY_STERNS_SHIPYARD_1F", 4, 6, false, true, 8, 6, true], ["MAP_SLATEPORT_CITY_STERNS_SHIPYARD_2F", 6, 3, false, true, 3, 9, false], ["MAP_TERRA_CAVE_END", 10, 12, false, true, 11, 12, true], ["MAP_TERRA_CAVE_ENTRANCE", 11, 14, false, true, 5, 9, false], ["MAP_TRAINER_HILL_ENTRANCE", 14, 13, false, true, 7, 11, false], ["MAP_VICTORY_ROAD_1F", 15, 30, false, true, 23, 22, true], ["MAP_VICTORY_ROAD_B1F", 15, 17, false, true, 36, 21, true], ["MAP_VICTORY_ROAD_B2F", 34, 24, false, true, 23, 19, true]];
 
+// web/spike-b/data/table-balls.json
+var table_balls_default = [["MAP_DEWFORD_TOWN_HALL", 3, 5], ["MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F", 3, 3], ["MAP_FORTREE_CITY_DECORATION_SHOP", 5, 3], ["MAP_LAVARIDGE_TOWN_HERB_SHOP", 4, 3], ["MAP_LILYCOVE_CITY_CONTEST_LOBBY", 15, 3], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_1F", 3, 5], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_2F", 3, 4], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_2F", 8, 7], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_1F", 9, 3], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_2F", 9, 5], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_3F", 9, 3], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_4F", 9, 5], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_5F", 14, 5], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_5F", 9, 3], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_ROOFTOP", 6, 5], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_ROOFTOP", 9, 5], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_1F", 5, 10], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F", 13, 10], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F", 8, 10], ["MAP_LILYCOVE_CITY_POKEMON_TRAINER_FAN_CLUB", 6, 4], ["MAP_LILYCOVE_CITY_POKEMON_TRAINER_FAN_CLUB", 5, 10], ["MAP_MAUVILLE_CITY_BIKE_SHOP", 5, 3], ["MAP_MAUVILLE_CITY_GAME_CORNER", 11, 3], ["MAP_MOSSDEEP_CITY_GAME_CORNER_1F", 7, 7], ["MAP_MOSSDEEP_CITY_GAME_CORNER_1F", 3, 7], ["MAP_MOSSDEEP_CITY_GAME_CORNER_B1F", 4, 1], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_1F", 13, 5], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_1F", 10, 5], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_2F", 6, 7], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_2F", 12, 7], ["MAP_ROUTE104_PRETTY_PETAL_FLOWER_SHOP", 1, 4], ["MAP_ROUTE104_PRETTY_PETAL_FLOWER_SHOP", 7, 7], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_NORTH_ENTRANCE", 7, 3], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_SOUTH_ENTRANCE", 7, 3], ["MAP_ROUTE111_OLD_LADYS_REST_STOP", 5, 4], ["MAP_ROUTE113_GLASS_WORKSHOP", 7, 5], ["MAP_ROUTE117_POKEMON_DAY_CARE", 3, 3], ["MAP_ROUTE119_WEATHER_INSTITUTE_1F", 16, 6], ["MAP_ROUTE119_WEATHER_INSTITUTE_2F", 13, 9], ["MAP_ROUTE119_WEATHER_INSTITUTE_2F", 1, 5], ["MAP_RUSTBORO_CITY_DEVON_CORP_1F", 7, 4], ["MAP_RUSTBORO_CITY_DEVON_CORP_2F", 7, 4], ["MAP_RUSTBORO_CITY_DEVON_CORP_2F", 10, 7], ["MAP_RUSTBORO_CITY_DEVON_CORP_3F", 15, 6], ["MAP_RUSTBORO_CITY_FLAT1_1F", 2, 5], ["MAP_RUSTBORO_CITY_FLAT1_1F", 10, 5], ["MAP_RUSTBORO_CITY_POKEMON_SCHOOL", 6, 4], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_1F", 7, 6], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_1F", 12, 6], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F", 5, 4], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F", 15, 4], ["MAP_SLATEPORT_CITY_POKEMON_FAN_CLUB", 7, 7]];
+
 // web/spike-b/shared/items.ts
 var ITEM_TM012 = 289;
 var ITEM_HM08 = 346;
@@ -11654,6 +11735,20 @@ function sees(world, from, tx, ty) {
     y += d.dy;
     if (x2 === tx && y === ty) return true;
     if (!world.clear(from.map, x2, y)) return false;
+  }
+  return false;
+}
+function seesOver(world, from, to, ox, oy) {
+  const d = DELTA[from.dir];
+  if (!d) return false;
+  const tx = to.x + ox, ty = to.y + oy;
+  let x2 = from.x;
+  let y = from.y;
+  for (let i = 1; i <= SIGHT_RANGE; i++) {
+    x2 += d.dx;
+    y += d.dy;
+    if (x2 === tx && y === ty) return true;
+    if (!world.clear(from.map, x2, y) && !world.clear(to.map, x2 - ox, y - oy)) return false;
   }
   return false;
 }
@@ -11898,6 +11993,18 @@ function keysOf(bits) {
   return { up: !!(bits & KEY_UP), down: !!(bits & KEY_DOWN), left: !!(bits & KEY_LEFT), right: !!(bits & KEY_RIGHT), b: !!(bits & KEY_B), a: !!(bits & KEY_A), select: !!(bits & KEY_SELECT) };
 }
 var QUAFF_FRAMES = 600;
+var LEGEND_FOE = -2;
+var LEGEND_CATCH = 1 / 3;
+var CAUGHT_WEAR = 0.5;
+var FLED_WEAR = 0.15;
+function legendMon(s, species, phase) {
+  return wornParty([tradedMon(species, phase)], s?.worn === void 0 ? void 0 : [s.worn])[0];
+}
+var MAINLANDS = /* @__PURE__ */ new Map();
+function botParty(seed, a, phase) {
+  const dealt = dealParty(seed, a.id, phase, a.m.spot.map, gradeOf(seed, a.id));
+  return a.caught?.length ? [...a.caught.map((sp) => tradedMon(sp, phase)), ...dealt].slice(0, 6) : dealt;
+}
 function wornParty(party, wear) {
   if (!wear) return party;
   return party.map((m, i) => {
@@ -12010,6 +12117,7 @@ var BOT_DUEL_MAX = 60 * 60 * 10;
 var BOT_BITE = 240;
 var BOT_BITES = 10;
 var ROOMS = rooms_default;
+var TABLE_BALLS = table_balls_default;
 var SPILL_KEY = 1 << 20;
 var ZONE_CELLS = [
   { map: "MAP_SAFARI_ZONE_NORTHWEST", x: 8, y: 36 },
@@ -12180,7 +12288,8 @@ var Room = class {
       if (cmd.spent && b2.loot) spend(b2.loot.items, cmd.spent.slice(0, 4));
     } else if (cmd.c === "fly") {
       const a = this.actor(cmd.id), t7 = cmd.to;
-      if (!a || a.bot || a.battling || a.m.action || this.ring().safari || !this.places.has(t7.map)) return;
+      if (!a || a.battling || a.m.action || this.ring().safari || !this.places.has(t7.map)) return;
+      if (a.bot && !teamFlies(botParty(this.seed, a, this.ring().phase + 1))) return;
       if (this.world.cell(t7.map, t7.x, t7.y) !== 0 || this.actors.some((o) => o.m.spot.map === t7.map && o.m.spot.x === t7.x && o.m.spot.y === t7.y)) return;
       a.m = newMover({ map: t7.map, x: t7.x, y: t7.y }, 1);
     } else if (cmd.c === "sail") {
@@ -12226,7 +12335,10 @@ var Room = class {
       if (!t7 || t7.busy !== cmd.id) return;
       t7.busy = 0;
       if (t7.gives) {
-        if (cmd.given) t7.gone = true;
+        if (cmd.given) {
+          t7.gone = true;
+          t7.by = cmd.id;
+        }
       } else if (cmd.given > 0 && cmd.given < 412) t7.species = cmd.given;
       const a = this.actor(cmd.id);
       if (a?.battling && !a.foe) {
@@ -12234,6 +12346,7 @@ var Room = class {
         a.calm = this.tick + GRACE;
       }
     } else if (cmd.c === "bots") {
+      if (cmd.b === LEGEND_FOE) return this.legendOver(cmd);
       const a = this.actor(cmd.a), b2 = this.actor(cmd.b);
       if (!a || !b2 || !a.bot || !b2.bot || a.foe !== b2.id || b2.foe !== a.id || a.judge !== cmd.id || !a.battling) return;
       this.part(a);
@@ -12256,6 +12369,7 @@ var Room = class {
         return;
       }
       const a = { id: cmd.id, bot: cmd.bot, name: cmd.name, skin: cmd.skin, m: newMover(cmd.spot, cmd.facing), keys: 0, last: 0, battling: false, foe: 0, calm: this.tick + JOIN_GRACE, shun: 0, shunUntil: 0, arriving: false };
+      if (a.bot) this.botLearns(a);
       this.actors.push(a);
       this.actors.sort((p, q2) => p.id - q2.id);
     } else if (cmd.c === "drop") {
@@ -12439,6 +12553,12 @@ var Room = class {
       const c = cells[Math.floor(rng() * cells.length)];
       out.set(`${id3}:${c.x}:${c.y}`, { key: ++n, map: id3, x: c.x, y: c.y, item: GIFTS[Math.floor(rng() * GIFTS.length)], gift: true });
     }
+    for (const [map, x2, y] of TABLE_BALLS) {
+      if (!this.maps.has(map) || this.places.has(map) || this.world.cell(map, x2, y) > 1 || out.has(`${map}:${x2}:${y}`)) continue;
+      if ([[0, 1], [0, -1], [1, 0], [-1, 0]].some(([dx, dy]) => clerkAt(map, x2 + dx, y + dy))) continue;
+      const r = cellRng(this.seed ^ 502558, map, x2, y);
+      out.set(`${map}:${x2}:${y}`, { key: ++n, map, x: x2, y, item: Math.floor(r() * 8) === 0 ? GOLD[Math.floor(r() * GOLD.length)] : blueTm(r) });
+    }
     if (DEALS.size >= 8) DEALS.delete(DEALS.keys().next().value);
     DEALS.set(id2, out);
     return this.dealt = out;
@@ -12587,6 +12707,20 @@ var Room = class {
     const g = this.ground().get(`${map}:${x2}:${y}`);
     return g && !this.picked.has(g.key) ? g : void 0;
   }
+  /** Somebody standing on a cell who has given away what they held: a gift-giver, somebody at
+   *  home, a story's person, a beaten leader. They stay (Cam, 11-02: "I don't think we should
+   *  ever disappear a person"), still in the way, and say so when talked to. Whoever took it
+   *  did it through the room, so every page has them standing the same. */
+  spentAt(map, x2, y) {
+    const g = this.ground().get(`${map}:${x2}:${y}`);
+    if (g?.gift && this.picked.has(g.key)) return { by: this.picked.get(g.key) };
+    for (const h of this.homes) if (h.gone && h.map === map && h.x === x2 && h.y === y) return { by: h.by ?? 0 };
+    for (const b2 of this.spills.values()) {
+      if (b2.person && b2.map === map && b2.x === x2 && b2.y === y && this.picked.has(b2.key)) return { by: this.picked.get(b2.key), ...b2.person.gate !== void 0 ? { gate: true } : {} };
+    }
+    const boss = leaderAt(map, x2, y);
+    return boss && this.bossDown(boss.n) ? { by: 0, beaten: this.gyms.find(([n]) => n === boss.n)?.[1] ?? "" } : void 0;
+  }
   /** A free cell beside a trainer, facing first, then round: walkable for them, not a
    *  door, a ledge, a ball or a bag, nor one of `used`. */
   beside(a, used = /* @__PURE__ */ new Set()) {
@@ -12597,9 +12731,26 @@ var Room = class {
    *  door (the cell they stand on just through one), which a solid bag would shut. */
   fallen(a) {
     const s = a.m.spot;
-    return this.world.warpAt(s.map, s.x, s.y) ? this.beside(a) ?? s : s;
+    if (!this.world.warpAt(s.map, s.x, s.y) && !this.pieceOn(s)) return s;
+    return this.beside(a) ?? this.nearestBare(s) ?? s;
   }
   /** The bag lying on a cell, if any. */
+  /** A ball or a bag lying on the cell, or one that will be again: a fight's legendary or boss. */
+  pieceOn(s) {
+    if (this.groundAt(s.map, s.x, s.y)) return true;
+    for (const b2 of this.spills.values()) {
+      if (b2.map === s.map && b2.x === s.x && b2.y === s.y && (!this.picked.has(b2.key) || b2.legend || b2.person?.gate !== void 0)) return true;
+    }
+    return false;
+  }
+  /** The nearest plain cell of the map with nothing on it, for a bag with nowhere beside it. */
+  nearestBare(s) {
+    for (let d = 2; d <= 6; d++) for (let dx = -d; dx <= d; dx++) for (const dy of dx === -d || dx === d ? [0] : [d - Math.abs(dx), Math.abs(dx) - d]) {
+      const t7 = { map: s.map, x: s.x + dx, y: s.y + dy };
+      if (this.world.cell(t7.map, t7.x, t7.y) === 0 && !this.world.warpAt(t7.map, t7.x, t7.y) && !this.pieceOn(t7) && !this.actors.some((o) => sameSpot(o.m.spot, t7))) return t7;
+    }
+    return void 0;
+  }
   spillAt(map, x2, y) {
     for (const b2 of this.spills.values()) if (b2.map === map && b2.x === x2 && b2.y === y && !this.picked.has(b2.key)) return b2;
     return void 0;
@@ -12621,9 +12772,13 @@ var Room = class {
     const end = this.roundEnd();
     if (end !== void 0 && this.tick >= end + AFTER_WIN) this.newRound(r.round + 1);
     else if (was.safari && !ring.safari) {
-      for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) this.dropOne(a);
+      for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) {
+        this.dropOne(a);
+        this.botLearns(a);
+      }
     } else if (ring.phase !== was.phase) {
       for (const e of this.events) if (e.story && DOORS[e.story] === "wait" && ring.phase > (e.phase ?? 0)) e.opened = true;
+      for (const a of this.actors) if (a.bot) this.botLearns(a);
       if (ring.phase === 1 && !r.entrants.length) r.entrants = this.actors.map((a) => [a.id, a.name]);
       const n = eventForRing(ring.phase);
       if (n !== void 0) this.dropEvent(n, ring);
@@ -12656,7 +12811,7 @@ var Room = class {
         continue;
       }
       if (!a.loot?.items.length || (this.tick + a.id * 13) % QUAFF_FRAMES !== 0 || this.inFog(a.m.spot, ring)) continue;
-      const party = wornParty(dealParty(this.seed, a.id, ring.phase + 1, a.m.spot.map, gradeOf(this.seed, a.id)), a.wear);
+      const party = wornParty(botParty(this.seed, a, ring.phase + 1), a.wear);
       if (quaff(party, a.loot.items) !== null) a.wear = party.map((m) => m.maxHp > 0 ? m.hp / m.maxHp : 0);
     }
     const phase = this.phaseAt(this.tick);
@@ -12708,7 +12863,7 @@ var Room = class {
     const cells = all.filter((s) => s.map === f.map && d(s) <= 8 && d(s) !== 1).sort((p, q2) => d(p) - d(q2) || p.y - q2.y || p.x - q2.x).slice(0, 1 + EVENT_RARES + EVENT_GOLD + 2);
     const level = rungForPhase(ring.phase + 1);
     const legends = LEGENDS[Math.min(n, LEGENDS.length - 1)];
-    const species = [legends[Math.min(legends.length - 1, Math.floor(rng() * legends.length))], ...draw(rng, RARES, EVENT_RARES)];
+    const species = [legendOf(legends, this.seed, rng), ...draw(rng, RARES, EVENT_RARES)];
     const bags = [...draw(rng, GOLD, EVENT_GOLD).map((id2) => [{ id: id2, n: 1 }]), SUPPLIES.map((r) => ({ ...r }))];
     const spot = cells.length > species.length + bags.length ? cells.pop() : void 0;
     const offers = RARES.filter((r) => !species.includes(r));
@@ -12732,7 +12887,7 @@ var Room = class {
    *  rung, its rares, its items, the supplies, and the trader past them. */
   tellStory(n, ring, story, rng) {
     const level = rungForPhase(ring.phase + 1);
-    const species = [...(story.mons ?? []).map((pick) => pick[Math.floor(rng() * pick.length)]), ...draw(rng, RARES, story.rares ?? 0)];
+    const species = [...(story.mons ?? []).map((pick) => legendOf(pick, this.seed, rng)), ...draw(rng, RARES, story.rares ?? 0)];
     const bags = [...(story.items ?? []).map((pick) => [{ id: pick[Math.floor(rng() * pick.length)], n: 1 }]), SUPPLIES.map((r) => ({ ...r }))];
     const cells = story.cells.map((c) => ({ map: c.map ?? story.map, x: c.x, y: c.y }));
     const pieces = species.length + bags.length;
@@ -12766,51 +12921,153 @@ var Room = class {
   }
   /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
   part(a) {
+    if (a.legendKey !== void 0) {
+      this.picked.delete(a.legendKey);
+      (a.tried ??= []).push(a.legendKey);
+      a.legendKey = void 0;
+    }
     a.battling = false;
     a.foe = a.judge = a.since = 0;
     a.calm = this.tick + GRACE;
   }
-  /** Two bots on one map in each other's eyeline fight (POK-238), one pair at a time
-   *  room-wide (BOT_DUEL_GAP). A bot has no ROM, so a trainer's page fights it in a
-   *  hidden one: the trainers take turns at it, by the frame. Nobody on the map to do it,
-   *  nobody fights. */
+  /** Where bot `b` stands from `a`, on `a`'s map's cells, when they could be said to meet: the same
+   *  map, or two joined at a seam, which the page draws side by side and anybody watching takes for
+   *  one place. */
+  across(a, b2) {
+    const p = a.m.spot, q2 = b2.m.spot;
+    if (p.map === q2.map) return { dx: q2.x - p.x, dy: q2.y - p.y, ox: 0, oy: 0 };
+    const from = this.places.get(p.map), to = this.places.get(q2.map);
+    if (!from || !to || !this.maps.get(p.map)?.seams.some((s) => s.to === q2.map)) return void 0;
+    const ox = to.gx - from.gx, oy = to.gy - from.gy;
+    return { dx: q2.x + ox - p.x, dy: q2.y + oy - p.y, ox, oy };
+  }
+  /** Two bots meet when one is in the other's eyeline, or when they stand side by side whichever
+   *  way they face (Cam, 11-02: "Bots stand next to each other without fighting"). */
+  botsMeet(a, b2) {
+    const at2 = this.across(a, b2);
+    if (!at2 || at2.dx && at2.dy) return false;
+    const far = Math.abs(at2.dx) + Math.abs(at2.dy);
+    if (far > SIGHT_RANGE) return false;
+    if (far === 1) return true;
+    const look = (o) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing });
+    if (a.m.spot.map === b2.m.spot.map) return eitherSees(this.world, look(a), look(b2));
+    return seesOver(this.world, look(a), look(b2), at2.ox, at2.oy) || seesOver(this.world, look(b2), look(a), -at2.ox, -at2.oy);
+  }
+  /** `a` has somebody in its eyeline who is mid-step, and free to fight. A bot on its way is only
+   *  ever still on the frame a step ends, so two walking never would be on the same one: 83% of the
+   *  looks bots gave each other came to nothing. It stands for the moment that step takes. */
+  sightsWalker(a) {
+    if (!this.simBots || a.battling || this.tick < a.calm || this.ring().safari) return false;
+    return this.actors.some((o) => o !== a && o.bot && !o.battling && !!o.m.action && this.tick >= o.calm && this.botsMeet(a, o));
+  }
+  /** Two bots who meet fight (POK-238). The host simulates it (Room.simBots), any number at once and
+   *  from the frame they meet: the "!", and the one who looked walks up, as any fight in this game
+   *  starts (Cam, 11-02: "Are these two battling each other they should be right next to each
+   *  other"). Otherwise a bot has no ROM, so a trainer's page fights it in a hidden one, one pair at a
+   *  time room-wide (BOT_DUEL_GAP): the trainers take turns at it, by the frame. Nobody on the map to
+   *  do it, nobody fights. */
   engageBots(events) {
     if (this.ring().safari) return;
-    if (!this.simBots && this.tick < this.duelAfter || this.tick % 8) return;
-    const judges = [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b2) => !b2.away)].filter((j) => !this.actors.some((a) => a.judge === j.id));
+    if (!this.simBots && (this.tick < this.duelAfter || this.tick % 8)) return;
+    const judges = this.freeJudges();
     if (!this.simBots && !judges.length) return;
-    const byMap = /* @__PURE__ */ new Map();
-    for (const a of this.actors) {
-      if (!a.bot || a.battling || a.m.action || this.tick < a.calm) continue;
-      const l = byMap.get(a.m.spot.map) ?? [];
-      l.push(a);
-      byMap.set(a.m.spot.map, l);
-    }
-    const look = (o) => ({ map: o.m.spot.map, x: o.m.spot.x, y: o.m.spot.y, dir: o.m.facing });
-    for (const id2 of [...byMap.keys()].sort()) {
-      const l = byMap.get(id2);
-      for (let i = 0; i < l.length; i++) {
-        for (let j = i + 1; j < l.length; j++) {
-          const a = l[i], b2 = l[j];
-          if (a.battling || b2.battling || !eitherSees(this.world, look(a), look(b2))) continue;
-          const dx = b2.m.spot.x - a.m.spot.x, dy = b2.m.spot.y - a.m.spot.y;
-          const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
-          a.m.facing = a.m.moveDir = toB;
-          b2.m.facing = b2.m.moveDir = BACK[toB];
-          const judge = this.simBots ? HOST_JUDGE : judges[(this.tick >>> 3) % judges.length].id;
-          a.battling = b2.battling = true;
-          a.foe = b2.id;
-          b2.foe = a.id;
-          a.judge = b2.judge = judge;
-          a.since = b2.since = this.tick;
-          a.keys = a.last = b2.keys = b2.last = 0;
-          events.push({ type: "bots", tick: this.tick, id: judge, a: a.id, b: b2.id });
-          if (this.simBots) continue;
-          this.duelAfter = this.tick + BOT_DUEL_GAP;
-          return;
+    const free = this.actors.filter((a) => a.bot && !a.battling && !a.m.action && this.tick >= a.calm);
+    for (let i = 0; i < free.length; i++) {
+      for (let j = i + 1; j < free.length; j++) {
+        const a = free[i], b2 = free[j];
+        if (a.battling || b2.battling || !this.botsMeet(a, b2)) continue;
+        const { dx, dy } = this.across(a, b2);
+        const toB = dx > 0 ? 4 : dx < 0 ? 3 : dy > 0 ? 1 : 2;
+        const bWalks = b2.m.facing === BACK[toB] && a.m.facing !== toB;
+        a.m.facing = a.m.moveDir = toB;
+        b2.m.facing = b2.m.moveDir = BACK[toB];
+        a.battling = b2.battling = true;
+        a.foe = b2.id;
+        b2.foe = a.id;
+        a.keys = a.last = b2.keys = b2.last = 0;
+        if (this.simBots) {
+          a.meet = { foe: b2.id, walk: !bWalks, since: this.tick, duel: false, bots: true };
+          b2.meet = { foe: a.id, walk: bWalks, since: this.tick, duel: false, bots: true };
+          continue;
         }
+        this.botsFight(a, b2, judges[(this.tick >>> 3) % judges.length].id, events);
+        this.duelAfter = this.tick + BOT_DUEL_GAP;
+        return;
       }
     }
+  }
+  /** What a bot's team could do on the field, in `field` as a trainer's page says theirs (POK-437;
+   *  Cam said yes, 10-20). Asked when it joins, each phase and after a catch; never forgotten in a
+   *  round, since the team it is dealt turns with the map under it and it must not lose SURF at sea. */
+  botLearns(a) {
+    a.field = (a.field ?? 0) | teamField(botParty(this.seed, a, this.ring().phase + 1));
+  }
+  /** The trainers whose pages could fight two bots out now (engageBots). */
+  freeJudges() {
+    return [...this.actors.filter((a) => !a.bot && !a.away && !a.battling), ...this.bench.filter((b2) => !b2.away)].filter((j) => !this.actors.some((a) => a.judge === j.id));
+  }
+  /** A bot pressed A at a legendary (POK-410; Cam, 11-02: "the bots are not picking up the
+   *  legendaries"). A battle like a trainer's, off the ground for everybody while it lasts,
+   *  fought where a bot's fights are: the host's simulator or a trainer's hidden ROM. Nobody
+   *  to run it, and it waits for somebody. */
+  botLegend(a, s, events) {
+    const species = s.bag.mons?.[0]?.species;
+    if (!species || this.ring().safari || this.tick < a.calm || a.tried?.includes(s.key)) return;
+    if (!this.simBots && this.tick < this.duelAfter) return;
+    const judges = this.simBots ? [] : this.freeJudges();
+    if (!this.simBots && !judges.length) return;
+    const judge = this.simBots ? HOST_JUDGE : judges[(this.tick >>> 3) % judges.length].id;
+    this.picked.set(s.key, a.id);
+    a.battling = true;
+    a.foe = LEGEND_FOE;
+    a.judge = judge;
+    a.since = this.tick;
+    a.legendKey = s.key;
+    a.keys = a.last = 0;
+    events.push({ type: "bots", tick: this.tick, id: judge, a: a.id, b: LEGEND_FOE, legend: { key: s.key, species } });
+    if (!this.simBots) this.duelAfter = this.tick + BOT_DUEL_GAP;
+  }
+  /** How a bot's legendary went. Beaten, it is the bot's, and off the map for good. Lost, the bot
+   *  gets away hurt. Either way it never fights that one again; no answer, the same, and it stands. */
+  legendOver(cmd) {
+    const a = this.actor(cmd.a);
+    if (!a?.bot || a.foe !== LEGEND_FOE || a.judge !== cmd.id || !a.battling || a.legendKey === void 0) return;
+    if (cmd.used && a.loot) spend(a.loot.items, cmd.used[0].slice(0, 4));
+    const phase = this.ring().phase + 1;
+    if (cmd.winner === a.id) {
+      const species = this.spills.get(a.legendKey)?.bag.mons?.[0]?.species;
+      const left = cmd.hp?.slice(0, 5).map((v2) => Math.min(1, Math.max(0, v2))) ?? a.wear ?? [];
+      a.legendKey = void 0;
+      if (species) {
+        a.caught = [species, ...a.caught ?? []];
+        a.wear = [CAUGHT_WEAR, ...left];
+        this.botLearns(a);
+      }
+    } else if (cmd.winner === LEGEND_FOE) {
+      a.wear = botParty(this.seed, a, phase).map(() => FLED_WEAR);
+      const s = this.spills.get(a.legendKey), left = cmd.hp?.[0];
+      if (s && left !== void 0) s.worn = Math.min(1, Math.max(0, left));
+    }
+    this.part(a);
+  }
+  /** The weather a fight starts in, standing at `s`: KYOGRE's rain or GROUDON's drought, the seed's
+   *  pick, in SOOTOPOLIS from the frame its story drops until its piece is gone, and the fight for
+   *  it is in it too (br_story.c BrStory_Weather; POK-384). 0 anywhere else. The room's, so nothing
+   *  waits a frame for a ROM's task to notice, and every seat has the one answer. */
+  weatherAt(s) {
+    if (s.map !== "MAP_SOOTOPOLIS_CITY") return 0;
+    const live = this.events.some((e) => {
+      if (e.story !== "sootopolis" || !this.spills.has(e.key)) return false;
+      const by = this.picked.get(e.key);
+      return by === void 0 || !!this.actor(by)?.battling;
+    });
+    return live ? clashWeather(this.seed) : 0;
+  }
+  /** The fight itself, handed to whoever runs it. */
+  botsFight(a, b2, judge, events) {
+    a.judge = b2.judge = judge;
+    a.since = b2.since = this.tick;
+    events.push({ type: "bots", tick: this.tick, id: judge, a: a.id, b: b2.id });
   }
   /** `id` off the map, and everything that waited on them let go. */
   remove(id2) {
@@ -12826,7 +13083,7 @@ var Room = class {
     for (const o of this.actors) if (o.bot && o.judge === id2) this.part(o);
     for (const [key, by] of this.picked) {
       const b2 = this.spills.get(key);
-      if (by === id2 && (b2?.legend || b2?.person?.gate !== void 0)) this.picked.delete(key);
+      if (by === id2 && a?.battling && (b2?.legend || b2?.person?.gate !== void 0)) this.picked.delete(key);
     }
     for (const e of this.events) if (e.trader?.busy === id2) e.trader.busy = 0;
     for (const h of this.homes) if (h.busy === id2) h.busy = 0;
@@ -12837,7 +13094,7 @@ var Room = class {
     if (!this.actor(a.id)) return;
     const phase = this.ring().phase + 1;
     const grade = gradeOf(this.seed, a.id);
-    const party = dealParty(this.seed, a.id, phase, a.m.spot.map, grade);
+    const party = botParty(this.seed, a, phase);
     const bag = { items: carried(party, a.loot?.items ?? []), money: purse(phase, grade) + (a.loot?.money ?? 0), mons: party.map((m) => ({ species: m.species, level: m.level })) };
     const key = SPILL_KEY + a.id, at2 = this.fallen(a);
     if (!emptyBag(bag)) this.spills.set(key, { key, map: at2.map, x: at2.x, y: at2.y, name: a.name, bag });
@@ -12999,6 +13256,61 @@ var Room = class {
     }
     return OPENS.get(id2);
   }
+  /** The landing cells that walk to a harbour with no HM at all, the boats counted: nobody dealt
+   *  one is stranded behind water, a tree or a boulder (POK-437). The rest are MOSSDEEP, EVER GRANDE
+   *  and the far end of ROUTE 115 (hm-reach.test.ts). */
+  mainland() {
+    const id2 = "mainland:" + [...this.maps.keys()].join();
+    const hit = MAINLANDS.get(id2);
+    if (hit) return hit;
+    const index = /* @__PURE__ */ new Map(), spots = [], back = [];
+    const node = (s) => {
+      const k = `${s.map}:${s.x}:${s.y}:${s.z ?? ""}`;
+      let n = index.get(k);
+      if (n === void 0) {
+        n = spots.length;
+        index.set(k, n);
+        spots.push(s);
+        back.push([]);
+      }
+      return n;
+    };
+    for (const m of this.maps.values()) {
+      if (m.id.startsWith(SAFARI)) continue;
+      for (let y = 0; y < m.h; y++) for (let x2 = 0; x2 < m.w; x2++) if (this.world.standable(m.id, x2, y)) node({ map: m.id, x: x2, y });
+    }
+    for (let n = 0; n < spots.length; n++) {
+      for (let dir = 1; dir <= 4; dir++) {
+        const r = this.base(spots[n], dir);
+        if (r && this.maps.has(r.to.map) && !r.to.map.startsWith(SAFARI)) back[node(r.to)].push(n);
+      }
+    }
+    const SIDES = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+    const boats = [...BOATS.map((b2) => ({ at: b2, to: b2.to })), { at: ATTENDANT, to: ["slateport"] }];
+    for (const b2 of boats) for (const to of b2.to) for (const [dx, dy] of SIDES) {
+      const from = index.get(`${b2.at.map}:${b2.at.x + dx}:${b2.at.y + dy}:`);
+      if (from !== void 0) back[node(PORTS[to].land)].push(from);
+    }
+    const ok = new Uint8Array(spots.length), queue = [];
+    for (let n = 0; n < spots.length; n++) if (spots[n].map === ATTENDANT.map || spots[n].map === PORTS.slateport.land.map) {
+      ok[n] = 1;
+      queue.push(n);
+    }
+    while (queue.length) for (const u of back[queue.pop()]) if (!ok[u]) {
+      ok[u] = 1;
+      queue.push(u);
+    }
+    const out = /* @__PURE__ */ new Set();
+    for (const k of this.landing()) {
+      const [map, x2, y] = k.split(":");
+      if ([`${map}:${x2}:${y}:`, ...this.world.levels(map, +x2, +y).map((z2) => `${map}:${x2}:${y}:${z2}`)].some((q2) => {
+        const n = index.get(q2);
+        return n !== void 0 && ok[n];
+      })) out.add(k);
+    }
+    MAINLANDS.set(id2, out);
+    return out;
+  }
   /** The fly map's time (PICK_WAIT after the Safari, or after a battle fought in the
    *  Zone since): whoever is still there, having chosen nowhere, drops anywhere outdoors
    *  (br_pick.c's timeout). */
@@ -13020,12 +13332,14 @@ var Room = class {
       return (state >>> 0) / 4294967296;
     };
     const used = new Set(this.actors.map((o) => `${o.m.spot.map}:${o.m.spot.x}:${o.m.spot.y}`));
-    const land = this.landing();
-    let landed = LANDED.get(land);
-    if (!landed) LANDED.set(land, landed = new Set([...land].map((k) => k.slice(0, k.indexOf(":")))));
+    const main = this.mainland();
+    let landed = LANDED.get(main);
+    if (!landed) LANDED.set(main, landed = new Set([...main].map((k) => k.slice(0, k.indexOf(":")))));
     const maps = [...this.places.keys()].filter((m) => !m.startsWith(SAFARI) && landed.has(m)).sort();
     for (let tries = 0; tries < 4; tries++) {
-      const map = tries === 0 && want ? want : maps[Math.floor(rng() * maps.length)];
+      const picked = tries === 0 && want;
+      const map = picked ? want : maps[Math.floor(rng() * maps.length)];
+      const land = picked ? this.landing() : main;
       const m = this.maps.get(map);
       if (!m) continue;
       const cells = [];
@@ -13069,6 +13383,8 @@ var Room = class {
       a.bleedAt = void 0;
       a.loot = void 0;
       if (a.judge) this.part(a);
+      a.caught = a.tried = a.field = void 0;
+      this.botLearns(a);
     }
     if (safari) {
       for (const a of this.actors) if (a.bot) a.m = newMover(this.zone(a.id)[0] ?? a.m.spot, a.m.facing);
@@ -13111,8 +13427,9 @@ var Room = class {
         continue;
       }
       if (this.tick - m.since < WALKUP_BANG) continue;
-      const dx = o.m.spot.x - w.m.spot.x, dy = o.m.spot.y - w.m.spot.y;
-      const beside = o.m.spot.map === w.m.spot.map && Math.abs(dx) + Math.abs(dy) <= 1;
+      const over2 = m.bots ? this.across(w, o) : void 0;
+      const dx = over2 ? over2.dx : o.m.spot.x - w.m.spot.x, dy = over2 ? over2.dy : o.m.spot.y - w.m.spot.y;
+      const beside = (over2 || o.m.spot.map === w.m.spot.map) && Math.abs(dx) + Math.abs(dy) <= 1;
       if (w.m.action) {
         tick(w.m, keysOf(0), this.stepFor(w));
         continue;
@@ -13129,10 +13446,15 @@ var Room = class {
         o.m.facing = o.m.moveDir = BACK[toO];
       }
       w.meet = o.meet = void 0;
+      if (m.bots) {
+        this.botsFight(w, o, HOST_JUDGE, events);
+        continue;
+      }
       const [h, f] = w.bot ? [o, w] : o.bot ? [w, o] : w.id < o.id ? [w, o] : [o, w];
       if (m.duel) {
-        events.push({ type: "duel", tick: this.tick, id: h.id, foe: f.id, first: true });
-        events.push({ type: "duel", tick: this.tick, id: f.id, foe: h.id, first: false });
+        const weather = this.weatherAt(h.m.spot);
+        events.push({ type: "duel", tick: this.tick, id: h.id, foe: f.id, first: true, ...weather ? { weather } : {} });
+        events.push({ type: "duel", tick: this.tick, id: f.id, foe: h.id, first: false, ...weather ? { weather } : {} });
       } else {
         f.foughtBy = h.id;
         events.push({ type: "fight", tick: this.tick, id: h.id, foe: f.id });
@@ -13212,6 +13534,7 @@ var Room = class {
             this.picked.set(g.key, a.id);
             add(loot.items, g.item);
           }
+          if (b2?.legend && !b2.person && b2.guard === void 0) this.botLegend(a, b2, events);
           if (b2 && !b2.legend && !b2.person && b2.guard === void 0) {
             for (const st2 of b2.bag.items) add(loot.items, st2.id, st2.n);
             loot.money += b2.bag.money;
@@ -13282,6 +13605,7 @@ var Room = class {
         const foe = g || b2 ? void 0 : this.facing(a);
         const tr = foe ? void 0 : this.traderAt(a.m.spot.map, x2, y);
         const boss = foe || tr ? void 0 : leaderAt(a.m.spot.map, x2, y);
+        const spent2 = g || b2 || foe || tr ? void 0 : this.spentAt(a.m.spot.map, x2, y);
         const dive = g || b2 || foe || tr || boss ? void 0 : diveTo(this.maps, this.world, a.m.spot, a.field ?? 0);
         if (boss && !this.bossDown(boss.n)) {
           a.battling = true;
@@ -13292,6 +13616,9 @@ var Room = class {
           a.battling = true;
           events.push({ type: "trade", tick: this.tick, id: a.id, n: tr.n, species: tr.t.species, ...tr.t.gives ? { gives: true } : {} });
         } else if (tr) {
+        } else if (spent2) {
+          const busy = spent2.gate ? this.actor(spent2.by) : void 0;
+          events.push({ type: "spent", tick: this.tick, id: a.id, by: spent2.by, ...busy?.battling ? { busy: busy.name } : {}, ...spent2.beaten !== void 0 ? { beaten: spent2.beaten === a.name ? "" : spent2.beaten } : {} });
         } else if (g) {
           this.picked.set(g.key, a.id);
           events.push({ type: "item", tick: this.tick, id: a.id, key: g.key, item: g.item, ...g.gift ? { gift: true } : {} });
@@ -13359,7 +13686,7 @@ var Room = class {
    *  two can't both walk into one cell). */
   stepFor(a, onWay = false) {
     const fn = (from, dir) => {
-      const bits = a.bot ? 7 : a.field ?? 0;
+      const bits = a.field ?? 0;
       const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir) : this.base(from, dir);
       if (!r || !this.maps.has(r.to.map)) return null;
       if (a.bot && !onWay && this.places.has(from.map) && !this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) return null;
@@ -13370,7 +13697,8 @@ var Room = class {
       if (this.groundAt(t7.map, t7.x, t7.y) || clerkAt(t7.map, t7.x, t7.y) || this.traderAt(t7.map, t7.x, t7.y) || ferryAt(t7.map, t7.x, t7.y)) return null;
       if (from.map.startsWith(SAFARI) !== t7.map.startsWith(SAFARI) && this.ring().safari) return null;
       const boss = leaderAt(t7.map, t7.x, t7.y);
-      if (boss && !this.bossDown(boss.n)) return null;
+      if (boss) return null;
+      if (this.spentAt(t7.map, t7.x, t7.y)) return null;
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t7.map && o.m.spot.x === t7.x && o.m.spot.y === t7.y)) return null;
       return r;
     };
@@ -13423,6 +13751,8 @@ var Room = class {
       mix2(a.cruise ? (a.cruise.to === "lilycove" ? 8 : 16) + LEGS.indexOf(a.cruise.leg) : 0);
       mix2(a.cruise?.steps ?? 0);
       mix2(a.loot?.money ?? 0);
+      for (const sp of a.caught ?? []) mix2(sp);
+      mix2(a.legendKey ?? 0);
       for (const st2 of a.loot?.items ?? []) {
         mix2(st2.id);
         mix2(st2.n);
@@ -13430,7 +13760,7 @@ var Room = class {
       if (a.meet) {
         mix2(a.meet.foe);
         mix2(a.meet.since);
-        mix2((a.meet.walk ? 1 : 0) | (a.meet.duel ? 2 : 0));
+        mix2((a.meet.walk ? 1 : 0) | (a.meet.duel ? 2 : 0) | (a.meet.bots ? 4 : 0));
       }
     }
     for (const [k, t7] of this.taken) {
@@ -13645,7 +13975,7 @@ function centreFor(room, a) {
   let best = null, bestH = Infinity, bestD = Infinity;
   for (const s of room.centreSteps()) {
     if (room.inFog(s)) continue;
-    const h = room.world.hops(a.m.spot.map, s.map, true, true);
+    const h = room.world.hops(a.m.spot.map, s.map, surfs(a), cuts(a));
     if (h === void 0 || h > bestH) continue;
     const q2 = room.places.get(s.map);
     const d = Math.abs(q2.gx + s.x - p.gx - a.m.spot.x) + Math.abs(q2.gy + s.y - p.gy - a.m.spot.y);
@@ -13665,7 +13995,7 @@ function planeOf(room, s) {
 }
 function safariGoal(room, a, b2) {
   const { map, x: x2, y } = a.m.spot;
-  const reach = room.world.reachOnMap(a.m.spot, true, true);
+  const reach = room.world.reachOnMap(a.m.spot, surfs(a), cuts(a));
   const spots = [...room.patchesOn(map)];
   for (const g of room.ground().values()) if (g.map === map && !g.gift && !room.picked.has(g.key)) spots.push(g);
   const near = spots.filter((s2) => (s2.x !== x2 || s2.y !== y) && reach.cell(s2.x, s2.y)).map((s2) => ({ s: s2, d: Math.abs(s2.x - x2) + Math.abs(s2.y - y) })).sort((p, q2) => p.d - q2.d).slice(0, 5);
@@ -13684,7 +14014,7 @@ function goal(room, a, b2) {
     let best, bestD2 = Infinity;
     for (const o of room.actors) {
       const q2 = planeOf(room, o.m.spot);
-      if (o === a || o.away || !p2 || !q2 || room.inFog(o.m.spot)) continue;
+      if (o === a || o.away || o.battling || !p2 || !q2 || room.inFog(o.m.spot)) continue;
       const d = Math.abs(q2.x - p2.x) + Math.abs(q2.y - p2.y);
       if (d < bestD2) {
         bestD2 = d;
@@ -13693,13 +14023,17 @@ function goal(room, a, b2) {
     }
     if (best) return { ...best.m.spot };
   }
-  const ev = room.events[room.events.length - 1];
-  if (ev && room.spills.has(ev.key) && !room.picked.has(ev.key) && rand(b2) < 1 / 3 && !room.inFog({ map: ev.map, x: ev.x, y: ev.y })) {
+  const lootMood = Math.imul(room.tick + a.id, 2654435761) >>> 30 < (room.results.entrants.length - room.results.fallen.length > 8 ? 2 : 1);
+  const legend = lootMood ? lootGoal(room, a, b2, true) : null;
+  if (legend) return legend;
+  const standing = (e) => room.spills.has(e.key) && !room.picked.has(e.key) && !room.inFog({ map: e.map, x: e.x, y: e.y });
+  const ev = [...room.events].reverse().find((e) => standing(e) && room.spills.get(e.key)?.legend && !a.tried?.includes(e.key)) ?? room.events[room.events.length - 1];
+  if (ev && standing(ev) && rand(b2) < (lootMood && room.spills.get(ev.key)?.legend ? 1 : 1 / 3)) {
     const near2 = room.landedOn(ev.map).filter((s) => Math.abs(s.x - ev.x) + Math.abs(s.y - ev.y) <= 4 && !room.spillAt(s.map, s.x, s.y));
     if (near2.length) return near2[Math.floor(rand(b2) * near2.length)];
   }
   const cells = insideNext(room);
-  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return wander(room, a, b2);
+  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return (lootMood ? lootGoal(room, a, b2) : null) ?? wander(room, a, b2);
   const p = planeOf(room, a.m.spot);
   if (!p) return null;
   const { x: x2, y } = p;
@@ -13707,7 +14041,7 @@ function goal(room, a, b2) {
   const near = [];
   let bestH = Infinity, bestD = Infinity;
   for (const s of cells) {
-    if (!hops.has(s.map)) hops.set(s.map, room.world.hops(a.m.spot.map, s.map, true, true));
+    if (!hops.has(s.map)) hops.set(s.map, room.world.hops(a.m.spot.map, s.map, surfs(a), cuts(a)));
     const h = hops.get(s.map);
     if (h === void 0 || h > bestH) continue;
     const q2 = room.places.get(s.map);
@@ -13721,6 +14055,41 @@ function goal(room, a, b2) {
   }
   const pool = near.filter((n) => n.h === bestH && n.d <= bestD + SPREAD);
   return pool.length ? pool[Math.floor(rand(b2) * pool.length)].s : null;
+}
+var surfs = (a) => ((a.field ?? 0) & FIELD_SURF) !== 0;
+var cuts = (a) => (a.field ?? 0) & 3;
+var FLY_EVERY = 60 * 60;
+var FLY_CLEAR = { x: 9, y: 7 };
+function flyGoal(room, a, b2) {
+  if (hunting(room) || room.tick < (b2.flyAfter ?? 0) || !teamFlies(botParty(room.seed, a, room.ring().phase + 1))) return null;
+  const seen = (s) => room.actors.some((o) => o !== a && o.m.spot.map === s.map && Math.abs(o.m.spot.x - s.x) <= FLY_CLEAR.x && Math.abs(o.m.spot.y - s.y) <= FLY_CLEAR.y);
+  const main = room.mainland();
+  const home = heart(room).filter((s) => main.has(`${s.map}:${s.x}:${s.y}`) && room.places.has(s.map) && room.world.cell(s.map, s.x, s.y) === 0 && !room.groundAt(s.map, s.x, s.y) && !room.spillAt(s.map, s.x, s.y));
+  for (let i = 0; i < 8 && home.length; i++) {
+    const s = home[Math.floor(rand(b2) * home.length)];
+    if (!seen(s)) return s;
+  }
+  return null;
+}
+var LOOT_NEAR = 14;
+function lootGoal(room, a, b2, legendOnly = false) {
+  const { map, x: x2, y } = a.m.spot;
+  const reach = room.world.reachOnMap(a.m.spot, surfs(a), cuts(a));
+  const near = [];
+  const see = (s, far) => {
+    const d = Math.abs(s.x - x2) + Math.abs(s.y - y);
+    if (d && (far || d <= LOOT_NEAR) && reach.cell(s.x, s.y) && !room.inFog(s)) near.push({ s, d });
+  };
+  if (!legendOnly) {
+    for (const g of room.ground().values()) if (g.map === map && !g.gift && !room.picked.has(g.key)) see({ map, x: g.x, y: g.y }, false);
+  }
+  for (const p of room.spills.values()) {
+    if (p.map !== map || room.picked.has(p.key) || p.person || p.guard !== void 0) continue;
+    if (p.legend ? !a.tried?.includes(p.key) : !legendOnly && (p.bag.items.length > 0 || p.bag.money > 0)) see({ map, x: p.x, y: p.y }, !!p.legend);
+  }
+  if (!near.length) return null;
+  near.sort((p, q2) => p.d - q2.d);
+  return near[Math.floor(rand(b2) * Math.min(3, near.length))].s;
 }
 var SPREAD = 6;
 var HEART = /* @__PURE__ */ new WeakMap();
@@ -13743,11 +14112,11 @@ function wander(room, a, b2) {
   const pool = here.length && rand(b2) < 0.5 ? here : inside;
   return pool.length ? pool[Math.floor(rand(b2) * pool.length)] : null;
 }
-function leg(room, from, to, avoid) {
-  const w = room.world;
-  if (from.map === to.map && w.reachOnMap(from, true, true).cell(to.x, to.y)) return findPath(w, from, to, 6e3, true, true, avoid);
-  const over2 = w.firstCrossing(from, to.map, true, true, (r) => r.cell(to.x, to.y));
-  return over2?.length ? findPathToAny(w, from, over2, 6e3, true, true, avoid) : null;
+function leg(room, a, to, avoid) {
+  const w = room.world, from = a.m.spot, surf = surfs(a), cut = cuts(a);
+  if (from.map === to.map && w.reachOnMap(from, surf, cut).cell(to.x, to.y)) return findPath(w, from, to, 6e3, surf, cut, avoid);
+  const over2 = w.firstCrossing(from, to.map, surf, cut, (r) => r.cell(to.x, to.y));
+  return over2?.length ? findPathToAny(w, from, over2, 6e3, surf, cut, avoid) : null;
 }
 var HUNT_AT = 3;
 function hunting(room) {
@@ -13756,6 +14125,7 @@ function hunting(room) {
 }
 function botKeys(room, a, b2) {
   if (a.m.action) return 0;
+  if (room.sightsWalker(a)) return 0;
   const ring = room.ring();
   const at2 = `${ring.round}:${ring.phase}:${room.events.length}${health(a) < HURT ? ":hurt" : ""}`;
   if (!ring.safari && b2.goal && b2.goal.map !== a.m.spot.map && b2.goal.map.startsWith(SAFARI)) {
@@ -13777,8 +14147,18 @@ function botKeys(room, a, b2) {
     b2.legs = 0;
     b2.avoid = void 0;
   }
+  if (!ring.safari && (room.tick + a.id * 7) % 30 === 0 && room.inFog(a.m.spot, ring)) {
+    const to = flyGoal(room, a, b2);
+    if (to) {
+      b2.flyTo = to;
+      b2.flyAfter = room.tick + FLY_EVERY;
+      b2.goal = null;
+      b2.steps = void 0;
+      return 0;
+    }
+  }
   if (b2.goal && !b2.steps?.length && (room.tick + a.id * 7) % 30 === 0) {
-    const path = !sameSpot(a.m.spot, b2.goal) && (b2.legs = (b2.legs ?? 0) + 1) <= 24 ? leg(room, a.m.spot, b2.goal, b2.avoid) : null;
+    const path = !sameSpot(a.m.spot, b2.goal) && (b2.legs = (b2.legs ?? 0) + 1) <= 24 ? leg(room, a, b2.goal, b2.avoid) : null;
     b2.steps = path?.found ? path.steps : void 0;
     const end = b2.steps?.[b2.steps.length - 1]?.to;
     if (end && room.actors.some((o) => o !== a && sameSpot(o.m.spot, end))) b2.steps = b2.steps.slice(0, -1);
@@ -13791,8 +14171,14 @@ function botKeys(room, a, b2) {
   if (!b2.steps?.length && (room.tick + a.id * 7) % 30 === 0 && room.tick >= a.calm && !ring.safari && !room.inFog(a.m.spot, ring)) {
     const here = (o2) => o2 !== a && !o2.battling && !o2.away && room.tick >= o2.calm && o2.m.spot.map === a.m.spot.map;
     const dx = (o2) => Math.abs(o2.m.spot.x - a.m.spot.x), dy = (o2) => Math.abs(o2.m.spot.y - a.m.spot.y);
-    const o = room.actors.find((o2) => !o2.bot && here(o2) && dx(o2) <= NEAR_PLAYER.x && dy(o2) <= NEAR_PLAYER.y) ?? (room.tick >= room.duelAfter ? room.actors.find((o2) => o2.bot && here(o2) && dx(o2) + dy(o2) <= NEAR_TILES) : void 0);
-    const path = o ? findPath(room.world, a.m.spot, o.m.spot, 2e3, true, true) : null;
+    const p = planeOf(room, a.m.spot);
+    const near = (o2) => {
+      if (o2 === a || o2.battling || o2.away || room.tick < o2.calm) return false;
+      const q2 = planeOf(room, o2.m.spot);
+      return !!p && !!q2 && (o2.m.spot.map === a.m.spot.map || !!room.maps.get(a.m.spot.map)?.seams.some((s) => s.to === o2.m.spot.map)) && Math.abs(q2.x - p.x) + Math.abs(q2.y - p.y) <= NEAR_TILES;
+    };
+    const o = room.actors.find((o2) => !o2.bot && here(o2) && dx(o2) <= NEAR_PLAYER.x && dy(o2) <= NEAR_PLAYER.y) ?? (room.tick >= room.duelAfter ? room.actors.find((o2) => o2.bot && near(o2)) : void 0);
+    const path = o ? findPath(room.world, a.m.spot, o.m.spot, 2e3, surfs(a), cuts(a)) : null;
     if (path?.found && path.steps.length >= 2) {
       b2.steps = path.steps.slice(0, -1);
       b2.stuck = 0;
@@ -13802,7 +14188,7 @@ function botKeys(room, a, b2) {
     if (sameSpot(b2.steps[0].to, a.m.spot)) {
       b2.steps.shift();
       b2.stuck = 0;
-    } else if ((b2.stuck = (b2.stuck ?? 0) + 1) > 90) {
+    } else if ((b2.stuck = (b2.stuck ?? 0) + 1) > 90 || room.actors.some((o) => o.battling && sameSpot(o.m.spot, b2.steps[0].to))) {
       const k = room.world.key(b2.steps[0].to);
       if (k >= 0) (b2.avoid ??= /* @__PURE__ */ new Set()).add(k);
       b2.steps = void 0;
@@ -13839,10 +14225,11 @@ function botSpawns(room, maps, count) {
     out.push({ name, skin, spot, facing, brain: { rng: n * 2654435761 >>> 0 || 1, wait: Math.floor(r() * 60), dir: 1 } });
   };
   for (const [x2, y] of [[7, 12], [13, 13], [11, 16]].slice(0, count)) add2({ map: "MAP_LITTLEROOT_TOWN", x: x2, y }, 1, botSkin(out.length * 7 + 1));
+  const main = room.mainland();
   const cells = room.landed().filter((s) => {
     const m = grids.get(s.map);
     const c = m?.[s.y * room.maps.get(s.map).w + s.x];
-    return m && (c === 0 || c === 7) && !room.groundAt(s.map, s.x, s.y) && !(s.map === "MAP_LITTLEROOT_TOWN" && s.x >= 7 && s.x <= 13 && s.y >= 9 && s.y <= 13);
+    return m && (c === 0 || c === 7) && !room.groundAt(s.map, s.x, s.y) && (c !== 0 || main.has(`${s.map}:${s.x}:${s.y}`)) && !(s.map === "MAP_LITTLEROOT_TOWN" && s.x >= 7 && s.x <= 13 && s.y >= 9 && s.y <= 13);
   });
   for (let tries = 0; out.length < count && cells.length && tries < 5e4; tries++) {
     const s = cells[Math.floor(r() * cells.length)];
@@ -13864,7 +14251,6 @@ function logMs(log) {
 
 // web/spike-b/shared/host.ts
 init_party();
-init_roster();
 var JITTER = 3;
 var CATCH_UP = 3;
 var MAX_QUEUE = 600;
@@ -13988,8 +14374,8 @@ var Host = class {
     if (this.players.has(id2)) this.pending.push({ c: "open", id: id2, n });
   }
   /** What trainer `id`'s fight left of bot `bot`'s team: each slot's HP share. */
-  wear(id2, bot, hp2, spent) {
-    if (this.players.has(id2)) this.pending.push({ c: "wear", id: id2, bot, hp: hp2, ...spent ? { spent } : {} });
+  wear(id2, bot, hp2, spent2) {
+    if (this.players.has(id2)) this.pending.push({ c: "wear", id: id2, bot, hp: hp2, ...spent2 ? { spent: spent2 } : {} });
   }
   /** FLY off the page's MAP landed it on `map` at x, y. */
   fly(id2, map, x2, y) {
@@ -14039,6 +14425,10 @@ var Host = class {
         if (bits !== a.keys) {
           keys.push([a.id, bits]);
           a.keys = bits;
+        }
+        if (brain?.flyTo) {
+          this.pending.push({ c: "fly", id: a.id, to: brain.flyTo });
+          brain.flyTo = void 0;
         }
         continue;
       }
@@ -14125,20 +14515,25 @@ var Host = class {
       seat: id2,
       name: b2?.name ?? "",
       skin: b2?.skin ?? 0,
-      party: b2 ? wornParty(dealParty(r.seed, id2, r.ring().phase + 1, b2.m.spot.map, gradeOf(r.seed, id2)), b2.wear) : [],
+      party: b2 ? wornParty(botParty(r.seed, b2, r.ring().phase + 1), b2.wear) : [],
       items: battleItems(b2?.loot?.items ?? [])
     };
+  }
+  /** A legendary's side: its one mon at the rung. */
+  legendSide({ key, species }) {
+    return { seat: LEGEND_FOE, name: speciesName(species), skin: 0, party: [legendMon(this.room.spills.get(key), species, this.room.ring().phase + 1)] };
   }
   /** The meeting this fight is for is still on. */
   simWanted(f) {
     const a = this.room.actor(f.a), b2 = this.room.actor(f.b);
+    if (f.legend) return !!a && a.since === f.since && a.judge === HOST_JUDGE && a.foe === LEGEND_FOE;
     return !!a && !!b2 && a.since === f.since && a.judge === HOST_JUDGE && a.foe === f.b && b2.foe === f.a;
   }
   /** Off the room's step and never in it: new meetings start, what is ready runs, and what is
    *  due goes in as an ordinary `bots` command on the next frame, so every mirror applies it. */
   simFrame(events) {
     const r = this.room;
-    for (const e of events) if (e.type === "bots" && e.id === HOST_JUDGE) this.fights.push({ a: e.a, b: e.b, since: r.actor(e.a)?.since ?? e.tick });
+    for (const e of events) if (e.type === "bots" && e.id === HOST_JUDGE) this.fights.push({ a: e.a, b: e.b, since: r.actor(e.a)?.since ?? e.tick, ...e.legend ? { legend: e.legend } : {} });
     if (!this.fights.length) return;
     this.fights = this.fights.filter((f) => this.simWanted(f));
     if (this.simFailed) {
@@ -14165,7 +14560,7 @@ var Host = class {
       if (!f.run) {
         const seed = (Math.imul(r.seed ^ f.since, 2654435761) ^ Math.imul(f.a, 2246822507) ^ Math.imul(f.b, 3266489909)) >>> 0;
         const at2 = r.actor(f.a)?.m.spot;
-        f.run = this.simulation(this.simSide(f.a), this.simSide(f.b), { seed, map: at2?.map ?? "", fog: !!at2 && r.inFog(at2) });
+        f.run = this.simulation(this.simSide(f.a), f.legend ? this.legendSide(f.legend) : this.simSide(f.b), { seed, map: at2?.map ?? "", fog: !!at2 && r.inFog(at2) });
       }
       const step = f.run.next();
       if (!step.done) return;
@@ -14178,7 +14573,7 @@ var Host = class {
     const frames = Math.ceil(logMs(f.out.log) / 1e3 * 60);
     f.due = Math.max(r.tick, Math.min(f.since + frames, f.since + SIM_LAST_FRAME));
     this.onLog?.(f.a, f.out.log);
-    this.onLog?.(f.b, f.out.log);
+    if (!f.legend) this.onLog?.(f.b, f.out.log);
   }
   simAnswer(f) {
     const out = f.out;
@@ -14186,13 +14581,14 @@ var Host = class {
       this.pending.push({ c: "bots", id: HOST_JUDGE, a: f.a, b: f.b, winner: 0 });
       return;
     }
-    const hp2 = out.winner === f.a ? out.shareA : out.winner === f.b ? out.shareB : void 0;
+    const winner = f.legend && out.shareB[0] < LEGEND_CATCH ? f.a : out.winner;
+    const hp2 = winner === f.a ? out.shareA : winner === f.b ? out.shareB : void 0;
     this.pending.push({
       c: "bots",
       id: HOST_JUDGE,
       a: f.a,
       b: f.b,
-      winner: out.winner,
+      winner,
       ...hp2 ? { hp: hp2 } : {},
       ...out.usedA.length || out.usedB.length ? { used: [out.usedA, out.usedB] } : {}
     });
@@ -15005,4 +15401,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "0313e8f07da3";
+export const WORLD_HASH = "3267210a1379";
