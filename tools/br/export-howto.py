@@ -14,7 +14,7 @@ One sheet, 240 wide (the screen's width), its pictures 150 tall, top to bottom:
     150  Hoenn: the POKéNAV's region map, `graphics/pokenav/region_map/map.png` laid out by
          its affine tilemap `map.bin` in `map.pal` (loaded at palette 7, hence the pixels'
          112 offset), at its own scale
-    300  a town for the fog to roll over, Fortree City
+    300  a town for the fog to roll over, Rustboro by the Devon building (Cam, 11-04: "let's make this Rustboro")
     450  a battle about to start: BRENDAN and MAY face to face on Slateport's harbour, the
          trainer's "!" (field_effects/pics/emotion_exclamation.png) over each
     600  an event the way a ROM shows it, at the top of Sky Pillar (src/br/br_loot.c's Spawn):
@@ -27,9 +27,8 @@ One sheet, 240 wide (the screen's width), its pictures 150 tall, top to bottom:
          at 2614, the same three in white, the way they flash while they change
     2678 encounters (br_patch.c): Jagged Pass's grass with three of its darkened patches,
          the tall grass's rustle in general_1's palette, and BRENDAN in the middle, about to
-         step on one. The red rock over Lavaridge: the town itself has no wild POKeMON, so no
-         patch ever shows there (Cam, 11-04: "I don't know, Lava Ridge or something")
-    2828 item pickups: outside the Devon building in Rustboro, two item balls, a gold one and a
+         step on one
+    2828 item pickups: Lavaridge outside its Center (Cam, 11-04: "maybe be in Lava Ridge"), two item balls, a gold one and a
          fallen trainer's bag (br_loot.c draws a bag as BIRCH's), BRENDAN about to take the nearest
 
 A panel's pictures are all of different places (Cam, 11-03), each with its trainer in the middle.
@@ -117,7 +116,7 @@ def on_map(name: str, x: int, y: int) -> Image.Image:
 
 
 def fog_town() -> Image.Image:
-    return on_map("FORTREE_CITY", 208, 96)
+    return on_map("RUSTBORO_CITY", 96, 192)
 
 
 def battle() -> Image.Image:
@@ -171,10 +170,10 @@ def encounters() -> Image.Image:
 
 
 def pickups() -> Image.Image:
-    im = on_map("RUSTBORO_CITY", 96, 192)
+    im = on_map("LAVARIDGE_TOWN", 48, 48)
     put = on_tiles(im)
     ball = frame(GFX_ITEM_BALL, 0)
-    for tx, ty, piece in ((5, 4, ball), (10, 6, ball), (6, 7, gold_ball()), (9, 4, frame(GFX_BIRCHS_BAG, 0))):
+    for tx, ty, piece in ((3, 5, ball), (9, 6, ball), (13, 7, gold_ball()), (7, 6, frame(GFX_BIRCHS_BAG, 0))):
         put(piece, tx, ty)
     put(frame(GFX_BRENDAN, 2), 7, 4)
     return im

@@ -215,7 +215,7 @@ export function howToScreen(model: () => HowToModel): DrawnScreen {
       if (artY !== undefined) c.drawUiPicture(SHEET, 0, artY, W, ART_H, art.x, art.y);
       const you = skinSheet(m.skin);
       if (panel.art === 'fog') {
-        // You, in Fortree, as the fog rolls over it.
+        // You, in Rustboro, as the fog rolls over it.
         if (you) c.drawSprite(you.gfx, Math.floor((W - you.w) / 2), art.y + 96 - you.h);
         fogOver(c, art, drift, 0.6);
       } else if (panel.art === 'evolve') {
