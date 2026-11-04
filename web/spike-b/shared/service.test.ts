@@ -231,6 +231,31 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it('a match\'s hello is the whole match: the curtain counts everybody, not only the bots (Cam, 11-04: "29 TRAINERS")', () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 29, cap: 30, now: () => 0, log: () => undefined });
+    const state = (p: ReturnType<typeof phone>) => (p.got.find((m) => m.t === 'hello') as unknown as { state: { actors: unknown[]; results: { entrants: unknown[] } } }).state;
+    try {
+      const a = phone();
+      const sa = svc.open(a.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      sa.onText(JSON.stringify({ t: 'set', set: { max: 30 } }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      // What main.ts puts on the curtain, on the state a page has before its first frame.
+      expect(state(a).results.entrants.length || state(a).actors.length).toBe(30);
+      expect(state(a).actors).toHaveLength(30);
+      // Two people: both, with their 28 bots.
+      const b = phone(), c = phone();
+      const sb = svc.open(b.link);
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, host: true }));
+      const code = (b.got.at(-1) as unknown as { code: string }).code;
+      svc.open(c.link).onText(JSON.stringify({ t: 'join', name: 'cy', skin: 0, code }));
+      sb.onText(JSON.stringify({ t: 'set', set: { max: 30 } }));
+      sb.onText(JSON.stringify({ t: 'start' }));
+      for (const p of [b, c]) expect(state(p).results.entrants).toHaveLength(30);
+    } finally {
+      svc.stop();
+    }
+  });
   it('the host sets MAX and the door (unlisted, a passcode), and takes a guest out', () => {
     const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
     try {
