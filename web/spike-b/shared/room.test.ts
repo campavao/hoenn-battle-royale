@@ -1464,7 +1464,7 @@ describe('rounds', () => {
     run(2);
     expect(host.room.ring().phase).toBe(1);
     expect(host.room.results.entrants.map(([id]) => id)).toEqual([a, b, c]);
-  });
+  }, 20_000); // A mirror's hash against the host's every frame of a whole match: ~2.5 s here, past the default 5 s on a loaded box.
 
   it('one trainer alone never wins, and two out on one frame leave no winner', () => {
     const room = makeRoom(MAPS, PATCHES, 5);
