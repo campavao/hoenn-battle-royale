@@ -59,7 +59,8 @@ export function bitsOf(k: Keys): number {
 export interface Actor {
   id: number;
   bot: boolean;
-  /** SELECT rides the ACRO BIKE: USEd off the BAG. A new mover (a FLY, a ferry) keeps it. */
+  /** The bike USEd off the BAG, which SELECT then rides: true the ACRO BIKE, false the MACH BIKE,
+   *  neither yet whichever the ground asks for (sim.ts acroNear). A new mover (a FLY, a ferry) keeps it. */
   likeAcro?: boolean;
   name: string;
   /** The wardrobe index: what the ROM draws this trainer as in a battle. */
@@ -720,7 +721,7 @@ export class Room {
     } else if (cmd.c === 'ride') {
       const a = this.actor(cmd.id);
       if (!a || a.bot) return;
-      a.likeAcro = cmd.acro || undefined;
+      a.likeAcro = cmd.acro;
       if (a.m.bike && a.m.acro !== cmd.acro && !this.base.acroAt?.(a.m.spot) && (cmd.acro || this.stepFor(a).cycling?.(a.m.spot))) {
         a.m.acro = cmd.acro;
         bikeClear(a.m);
@@ -2312,7 +2313,7 @@ export class Room {
     fn.cycling = !a.bot && !this.ring().safari ? this.base.cycling : undefined;
     fn.acroCycling = a.bot ? undefined : this.base.acroCycling;
     fn.acroAt = this.base.acroAt;
-    fn.likeAcro = !!a.likeAcro;
+    fn.likeAcro = a.bot ? false : a.likeAcro;
     return fn;
   }
 
