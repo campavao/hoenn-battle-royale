@@ -59,7 +59,6 @@ import { ITEM_POKE_DOLL, groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
 import { GOLD } from '../src/match/events';
 import { FLYING, STORIES } from '../src/match/story';
-import hiddenJson from './data/hidden.json';
 import { RomArt, type MapAnim } from './romart';
 import { AskBox } from './askbox';
 import { ANIM_COUNTER_MAX } from '../src/tile-anims';
@@ -77,7 +76,7 @@ import { PadPrefsControl } from '../src/ui/padprefs';
 import { inputKeyboard, inputPad } from '../src/ui/hints';
 import { wireDpad } from './dpad';
 import { StartMenu } from './startmenu';
-import { MapWindow } from './mapwindow';
+import { MapWindow, mapFit } from './mapwindow';
 import { FLY_SPOTS } from './flyspots';
 import { ARRIVES, FLIGHT_LEN, POISON_COLOUR, dollShows, flew, flightFade, flightPose, poisonBeat, poisonLook } from './looks';
 import type { MapPlace } from './ringmap';
@@ -87,11 +86,12 @@ import { BAG_POSITION_POCKET, POCKET_BALLS, POCKET_TMHM, isMachine, readBattleBa
 import type { Rom } from '../src/battle/movebook';
 import { BATTLE_MENU, MENU_ACTION, MENU_PARTY, TouchLayer } from '../src/touch';
 import { romAsks, type TeamRow } from './rom';
-import { eatLiftClick, pageWin } from '../src/ui/pagewin';
+import { eatLiftClick, glass, pageWin } from '../src/ui/pagewin';
 import { SummaryWindow } from '../src/ui/summary';
 import { Radial, type DialItem } from '../src/ui/radial';
 import { ITEM_HM01, ITEM_TM01, MovesBox, learnList, type LearnRow } from '../src/ui/movesbox';
 import { learnsByNow } from '../src/ui/monfacts';
+import { DIAL_TIP_MS, dialKnown, dialTipDue, dialTipShown, dialTipWords } from '../src/ui/dialtip';
 import { TMHM_MOVES } from '../src/ui/tmhm';
 import { HUD } from '../src/net/hud';
 import { bagHolds, fieldMoves, fogPhase, ITEM_ACRO_BIKE, ITEM_MACH_BIKE, ITEM_TOWN_MAP, itemCut, KEYITEMS_POCKET, MINI_MAP, PhoneHud, signFor, type FieldMove } from '../src/ui/phonehud';
@@ -978,7 +978,8 @@ function askKey(k: string): void {
  *  (`start`) is its own window on the field; a MART's `shelf` and `roller` are shop.c's. */
 function ask(title: string, rows: [string, string][], start = false, more: { pick?: number; shelf?: Shelf; roller?: Roller } = {}): Promise<string> {
   return new Promise((resolve) => {
-    asking = { pick: 0, start, title, rows, ...more, done: (c) => { asking = null; startMenu.hide(); askBox.hide(); calmUntil = frame + 30; resolve(c); } };
+    document.body.classList.add('ask-up');
+    asking = { pick: 0, start, title, rows, ...more, done: (c) => { asking = null; document.body.classList.remove('ask-up'); startMenu.hide(); askBox.hide(); calmUntil = frame + 30; resolve(c); } };
     askPaint();
   });
 }
@@ -1028,7 +1029,7 @@ function openMapWindow(o: { verb: string | null; can(p: MapPlace): boolean; prom
       plots: () => map.plots({ spot: me.m.spot, gfx: gfxOf(me.skin) }),
       head: (gfx) => {
         const s = sheet(gfx);
-        return s ? { img: s, w: SHEETS[String(gfx)].w } : null;
+        return s ? { img: s, w: SHEETS[String(gfx)].w, h: SHEETS[String(gfx)].h } : null;
       },
       verb: o.verb,
       can: o.can,
@@ -1036,7 +1037,7 @@ function openMapWindow(o: { verb: string | null; can(p: MapPlace): boolean; prom
       back: o.back ? () => asking?.done('') : null,
       choose: (p) => { picked = p; rom?.sound(SE_SELECT); asking?.done(''); },
       moved: () => rom?.sound(SE_SELECT),
-      scale: Math.min(windowScale(), Math.max(1, Math.min(Math.floor(innerWidth / 240), Math.floor((innerHeight - 16) / (160 + 36 + 32 + 16))))),
+      fit: () => mapFit(touchPad, glass(), windowScale()),
       start,
     });
     // The drop's clock: the place under the cursor is the choice, as br_pick.c's timeout has it.
@@ -1156,9 +1157,22 @@ const ITEM_ITEMFINDER = 261;
 /** A pad's right trigger in the standard layout, unless a remap has put a button of the game's on it. */
 const PAD_RT = 7;
 const RADIAL_KEY = 'c';
-const radial = new Radial({ scale: windowScale, sound: () => rom?.sound(SE_SELECT) });
+const radial = new Radial({ scale: windowScale, touch: matchMedia('(pointer: coarse)').matches, sound: () => rom?.sound(SE_SELECT) });
+/** The word over the round button that it has a dial behind it (ui/dialtip.ts). */
+const dialTip = new Tag(document.getElementById('dial-tip') as HTMLCanvasElement);
+let dialTipLeft = dialTipDue();
+let dialTipUntil = 0;
+function dialTipFrame(on: boolean): void {
+  if (!dialTipLeft) return;
+  if (!on) { dialTip.hide(); return; }
+  const now = performance.now();
+  if (!dialTipUntil) { dialTipUntil = now + DIAL_TIP_MS; dialTipShown(); }
+  const b = document.getElementById('hud-ctx')?.getBoundingClientRect();
+  if (now > dialTipUntil) { dialTipLeft = false; dialTip.hide(); }
+  else if (b?.width) dialTip.show(dialTipWords(touchPad ? 'touch' : document.body.classList.contains('pad-input') ? 'pad' : 'keys', RADIAL_KEY), b.x + b.width / 2, b.y);
+}
 /** Riding, or the bike in the bag: SELECT gets on or off where a bike may go (sim.ts). */
-function bikeNow(me: Actor): { item: number; label: 'BIKE' | 'WALK'; enabled: boolean } {
+function bikeNow(me: Actor): { item: number; label: 'BIKE' | 'WALK'; enabled: boolean; on: boolean } {
   const has = rom ? bagHolds(rom.emu, romTables.sym, KEYITEMS_POCKET, [ITEM_MACH_BIKE, ITEM_ACRO_BIKE]) : new Set<number>();
   const step = link.room.stepFor(me), spot = me.m.spot;
   // The one that SELECT would get on (sim.ts begin), or is on.
@@ -1168,6 +1182,8 @@ function bikeNow(me: Actor): { item: number; label: 'BIKE' | 'WALK'; enabled: bo
     label: me.m.bike ? 'WALK' : 'BIKE',
     // No getting off on a rail.
     enabled: me.m.bike ? (step.acroAt?.(spot) ?? 0) < 2 : !!step.cycling?.(spot) || !!step.acroCycling?.(spot),
+    // Lit while riding, on a desktop and a phone (Cam, 11-04: "let's have it highlight to show that it's in use").
+    on: !!me.m.bike,
   };
 }
 /** What SELECT would do with the rod here: casts it facing water, on foot or surfing (room.ts). */
@@ -1191,6 +1207,9 @@ function openDial(finger?: { x: number; y: number }): void {
   held.clear();
   pressed.clear();
   rom.sound(SE_WIN_OPEN);
+  dialKnown();
+  dialTipLeft = false;
+  dialTip.hide();
   radial.open(dialItems(me));
   if (finger) radial.fingerFrom(finger.x, finger.y);
 }
@@ -1282,12 +1301,35 @@ function closePanel(): void {
   calmUntil = frame + 30;
   panelDone?.();
 }
+/** ui/taken.ts, its own chunk: main is at its budget (vite.config.ts), and only a SUMMARY off the
+ *  ground asks. Fetched as the page starts; until it comes, that SUMMARY has no moves to show. */
+let takenLib: typeof import('../src/ui/taken') | null = null;
+void import('../src/ui/taken').then((m) => { takenLib = m; }, (e) => console.warn('spike taken', e));
+/** What taking this one would make of it (ui/taken.ts), for its SUMMARY: `at` is its place on the team
+ *  screen, whose key seeds it, or null for a trader's, which the ROM rolls when he hands it over. Under
+ *  the rung it comes up to the rung (br_loot.c MakeTaken). */
+function joinsAs(species: number, level: number, at: number | null): NonNullable<PartyMember['joins']> {
+  const was = Math.max(level, rungForPhase(link.room.ring().phase + 1));
+  const lib = takenLib;
+  const t = lib?.takenMon(romTables, species, was, at === null || !rom ? null : lib.teamSeed(rom.matchSeed(), at), rom?.localHour());
+  if (!lib || !t) return { species, name: speciesName(species), level: was, moves: [] };
+  return { species: t.species, name: speciesName(t.species), level: t.level, moves: t.moves.map((id) => { const pp = lib.fullPp(romTables, id); return { id, pp, maxPp: pp }; }) };
+}
+/** The one who just joined knows what its SUMMARY said (ui/taken.ts says why it might not yet): by the
+ *  party against what it was, unless it came out another species, which SUMMARY got wrong anyway. */
+async function sayWhatItSaid(before: PartyMember[], joins: NonNullable<PartyMember['joins']>): Promise<void> {
+  const after = readTeam();
+  const slot = after.findIndex((m, i) => m.species !== before[i]?.species || JSON.stringify(m.moves) !== JSON.stringify(before[i]?.moves));
+  const m = after[slot];
+  if (!rom || !m || m.species !== joins.species || m.moves.map((v) => v.id).join() === joins.moves.map((v) => v.id).join()) return;
+  await rom.dealMoves(slot, joins.moves);
+}
 /** A dropped team on the windows: taken one at a time, each through the ROM's own screen unseen.
  *  What is still on the ground comes back. */
 let panelDone: (() => void) | null = null;
 function dropPanel(who: string, mons: TeamRow[]): Promise<TeamRow[]> {
   let left = mons;
-  const rows = () => left.map((m) => ({ species: m.species, name: speciesName(m.species), level: m.level, hp: 1, maxHp: 1, status: 0, item: 0, itemName: '', ability: '', moves: [], active: false }));
+  const rows = () => left.map((m, at) => ({ species: m.species, name: speciesName(m.species), level: m.level, hp: 1, maxHp: 1, status: 0, item: 0, itemName: '', ability: '', moves: [], active: false, joins: joinsAs(tradedInto(m.species), m.level, at) }));
   return new Promise((resolve) => {
     if (!battleMenu || !rom) { resolve(left); return; }
     swapping = true;
@@ -1300,8 +1342,10 @@ function dropPanel(who: string, mons: TeamRow[]): Promise<TeamRow[]> {
     const show = () => battleMenu!.openDrop(who, rows(), take, closePanel);
     const take = (at: number, give?: number) => {
       battleMenu!.hideField();
-      void rom!.team(left, who, () => {}, () => {}, { take: at, give }).then((rest) => {
+      const before = readTeam(), joins = rows()[at]?.joins;
+      void rom!.team(left, who, () => {}, () => {}, { take: at, give }).then(async (rest) => {
         left = rest;
+        if (joins) await sayWhatItSaid(before, joins);
         if (!panelUp) return;
         if (left.length) show(); else closePanel();
       });
@@ -1867,14 +1911,13 @@ async function nurse(): Promise<void> {
 
 /** Somebody's offer of a mon: yes or no, and its SUMMARY first if I want to see it. Nobody's
  *  party holds it, so that is what the wire says, its species, at the rung it would come at. */
-async function askLooking(title: string, yes: string, species: number): Promise<string> {
+async function askLooking(title: string, yes: string, species: number, joins: () => NonNullable<PartyMember['joins']>): Promise<string> {
   for (;;) {
     const c = await ask(title, [[yes, 'y'], ['SUMMARY', 'look'], ['NO, THANKS', '']]);
     if (c !== 'look') return c;
-    const level = rungForPhase(link.room.ring().phase + 1);
     swapping = true;
     await new Promise<void>((done) => {
-      summaryWin?.open([{ species, name: speciesName(species), level, hp: 1, maxHp: 1, status: 0, item: 0, itemName: '', ability: '', moves: [], active: false }], 0, () => !isOut && !battle, done);
+      summaryWin?.open([{ hp: 1, maxHp: 1, status: 0, item: 0, itemName: '', ability: '', active: false, ...joins() }], 0, () => !isOut && !battle, done);
     });
     swapping = false;
     calmUntil = frame + 30;
@@ -1891,17 +1934,19 @@ async function trade(n: number, species: number): Promise<void> {
     if (swapping) leaveScreen();
     asking?.done('');
     const name = speciesName(species);
-    const c = await askLooking(`I'll trade you my ${name} for one of yours. Which one?`, 'CHOOSE', species);
     // Somebody at home's goes through a trade's evolution on the way over (br_loot.c's
     // BrLoot_HomeTrade); an event's trader's does not (br_event.c's Swap).
     const got = n >= HOME_N ? tradedInto(species) : species;
+    const c = await askLooking(`I'll trade you my ${name} for one of yours. Which one?`, 'CHOOSE', species, () => joinsAs(got, 0, null));
     if (c !== 'y' || !rom || isOut) return;
     const slot = await askParty(`For ${name}`);
     if (slot === null || !rom || isOut) return;
     swapping = true;
     held.clear();
     try {
+      const before = readTeam(), joins = joinsAs(got, 0, null);
       given = await rom.trade(got, () => battleEl.classList.add('on'), slot);
+      if (given) await sayWhatItSaid(before, joins);
     } finally {
       swapping = false;
       battleEl.classList.remove('on');
@@ -1924,7 +1969,7 @@ async function gift(n: number, species: number): Promise<void> {
     if (!rom || isOut || battle || swapping) return;
     asking?.done('');
     const name = speciesName(species);
-    const c = await askLooking(`Will you look after my ${name} for me?`, 'YES', species);
+    const c = await askLooking(`Will you look after my ${name} for me?`, 'YES', species, () => joinsAs(tradedInto(species), 0, 0));
     if (c !== 'y' || !rom || isOut) return;
     const left = await dropPanel('GIFT', [{ species, level: rungForPhase(link.room.ring().phase + 1) }]);
     if (!left.some((m) => m.species === species)) taken = species;
@@ -2819,6 +2864,7 @@ function wirePhoneHud(desk = false): void {
     hud.setScale(s);
     msgBox.setScale(s);
     itemTag.setScale(s);
+    dialTip.setScale(s);
   };
   addEventListener('resize', scale);
   scale();
@@ -2834,6 +2880,7 @@ function wirePhoneHud(desk = false): void {
     if (!me) { hud.hide(); return; }
     const ring = link.room.ring();
     const res = link.room.results;
+    dialTipFrame(!!mine && !ring.safari && !battle && !swapping && !romUp && !asking && !spectating && !lobby?.shown);
     const fogged = link.room.inFog(me.m.spot);
     if (fogged && !hudFogged) fogFlashTo = frame + BR_HUD_FOG_FRAMES;
     hudFogged = fogged;
@@ -3050,6 +3097,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     choose: (which, slot, move) => touch.chooseBattle(which, slot, move),
     back: () => touch.tapKey('b'),
     focusFirst: !touchPad,
+    refit: touchPad ? () => resize() : undefined,
     firstMoves: {
       readParty: () => {
         if (partyAt === undefined || countAt === undefined) return [];
@@ -3071,7 +3119,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       bag: () => bagArtOf(),
       keys: touchPad ? undefined : { party: 'Q', bag: 'E' },
       switchTo: (slot) => walkParty(slot),
-      showMon: (rows, at) => summaryWin?.open(rows, at, () => menu.isShown),
+      showMon: (rows, at) => summaryWin?.open(rows.map((r) => (r.joins ? { ...r, ...r.joins } : r)), at, () => menu.isShown),
       useOn,
       sendOut: (slot) => { walk = { slot, step: 0, frames: 0, item: false, forced: true }; },
       field: {
@@ -3119,11 +3167,11 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
   const DESK_MENU_H = 136;
   const resize = () => {
     // The windows alone: no picture for them to follow, on a phone either.
-    if (touchPad && battleEl.classList.contains('panel')) {
-      const s = menu.fitScale(windowScale());
+    if (touchPad && (battleEl.classList.contains('panel') || (innerWidth > innerHeight && menu.standsAlone))) {
+      menu.setRoom(Infinity);
+      const s = menu.fillScale();
       battleEl.style.setProperty('--s', String(s));
       menu.setScale(s);
-      menu.setRoom(Infinity);
       return;
     }
     if (!touchPad) {
@@ -3264,7 +3312,9 @@ paintSound();
 
 /** Every map's hidden items (tools/br/spike-hidden.py): still buried in a match, and each
  *  trainer can dig each one up once, as each ROM's own flag lets them. */
-const HIDDEN = new Map((hiddenJson as [string, number, number, number][]).map(([m, x, y, item]) => [`${m}:${x}:${y}`, { map: m, x, y, item }]));
+const HIDDEN = new Map<string, { map: string; x: number; y: number; item: number }>();
+// Its own chunk, with main at its budget (vite.config.ts): here well before anybody stands on a map.
+void import('./data/hidden.json').then((d) => { for (const [m, x, y, item] of d.default as [string, number, number, number][]) HIDDEN.set(`${m}:${x}:${y}`, { map: m, x, y, item }); }, (e) => console.warn('spike hidden', e));
 /** What I dug up this round. */
 const dug = new Set<string>();
 let dugRound = -1;
@@ -5177,7 +5227,7 @@ async function boot(): Promise<void> {
     }
   }
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { watch, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, get movesBox() { return movesBox; }, radial };
+  (window as unknown as { __spike: unknown }).__spike = { watch, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, get movesBox() { return movesBox; }, radial, moveName: (id: number) => moveInfo(romTables, id)?.name ?? '' };
 }
 
 void boot();

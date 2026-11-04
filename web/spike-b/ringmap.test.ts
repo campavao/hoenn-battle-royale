@@ -23,6 +23,13 @@ const place = (id: string) => room.places.get(id)!;
 const ringAt = (cx: number, cy: number, r: number, next?: number): Ring => ({ round: 0, phase: 2, last: false, cx, cy, r, next, left: 60 });
 
 describe('ring map', () => {
+  it("has every leader's face, beaten or not, and mine (Cam, 11-04: \"I can't see my face anymore or the other faces\")", () => {
+    const plots = map.plots({ spot: { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 }, gfx: 7 });
+    expect(plots.gyms.length, 'all eight, from the start').toBe(8);
+    expect(plots.gyms.every((g) => !g.beaten)).toBe(true);
+    expect(plots.me?.gfx).toBe(7);
+  });
+
   it('has the trainer in the section and cell they stand in', () => {
     const grid = (id: string) => { const s = SECTIONS.find((x) => x.id === id)!; return { x: s.x, y: s.y }; };
     expect(map.cellOf({ map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 })).toEqual(grid('MAPSEC_LITTLEROOT_TOWN'));

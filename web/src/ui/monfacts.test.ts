@@ -91,7 +91,7 @@ describe('a box on the screen', () => {
     expect(pageScale(232, 344, 2, false, { w: 800, h: 400 })).toBe(1);
   });
   it("is the windows' scale on a phone, or what fits", () => {
-    expect(pageScale(232, 344, 1.56, true, { w: 390, h: 844 })).toBeCloseTo(1.56);
+    expect(pageScale(232, 344, 1.56, true, { w: 390, h: 844 })).toBeCloseTo(382 / 232);
     expect(pageScale(232, 344, 1.5, true, { w: 375, h: 400 })).toBeCloseTo(384 / 344);
   });
 });

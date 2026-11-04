@@ -54,11 +54,29 @@ export function eatLiftClick(): void {
   addEventListener('pointercancel', done, true);
 }
 
-/** CSS pixels per GBA pixel for a box of `w` x `h`. A phone's is the battle windows' scale, or
- *  what fits; a window with a mouse goes down a whole step from its windows, so that this is a
- *  box on the screen and not the screen. */
+let insets: HTMLElement | null = null;
+/** The screen a window may stand on, CSS pixels: less the notch and the home bar, on a phone that
+ *  has them. */
+export function glass(doc: Document = document): { w: number; h: number } {
+  if (!insets) {
+    insets = doc.createElement('div');
+    insets.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;width:0;height:0;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
+    doc.body.appendChild(insets);
+  }
+  const c = getComputedStyle(insets);
+  const px = (v: string) => parseFloat(v) || 0;
+  return { w: innerWidth - px(c.paddingLeft) - px(c.paddingRight), h: innerHeight - px(c.paddingTop) - px(c.paddingBottom) };
+}
+
+/** The most a phone's windows grow: a tablet's aren't a wall. */
+export const TOUCH_MAX_SCALE = 3;
+
+/** CSS pixels per GBA pixel for a box of `w` x `h`. A phone's is all the glass there is (Cam, 11-04:
+ *  "on mobile the menus like the map and everything else should take up the full screen"); a window
+ *  with a mouse goes down a whole step from its windows, so that this is a box on the screen and
+ *  not the screen. */
 export function pageScale(w: number, h: number, base: number, touch: boolean, room: { w: number; h: number }): number {
   const fit = Math.min((room.w - 8) / w, (room.h - 16) / h);
-  if (touch) return Math.min(base, fit);
+  if (touch) return Math.min(TOUCH_MAX_SCALE, fit);
   return Math.max(1, Math.min(Math.max(2, base - 1), Math.floor(fit)));
 }

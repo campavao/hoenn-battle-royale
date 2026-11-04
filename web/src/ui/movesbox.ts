@@ -7,7 +7,7 @@ import { TEXT_BLUE, TEXT_DARK, TEXT_GRAY, fitText, measure, wrapText, type Emera
 import { drawType, powerText, type PartyMember } from './battlemenu';
 import { isMachine } from './bag';
 import { relearnable } from './monfacts';
-import { pageRoot, pageScale, pageWin, type PageWindow } from './pagewin';
+import { glass, pageRoot, pageScale, pageWin, type PageWindow } from './pagewin';
 import { Win } from './phonehud';
 import { TMHM_MOVES } from './tmhm';
 
@@ -283,7 +283,11 @@ export class MovesBox implements PageWindow {
   }
 
   private fit(): void {
-    const s = pageScale(W, BOX_H, this.deps.scale(), this.deps.touch, { w: innerWidth, h: innerHeight });
+    const room = glass();
+    // A phone on its side: the words beside the list, not under it.
+    const side = this.deps.touch && room.w > room.h;
+    this.box.classList.toggle('side', side);
+    const s = side ? pageScale(2 * W + GAP, HEAD_H + GAP + LIST_H + GAP + BTN_H, this.deps.scale(), true, room) : pageScale(W, BOX_H, this.deps.scale(), this.deps.touch, room);
     if (s === this.scale) return;
     this.scale = s;
     pageRoot().style.setProperty('--s', String(s));

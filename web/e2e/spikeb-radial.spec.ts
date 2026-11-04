@@ -58,8 +58,21 @@ test('a desktop has the round button, and SHIFT named on it; it gets on the bike
   expect(box.x, 'beside the BAG').toBeGreaterThanOrEqual(bag.x + bag.width);
   await shot(page, 'desk-field-round');
   expect(await riding(page)).toBe(false);
+  await expect(round, 'not lit on foot').not.toHaveClass(/hud-on/);
+  // Over it, a word that it has a dial behind it, for a while, and not once the dial's been used.
+  const tip = page.locator('#dial-tip');
+  await expect(tip).toBeVisible();
+  const over = (await tip.boundingBox())!;
+  expect(over.y + over.height, 'over the button').toBeLessThanOrEqual(box.y + 1);
+  await shot(page, 'desk-dial-tip');
   await round.click();
   await expect.poll(() => riding(page)).toBe(true);
+  await expect(round, 'lit while it is in use (Cam, 11-04)').toHaveClass(/hud-on/);
+  await shot(page, 'desk-round-lit');
+  await page.waitForTimeout(600);
+  await round.click();
+  await expect.poll(() => riding(page)).toBe(false);
+  await expect(round).not.toHaveClass(/hud-on/);
   await ctx.close();
 });
 
@@ -70,6 +83,8 @@ test('C held: the dial, the arrows lean, and letting go uses it', async ({ brows
   await onRoute(page);
   await page.keyboard.down('c');
   await expect(page.locator('#radial')).toBeVisible();
+  await expect(page.locator('#dial-tip'), 'it knows now').toBeHidden();
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector('.rad-up canvas')!).imageRendering), 'crisp at any scale').toBe('pixelated');
   // Standing still on it: nobody walks for the arrows.
   const at = await spike(page, (s) => s.link.room.actor(s.link.me).m.spot.x);
   await page.keyboard.press('ArrowUp');
