@@ -17,6 +17,12 @@ export const LOG_TEXT_MAX = 160;
 export const LOG_STREAM_EVENTS = 1500;
 export const LOG_STREAM_CHARS = 96 * 1024;
 
+/** The lowest seat a log names: room.ts's LEGEND_FOE (-2), the legendary a bot fights. The host's
+ *  simulator logs it as its seat and the room stamps it on a page's log (service.ts publishBl);
+ *  a log that dropped it dropped its `start`, and the fight was none (logwire.test.ts keeps the
+ *  two equal). A trainer's seat is above 0. */
+const SEAT_MIN = -2;
+
 const int = (v: unknown, lo: number, hi: number): number | undefined =>
   typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi ? v : undefined;
 
@@ -46,7 +52,7 @@ function monOf(m: unknown): LogMon | undefined {
 function sideTeam(s: unknown): LogSide | undefined {
   if (!s || typeof s !== 'object') return undefined;
   const o = s as Record<string, unknown>;
-  const seat = int(o.seat, 0, 0x7fffffff), skin = int(o.skin, 0, 255), name = line(o.name, 24);
+  const seat = int(o.seat, SEAT_MIN, 0x7fffffff), skin = int(o.skin, 0, 255), name = line(o.name, 24);
   if (seat === undefined || skin === undefined || name === undefined || !Array.isArray(o.team) || o.team.length > 6) return undefined;
   const team: LogMon[] = [];
   for (const m of o.team) {
@@ -95,7 +101,7 @@ export function cleanEvent(raw: unknown): BattleEvent | undefined {
       return side !== undefined ? { e: 'faint', side } : undefined;
     }
     case 'end': {
-      const winner = int(o.winner, 0, 0x7fffffff);
+      const winner = int(o.winner, SEAT_MIN, 0x7fffffff);
       return winner !== undefined ? { e: 'end', winner } : undefined;
     }
     default:

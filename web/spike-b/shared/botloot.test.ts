@@ -8,6 +8,8 @@ import worldJson from '../data/world.json';
 import patchJson from '../../src/data/patches.json';
 import { botKeys, type Brain } from './bots';
 import { Host, play } from './host';
+import type { BattleEvent } from './battlelog';
+import { cleanEvents } from './logwire';
 import { HOST_JUDGE, KEY_A, KEY_B, KEY_RIGHT, LEGEND_FOE, SPILL_KEY, botParty, makeRoom, type Room } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
@@ -183,6 +185,25 @@ describe('a bot at a legendary', () => {
     expect(answered).toBe(true);
     expect(mirror.hash()).toBe(room.hash());
     expect(mirror.actor(7)?.caught).toEqual(room.actor(7)?.caught);
+  });
+
+  it('its log is one the relay keeps for a watcher: the legendary has a seat it can read', async () => {
+    const room = stage();
+    room.apply({ c: 'lock' });
+    const logs: BattleEvent[][] = [];
+    const host = new Host(room, 0, MAPS, 0, { onLog: (_seat, log) => logs.push(log) });
+    host.brains.set(7, { rng: 7, wait: 0, dir: 1 });
+    await host.simReady();
+    legendAt(room, 13, 12);
+    for (const g of room.ground().values()) if (g.map === OLDALE) room.picked.set(g.key, 99);
+    for (let i = 0; i < 60 * 60 * 11 && !logs.length; i++) host.advance();
+    expect(logs, 'the fight was worked out, once, for the bot alone').toHaveLength(1);
+    // What WorldService.publishLog does with it first (logwire.ts): a seat and a winner are read
+    // as non-negative, and a log whose `start` is dropped is refused whole.
+    const kept = cleanEvents(logs[0]);
+    expect(kept[0]?.e).toBe('start');
+    expect(kept.at(-1)?.e).toBe('end');
+    expect(kept.length).toBe(logs[0].length);
   });
 });
 
