@@ -59,7 +59,6 @@ import { ITEM_POKE_DOLL, groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
 import { GOLD } from '../src/match/events';
 import { FLYING, STORIES } from '../src/match/story';
-import hiddenJson from './data/hidden.json';
 import { RomArt, type MapAnim } from './romart';
 import { AskBox } from './askbox';
 import { ANIM_COUNTER_MAX } from '../src/tile-anims';
@@ -3313,7 +3312,9 @@ paintSound();
 
 /** Every map's hidden items (tools/br/spike-hidden.py): still buried in a match, and each
  *  trainer can dig each one up once, as each ROM's own flag lets them. */
-const HIDDEN = new Map((hiddenJson as [string, number, number, number][]).map(([m, x, y, item]) => [`${m}:${x}:${y}`, { map: m, x, y, item }]));
+const HIDDEN = new Map<string, { map: string; x: number; y: number; item: number }>();
+// Its own chunk, with main at its budget (vite.config.ts): here well before anybody stands on a map.
+void import('./data/hidden.json').then((d) => { for (const [m, x, y, item] of d.default as [string, number, number, number][]) HIDDEN.set(`${m}:${x}:${y}`, { map: m, x, y, item }); }, (e) => console.warn('spike hidden', e));
 /** What I dug up this round. */
 const dug = new Set<string>();
 let dugRound = -1;
