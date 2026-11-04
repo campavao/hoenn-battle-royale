@@ -45,6 +45,32 @@ function head(c: EmeraldCanvas, deps: MapWindowDeps, gfx: number, x: number, y: 
   if (s) c.drawImageTo(s.img, 0, 0, s.w, 16, Math.round(x - s.w / 2), Math.round(y - 8), s.w, 16);
 }
 
+/** How near, in the picture's pixels, a mark has to be to take the cursor; and in cells, a place. */
+const SNAP_MARK = 8, SNAP_PLACE = 3;
+
+/** The cell a pointer at (x, y) of the picture means: a mark it is on (a legendary's ball, a leader),
+ *  or the place under it, or the nearest place when it is over open sea. Null off the grid, or with
+ *  nothing near. */
+export function snapCell(x: number, y: number, plots: Pick<MapPlots, 'events' | 'gyms'>, placeAt: (cx: number, cy: number) => unknown): { x: number; y: number } | null {
+  const cx = Math.floor((x - GRID_X) / CELL), cy = Math.floor((y - GRID_Y) / CELL);
+  if (cx < 0 || cy < 0 || cx >= GRID_W || cy >= GRID_H) return null;
+  let best: { x: number; y: number } | null = null, bestD = SNAP_MARK;
+  for (const m of [...plots.events, ...plots.gyms]) {
+    const d = Math.hypot(m.x - x, m.y - y);
+    if (d <= bestD) { best = { x: Math.floor((m.x - GRID_X) / CELL), y: Math.floor((m.y - GRID_Y) / CELL) }; bestD = d; }
+  }
+  if (best) return best;
+  if (placeAt(cx, cy)) return { x: cx, y: cy };
+  let far = SNAP_PLACE + 1;
+  for (let dy = -SNAP_PLACE; dy <= SNAP_PLACE; dy++) {
+    for (let dx = -SNAP_PLACE; dx <= SNAP_PLACE; dx++) {
+      const d = Math.hypot(dx, dy), nx = cx + dx, ny = cy + dy;
+      if (d < far && nx >= 0 && ny >= 0 && nx < GRID_W && ny < GRID_H && placeAt(nx, ny)) { best = { x: nx, y: ny }; far = d; }
+    }
+  }
+  return best;
+}
+
 export class MapWindow {
   private map: Win;
   private foot: Win;
@@ -58,6 +84,9 @@ export class MapWindow {
   private edge: Uint8Array | null = null;
   private edgeOf = '';
   private raf = 0;
+  private outside: (e: PointerEvent) => void;
+  /** The cell last pressed on, for the second press. */
+  private armed: { x: number; y: number } | null = null;
 
   constructor(private readonly el: HTMLElement, private readonly deps: MapWindowDeps) {
     this.cx = deps.start.x;
@@ -71,6 +100,16 @@ export class MapWindow {
     this.map.size(W, H, s);
     this.map.canvas.classList.add('map-picture');
     this.map.canvas.addEventListener('pointerdown', (e) => this.pointed(e));
+    // A mouse's cursor follows it, onto what's near (Cam, 11-02: "Can we make it like snap?").
+    this.map.canvas.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') this.hovered(e); });
+    // Off the window, onto the dim round it, is out, as B is, and goes no further (no walk to where
+    // it landed). Cam, 11-02: "Took me forever to get out of the map there".
+    this.outside = (e: PointerEvent) => {
+      if (!deps.back || el.contains(e.target as Node)) return;
+      e.stopPropagation();
+      deps.back();
+    };
+    addEventListener('pointerdown', this.outside, true);
     this.foot = new Win(el, W, FOOT_H, (c) => this.paintFoot(c));
     this.foot.size(W, FOOT_H, s);
     const row = document.createElement('div');
@@ -123,12 +162,24 @@ export class MapWindow {
 
   private pointed(e: PointerEvent): void {
     const { x, y } = this.map.c.toPixel(e.clientX, e.clientY);
-    const cx = Math.floor((x - GRID_X) / CELL), cy = Math.floor((y - GRID_Y) / CELL);
-    if (cx < 0 || cy < 0 || cx >= GRID_W || cy >= GRID_H) return;
-    // On it already: a second press is the verb, for a mouse. A thumb has the button too.
-    if (cx === this.cx && cy === this.cy) { this.press(); return; }
-    this.cx = cx;
-    this.cy = cy;
+    const at = snapCell(x, y, this.deps.plots(), this.deps.placeAt);
+    if (!at) return;
+    // Pressed on already: a second press is the verb, for a mouse. A thumb has the button too. Not
+    // the first, though the mouse brought the cursor there: a FLY is not undone by a stray click.
+    if (this.armed && at.x === this.armed.x && at.y === this.armed.y) { this.press(); return; }
+    this.armed = at;
+    if (at.x !== this.cx || at.y !== this.cy) this.moveTo(at);
+  }
+
+  private hovered(e: PointerEvent): void {
+    const { x, y } = this.map.c.toPixel(e.clientX, e.clientY);
+    const at = snapCell(x, y, this.deps.plots(), this.deps.placeAt);
+    if (at && (at.x !== this.cx || at.y !== this.cy)) { this.armed = null; this.moveTo(at); }
+  }
+
+  private moveTo(at: { x: number; y: number }): void {
+    this.cx = at.x;
+    this.cy = at.y;
     this.deps.moved();
     this.paint();
   }
@@ -226,6 +277,7 @@ export class MapWindow {
   }
 
   close(): void {
+    removeEventListener('pointerdown', this.outside, true);
     cancelAnimationFrame(this.raf);
     this.el.replaceChildren();
     this.el.hidden = true;

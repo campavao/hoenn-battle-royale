@@ -45,14 +45,14 @@ import { OUT_BATCH_MS, event, felled, opening, outs, won } from '../src/match/ti
 import { MessageBox } from './msgbox';
 import { Fishing, fishPose, rodOf, type Rod } from './fish';
 import { Ticks } from './ticks';
-import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_CONTEST_CURTAIN_FALL, SE_CONTEST_CURTAIN_RISE, SE_DOOR, SE_EXIT, SE_FIELD_POISON, SE_LEDGE, SE_M_FLY, SE_SELECT, SE_SHOP, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
+import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_CONTEST_CURTAIN_FALL, SE_CONTEST_CURTAIN_RISE, SE_DOOR, SE_EXIT, SE_FAILURE, SE_FIELD_POISON, SE_LEDGE, SE_M_FLY, SE_SELECT, SE_SHOP, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { devRomParam, importRom } from './import';
 import { askToKeepStorage, registerServiceWorker } from '../src/pwa';
 import { devPace, parseRoomHash, withRoom, withoutRoom } from '../src/hash';
 import { recordSolo, statFlushed, statMessage } from '../src/match/stats';
 import { WORLD_HASH_SHORT, battlesOn } from './net';
-import { groundCount, isTm, tradedInto } from './shared/items';
+import { ITEM_POKE_DOLL, groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
 import { GOLD } from '../src/match/events';
 import { FLYING, STORIES } from '../src/match/story';
@@ -80,7 +80,7 @@ import { ARRIVES, FLIGHT_LEN, POISON_COLOUR, dollShows, flew, flightFade, flight
 import type { MapPlace } from './ringmap';
 import { BACK_H, BATTLE_TYPE_RECORDED, BattleMenu, CELL_H, battleWantsNoPad, ppWithBonus, readBattleView, type PartyMember } from '../src/ui/battlemenu';
 import { BATTLE_TYPE_TRAINER, CARD_H, SidesView } from '../src/ui/sides';
-import { BAG_POSITION_POCKET, POCKET_TMHM, isMachine, readBattleBag, readFieldBag, readPocket, takesMachine } from '../src/ui/bag';
+import { BAG_POSITION_POCKET, POCKET_BALLS, POCKET_TMHM, isMachine, readBattleBag, readFieldBag, readPocket, takesMachine } from '../src/ui/bag';
 import type { Rom } from '../src/battle/movebook';
 import { BATTLE_MENU, MENU_ACTION, MENU_PARTY, TouchLayer } from '../src/touch';
 import { romAsks, type TeamRow } from './rom';
@@ -1236,16 +1236,18 @@ function leaveScreen(): void {
 async function peek(): Promise<void> {
   const id = follow;
   const a = id ? link.room.actor(id) : undefined;
-  if (!a) return;
   rom?.sound(SE_WIN_OPEN);
   const r = link.room;
-  const team: FameMon[] = a.bot
+  const team: FameMon[] = !a ? [] : a.bot
     ? wornParty(botParty(r.seed, a, r.ring().phase + 1), a.wear).map((m) => ({ species: m.species, level: m.level, hp: m.hp, maxHp: m.maxHp, moves: m.moves.map((v: { id: number }) => ({ id: v.id })) }))
     : link.teams.get(a.id) ?? [];
-  const bag: PeekBag | undefined = a.bot ? { items: (a.loot?.items ?? []).map((s) => ({ id: s.id, n: s.n })), money: a.loot?.money ?? 0 } : link.bags.get(a.id);
+  const bag: PeekBag | undefined = !a ? undefined : a.bot ? { items: (a.loot?.items ?? []).map((s) => ({ id: s.id, n: s.n })), money: a.loot?.money ?? 0 } : link.bags.get(a.id);
   for (;;) {
-    const c = await ask(a.name, [['POKéMON', 'mons'], ['BAG', 'bag'], ['SAVE LOG', 'savelog'], ['EXIT', '']], true);
+    // LEAVE: what the strip's button does, for a pad and a keyboard (it has no focus to reach it by).
+    const c = await ask(a?.name ?? 'WATCHING', [...(a ? [['POKéMON', 'mons'], ['BAG', 'bag']] as [string, string][] : []), ['SAVE LOG', 'savelog'], ...(isOut || waiting ? [['LEAVE', 'leave']] as [string, string][] : []), ['EXIT', '']], true);
     if (c === 'savelog') { saveLog(); return; }
+    if (c === 'leave') { askToLeave(); return; }
+    if (!a) return;
     if (c === 'mons') {
       if (!team.length) { await ask(`${a.name} has not told their team yet.`, [['OK', '']]); continue; }
       for (;;) {
@@ -1565,6 +1567,14 @@ const PARTY_HOLD = 900;
 let battleMenu: BattleMenu | null = null;
 let bagFrames = 0;
 const BAG_HOLD = 150;
+const ITEM_FLUFFY_TAIL = ITEM_POKE_DOLL + 1;
+/** A USE walked on the ROM's BAG: frames to read what became of it, and the most it may take. */
+const BAG_USE_READ = 45, BAG_USE_MAX = 1200;
+/** What the ROM's BAG says of an item it won't use (item_use.c), in its words. */
+function refusedLine(pocket: number, item: number): string {
+  if (pocket === POCKET_BALLS) return 'The BOX is full.';
+  return item === ITEM_POKE_DOLL || item === ITEM_FLUFFY_TAIL ? "DAD's advice... There's a time and place for everything!" : "It won't have any effect.";
+}
 function trackBag(): void {
   const sym = romTables.sym;
   const main = sym('gMain'), run = sym('CB2_BagMenuRun'), pick = sym('gBrBag'), battleCb = sym('BattleMainCB2');
@@ -2443,7 +2453,8 @@ sheetBtn.addEventListener('click', () => openSheet());
 // Out of the match there is no dock (so no ☰) and a phone has no R: LEAVE sits on the watch
 // strip, and opens the sheet at its "Leave the match?" (Cam, 11-02: "except for reloading").
 const watchLeave = document.getElementById('watch-leave')!;
-watchLeave.addEventListener('click', () => { openSheet(); sheetLeave = true; lobby?.stage.redraw(); });
+function askToLeave(): void { openSheet(); sheetLeave = true; lobby?.stage.redraw(); }
+watchLeave.addEventListener('click', askToLeave);
 function openSheet(): void {
   if (!lobby || !matchOn || lobby.shown) return;
   held.clear();
@@ -2526,6 +2537,7 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
     } : undefined,
   };
 }
+let refreshHud: () => void = () => undefined;
 /** A phone's HUD and dock (the live game's ui/phonehud.ts) in place of the corner and the
  *  buttons: the sign of the place I stand in, the fog window (Safari or Fog, the clock,
  *  how many are left, which way is safe), and PARTY, MAP, START and the room under it. */
@@ -2544,6 +2556,7 @@ function wirePhoneHud(desk = false): void {
   const hud = new PhoneHud({
     top,
     dock,
+    refresh: () => refreshHud(),
     onParty: () => void runMenu('1'),
     onMap: () => void runMenu('13'),
     onStart: () => void openMenu(),
@@ -2573,7 +2586,7 @@ function wirePhoneHud(desk = false): void {
   addEventListener('resize', scale);
   scale();
   document.body.classList.add(desk ? 'desk-hud' : 'phone-hud');
-  setInterval(() => {
+  refreshHud = () => {
     // On the map. A trainer out has no dock (the watch strip is theirs), but keeps the
     // fog window for the one they watch, as live does: the clock and how many are left
     // (Cam, 2026-10-30). The sign's corner is the watch strip's, so it goes.
@@ -2610,7 +2623,8 @@ function wirePhoneHud(desk = false): void {
       party: rom?.partyCount() ?? 0,
       moves: mine && !mine.battling ? fieldChips(mine) : [],
     });
-  }, 100);
+  };
+  setInterval(refreshHud, 100);
 }
 
 /** A bike's USE in the BAG (item_use.c ItemUseOutOfBattle_Bike): the window shuts and I'm on it, or
@@ -2714,6 +2728,33 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     emu.write(sym('gBagPosition')! + BAG_POSITION_POCKET, pocket, 8);
     emu.write(sym('gBrBag')!, item, 16);
   });
+  /** A USE with nobody to ask about (an X item, a ball, a doll): the ROM's BAG does it, unseen, and
+   *  stood there on its own screen when it refused. Its line goes on the page's box instead and B
+   *  leaves it, the turn still ours; used, its line is pressed past. */
+  let bagUse: { pocket: number; item: number; was: number; frames: number; waited: number; said: boolean } | null = null;
+  const useFromBag = (pocket: number, item: number) => {
+    bagUse = { pocket, item, was: readPocket(emu, sym, pocket).find((x) => x.item === item)?.n ?? 0, frames: 0, waited: 0, said: false };
+    pickFromBag(pocket, item);
+  };
+  const bagUseFrame = () => {
+    const u = bagUse;
+    if (!u) return;
+    const main = sym('gMain'), bag = sym('CB2_BagMenuRun');
+    if (main === undefined || bag === undefined || ++u.waited > BAG_USE_MAX) { bagUse = null; return; }
+    const inBag = ((emu.read(main + 4, 32) ^ bag) & ~1) === 0;
+    // Asked for and not up yet; or up, and now gone: the battle has it.
+    if (!inBag) { if (u.frames) bagUse = null; return; }
+    if (emu.read(sym('gBrBag')!, 16)) return;
+    bagFrames = 0;
+    if (++u.frames < BAG_USE_READ || u.frames % 30) return;
+    const left = readPocket(emu, sym, u.pocket).find((x) => x.item === u.item)?.n ?? 0;
+    if (left < u.was) { touch.tapKey('a'); return; }
+    if (!u.said) {
+      u.said = true;
+      say(refusedLine(u.pocket, u.item));
+    }
+    touch.tapKey('b');
+  };
   const useOn = (pocket: number, item: number, slot: number, move?: number) => {
     walk = { slot, summary: false, step: 0, frames: 0, item: true, move };
     partyHold = true;
@@ -2722,6 +2763,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     pickFromBag(pocket, item);
   };
   emu.onFrame(() => {
+    bagUseFrame();
     // One has fainted: the ROM's fade and party stay behind the picture until it is answered.
     const brAt = sym('gBrBattle');
     if (brAt !== undefined && emu.read(brAt + BATTLE_MENU, 8) === MENU_PARTY) {
@@ -2773,7 +2815,11 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       const main = sym('gMain'), fight = sym('BattleMainCB2'), bag = sym('CB2_BagMenuRun');
       const cb2 = main === undefined ? 0 : emu.read(main + 4, 32);
       if (fight !== undefined && ((cb2 ^ fight) & ~1) === 0) walk = null;
-      else if ((bag !== undefined && ((cb2 ^ bag) & ~1) === 0) || walk.frames > 400) { touch.tapKey('b'); walk = null; }
+      else if ((bag !== undefined && ((cb2 ^ bag) & ~1) === 0) || walk.frames > 400) {
+        if (((cb2 ^ (bag ?? 0)) & ~1) === 0) say("It won't have any effect.");
+        touch.tapKey('b');
+        walk = null;
+      }
       else touch.tapKey('a');
     }
   });
@@ -2838,8 +2884,9 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     onShown: (on) => document.body.classList.toggle('battle-menu', on),
     readBag: () => readBattleBag(emu, sym, tables),
     useItem: sym('gBrBag') !== undefined && sym('gBagPosition') !== undefined
-      ? pickFromBag
+      ? useFromBag
       : undefined,
+    refused: () => { rom?.sound(SE_FAILURE); say("It won't have any effect."); },
   });
   battleMenu = menu;
   // A window with a mouse: the windows at their whole-pixel size, under a picture fitted to what
@@ -4103,8 +4150,6 @@ function purpleSheet(gfx: number, s: HTMLCanvasElement): HTMLCanvasElement {
   return p;
 }
 
-/** items.h ITEM_POKE_DOLL. */
-const ITEM_POKE_DOLL = 80;
 let dollArt: HTMLCanvasElement | null = null;
 /** The doll in a bubble over a trainer's head, where the "!" and "VS" sit. */
 function drawDoll(x: number, y: number): void {
@@ -4900,7 +4945,7 @@ async function boot(): Promise<void> {
     }
   }
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { watch, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; } };
+  (window as unknown as { __spike: unknown }).__spike = { watch, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; } };
 }
 
 void boot();

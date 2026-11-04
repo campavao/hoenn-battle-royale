@@ -677,7 +677,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     let n = 0;
     const calm = briskFades();
     await until(emu, () => {
-      if (leaving && !(n++ % 12)) { emu.press('b'); } else if (leaving && n % 12 === 4) emu.release('b');
+      if (leaving && !(n++ % 6)) { emu.press('b'); } else if (leaving && n % 6 === 3) emu.release('b');
       return onField();
     }, Infinity);
     calm();
@@ -741,6 +741,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
    *  pressed past. A screen that is the ROM's alone is shown once it has come to rest. */
   const pickLoop = async (slot: number | undefined, move: number | undefined, onStart: () => void, onEnd: () => void) => {
     hurryOn();
+    // These count the page's frames, which at HURRY_SPEED are eight of the ROM's: a line pressed past
+    // every 30 was half a second of nothing on the player's screen (Cam, 11-02: "Why did that take
+    // forever? Is this another hidden cutscene?": 4.1 s from a TM's who to the field).
+    const LINE_EVERY = 6;
     const bagCb = sym('CB2_BagMenuRun');
     const partyCb = partyScreen();
     let sent = slot === undefined, moves = move ?? -1, n = 0, settledFor = 0, was = 0, showing = false;
@@ -760,7 +764,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         if (forget && !forgetting && romAsks.forget && !fade().active) {
           forgetting = true;
           hurryOff();
-          void romAsks.forget(emu.read(partyMenuAt + 9, 8), forget).then((row) => { script = row === null ? ['b'] : [...Array(row).fill('down'), 'a']; n = 0; });
+          // The ROM's own forget screen closing, its lines after, are as unseen as the rest.
+          void romAsks.forget(emu.read(partyMenuAt + 9, 8), forget).then((row) => { script = row === null ? ['b'] : [...Array(row).fill('down'), 'a']; n = 0; hurryOn(); });
         }
         if (forgetting) {
           if (script.length && n % 12 === 0 && !fade().active) { const k = script.shift()!; emu.press(k); pressedKey = k; n = 1; }
@@ -788,14 +793,14 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
           if (moves > 0) press('down', 12);
           if (moves > 0 && n % 12 === 3) moves--;
           if (moves === 0) { press('a', 30); if (n % 30 === 3) moves = -1; }
-        } else if (sent && moves < 0) press('a', 30);
-      } else if (n > 60 && !emu.read(sym('gBrBag')!, 16)) {
+        } else if (sent && moves < 0) press('a', LINE_EVERY);
+      } else if (n > 12 && !fade().active && !emu.read(sym('gBrBag')!, 16)) {
         // A TM has its "Booted up a TM" and "Contains..." in the bag before it asks who: pressed
         // past, though not for ever. Back from the party, or an item the bag refused, B shuts it.
-        if (!sent && aInBag < 8) {
-          if (n % 30 === 0) aInBag++;
-          press('a', 30);
-        } else press('b', 30);
+        if (!sent && aInBag < 40) {
+          if (n % LINE_EVERY === 0) aInBag++;
+          press('a', LINE_EVERY);
+        } else press('b', LINE_EVERY);
       }
       return false;
     }, 3000);
@@ -1414,7 +1419,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
           drain(() => undefined);
           if (!Number.isNaN(catchAt) && emu.read(catchAt + 2, 8) !== 0xff) moves = true;
         });
-        const tap = async (k: GbaKey) => { emu.press(k); await frames(emu, 3); emu.release(k); await frames(emu, 3); };
+        // Page frames, eight of the ROM's each here: walking to a row was a third of a second a key.
+        const tap = async (k: GbaKey) => { emu.press(k); await frames(emu, 2); emu.release(k); await frames(emu, 2); };
         let up = false;
         let back = true;
         let said = '';
@@ -1428,7 +1434,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         await tap('start');
         // Taking keys once its handler is in gMenuCallback and its text is drawn.
         if (await until(emu, () => emu.read(menuCbAt, 32) === startMenu.input, 90)) {
-          await frames(emu, 12);
+          await frames(emu, 4);
           const count = emu.read(startMenu.count, 8);
           const rows = Array.from({ length: count }, (_, i) => emu.read(startMenu.actions + i, 8));
           const target = rows.indexOf(action);

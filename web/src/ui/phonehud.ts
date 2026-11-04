@@ -421,6 +421,8 @@ export interface PhoneHudDeps {
   top: HTMLElement;
   /** The dock: PARTY, MAP, START, the context button (the room menu sits between). */
   dock: HTMLElement;
+  /** What the view would be now, for a tap between its refreshes. */
+  refresh?(): void;
   onParty(): void;
   onMap(): void;
   onStart(): void;
@@ -662,6 +664,8 @@ export class PhoneHud {
     // Off the field the dock is still up for OFF_FIELD_GRACE frames, but a tap there
     // would land on a battle or a menu: it does nothing until the field is back.
     const field = (act: (v: HudView) => void) => () => {
+      // What the page knows now, not at its last refresh: a tap right after a window closed.
+      deps.refresh?.();
       if (this.view?.onField) act(this.view);
     };
     this.buttons = {
