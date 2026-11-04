@@ -112,6 +112,33 @@ export function raiseCurtain(art: HTMLCanvasElement, parent: HTMLElement, onRise
   setTimeout(() => el.remove(), hold + (rows / RISE_PER_FRAME) * FRAME_MS + 1000);
 }
 
+/** The curtain coming down behind the page's top layer and hanging there, over the field, the
+ *  HUD and whatever shakes on them (Cam, 11-04, of the Hall of Fame: "maybe we have the banner
+ *  come down behind"). What it hands back takes it up again and away. */
+export function curtainBehind(art: HTMLCanvasElement, parent: HTMLElement): () => void {
+  const { el, scale, rows } = hang(art, parent);
+  el.style.zIndex = '1';
+  el.style.transform = `translateY(${-rows * scale}px)`;
+  const t0 = performance.now();
+  let upFrom = 0;
+  const step = (now: number) => {
+    if (!el.isConnected) return;
+    if (!upFrom) el.style.transform = `translateY(${-(rows - Math.round(curtainFall(now - t0, rows))) * scale}px)`;
+    else {
+      const up = curtainRise(now - upFrom, 0);
+      if (up >= rows) { el.remove(); return; }
+      el.style.transform = `translateY(${-Math.round(up) * scale}px)`;
+    }
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+  return () => {
+    upFrom = performance.now();
+    // A hidden tab has no frames: it must not come back to a curtain still down.
+    setTimeout(() => el.remove(), (rows / RISE_PER_FRAME) * FRAME_MS + 1000);
+  };
+}
+
 /** A curtain coming down over a cut: `isDown` once nothing behind it can be seen. */
 export interface Cover { isDown(): boolean }
 

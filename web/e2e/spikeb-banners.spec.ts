@@ -184,3 +184,40 @@ test('in the final ring a watched fight comes up under the curtain', async ({ pa
   expect(seen[first].curtain, 'all the way down as the fight appears').toBe(0);
   expect(seen.slice(first).some((f) => typeof f.curtain === 'number' && f.curtain < -16), 'and it rises off it').toBe(true);
 });
+
+test('the Hall of Fame: a window in the middle with a mouse, the curtain down behind it, and quick', async ({ page }) => {
+  test.setTimeout(240_000);
+  // Cam's window: the How to Play's own size comes out 720 wide on it.
+  await page.setViewportSize({ width: 1920, height: 1040 });
+  await page.goto(`/?rom=${romHashParam()}`);
+  await page.locator('#lobby-rows button', { hasText: 'HOST A ROOM' }).click({ timeout: 90_000 });
+  await page.locator('#room-start').click({ timeout: 30_000 });
+  await page.waitForFunction(() => { const s = (window as any).__spike; return !!s.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 90_000 });
+  // One bot left standing, with the team the match dealt it: its parade, on my ROM.
+  await page.waitForFunction(() => (window as any).__spike.link.room.results.entrants.length >= 2, undefined, { timeout: 120_000 });
+  const crowned = Date.now();
+  await spike(page, (s) => { const room = s.link.room; const left = room.actors.find((a: any) => a.bot); for (const a of [...room.actors]) if (a !== left) { room.fall(a, 'the fog'); room.remove(a.id); } });
+
+  const fame = page.locator('#battle.on.fame');
+  await expect(fame, 'the parade is up').toBeAttached({ timeout: 30_000 });
+  await expect(page.locator('#curtain'), 'the curtain, behind it').toBeAttached();
+  await page.waitForTimeout(3000);
+  const box = (await page.locator('#gba').boundingBox())!;
+  expect(box.width, "a window's size").toBe(720);
+  expect(Math.abs(box.x + box.width / 2 - 960), 'in the middle').toBeLessThan(1);
+  expect(Math.abs(box.y + box.height / 2 - 520), 'in the middle').toBeLessThan(1);
+  const hung = await page.locator('#curtain').evaluate((c) => { const b = c.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, z: getComputedStyle(c).zIndex }; });
+  expect(hung.top, 'all the way down').toBe(0);
+  expect(hung.bottom).toBeGreaterThanOrEqual(1040);
+  expect(Number(hung.z), 'behind the ROM').toBeLessThan(Number(await fame.evaluate((b) => getComputedStyle(b).zIndex)));
+  await expect(page.locator('#keys'), 'the keys are not over it').toBeHidden();
+  await shot(page, 'fame-desktop');
+
+  // Nobody presses A. The clock is the game's own speed on a machine that may be busy, so a
+  // bound and not a number: Emerald's took 34 s for six before anything of the page's.
+  await expect(fame, 'and it goes').toHaveCount(0, { timeout: 40_000 });
+  const took = Date.now() - crowned;
+  console.log(`crown to the parade's end: ${took} ms`);
+  await expect(page.locator('#curtain'), 'and up').toHaveCount(0, { timeout: 5000 });
+  await expect(page.locator('#results-panel, #win.on').first(), 'and on to the results').toBeVisible({ timeout: 30_000 });
+});

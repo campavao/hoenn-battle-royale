@@ -34,6 +34,7 @@ import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
 import { over } from './shared/over';
 import { Lobby, me, seeThrough, type RoomInfo } from './lobby';
+import { stageScale } from '../src/ui/stage';
 import { loadCareer, ordinal, recordMatch } from '../src/match/career';
 import type { MatchTally } from '../src/match/tally';
 import { beatenBy, couldFly, tallySince, teamMembers, PARTY_LEN, spentLine, spillShows } from './carry';
@@ -67,7 +68,7 @@ import { RingMap } from './ringmap';
 import { SeamGlide, seamOff } from './seamglide';
 import { Watch } from './watch';
 import { BattleView } from './battleview';
-import { coverScreen, curtainLines, raiseCurtain, type Cover } from './curtain';
+import { coverScreen, curtainBehind, curtainLines, raiseCurtain, type Cover } from './curtain';
 import { frameOf as fxFrame, grassUnderAsh, isFloor, MB_ASHGRASS, SHEETS as FX_SHEETS, stepEffects, type Effect, type FxKind } from './fieldfx';
 import { CHUNK, ChunkCache, WorldFill, chunksOver, type FillFile } from './worldfill';
 import { ROOM_GAP, clampZoom, loadZoom, nextZoom, pickedZoom, roomFloor, saveZoom, wheelSteps, zoomLabel, zoomRange } from './zoom';
@@ -2294,6 +2295,20 @@ function fameTeamOf(id: number): FameMon[] | undefined {
   return championTeam(id).map((m) => ({ species: m.species, level: m.level, hp: m.hp, maxHp: m.maxHp, moves: m.moves.map((v) => ({ id: v.id })) }));
 }
 
+/** The Hall of Fame on the page: the banner down behind it, over a field that goes on shaking,
+ *  and with a mouse at a window's size in the middle (Cam, 11-04: "the smaller screen in the
+ *  middle of your screen"). What it hands back takes all that away. */
+function fameUp(): () => void {
+  battleEl.style.setProperty('--fame', String(stageScale(innerWidth, innerHeight)));
+  battleEl.classList.add('on', 'fame');
+  const c = art?.contestCurtain();
+  const up = c ? curtainBehind(c, document.body) : () => {};
+  return () => {
+    up();
+    battleEl.classList.remove('on', 'fame');
+  };
+}
+
 /** Somebody else's Hall of Fame on my ROM: after any battle of the trainer I watch,
  *  which has the ROM first. */
 async function paradeOf(id: number): Promise<void> {
@@ -2303,18 +2318,20 @@ async function paradeOf(id: number): Promise<void> {
   const r = rom;
   // My ROM's turns are one at a time: the replay on screen ends first.
   romUp = true;
-  try { await r.paradeOf(mons, a?.name ?? '', a?.skin ?? 0, () => battleEl.classList.add('on')); } catch (e) { console.warn('spike fame failed', e); }
+  let over = () => { battleEl.classList.remove('on'); };
+  try { await r.paradeOf(mons, a?.name ?? '', a?.skin ?? 0, () => { over = fameUp(); }); } catch (e) { console.warn('spike fame failed', e); }
   romUp = false;
-  battleEl.classList.remove('on');
+  over();
 }
 
 /** The Hall of Fame: the ROM has the screen until it is over. */
 async function parade(): Promise<void> {
   if (!rom) return;
   romUp = true;
-  try { await rom.fame(() => battleEl.classList.add('on')); } catch (e) { console.warn('spike fame failed', e); }
+  let over = () => { battleEl.classList.remove('on'); };
+  try { await rom.fame(() => { over = fameUp(); }); } catch (e) { console.warn('spike fame failed', e); }
   romUp = false;
-  battleEl.classList.remove('on');
+  over();
 }
 
 /** The last one standing (or MATCH OVER, with nobody), and how everybody else went out,

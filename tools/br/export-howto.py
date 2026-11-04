@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """The HOW TO PLAY panels' pictures (POK-430), out of the game's own art.
 
-    python tools/br/export-howto.py   -> web/public/ui/howto.png
+    python tools/br/export-howto.py   -> web/src/ui/howto-sheet.png
+
+The sheet is imported by howto.ts, so the build names it by its bytes: under a name of its
+own in /ui/ a new sheet reached a player's second look, after the service worker had shown
+them the one it kept (Cam, 11-04: "This still hasn't changed").
 
 One sheet, 240 wide (the screen's width), its pictures 150 tall, top to bottom:
 
@@ -10,8 +14,8 @@ One sheet, 240 wide (the screen's width), its pictures 150 tall, top to bottom:
     150  Hoenn: the POKéNAV's region map, `graphics/pokenav/region_map/map.png` laid out by
          its affine tilemap `map.bin` in `map.pal` (loaded at palette 7, hence the pixels'
          112 offset), at its own scale
-    300  a town for the fog to roll over, Fortree City
-    450  a battle about to start: BRENDAN and MAY face to face on Route 103, the
+    300  a town for the fog to roll over, Rustboro by the Devon building (Cam, 11-04: "let's make this Rustboro")
+    450  a battle about to start: BRENDAN and MAY face to face on Slateport's harbour, the
          trainer's "!" (field_effects/pics/emotion_exclamation.png) over each
     600  an event the way a ROM shows it, at the top of Sky Pillar (src/br/br_loot.c's Spawn):
          RAYQUAZA (gfx 207, br_legend.c), its two rares as red balls and three gold balls
@@ -21,11 +25,11 @@ One sheet, 240 wide (the screen's width), its pictures 150 tall, top to bottom:
          Task_UpdateBgPalette runs while a POKéMON evolves (src/evolution_scene.c)
     2550 CHARMANDER, CHARMELEON, CHARIZARD, 64x64 each, in their own colours; under them,
          at 2614, the same three in white, the way they flash while they change
-    2678 encounters (br_patch.c): Route 123's grass with three of its darkened patches,
+    2678 encounters (br_patch.c): Jagged Pass's grass with three of its darkened patches,
          the tall grass's rustle in general_1's palette, and BRENDAN in the middle, about to
          step on one
-    2828 item pickups: a Slateport street with two item balls, a gold one and a fallen
-         trainer's bag (br_loot.c draws a bag as BIRCH's), BRENDAN about to take the nearest
+    2828 item pickups: Lavaridge outside its Center (Cam, 11-04: "maybe be in Lava Ridge"), two item balls, a gold one and a
+         fallen trainer's bag (br_loot.c draws a bag as BIRCH's), BRENDAN about to take the nearest
 
 A panel's pictures are all of different places (Cam, 11-03), each with its trainer in the middle.
 
@@ -39,7 +43,7 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "web/public/ui/howto.png"
+OUT = ROOT / "web/src/ui/howto-sheet.png"
 MAPS = ROOT / "web/public/field-maps"
 SPRITES = ROOT / "web/public/field-sprites"
 SHEETS = json.loads((ROOT / "web/src/data/sprites.json").read_text())
@@ -47,7 +51,7 @@ SHEETS = json.loads((ROOT / "web/src/data/sprites.json").read_text())
 BANG = ROOT / "graphics/field_effects/pics/emotion_exclamation.png"
 FX = ROOT / "graphics/field_effects"
 W, H = 240, 150
-BATTLE_AT = ("ROUTE103", 160, 96)
+BATTLE_AT = ("SLATEPORT_CITY", 392, 560)
 EVO_FRAMES = range(13, 25)
 MONS = ["charmander", "charmeleon", "charizard"]
 SHEET_H = H * 5 + H * len(EVO_FRAMES) + 64 * 2 + H * 2
@@ -112,7 +116,7 @@ def on_map(name: str, x: int, y: int) -> Image.Image:
 
 
 def fog_town() -> Image.Image:
-    return on_map("FORTREE_CITY", 208, 96)
+    return on_map("RUSTBORO_CITY", 96, 192)
 
 
 def battle() -> Image.Image:
@@ -141,7 +145,7 @@ def event() -> Image.Image:
 
     ball, gold = frame(GFX_ITEM_BALL, 0), gold_ball()
     put(frame(GFX_RAYQUAZA, 0), 7, 4)
-    for tx, ty, piece in ((4, 4, ball), (10, 4, ball), (6, 6, gold), (7, 6, gold), (8, 6, gold)):
+    for tx, ty, piece in ((4, 4, ball), (10, 4, ball), (7, 6, gold), (8, 6, gold), (9, 6, gold)):
         put(piece, tx, ty)
     return im
 
@@ -155,21 +159,21 @@ def on_tiles(im: Image.Image):
 
 
 def encounters() -> Image.Image:
-    im = on_map("ROUTE123", 1008, 96)
+    im = on_map("JAGGED_PASS", 16, 320)
     put = on_tiles(im)
     # The rustle's second frame, the grass at its widest, reads best standing still.
     patch = paletted(FX / "pics/br_patch_tall_grass.png", jasc(FX / "palettes/general_1.pal")).crop((16, 0, 32, 16))
-    for tx, ty in ((6, 4), (9, 3), (5, 2)):
+    for tx, ty in ((8, 4), (10, 5), (8, 3)):
         put(patch, tx, ty)
-    put(frame(GFX_BRENDAN, 2), 7, 4)
+    put(frame(GFX_BRENDAN, 2, True), 7, 4)
     return im
 
 
 def pickups() -> Image.Image:
-    im = on_map("SLATEPORT_CITY", 160, 496)
+    im = on_map("LAVARIDGE_TOWN", 48, 48)
     put = on_tiles(im)
     ball = frame(GFX_ITEM_BALL, 0)
-    for tx, ty, piece in ((8, 2, ball), (6, 6, ball), (8, 6, gold_ball()), (6, 4, frame(GFX_BIRCHS_BAG, 0))):
+    for tx, ty, piece in ((3, 5, ball), (9, 6, ball), (13, 7, gold_ball()), (7, 6, frame(GFX_BIRCHS_BAG, 0))):
         put(piece, tx, ty)
     put(frame(GFX_BRENDAN, 2), 7, 4)
     return im
