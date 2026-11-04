@@ -370,6 +370,28 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it("REPLACE WITH BOT hands the room the team and bag the trainer last told (Cam, 11-03: the same rules)", () => {
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
+    try {
+      const a = phone(), b = phone();
+      const sa = svc.open(a.link), sb = svc.open(b.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, code }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      const bob = (b.got.find((m) => m.t === 'hello') as unknown as { id: number }).id;
+      const mons = [{ species: 252, level: 9, hp: 10, maxHp: 20, moves: [{ id: 1 }] }];
+      const bag = { items: [{ id: 13, n: 3 }], money: 2500 };
+      sb.onText(JSON.stringify({ t: 'team', mons, bag }));
+      const host = (svc as unknown as { rooms: Map<string, { host: { toBot: (...args: unknown[]) => void } }> }).rooms.get(code)!.host;
+      const seen: unknown[][] = [];
+      host.toBot = (...args) => seen.push(args);
+      sa.onText(JSON.stringify({ t: 'bot', id: bob }));
+      expect(seen).toEqual([[bob, mons, bag]]);
+    } finally {
+      svc.stop();
+    }
+  });
   it("a team row keeps its personality and OT id, for the champion's parade on everybody's ROM", () => {
     const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
     try {

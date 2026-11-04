@@ -68,6 +68,19 @@ const HEAL: Record<number, number> = {
 /** Emerald's MAX_TRAINER_ITEMS: the AI reads four and no more. */
 export const BATTLE_ITEMS = 2;
 
+/** MASTER BALL to PREMIER BALL (include/constants/items.h). */
+const isBall = (id: number) => id >= 1 && id <= 12;
+
+/** A ball to throw: what a wild fight is for. */
+export function hasBall(bag: readonly Stack[]): boolean {
+  return bag.some((s) => isBall(s.id) && s.n > 0);
+}
+
+/** The balls in here, the MASTER BALL first. */
+export function ballsIn(bag: readonly Stack[]): Stack[] {
+  return bag.filter((s) => isBall(s.id) && s.n > 0).map((s) => ({ ...s })).sort((p, q) => p.id - q.id);
+}
+
 /** Is this something a quaff could drink? */
 export function isMedicine(id: number): boolean {
   return HEAL[id] !== undefined;
@@ -203,7 +216,8 @@ export function battleItems(bag: Stack[]): number[] {
   };
 
   pour((id) => isMedicine(id), MEDICINE_FIRST);
-  pour((id) => !isMedicine(id));
+  // Not a ball: no use against a trainer's, and it would take the place of something that is.
+  pour((id) => !isMedicine(id) && !isBall(id));
   pour((id) => isMedicine(id));
   return out;
 }

@@ -8669,6 +8669,9 @@ function translate(lines, names, winnerSeat, seats) {
         text(`${names.trainers[side]} used ${p[2]}!`);
         break;
       }
+      case "say":
+        text(p[1]);
+        break;
       case "move": {
         const w = who2(p[1]);
         lastMove = names.moveNum(p[2]);
@@ -9395,6 +9398,7 @@ var init_learnset_fixes = __esm({
 var battlesim_exports = {};
 __export(battlesim_exports, {
   TURN_CAP: () => TURN_CAP,
+  ballTakes: () => ballTakes,
   movesFor: () => movesFor,
   simulate: () => simulate,
   simulation: () => simulation
@@ -9628,6 +9632,22 @@ function useItem(battle, side, row) {
   if (it2.special === "direhit") mon2.addVolatile("focusenergy");
   if (it2.special === "guardspec") side.addSideCondition("mist", mon2);
 }
+function ballTakes(ball, mon2, catchRate, firstTurn, rng) {
+  if (ball === ITEM_MASTER_BALL5) return true;
+  const multiplier = firstTurn ? 40 : 20;
+  let odds = Math.floor(Math.floor(catchRate * multiplier / 10) * (mon2.maxhp * 3 - mon2.hp * 2) / (3 * mon2.maxhp));
+  if (mon2.status === "slp" || mon2.status === "frz") odds *= 2;
+  else if (mon2.status === "psn" || mon2.status === "tox" || mon2.status === "brn" || mon2.status === "par") odds = Math.floor(odds * 15 / 10);
+  if (odds > 254) return true;
+  if (odds <= 0) return false;
+  const shakes = Math.floor(1048560 / Math.floor(Math.sqrt(Math.floor(Math.sqrt(Math.floor(16711680 / odds))))));
+  for (let i = 0; i < 4; i++) if (rng() * 65536 >= shakes) return false;
+  return true;
+}
+function runTakes(mine, theirs, tries, rng) {
+  if (mine >= theirs) return true;
+  return (Math.floor(mine * 128 / theirs) + tries * 30 & 255) > Math.floor(rng() * 256);
+}
 function simulate(a, b2, opts) {
   const run = simulation(a, b2, opts);
   for (; ; ) {
@@ -9672,17 +9692,23 @@ function* simulation(a, b2, opts) {
       battle.damage(Math.max(1, Math.floor(mon2.maxhp / 10)), mon2, mon2, FOG);
     });
   }
-  let capped = false;
+  if (opts.weather) {
+    battle.field.setWeather(opts.weather, "debug");
+    battle.field.weatherState.duration = 0;
+  }
+  let capped = false, caught = false, ran = false, runs = 0;
   const cap = opts.turnCap ?? TURN_CAP;
   let guard = 0;
+  const left = (a.balls ?? []).map((row) => ({ ...row }));
+  const thrown = [];
   yield;
-  while (!battle.ended) {
+  while (!battle.ended && !caught && !ran) {
     if (battle.turn > cap || ++guard > cap * 20) {
       capped = true;
       break;
     }
     let acted = false;
-    for (let n = 0; n < 2 && !battle.ended; n++) {
+    for (let n = 0; n < 2 && !battle.ended && !caught && !ran; n++) {
       const side = sides[n];
       const request = side.activeRequest;
       if (!request || request.wait || side.isChoiceDone()) continue;
@@ -9691,6 +9717,35 @@ function* simulation(a, b2, opts) {
         const next = pickNext(battle, side, side.foe.active[0]);
         if (!next || !battle.choose(side.id, `switch ${side.pokemon.indexOf(next) + 1}`)) battle.choose(side.id, "default");
         continue;
+      }
+      if (n === 0 && opts.wild) {
+        const me2 = side.active[0], wild = side.foe.active[0];
+        const ball = left[0];
+        if (ball && (ball.id === ITEM_MASTER_BALL5 || wild.hp / wild.maxhp <= opts.wild.catchAt)) {
+          if (--ball.n <= 0) left.shift();
+          thrown.push(ball.id);
+          battle.add("bag", side.id, BALL_NAME(ball.id));
+          if (ballTakes(ball.id, wild, opts.wild.catchRate, battle.turn <= 1, rng)) {
+            caught = true;
+            battle.add("say", `Gotcha! ${speciesName(b2.party[0]?.species ?? 0)} was caught!`);
+            break;
+          }
+          battle.add("say", "Oh, no! The POKeMON broke free!");
+          battle.skip.push(me2);
+          battle.choose(side.id, "default");
+          continue;
+        }
+        if (!ball) {
+          if (runTakes(me2.storedStats.spe, wild.storedStats.spe, runs++, rng)) {
+            ran = true;
+            battle.add("say", "Got away safely!");
+            break;
+          }
+          battle.add("say", "Can't escape!");
+          battle.skip.push(me2);
+          battle.choose(side.id, "default");
+          continue;
+        }
       }
       const lastHit = side.active[0]?.attackedBy?.at(-1)?.move;
       const d = decide(battle, side, request, bags[n], lastHit ? dex.moves.get(lastHit) : void 0, rng);
@@ -9711,7 +9766,7 @@ function* simulation(a, b2, opts) {
         if (!ok) battle.choose(side.id, "default");
       } else if (!battle.choose(side.id, `move ${d.slot + 1}`)) battle.choose(side.id, "default");
     }
-    if (!acted && !battle.ended) {
+    if (!acted && !battle.ended && !caught && !ran) {
       capped = true;
       break;
     }
@@ -9729,9 +9784,9 @@ function* simulation(a, b2, opts) {
     return { row, share };
   };
   const ra2 = report(0), rb = report(1);
-  const left = (share) => share.reduce((t7, x2) => t7 + x2, 0) / Math.max(1, share.length);
-  const byHp = left(ra2.share) > left(rb.share) ? a.seat : left(rb.share) > left(ra2.share) ? b2.seat : 0;
-  const winner = capped ? byHp : battle.winner === "A" ? a.seat : battle.winner === "B" ? b2.seat : 0;
+  const teamLeft = (share) => share.reduce((t7, x2) => t7 + x2, 0) / Math.max(1, share.length);
+  const byHp = teamLeft(ra2.share) > teamLeft(rb.share) ? a.seat : teamLeft(rb.share) > teamLeft(ra2.share) ? b2.seat : 0;
+  const winner = caught ? a.seat : ran ? 0 : capped ? byHp : battle.winner === "A" ? a.seat : battle.winner === "B" ? b2.seat : 0;
   const logSide = (n) => {
     const s = inputs[n];
     const team = s.party.map(plainMon);
@@ -9750,10 +9805,12 @@ function* simulation(a, b2, opts) {
     b: rb.row,
     shareA: ra2.share,
     shareB: rb.share,
-    usedA: bags[0].filter((r) => r.used).map((r) => r.id),
+    usedA: [...bags[0].filter((r) => r.used).map((r) => r.id), ...thrown],
     usedB: bags[1].filter((r) => r.used).map((r) => r.id),
     turns: battle.turn,
     capped,
+    ...caught ? { caught } : {},
+    ...ran ? { ran } : {},
     log,
     unknown: said.unknown
   };
@@ -9763,7 +9820,7 @@ function toCard(hp2, realMax, cardMax) {
   if (hp2 >= realMax) return cardMax;
   return Math.max(1, Math.min(cardMax, Math.floor((cardMax * hp2 + Math.floor(realMax / 2)) / realMax)));
 }
-var TURN_CAP, dex, NATURES, moveByNum, numOfMove, EXPLODES, ODD_POWER, WORKED_OUT, NO_WORTH, GOOD_STATUS, HALF_WORTH, THREE_HITS, TWO_HITS, FIFTH, POWER_SPENT, PHYSICAL2, rand32, SimBattle, plainMon, bagOf, FOG;
+var TURN_CAP, dex, NATURES, moveByNum, numOfMove, EXPLODES, ODD_POWER, WORKED_OUT, NO_WORTH, GOOD_STATUS, HALF_WORTH, THREE_HITS, TWO_HITS, FIFTH, POWER_SPENT, PHYSICAL2, rand32, SimBattle, plainMon, bagOf, FOG, ITEM_MASTER_BALL5, BALL_NAME;
 var init_battlesim = __esm({
   "web/spike-b/shared/battlesim.ts"() {
     "use strict";
@@ -9823,6 +9880,8 @@ var init_battlesim = __esm({
     plainMon = (card) => ({ species: card.species, level: card.level, hp: card.hp, maxHp: card.maxHp, status: 0, shiny: !!card.shiny, gender: card.personality & 1 });
     bagOf = (items) => (items ?? []).map((id2) => ({ id: id2, item: BAG_ITEMS[id2] ?? null, used: false }));
     FOG = { id: "fog", name: "fog", fullname: "fog", effectType: "Condition" };
+    ITEM_MASTER_BALL5 = 1;
+    BALL_NAME = (id2) => id2 === ITEM_MASTER_BALL5 ? "MASTER BALL" : "ROYALE BALL";
   }
 });
 
@@ -11032,6 +11091,131 @@ init_roster();
 init_party();
 init_clock();
 
+// web/src/bots/bag.ts
+init_roster();
+init_party();
+
+// web/src/match/gifts.ts
+init_clock();
+var ITEM_BRIGHT_POWDER = 179;
+var ITEM_WHITE_HERB = 180;
+var ITEM_QUICK_CLAW = 183;
+var ITEM_CHOICE_BAND = 186;
+var ITEM_KINGS_ROCK = 187;
+var ITEM_FOCUS_BAND = 196;
+var ITEM_SCOPE_LENS = 198;
+var ITEM_LEFTOVERS = 200;
+var ITEM_SHELL_BELL = 219;
+var GIFTS = [
+  ITEM_BRIGHT_POWDER,
+  ITEM_WHITE_HERB,
+  ITEM_QUICK_CLAW,
+  ITEM_CHOICE_BAND,
+  ITEM_KINGS_ROCK,
+  ITEM_FOCUS_BAND,
+  ITEM_SCOPE_LENS,
+  ITEM_LEFTOVERS,
+  ITEM_SHELL_BELL
+];
+
+// web/src/bots/bag.ts
+var ITEM = {
+  POTION: 13,
+  FULL_RESTORE: 19,
+  MAX_POTION: 20,
+  HYPER_POTION: 21,
+  SUPER_POTION: 22,
+  FULL_HEAL: 23,
+  GUARD_SPEC: 73,
+  DIRE_HIT: 74,
+  X_ATTACK: 75,
+  X_DEFEND: 76,
+  X_SPEED: 77
+};
+var HEAL = {
+  [ITEM.POTION]: 20,
+  [ITEM.SUPER_POTION]: 50,
+  [ITEM.HYPER_POTION]: 200,
+  [ITEM.MAX_POTION]: 9999,
+  [ITEM.FULL_RESTORE]: 9999
+};
+var BATTLE_ITEMS = 2;
+var isBall = (id2) => id2 >= 1 && id2 <= 12;
+function hasBall(bag) {
+  return bag.some((s) => isBall(s.id) && s.n > 0);
+}
+function ballsIn(bag) {
+  return bag.filter((s) => isBall(s.id) && s.n > 0).map((s) => ({ ...s })).sort((p, q2) => p.id - q2.id);
+}
+function isMedicine(id2) {
+  return HEAL[id2] !== void 0;
+}
+function take(bag, id2) {
+  const i = bag.findIndex((s) => s.id === id2 && s.n > 0);
+  if (i < 0) return false;
+  bag[i].n--;
+  if (bag[i].n <= 0) bag.splice(i, 1);
+  return true;
+}
+function add(bag, id2, n = 1) {
+  const mine = bag.find((s) => s.id === id2);
+  if (mine) mine.n = Math.min(99, mine.n + n);
+  else if (bag.length < 32) bag.push({ id: id2, n: Math.min(99, n) });
+}
+function carried(party, bag) {
+  const out = bag.map((stack) => ({ ...stack }));
+  for (const mon2 of party) if (mon2.heldItem) add(out, mon2.heldItem);
+  return out;
+}
+var QUAFF_AT = 0.6;
+function quaff(party, bag) {
+  let worst = -1;
+  let share = QUAFF_AT;
+  for (let i = 0; i < party.length; i++) {
+    const mon3 = party[i];
+    if (mon3.hp <= 0 || mon3.maxHp <= 0) continue;
+    const frac = mon3.hp / mon3.maxHp;
+    if (frac < share) {
+      share = frac;
+      worst = i;
+    }
+  }
+  if (worst < 0) return null;
+  let best = null;
+  for (const stack of bag) {
+    if (stack.n <= 0 || !isMedicine(stack.id)) continue;
+    if (best === null || HEAL[stack.id] < HEAL[best]) best = stack.id;
+  }
+  if (best === null) return null;
+  take(bag, best);
+  const mon2 = party[worst];
+  party[worst] = { ...mon2, hp: Math.min(mon2.maxHp, mon2.hp + HEAL[best]) };
+  return best;
+}
+function battleItems(bag) {
+  const out = [];
+  const left = bag.map((stack) => stack.n);
+  const pour = (want, cap = BATTLE_ITEMS) => {
+    bag.forEach((stack, i) => {
+      if (!want(stack.id)) return;
+      for (; left[i] > 0 && out.length < cap; left[i]--) out.push(stack.id);
+    });
+  };
+  pour((id2) => isMedicine(id2), MEDICINE_FIRST);
+  pour((id2) => !isMedicine(id2) && !isBall(id2));
+  pour((id2) => isMedicine(id2));
+  return out;
+}
+var MEDICINE_FIRST = 1;
+function spend(bag, used) {
+  for (const id2 of used) take(bag, id2);
+}
+function purse(phase, grade = 1 /* Regular */) {
+  const level = rungForPhase(phase);
+  const mult = grade === 2 /* Ace */ ? 3 : grade === 0 /* Rookie */ ? 1 : 2;
+  return level * 20 * mult;
+}
+
 // web/spike-b/shared/marts.ts
 var MARTS = [
   "FALLARBOR_TOWN",
@@ -11158,8 +11342,8 @@ var ITEM_MASTER_BALL = 1;
 var ITEM_FULL_RESTORE = 19;
 var ITEM_MAX_POTION = 20;
 var ITEM_MAX_REVIVE = 25;
-var ITEM_CHOICE_BAND = 186;
-var ITEM_LEFTOVERS = 200;
+var ITEM_CHOICE_BAND2 = 186;
+var ITEM_LEFTOVERS2 = 200;
 var GOLD = [
   301,
   302,
@@ -11174,8 +11358,8 @@ var GOLD = [
   326,
   // TM13 14 15 22 24 25 26 29 30 35 38
   ITEM_MASTER_BALL,
-  ITEM_LEFTOVERS,
-  ITEM_CHOICE_BAND
+  ITEM_LEFTOVERS2,
+  ITEM_CHOICE_BAND2
 ];
 var EVENT_GOLD = 3;
 var SUPPLIES = [
@@ -11222,8 +11406,8 @@ var MAPSEC_SOUTHERN_ISLAND = 73;
 var MAPSEC_BIRTH_ISLAND = 200;
 var MAPSEC_FARAWAY_ISLAND = 201;
 var MAPSEC_NAVEL_ROCK = 211;
-var ITEM_FOCUS_BAND = 196;
-var ITEM_SHELL_BELL = 219;
+var ITEM_FOCUS_BAND2 = 196;
+var ITEM_SHELL_BELL2 = 219;
 var ITEM_TM24 = 312;
 var ITEM_TM47 = 335;
 var ITEM_DEEP_SEA_TOOTH = 192;
@@ -11270,7 +11454,7 @@ var STORIES = [
     section: "MAPSEC_SHOAL_CAVE",
     map: "MAP_SHOAL_CAVE_LOW_TIDE_LOWER_ROOM",
     // The BLACK BELT's FOCUS BAND where he stands, and the bell the shells and salt make.
-    items: [[ITEM_FOCUS_BAND], [ITEM_SHELL_BELL]],
+    items: [[ITEM_FOCUS_BAND2], [ITEM_SHELL_BELL2]],
     cells: [{ x: 11, y: 4 }, { x: 12, y: 4 }, { x: 10, y: 4 }, { x: 11, y: 5 }]
   },
   // The three golems in their chambers, where their own sat, the supplies and the trader
@@ -11488,124 +11672,6 @@ var STORIES = [
 init_party();
 init_roster();
 
-// web/src/bots/bag.ts
-init_roster();
-init_party();
-
-// web/src/match/gifts.ts
-init_clock();
-var ITEM_BRIGHT_POWDER = 179;
-var ITEM_WHITE_HERB = 180;
-var ITEM_QUICK_CLAW = 183;
-var ITEM_CHOICE_BAND2 = 186;
-var ITEM_KINGS_ROCK = 187;
-var ITEM_FOCUS_BAND2 = 196;
-var ITEM_SCOPE_LENS = 198;
-var ITEM_LEFTOVERS2 = 200;
-var ITEM_SHELL_BELL2 = 219;
-var GIFTS = [
-  ITEM_BRIGHT_POWDER,
-  ITEM_WHITE_HERB,
-  ITEM_QUICK_CLAW,
-  ITEM_CHOICE_BAND2,
-  ITEM_KINGS_ROCK,
-  ITEM_FOCUS_BAND2,
-  ITEM_SCOPE_LENS,
-  ITEM_LEFTOVERS2,
-  ITEM_SHELL_BELL2
-];
-
-// web/src/bots/bag.ts
-var ITEM = {
-  POTION: 13,
-  FULL_RESTORE: 19,
-  MAX_POTION: 20,
-  HYPER_POTION: 21,
-  SUPER_POTION: 22,
-  FULL_HEAL: 23,
-  GUARD_SPEC: 73,
-  DIRE_HIT: 74,
-  X_ATTACK: 75,
-  X_DEFEND: 76,
-  X_SPEED: 77
-};
-var HEAL = {
-  [ITEM.POTION]: 20,
-  [ITEM.SUPER_POTION]: 50,
-  [ITEM.HYPER_POTION]: 200,
-  [ITEM.MAX_POTION]: 9999,
-  [ITEM.FULL_RESTORE]: 9999
-};
-var BATTLE_ITEMS = 2;
-function isMedicine(id2) {
-  return HEAL[id2] !== void 0;
-}
-function take(bag, id2) {
-  const i = bag.findIndex((s) => s.id === id2 && s.n > 0);
-  if (i < 0) return false;
-  bag[i].n--;
-  if (bag[i].n <= 0) bag.splice(i, 1);
-  return true;
-}
-function add(bag, id2, n = 1) {
-  const mine = bag.find((s) => s.id === id2);
-  if (mine) mine.n = Math.min(99, mine.n + n);
-  else if (bag.length < 32) bag.push({ id: id2, n: Math.min(99, n) });
-}
-function carried(party, bag) {
-  const out = bag.map((stack) => ({ ...stack }));
-  for (const mon2 of party) if (mon2.heldItem) add(out, mon2.heldItem);
-  return out;
-}
-var QUAFF_AT = 0.6;
-function quaff(party, bag) {
-  let worst = -1;
-  let share = QUAFF_AT;
-  for (let i = 0; i < party.length; i++) {
-    const mon3 = party[i];
-    if (mon3.hp <= 0 || mon3.maxHp <= 0) continue;
-    const frac = mon3.hp / mon3.maxHp;
-    if (frac < share) {
-      share = frac;
-      worst = i;
-    }
-  }
-  if (worst < 0) return null;
-  let best = null;
-  for (const stack of bag) {
-    if (stack.n <= 0 || !isMedicine(stack.id)) continue;
-    if (best === null || HEAL[stack.id] < HEAL[best]) best = stack.id;
-  }
-  if (best === null) return null;
-  take(bag, best);
-  const mon2 = party[worst];
-  party[worst] = { ...mon2, hp: Math.min(mon2.maxHp, mon2.hp + HEAL[best]) };
-  return best;
-}
-function battleItems(bag) {
-  const out = [];
-  const left = bag.map((stack) => stack.n);
-  const pour = (want, cap = BATTLE_ITEMS) => {
-    bag.forEach((stack, i) => {
-      if (!want(stack.id)) return;
-      for (; left[i] > 0 && out.length < cap; left[i]--) out.push(stack.id);
-    });
-  };
-  pour((id2) => isMedicine(id2), MEDICINE_FIRST);
-  pour((id2) => !isMedicine(id2));
-  pour((id2) => isMedicine(id2));
-  return out;
-}
-var MEDICINE_FIRST = 1;
-function spend(bag, used) {
-  for (const id2 of used) take(bag, id2);
-}
-function purse(phase, grade = 1 /* Regular */) {
-  const level = rungForPhase(phase);
-  const mult = grade === 2 /* Ace */ ? 3 : grade === 0 /* Rookie */ ? 1 : 2;
-  return level * 20 * mult;
-}
-
 // web/src/bots/patches.ts
 var PATCH_KEY_BASE = 8192;
 var PATCH_MAX = 8;
@@ -11707,8 +11773,11 @@ var rooms_default = [["MAP_DEWFORD_TOWN_HOUSE1", 4, 3, true, true, 6, 4, false],
 var table_balls_default = [["MAP_DEWFORD_TOWN_HALL", 3, 5], ["MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F", 3, 3], ["MAP_FORTREE_CITY_DECORATION_SHOP", 5, 3], ["MAP_LAVARIDGE_TOWN_HERB_SHOP", 4, 3], ["MAP_LILYCOVE_CITY_CONTEST_LOBBY", 15, 3], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_1F", 3, 5], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_2F", 3, 4], ["MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_2F", 8, 7], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_1F", 9, 3], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_2F", 9, 5], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_3F", 9, 3], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_4F", 9, 5], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_5F", 14, 5], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_5F", 9, 3], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_ROOFTOP", 6, 5], ["MAP_LILYCOVE_CITY_DEPARTMENT_STORE_ROOFTOP", 9, 5], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_1F", 5, 10], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F", 13, 10], ["MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F", 8, 10], ["MAP_LILYCOVE_CITY_POKEMON_TRAINER_FAN_CLUB", 6, 4], ["MAP_LILYCOVE_CITY_POKEMON_TRAINER_FAN_CLUB", 5, 10], ["MAP_MAUVILLE_CITY_BIKE_SHOP", 5, 3], ["MAP_MAUVILLE_CITY_GAME_CORNER", 11, 3], ["MAP_MOSSDEEP_CITY_GAME_CORNER_1F", 7, 7], ["MAP_MOSSDEEP_CITY_GAME_CORNER_1F", 3, 7], ["MAP_MOSSDEEP_CITY_GAME_CORNER_B1F", 4, 1], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_1F", 13, 5], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_1F", 10, 5], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_2F", 6, 7], ["MAP_MOSSDEEP_CITY_SPACE_CENTER_2F", 12, 7], ["MAP_ROUTE104_PRETTY_PETAL_FLOWER_SHOP", 1, 4], ["MAP_ROUTE104_PRETTY_PETAL_FLOWER_SHOP", 7, 7], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_NORTH_ENTRANCE", 7, 3], ["MAP_ROUTE110_SEASIDE_CYCLING_ROAD_SOUTH_ENTRANCE", 7, 3], ["MAP_ROUTE111_OLD_LADYS_REST_STOP", 5, 4], ["MAP_ROUTE113_GLASS_WORKSHOP", 7, 5], ["MAP_ROUTE117_POKEMON_DAY_CARE", 3, 3], ["MAP_ROUTE119_WEATHER_INSTITUTE_1F", 16, 6], ["MAP_ROUTE119_WEATHER_INSTITUTE_2F", 13, 9], ["MAP_ROUTE119_WEATHER_INSTITUTE_2F", 1, 5], ["MAP_RUSTBORO_CITY_DEVON_CORP_1F", 7, 4], ["MAP_RUSTBORO_CITY_DEVON_CORP_2F", 7, 4], ["MAP_RUSTBORO_CITY_DEVON_CORP_2F", 10, 7], ["MAP_RUSTBORO_CITY_DEVON_CORP_3F", 15, 6], ["MAP_RUSTBORO_CITY_FLAT1_1F", 2, 5], ["MAP_RUSTBORO_CITY_FLAT1_1F", 10, 5], ["MAP_RUSTBORO_CITY_POKEMON_SCHOOL", 6, 4], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_1F", 7, 6], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_1F", 12, 6], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F", 5, 4], ["MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F", 15, 4], ["MAP_SLATEPORT_CITY_POKEMON_FAN_CLUB", 7, 7]];
 
 // web/spike-b/shared/items.ts
+var ITEM_MASTER_BALL3 = 1;
+var ITEM_LAST_BALL = 12;
 var ITEM_TM012 = 289;
 var ITEM_HM08 = 346;
+var groundCount = (item) => item > ITEM_MASTER_BALL3 && item <= ITEM_LAST_BALL ? 6 : 1;
 var isTm = (item) => item >= ITEM_TM012 && item <= ITEM_HM08;
 var ITEM_POKE_DOLL = 80;
 var ITEM_LINK_CABLE = 52;
@@ -12340,14 +12409,18 @@ var QUAFF_FRAMES = 600;
 var LEGEND_FOE = -2;
 var LEGEND_CATCH = 1 / 3;
 var CAUGHT_WEAR = 0.5;
-var FLED_WEAR = 0.15;
-function legendMon(s, species, phase) {
-  return wornParty([tradedMon(species, phase)], s?.worn === void 0 ? void 0 : [s.worn])[0];
+function legendMon(species, phase) {
+  return tradedMon(species, phase);
 }
 var MAINLANDS = /* @__PURE__ */ new Map();
 function botParty(seed, a, phase) {
-  const dealt = dealParty(seed, a.id, phase, a.m.spot.map, gradeOf(seed, a.id));
-  return a.caught?.length ? [...a.caught.map((sp) => tradedMon(sp, phase)), ...dealt].slice(0, 6) : dealt;
+  const taken = (a.caught ?? []).map((sp, i) => {
+    const m = tradedMon(sp, phase), moves = a.moves?.[i];
+    return moves?.length ? { ...m, moves: moves.map((id2) => ({ id: id2, pp: 15, ppUps: 0 })), romMoves: true } : m;
+  });
+  if (a.own) return taken.slice(0, 6);
+  const dealt = dealParty(seed, a.id, phase, a.dealt ?? a.m.spot.map, gradeOf(seed, a.id));
+  return taken.length ? [...taken, ...dealt].slice(0, 6) : dealt;
 }
 function wornParty(party, wear) {
   if (!wear) return party;
@@ -12459,7 +12532,7 @@ var BOT_DUEL_GAP = 60 * 12;
 var HOST_JUDGE = -1;
 var BOT_DUEL_MAX = 60 * 60 * 10;
 var BOT_BITE = 240;
-var BOT_BITES = 10;
+var FOG_BITE = 0.1;
 var ROOMS = rooms_default;
 var TABLE_BALLS = table_balls_default;
 var SPILL_KEY = 1 << 20;
@@ -12471,7 +12544,7 @@ var ZONE_CELLS = [
   { map: "MAP_SAFARI_ZONE_SOUTH", x: 4, y: 20 },
   { map: "MAP_SAFARI_ZONE_SOUTHEAST", x: 30, y: 20 }
 ];
-var ITEM_MASTER_BALL3 = 1;
+var ITEM_MASTER_BALL4 = 1;
 var ZONE_ITEMS = [4, 21, 19, 24, 20, 23, 75, 77, 68, 95, 97, 96, 98, 93, 94, 110, 69];
 var ZONE_TMS = [2, 6, 13, 14, 15, 19, 22, 24, 25, 26, 29, 30, 31, 35, 36, 38, 40, 50].map((n) => 288 + n);
 var ZONE_TM_IN = 2;
@@ -12486,7 +12559,7 @@ function zoneBalls(seed) {
   };
   const pick = (t7) => t7[Math.floor(zr() * t7.length)];
   const zone = ZONE_CELLS.map(() => Math.floor(zr() * ZONE_TM_IN) === 0 ? pick(ZONE_TMS) : pick(ZONE_ITEMS));
-  if (Math.floor(zr() * ZONE_MASTER_ODDS) === 0) zone[Math.floor(zr() * zone.length)] = ITEM_MASTER_BALL3;
+  if (Math.floor(zr() * ZONE_MASTER_ODDS) === 0) zone[Math.floor(zr() * zone.length)] = ITEM_MASTER_BALL4;
   return zone;
 }
 var CHEST = { map: "MAP_ROUTE117_POKEMON_DAY_CARE", x: 5, y: 5 };
@@ -12632,6 +12705,12 @@ var Room = class {
       if (!a || a.bot) return;
       this.letGoOf(a);
       Object.assign(a, { bot: true, battling: false, foe: 0, meet: void 0, boss: void 0, away: void 0, keys: 0, last: 0, calm: this.tick + GRACE });
+      if (cmd.team?.length) {
+        const team = cmd.team.slice(0, 6);
+        Object.assign(a, { own: true, caught: team.map((m) => m.species), moves: team.map((m) => m.moves ?? []), wear: team.map((m) => Math.min(1, Math.max(0, m.hp))) });
+      }
+      if (cmd.items || cmd.money) a.loot = { items: (cmd.items ?? []).map((st2) => ({ id: st2.id, n: st2.n })), money: cmd.money ?? 0 };
+      a.dealt = a.m.spot.map;
     } else if (cmd.c === "wear") {
       const b2 = this.actor(cmd.bot);
       if (!b2?.bot || b2.foughtBy !== cmd.id) return;
@@ -12646,7 +12725,7 @@ var Room = class {
       a.m = newMover({ map: t7.map, x: t7.x, y: t7.y }, 1);
     } else if (cmd.c === "sail") {
       const a = this.actor(cmd.id);
-      if (!a || a.bot || a.battling || a.m.action) return;
+      if (!a || a.battling || a.m.action) return;
       const [x2, y] = this.ahead(a);
       const who2 = ferryAt(a.m.spot.map, x2, y);
       const boat = who2 === "boat" ? boatAt(a.m.spot.map, x2, y) : void 0;
@@ -12709,6 +12788,14 @@ var Room = class {
       if (cmd.used && b2.loot) spend(b2.loot.items, cmd.used[1].slice(0, 4));
       if (won && cmd.hp) won.wear = cmd.hp.slice(0, 6).map((v2) => Math.min(1, Math.max(0, v2)));
       if (won && lost) this.botOut(lost, won.name);
+      if (!won && cmd.drew) {
+        const [left, right] = [a, b2].map((o, i) => {
+          o.wear = cmd.drew[i].slice(0, 6).map((v2) => Math.min(1, Math.max(0, v2)));
+          return !o.wear.some((v2) => v2 > 0);
+        });
+        if (left) this.botOut(a, right ? "" : b2.name);
+        if (right) this.botOut(b2, left ? "" : a.name);
+      }
     } else if (cmd.c === "lock") {
       this.results.entrants = this.actors.map((a) => [a.id, a.name]);
       if (!this.opening) {
@@ -13153,15 +13240,11 @@ var Room = class {
       a.bleedAt ??= this.tick + bite;
       if (this.tick < a.bleedAt) continue;
       a.bleedAt += bite;
-      a.bites = (a.bites ?? 0) + 1;
-      if (a.bites >= BOT_BITES) this.botOut(a, "");
+      a.wear = botParty(this.seed, a, ring.phase + 1).map((_2, i) => Math.max(0, Math.round(((a.wear?.[i] ?? 1) - FOG_BITE) * 1e3) / 1e3));
+      if (!a.wear.some((v2) => v2 > 0)) this.botOut(a, "");
     }
     for (const a of this.actors) {
       if (!a.bot || a.battling || !a.wear) continue;
-      if (this.centreSteps().some((s) => s.map === a.m.spot.map && s.x === a.m.spot.x && s.y === a.m.spot.y)) {
-        a.wear = void 0;
-        continue;
-      }
       if (!a.loot?.items.length || (this.tick + a.id * 13) % QUAFF_FRAMES !== 0 || this.inFog(a.m.spot, ring)) continue;
       const party = wornParty(botParty(this.seed, a, ring.phase + 1), a.wear);
       if (quaff(party, a.loot.items) !== null) a.wear = party.map((m) => m.maxHp > 0 ? m.hp / m.maxHp : 0);
@@ -13349,9 +13432,9 @@ var Room = class {
     }
   }
   /** What a bot's team could do on the field, in `field` as a trainer's page says theirs (POK-437;
-   *  Cam said yes, 10-20). Asked when it joins, each phase and after a catch; never forgotten in a
-   *  round, since the team it is dealt turns with the map under it and it must not lose SURF at sea. */
+   *  Cam said yes, 10-20). Asked when it joins, each phase and after a catch: a team only grows. */
   botLearns(a) {
+    a.dealt ??= a.m.spot.map;
     a.field = (a.field ?? 0) | teamField(botParty(this.seed, a, this.ring().phase + 1));
   }
   /** The trainers whose pages could fight two bots out now (engageBots). */
@@ -13365,6 +13448,7 @@ var Room = class {
   botLegend(a, s, events) {
     const species = s.bag.mons?.[0]?.species;
     if (!species || this.ring().safari || this.tick < a.calm || a.tried?.includes(s.key)) return;
+    if (!hasBall(a.loot?.items ?? [])) return;
     if (!this.simBots && this.tick < this.duelAfter) return;
     const judges = this.simBots ? [] : this.freeJudges();
     if (!this.simBots && !judges.length) return;
@@ -13379,27 +13463,28 @@ var Room = class {
     events.push({ type: "bots", tick: this.tick, id: judge, a: a.id, b: LEGEND_FOE, legend: { key: s.key, species } });
     if (!this.simBots) this.duelAfter = this.tick + BOT_DUEL_GAP;
   }
-  /** How a bot's legendary went. Beaten, it is the bot's, and off the map for good. Lost, the bot
-   *  gets away hurt. Either way it never fights that one again; no answer, the same, and it stands. */
+  /** How a bot's legendary went, as it goes for a trainer (main.ts): caught, it is theirs, and off the
+   *  map for good; their team down, they are out of the match; knocked out or run from, it stands
+   *  again as it was, and they have what the fight left them. A bot has one go at each. */
   legendOver(cmd) {
     const a = this.actor(cmd.a);
     if (!a?.bot || a.foe !== LEGEND_FOE || a.judge !== cmd.id || !a.battling || a.legendKey === void 0) return;
-    if (cmd.used && a.loot) spend(a.loot.items, cmd.used[0].slice(0, 4));
-    const phase = this.ring().phase + 1;
+    if (cmd.used && a.loot) spend(a.loot.items, cmd.used[0].slice(0, 32));
     if (cmd.winner === a.id) {
       const species = this.spills.get(a.legendKey)?.bag.mons?.[0]?.species;
       const left = cmd.hp?.slice(0, 5).map((v2) => Math.min(1, Math.max(0, v2))) ?? a.wear ?? [];
       a.legendKey = void 0;
       if (species) {
         a.caught = [species, ...a.caught ?? []];
-        a.wear = [CAUGHT_WEAR, ...left];
+        a.moves = a.moves && [[], ...a.moves];
+        a.wear = [cmd.caught ?? CAUGHT_WEAR, ...left];
         this.botLearns(a);
       }
     } else if (cmd.winner === LEGEND_FOE) {
-      a.wear = botParty(this.seed, a, phase).map(() => FLED_WEAR);
-      const s = this.spills.get(a.legendKey), left = cmd.hp?.[0];
-      if (s && left !== void 0) s.worn = Math.min(1, Math.max(0, left));
-    }
+      this.part(a);
+      this.botOut(a, "", { wild: true });
+      return;
+    } else if (cmd.drew) a.wear = cmd.drew[0].slice(0, 6).map((v2) => Math.min(1, Math.max(0, v2)));
     this.part(a);
   }
   /** The weather a fight starts in, standing at `s`: KYOGRE's rain or GROUDON's drought, the seed's
@@ -13442,7 +13527,7 @@ var Room = class {
   }
   /** A bot is beaten (by `by`, '' the fog): out of the match and off the map, its team and
    *  purse in a bag where it stood, as the live bots' eliminate() drops theirs. */
-  botOut(a, by) {
+  botOut(a, by, how = {}) {
     if (!this.actor(a.id)) return;
     const phase = this.ring().phase + 1;
     const grade = gradeOf(this.seed, a.id);
@@ -13450,7 +13535,7 @@ var Room = class {
     const bag = { items: carried(party, a.loot?.items ?? []), money: purse(phase, grade) + (a.loot?.money ?? 0), mons: party.map((m) => ({ species: m.species, level: m.level })) };
     const key = SPILL_KEY + a.id, at2 = this.fallen(a);
     if (!emptyBag(bag)) this.spills.set(key, { key, map: at2.map, x: at2.x, y: at2.y, name: a.name, bag });
-    this.fall(a, by);
+    this.fall(a, by, how);
     this.remove(a.id);
   }
   /** `a` is out of this round's match (once; nothing after the win). */
@@ -13709,6 +13794,10 @@ var Room = class {
       a.m = newMover(cells[Math.floor(rng() * cells.length)], 1);
       a.calm = this.tick + JOIN_GRACE;
       a.pickBy = void 0;
+      if (a.bot && !a.own) {
+        a.dealt = map;
+        a.field = void 0;
+      }
       return;
     }
   }
@@ -13736,15 +13825,19 @@ var Room = class {
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q2) => p.id - q2.id);
     for (const a of this.actors) if (a.bot) {
-      a.bites = 0;
       a.bleedAt = void 0;
       a.loot = void 0;
       if (a.judge) this.part(a);
-      a.caught = a.tried = a.field = void 0;
+      a.caught = a.tried = a.field = a.moves = a.wear = void 0;
+      a.own = false;
+      a.dealt = void 0;
       this.botLearns(a);
     }
     if (safari) {
-      for (const a of this.actors) if (a.bot) a.m = newMover(this.zone(a.id)[0] ?? a.m.spot, a.m.facing);
+      for (const a of this.actors) if (a.bot) {
+        a.m = newMover(this.zone(a.id)[0] ?? a.m.spot, a.m.facing);
+        a.cruise = void 0;
+      }
     }
     for (const a of this.actors) if (a.meet) {
       a.meet = void 0;
@@ -13889,14 +13982,22 @@ var Room = class {
           const loot = a.loot ??= { items: [], money: 0 };
           if (g && !g.gift) {
             this.picked.set(g.key, a.id);
-            add(loot.items, g.item);
+            add(loot.items, g.item, groundCount(g.item));
           }
           if (b2?.legend && !b2.person && b2.guard === void 0) this.botLegend(a, b2, events);
           if (b2 && !b2.legend && !b2.person && b2.guard === void 0) {
             for (const st2 of b2.bag.items) add(loot.items, st2.id, st2.n);
             loot.money += b2.bag.money;
-            if (b2.bag.mons?.length) b2.bag = { items: [], money: 0, mons: b2.bag.mons };
+            const rest = this.botTakes(a, b2.bag.mons ?? []);
+            if (rest.length) b2.bag = { items: [], money: 0, mons: rest };
             else this.picked.set(b2.key, a.id);
+          }
+          const c = this.maps.get(a.m.spot.map)?.centre;
+          if (a.wear && dir === DIR_NORTH && c && a.m.spot.x === c.counterX && a.m.spot.y === c.counterY && !this.inFog(a.m.spot)) a.wear = void 0;
+          if (a.cruise && bedAt(a.m.spot.map, x2, y)) {
+            a.cruise.leg = afterBed(a.cruise);
+            a.cruise.steps = 0;
+            a.wear = void 0;
           }
         }
         if (!r || (r.hop || r.water && !this.onWater(a)) && !(bits & KEY_A)) {
@@ -14013,6 +14114,19 @@ var Room = class {
     } else if (!a.m.action) a.arriving = false;
     a.last = bits;
   }
+  /** A bot takes Pokemon out of a bag, after what it took before; those there is no room for. */
+  botTakes(a, mons) {
+    const room = Math.max(0, 6 - botParty(this.seed, a, this.ring().phase + 1).length);
+    const take2 = mons.slice(0, room);
+    if (take2.length) {
+      const at2 = a.caught?.length ?? 0;
+      a.caught = [...a.caught ?? [], ...take2.map((m) => m.species)];
+      if (a.moves) a.moves = [...a.moves, ...take2.map(() => [])];
+      a.wear?.splice(at2, 0, ...take2.map(() => 1));
+      this.botLearns(a);
+    }
+    return mons.slice(room);
+  }
   /** An event's trader standing on a cell, or somebody at home (not one who gave theirs). */
   traderAt(map, x2, y) {
     for (const e of this.events) if (e.trader && e.map === map && e.trader.x === x2 && e.trader.y === y) return { n: e.n, t: e.trader };
@@ -14049,8 +14163,7 @@ var Room = class {
       if (a.bot && !onWay && this.places.has(from.map) && !this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) return null;
       const t7 = r.to;
       if (r.warp && DOOR_MAPS.has(from.map) && from.y === DOOR_Y + 1 && t7.y < DOOR_Y && !this.events.some((e) => e.map === from.map && e.opened)) return null;
-      const bag = this.spillAt(t7.map, t7.x, t7.y);
-      if (bag && !(a.bot && !bag.bag.items.length && !bag.bag.money && !bag.legend && !bag.person && bag.guard === void 0)) return null;
+      if (this.spillAt(t7.map, t7.x, t7.y)) return null;
       if (this.groundAt(t7.map, t7.x, t7.y) || clerkAt(t7.map, t7.x, t7.y) || this.traderAt(t7.map, t7.x, t7.y) || ferryAt(t7.map, t7.x, t7.y)) return null;
       if (from.map.startsWith(SAFARI) !== t7.map.startsWith(SAFARI) && this.ring().safari) return null;
       const boss = leaderAt(t7.map, t7.x, t7.y);
@@ -14105,8 +14218,9 @@ var Room = class {
       mix2(a.last);
       mix2(a.judge ?? 0);
       mix2(a.since ?? 0);
-      mix2(a.bites ?? 0);
       mix2(a.bleedAt ?? 0);
+      for (const w of a.wear ?? []) mix2(Math.round(w * 1e3));
+      str(a.dealt ?? "");
       mix2(a.boss ?? 0);
       mix2(a.away ? 1 : 0);
       mix2(a.pickBy ?? 0);
@@ -14331,7 +14445,13 @@ function health(a) {
   const w = a.wear;
   return w?.length ? w.reduce((s, v2) => s + v2, 0) / w.length : 1;
 }
+function counterOf(room, map) {
+  const c = room.maps.get(map)?.centre;
+  return c ? { map, x: c.counterX, y: c.counterY } : null;
+}
 function centreFor(room, a) {
+  const inside = counterOf(room, a.m.spot.map);
+  if (inside) return inside;
   const p = room.places.get(a.m.spot.map);
   if (!p) return null;
   let best = null, bestH = Infinity, bestD = Infinity;
@@ -14347,7 +14467,8 @@ function centreFor(room, a) {
       best = s;
     }
   }
-  return best;
+  const door = best && room.world.map(best.map)?.warps?.find((w) => w.x === best.x && w.y === best.y - 1 && room.world.map(w.to)?.centre);
+  return door ? counterOf(room, door.to) : null;
 }
 function planeOf(room, s) {
   const p = room.places.get(s.map);
@@ -14366,8 +14487,9 @@ function safariGoal(room, a, b2) {
   return { map, x: s.x, y: s.y };
 }
 function goal(room, a, b2) {
+  b2.byBoat = false;
   if (room.ring().safari) return safariGoal(room, a, b2);
-  if (health(a) < HURT) {
+  if (health(a) < HURT && !room.inFog(a.m.spot)) {
     const c = centreFor(room, a);
     if (c) return c;
   }
@@ -14383,7 +14505,10 @@ function goal(room, a, b2) {
         best = o;
       }
     }
-    if (best) return { ...best.m.spot };
+    if (best) {
+      b2.byBoat = true;
+      return { ...best.m.spot };
+    }
   }
   const lootMood = Math.imul(room.tick + a.id, 2654435761) >>> 30 < (room.results.entrants.length - room.results.fallen.length > 8 ? 2 : 1);
   const legend = lootMood ? lootGoal(room, a, b2, true) : null;
@@ -14416,14 +14541,90 @@ function goal(room, a, b2) {
     if (d <= bestD + SPREAD) near.push({ s, h, d });
   }
   const pool = near.filter((n) => n.h === bestH && n.d <= bestD + SPREAD);
-  return pool.length ? pool[Math.floor(rand(b2) * pool.length)].s : null;
+  if (pool.length) return pool[Math.floor(rand(b2) * pool.length)].s;
+  const rides = ridesFrom(room, a);
+  const nearest = /* @__PURE__ */ new Map();
+  for (const s of cells) {
+    let n = nearest.get(s.map);
+    if (n === void 0) nearest.set(s.map, n = rides.some((r) => room.world.hops(r.from.map, s.map, surfs(a), cuts(a)) !== void 0) ? { s, d: Infinity } : null);
+    if (!n) continue;
+    const q2 = room.places.get(s.map);
+    const d = Math.abs(q2.gx + s.x - x2) + Math.abs(q2.gy + s.y - y);
+    if (d < n.d) {
+      n.s = s;
+      n.d = d;
+    }
+  }
+  const ways = [...nearest.values()].filter((n) => !!n).sort((p2, q2) => p2.d - q2.d).slice(0, 8);
+  for (const { s } of ways) if (rides.some((r) => walks(room, a, r.from, s))) {
+    b2.byBoat = true;
+    return s;
+  }
+  return null;
+}
+var RIDES = [...BOATS.flatMap((o) => o.to.map((to) => ({ map: o.map, x: o.x, y: o.y, to }))), { ...ATTENDANT, to: "slateport" }];
+function besideOf(room, who2) {
+  const out = [];
+  for (const [dx, dy, face2] of [[0, 1, 2], [0, -1, 1], [1, 0, 3], [-1, 0, 4]]) {
+    if (room.world.standable(who2.map, who2.x + dx, who2.y + dy)) out.push({ at: { map: who2.map, x: who2.x + dx, y: who2.y + dy }, face: face2 });
+  }
+  return out;
+}
+function walks(room, a, from, to) {
+  const w = room.world, surf = surfs(a), cut = cuts(a);
+  if (from.map === to.map && w.reachOnMap(from, surf, cut).cell(to.x, to.y)) return true;
+  return !!w.firstCrossing(from, to.map, surf, cut, (r) => r.cell(to.x, to.y))?.length;
+}
+function ridesFrom(room, a) {
+  const out = [];
+  const used = /* @__PURE__ */ new Set();
+  let front = [{ from: a.m.spot, first: null }];
+  while (front.length) {
+    const next = [];
+    for (const f of front) {
+      RIDES.forEach((r, i) => {
+        if (used.has(i)) return;
+        const beside = besideOf(room, r).filter((c) => walks(room, a, f.from, c.at));
+        if (!beside.length) return;
+        used.add(i);
+        next.push({ from: PORTS[r.to].land, first: f.first ?? { to: r.to, beside } });
+      });
+    }
+    out.push(...next);
+    front = next;
+  }
+  return out;
+}
+function rideFor(room, a, to) {
+  return ridesFrom(room, a).find((r) => walks(room, a, r.from, to))?.first ?? null;
+}
+function aboard(room, a, b2) {
+  const c = a.cruise;
+  const stands = c.leg === "land" ? besideOf(room, TIDAL_SAILOR).filter((s) => s.at.x === TIDAL.x && s.at.y === TIDAL.y) : TIDAL_BEDS.flatMap((bed) => besideOf(room, bed));
+  const here = stands.find((s) => sameSpot(s.at, a.m.spot));
+  b2.steps = here ? void 0 : b2.steps;
+  if (here) {
+    b2.goal = null;
+    if ((room.tick + a.id * 7) % 30) return 0;
+    if (c.leg === "land") {
+      b2.sail = c.to;
+      b2.plan = void 0;
+    }
+    return KEY_OF[here.face] | KEY_A;
+  }
+  if (!b2.goal || !stands.some((s) => sameSpot(s.at, b2.goal))) {
+    b2.goal = stands[0].at;
+    b2.steps = void 0;
+    b2.legs = 0;
+  }
+  return void 0;
 }
 var surfs = (a) => ((a.field ?? 0) & FIELD_SURF) !== 0;
 var cuts = (a) => (a.field ?? 0) & 3;
 var FLY_EVERY = 60 * 60;
 var FLY_CLEAR = { x: 9, y: 7 };
 function flyGoal(room, a, b2) {
-  if (hunting(room) || room.tick < (b2.flyAfter ?? 0) || !teamFlies(botParty(room.seed, a, room.ring().phase + 1))) return null;
+  if (a.cruise || hunting(room) || room.tick < (b2.flyAfter ?? 0) || !teamFlies(botParty(room.seed, a, room.ring().phase + 1))) return null;
   const seen = (s) => room.actors.some((o) => o !== a && o.m.spot.map === s.map && Math.abs(o.m.spot.x - s.x) <= FLY_CLEAR.x && Math.abs(o.m.spot.y - s.y) <= FLY_CLEAR.y);
   const main = room.mainland();
   const home = heart(room).filter((s) => main.has(`${s.map}:${s.x}:${s.y}`) && room.places.has(s.map) && room.world.cell(s.map, s.x, s.y) === 0 && !room.groundAt(s.map, s.x, s.y) && !room.spillAt(s.map, s.x, s.y));
@@ -14447,12 +14648,13 @@ function lootGoal(room, a, b2, legendOnly = false) {
   }
   for (const p of room.spills.values()) {
     if (p.map !== map || room.picked.has(p.key) || p.person || p.guard !== void 0) continue;
-    if (p.legend ? !a.tried?.includes(p.key) : !legendOnly && (p.bag.items.length > 0 || p.bag.money > 0)) see({ map, x: p.x, y: p.y }, !!p.legend);
+    if (p.legend ? !a.tried?.includes(p.key) && hasBall(a.loot?.items ?? []) && health(a) >= HURT : !legendOnly && (p.bag.items.length > 0 || p.bag.money > 0 || !!p.bag.mons?.length && partyRoom(room, a))) see({ map, x: p.x, y: p.y }, !!p.legend);
   }
   if (!near.length) return null;
   near.sort((p, q2) => p.d - q2.d);
   return near[Math.floor(rand(b2) * Math.min(3, near.length))].s;
 }
+var partyRoom = (room, a) => botParty(room.seed, a, room.ring().phase + 1).length < 6;
 var SPREAD = 6;
 var HEART = /* @__PURE__ */ new WeakMap();
 function heart(room) {
@@ -14494,15 +14696,21 @@ function botKeys(room, a, b2) {
     b2.goal = null;
     b2.steps = void 0;
   }
-  if (b2.goal && !a.wear && sameSpot(a.m.spot, b2.goal) && room.centreSteps().some((s) => sameSpot(s, a.m.spot))) {
+  const counter = b2.goal && sameSpot(a.m.spot, b2.goal) ? counterOf(room, a.m.spot.map) : null;
+  if (counter && sameSpot(a.m.spot, counter)) {
+    if (a.wear && !room.inFog(a.m.spot)) return KEY_UP | KEY_B | KEY_A;
     b2.goal = null;
     b2.steps = void 0;
     b2.wait = 120;
     return 0;
   }
+  if (a.cruise) {
+    const keys = aboard(room, a, b2);
+    if (keys !== void 0) return keys;
+  }
   const hunt = hunting(room) && (!b2.steps?.length || (room.tick + a.id * 7) % 240 === 0);
   const idle = !b2.goal && !b2.steps?.length && (room.tick + a.id * 7) % (ring.safari ? 60 : 300) === 0;
-  if ((b2.plan !== at2 || hunt || idle || !b2.goal && room.inFog(a.m.spot, ring)) && (room.tick + a.id * 7) % 30 === 0) {
+  if (!a.cruise && (b2.plan !== at2 || hunt || idle || !b2.goal && room.inFog(a.m.spot, ring)) && (room.tick + a.id * 7) % 30 === 0) {
     b2.plan = at2;
     b2.goal = goal(room, a, b2);
     b2.steps = void 0;
@@ -14520,7 +14728,16 @@ function botKeys(room, a, b2) {
     }
   }
   if (b2.goal && !b2.steps?.length && (room.tick + a.id * 7) % 30 === 0) {
-    const path = !sameSpot(a.m.spot, b2.goal) && (b2.legs = (b2.legs ?? 0) + 1) <= 24 ? leg(room, a, b2.goal, b2.avoid) : null;
+    let path = !sameSpot(a.m.spot, b2.goal) && (b2.legs = (b2.legs ?? 0) + 1) <= 24 ? leg(room, a, b2.goal, b2.avoid) : null;
+    if (!path?.found && b2.byBoat && !a.cruise && (b2.legs ?? 0) <= 24) {
+      const ride = rideFor(room, a, b2.goal);
+      const here = ride?.beside.find((s) => sameSpot(s.at, a.m.spot));
+      if (here) {
+        b2.sail = ride.to;
+        return KEY_OF[here.face] | KEY_A;
+      }
+      path = ride ? leg(room, a, ride.beside[0].at, b2.avoid) : null;
+    }
     b2.steps = path?.found ? path.steps : void 0;
     const end = b2.steps?.[b2.steps.length - 1]?.to;
     if (end && room.actors.some((o) => o !== a && sameSpot(o.m.spot, end))) b2.steps = b2.steps.slice(0, -1);
@@ -14663,11 +14880,17 @@ var Host = class {
     this.players.delete(id2);
     this.pending.push({ c: "leave", id: id2 });
   }
-  /** The trainer plays on as a bot, the phone that had them gone (the host's REPLACE WITH BOT). */
-  toBot(id2) {
+  /** The trainer plays on as a bot, the phone that had them gone (the host's REPLACE WITH BOT), with
+   *  the team and bag it last told the room (Cam, 11-03: "the same rules as a player"). */
+  toBot(id2, team, bag) {
     if (!this.players.delete(id2)) return;
     this.brains.set(id2, { rng: id2 * 2654435761 >>> 0 || 1, wait: 30, dir: 1 });
-    this.pending.push({ c: "bot", id: id2 });
+    this.pending.push({
+      c: "bot",
+      id: id2,
+      ...team?.length ? { team: team.map((m) => ({ species: m.species, hp: m.maxHp ? (m.hp ?? m.maxHp) / m.maxHp : 1, moves: (m.moves ?? []).map((v2) => v2.id) })) } : {},
+      ...bag ? { items: bag.items.map((st2) => ({ id: st2.id, n: st2.n })), money: bag.money } : {}
+    });
   }
   /** How many inputs a phone has sent that no frame has used yet. */
   backlog(id2) {
@@ -14787,6 +15010,10 @@ var Host = class {
           this.pending.push({ c: "fly", id: a.id, to: brain.flyTo });
           brain.flyTo = void 0;
         }
+        if (brain?.sail !== void 0) {
+          this.pending.push({ c: "sail", id: a.id, to: brain.sail });
+          brain.sail = void 0;
+        }
         continue;
       }
       const p = this.players.get(a.id);
@@ -14873,12 +15100,13 @@ var Host = class {
       name: b2?.name ?? "",
       skin: b2?.skin ?? 0,
       party: b2 ? wornParty(botParty(r.seed, b2, r.ring().phase + 1), b2.wear) : [],
-      items: battleItems(b2?.loot?.items ?? [])
+      items: battleItems(b2?.loot?.items ?? []),
+      balls: ballsIn(b2?.loot?.items ?? [])
     };
   }
   /** A legendary's side: its one mon at the rung. */
-  legendSide({ key, species }) {
-    return { seat: LEGEND_FOE, name: speciesName(species), skin: 0, party: [legendMon(this.room.spills.get(key), species, this.room.ring().phase + 1)] };
+  legendSide({ species }) {
+    return { seat: LEGEND_FOE, name: speciesName(species), skin: 0, party: [legendMon(species, this.room.ring().phase + 1)] };
   }
   /** The meeting this fight is for is still on. */
   simWanted(f) {
@@ -14918,7 +15146,9 @@ var Host = class {
         const seed = (Math.imul(r.seed ^ f.since, 2654435761) ^ Math.imul(f.a, 2246822507) ^ Math.imul(f.b, 3266489909)) >>> 0;
         const at2 = r.actor(f.a)?.m.spot, since = f.since;
         const fog = (ms) => !!at2 && r.inFog(at2, r.ring(since + Math.ceil(ms / 1e3 * 60)));
-        f.run = this.simulation(this.simSide(f.a), f.legend ? this.legendSide(f.legend) : this.simSide(f.b), { seed, map: at2?.map ?? "", fog });
+        const w = at2 ? r.weatherAt(at2) : 0;
+        const weather = w === WEATHER_DOWNPOUR ? "raindance" : w === WEATHER_DROUGHT ? "sunnyday" : void 0;
+        f.run = this.simulation(this.simSide(f.a), f.legend ? this.legendSide(f.legend) : this.simSide(f.b), { seed, map: at2?.map ?? "", fog, ...weather ? { weather } : {}, ...f.legend ? { wild: { catchRate: catchRateOf(f.legend.species), catchAt: LEGEND_CATCH } } : {} });
       }
       const step = f.run.next();
       if (!step.done) return;
@@ -14939,8 +15169,8 @@ var Host = class {
       this.pending.push({ c: "bots", id: HOST_JUDGE, a: f.a, b: f.b, winner: 0 });
       return;
     }
-    const winner = f.legend && out.shareB[0] < LEGEND_CATCH ? f.a : out.winner;
-    const hp2 = winner === f.a ? out.shareA : winner === f.b ? out.shareB : void 0;
+    const winner = !f.legend ? out.winner : out.caught ? f.a : out.winner === f.b && !out.capped ? f.b : 0;
+    const hp2 = winner === f.a ? out.shareA : !f.legend && winner === f.b ? out.shareB : void 0;
     this.pending.push({
       c: "bots",
       id: HOST_JUDGE,
@@ -14948,10 +15178,14 @@ var Host = class {
       b: f.b,
       winner,
       ...hp2 ? { hp: hp2 } : {},
+      ...winner ? {} : { drew: [out.shareA, out.shareB] },
+      ...out.caught ? { caught: out.shareB[0] } : {},
       ...out.usedA.length || out.usedB.length ? { used: [out.usedA, out.usedB] } : {}
     });
   }
 };
+var CATCH_RATES = { 404: 5, 405: 5, 151: 45, 251: 45 };
+var catchRateOf = (species) => CATCH_RATES[species] ?? 3;
 
 // web/src/match/lifecycle.ts
 init_roster();
@@ -15402,7 +15636,7 @@ var WorldService = class {
     this.where.delete(p.id);
     if (!room) return;
     room.members.delete(p.id);
-    if (toBot) room.host?.toBot(p.id);
+    if (toBot) room.host?.toBot(p.id, p.team, p.bag);
     else room.host?.leave(p.id);
     room.streams.delete(p.id);
     this.closeLog(room, p.id);
@@ -15762,4 +15996,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "3316fdae8546";
+export const WORLD_HASH = "376e62fd149b";

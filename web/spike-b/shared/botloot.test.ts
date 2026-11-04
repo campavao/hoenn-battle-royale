@@ -23,6 +23,8 @@ function stage(simBots = true): Room {
   room.simBots = simBots;
   room.apply({ c: 'join', id: 7, bot: true, name: 'BOT', skin: 0, spot: { map: OLDALE, x: 10, y: 12 }, facing: 1 });
   room.actor(7)!.calm = 0;
+  // A ball to catch one with: without, it would leave a legendary be (bot-rules.test.ts).
+  room.actor(7)!.loot = { items: [{ id: 4, n: 6 }], money: 0 };
   return room;
 }
 
@@ -68,16 +70,15 @@ describe('a bot on the field', () => {
     expect(walking).toBe(true);
   });
 
-  it('leaves a gift, and a bag with nothing but Pokemon in it, alone', () => {
+  it('leaves a gift alone: A at its giver takes nothing', () => {
     const room = stage();
-    room.spills.set(KEY, { key: KEY, map: OLDALE, x: 12, y: 12, name: 'X', bag: { items: [], money: 0, mons: [{ species: 25, level: 5 }] } });
-    for (const g of room.ground().values()) if (g.map === OLDALE) room.picked.set(g.key, 99);
-    const brain: Brain = { rng: 7, wait: 0, dir: 1 };
+    const gift = [...room.ground().values()].find((g) => g.map === OLDALE && g.gift)!;
     const bot = room.actor(7)!;
-    bot.keys = botKeys(room, bot, brain);
-    for (let i = 0; i < 120; i++) { bot.keys = botKeys(room, bot, brain); room.step(); }
-    expect(brain.goal === undefined || brain.goal === null || brain.goal.x !== 12 || brain.goal.y !== 12).toBe(true);
-    expect(room.spillAt(OLDALE, 12, 12)?.bag.mons?.length).toBe(1);
+    bot.m = { ...bot.m, spot: { map: OLDALE, x: gift.x - 1, y: gift.y }, facing: 4 };
+    bot.keys = KEY_RIGHT | KEY_A | KEY_B;
+    room.step();
+    expect(room.picked.has(gift.key)).toBe(false);
+    expect(bot.loot?.items, 'what it came with').toEqual([{ id: 4, n: 6 }]);
   });
 });
 
@@ -132,15 +133,14 @@ describe('a bot at a legendary', () => {
     expect(room.spills.get(SPILL_KEY + 7)?.bag.mons?.[0].species).toBe(404);
   });
 
-  it('lost, the bot gets away hurt, never tries that one again, and it stands as worn as it was left', () => {
+  it('run from, the bot never tries that one again', () => {
     const room = stage();
     const bot = atIt(room);
-    room.apply({ c: 'bots', id: HOST_JUDGE, a: 7, b: LEGEND_FOE, winner: LEGEND_FOE, hp: [0.6] });
-    expect(room.actor(7)).toBeDefined();
+    room.apply({ c: 'bots', id: HOST_JUDGE, a: 7, b: LEGEND_FOE, winner: 0, drew: [[0.6], [0.9]] });
     expect(bot.battling).toBe(false);
-    expect(bot.wear?.every((w) => w === 0.15)).toBe(true);
+    expect(bot.wear).toEqual([0.6]);
     expect(bot.tried).toEqual([KEY]);
-    expect(room.spillAt(OLDALE, 11, 12)).toMatchObject({ legend: true, worn: 0.6 });
+    expect(room.spillAt(OLDALE, 11, 12)?.legend).toBe(true);
     bot.calm = 0;
     bot.keys = KEY_RIGHT | KEY_A | KEY_B;
     expect(room.step()).toEqual([]);

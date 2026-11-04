@@ -1678,7 +1678,7 @@ async function judgeBots(ida: number, idb: number, legend?: { key: number; speci
     return { seat: id, party: b ? wornParty(botParty(r.seed, b, r.ring().phase + 1), b.wear) : [], items: battleItems(b?.loot?.items ?? []) };
   };
   // A legendary is a side of one, on a seat the ROM's wire can carry; nobody's in a room this size.
-  const a = side(ida), b = legend ? { seat: LEGEND_SEAT, party: [legendMon(r.spills.get(legend.key), legend.species, r.ring().phase + 1)], items: [] } : side(idb);
+  const a = side(ida), b = legend ? { seat: LEGEND_SEAT, party: [legendMon(legend.species, r.ring().phase + 1)], items: [] } : side(idb);
   // This meeting, not the pair: they can be let go (the room's own cap) and meet again,
   // and an answer for the old one would end the new one.
   const since = r.actor(ida)?.since;

@@ -9,7 +9,9 @@ import { BOT_DUEL_MAX, HOST_JUDGE, LEGEND_CATCH, LEGEND_FOE, Room, botParty, leg
 import { within } from './items';
 import { logMs, type BattleEvent } from './battlelog';
 import { speciesName } from '../../src/bots/party';
-import { battleItems } from '../../src/bots/bag';
+import { ballsIn, battleItems, type Stack } from '../../src/bots/bag';
+import { WEATHER_DOWNPOUR, WEATHER_DROUGHT } from '../../src/match/events';
+import type { FameMon } from '../../src/ui/results';
 import type { SimOutcome, SimSide, simulation as Simulation } from './battlesim';
 
 /** One frame as a mirror needs it: what changed before anybody moved, the bots whose
@@ -140,11 +142,17 @@ export class Host {
     this.pending.push({ c: 'leave', id });
   }
 
-  /** The trainer plays on as a bot, the phone that had them gone (the host's REPLACE WITH BOT). */
-  toBot(id: number): void {
+  /** The trainer plays on as a bot, the phone that had them gone (the host's REPLACE WITH BOT), with
+   *  the team and bag it last told the room (Cam, 11-03: "the same rules as a player"). */
+  toBot(id: number, team?: readonly FameMon[], bag?: { items: readonly Stack[]; money: number }): void {
     if (!this.players.delete(id)) return;
     this.brains.set(id, { rng: (id * 2654435761) >>> 0 || 1, wait: 30, dir: 1 });
-    this.pending.push({ c: 'bot', id });
+    this.pending.push({
+      c: 'bot',
+      id,
+      ...(team?.length ? { team: team.map((m) => ({ species: m.species, hp: m.maxHp ? (m.hp ?? m.maxHp) / m.maxHp : 1, moves: (m.moves ?? []).map((v) => v.id) })) } : {}),
+      ...(bag ? { items: bag.items.map((st) => ({ id: st.id, n: st.n })), money: bag.money } : {}),
+    });
   }
 
   /** How many inputs a phone has sent that no frame has used yet. */
@@ -270,6 +278,8 @@ export class Host {
         if (bits !== a.keys) { keys.push([a.id, bits]); a.keys = bits; }
         // Its team can FLY and the fog has it (bots.ts flyGoal): a `fly` for every mirror, next frame.
         if (brain?.flyTo) { this.pending.push({ c: 'fly', id: a.id, to: brain.flyTo }); brain.flyTo = undefined; }
+        // At its boatman (bots.ts rideFor), as FLY is: a `sail` for every mirror, next frame.
+        if (brain?.sail !== undefined) { this.pending.push({ c: 'sail', id: a.id, to: brain.sail }); brain.sail = undefined; }
         continue;
       }
       const p = this.players.get(a.id);
@@ -351,12 +361,13 @@ export class Host {
       skin: b?.skin ?? 0,
       party: b ? wornParty(botParty(r.seed, b, r.ring().phase + 1), b.wear) : [],
       items: battleItems(b?.loot?.items ?? []),
+      balls: ballsIn(b?.loot?.items ?? []),
     };
   }
 
   /** A legendary's side: its one mon at the rung. */
-  private legendSide({ key, species }: { key: number; species: number }): SimSide {
-    return { seat: LEGEND_FOE, name: speciesName(species), skin: 0, party: [legendMon(this.room.spills.get(key), species, this.room.ring().phase + 1)] };
+  private legendSide({ species }: { key: number; species: number }): SimSide {
+    return { seat: LEGEND_FOE, name: speciesName(species), skin: 0, party: [legendMon(species, this.room.ring().phase + 1)] };
   }
 
   /** The meeting this fight is for is still on. */
@@ -403,7 +414,10 @@ export class Host {
         // of the frame a turn ends on is known now (Cam, 11-03).
         const at = r.actor(f.a)?.m.spot, since = f.since;
         const fog = (ms: number) => !!at && r.inFog(at, r.ring(since + Math.ceil((ms / 1000) * 60)));
-        f.run = this.simulation!(this.simSide(f.a), f.legend ? this.legendSide(f.legend) : this.simSide(f.b), { seed, map: at?.map ?? '', fog });
+        // The weather a trainer would fight in here (room.ts weatherAt, br_story.c's), for all of it.
+        const w = at ? r.weatherAt(at) : 0;
+        const weather = w === WEATHER_DOWNPOUR ? 'raindance' : w === WEATHER_DROUGHT ? 'sunnyday' : undefined;
+        f.run = this.simulation!(this.simSide(f.a), f.legend ? this.legendSide(f.legend) : this.simSide(f.b), { seed, map: at?.map ?? '', fog, ...(weather ? { weather } as const : {}), ...(f.legend ? { wild: { catchRate: catchRateOf(f.legend.species), catchAt: LEGEND_CATCH } } : {}) });
       }
       const step = f.run.next();
       if (!step.done) return;
@@ -424,9 +438,10 @@ export class Host {
   private simAnswer(f: SimFight): void {
     const out = f.out;
     if (!out) { this.pending.push({ c: 'bots', id: HOST_JUDGE, a: f.a, b: f.b, winner: 0 }); return; }
-    // A legendary it brought low enough to catch is the bot's, however the rest of its team did.
-    const winner = f.legend && out.shareB[0] < LEGEND_CATCH ? f.a : out.winner;
-    const hp = winner === f.a ? out.shareA : winner === f.b ? out.shareB : undefined;
+    // A legendary is the bot's when a ball took it, and only then, as for a trainer: knocked out or
+    // run from, it stands again. Out of turns it is nobody's fight.
+    const winner = !f.legend ? out.winner : out.caught ? f.a : out.winner === f.b && !out.capped ? f.b : 0;
+    const hp = winner === f.a ? out.shareA : !f.legend && winner === f.b ? out.shareB : undefined;
     this.pending.push({
       c: 'bots',
       id: HOST_JUDGE,
@@ -434,10 +449,17 @@ export class Host {
       b: f.b,
       winner,
       ...(hp ? { hp } : {}),
+      ...(winner ? {} : { drew: [out.shareA, out.shareB] as [number[], number[]] }),
+      ...(out.caught ? { caught: out.shareB[0] } : {}),
       ...(out.usedA.length || out.usedB.length ? { used: [out.usedA, out.usedB] as [number[], number[]] } : {}),
     });
   }
 }
+
+/** A legendary's catch rate (src/data/pokemon/species_info.h): three, but GROUDON's and KYOGRE's five,
+ *  and the two mythical gifts'. */
+const CATCH_RATES: Record<number, number> = { 404: 5, 405: 5, 151: 45, 251: 45 };
+const catchRateOf = (species: number) => CATCH_RATES[species] ?? 3;
 
 /** A mirror's frame: the same order the host used. */
 export function play(room: Room, f: Frame): RoomEvent[] {

@@ -29,6 +29,8 @@ export interface SimSide {
   party: PackedMon[];
   /** Bag items it may spend in this fight (bag.ts battleItems), ids from the ROM's table. */
   items?: number[];
+  /** The balls it carries, for a wild fight (`SimOptions.wild`). */
+  balls?: { id: number; n: number }[];
 }
 
 export interface SimOptions {
@@ -39,6 +41,12 @@ export interface SimOptions {
    *  asked at every turn's end, with how far into the log's playing that is: a ring that closes on a
    *  fight under way gets to it there (br_ring.c TurnFog; Cam, 11-03). Once in, always in. */
   fog?: boolean | ((ms: number) => boolean);
+  /** The weather the fight starts in and stays in, as an overworld's does (room.ts weatherAt). */
+  weather?: 'raindance' | 'sunnyday';
+  /** `b` is a wild mon, as a trainer's legendary is: `a` can throw and run, and has to do one or the
+   *  other to come away with anything. The ROM's own sums for both (battle_script_commands.c,
+   *  br_catch.c, battle_util.c). */
+  wild?: { catchRate: number; catchAt: number };
   /** TURN_CAP, for a test. */
   turnCap?: number;
 }
@@ -59,6 +67,9 @@ export interface SimOutcome {
   turns: number;
   /** The fight ran to TURN_CAP: whoever has the most of their team's HP left won (nobody, level). */
   capped: boolean;
+  /** A wild fight: `a`'s ball took it, or `a` got away (`winner` 0). */
+  caught?: boolean;
+  ran?: boolean;
   log: BattleEvent[];
   /** Engine lines the log had no words for: empty on a clean fight, read by the tests. */
   unknown: string[];
@@ -373,6 +384,31 @@ function useItem(battle: any, side: any, row: { item: BagItem | null; used: bool
 
 const FOG = { id: 'fog', name: 'fog', fullname: 'fog', effectType: 'Condition' };
 
+const ITEM_MASTER_BALL = 1;
+/** Every ball but the MASTER BALL is a ROYALE BALL in a match (br_items.c). */
+const BALL_NAME = (id: number) => (id === ITEM_MASTER_BALL ? 'MASTER BALL' : 'ROYALE BALL');
+/** A ball thrown at `mon`, with the ROM's sums: atkcatch's odds and shakes, a ROYALE BALL's ULTRA odds
+ *  doubled on the first turn (br_catch.c BrCatch_BallMultiplier). */
+export function ballTakes(ball: number, mon: { hp: number; maxhp: number; status: string }, catchRate: number, firstTurn: boolean, rng: () => number): boolean {
+  if (ball === ITEM_MASTER_BALL) return true;
+  const multiplier = firstTurn ? 40 : 20;
+  let odds = Math.floor((Math.floor((catchRate * multiplier) / 10) * (mon.maxhp * 3 - mon.hp * 2)) / (3 * mon.maxhp));
+  if (mon.status === 'slp' || mon.status === 'frz') odds *= 2;
+  else if (mon.status === 'psn' || mon.status === 'tox' || mon.status === 'brn' || mon.status === 'par') odds = Math.floor((odds * 15) / 10);
+  if (odds > 254) return true;
+  if (odds <= 0) return false;
+  const shakes = Math.floor(1048560 / Math.floor(Math.sqrt(Math.floor(Math.sqrt(Math.floor(16711680 / odds))))));
+  for (let i = 0; i < 4; i++) if (rng() * 65536 >= shakes) return false;
+  return true;
+}
+
+/** RUN from a wild mon, with the ROM's sums (battle_util.c TryRunFromBattle): a faster one always
+ *  gets away, a slower one on a byte's odds that grow with each try. */
+function runTakes(mine: number, theirs: number, tries: number, rng: () => number): boolean {
+  if (mine >= theirs) return true;
+  return ((Math.floor((mine * 128) / theirs) + tries * 30) & 0xff) > Math.floor(rng() * 256);
+}
+
 /** A fight, start to end, there and then, the same every time for the same seed and sides. */
 export function simulate(a: SimSide, b: SimSide, opts: SimOptions): SimOutcome {
   const run = simulation(a, b, opts);
@@ -429,14 +465,22 @@ export function* simulation(a: SimSide, b: SimSide, opts: SimOptions): Generator
     });
   }
 
-  let capped = false;
+  // An overworld's weather: it lasts (B_WEATHER_RAIN_PERMANENT), and the fight opens in it.
+  if (opts.weather) {
+    battle.field.setWeather(opts.weather, 'debug');
+    battle.field.weatherState.duration = 0;
+  }
+
+  let capped = false, caught = false, ran = false, runs = 0;
   const cap = opts.turnCap ?? TURN_CAP;
   let guard = 0;
+  const left = (a.balls ?? []).map((row) => ({ ...row }));
+  const thrown: number[] = [];
   yield; // the teams and the opening are a turn's work
-  while (!battle.ended) {
+  while (!battle.ended && !caught && !ran) {
     if (battle.turn > cap || ++guard > cap * 20) { capped = true; break; }
     let acted = false;
-    for (let n = 0; n < 2 && !battle.ended; n++) {
+    for (let n = 0; n < 2 && !battle.ended && !caught && !ran; n++) {
       const side = sides[n];
       const request = side.activeRequest;
       if (!request || request.wait || side.isChoiceDone()) continue;
@@ -445,6 +489,37 @@ export function* simulation(a: SimSide, b: SimSide, opts: SimOptions): Generator
         const next = pickNext(battle, side, side.foe.active[0]);
         if (!next || !battle.choose(side.id, `switch ${side.pokemon.indexOf(next) + 1}`)) battle.choose(side.id, 'default');
         continue;
+      }
+      // At a wild mon, what a trainer goes there for: a ball, once it is low enough to be worth one
+      // (a MASTER BALL at once); with none left, away, before it costs the match.
+      if (n === 0 && opts.wild) {
+        const me = side.active[0], wild = side.foe.active[0];
+        const ball = left[0];
+        if (ball && (ball.id === ITEM_MASTER_BALL || wild.hp / wild.maxhp <= opts.wild.catchAt)) {
+          if (--ball.n <= 0) left.shift();
+          thrown.push(ball.id);
+          battle.add('bag', side.id, BALL_NAME(ball.id));
+          if (ballTakes(ball.id, wild, opts.wild.catchRate, battle.turn <= 1, rng)) {
+            caught = true;
+            battle.add('say', `Gotcha! ${speciesName(b.party[0]?.species ?? 0)} was caught!`);
+            break;
+          }
+          battle.add('say', 'Oh, no! The POKeMON broke free!');
+          battle.skip.push(me);
+          battle.choose(side.id, 'default');
+          continue;
+        }
+        if (!ball) {
+          if (runTakes(me.storedStats.spe, wild.storedStats.spe, runs++, rng)) {
+            ran = true;
+            battle.add('say', 'Got away safely!');
+            break;
+          }
+          battle.add('say', "Can't escape!");
+          battle.skip.push(me);
+          battle.choose(side.id, 'default');
+          continue;
+        }
       }
       const lastHit = side.active[0]?.attackedBy?.at(-1)?.move;
       const d = decide(battle, side, request, bags[n], lastHit ? dex.moves.get(lastHit) : undefined, rng);
@@ -465,7 +540,7 @@ export function* simulation(a: SimSide, b: SimSide, opts: SimOptions): Generator
         if (!ok) battle.choose(side.id, 'default');
       } else if (!battle.choose(side.id, `move ${d.slot + 1}`)) battle.choose(side.id, 'default');
     }
-    if (!acted && !battle.ended) { capped = true; break; }
+    if (!acted && !battle.ended && !caught && !ran) { capped = true; break; }
     if (!battle.ended) yield;
   }
 
@@ -484,9 +559,9 @@ export function* simulation(a: SimSide, b: SimSide, opts: SimOptions): Generator
   const ra = report(0), rb = report(1);
   // Out of turns: judged on what's left, as a share of each team (Cam's rule is no coin flip, and
   // this is what the fight showed). Level, nobody won, and both walk on.
-  const left = (share: number[]) => share.reduce((t, x) => t + x, 0) / Math.max(1, share.length);
-  const byHp = left(ra.share) > left(rb.share) ? a.seat : left(rb.share) > left(ra.share) ? b.seat : 0;
-  const winner = capped ? byHp : battle.winner === 'A' ? a.seat : battle.winner === 'B' ? b.seat : 0;
+  const teamLeft = (share: number[]) => share.reduce((t, x) => t + x, 0) / Math.max(1, share.length);
+  const byHp = teamLeft(ra.share) > teamLeft(rb.share) ? a.seat : teamLeft(rb.share) > teamLeft(ra.share) ? b.seat : 0;
+  const winner = caught ? a.seat : ran ? 0 : capped ? byHp : battle.winner === 'A' ? a.seat : battle.winner === 'B' ? b.seat : 0;
 
   const logSide = (n: 0 | 1): LogSide => {
     const s = inputs[n];
@@ -507,10 +582,12 @@ export function* simulation(a: SimSide, b: SimSide, opts: SimOptions): Generator
     b: rb.row,
     shareA: ra.share,
     shareB: rb.share,
-    usedA: bags[0].filter((r) => r.used).map((r) => r.id),
+    usedA: [...bags[0].filter((r) => r.used).map((r) => r.id), ...thrown],
     usedB: bags[1].filter((r) => r.used).map((r) => r.id),
     turns: battle.turn,
     capped,
+    ...(caught ? { caught } : {}),
+    ...(ran ? { ran } : {}),
     log,
     unknown: said.unknown,
   };

@@ -309,7 +309,8 @@ test('a watched bot fight, start to champion: drawn by the page, from one log, o
           await host.waitForTimeout(250);
           const after = await spike(host, (s) => ({ who: document.getElementById('watch-who')!.textContent, dim: document.getElementById('battleview-dim')!.hidden, v: s.watch.showing ? `${s.watch.showing.from}:${s.watch.showing.f}` : null }));
           await host.locator('#watch-prev').click({ timeout: 2000 });
-          await expect.poll(() => spike(host, (s) => !!s.watch.showing), { timeout: 3000 }).toBe(true);
+          // Its own fight: NEXT can land on a trainer fighting too, whose view is still up a frame on.
+          await expect.poll(() => host.evaluate((key) => { const v = (window as any).__spike.watch.showing; return !!v && `${v.from}:${v.f}` === key; }, `${on.from}:${on.f}`), { timeout: 3000 }).toBe(true);
           const back = await spike(host, (s) => { const v = s.watch.showing; return { key: `${v.from}:${v.f}`, ms: v.view.snapshot().ms, side: v.side }; });
           moved = { before: on, after, back, gone: Date.now() - t };
           step(`moved ${JSON.stringify(moved)}`);
