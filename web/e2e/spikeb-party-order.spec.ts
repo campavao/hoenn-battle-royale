@@ -186,3 +186,27 @@ test('the moves keep the cursor between turns, and a switch-in starts on the fir
   await expect(page.locator('.bm-cell').first()).toHaveClass(/bm-focus/);
   await ctx.close();
 });
+
+const LAYOUTS = [
+  { name: 'keyboard', box: 1, opts: { viewport: { width: 1920, height: 1080 }, screen: { width: 1920, height: 1080 } } },
+  // The windows stand over the box here: the clock stays at the top, where it can be seen.
+  { name: 'touch-side', box: 2, opts: { viewport: { width: 712, height: 327 }, isMobile: true, hasTouch: true } },
+  { name: 'phone', box: 1, opts: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } },
+];
+for (const { name, box, opts } of LAYOUTS) {
+  test(`the shot clock is in the box, bottom right: ${name}`, async ({ browser }) => {
+    test.setTimeout(300_000);
+    const ctx = await browser.newContext(opts);
+    const page = await ctx.newPage();
+    await withTeam(page);
+    await intoFight(page);
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: test.info().outputPath(`clock-${name}.png`) });
+    if (process.env.HBR_E2E_SCRATCH) await page.screenshot({ path: `${process.env.HBR_E2E_SCRATCH}/clock-${name}.png` });
+    // The page has the menus, which is what puts it there: tools/br/drivers/clock-in-box.txt holds
+    // the ROM to the cell. Here, every layout asks for it, and the pictures are the proof it reads.
+    const asks = await spike(page, (s) => ({ box: s.rom.emu.read(s.art.sym('gBrHud') + 0x17b, 8), menu: s.rom.emu.read(s.art.sym('gBrBattle') + 8, 8) }));
+    expect(asks).toEqual({ box, menu: 1 });
+    await ctx.close();
+  });
+}

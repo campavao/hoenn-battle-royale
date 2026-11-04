@@ -178,7 +178,7 @@ struct BrHud
     /* 0x178 */ u8 boxFrames;   // frames the box has left, 0 = none
     /* 0x179 */ u8 winBox;      // window id, WINDOW_NONE while absent
     /* 0x17A */ u8 noCorner;    // PAGE WRITES: BR_HUD_PAGE_* -- the page draws the corner's lines itself
-    /* 0x17B */ u8 noBattleBox; // PAGE WRITES: 1 while the page draws the battle's menus itself (a phone)
+    /* 0x17B */ u8 noBattleBox; // PAGE WRITES: 1 while the page draws the battle's menus itself (a phone), 2 with them over the message box
     /* 0x17C */
 };
 

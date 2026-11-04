@@ -1,0 +1,59 @@
+# clock-in-box: under the page's windows (gBrHud.noBattleBox) the shot clock is in the message
+# box, bottom right, in both menus (Cam, 11-04: "we've freed up the right-hand side"); with the
+# ROM's own menus, at the top right as it was. It goes when the choice is made and leaves no
+# hole in the box. BG0's tilemap is at screen block 24 (battle_bg.c), 32 cells a row: the cell
+# at (25, 17) is 0x0600C472. The clock's first tile is CLK_BASEBLOCK, 0x110; B_WIN_MSG's there
+# is 0x90 + 2 * 26 + 23 = 0xDB. At the top of the action menu's scroll, (26, 20) is 0x0600C534,
+# in palette 5.
+wait 30
+# BR_BOOT_MAP | TESTMON, male, Route 102 (0, 17), x=20 y=9 -- the middle grass patch
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrHud+0x17B 1
+pokebytes gBrPatch+16 1A 00
+pokebytes gBrPatch+32 10 00
+poke u8 gBrPatch+4 1
+tap LEFT
+wait 4
+tap LEFT
+wait 600
+expectge u8 gBattlersCount 2
+wait 240
+shot action-in-box
+expect u8 gBrBattle+8 1
+expect u16 gBattle_BG0_Y 0
+expect u16 0x0600C472 0x0110
+# the page lets go mid-menu: the ROM's own menu, the clock at its top right, the box whole
+poke u8 gBrHud+0x17B 0
+wait 4
+shot action-rom-menu
+expect u16 gBattle_BG0_Y 160
+expect u16 0x0600C534 0x5110
+expect u16 0x0600C472 0x00DB
+# and taken again: back in the box
+poke u8 gBrHud+0x17B 1
+wait 4
+expect u16 gBattle_BG0_Y 0
+expect u16 0x0600C472 0x0110
+# the windows stand over the box (a phone on its side): at the top, the cell at (26, 0)
+poke u8 gBrHud+0x17B 2
+wait 4
+expect u16 gBattle_BG0_Y 0
+expect u16 0x0600C034 0x5110
+expect u16 0x0600C472 0x00DB
+poke u8 gBrHud+0x17B 1
+wait 4
+expect u16 0x0600C472 0x0110
+# FIGHT: the move menu has it there too
+tap A
+wait 30
+shot moves-in-box
+expect u8 gBrBattle+8 2
+expect u16 0x0600C472 0x0110
+# a move: the clock goes, and the box is whole under it
+tap A
+wait 8
+expect u8 gBrBattle+8 0
+expect u16 0x0600C472 0x00DB
+say clock in box ok

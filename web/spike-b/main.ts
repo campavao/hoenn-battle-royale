@@ -3112,7 +3112,8 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     // The battle's own FIGHT/BAG box comes off under the windows (br_battle.c
     // BrBattle_MenuBoxOff), as on a phone live; written each frame, as every battle
     // starts from the parked boot.
-    if (hudBase !== undefined) emu.write(hudBase + HUD.OFF_NO_BATTLE_BOX, up ? 1 : 0, 8);
+    // 2: the windows stand over the message box (a phone on its side), and its clock goes back up.
+    if (hudBase !== undefined) emu.write(hudBase + HUD.OFF_NO_BATTLE_BOX, !up ? 0 : menu.isShown && root.classList.contains('bm-lift') ? 2 : 1, 8);
     menu.update(up ? readBattleView(emu, sym, tables, menu.wantsBag) : null);
     const off = up && battleWantsNoPad(emu, sym, tables);
     if (off !== noPad) document.body.classList.toggle('battle-no-pad', (noPad = off));

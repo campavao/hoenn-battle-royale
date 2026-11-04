@@ -80,6 +80,12 @@ static EWRAM_DATA u16 sItemNoted = 0;
 #define CLK_WIDTH 3
 #define CLK_HEIGHT 2
 #define CLK_BASEBLOCK 0x0110  // free bg0 tiles above B_WIN_YESNO, only shown then
+// Under the page's windows (gBrHud.noBattleBox) it goes in the message box instead, bottom
+// right, on the prompt's own line (Cam, 11-04: "we've freed up the right-hand side"; at the
+// top it was hard to notice). Its tiles stand on B_WIN_MSG's, drawn in that window's colours.
+// Where the windows stand over the box (2: a phone on its side) the top is what can be seen.
+#define CLK_BOX_LEFT 25
+#define CLK_BOX_ROW 17
 
 static EWRAM_DATA u8 sClockWin = WINDOW_NONE;
 static EWRAM_DATA u8 sClockTop = 0xFF;    // tilemapTop it was built at, 0xFF none
@@ -104,7 +110,12 @@ void BrBattle_HideClock(void)
     }
     if (ClockLive())
     {
+        bool8 inBox = gWindows[sClockWin].window.tilemapLeft == CLK_BOX_LEFT;
+
         ClearWindowTilemap(sClockWin);
+        // What it stood on: left at tile 0 it was a hole in the box until the next line.
+        if (inBox)
+            PutWindowTilemap(B_WIN_MSG);
         CopyWindowToVram(sClockWin, COPYWIN_MAP);
         RemoveWindow(sClockWin);
     }
@@ -166,21 +177,23 @@ void BrBattle_DrawClock(void)
 void BrBattle_DrawClockSecs(u8 secs)
 {
     u8 top = gBattle_BG0_Y / 8;                // screen row 0 in bg0-tile space
+    // A choice's own clock; a spectator's replay has lines that run the box's whole width.
+    bool8 inBox = gBrHud.noBattleBox == 1 && gBrBattle.menu != BR_MENU_NONE;
     struct TextPrinterTemplate tp;
     u8 buf[4];
     u8 colors[3];
 
-    if (!ClockLive() || sClockTop != top)
+    if (!ClockLive() || sClockTop != top || (gWindows[sClockWin].window.tilemapLeft == CLK_BOX_LEFT) != inBox)
     {
         struct WindowTemplate t = {0};
 
         BrBattle_HideClock();
         t.bg = 0;
-        t.tilemapLeft = CLK_LEFT;
-        t.tilemapTop = top;
+        t.tilemapLeft = inBox ? CLK_BOX_LEFT : CLK_LEFT;
+        t.tilemapTop = inBox ? top + CLK_BOX_ROW : top;
         t.width = CLK_WIDTH;
         t.height = CLK_HEIGHT;
-        t.paletteNum = 5;   // the battle menu's own text palette, loaded and stable here
+        t.paletteNum = inBox ? 0 : 5;   // B_WIN_MSG's, or the battle menu's own text palette, loaded and stable here
         t.baseBlock = CLK_BASEBLOCK;
         sClockWin = AddWindow(&t);
         sClockTop = top;
@@ -199,21 +212,22 @@ void BrBattle_DrawClockSecs(u8 secs)
         BrWire_Send(BR_MSG_SHOT, msg, 2);
     }
 
-    FillWindowPixelBuffer(sClockWin, PIXEL_FILL(TEXT_COLOR_TRANSPARENT));
+    FillWindowPixelBuffer(sClockWin, inBox ? PIXEL_FILL(15) : PIXEL_FILL(TEXT_COLOR_TRANSPARENT));
     ConvertIntToDecimalStringN(buf, secs, STR_CONV_MODE_RIGHT_ALIGN, 2);
     tp.currentChar = buf;
     tp.windowId = sClockWin;
-    tp.fontId = FONT_SMALL;
-    tp.x = tp.currentX = 0;
-    tp.y = tp.currentY = 0;
+    tp.fontId = inBox ? FONT_NORMAL : FONT_SMALL;
+    tp.x = tp.currentX = inBox ? 11 : 0;
+    tp.y = tp.currentY = inBox ? 1 : 0;
     tp.letterSpacing = 0;
     tp.lineSpacing = 0;
     tp.unk = 0;
     // Palette 5's menu-text triple: dark digits with a light shadow, the healthbox
-    // number look, over a transparent fill so only the digits sit on the sky.
-    tp.fgColor = 13;
-    tp.bgColor = TEXT_COLOR_TRANSPARENT;
-    tp.shadowColor = 15;
+    // number look, over a transparent fill so only the digits sit on the sky. In the box,
+    // the prompt's own (battle_message.c sTextOnWindowsInfo_Normal).
+    tp.fgColor = inBox ? 1 : 13;
+    tp.bgColor = inBox ? 15 : TEXT_COLOR_TRANSPARENT;
+    tp.shadowColor = inBox ? 6 : 15;
     // AddTextPrinter colours the font's one shared table for these three, and a printer
     // still running draws its next glyph with whatever is in it: the prompt in the
     // message box on a phone (BrBattle_MenuBoxOff) came out red on teal after its first.

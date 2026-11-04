@@ -31,6 +31,9 @@
 BR_OFFSET(Main, callback2, 0x004)
 BR_OFFSET(Main, state, 0x438)
 
+// gBattleStruct: who stands in which slot of the party screen (web/spike-b/battleorder.ts).
+BR_OFFSET(BattleStruct, battlerPartyOrders, 96)
+
 // gSaveBlock1Ptr: where we stand (SB1_POS_X/Y), on which map (SB1_MAP_GROUP/NUM), and
 // the vars (SB1_VARS).
 BR_OFFSET(SaveBlock1, pos, 0x00)
