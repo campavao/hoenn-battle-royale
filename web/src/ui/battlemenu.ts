@@ -789,6 +789,7 @@ export class BattleMenu {
     };
     part('bm-m-card', MENU_W, MEMBER_CARD_H, (c) => this.paintCard(c));
     part('bm-m-held', MENU_W - 16, MEMBER_HELD_H, (c, redo) => this.paintHeld(c, redo));
+    this.heldWin = this.memberBox.lastElementChild as HTMLElement;
     const moves = doc.createElement('div');
     moves.className = 'bm-m-moves';
     this.memberBox.appendChild(moves);
@@ -839,6 +840,7 @@ export class BattleMenu {
   }
 
   private selectBtn: HTMLButtonElement | null = null;
+  private heldWin!: HTMLElement;
   /** Which of the four the forget window's head is telling of; null is the new move. */
   private forgetShown: number | null = null;
   private forgetMoved = false;
@@ -1075,17 +1077,20 @@ export class BattleMenu {
   }
 
   private paintCard(c: EmeraldCanvas): void {
-    this.drawCard(c, this.team[this.memberAt]);
+    // No level: they're all at the rung (Cam, 11-04: "we don't need to show level five"). SUMMARY has it.
+    this.drawCard(c, this.team[this.memberAt], false);
   }
 
-  private drawCard(c: EmeraldCanvas, m: PartyMember | null | undefined): void {
+  private drawCard(c: EmeraldCanvas, m: PartyMember | null | undefined, level = true): void {
     c.drawFrame({ x: 0, y: 0, w: MENU_W, h: MEMBER_CARD_H });
     if (!m) return;
     const icon = this.deps.firstMoves?.icon(m.species);
     if (icon) c.drawImageTo(icon, 0, 0, 32, 32, 10, 12, 32, 32);
     c.drawText(fitText(m.name, 120), 50, 8, TEXT_DARK);
-    const lv = `Lv${m.level}`;
-    c.drawText(lv, MENU_W - 10 - measure(lv), 8, TEXT_GRAY);
+    if (level) {
+      const lv = `Lv${m.level}`;
+      c.drawText(lv, MENU_W - 10 - measure(lv), 8, TEXT_GRAY);
+    }
     c.drawText(fitText(m.ability, MENU_W - 60), 50, 22, TEXT_BLUE);
     drawHp(c, 50, 40, 110, m.maxHp ? m.hp / m.maxHp : 0);
     const hp = `${m.hp}/${m.maxHp}`;
@@ -1095,9 +1100,9 @@ export class BattleMenu {
   private paintHeld(c: EmeraldCanvas, redo: () => void): void {
     const m = this.team[this.memberAt];
     c.drawFrame({ x: 0, y: 0, w: MENU_W - 16, h: MEMBER_HELD_H });
-    if (!m) return;
-    if (m.item) drawIcon(c, m.item, 8, 4, redo);
-    c.drawText(m.item ? m.itemName : 'Holds nothing', m.item ? 36 : 12, 9, m.item ? TEXT_DARK : TEXT_GRAY);
+    if (!m?.item) return;
+    drawIcon(c, m.item, 8, 4, redo);
+    c.drawText(m.itemName, 36, 9, TEXT_DARK);
   }
 
   /** One of the four moves a mon could lose (for a TM) or restore PP to (an ETHER): its name,
@@ -1157,7 +1162,7 @@ export class BattleMenu {
     const info = slot && this.deps.rom ? moveInfo(this.deps.rom, slot.id) : null;
     if (!slot || !info) { c.drawTextCentred('-', CELL_W / 2, 20, TEXT_GRAY); return; }
     c.drawText(fitText(info.name, CELL_W - 16), 8, 7, TEXT_DARK);
-    c.drawText(`PP ${slot.pp}/${slot.maxPp}`, 8, 21, slot.pp === 0 ? TEXT_RED : TEXT_GRAY);
+    c.drawText(`PP ${slot.pp}/${slot.maxPp}`, 8, 21, slot.pp === 0 ? TEXT_RED : TEXT_DARK);
     if (this.view) drawEffect(c, moveEffect(this.deps.rom, info, this.view.foe.types), '', 6, 37, CELL_W - 12);
   }
 
@@ -1779,6 +1784,8 @@ export class BattleMenu {
     if (member) {
       const key = `${this.memberAt}|${JSON.stringify(this.team[this.memberAt])}|${v?.foe.types}|${!!this.fieldHome}`;
       for (const { w } of this.memberWins) w.show(key);
+      // Holding nothing isn't worth a window (Cam, 11-04).
+      this.heldWin.hidden = !this.team[this.memberAt]?.item;
       this.selectBtn?.setAttribute('aria-disabled', String(!this.canSelect()));
     }
     this.cells.forEach(({ b, w }, i) => {
@@ -1831,7 +1838,7 @@ export class BattleMenu {
    *  above it: Cam, 11-02, iPhone 13 mini) stand on the bottom of the glass instead, over the
    *  picture, so SELECT and BACK can always be reached. Measured only when something changed. */
   private fitGlass(): void {
-    const key = `${this.mode}|${this.room}|${this.scale}|${this.useHead.hidden}|${!!this.releasing}|${this.shown}|${innerHeight}`;
+    const key = `${this.mode}|${this.room}|${this.scale}|${this.useHead.hidden}|${!!this.releasing}|${this.shown}|${innerHeight}|${this.heldWin.hidden}`;
     if (key === this.fitKey || !this.shown) return;
     this.fitKey = key;
     const root = this.deps.root;

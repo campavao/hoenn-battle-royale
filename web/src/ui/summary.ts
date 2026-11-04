@@ -332,11 +332,11 @@ export class SummaryWindow implements PageWindow {
     c.drawText(fitText(name || m.ability, W - 16), 8, 5, TEXT_BLUE);
     const words = m.abilityNum === undefined && ids[1] ? '' : abilityDesc(rom, one || ids[0]);
     wrapText(words, W - 16).slice(0, 2).forEach((line, i) => c.drawText(line, 8, 19 + i * 13, TEXT_DARK));
+    // Holding nothing goes unsaid (Cam, 11-04).
+    if (!m.item) return;
     c.fillRect({ x: 8, y: 46, w: W - 16, h: 1 }, '#d0d0c8');
-    if (m.item) {
-      drawItemFitted(c, m.item, 18, 58, 15, redo);
-      c.drawText(fitText(m.itemName, W - 40), 32, 51, TEXT_DARK);
-    } else c.drawText('Holds nothing', 8, 51, TEXT_GRAY);
+    drawItemFitted(c, m.item, 18, 58, 15, redo);
+    c.drawText(fitText(m.itemName, W - 40), 32, 51, TEXT_DARK);
   }
 
   private paintMove(c: EmeraldCanvas, i: number, redo: () => void): void {
