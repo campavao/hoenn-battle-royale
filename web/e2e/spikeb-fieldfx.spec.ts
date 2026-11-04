@@ -514,7 +514,7 @@ test.describe('the ACRO BIKE on its own ground', () => {
     await expect(page.locator('.bm-bag-head')).toBeHidden();
   };
 
-  test('hops up the rocks of Jagged Pass, B held, where a walker and the MACH BIKE stop', async ({ browser }) => {
+  test('hops up the rocks of Jagged Pass, B held, where a walker and the MACH BIKE stop', async ({ browser }, testInfo) => {
     test.setTimeout(240_000);
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const page = await ctx.newPage();
@@ -527,6 +527,15 @@ test.describe('the ACRO BIKE on its own ground', () => {
     await hold(page, ['ArrowUp'], () => page.waitForTimeout(700));
     expect(await rider(page)).toMatchObject({ x: 22, y: 19, bike: false });
     await shot(page, 'acro-rock-foot');
+    // Beside the rock, the quick action is the ACRO BIKE (Cam, 11-04), with its own picture.
+    await page.waitForTimeout(300);
+    await page.locator('#hud-ctx').screenshot({ path: testInfo.outputPath('acro-near-button.png') });
+    await page.keyboard.press('Shift', { delay: 120 });
+    await expect.poll(async () => (await rider(page)).bike, { timeout: 5_000 }).toBe(true);
+    expect((await rider(page)).acro).toBe(true);
+    await page.waitForTimeout(300);
+    await page.keyboard.press('Shift', { delay: 120 });
+    await expect.poll(async () => (await rider(page)).bike, { timeout: 5_000 }).toBe(false);
     // The MACH BIKE: a wall, B or no B.
     await useBike(page, 259);
     await expect.poll(async () => (await rider(page)).bike, { timeout: 5_000 }).toBe(true);

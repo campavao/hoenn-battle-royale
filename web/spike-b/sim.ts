@@ -178,6 +178,20 @@ export function tick(m: Mover, keys: Keys, step: StepFn): void {
 /** bike.c's sMachBikeSpeedCallbacks: PlayerWalkNormal, PlayerWalkFast, PlayerWalkFaster. */
 const BIKE_PX = [1, 2, 4];
 
+/** How close to a rail or a rock SELECT reaches for the ACRO BIKE, in tiles. */
+const ACRO_NEAR = 2;
+/** The ACRO BIKE's ground is at hand: SELECT and the quick action offer that bike here, unless
+ *  the MACH BIKE was USEd off the BAG (Cam, 11-04: "also what's on the smart action button when
+ *  near it"). */
+export function acroNear(step: StepFn, s: Spot): boolean {
+  for (let dy = -ACRO_NEAR; dy <= ACRO_NEAR; dy++) {
+    for (let dx = -ACRO_NEAR; dx <= ACRO_NEAR; dx++) {
+      if (step.acroAt?.({ map: s.map, x: s.x + dx, y: s.y + dy })) return true;
+    }
+  }
+  return false;
+}
+
 function begin(m: Mover, keys: Keys, step: StepFn): void {
   m.prev = m.spot;
   // SELECT, the registered bike (GetOnOffBike): on where cycling is allowed, off anywhere but
@@ -188,7 +202,7 @@ function begin(m: Mover, keys: Keys, step: StepFn): void {
   if (press && (m.bike ? under < ACRO_ISO_V : step.cycling?.(m.spot) || step.acroCycling?.(m.spot))) {
     m.bike = !m.bike;
     // The Zone's one bike, and the only one that goes anywhere from its own ground.
-    if (m.bike) m.acro = !step.cycling?.(m.spot) || under !== 0 || !!step.likeAcro;
+    if (m.bike) m.acro = !step.cycling?.(m.spot) || under !== 0 || (step.likeAcro ?? acroNear(step, m.spot));
     bikeClear(m);
     // PlayerAvatarTransition_AcroBike, Bike_HandleBumpySlopeJump: up on its back wheel already.
     if (m.bike && m.acro && under === ACRO_BUMPY) m.acroState = ACRO_WHEELIE;

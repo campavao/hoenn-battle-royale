@@ -319,3 +319,123 @@ test('rooms at 1080p, on a phone, and on a watched trainer\'s page', async ({ br
   await shot(page, 'room-watched');
   await watch.close();
 });
+
+// ---- 2026-11-04: what is drawn is what you can walk on ------------------------------------
+
+/** How much of `map`'s row range isn't drawn by `map`, as the field shows it: pixels against the
+ *  map's own ground and top layer. */
+async function notItsOwn(page: Page, map: string, rows: [number, number]): Promise<{ wrong: number; of: number }> {
+  return page.evaluate(([map, r0, r1]) => {
+    const s = (window as unknown as { __spike: { placed: Map<string, P & { ground?: HTMLCanvasElement; cover?: HTMLCanvasElement }>; zoom: number; cam: { x: number; y: number } } }).__spike;
+    const p = s.placed.get(map as string)!, cv = document.getElementById('world') as HTMLCanvasElement;
+    const dpr = devicePixelRatio || 1, k = s.zoom < dpr ? dpr : Math.max(1, s.zoom), z = s.zoom / k;
+    if (z !== 1) throw new Error(`read at one canvas pixel to a world pixel, not ${z}`);
+    const ox = Math.round(cv.width / 2 - s.cam.x), oy = Math.round(cv.height / 2 - s.cam.y);
+    const w = p.m.w * 16, h = ((r1 as number) - (r0 as number)) * 16, y0 = (r0 as number) * 16;
+    const own = document.createElement('canvas');
+    own.width = w; own.height = h;
+    const c = own.getContext('2d')!;
+    c.drawImage(p.ground!, 0, -y0);
+    c.drawImage(p.cover!, 0, -y0);
+    const a = c.getImageData(0, 0, w, h).data;
+    const b = cv.getContext('2d')!.getImageData(ox + p.gx * 16, oy + p.gy * 16 + y0, w, h).data;
+    let wrong = 0;
+    for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) wrong += 1;
+    return { wrong, of: w * h };
+  }, [map, rows[0], rows[1]] as const);
+}
+
+test('Verdanturf is drawn by Verdanturf: the Rusturf mouth and the roofs in its top rows', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await inMatch(page);
+  // A cell down, so my own head isn't on the rows it reads.
+  await standAt(page, 'MAP_VERDANTURF_TOWN', 8, 3);
+  await page.evaluate(() => { (window as unknown as { __spike: S }).__spike.zoom = 1; });
+  await page.waitForTimeout(600);
+  const seen = await notItsOwn(page, 'MAP_VERDANTURF_TOWN', [0, 2]);
+  // Below the cave mouth (8, 1), a cell a trainer can stand on and walk up from. Cam, 11-04: "the
+  // cave entrance it looks completely blocked but I can still walk up that way".
+  await standAt(page, 'MAP_VERDANTURF_TOWN', 8, 2);
+  await page.evaluate(() => { (window as unknown as { __spike: S }).__spike.zoom = 3; });
+  await page.waitForTimeout(600);
+  await shot(page, 'verdanturf');
+  expect(seen.wrong, `of ${seen.of} pixels of its two top rows`).toBe(0);
+});
+
+// Not a check: HBR_ARTBOARD=<dir> photographs the field, a window at a time at one canvas pixel to a
+// world pixel, for the page Cam marks up (Cam, 11-04: "have the map in a big kind of like ... artboard
+// where I can like click and drag and like highlight areas"). tools/br/world-artboard.py stitches it.
+test('the whole outdoor world, for the artboard', async ({ page }) => {
+  const dir = process.env.HBR_ARTBOARD;
+  test.skip(!dir, 'HBR_ARTBOARD=<dir> asks for it');
+  test.setTimeout(900_000);
+  const W = 1600, H = 1000, MARGIN = 16 * 16;
+  await page.setViewportSize({ width: W, height: H });
+  await inMatch(page);
+  type Q = P & { door?: unknown; ground?: HTMLCanvasElement; cover?: HTMLCanvasElement; m: { id: string; w: number; h: number; outdoor?: boolean; group: number; num: number; grid: string } };
+  const meta = await page.evaluate(() => {
+    const s = (window as unknown as { __spike: { placed: Map<string, Q>; link: { me: number; room: any } } }).__spike, room = s.link.room;
+    // The field alone: me off in the Zone. A dealt ball isn't the map's.
+    const a = room.actor(s.link.me), spot = { map: 'MAP_SAFARI_ZONE_SOUTH', x: 20, y: 20 };
+    a.m = { ...a.m, spot, prev: spot, action: null, px: 0, py: 0 };
+    for (const g of room.ground().values()) if (!g.gift) room.picked.set(g.key, 0);
+    return {
+      mainland: [...room.places.keys()] as string[],
+      maps: [...s.placed.values()].map((p) => ({ id: p.m.id, gx: p.gx, gy: p.gy, w: p.m.w, h: p.m.h, group: p.m.group, num: p.m.num, outdoor: !!p.m.outdoor, grid: p.m.grid })),
+    };
+  });
+  // Free the camera: a spectator's drag lets go of whoever it follows.
+  await page.evaluate(() => (window as unknown as { __spike: { toggleSpectate(): void } }).__spike.toggleSpectate());
+  await page.mouse.move(W / 2, H / 3);
+  await page.mouse.down();
+  await page.mouse.move(W / 2 + 8, H / 3);
+  await page.mouse.up();
+  await page.evaluate(() => { (window as unknown as { __spike: S }).__spike.zoom = 1; });
+  const on = new Set(meta.mainland);
+  const rect = meta.maps.filter((m) => on.has(m.id));
+  const x0 = Math.min(...rect.map((m) => m.gx)) * 16 - MARGIN, y0 = Math.min(...rect.map((m) => m.gy)) * 16 - MARGIN;
+  const x1 = Math.max(...rect.map((m) => m.gx + m.w)) * 16 + MARGIN, y1 = Math.max(...rect.map((m) => m.gy + m.h)) * 16 + MARGIN;
+  fs.mkdirSync(dir!, { recursive: true });
+  const save = (file: string, url: string) => fs.writeFileSync(path.join(dir!, file), Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'));
+  const tiles: { x: number; y: number; file: string }[] = [];
+  for (let y = y0; y < y1; y += H) {
+    for (let x = x0; x < x1; x += W) {
+      const url = await page.evaluate(async ([x, y, W, H]) => {
+        const s = (window as unknown as { __spike: S }).__spike;
+        s.cam.x = x + W / 2;
+        s.cam.y = y + H / 2;
+        await new Promise((r) => setTimeout(r, 1300));
+        // Every window at the same look of the sea, or the windows show as squares.
+        await new Promise<void>((done) => {
+          const tick = () => { if ((s as unknown as { animStep: number }).animStep === 0) done(); else requestAnimationFrame(tick); };
+          tick();
+        });
+        return (document.getElementById('world') as HTMLCanvasElement).toDataURL('image/png');
+      }, [x, y, W, H] as const);
+      const file = `tile_${x}_${y}.png`;
+      save(file, url);
+      tiles.push({ x, y, file });
+    }
+  }
+  // The outdoors that don't lie on the plane: the Zone, the islands, the towns and peaks a warp reaches.
+  const apart = meta.maps.filter((m) => m.outdoor && !on.has(m.id) && m.w > 1);
+  const pics: { id: string; file: string }[] = [];
+  for (const m of apart) {
+    const url = await page.evaluate((id) => {
+      const s = (window as unknown as { __spike: { placed: Map<string, Q>; art: { map(g: number, n: number, over: Map<number, number>): { ground: HTMLCanvasElement; cover: HTMLCanvasElement } } } }).__spike;
+      const p = s.placed.get(id)!;
+      const a = p.ground ? { ground: p.ground, cover: p.cover! } : s.art.map(p.m.group, p.m.num, new Map());
+      const c = document.createElement('canvas');
+      c.width = a.ground.width; c.height = a.ground.height;
+      const g = c.getContext('2d')!;
+      g.drawImage(a.ground, 0, 0);
+      g.drawImage(a.cover, 0, 0);
+      return c.toDataURL('image/png');
+    }, m.id);
+    const file = `apart_${m.id}.png`;
+    save(file, url);
+    pics.push({ id: m.id, file });
+  }
+  fs.writeFileSync(path.join(dir!, 'meta.json'), JSON.stringify({ x0, y0, x1, y1, W, H, tiles, pics, mainland: meta.mainland, maps: meta.maps.filter((m) => on.has(m.id) || pics.some((q) => q.id === m.id)), everything: meta.maps.map(({ id, gx, gy, w, h }) => ({ id, gx, gy, w, h })) }));
+});

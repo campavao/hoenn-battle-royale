@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { arrived, BAG_AT, BAG_LEN, fameTeam, fieldOf, healed, partySettled, partyWhole, rekey, spentLine, spillOf, spillShows, tallySince, teamMembers, teamOf, withHeld, withMoney, withMove } from './carry';
+import { arrived, BAG_AT, BAG_LEN, beatenBy, drainFavourites, emptyFavourites, fameTeam, fieldOf, healed, partySettled, partyWhole, rekey, spentLine, spillOf, spillShows, tallySince, teamMembers, teamOf, withFavourites, withHeld, withMoney, withMove } from './carry';
+import { favourite, TALLY_BYTES } from '../src/match/tally';
 import HMS from '../src/data/hms.json';
 
 describe('rekey', () => {
@@ -186,6 +187,49 @@ describe('tallySince', () => {
     const now = { steps: 0, won: 5, caught: 1, items: 0, mons: { 277: 9, 280: 2 }, moves: { 1: 5, 33: 6 } };
     expect(tallySince(from, now, 40)).toEqual({ won: 3, caught: 0, items: 0, steps: 40, trainers: 0, duelsWon: 0, took: 0, mons: { 277: 4, 280: 2 }, moves: { 33: 6 } });
     expect(tallySince(null, null, 7)).toMatchObject({ won: 0, steps: 7, mons: {} });
+  });
+  it('and what the room saw of the round, from its fallen: Cam, 11-04, BEATEN 4 and TRAINERS BEATEN 0', () => {
+    const fallen = [
+      { by: 'CAM', bot: true }, { by: 'CAM', bot: true }, { by: 'CAM' }, { by: 'MAY', bot: true }, { by: '', bot: true }, { by: 'CAM', bot: true, wild: true },
+    ];
+    expect(beatenBy(fallen, 'CAM')).toEqual({ trainers: 3, duelsWon: 1 });
+    expect(tallySince(null, null, 0, { ...beatenBy(fallen, 'CAM'), took: 5 })).toMatchObject({ trainers: 3, duelsWon: 1, took: 5 });
+    expect(beatenBy(fallen, ''), 'the fog is nobody').toEqual({ trainers: 0, duelsWon: 0 });
+  });
+});
+
+describe('the favourites past what the ROM has room for', () => {
+  /** gBrTally (br_tally.h) with these in its tables: 6 species at +8 and +36, 8 moves at +20 and +42. */
+  const table = (mons: [number, number][], moves: [number, number][]) => {
+    const u = new Uint8Array(TALLY_BYTES), v = new DataView(u.buffer);
+    v.setUint16(2, 3, true); // won: not the tables', and stays
+    mons.forEach(([id, n], i) => { v.setUint16(8 + i * 2, id, true); u[36 + i] = n; });
+    moves.forEach(([id, n], i) => { v.setUint16(20 + i * 2, id, true); u[42 + i] = n; });
+    return u;
+  };
+
+  // Cam, 11-04: "FAVORITE NOSEPASS, TOP MOVE TACKLE. It doesn't feel true": BrTally_Move keeps the
+  // first eight moves and six species it meets, on a page's whole boot, and drops the rest.
+  it('each battle goes into the page\'s own count and the ROM\'s tables start again, so no move is ever dropped', () => {
+    const sum = emptyFavourites();
+    const early = table([[299, 30]], [[33, 30], [1, 1], [2, 1], [3, 1], [4, 1], [5, 1], [6, 1], [7, 1]]);
+    const left = drainFavourites(early, sum);
+    expect(left).not.toBe(early);
+    expect(early[36], 'what was read is not written on').toBe(30);
+    expect([...left.slice(8)].every((b) => b === 0), 'empty for the next battle').toBe(true);
+    expect(left[2], 'and the rest of the tally goes on').toBe(3);
+    // Four more battles of a mon and a move the full tables had no room for.
+    for (let i = 0; i < 4; i++) drainFavourites(table([[183, 10]], [[94, 10]]), sum);
+    expect(sum).toEqual({ mons: { 299: 30, 183: 40 }, moves: { 33: 30, 1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 1, 94: 40 } });
+    expect(favourite(sum.mons)).toBe(183);
+    expect(favourite(sum.moves)).toBe(94);
+  });
+
+  it('the counts as the page says them: what was drained and what the last battle has not yet', () => {
+    const sum = { mons: { 299: 30 }, moves: { 33: 30 } };
+    const t = withFavourites({ steps: 0, won: 1, caught: 0, items: 0, mons: { 299: 2, 183: 4 }, moves: { 94: 4 } }, sum);
+    expect(t).toMatchObject({ won: 1, mons: { 299: 32, 183: 4 }, moves: { 33: 30, 94: 4 } });
+    expect(sum.mons[299], 'not added to itself').toBe(30);
   });
 });
 

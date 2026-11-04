@@ -29,7 +29,7 @@ import { FADE_COLOR_WORD, FADE_Y_WORD, fadeOf } from '../src/field';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 import { CATCH_UP_SPEED, seatBstart, spectatePace } from '../src/match/spectate';
 import { BAG_POSITION_POCKET } from '../src/ui/bag';
-import { withHeld, withMove } from './carry';
+import { drainFavourites, emptyFavourites, withFavourites, withHeld, withMove } from './carry';
 import type { SpMsg } from './shared/wire';
 import { readTally, type MatchTally } from '../src/match/tally';
 import type { FameMon } from '../src/ui/results';
@@ -650,6 +650,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
   // is what they had at the end, not the bag a loss puts the team back to (as BrMatch_Out
   // reads it, after the battle).
   let last: ReturnType<typeof kept> | null = null;
+  // MY STATS' favourites, out of gBrTally's small tables after every battle (carry.ts drainFavourites).
+  let favourites = emptyFavourites();
   // A screen the page opened (a menu row, a bag's team) asked to close.
   let leaving = false;
   const onField = () => ((emu.read(mainAt + 4, 32) & ~1) >>> 0) === overworldCb;
@@ -1042,6 +1044,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       // how it came in (the ring and elimination are the match's, later).
       await partyDone();
       const now = kept();
+      if (!Number.isNaN(tallyAt)) {
+        now.tally = drainFavourites(now.tally, favourites);
+        emu.bytes(tallyAt, TALLY_LEN).set(now.tally);
+      }
       last = now;
       if (result.outcome !== LOST && result.outcome !== DREW) carried = now;
       // The counts stand either way: a lost battle was still fought (MY STATS).
@@ -1157,7 +1163,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     tally() {
       // The trainer's own counts, as the last battle left them (the ROM sits in the boot
       // snapshot between battles).
-      return Number.isNaN(tallyAt) ? null : tallyOf((carried ?? kept()).tally);
+      return Number.isNaN(tallyAt) ? null : withFavourites(tallyOf((carried ?? kept()).tally), favourites);
     },
     bleed() {
       return inTurn(async () => {
