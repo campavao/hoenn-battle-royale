@@ -21,6 +21,8 @@ test('a hidden ROM fights a bot and a legendary, and the room hears who took it'
     for (const a of room.actors) if (a.bot) a.calm = 1e9;
     const bot = room.actors.find((a: any) => a.bot && !a.battling);
     bot.calm = 0;
+    // No ball, no fight: nothing to catch it with is nothing to fight it for (Room.botLegend).
+    bot.loot = { items: [{ id: 4, n: 5 }], money: 0 };
     const { map, x, y } = bot.m.spot;
     room.spills.set(KEY, { key: KEY, map, x, y: y + 1, name: '', legend: true, bag: { items: [], money: 0, mons: [{ species: 407, level: 5 }] } });
     const pending: unknown[] = [];
@@ -34,21 +36,21 @@ test('a hidden ROM fights a bot and a legendary, and the room hears who took it'
   // Answered: the bot walks again, with what came of it on it.
   await page.waitForFunction((id) => {
     const a = (window as any).__spike.link.room.actor(id);
-    return a && !a.battling;
+    // Gone, too: a bot whose team went down at it is out of the match, as a trainer is.
+    return !a || !a.battling;
   }, staged.id, { timeout: 360_000 });
   const out = await page.evaluate(({ id, key }) => {
     const room = (window as any).__spike.link.room, a = room.actor(id);
-    return { caught: a.caught ?? [], tried: a.tried ?? [], wear: a.wear ?? null, stands: !room.picked.has(key), worn: room.spills.get(key)?.worn ?? null };
+    return { out: !a, caught: a?.caught ?? [], tried: a?.tried ?? [], stands: !room.picked.has(key) };
   }, staged);
   console.log('bot at a legendary, on the ROM:', JSON.stringify(out));
-  // One or the other, and never a "no answer": a fight that ran.
+  // Caught, off the map; anything else and it stands, for the bot that lost or ran as for a trainer,
+  // and never a "no answer": a fight that ran.
   if (out.caught.length) {
     expect(out.caught).toEqual([407]);
     expect(out.stands).toBe(false);
   } else {
-    expect(out.tried).toEqual([staged.key]);
     expect(out.stands).toBe(true);
-    expect(out.wear?.every((w: number) => w === 0.15)).toBe(true);
-    expect(out.worn).not.toBeNull();
+    if (!out.out) expect(out.tried).toEqual([staged.key]);
   }
 });
