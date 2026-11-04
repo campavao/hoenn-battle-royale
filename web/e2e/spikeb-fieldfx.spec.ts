@@ -274,6 +274,8 @@ test('in the fog a trainer goes purple, as poison does, me and the others', asyn
     for (const [id, p] of room.places) for (let y = 3; y < (s.placed.get(id)?.m.h ?? 0) - 3; y++) for (let x = 3; x < s.placed.get(id).m.w - 3; x++) {
       if (!s.placed.get(id).m.outdoor || room.world.cell(id, x, y) || room.world.cell(id, x + 2, y) || room.world.cell(id, x - 2, y)) continue;
       if (Math.hypot(p.gx + x - ring.cx, p.gy + y - ring.cy) < ring.r + 3) continue;
+      // Off a marked spot: a bot's step on one is a fight (Room.botOnPatch).
+      if (room.patchesOn(id).some((q: any) => q.y === y && q.x === x + 2)) continue;
       const bot = room.actors.find((o: any) => o.bot && !o.battling);
       const spot = { map: id, x: x + 2, y };
       bot.m = { ...bot.m, spot, prev: spot, action: null, px: 0, py: 0 };
@@ -285,7 +287,7 @@ test('in the fog a trainer goes purple, as poison does, me and the others', asyn
   await stand(page, at.map, at.x, at.y, 1);
   await page.waitForTimeout(500);
   // Frame by frame over two pulses: how much of each sprite is the purple of RGB(30, 0, 31).
-  const purple = await page.evaluate(([map, x, y, bx]) => new Promise<{ me: number; bot: number; shots: number }>((done) => {
+  const purple = await page.evaluate(([map, x, y, bx, botId]) => new Promise<{ me: number; bot: number; shots: number }>((done) => {
     const s = (window as any).__spike, canvas = document.getElementById('world') as HTMLCanvasElement;
     const c = canvas.getContext('2d')!;
     let n = 0, me = 0, bot = 0;
@@ -299,12 +301,15 @@ test('in the fog a trainer goes purple, as poison does, me and the others', asyn
       return m;
     };
     const look = () => {
+      // Kept on its cell: a bot in the fog walks for the way out, and calm doesn't hold it.
+      const b = s.link.room.actor(botId), spot = { map, x: bx, y };
+      if (b) b.m = { ...b.m, spot, prev: spot, action: null, px: 0, py: 0 };
       me = Math.max(me, count(x as number));
       bot = Math.max(bot, count(bx as number));
       if (++n < 200) requestAnimationFrame(look); else done({ me, bot, shots: n });
     };
     requestAnimationFrame(look);
-  }), [at.map, at.x, at.y, at.x + 2] as const);
+  }), [at.map, at.x, at.y, at.x + 2, at.bot] as const);
   await shot(page, 'poison');
   expect(purple.me, 'me').toBeGreaterThan(10);
   expect(purple.bot, 'the bot beside me').toBeGreaterThan(10);
