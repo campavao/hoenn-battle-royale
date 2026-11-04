@@ -618,7 +618,10 @@ test.describe('the ACRO BIKE on its own ground', () => {
     await page.waitForTimeout(200);
     await hold(page, ['ArrowRight'], () => at(page, 26, 3));
     await page.waitForTimeout(300);
-    expect(await rider(page)).toMatchObject({ map: 'MAP_SAFARI_ZONE_SOUTH', x: 26, y: 3, bike: true, acro: true });
+    // On along the rail, a step further if the key comes up late (once on CI, 27).
+    const across = await rider(page);
+    expect(across).toMatchObject({ map: 'MAP_SAFARI_ZONE_SOUTH', y: 3, bike: true, acro: true });
+    expect(across.x).toBeGreaterThanOrEqual(26);
     await shot(page, 'acro-rail-across');
     await ctx.close();
   });

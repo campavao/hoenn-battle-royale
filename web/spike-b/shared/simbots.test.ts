@@ -262,7 +262,7 @@ describe('Room.simBots', () => {
   });
 
   it('a solo page: the log reaches its own watcher once, where the fight stands, and the bots stay busy for it', async () => {
-    const link = soloLink(MAPS, PATCHES, new WorldIndex(MAPS).world, 99, { bots: 12, simBots: true, ringFrames: 7200, openingFrames: 1 });
+    const link = soloLink(MAPS, PATCHES, new WorldIndex(MAPS).world, 99, { bots: 12, simBots: true, ringFrames: 7200, openingFrames: 0 });
     const room = link.room;
     await import('./battlesim');
     const heard: { from: number; f: number; events: BattleEvent[]; ago?: number }[] = [];

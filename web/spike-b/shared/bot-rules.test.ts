@@ -11,7 +11,7 @@ import { gradeOf } from '../../src/bots/roster';
 import { WEATHER_DOWNPOUR } from '../../src/match/events';
 import worldJson from '../data/world.json';
 import patchJson from '../../src/data/patches.json';
-import { HURT, botKeys, health, type Brain } from './bots';
+import { HURT, botKeys, health, patchGoal, type Brain } from './bots';
 import { Host, play } from './host';
 import { simulate } from './battlesim';
 import type { BattleEvent } from './battlelog';
@@ -258,6 +258,61 @@ describe('a bot at a legendary', () => {
 // Cam, 11-04: "an actual player when they stepped over a tile would initiate a battle and then leaving
 // that tile would leave it no longer with a wild Pokemon, that's how a bot should do it too ... if we
 // don't treat bots like normal players then we run into issues that we don't even know about."
+describe('a bot that needs Pokemon (Cam, 11-04: "they should go for wild patches, like a trainer would")', () => {
+  const stage = (loot: { id: number; n: number }[] = [{ id: 4, n: 5 }]) => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.ringPhase = room.opening = 600;
+    while (room.ring().safari) room.step(new Map());
+    const p = room.patchesOn('MAP_ROUTE101')[0];
+    room.apply({ c: 'join', id: 1, bot: true, name: 'ONE', skin: 4, spot: { map: 'MAP_ROUTE101', x: p.x, y: p.y }, facing: 1 });
+    const a = room.actor(1)!;
+    a.loot = { items: loot, money: 0 };
+    return { room, a, brain: { rng: 1 } as unknown as Brain };
+  };
+
+  it('goes for marked grass on its map with a ball and room on its team, not the spot it stands on', () => {
+    const { room, a, brain } = stage();
+    const to = patchGoal(room, a, brain)!;
+    expect(to.map).toBe('MAP_ROUTE101');
+    expect(room.patchesOn('MAP_ROUTE101').some((q) => q.x === to.x && q.y === to.y)).toBe(true);
+    expect(sameSpot(to, a.m.spot)).toBe(false);
+  });
+
+  it('walks there and fights what lives on it', () => {
+    const { room, a, brain } = stage();
+    room.simBots = true;
+    Object.assign(brain, { wait: 0, dir: 1 });
+    const fights: ReturnType<typeof room.step> = [];
+    for (let f = 0; f < 60 * 60 && !fights.length; f++) { a.keys = botKeys(room, a, brain); fights.push(...room.step().filter((e) => e.type === 'bots')); }
+    expect(fights.length).toBe(1);
+    expect(room.patchesOn(a.m.spot.map).some((q) => q.x === a.m.spot.x && q.y === a.m.spot.y)).toBe(true);
+  });
+
+  it('not with nothing to throw: a wild fight is for a catch', () => {
+    const { room, a, brain } = stage([]);
+    expect(patchGoal(room, a, brain)).toBeNull();
+  });
+
+  it('not with a full team', () => {
+    const { room, a, brain } = stage();
+    a.caught = [1, 4, 7, 25, 133, 152];
+    expect(patchGoal(room, a, brain)).toBeNull();
+  });
+
+  it('not hurt: a CENTER is first', () => {
+    const { room, a, brain } = stage();
+    a.wear = [0.1];
+    expect(health(a)).toBeLessThan(HURT);
+    expect(patchGoal(room, a, brain)).toBeNull();
+  });
+
+  it('not a spot somebody has been through', () => {
+    const { room, a, brain } = stage();
+    for (const q of room.patchesOn('MAP_ROUTE101')) room.taken.set(q.key, room.tick);
+    expect(patchGoal(room, a, brain)).toBeNull();
+  });
+});
+
 describe('a bot on a wild patch', () => {
   /** A marked spot on `map` whose cell to the west is open ground, to step onto it from. */
   const spotOn = (room: Room, map = 'MAP_ROUTE101') => {
