@@ -143,10 +143,24 @@
       body.desk-wide .bm-m-moves { grid-area: 1 / 2 / 4 / 3; }
       body.desk-wide #battle-menu[data-mode="bag"], body.desk-wide #battle-menu[data-mode="item"], body.desk-wide #battle-menu[data-mode="info"] { position: fixed; left: 0; right: 0; width: fit-content; margin-inline: auto; bottom: 8px; }
       body.desk-wide #battle-menu[data-mode="bag"], body.desk-wide #battle-menu[data-mode="item"], body.desk-wide #battle-menu[data-mode="info"] { grid-template-columns: auto auto; }
+      /* A phone on its side: the height it hasn't got, the desktop's way (Cam, 11-04): three across, and
+         one of them beside its moves. A question has the glass to itself, or the dock stands on it. */
+      @media (orientation: landscape) and (pointer: coarse) and (max-height: 480px) {
+        body #bag-panel { top: 50%; bottom: auto; transform: translate(-50%, -50%); }
+        body.ask-up #pdock, body.ask-up #pad .dpad, body.ask-up #pad .ab { visibility: hidden; }
+        .bm-party { grid-template-columns: auto auto auto; }
+        .bm-member:not([hidden]) { display: grid; grid-template-columns: auto auto; column-gap: calc(var(--s, 1.5) * 8px); row-gap: calc(var(--s, 1.5) * 4px); justify-items: center; align-items: center; }
+        .bm-m-card { grid-area: 1 / 1; }
+        .bm-m-held { grid-area: 2 / 1; }
+        .bm-m-row { grid-area: 3 / 1; max-width: calc(var(--s, 1.5) * 240px); }
+        .bm-m-moves { grid-area: 1 / 2 / 4 / 3; }
+      }
       .hud-mini { pointer-events: auto; cursor: pointer; }
       .hud-moves { top: calc(var(--s, 1.5) * 108px); }
       #item-tag { position: fixed; left: 0; top: 0; z-index: 2; pointer-events: none; image-rendering: pixelated; }
       #item-tag[hidden] { display: none; }
+      #dial-tip { position: fixed; left: 0; top: 0; z-index: 2; pointer-events: none; image-rendering: pixelated; }
+      #dial-tip[hidden] { display: none; }
       #bag-panel { position: fixed; z-index: 4; left: 50%; bottom: calc(env(safe-area-inset-bottom) + var(--s, 1.5) * 56px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: calc(var(--s, 1.5) * 8px); }
       #bag-panel[hidden] { display: none; }
 #map-window { position: fixed; z-index: 4; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; gap: 4px; align-items: center; }
@@ -155,6 +169,11 @@
 #map-window canvas { display: block; image-rendering: pixelated; }
 #map-window .map-picture { touch-action: none; cursor: pointer; }
 #map-window .map-row { display: flex; gap: 4px; justify-content: center; }
+#map-window .map-col { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+/* A phone on its side: the words and the buttons beside the picture, all of its height (Cam, 11-04). */
+#map-window.side { flex-direction: row; align-items: stretch; }
+#map-window.side .map-col { justify-content: center; }
+#map-window.side .map-row { flex-direction: column; }
 #map-window .map-btn[aria-disabled="true"] { cursor: default; }
       #bag-panel canvas { display: block; image-rendering: pixelated; }
       .bag-row { display: flex; gap: calc(var(--s, 1.5) * 8px); }
@@ -166,6 +185,8 @@
       #pdock.hud-bumpers .hud-btn[hidden] { display: none; }
       .hud-ctx-round { position: fixed; right: calc(env(safe-area-inset-right) + 24px); bottom: calc(env(safe-area-inset-bottom) + var(--s, 1.5) * 52px + 88px); width: calc(var(--s, 1.5) * 36px); height: calc(var(--s, 1.5) * 36px); border-radius: 50%; background: rgba(32, 38, 44, 0.45) !important; }
       .hud-ctx-round[aria-disabled="true"] { opacity: 0.45; }
+      .hud-ctx-round.hud-on { background: rgba(232, 160, 32, 0.75) !important; box-shadow: 0 0 0 calc(var(--s, 1.5) * 2px) #e8a020; }
+      .hud-btn.hud-on:not(.hud-ctx-round) { outline: calc(var(--s, 1.5) * 2px) solid #e8a020; outline-offset: calc(var(--s, 1.5) * -3px); }
       /* A phone on its side has no room down the right edge for all of these (iPhone 13 mini, 327
          high in Safari): the corner a little smaller and clear of the thumbs, the moves beside it,
          the bike beside B. */
@@ -389,9 +410,14 @@
       /* The page's own small windows over everything (ui/pagewin.ts): SUMMARY, MOVES. */
       #page-win { position: fixed; inset: 0; z-index: 6; display: grid; place-items: center; background: #0007; }
       #page-win[hidden], #page-win > [hidden], #page-win .bm-btn[hidden] { display: none; }
-      #page-win canvas { display: block; }
+      #page-win canvas { display: block; image-rendering: pixelated; }
       body:has(#page-win:not([hidden])) #battle-menu { visibility: hidden; }
       #moves-box { display: grid; justify-content: center; gap: calc(var(--s, 1.5) * 4px); }
+      #moves-box.side { grid-template-columns: auto auto; }
+      #moves-box.side .mv-top { grid-area: 1 / 1; }
+      #moves-box.side .mv-list { grid-area: 2 / 1; }
+      #moves-box.side .mv-detail { grid-area: 1 / 2 / 3 / 3; align-self: center; }
+      #moves-box.side .mv-row { grid-area: 3 / 1 / 4 / 3; }
       .mv-top, .mv-row { display: flex; justify-content: center; gap: calc(var(--s, 1.5) * 4px); }
       .mv-list { overflow-y: auto; touch-action: pan-y; scrollbar-width: none; cursor: pointer; }
       .hud-ctx-round { touch-action: none; }
@@ -444,6 +470,7 @@
     <div id="keys" aria-hidden="true" hidden></div>
     <div id="msg" role="status"></div>
     <canvas id="item-tag" hidden></canvas>
+    <canvas id="dial-tip" hidden></canvas>
     <div id="bag-panel" hidden></div><div id="map-window" hidden></div>
     <canvas id="askbox" class="startmenu" hidden></canvas>
     <canvas id="startmenu" class="startmenu" hidden></canvas><canvas id="stock" class="startmenu" hidden></canvas>

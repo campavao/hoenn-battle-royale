@@ -181,6 +181,23 @@ test("a desktop's name tag reads at a glance, and names what is in reach", async
   const box = (await boxOf(page, '#item-tag'))!;
   expect(box.height, "its window with the item's picture, and its point, at 3 pixels a pixel").toBe(42 * 3);
   await page.screenshot({ path: test.info().outputPath('bar.png') });
+  // It comes up where it stays. Measured while hidden it read 0 wide, and stood half its width to the
+  // right for a frame or two (Cam, 11-02 and 11-04: "Is this still zooming in from the right?").
+  const places = await page.evaluate(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s = (window as any).__spike, a = s.link.room.actor(s.link.me), el = document.getElementById('item-tag') as HTMLElement;
+    const seen: string[] = [];
+    a.m = { ...a.m, facing: 1 };
+    while (!el.hidden) await new Promise(requestAnimationFrame);
+    a.m = { ...a.m, facing: 2 };
+    for (let n = 0; n < 30; n++) {
+      await new Promise(requestAnimationFrame);
+      if (!el.hidden) seen.push(el.style.transform);
+    }
+    return seen;
+  });
+  expect(places.length, 'it came back').toBeGreaterThan(5);
+  expect(new Set(places).size, places.slice(0, 4).join(' ')).toBe(1);
   await ctx.close();
 });
 

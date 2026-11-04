@@ -3,10 +3,34 @@
 // world's fog a pixel at a time (ringmap.ts), the marks, and a cursor by the keys, a pad, a mouse
 // or a thumb. Nothing of it goes through the hidden ROM.
 import { Win, drawItemFitted } from '../src/ui/phonehud';
-import { TEXT_BLUE, TEXT_DARK, TEXT_GRAY, fitText, type EmeraldCanvas, type TextColor } from '../src/ui/emerald';
+import { TEXT_BLUE, TEXT_DARK, TEXT_GRAY, fitText, wrapText, type EmeraldCanvas, type TextColor } from '../src/ui/emerald';
 import { CELL, GRID_H, GRID_W, GRID_X, GRID_Y, type MapPlots, type MapPlace } from './ringmap';
 
 const W = 240, H = 160, FOOT_H = 36, BTN_H = 32, GAP = 4, BTN_W = (W - GAP) / 2;
+/** A phone on its side: the words and the buttons in a column by the picture, this narrow at least,
+ *  the second line wrapped, the footer that much taller. */
+const COL_MIN = 104, COL_MAX = 200, SIDE_FOOT_H = 52;
+/** The most a phone's MAP grows: a tablet's isn't a wall. */
+const TOUCH_MAX = 3;
+
+export interface MapFit {
+  /** CSS pixels to a GBA pixel. */
+  s: number;
+  /** The column's width, GBA pixels, for a phone on its side; 0 for the footer under the picture. */
+  col: number;
+}
+
+/** The MAP's size on this screen. A phone's is all the glass there is, to a fraction of a pixel (Cam,
+ *  11-04: "The map tends to be pretty small on mobile"); a window with a mouse keeps whole pixels. */
+export function mapFit(touch: boolean, room: { w: number; h: number }, base: number): MapFit {
+  const tall = H + FOOT_H + BTN_H + 16;
+  if (!touch) return { s: Math.min(base, Math.max(1, Math.min(Math.floor(room.w / W), Math.floor((room.h - 16) / tall)))), col: 0 };
+  if (room.w > room.h) {
+    const s = Math.min(TOUCH_MAX, (room.h - 8) / H, (room.w - 8 - GAP) / (W + COL_MIN));
+    return { s, col: Math.min(COL_MAX, Math.floor(((room.w - 8 - GAP) / s - W) / 8) * 8) };
+  }
+  return { s: Math.min(TOUCH_MAX, (room.w - 8) / W, (room.h - 16) / tall), col: 0 };
+}
 const FOG_TINT = [152, 96, 200], FOG_MIX = 0.62;
 /** The next ring's edge: a border round what's still safe, rather than the next fog blinking on
  *  and off (Cam, 11-02: "make this a line like a border so it just kind of looks like an area
@@ -24,8 +48,8 @@ export interface MapWindowDeps {
   /** The place on a cell of the grid. */
   placeAt(cx: number, cy: number): MapPlace | null;
   plots(): MapPlots;
-  /** A person's standing sprite, with its width. */
-  head(gfx: number): { img: CanvasImageSource; w: number } | null;
+  /** A person's standing sprite, with its frame's size. */
+  head(gfx: number): { img: HTMLCanvasElement; w: number; h: number } | null;
   /** The buttons' word, null for none: a MAP with nobody to FLY only looks. */
   verb: string | null;
   /** Whether the verb can be pressed on this place. */
@@ -36,13 +60,36 @@ export interface MapWindowDeps {
   back: (() => void) | null;
   choose(place: MapPlace): void;
   moved(): void;
-  scale: number;
+  /** Its size on the screen now. */
+  fit(): MapFit;
   start: { x: number; y: number };
 }
 
-function head(c: EmeraldCanvas, deps: MapWindowDeps, gfx: number, x: number, y: number): void {
+const greys = new Map<HTMLCanvasElement, HTMLCanvasElement>();
+/** A sprite sheet in grey, for a leader beaten (br_gym.c BrGym_Gray), by hand: Safari's canvas has no filter. */
+function greyOf(img: HTMLCanvasElement): HTMLCanvasElement {
+  let out = greys.get(img);
+  if (out) return out;
+  out = document.createElement('canvas');
+  out.width = img.width;
+  out.height = img.height;
+  const c = out.getContext('2d')!;
+  c.drawImage(img, 0, 0);
+  const d = c.getImageData(0, 0, out.width, out.height);
+  for (let i = 0; i < d.data.length; i += 4) {
+    const v = (d.data[i] * 3 + d.data[i + 1] * 6 + d.data[i + 2]) / 10;
+    d.data[i] = d.data[i + 1] = d.data[i + 2] = v;
+  }
+  c.putImageData(d, 0, 0);
+  greys.set(img, out);
+  return out;
+}
+
+/** A person's head, the 16 rows that have it: they stand at the bottom of a frame, the head some way
+ *  down it (as the minimap's, main.ts miniFrame). */
+function head(c: EmeraldCanvas, deps: MapWindowDeps, gfx: number, x: number, y: number, grey = false): void {
   const s = deps.head(gfx);
-  if (s) c.drawImageTo(s.img, 0, 0, s.w, 16, Math.round(x - s.w / 2), Math.round(y - 8), s.w, 16);
+  if (s) c.drawImageTo(grey ? greyOf(s.img) : s.img, 0, Math.max(0, s.h - 26), s.w, 16, Math.round(x - s.w / 2), Math.round(y - 8), s.w, 16);
 }
 
 /** How near, in the picture's pixels, a mark has to be to take the cursor; and in cells, a place. */
@@ -74,6 +121,9 @@ export function snapCell(x: number, y: number, plots: Pick<MapPlots, 'events' | 
 export class MapWindow {
   private map: Win;
   private foot: Win;
+  private layout: MapFit;
+  private buttons: { win: Win }[] = [];
+  private readonly refit = (): void => this.fit();
   private verbBtn: HTMLButtonElement | null = null;
   private verbWin: Win | null = null;
   private cx: number;
@@ -95,9 +145,8 @@ export class MapWindow {
     this.fogged.height = H;
     el.replaceChildren();
     el.hidden = false;
-    const s = deps.scale;
+    this.layout = deps.fit();
     this.map = new Win(el, W, H, (c, redo) => this.paintMap(c, redo));
-    this.map.size(W, H, s);
     this.map.canvas.classList.add('map-picture');
     this.map.canvas.addEventListener('pointerdown', (e) => this.pointed(e));
     // A mouse's cursor follows it, onto what's near (Cam, 11-02: "Can we make it like snap?").
@@ -110,16 +159,20 @@ export class MapWindow {
       deps.back();
     };
     addEventListener('pointerdown', this.outside, true);
-    this.foot = new Win(el, W, FOOT_H, (c) => this.paintFoot(c));
-    this.foot.size(W, FOOT_H, s);
+    const col = document.createElement('div');
+    col.className = 'map-col';
+    el.appendChild(col);
+    this.foot = new Win(col, W, FOOT_H, (c) => this.paintFoot(c));
     const row = document.createElement('div');
     row.className = 'map-row';
-    el.appendChild(row);
+    col.appendChild(row);
     if (deps.back) this.button(row, 'BACK', deps.back);
     if (deps.verb) {
       this.verbBtn = this.button(row, deps.verb, () => this.press());
       this.verbWin = this.verbBtn.firstElementChild ? null : null;
     }
+    this.fit();
+    addEventListener('resize', this.refit);
     const tick = () => {
       this.paint();
       this.raf = requestAnimationFrame(tick);
@@ -135,15 +188,24 @@ export class MapWindow {
     b.setAttribute('aria-label', label);
     parent.appendChild(b);
     const win = new Win(b, BTN_W, BTN_H, (c) => {
-      c.drawFrame({ x: 0, y: 0, w: BTN_W, h: BTN_H });
+      const w = c.width;
+      c.drawFrame({ x: 0, y: 0, w, h: BTN_H });
       const off = b.getAttribute('aria-disabled') === 'true';
-      c.drawTextCentred(label, BTN_W / 2, 8, off ? TEXT_GRAY : TEXT_DARK);
+      c.drawTextCentred(label, w / 2, 8, off ? TEXT_GRAY : TEXT_DARK);
     });
-    win.size(BTN_W, BTN_H, this.deps.scale);
-    win.show(label);
+    this.buttons.push({ win });
     if (label === this.deps.verb) this.verbWin = win;
     b.addEventListener('click', press);
     return b;
+  }
+
+  /** Everything at the size it has now, a phone turned included. */
+  private fit(): void {
+    const f = (this.layout = this.deps.fit());
+    this.el.classList.toggle('side', f.col > 0);
+    this.map.size(W, H, f.s);
+    this.foot.size(f.col || W, f.col ? SIDE_FOOT_H : FOOT_H, f.s);
+    for (const { win } of this.buttons) win.size(f.col || BTN_W, BTN_H, f.s);
   }
 
   private place(): MapPlace | null {
@@ -261,7 +323,7 @@ export class MapWindow {
       drawItemFitted(c, ITEM_POKE_BALL, e.x, e.y, 10, redo);
       c.setFilter('none');
     }
-    for (const g of plots.gyms) head(c, this.deps, g.gfx, g.x, g.y);
+    for (const g of plots.gyms) head(c, this.deps, g.gfx, g.x, g.y, g.beaten);
     if (plots.me) head(c, this.deps, plots.me.gfx, plots.me.x, plots.me.y);
     // The cursor over all of it, region_map.c's red box, breathing.
     const x = GRID_X + this.cx * CELL, y = GRID_Y + this.cy * CELL, n = CELL;
@@ -270,14 +332,17 @@ export class MapWindow {
   }
 
   private paintFoot(c: EmeraldCanvas): void {
-    c.drawFrame({ x: 0, y: 0, w: W, h: FOOT_H });
-    const line = (t: string, y: number, colour: TextColor) => c.drawText(fitText(t, W - 16), 8, y, colour);
+    const w = c.width;
+    c.drawFrame({ x: 0, y: 0, w, h: c.height });
+    const line = (t: string, y: number, colour: TextColor) => c.drawText(fitText(t, w - 16), 8, y, colour);
     line(this.place()?.name || '', 3, TEXT_DARK);
-    line(this.deps.prompt(), 18, TEXT_BLUE);
+    // Narrow, the second line takes two.
+    wrapText(this.deps.prompt(), w - 16).slice(0, c.height > FOOT_H ? 2 : 1).forEach((t, i) => line(t, 18 + i * 14, TEXT_BLUE));
   }
 
   close(): void {
     removeEventListener('pointerdown', this.outside, true);
+    removeEventListener('resize', this.refit);
     cancelAnimationFrame(this.raf);
     this.el.replaceChildren();
     this.el.hidden = true;

@@ -21,7 +21,7 @@ import { EmeraldCanvas, TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_GREEN, TEXT_RED, T
 import { hintFor, onHintsChange } from './hints';
 import { ITEMS_POCKET, Win, bagHolds, drawFitted, drawIcon, drawItemFitted, drawKeycap, picture } from './phonehud';
 import { nextFocus, type Dir } from './focus';
-import { eatLiftClick } from './pagewin';
+import { TOUCH_MAX_SCALE, eatLiftClick, glass } from './pagewin';
 import { BAG_POCKETS, FIELD_POCKETS, POCKET_BALLS, asksMove, asksWhoInField, isMachine, itemEffect, itemInfo, medicineHelps, takesMachine, readBattleBag, usableInField, usedOnOne, type Stack } from './bag';
 
 // ---- what the ROM says ---------------------------------------------------------------
@@ -275,6 +275,8 @@ export interface PartyMember {
   moves: { id: number; pp: number; maxPp: number }[];
   /** Out in the battle now. */
   active: boolean;
+  /** Not on a team yet: what SUMMARY says of it, as taking it would make it (ui/taken.ts). */
+  joins?: Pick<PartyMember, 'species' | 'name' | 'level' | 'moves'>;
 }
 
 /** The buttons under the moves (Cam's sketch, 11-01), three across MENU_W. */
@@ -375,6 +377,8 @@ export interface BattleMenuDeps {
   };
   /** Has the focus show from the start: nothing here is touched. */
   focusFirst?: boolean;
+  /** What's on show changed its shape: the page's sizing, again (a phone's: fillScale). */
+  refit?(): void;
 }
 
 /** The bag's windows, GBA pixels: the pocket bar, the list and BACK under it. A tap on
@@ -794,13 +798,14 @@ export class BattleMenu {
     };
     part('bm-m-card', MENU_W, MEMBER_CARD_H, (c) => this.paintCard(c));
     part('bm-m-held', MENU_W - 16, MEMBER_HELD_H, (c, redo) => this.paintHeld(c, redo));
+    this.heldWin = this.memberBox.lastElementChild as HTMLElement;
     const moves = doc.createElement('div');
     moves.className = 'bm-m-moves';
     this.memberBox.appendChild(moves);
     for (let i = 0; i < 4; i++) {
       const el = doc.createElement('div');
       moves.appendChild(el);
-      this.memberWins.push({ w: new Win(el, CELL_W, MEMBER_MOVE_H, (c) => this.paintMemberMove(c, i)), ww: CELL_W, hh: MEMBER_MOVE_H });
+      this.memberWins.push({ w: new Win(el, CELL_W, MEMBER_MOVE_H, (c, redo) => this.paintMemberMove(c, i, redo)), ww: CELL_W, hh: MEMBER_MOVE_H });
     }
     const mrow = doc.createElement('div');
     mrow.className = 'bm-m-row';
@@ -844,6 +849,8 @@ export class BattleMenu {
   }
 
   private selectBtn: HTMLButtonElement | null = null;
+  private refitting = false;
+  private heldWin!: HTMLElement;
   /** Which of the four the forget window's head is telling of; null is the new move. */
   private forgetShown: number | null = null;
   private forgetMoved = false;
@@ -927,6 +934,26 @@ export class BattleMenu {
   fitScale(scale: number): number {
     if (!this.releasing) return scale;
     return Math.min(scale, (innerHeight - 8) / (this.deps.root.getBoundingClientRect().height / this.scale));
+  }
+
+  /** On a phone's side: windows with no business beside the picture. The moves keep their place under it. */
+  get standsAlone(): boolean {
+    return this.mode === 'party' || this.mode === 'member' || this.mode === 'bag' || this.mode === 'item' || this.mode === 'usemove';
+  }
+
+  /** What makes all the glass of what's on show now (Cam, 11-04: "on mobile the menus like the map and
+   *  everything else should take up the full screen"), every window scaling together. */
+  fillScale(): number {
+    let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
+    for (const el of this.deps.root.querySelectorAll<HTMLElement>(':scope > *')) {
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      left = Math.min(left, r.left); right = Math.max(right, r.right);
+      top = Math.min(top, r.top); bottom = Math.max(bottom, r.bottom);
+    }
+    if (right <= left) return this.scale;
+    const room = glass();
+    return Math.min(TOUCH_MAX_SCALE, (room.w - 8) / ((right - left) / this.scale), (room.h - 8) / ((bottom - top) / this.scale));
   }
 
   /** One of the party's page, as it stands now. */
@@ -1080,17 +1107,20 @@ export class BattleMenu {
   }
 
   private paintCard(c: EmeraldCanvas): void {
-    this.drawCard(c, this.team[this.memberAt]);
+    // No level: they're all at the rung (Cam, 11-04: "we don't need to show level five"). SUMMARY has it.
+    this.drawCard(c, this.team[this.memberAt], false);
   }
 
-  private drawCard(c: EmeraldCanvas, m: PartyMember | null | undefined): void {
+  private drawCard(c: EmeraldCanvas, m: PartyMember | null | undefined, level = true): void {
     c.drawFrame({ x: 0, y: 0, w: MENU_W, h: MEMBER_CARD_H });
     if (!m) return;
     const icon = this.deps.firstMoves?.icon(m.species);
     if (icon) c.drawImageTo(icon, 0, 0, 32, 32, 10, 12, 32, 32);
     c.drawText(fitText(m.name, 120), 50, 8, TEXT_DARK);
-    const lv = `Lv${m.level}`;
-    c.drawText(lv, MENU_W - 10 - measure(lv), 8, TEXT_GRAY);
+    if (level) {
+      const lv = `Lv${m.level}`;
+      c.drawText(lv, MENU_W - 10 - measure(lv), 8, TEXT_GRAY);
+    }
     c.drawText(fitText(m.ability, MENU_W - 60), 50, 22, TEXT_BLUE);
     drawHp(c, 50, 40, 110, m.maxHp ? m.hp / m.maxHp : 0);
     const hp = `${m.hp}/${m.maxHp}`;
@@ -1100,9 +1130,9 @@ export class BattleMenu {
   private paintHeld(c: EmeraldCanvas, redo: () => void): void {
     const m = this.team[this.memberAt];
     c.drawFrame({ x: 0, y: 0, w: MENU_W - 16, h: MEMBER_HELD_H });
-    if (!m) return;
-    if (m.item) drawIcon(c, m.item, 8, 4, redo);
-    c.drawText(m.item ? m.itemName : 'Holds nothing', m.item ? 36 : 12, 9, m.item ? TEXT_DARK : TEXT_GRAY);
+    if (!m?.item) return;
+    drawIcon(c, m.item, 8, 4, redo);
+    c.drawText(m.itemName, 36, 9, TEXT_DARK);
   }
 
   /** One of the four moves a mon could lose (for a TM) or restore PP to (an ETHER): its name,
@@ -1156,14 +1186,18 @@ export class BattleMenu {
     return slot && info ? `${info.name}, ${info.typeName}, POWER ${powerText(info)}, PP ${slot.pp}/${slot.maxPp}` : '';
   }
 
-  private paintMemberMove(c: EmeraldCanvas, i: number): void {
+  /** As the battle's own move windows have it (paintCell), a little tighter: the type (Cam, 11-04:
+   *  "spark is electric, thunder electric, agility psychic") and the PP, the name, how it lands. */
+  private paintMemberMove(c: EmeraldCanvas, i: number, redo: () => void): void {
     c.drawFrame({ x: 0, y: 0, w: CELL_W, h: MEMBER_MOVE_H });
     const slot = this.team[this.memberAt]?.moves[i];
     const info = slot && this.deps.rom ? moveInfo(this.deps.rom, slot.id) : null;
     if (!slot || !info) { c.drawTextCentred('-', CELL_W / 2, 20, TEXT_GRAY); return; }
-    c.drawText(fitText(info.name, CELL_W - 16), 8, 7, TEXT_DARK);
-    c.drawText(`PP ${slot.pp}/${slot.maxPp}`, 8, 21, slot.pp === 0 ? TEXT_RED : TEXT_GRAY);
-    if (this.view) drawEffect(c, moveEffect(this.deps.rom, info, this.view.foe.types), '', 6, 37, CELL_W - 12);
+    drawType(c, info.type, 8, 4, redo);
+    const pp = `PP ${slot.pp}/${slot.maxPp}`;
+    c.drawText(pp, CELL_W - 8 - measure(pp), 5, slot.pp === 0 ? TEXT_RED : TEXT_DARK);
+    c.drawText(fitText(info.name, CELL_W - 16), 8, 19, TEXT_DARK);
+    if (this.view) drawEffect(c, moveEffect(this.deps.rom, info, this.view.foe.types), '', 6, 35, CELL_W - 12);
   }
 
   // ---- the keys and a pad --------------------------------------------------------------
@@ -1789,6 +1823,8 @@ export class BattleMenu {
     if (member) {
       const key = `${this.memberAt}|${JSON.stringify(this.team[this.memberAt])}|${v?.foe.types}|${!!this.fieldHome}`;
       for (const { w } of this.memberWins) w.show(key);
+      // Holding nothing isn't worth a window (Cam, 11-04).
+      this.heldWin.hidden = !this.team[this.memberAt]?.item;
       this.selectBtn?.setAttribute('aria-disabled', String(!this.canSelect()));
     }
     this.cells.forEach(({ b, w }, i) => {
@@ -1841,12 +1877,19 @@ export class BattleMenu {
    *  above it: Cam, 11-02, iPhone 13 mini) stand on the bottom of the glass instead, over the
    *  picture, so SELECT and BACK can always be reached. Measured only when something changed. */
   private fitGlass(): void {
-    const key = `${this.mode}|${this.room}|${this.scale}|${this.useHead.hidden}|${!!this.releasing}|${this.shown}|${innerHeight}`;
+    const key = `${this.mode}|${this.room}|${this.scale}|${this.useHead.hidden}|${!!this.releasing}|${this.shown}|${innerHeight}|${this.heldWin.hidden}`;
     if (key === this.fitKey || !this.shown) return;
     this.fitKey = key;
     const root = this.deps.root;
     root.classList.remove('bm-lift');
-    if (root.getBoundingClientRect().bottom > innerHeight) root.classList.add('bm-lift');
+    if (!this.refitting) {
+      this.refitting = true;
+      this.deps.refit?.();
+      this.refitting = false;
+    }
+    // ...and on a phone's side, over the battle, whose dim is the band's.
+    const alone = !!this.deps.refit && innerWidth > innerHeight && this.standsAlone && !root.closest('.panel');
+    if (alone || root.getBoundingClientRect().bottom > innerHeight) root.classList.add('bm-lift');
   }
 
   /** How tall a cell is now: a move's four lines, or the Safari's word. */

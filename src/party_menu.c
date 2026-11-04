@@ -1877,6 +1877,9 @@ void PartyMenuModifyHP(u8 taskId, u8 slot, s8 hpIncrement, s16 hpDifference, Tas
     tMaxHP = GetMonData(mon, MON_DATA_MAX_HP);
     tHPIncrement = hpIncrement;
     tHPToAdd = hpDifference;
+#if BR
+    tHPIncrement *= tHPToAdd, tHPToAdd = 1; // nobody sees this screen: a MAX POTION was 280 frames of it (Cam, 11-04)
+#endif
     tPartyId = slot;
     tStartHP = tHP;
     SetTaskFuncWithFollowupFunc(taskId, Task_PartyMenuModifyHP, task);

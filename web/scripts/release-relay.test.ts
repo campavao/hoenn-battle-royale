@@ -66,7 +66,8 @@ function runStep(secrets: Record<string, string>, extra: Record<string, string> 
 const UP = 'up --service hoenn-relay --detach --ci';
 const LINK = 'link --project 34e1da0b-5125-40be-9954-d90fafa3e156 --environment production --service hoenn-relay';
 
-describe.skipIf(!bash)("the release job's relay step", () => {
+// Each case runs bash, and vitest's 5 s ran out on a busy runner (#321's web job, 11-04).
+describe.skipIf(!bash)("the release job's relay step", { timeout: 30_000 }, () => {
   it('deploys with the project token as RAILWAY_TOKEN, unlinked', () => {
     const { calls } = runStep({ RAILWAY_PROJECT_TOKEN: 'proj' });
     expect(calls).toEqual([`${UP}|proj|unset`]);

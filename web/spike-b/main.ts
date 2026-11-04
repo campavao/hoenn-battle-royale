@@ -60,7 +60,6 @@ import { ITEM_POKE_DOLL, groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
 import { GOLD } from '../src/match/events';
 import { FLYING, STORIES } from '../src/match/story';
-import hiddenJson from './data/hidden.json';
 import { RomArt, type MapAnim } from './romart';
 import { AskBox } from './askbox';
 import { ANIM_COUNTER_MAX } from '../src/tile-anims';
@@ -78,7 +77,7 @@ import { PadPrefsControl } from '../src/ui/padprefs';
 import { inputKeyboard, inputPad } from '../src/ui/hints';
 import { wireDpad } from './dpad';
 import { StartMenu } from './startmenu';
-import { MapWindow } from './mapwindow';
+import { MapWindow, mapFit } from './mapwindow';
 import { FLY_SPOTS } from './flyspots';
 import { ARRIVES, FLIGHT_LEN, POISON_COLOUR, dollShows, flew, flightFade, flightPose, poisonBeat, poisonLook } from './looks';
 import type { MapPlace } from './ringmap';
@@ -88,11 +87,12 @@ import { BAG_POSITION_POCKET, POCKET_BALLS, POCKET_TMHM, isMachine, readBattleBa
 import type { Rom } from '../src/battle/movebook';
 import { BATTLE_MENU, MENU_ACTION, MENU_PARTY, TouchLayer } from '../src/touch';
 import { romAsks, type TeamRow } from './rom';
-import { eatLiftClick, pageWin } from '../src/ui/pagewin';
+import { eatLiftClick, glass, pageWin } from '../src/ui/pagewin';
 import { SummaryWindow } from '../src/ui/summary';
 import { Radial, type DialItem } from '../src/ui/radial';
 import { ITEM_HM01, ITEM_TM01, MovesBox, learnList, type LearnRow } from '../src/ui/movesbox';
 import { learnsByNow } from '../src/ui/monfacts';
+import { DIAL_TIP_MS, dialKnown, dialTipDue, dialTipShown, dialTipWords } from '../src/ui/dialtip';
 import { TMHM_MOVES } from '../src/ui/tmhm';
 import { HUD } from '../src/net/hud';
 import { bagHolds, fieldMoves, fogPhase, ITEM_ACRO_BIKE, ITEM_MACH_BIKE, ITEM_TOWN_MAP, itemCut, KEYITEMS_POCKET, MINI_MAP, PhoneHud, signFor, type FieldMove } from '../src/ui/phonehud';
@@ -979,7 +979,8 @@ function askKey(k: string): void {
  *  (`start`) is its own window on the field; a MART's `shelf` and `roller` are shop.c's. */
 function ask(title: string, rows: [string, string][], start = false, more: { pick?: number; shelf?: Shelf; roller?: Roller } = {}): Promise<string> {
   return new Promise((resolve) => {
-    asking = { pick: 0, start, title, rows, ...more, done: (c) => { asking = null; startMenu.hide(); askBox.hide(); calmUntil = frame + 30; resolve(c); } };
+    document.body.classList.add('ask-up');
+    asking = { pick: 0, start, title, rows, ...more, done: (c) => { asking = null; document.body.classList.remove('ask-up'); startMenu.hide(); askBox.hide(); calmUntil = frame + 30; resolve(c); } };
     askPaint();
   });
 }
@@ -1029,7 +1030,7 @@ function openMapWindow(o: { verb: string | null; can(p: MapPlace): boolean; prom
       plots: () => map.plots({ spot: me.m.spot, gfx: gfxOf(me.skin) }),
       head: (gfx) => {
         const s = sheet(gfx);
-        return s ? { img: s, w: SHEETS[String(gfx)].w } : null;
+        return s ? { img: s, w: SHEETS[String(gfx)].w, h: SHEETS[String(gfx)].h } : null;
       },
       verb: o.verb,
       can: o.can,
@@ -1037,7 +1038,7 @@ function openMapWindow(o: { verb: string | null; can(p: MapPlace): boolean; prom
       back: o.back ? () => asking?.done('') : null,
       choose: (p) => { picked = p; rom?.sound(SE_SELECT); asking?.done(''); },
       moved: () => rom?.sound(SE_SELECT),
-      scale: Math.min(windowScale(), Math.max(1, Math.min(Math.floor(innerWidth / 240), Math.floor((innerHeight - 16) / (160 + 36 + 32 + 16))))),
+      fit: () => mapFit(touchPad, glass(), windowScale()),
       start,
     });
     // The drop's clock: the place under the cursor is the choice, as br_pick.c's timeout has it.
@@ -1157,9 +1158,22 @@ const ITEM_ITEMFINDER = 261;
 /** A pad's right trigger in the standard layout, unless a remap has put a button of the game's on it. */
 const PAD_RT = 7;
 const RADIAL_KEY = 'c';
-const radial = new Radial({ scale: windowScale, sound: () => rom?.sound(SE_SELECT) });
+const radial = new Radial({ scale: windowScale, touch: matchMedia('(pointer: coarse)').matches, sound: () => rom?.sound(SE_SELECT) });
+/** The word over the round button that it has a dial behind it (ui/dialtip.ts). */
+const dialTip = new Tag(document.getElementById('dial-tip') as HTMLCanvasElement);
+let dialTipLeft = dialTipDue();
+let dialTipUntil = 0;
+function dialTipFrame(on: boolean): void {
+  if (!dialTipLeft) return;
+  if (!on) { dialTip.hide(); return; }
+  const now = performance.now();
+  if (!dialTipUntil) { dialTipUntil = now + DIAL_TIP_MS; dialTipShown(); }
+  const b = document.getElementById('hud-ctx')?.getBoundingClientRect();
+  if (now > dialTipUntil) { dialTipLeft = false; dialTip.hide(); }
+  else if (b?.width) dialTip.show(dialTipWords(touchPad ? 'touch' : document.body.classList.contains('pad-input') ? 'pad' : 'keys', RADIAL_KEY), b.x + b.width / 2, b.y);
+}
 /** Riding, or the bike in the bag: SELECT gets on or off where a bike may go (sim.ts). */
-function bikeNow(me: Actor): { item: number; label: 'BIKE' | 'WALK'; enabled: boolean } {
+function bikeNow(me: Actor): { item: number; label: 'BIKE' | 'WALK'; enabled: boolean; on: boolean } {
   const has = rom ? bagHolds(rom.emu, romTables.sym, KEYITEMS_POCKET, [ITEM_MACH_BIKE, ITEM_ACRO_BIKE]) : new Set<number>();
   const step = link.room.stepFor(me), spot = me.m.spot;
   // The one that SELECT would get on (sim.ts begin), or is on.
@@ -1169,6 +1183,8 @@ function bikeNow(me: Actor): { item: number; label: 'BIKE' | 'WALK'; enabled: bo
     label: me.m.bike ? 'WALK' : 'BIKE',
     // No getting off on a rail.
     enabled: me.m.bike ? (step.acroAt?.(spot) ?? 0) < 2 : !!step.cycling?.(spot) || !!step.acroCycling?.(spot),
+    // Lit while riding, on a desktop and a phone (Cam, 11-04: "let's have it highlight to show that it's in use").
+    on: !!me.m.bike,
   };
 }
 /** What SELECT would do with the rod here: casts it facing water, on foot or surfing (room.ts). */
@@ -1192,6 +1208,9 @@ function openDial(finger?: { x: number; y: number }): void {
   held.clear();
   pressed.clear();
   rom.sound(SE_WIN_OPEN);
+  dialKnown();
+  dialTipLeft = false;
+  dialTip.hide();
   radial.open(dialItems(me));
   if (finger) radial.fingerFrom(finger.x, finger.y);
 }
@@ -1283,12 +1302,35 @@ function closePanel(): void {
   calmUntil = frame + 30;
   panelDone?.();
 }
+/** ui/taken.ts, its own chunk: main is at its budget (vite.config.ts), and only a SUMMARY off the
+ *  ground asks. Fetched as the page starts; until it comes, that SUMMARY has no moves to show. */
+let takenLib: typeof import('../src/ui/taken') | null = null;
+void import('../src/ui/taken').then((m) => { takenLib = m; }, (e) => console.warn('spike taken', e));
+/** What taking this one would make of it (ui/taken.ts), for its SUMMARY: `at` is its place on the team
+ *  screen, whose key seeds it, or null for a trader's, which the ROM rolls when he hands it over. Under
+ *  the rung it comes up to the rung (br_loot.c MakeTaken). */
+function joinsAs(species: number, level: number, at: number | null): NonNullable<PartyMember['joins']> {
+  const was = Math.max(level, rungForPhase(link.room.ring().phase + 1));
+  const lib = takenLib;
+  const t = lib?.takenMon(romTables, species, was, at === null || !rom ? null : lib.teamSeed(rom.matchSeed(), at), rom?.localHour());
+  if (!lib || !t) return { species, name: speciesName(species), level: was, moves: [] };
+  return { species: t.species, name: speciesName(t.species), level: t.level, moves: t.moves.map((id) => { const pp = lib.fullPp(romTables, id); return { id, pp, maxPp: pp }; }) };
+}
+/** The one who just joined knows what its SUMMARY said (ui/taken.ts says why it might not yet): by the
+ *  party against what it was, unless it came out another species, which SUMMARY got wrong anyway. */
+async function sayWhatItSaid(before: PartyMember[], joins: NonNullable<PartyMember['joins']>): Promise<void> {
+  const after = readTeam();
+  const slot = after.findIndex((m, i) => m.species !== before[i]?.species || JSON.stringify(m.moves) !== JSON.stringify(before[i]?.moves));
+  const m = after[slot];
+  if (!rom || !m || m.species !== joins.species || m.moves.map((v) => v.id).join() === joins.moves.map((v) => v.id).join()) return;
+  await rom.dealMoves(slot, joins.moves);
+}
 /** A dropped team on the windows: taken one at a time, each through the ROM's own screen unseen.
  *  What is still on the ground comes back. */
 let panelDone: (() => void) | null = null;
 function dropPanel(who: string, mons: TeamRow[]): Promise<TeamRow[]> {
   let left = mons;
-  const rows = () => left.map((m) => ({ species: m.species, name: speciesName(m.species), level: m.level, hp: 1, maxHp: 1, status: 0, item: 0, itemName: '', ability: '', moves: [], active: false }));
+  const rows = () => left.map((m, at) => ({ species: m.species, name: speciesName(m.species), level: m.level, hp: 1, maxHp: 1, status: 0, item: 0, itemName: '', ability: '', moves: [], active: false, joins: joinsAs(tradedInto(m.species), m.level, at) }));
   return new Promise((resolve) => {
     if (!battleMenu || !rom) { resolve(left); return; }
     swapping = true;
@@ -1301,8 +1343,10 @@ function dropPanel(who: string, mons: TeamRow[]): Promise<TeamRow[]> {
     const show = () => battleMenu!.openDrop(who, rows(), take, closePanel);
     const take = (at: number, give?: number) => {
       battleMenu!.hideField();
-      void rom!.team(left, who, () => {}, () => {}, { take: at, give }).then((rest) => {
+      const before = readTeam(), joins = rows()[at]?.joins;
+      void rom!.team(left, who, () => {}, () => {}, { take: at, give }).then(async (rest) => {
         left = rest;
+        if (joins) await sayWhatItSaid(before, joins);
         if (!panelUp) return;
         if (left.length) show(); else closePanel();
       });
@@ -1748,12 +1792,52 @@ let partyGone = false;
 let partyHeld = 0;
 /** Frames the picture waits on the party's unseen walk, at most. */
 const PARTY_HOLD = 900;
+/** Pictures since a hold ended that were not yet the battle's, and how many may be. */
+let heldTail = -1;
+const HELD_TAIL = 30;
+/** The battle's picture and not a black one: its backdrop is keyed out (keyPicture has run), about
+ *  40-60% of the glass in every one measured. */
+function drawnPicture(rgba: Uint8ClampedArray): boolean {
+  let keyed = 0;
+  for (let i = 3; i < rgba.length; i += 4 * 8) if (rgba[i] === 0) keyed++;
+  return keyed * 8 * 8 >= 240 * 160;
+}
+/** The prompt off the held picture from the moment a choice is made: the windows go, and this says
+ *  the click landed while the ROM's screens are walked. B_WIN_MSG, tiles 2,15 and 26x4. */
+let promptOff = false;
+const MSG_X = 16, MSG_Y = 120, MSG_W = 208, MSG_H = 32;
+function clearPrompt(): void {
+  const c = keyCanvas.getContext('2d');
+  if (!c) return;
+  const [r, g, b, a] = c.getImageData(MSG_X, MSG_Y, 1, 1).data;
+  c.fillStyle = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
+  c.fillRect(MSG_X, MSG_Y, MSG_W, MSG_H);
+}
 let battleMenu: BattleMenu | null = null;
 let bagFrames = 0;
 const BAG_HOLD = 150;
+/** ROM frames after the battle's callback is back before its picture is one to show. With the
+ *  see-through on it has no fade in (reshow_battle_screen.c), and its first frames are black, then
+ *  the bases and the box with no mon and no healthbox on them. Shown at once, that one picture was
+ *  Cam's "flashes" (11-04). */
+const BACK_SETTLE = 6;
+let backAt = -1;
+let bagRanAt = 0;
+/** The battle's own screen again, and drawn. */
+function battleBack(): boolean { return !!rom && backAt >= 0 && rom.emu.ran - backAt >= BACK_SETTLE; }
+/** The unseen part of a choice is at speed, or when it last was. */
+let hiding = false;
+let hidUntil = 0;
+/** ...and in the picture: at HURRY_SPEED the core does not draw every frame, so the last one it did
+ *  can be older than the RAM says. One in seven of them was still that bare frame. */
+function pictureBack(): boolean { return battleBack() && !hiding && !!rom && rom.emu.ran - hidUntil >= BACK_SETTLE; }
 const ITEM_FLUFFY_TAIL = ITEM_POKE_DOLL + 1;
 /** A USE walked on the ROM's BAG: frames to read what became of it, and the most it may take. */
 const BAG_USE_READ = 45, BAG_USE_MAX = 1200;
+/** ROM frames the unseen part of a choice may run fast, at most: what is still going then is not one. */
+const UNSEEN_MAX = 2400;
+/** ...and to leave the battle's screen at all: a press or two, and the start of its fade. */
+const UNSEEN_START = 180;
 /** What the ROM's BAG says of an item it won't use (item_use.c), in its words. */
 function refusedLine(pocket: number, item: number): string {
   if (pocket === POCKET_BALLS) return 'The BOX is full.';
@@ -1764,14 +1848,18 @@ function trackBag(): void {
   const main = sym('gMain'), run = sym('CB2_BagMenuRun'), pick = sym('gBrBag'), battleCb = sym('BattleMainCB2');
   if (!rom || main === undefined || run === undefined || pick === undefined || battleCb === undefined) return;
   const cb2 = rom.emu.read(main + 4, 32);
+  const step = Math.max(1, rom.emu.ran - bagRanAt);
+  bagRanAt = rom.emu.ran;
+  if (((cb2 ^ battleCb) & ~1) !== 0 || romFading()) backAt = -1;
+  else if (backAt < 0) backAt = rom.emu.ran;
   const is = (n: string | number | undefined) => { const a = typeof n === 'string' ? sym(n) : n; return a !== undefined && ((cb2 ^ a) & ~1) === 0; };
   const bag = rom.emu.read(pick, 16) !== 0 || is(run);
   if (!bag && !romBag) return;
   if (romBag === 'free') { if (!bag) romBag = null; return; }
   if (bag) romBag = 'bag';
   else if (romBag === 'bag') romBag = is('CB2_SetUpReshowBattleScreenAfterMenu2') || is('ReshowBattleScreenAfterMenu') || is(battleCb) ? 'reshow' : null;
-  else if (is(battleCb) && !romFading()) romBag = null;
-  bagFrames = romBag ? bagFrames + 1 : 0;
+  else if (pictureBack()) romBag = null;
+  bagFrames = romBag ? bagFrames + step : 0;
   if (bagFrames > BAG_HOLD) romBag = 'free';
 }
 function romFading(): boolean {
@@ -1809,13 +1897,19 @@ function seeFrame(): void {
     if (partyHold && main !== undefined && fight !== undefined) {
       const inFight = ((rom!.emu.read(main + 4, 32) ^ fight) & ~1) === 0;
       if (!inFight) partyGone = true;
-      if ((partyGone && inFight && !romFading()) || ++partyHeld > PARTY_HOLD) partyHold = false;
+      if ((partyGone && inFight && pictureBack()) || ++partyHeld > PARTY_HOLD) partyHold = false;
     }
+    heldTail = 0;
     return;
   }
   if (keyed) {
-    keyPicture(keyImage.data);
+    keyPicture(keyImage.data, romFading());
+    if (heldTail >= 0) {
+      if (!drawnPicture(keyImage.data) && ++heldTail <= HELD_TAIL) return;
+      heldTail = -1;
+    }
     keyCanvas.getContext('2d')?.putImageData(keyImage, 0, 0);
+    if (promptOff) clearPrompt();
   } else if (rom && !up) rom.seeThrough(false);
   if (keyed !== seeing) { seeing = keyed; battleEl.classList.toggle('see', keyed); }
   battleEl.classList.toggle('screen', up && !battle);
@@ -1868,14 +1962,13 @@ async function nurse(): Promise<void> {
 
 /** Somebody's offer of a mon: yes or no, and its SUMMARY first if I want to see it. Nobody's
  *  party holds it, so that is what the wire says, its species, at the rung it would come at. */
-async function askLooking(title: string, yes: string, species: number): Promise<string> {
+async function askLooking(title: string, yes: string, species: number, joins: () => NonNullable<PartyMember['joins']>): Promise<string> {
   for (;;) {
     const c = await ask(title, [[yes, 'y'], ['SUMMARY', 'look'], ['NO, THANKS', '']]);
     if (c !== 'look') return c;
-    const level = rungForPhase(link.room.ring().phase + 1);
     swapping = true;
     await new Promise<void>((done) => {
-      summaryWin?.open([{ species, name: speciesName(species), level, hp: 1, maxHp: 1, status: 0, item: 0, itemName: '', ability: '', moves: [], active: false }], 0, () => !isOut && !battle, done);
+      summaryWin?.open([{ hp: 1, maxHp: 1, status: 0, item: 0, itemName: '', ability: '', active: false, ...joins() }], 0, () => !isOut && !battle, done);
     });
     swapping = false;
     calmUntil = frame + 30;
@@ -1892,17 +1985,19 @@ async function trade(n: number, species: number): Promise<void> {
     if (swapping) leaveScreen();
     asking?.done('');
     const name = speciesName(species);
-    const c = await askLooking(`I'll trade you my ${name} for one of yours. Which one?`, 'CHOOSE', species);
     // Somebody at home's goes through a trade's evolution on the way over (br_loot.c's
     // BrLoot_HomeTrade); an event's trader's does not (br_event.c's Swap).
     const got = n >= HOME_N ? tradedInto(species) : species;
+    const c = await askLooking(`I'll trade you my ${name} for one of yours. Which one?`, 'CHOOSE', species, () => joinsAs(got, 0, null));
     if (c !== 'y' || !rom || isOut) return;
     const slot = await askParty(`For ${name}`);
     if (slot === null || !rom || isOut) return;
     swapping = true;
     held.clear();
     try {
+      const before = readTeam(), joins = joinsAs(got, 0, null);
       given = await rom.trade(got, () => battleEl.classList.add('on'), slot);
+      if (given) await sayWhatItSaid(before, joins);
     } finally {
       swapping = false;
       battleEl.classList.remove('on');
@@ -1925,7 +2020,7 @@ async function gift(n: number, species: number): Promise<void> {
     if (!rom || isOut || battle || swapping) return;
     asking?.done('');
     const name = speciesName(species);
-    const c = await askLooking(`Will you look after my ${name} for me?`, 'YES', species);
+    const c = await askLooking(`Will you look after my ${name} for me?`, 'YES', species, () => joinsAs(tradedInto(species), 0, 0));
     if (c !== 'y' || !rom || isOut) return;
     const left = await dropPanel('GIFT', [{ species, level: rungForPhase(link.room.ring().phase + 1) }]);
     if (!left.some((m) => m.species === species)) taken = species;
@@ -2820,6 +2915,7 @@ function wirePhoneHud(desk = false): void {
     hud.setScale(s);
     msgBox.setScale(s);
     itemTag.setScale(s);
+    dialTip.setScale(s);
   };
   addEventListener('resize', scale);
   scale();
@@ -2835,6 +2931,7 @@ function wirePhoneHud(desk = false): void {
     if (!me) { hud.hide(); return; }
     const ring = link.room.ring();
     const res = link.room.results;
+    dialTipFrame(!!mine && !ring.safari && !battle && !swapping && !romUp && !asking && !spectating && !lobby?.shown);
     const fogged = link.room.inFog(me.m.spot);
     if (fogged && !hudFogged) fogFlashTo = frame + BR_HUD_FOG_FRAMES;
     hudFogged = fogged;
@@ -2930,9 +3027,30 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     return false;
   };
   const PARTY_SLOT_ID = 9;
-  let walk: { slot: number; step: number; frames: number; item: boolean; move?: number; forced?: boolean } | null = null;
+  /** gBrPartyScreen: a pointer in the ROM to the party screen's callback. */
+  const partyCbAt = sym('gBrPartyScreen');
+  const partyCb = partyCbAt === undefined ? undefined : new DataView(files.rom.buffer, files.rom.byteOffset).getUint32(partyCbAt - 0x08000000, true);
+  const partyUp = () => {
+    const main = sym('gMain');
+    return main === undefined || partyCb === undefined || ((emu.read(main + 4, 32) ^ partyCb) & ~1) === 0;
+  };
+  // All of it counted in the ROM's frames, as the keys it presses are (touch.ts): it runs at
+  // HURRY_SPEED, when the page sees about one in eight.
+  let walk: { slot: number; step: number; frames: number; beat: number; item: boolean; move?: number; forced?: boolean } | null = null;
+  /** The ROM's BAG and party under the windows, from the click until the battle is back and drawn:
+   *  nobody sees them, so at HURRY_SPEED. Cam, 11-04: "selected an item, selected the Pokemon, and
+   *  we fully waited like five seconds". */
+  let unseen: { gone: boolean; frames: number } | null = null;
+  const hide = () => {
+    rom?.unseen(true);
+    unseen = { gone: false, frames: 0 };
+    hiding = true;
+    promptOff = true;
+    if (seeing) clearPrompt();
+  };
   const walkParty = (slot: number) => {
-    walk = { slot, step: 0, frames: 0, item: false };
+    hide();
+    walk = { slot, step: 0, frames: 0, beat: 0, item: false };
     partyHold = true;
     partyGone = false;
     partyHeld = 0;
@@ -2947,22 +3065,24 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
   /** A USE with nobody to ask about (an X item, a ball, a doll): the ROM's BAG does it, unseen, and
    *  stood there on its own screen when it refused. Its line goes on the page's box instead and B
    *  leaves it, the turn still ours; used, its line is pressed past. */
-  let bagUse: { pocket: number; item: number; was: number; frames: number; waited: number; said: boolean } | null = null;
+  let bagUse: { pocket: number; item: number; was: number; frames: number; next: number; waited: number; said: boolean } | null = null;
   const useFromBag = (pocket: number, item: number) => {
-    bagUse = { pocket, item, was: readPocket(emu, sym, pocket).find((x) => x.item === item)?.n ?? 0, frames: 0, waited: 0, said: false };
+    hide();
+    bagUse = { pocket, item, was: readPocket(emu, sym, pocket).find((x) => x.item === item)?.n ?? 0, frames: 0, next: BAG_USE_READ, waited: 0, said: false };
     pickFromBag(pocket, item);
   };
-  const bagUseFrame = () => {
+  const bagUseFrame = (step: number) => {
     const u = bagUse;
     if (!u) return;
     const main = sym('gMain'), bag = sym('CB2_BagMenuRun');
-    if (main === undefined || bag === undefined || ++u.waited > BAG_USE_MAX) { bagUse = null; return; }
+    if (main === undefined || bag === undefined || (u.waited += step) > BAG_USE_MAX) { bagUse = null; return; }
     const inBag = ((emu.read(main + 4, 32) ^ bag) & ~1) === 0;
     // Asked for and not up yet; or up, and now gone: the battle has it.
     if (!inBag) { if (u.frames) bagUse = null; return; }
     if (emu.read(sym('gBrBag')!, 16)) return;
     bagFrames = 0;
-    if (++u.frames < BAG_USE_READ || u.frames % 30) return;
+    if ((u.frames += step) < u.next) return;
+    u.next = u.frames + 30;
     const left = readPocket(emu, sym, u.pocket).find((x) => x.item === u.item)?.n ?? 0;
     if (left < u.was) { touch.tapKey('a'); return; }
     if (!u.said) {
@@ -2972,14 +3092,32 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     touch.tapKey('b');
   };
   const useOn = (pocket: number, item: number, slot: number, move?: number) => {
-    walk = { slot, step: 0, frames: 0, item: true, move };
+    hide();
+    walk = { slot, step: 0, frames: 0, beat: 0, item: true, move };
     partyHold = true;
     partyGone = false;
     partyHeld = 0;
     pickFromBag(pocket, item);
   };
+  let ranAt = 0;
   emu.onFrame(() => {
-    bagUseFrame();
+    const step = Math.max(1, emu.ran - ranAt);
+    ranAt = emu.ran;
+    bagUseFrame(step);
+    if (unseen) {
+      const main = sym('gMain'), fight = sym('BattleMainCB2');
+      const inFight = main !== undefined && fight !== undefined && ((emu.read(main + 4, 32) ^ fight) & ~1) === 0;
+      if (!inFight) unseen.gone = true;
+      unseen.frames += step;
+      // Never left the battle (the clock took the turn as the click landed): that turn is one to see.
+      if (!battle || unseen.frames > (unseen.gone ? UNSEEN_MAX : UNSEEN_START) || (!walk && !bagUse && unseen.gone && battleBack())) {
+        rom?.unseen(false);
+        unseen = null;
+        hiding = false;
+        hidUntil = emu.ran;
+        promptOff = false;
+      }
+    }
     // One has fainted: the ROM's fade and party stay behind the picture until it is answered.
     const brAt = sym('gBrBattle');
     if (brAt !== undefined && emu.read(brAt + BATTLE_MENU, 8) === MENU_PARTY) {
@@ -2987,20 +3125,26 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     }
     menu.away = !!walk;
     if (!walk) return;
-    walk.frames++;
+    walk.frames += step;
+    walk.beat += step;
+    const every = (n: number) => { if (walk!.beat < n) return false; walk!.beat = 0; return true; };
     if (walk.step === 0) {
-      if (choosing()) {
+      // Its screen up and its fade over: its task is there a frame before the fade begins, and takes
+      // no keys through it.
+      if (choosing() && partyUp() && !romFading()) {
         emu.write(partyMenu! + PARTY_SLOT_ID, walk.slot, 8);
         touch.tapKey('a');
         walk.step = walk.item ? (walk.move === undefined ? 5 : 6) : 1;
         walk.frames = 0;
+        walk.beat = 0;
       } else if (walk.frames > 400) { walk = null; partyHold = false; }
     } else if (walk.step === 1 && walk.frames > 40) {
       // Its little menu: SHIFT, SUMMARY, CANCEL.
       touch.tapKey('a');
       walk.step = 3;
       walk.frames = 0;
-    } else if (walk.step === 3 && walk.frames % 30 === 0) {
+      walk.beat = 0;
+    } else if (walk.step === 3 && every(30)) {
       // SHIFT is taken once its question has printed: pressed again until the party is gone.
       // Back on the party's list means the ROM said no (trapped, say): its line, then out.
       const main = sym('gMain'), fight = sym('BattleMainCB2');
@@ -3011,10 +3155,10 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       else touch.tapKey('a');
     } else if (walk.step === 6) {
       // An ETHER's "restore which move?": down to it, and A.
-      if (walk.frames > 40 && walk.frames % 12 === 0) {
-        if (walk.move! > 0) { touch.tapKey('down'); walk.move!--; } else { touch.tapKey('a'); walk.step = 5; walk.frames = 0; }
+      if (walk.frames > 40 && every(12)) {
+        if (walk.move! > 0) { touch.tapKey('down'); walk.move!--; } else { touch.tapKey('a'); walk.step = 5; walk.frames = 0; walk.beat = 0; }
       }
-    } else if (walk.step === 5 && walk.frames % 30 === 0) {
+    } else if (walk.step === 5 && every(30)) {
       // Its line on the party's own screen is pressed past, until the battle is back. The bag
       // again means the ROM would not have it (nothing to cure, say): out, the turn still ours.
       const main = sym('gMain'), fight = sym('BattleMainCB2'), bag = sym('CB2_BagMenuRun');
@@ -3043,6 +3187,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     choose: (which, slot, move) => touch.chooseBattle(which, slot, move),
     back: () => touch.tapKey('b'),
     focusFirst: !touchPad,
+    refit: touchPad ? () => resize() : undefined,
     firstMoves: {
       readParty: () => {
         if (partyAt === undefined || countAt === undefined) return [];
@@ -3063,9 +3208,9 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       bag: () => bagArtOf(),
       keys: touchPad ? undefined : { party: 'Q', bag: 'E' },
       switchTo: (slot) => walkParty(slot),
-      showMon: (rows, at) => summaryWin?.open(rows, at, () => menu.isShown),
+      showMon: (rows, at) => summaryWin?.open(rows.map((r) => (r.joins ? { ...r, ...r.joins } : r)), at, () => menu.isShown),
       useOn,
-      sendOut: (slot) => { walk = { slot, step: 0, frames: 0, item: false, forced: true }; },
+      sendOut: (slot) => { hide(); walk = { slot, step: 0, frames: 0, beat: 0, item: false, forced: true }; },
       field: {
         close: closePanel,
         readBag: () => readFieldBag(emu, sym),
@@ -3111,11 +3256,11 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
   const DESK_MENU_H = 136;
   const resize = () => {
     // The windows alone: no picture for them to follow, on a phone either.
-    if (touchPad && battleEl.classList.contains('panel')) {
-      const s = menu.fitScale(windowScale());
+    if (touchPad && (battleEl.classList.contains('panel') || (innerWidth > innerHeight && menu.standsAlone))) {
+      menu.setRoom(Infinity);
+      const s = menu.fillScale();
       battleEl.style.setProperty('--s', String(s));
       menu.setScale(s);
-      menu.setRoom(Infinity);
       return;
     }
     if (!touchPad) {
@@ -3257,7 +3402,9 @@ paintSound();
 
 /** Every map's hidden items (tools/br/spike-hidden.py): still buried in a match, and each
  *  trainer can dig each one up once, as each ROM's own flag lets them. */
-const HIDDEN = new Map((hiddenJson as [string, number, number, number][]).map(([m, x, y, item]) => [`${m}:${x}:${y}`, { map: m, x, y, item }]));
+const HIDDEN = new Map<string, { map: string; x: number; y: number; item: number }>();
+// Its own chunk, with main at its budget (vite.config.ts): here well before anybody stands on a map.
+void import('./data/hidden.json').then((d) => { for (const [m, x, y, item] of d.default as [string, number, number, number][]) HIDDEN.set(`${m}:${x}:${y}`, { map: m, x, y, item }); }, (e) => console.warn('spike hidden', e));
 /** What I dug up this round. */
 const dug = new Set<string>();
 let dugRound = -1;
@@ -5170,7 +5317,7 @@ async function boot(): Promise<void> {
     }
   }
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { watch, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, get movesBox() { return movesBox; }, radial };
+  (window as unknown as { __spike: unknown }).__spike = { watch, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, get movesBox() { return movesBox; }, radial, moveName: (id: number) => moveInfo(romTables, id)?.name ?? '' };
 }
 
 void boot();
