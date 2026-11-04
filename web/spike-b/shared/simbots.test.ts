@@ -7,7 +7,7 @@ import patchJson from '../../src/data/patches.json';
 import { Host, play } from './host';
 import { soloLink } from '../net';
 import { WorldIndex } from '../../src/bots/hoenn';
-import { logMs, type BattleEvent } from './battlelog';
+import { eventMs, logMs, type BattleEvent } from './battlelog';
 import { HOST_JUDGE, makeRoom, BOT_DUEL_GAP, type Room } from './room';
 import { findPath } from '../../src/bots/path';
 
@@ -234,6 +234,31 @@ describe('Room.simBots', () => {
       expect(room.actor(1)?.battling).toBe(false);
     }
     expect(mirror.hash()).toBe(room.hash());
+  });
+
+  it('a ring that closes on a fight under way reaches it (Cam, 11-03: "it starts hurting when the fog arrives")', async () => {
+    const room = stage();
+    const logs: BattleEvent[][] = [];
+    const host = new Host(room, 0, MAPS, 0, { onLog: (seat, ev) => { if (seat === 1) logs.push(ev); } });
+    await host.simReady();
+    // Clear of the fog when they meet, and fogged eight seconds into the fight, by the room's own clock.
+    const FOG_AT = 8 * 60;
+    const real = room.ring.bind(room);
+    room.ring = (tick = room.tick) => {
+      const since = room.actor(1)?.battling ? room.actor(1)!.since : undefined;
+      return { ...real(tick), r: since !== undefined && tick >= since + FOG_AT ? 0 : Infinity };
+    };
+    room.apply({ c: 'lock' });
+    for (let frames = 0; !logs.length && frames < 60 * 60; frames++) host.advance();
+    expect(logs).toHaveLength(1);
+    let t = 0;
+    const lines: number[] = [];
+    for (const e of logs[0]) {
+      if (e.e === 'text' && /is hurt by the fog!$/.test(e.text)) lines.push(t);
+      t += eventMs(e);
+    }
+    expect(lines.length, 'it bit them').toBeGreaterThan(0);
+    expect(lines[0], 'after it got there, not from the start').toBeGreaterThanOrEqual((FOG_AT / 60) * 1000);
   });
 
   it('a solo page: the log reaches its own watcher once, where the fight stands, and the bots stay busy for it', async () => {

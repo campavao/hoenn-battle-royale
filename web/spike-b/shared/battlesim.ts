@@ -15,7 +15,7 @@
 import { Battle, Dex, LEVEL_UP, toID } from './engine/gen3.mjs';
 import { speciesName } from '../../src/bots/party';
 import type { PackedMon } from '../../src/net/wire';
-import type { BattleEvent, LogMon, LogSide, Side } from './battlelog';
+import { logMs, START_MS, type BattleEvent, type LogMon, type LogSide, type Side } from './battlelog';
 import { decide, pickNext } from './simbrain';
 import { translate, STATUS_BITS } from './simlog';
 import { BAG_ITEMS, heldId, type BagItem } from './simnames';
@@ -35,8 +35,10 @@ export interface SimOptions {
   seed: number;
   /** Where it is, for the log's ground. */
   map?: string;
-  /** The fog bites at each turn's end, as it does a trainer's (br_ring.c; Cam, 11-02). */
-  fog?: boolean;
+  /** The fog bites at each turn's end, as it does a trainer's (br_ring.c; Cam, 11-02). A function is
+   *  asked at every turn's end, with how far into the log's playing that is: a ring that closes on a
+   *  fight under way gets to it there (br_ring.c TurnFog; Cam, 11-03). Once in, always in. */
+  fog?: boolean | ((ms: number) => boolean);
   /** TURN_CAP, for a test. */
   turnCap?: number;
 }
@@ -403,18 +405,30 @@ export function* simulation(a: SimSide, b: SimSide, opts: SimOptions): Generator
   // short of over when its last one faints: nobody out, no switch to make, and the other side's every
   // move "But it failed!" until TURN_CAP. Started by the second player's coming in, so counted here.
   for (const s of battle.sides) s.pokemonLeft = s.pokemon.filter((m: any) => !m.fainted).length; // eslint-disable-line @typescript-eslint/no-explicit-any
-  if (opts.fog) {
-    battle.onEvent('Residual', battle.format, (mon: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-      // A tenth, and it hurts but never finishes anybody (br_ring.c's floorAtOne).
-      const bite = Math.min(Math.max(1, Math.floor(mon.maxhp / 10)), mon.hp - 1);
-      if (bite > 0) battle.damage(bite, mon, mon, FOG);
-    });
-  }
-
   const sides = battle.sides;
   const bags = [bagOf(a.items), bagOf(b.items)];
   const inputs: SimSide[] = [a, b];
   const cardOf = (mon: any) => Number(mon.name.slice(1)); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const names = {
+    trainers: [a.name, b.name] as [string, string],
+    mon: (side: Side, slot: number) => speciesName(inputs[side].party[slot]?.species ?? 0),
+    moveNum: (name: string) => numOfMove.get(name) ?? 0,
+  };
+
+  if (opts.fog) {
+    let fogged = opts.fog === true;
+    let askedOn = -1;
+    battle.onEvent('Residual', battle.format, (mon: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+      if (!fogged && typeof opts.fog === 'function' && askedOn !== battle.turn) {
+        askedOn = battle.turn;
+        fogged = opts.fog(START_MS + logMs(translate(battle.log, names, 0, [a.seat, b.seat]).log));
+      }
+      if (!fogged) return;
+      // A tenth, down to nothing: it knocks out, as a trainer's does (br_ring.c BrRing_FogEndTurn).
+      battle.damage(Math.max(1, Math.floor(mon.maxhp / 10)), mon, mon, FOG);
+    });
+  }
+
   let capped = false;
   const cap = opts.turnCap ?? TURN_CAP;
   let guard = 0;
@@ -483,16 +497,7 @@ export function* simulation(a: SimSide, b: SimSide, opts: SimOptions): Generator
     }
     return { seat: s.seat, name: s.name, skin: s.skin, team };
   };
-  const said = translate(
-    battle.log,
-    {
-      trainers: [a.name, b.name],
-      mon: (side: Side, slot: number) => speciesName(inputs[side].party[slot]?.species ?? 0),
-      moveNum: (name: string) => numOfMove.get(name) ?? 0,
-    },
-    winner,
-    [a.seat, b.seat],
-  );
+  const said = translate(battle.log, names, winner, [a.seat, b.seat]);
   const log: BattleEvent[] = [{ e: 'start', a: logSide(0), b: logSide(1), map }, ...said.log];
 
   return {

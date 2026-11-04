@@ -327,6 +327,23 @@ var init_party = __esm({
   }
 });
 
+// web/spike-b/shared/battlelog.ts
+function eventMs(ev) {
+  return ev.e === "text" ? Math.max(TEXT_MS, 500 + ev.text.length * 30) : HOLD_MS[ev.e];
+}
+function logMs(log) {
+  return log.reduce((t7, ev) => t7 + eventMs(ev), 0);
+}
+var TEXT_MS, HOLD_MS, START_MS;
+var init_battlelog = __esm({
+  "web/spike-b/shared/battlelog.ts"() {
+    "use strict";
+    TEXT_MS = 1400;
+    HOLD_MS = { start: 2e3, send: 1200, back: 700, text: TEXT_MS, hit: 500, hp: 900, status: 300, faint: 1e3, end: 1500 };
+    START_MS = HOLD_MS.start;
+  }
+});
+
 // web/spike-b/shared/engine/gen3.mjs
 function tt(t7) {
   return typeof t7 == "string" || typeof t7 == "number" ? `${t7}` : "";
@@ -9634,16 +9651,27 @@ function* simulation(a, b2, opts) {
   battle.setPlayer("p1", { name: "A", team: teamA.sets });
   battle.setPlayer("p2", { name: "B", team: teamB.sets });
   for (const s of battle.sides) s.pokemonLeft = s.pokemon.filter((m) => !m.fainted).length;
-  if (opts.fog) {
-    battle.onEvent("Residual", battle.format, (mon2) => {
-      const bite = Math.min(Math.max(1, Math.floor(mon2.maxhp / 10)), mon2.hp - 1);
-      if (bite > 0) battle.damage(bite, mon2, mon2, FOG);
-    });
-  }
   const sides = battle.sides;
   const bags = [bagOf(a.items), bagOf(b2.items)];
   const inputs = [a, b2];
   const cardOf = (mon2) => Number(mon2.name.slice(1));
+  const names = {
+    trainers: [a.name, b2.name],
+    mon: (side, slot) => speciesName(inputs[side].party[slot]?.species ?? 0),
+    moveNum: (name) => numOfMove.get(name) ?? 0
+  };
+  if (opts.fog) {
+    let fogged = opts.fog === true;
+    let askedOn = -1;
+    battle.onEvent("Residual", battle.format, (mon2) => {
+      if (!fogged && typeof opts.fog === "function" && askedOn !== battle.turn) {
+        askedOn = battle.turn;
+        fogged = opts.fog(START_MS + logMs(translate(battle.log, names, 0, [a.seat, b2.seat]).log));
+      }
+      if (!fogged) return;
+      battle.damage(Math.max(1, Math.floor(mon2.maxhp / 10)), mon2, mon2, FOG);
+    });
+  }
   let capped = false;
   const cap = opts.turnCap ?? TURN_CAP;
   let guard = 0;
@@ -9713,16 +9741,7 @@ function* simulation(a, b2, opts) {
     }
     return { seat: s.seat, name: s.name, skin: s.skin, team };
   };
-  const said = translate(
-    battle.log,
-    {
-      trainers: [a.name, b2.name],
-      mon: (side, slot) => speciesName(inputs[side].party[slot]?.species ?? 0),
-      moveNum: (name) => numOfMove.get(name) ?? 0
-    },
-    winner,
-    [a.seat, b2.seat]
-  );
+  const said = translate(battle.log, names, winner, [a.seat, b2.seat]);
   const log = [{ e: "start", a: logSide(0), b: logSide(1), map }, ...said.log];
   return {
     winner,
@@ -9750,6 +9769,7 @@ var init_battlesim = __esm({
     "use strict";
     init_gen3();
     init_party();
+    init_battlelog();
     init_simbrain();
     init_simlog();
     init_simnames();
@@ -14239,17 +14259,8 @@ function botSpawns(room, maps, count) {
   return out;
 }
 
-// web/spike-b/shared/battlelog.ts
-var TEXT_MS = 1400;
-var HOLD_MS = { start: 2e3, send: 1200, back: 700, text: TEXT_MS, hit: 500, hp: 900, status: 300, faint: 1e3, end: 1500 };
-function eventMs(ev) {
-  return ev.e === "text" ? Math.max(TEXT_MS, 500 + ev.text.length * 30) : HOLD_MS[ev.e];
-}
-function logMs(log) {
-  return log.reduce((t7, ev) => t7 + eventMs(ev), 0);
-}
-
 // web/spike-b/shared/host.ts
+init_battlelog();
 init_party();
 var JITTER = 3;
 var CATCH_UP = 3;
@@ -14559,8 +14570,9 @@ var Host = class {
     try {
       if (!f.run) {
         const seed = (Math.imul(r.seed ^ f.since, 2654435761) ^ Math.imul(f.a, 2246822507) ^ Math.imul(f.b, 3266489909)) >>> 0;
-        const at2 = r.actor(f.a)?.m.spot;
-        f.run = this.simulation(this.simSide(f.a), f.legend ? this.legendSide(f.legend) : this.simSide(f.b), { seed, map: at2?.map ?? "", fog: !!at2 && r.inFog(at2) });
+        const at2 = r.actor(f.a)?.m.spot, since = f.since;
+        const fog = (ms) => !!at2 && r.inFog(at2, r.ring(since + Math.ceil(ms / 1e3 * 60)));
+        f.run = this.simulation(this.simSide(f.a), f.legend ? this.legendSide(f.legend) : this.simSide(f.b), { seed, map: at2?.map ?? "", fog });
       }
       const step = f.run.next();
       if (!step.done) return;
@@ -15401,4 +15413,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "3267210a1379";
+export const WORLD_HASH = "a5d503597144";

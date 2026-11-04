@@ -393,9 +393,12 @@ export class Host {
       if (!f.run) {
         // Every number in it from the match: a fight can be run again from its seed.
         const seed = (Math.imul(r.seed ^ f.since, 0x9e3779b1) ^ Math.imul(f.a, 0x85ebca6b) ^ Math.imul(f.b, 0xc2b2ae35)) >>> 0;
-        // In the fog where they stand, it bites them as it does a trainer in a fight (Cam, 11-02).
-        const at = r.actor(f.a)?.m.spot;
-        f.run = this.simulation!(this.simSide(f.a), f.legend ? this.legendSide(f.legend) : this.simSide(f.b), { seed, map: at?.map ?? '', fog: !!at && r.inFog(at) });
+        // In the fog where they stand, it bites them as it does a trainer in a fight (Cam, 11-02),
+        // from the turn the ring gets there: the fight plays out from the frame they met, so the ring
+        // of the frame a turn ends on is known now (Cam, 11-03).
+        const at = r.actor(f.a)?.m.spot, since = f.since;
+        const fog = (ms: number) => !!at && r.inFog(at, r.ring(since + Math.ceil((ms / 1000) * 60)));
+        f.run = this.simulation!(this.simSide(f.a), f.legend ? this.legendSide(f.legend) : this.simSide(f.b), { seed, map: at?.map ?? '', fog });
       }
       const step = f.run.next();
       if (!step.done) return;
