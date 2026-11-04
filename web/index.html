@@ -147,6 +147,8 @@
       .hud-moves { top: calc(var(--s, 1.5) * 108px); }
       #item-tag { position: fixed; left: 0; top: 0; z-index: 2; pointer-events: none; image-rendering: pixelated; }
       #item-tag[hidden] { display: none; }
+      #dial-tip { position: fixed; left: 0; top: 0; z-index: 2; pointer-events: none; image-rendering: pixelated; }
+      #dial-tip[hidden] { display: none; }
       #bag-panel { position: fixed; z-index: 4; left: 50%; bottom: calc(env(safe-area-inset-bottom) + var(--s, 1.5) * 56px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: calc(var(--s, 1.5) * 8px); }
       #bag-panel[hidden] { display: none; }
 #map-window { position: fixed; z-index: 4; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; gap: 4px; align-items: center; }
@@ -386,7 +388,7 @@
       /* The page's own small windows over everything (ui/pagewin.ts): SUMMARY, MOVES. */
       #page-win { position: fixed; inset: 0; z-index: 6; display: grid; place-items: center; background: #0007; }
       #page-win[hidden], #page-win > [hidden], #page-win .bm-btn[hidden] { display: none; }
-      #page-win canvas { display: block; }
+      #page-win canvas { display: block; image-rendering: pixelated; }
       body:has(#page-win:not([hidden])) #battle-menu { visibility: hidden; }
       #moves-box { display: grid; justify-content: center; gap: calc(var(--s, 1.5) * 4px); }
       .mv-top, .mv-row { display: flex; justify-content: center; gap: calc(var(--s, 1.5) * 4px); }
@@ -441,6 +443,7 @@
     <div id="keys" aria-hidden="true" hidden></div>
     <div id="msg" role="status"></div>
     <canvas id="item-tag" hidden></canvas>
+    <canvas id="dial-tip" hidden></canvas>
     <div id="bag-panel" hidden></div><div id="map-window" hidden></div>
     <canvas id="askbox" class="startmenu" hidden></canvas>
     <canvas id="startmenu" class="startmenu" hidden></canvas><canvas id="stock" class="startmenu" hidden></canvas>

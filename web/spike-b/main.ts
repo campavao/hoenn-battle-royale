@@ -90,6 +90,7 @@ import { Radial, type DialItem } from '../src/ui/radial';
 import { ITEM_HM01, ITEM_TM01, MovesBox, learnList, type LearnRow } from '../src/ui/movesbox';
 import { learnsByNow } from '../src/ui/monfacts';
 import { fullPp, takenMon, teamSeed } from '../src/ui/taken';
+import { DIAL_TIP_MS, dialKnown, dialTipDue, dialTipShown, dialTipWords } from '../src/ui/dialtip';
 import { TMHM_MOVES } from '../src/ui/tmhm';
 import { HUD } from '../src/net/hud';
 import { bagHolds, fieldMoves, fogPhase, ITEM_ACRO_BIKE, ITEM_MACH_BIKE, ITEM_TOWN_MAP, itemCut, KEYITEMS_POCKET, MINI_MAP, PhoneHud, signFor, type FieldMove } from '../src/ui/phonehud';
@@ -1153,6 +1154,19 @@ const ITEM_ITEMFINDER = 261;
 const PAD_RT = 7;
 const RADIAL_KEY = 'c';
 const radial = new Radial({ scale: windowScale, sound: () => rom?.sound(SE_SELECT) });
+/** The word over the round button that it has a dial behind it (ui/dialtip.ts). */
+const dialTip = new Tag(document.getElementById('dial-tip') as HTMLCanvasElement);
+let dialTipLeft = dialTipDue();
+let dialTipUntil = 0;
+function dialTipFrame(on: boolean): void {
+  if (!dialTipLeft) return;
+  if (!on) { dialTip.hide(); return; }
+  const now = performance.now();
+  if (!dialTipUntil) { dialTipUntil = now + DIAL_TIP_MS; dialTipShown(); }
+  const b = document.getElementById('hud-ctx')?.getBoundingClientRect();
+  if (now > dialTipUntil) { dialTipLeft = false; dialTip.hide(); }
+  else if (b?.width) dialTip.show(dialTipWords(touchPad ? 'touch' : document.body.classList.contains('pad-input') ? 'pad' : 'keys', RADIAL_KEY), b.x + b.width / 2, b.y);
+}
 /** Riding, or the bike in the bag: SELECT gets on or off where a bike may go (sim.ts). */
 function bikeNow(me: Actor): { item: number; label: 'BIKE' | 'WALK'; enabled: boolean; on: boolean } {
   const has = rom ? bagHolds(rom.emu, romTables.sym, KEYITEMS_POCKET, [ITEM_MACH_BIKE, ITEM_ACRO_BIKE]) : new Set<number>();
@@ -1189,6 +1203,9 @@ function openDial(finger?: { x: number; y: number }): void {
   held.clear();
   pressed.clear();
   rom.sound(SE_WIN_OPEN);
+  dialKnown();
+  dialTipLeft = false;
+  dialTip.hide();
   radial.open(dialItems(me));
   if (finger) radial.fingerFrom(finger.x, finger.y);
 }
@@ -2798,6 +2815,7 @@ function wirePhoneHud(desk = false): void {
     hud.setScale(s);
     msgBox.setScale(s);
     itemTag.setScale(s);
+    dialTip.setScale(s);
   };
   addEventListener('resize', scale);
   scale();
@@ -2813,6 +2831,7 @@ function wirePhoneHud(desk = false): void {
     if (!me) { hud.hide(); return; }
     const ring = link.room.ring();
     const res = link.room.results;
+    dialTipFrame(!!mine && !ring.safari && !battle && !swapping && !romUp && !asking && !spectating && !lobby?.shown);
     const fogged = link.room.inFog(me.m.spot);
     if (fogged && !hudFogged) fogFlashTo = frame + BR_HUD_FOG_FRAMES;
     hudFogged = fogged;
