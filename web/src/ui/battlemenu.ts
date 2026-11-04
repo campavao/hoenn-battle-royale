@@ -796,7 +796,7 @@ export class BattleMenu {
     for (let i = 0; i < 4; i++) {
       const el = doc.createElement('div');
       moves.appendChild(el);
-      this.memberWins.push({ w: new Win(el, CELL_W, MEMBER_MOVE_H, (c) => this.paintMemberMove(c, i)), ww: CELL_W, hh: MEMBER_MOVE_H });
+      this.memberWins.push({ w: new Win(el, CELL_W, MEMBER_MOVE_H, (c, redo) => this.paintMemberMove(c, i, redo)), ww: CELL_W, hh: MEMBER_MOVE_H });
     }
     const mrow = doc.createElement('div');
     mrow.className = 'bm-m-row';
@@ -1156,14 +1156,18 @@ export class BattleMenu {
     return slot && info ? `${info.name}, ${info.typeName}, POWER ${powerText(info)}, PP ${slot.pp}/${slot.maxPp}` : '';
   }
 
-  private paintMemberMove(c: EmeraldCanvas, i: number): void {
+  /** As the battle's own move windows have it (paintCell), a little tighter: the type (Cam, 11-04:
+   *  "spark is electric, thunder electric, agility psychic") and the PP, the name, how it lands. */
+  private paintMemberMove(c: EmeraldCanvas, i: number, redo: () => void): void {
     c.drawFrame({ x: 0, y: 0, w: CELL_W, h: MEMBER_MOVE_H });
     const slot = this.team[this.memberAt]?.moves[i];
     const info = slot && this.deps.rom ? moveInfo(this.deps.rom, slot.id) : null;
     if (!slot || !info) { c.drawTextCentred('-', CELL_W / 2, 20, TEXT_GRAY); return; }
-    c.drawText(fitText(info.name, CELL_W - 16), 8, 7, TEXT_DARK);
-    c.drawText(`PP ${slot.pp}/${slot.maxPp}`, 8, 21, slot.pp === 0 ? TEXT_RED : TEXT_DARK);
-    if (this.view) drawEffect(c, moveEffect(this.deps.rom, info, this.view.foe.types), '', 6, 37, CELL_W - 12);
+    drawType(c, info.type, 8, 4, redo);
+    const pp = `PP ${slot.pp}/${slot.maxPp}`;
+    c.drawText(pp, CELL_W - 8 - measure(pp), 5, slot.pp === 0 ? TEXT_RED : TEXT_DARK);
+    c.drawText(fitText(info.name, CELL_W - 16), 8, 19, TEXT_DARK);
+    if (this.view) drawEffect(c, moveEffect(this.deps.rom, info, this.view.foe.types), '', 6, 35, CELL_W - 12);
   }
 
   // ---- the keys and a pad --------------------------------------------------------------
