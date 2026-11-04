@@ -34,7 +34,7 @@ import { over } from './shared/over';
 import { Lobby, me, seeThrough, type RoomInfo } from './lobby';
 import { loadCareer, ordinal, recordMatch } from '../src/match/career';
 import type { MatchTally } from '../src/match/tally';
-import { couldFly, tallySince, teamMembers, PARTY_LEN, spentLine, spillShows } from './carry';
+import { beatenBy, couldFly, tallySince, teamMembers, PARTY_LEN, spentLine, spillShows } from './carry';
 import { BagPanel } from './bagpanel';
 import { Tag } from './tag';
 import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, startStickLearn, stickKeys, stickLearnStep, type AxisSense, type StickMap } from '../src/pad';
@@ -888,6 +888,7 @@ function giveNext(): void {
     }).finally(() => { romUp = false; battleEl.classList.remove('on'); })
     : r.give(item, groundCount(item));
   took.then((got) => {
+    if (got) myTookN++;
     // What the ROM made of it (br_items.c's Apply), not what was on the ground.
     if (!got) {
       say(`No room in the bag for ${name(item)}.`);
@@ -1110,9 +1111,10 @@ async function openBag(key: number, bag: Bag, who: string): Promise<void> {
   const mons = (bag.mons ?? []).map((m) => (m.level > 0 ? m : { ...m, level: rung }));
   const things = bag.items.length > 0 || bag.money > 0;
   const c = mons.length && !things ? 'mons' : await askBag(who, bag, mons[0]?.species);
-  if (c === 'items') return takeBag(key, bag, who);
+  if (c === 'items') { myTookN++; return takeBag(key, bag, who); }
   if (c !== 'mons' || isOut || !rom) { link.drop(key, bag); return; }
   const left = await dropPanel(who, mons);
+  if (left.length < mons.length) myTookN++;
   const rest: Bag = { items: bag.items, money: bag.money, mons: left };
   if (!emptyBag(rest)) link.drop(key, rest);
   else bagOpen = 0;
@@ -2211,10 +2213,13 @@ function record(round: number): void {
   // Placed by when I went out: the last out is second; never out, and nobody won, a tie for first.
   const placement = res.winner === link.me ? 1 : i >= 0 ? res.entrants.length - i : res.winner ? 2 : 1;
   const now = rom?.tally() ?? null;
-  lastRound = tallySince(tallyFrom, now, myStepsN);
+  // The room's counts too: MY STATS' TRAINERS BEATEN, PLAYERS BEATEN and LOOT TAKEN stood still at what
+  // classic had left them (Cam, 11-04: BEATEN 4 that match, TRAINERS BEATEN 0).
+  const myName = res.entrants.find(([id]) => id === link.me)?.[1] ?? '';
+  lastRound = tallySince(tallyFrom, now, myStepsN, { ...beatenBy(res.fallen, myName), took: myTookN });
   recordMatch(placement, localStorage, lastRound);
   tallyFrom = now;
-  myStepsN = 0;
+  myStepsN = myTookN = 0;
 }
 
 /** The ROM's move table, for MY STATS' favourite move. */
@@ -2226,6 +2231,8 @@ let lastRound: ReturnType<typeof tallySince> | null = null;
 /** MY STATS for the round I am in: the hidden ROM's tally as it began, and my steps. */
 let tallyFrom: MatchTally | null = null;
 let myStepsN = 0;
+/** The balls and bags I took from, this round: MY STATS' LOOT TAKEN. */
+let myTookN = 0;
 let mySpotWas = '';
 function stepsFrame(): void {
   const s = link.mine()?.m.spot;
@@ -2556,7 +2563,7 @@ function startMatch(l: WorldLink): void {
   buzzerCover = null;
   teamSent = '';
   tallyFrom = rom?.tally() ?? null;
-  myStepsN = 0;
+  myStepsN = myTookN = 0;
   mySpotWas = '';
   ticks.clear();
   toldEvents = 0;

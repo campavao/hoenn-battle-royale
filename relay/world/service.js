@@ -11202,10 +11202,52 @@ function battleItems(bag) {
     });
   };
   pour((id2) => isMedicine(id2), MEDICINE_FIRST);
-  pour((id2) => !isMedicine(id2) && !isBall(id2));
+  pour((id2) => !isMedicine(id2) && FIGHT_ITEMS.has(id2));
   pour((id2) => isMedicine(id2));
   return out;
 }
+var FIGHT_ITEMS = /* @__PURE__ */ new Set([
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  // POTION to FULL HEAL
+  26,
+  27,
+  28,
+  29,
+  30,
+  31,
+  32,
+  38,
+  44,
+  // the drinks, the powders, LAVA COOKIE, BERRY JUICE
+  73,
+  74,
+  75,
+  76,
+  77,
+  78,
+  79,
+  // GUARD SPEC. to X SPECIAL
+  133,
+  134,
+  135,
+  136,
+  137,
+  139,
+  140,
+  141,
+  142
+  // the berries that cure or heal
+]);
 var MEDICINE_FIRST = 1;
 function spend(bag, used) {
   for (const id2 of used) take(bag, id2);
@@ -12413,7 +12455,8 @@ function legendMon(species, phase) {
   return tradedMon(species, phase);
 }
 var MAINLANDS = /* @__PURE__ */ new Map();
-function botParty(seed, a, phase) {
+function botParty(seed, a, atPhase) {
+  const phase = a.held ?? atPhase;
   const taken = (a.caught ?? []).map((sp, i) => {
     const m = tradedMon(sp, phase), moves = a.moves?.[i];
     return moves?.length ? { ...m, moves: moves.map((id2) => ({ id: id2, pp: 15, ppUps: 0 })), romMoves: true } : m;
@@ -12780,8 +12823,8 @@ var Room = class {
       if (cmd.b === LEGEND_FOE) return this.legendOver(cmd);
       const a = this.actor(cmd.a), b2 = this.actor(cmd.b);
       if (!a || !b2 || !a.bot || !b2.bot || a.foe !== b2.id || b2.foe !== a.id || a.judge !== cmd.id || !a.battling) return;
-      this.part(a);
-      this.part(b2);
+      this.part(a, true);
+      this.part(b2, true);
       const won = cmd.winner === a.id ? a : cmd.winner === b2.id ? b2 : void 0;
       const lost = won === a ? b2 : won === b2 ? a : void 0;
       if (cmd.used && a.loot) spend(a.loot.items, cmd.used[0].slice(0, 4));
@@ -12796,6 +12839,7 @@ var Room = class {
         if (left) this.botOut(a, right ? "" : b2.name);
         if (right) this.botOut(b2, left ? "" : a.name);
       }
+      a.held = b2.held = void 0;
     } else if (cmd.c === "lock") {
       this.results.entrants = this.actors.map((a) => [a.id, a.name]);
       if (!this.opening) {
@@ -12852,6 +12896,7 @@ var Room = class {
         foe.battling = false;
         foe.calm = this.tick + GRACE;
         if (cmd.won) this.botOut(foe, a.name);
+        foe.held = void 0;
       }
       a.foe = 0;
       if (a.boss) {
@@ -13354,8 +13399,14 @@ var Room = class {
     a.foe = 0;
     a.calm = this.tick + GRACE;
   }
-  /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
-  part(a) {
+  /** The fight starts: its team is this rung's until it is over. */
+  hold(a) {
+    a.held = this.ring().phase + 1;
+  }
+  /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace, its team the
+   *  ring's again (`settling`: not until the caller has seen to who fell). */
+  part(a, settling = false) {
+    if (!settling) a.held = void 0;
     if (a.legendKey !== void 0) {
       this.picked.delete(a.legendKey);
       (a.tried ??= []).push(a.legendKey);
@@ -13458,6 +13509,7 @@ var Room = class {
     a.foe = LEGEND_FOE;
     a.judge = judge;
     a.since = this.tick;
+    this.hold(a);
     a.legendKey = s.key;
     a.keys = a.last = 0;
     events.push({ type: "bots", tick: this.tick, id: judge, a: a.id, b: LEGEND_FOE, legend: { key: s.key, species } });
@@ -13481,7 +13533,7 @@ var Room = class {
         this.botLearns(a);
       }
     } else if (cmd.winner === LEGEND_FOE) {
-      this.part(a);
+      this.part(a, true);
       this.botOut(a, "", { wild: true });
       return;
     } else if (cmd.drew) a.wear = cmd.drew[0].slice(0, 6).map((v2) => Math.min(1, Math.max(0, v2)));
@@ -13504,6 +13556,8 @@ var Room = class {
   botsFight(a, b2, judge, events) {
     a.judge = b2.judge = judge;
     a.since = b2.since = this.tick;
+    this.hold(a);
+    this.hold(b2);
     events.push({ type: "bots", tick: this.tick, id: judge, a: a.id, b: b2.id });
   }
   /** `id` off the map, and everything that waited on them let go. */
@@ -13515,7 +13569,10 @@ var Room = class {
   /** Everything that waited on trainer `id`, who has no page to answer for it now. */
   letGoOf(a, id2 = a?.id ?? 0) {
     const foe = a?.foe ? this.actor(a.foe) : void 0;
-    if (foe?.bot) foe.battling = false;
+    if (foe?.bot) {
+      foe.battling = false;
+      foe.held = void 0;
+    }
     for (const o of this.actors) if (o.meet?.foe === id2) this.unmeet(o);
     for (const o of this.actors) if (o.bot && o.judge === id2) this.part(o);
     for (const [key, by] of this.picked) {
@@ -13830,7 +13887,7 @@ var Room = class {
       if (a.judge) this.part(a);
       a.caught = a.tried = a.field = a.moves = a.wear = void 0;
       a.own = false;
-      a.dealt = void 0;
+      a.dealt = a.held = void 0;
       this.botLearns(a);
     }
     if (safari) {
@@ -13907,6 +13964,7 @@ var Room = class {
         events.push({ type: "duel", tick: this.tick, id: f.id, foe: h.id, first: false, ...weather ? { weather } : {} });
       } else {
         f.foughtBy = h.id;
+        this.hold(f);
         events.push({ type: "fight", tick: this.tick, id: h.id, foe: f.id });
       }
     }
@@ -14099,6 +14157,7 @@ var Room = class {
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
           foe.foughtBy = a.id;
+          this.hold(foe);
           events.push({ type: "fight", tick: this.tick, id: a.id, foe: foe.id });
         } else if (!foe && this.clerk(a)) {
           events.push({ type: "mart", tick: this.tick, id: a.id, map: a.m.spot.map });
@@ -14210,6 +14269,7 @@ var Room = class {
       mix2(m.lift + 1024);
       mix2(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 65535);
       mix2((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | (a.field ?? 0) << 3);
+      mix2(a.held ?? 0);
       mix2(a.foe);
       mix2(a.calm);
       mix2(a.shun);
@@ -14875,6 +14935,11 @@ var Host = class {
   /** START: who is on the map once this frame's joins are in is the match. */
   lock() {
     this.pending.push({ c: "lock" });
+  }
+  /** The joins and the lock in now, not on the next frame: the state a match's first `hello` carries
+   *  is the match, or a page's curtain counts its bots and nobody else (Cam, 11-04: "29 TRAINERS"). */
+  settle() {
+    for (const c of this.pending.splice(0)) this.room.apply(c);
   }
   leave(id2) {
     this.players.delete(id2);
@@ -15741,6 +15806,7 @@ var WorldService = class {
       p.heard = room.t0 = this.opts.now();
     }
     host.lock();
+    host.settle();
     room.host = host;
     room.startsAt = null;
     room.t0 = this.opts.now();
@@ -15996,4 +16062,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "376e62fd149b";
+export const WORLD_HASH = "78a4ef607473";
