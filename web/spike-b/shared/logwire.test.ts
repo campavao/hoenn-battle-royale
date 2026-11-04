@@ -1,6 +1,7 @@
 // A log off the wire: rebuilt event by event, the bad ones dropped, never a throw.
 import { describe, expect, it } from 'vitest';
 import { chunkEvents, cleanEvent, cleanEvents, LOG_MSG_CHARS, LOG_MSG_EVENTS, LOG_TEXT_MAX } from './logwire';
+import { LEGEND_FOE } from './room';
 
 const mon = { species: 280, level: 12, hp: 31, maxHp: 31, status: 0 };
 const side = { seat: 1001, name: 'CAM', skin: 3, team: [mon] };
@@ -12,6 +13,14 @@ describe('cleanEvents', () => {
       { e: 'send', side: 0, slot: 0 }, { e: 'back', side: 1 }, { e: 'text', text: 'Foe GLOOM used TOXIC!' },
       { e: 'hit', side: 1, move: 92 }, { e: 'hit', side: 0 }, { e: 'hp', side: 1, hp: 12 }, { e: 'status', side: 1, status: 0x80 },
       { e: 'faint', side: 1 }, { e: 'end', winner: 1001 },
+    ];
+    expect(cleanEvents(JSON.parse(JSON.stringify(log)))).toEqual(log);
+  });
+
+  it('keeps the legendary a bot fights as a seat: its start and its winning end are not dropped', () => {
+    const log = [
+      { e: 'start', a: side, b: { ...side, seat: LEGEND_FOE, name: 'RAYQUAZA' }, map: 'MAP_ROUTE101' },
+      { e: 'end', winner: LEGEND_FOE },
     ];
     expect(cleanEvents(JSON.parse(JSON.stringify(log)))).toEqual(log);
   });

@@ -62,6 +62,9 @@ export type BattleEvent =
 const TEXT_MS = 1400;
 const HOLD_MS: Record<BattleEvent['e'], number> = { start: 2000, send: 1200, back: 700, text: TEXT_MS, hit: 500, hp: 900, status: 300, faint: 1000, end: 1500 };
 
+/** The `start` event's, ahead of everything else a log says. */
+export const START_MS = HOLD_MS.start;
+
 export function eventMs(ev: BattleEvent): number {
   return ev.e === 'text' ? Math.max(TEXT_MS, 500 + ev.text.length * 30) : HOLD_MS[ev.e];
 }

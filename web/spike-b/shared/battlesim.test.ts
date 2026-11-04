@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyEvent, emptyState, logMs, type BattleEvent } from './battlelog';
+import { applyEvent, emptyState, eventMs, logMs, type BattleEvent } from './battlelog';
 import { movesFor, simulate, simulation, TURN_CAP, type SimSide } from './battlesim';
 import { heldId } from './simnames';
 import { LEVEL_UP } from './engine/gen3.mjs';
@@ -189,15 +189,37 @@ describe('battlesim', () => {
     expect(TURN_CAP).toBe(60);
   });
 
-  it('the fog hurts but never finishes anybody (br_ring.c)', () => {
+  it('the fog knocks out, as a trainer\'s does (br_ring.c, Cam 10-19), with the bar and the faint said', () => {
+    let finished = 0;
     for (let seed = 1; seed <= 12; seed++) {
-      const { log } = simulate(side(1, [card(44, 50)]), side(2, [card(16, 50)]), { seed, fog: true });
+      const { log, unknown } = simulate(side(1, [card(213, 50, { hp: 15 })]), side(2, [card(213, 50, { hp: 15 })]), { seed, fog: true }) // SHUCKLE, whose moves won't get there first;
+      expect(unknown).toEqual([]);
       log.forEach((e, i) => {
         if (e.e !== 'text' || !/hurt by the fog!$/.test(e.text)) return;
         const hp = log.slice(i + 1).find((x) => x.e === 'hp');
-        if (hp?.e === 'hp') expect(hp.hp, `seed ${seed}`).toBeGreaterThan(0);
+        if (hp?.e === 'hp' && hp.hp === 0) finished++;
       });
     }
+    expect(finished).toBeGreaterThan(0);
+  });
+
+  it('a fog that reaches a fight under way: nothing before it arrives, and it bites from there on', () => {
+    const arrives = 12_000;
+    const asked: number[] = [];
+    const { log } = simulate(side(1, [card(44, 50)]), side(2, [card(16, 50)]), { seed: 2, fog: (ms) => { asked.push(ms); return ms >= arrives; } });
+    let t = 0;
+    const lines: number[] = [];
+    for (const e of log) {
+      if (e.e === 'text' && /is hurt by the fog!$/.test(e.text)) lines.push(t);
+      t += eventMs(e);
+    }
+    expect(lines.length, 'it reached them').toBeGreaterThan(0);
+    expect(lines[0], 'not before it got there').toBeGreaterThanOrEqual(arrives);
+    expect(asked.every((ms, i) => !i || ms > asked[i - 1]), 'asked once a turn, later each time').toBe(true);
+    // Asked of how far into the log the turn is: the answer and the line are the same moment.
+    expect(lines[0] - asked.find((ms) => ms >= arrives)!).toBeLessThan(1000);
+    // The same fight for the same seed and the same fog.
+    expect(simulate(side(1, [card(44, 50)]), side(2, [card(16, 50)]), { seed: 2, fog: (ms) => ms >= arrives }).log).toEqual(log);
   });
 
   it('the fog bites each turn', () => {

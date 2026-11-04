@@ -205,6 +205,61 @@ test('the MAP has the next fog as a line, and nothing blinks', async ({ browser 
   await ctx.close();
 });
 
+test('a ring that closes on my own fight gets to it: clear when it starts, hurt from the turn it arrives', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  await intoMatch(page, '#solo&nobots&safari=0&fog=40&seed=7');
+  await fromChest(page);
+  await spike(page, (s) => s.rom.fillParty());
+  await expect.poll(() => spike(page, (s) => { const r = s.link.room.ring(); return r.phase >= 1 && r.left > 25 * 60; }), { timeout: 70_000, intervals: [250] }).toBe(true);
+  // A cell inside this ring and outside the next: clear now, and the fog's by this phase's end.
+  const place = await spike(page, (s) => {
+    const room = s.link.room, ring = room.ring();
+    for (const [id, p] of room.places) for (let y = 1; y < (s.placed.get(id)?.m.h ?? 0) - 1; y++) for (let x = 1; x < s.placed.get(id).m.w - 1; x++) {
+      if (!s.placed.get(id).m.outdoor || room.world.cell(id, x, y) !== 0) continue;
+      const d = Math.hypot(p.gx + x + 0.5 - ring.cx, p.gy + y + 0.5 - ring.cy);
+      if (d > ring.next + 0.5 && d < ring.next + 2) return { map: id, x, y };
+    }
+    return null;
+  }) as { map: string; x: number; y: number };
+  await stand(page, place.map, place.x, place.y, 1);
+  const inFog = () => spike(page, (s) => s.link.room.inFog(s.link.room.actor(s.link.me).m.spot));
+  expect(await inFog(), 'clear as it starts').toBe(false);
+  // What the box says, every frame; and a wild fight, off a marked spot of Route 117.
+  await page.evaluate(async () => {
+    const { battleText } = await import('/spike-b/battlereader.ts' as string);
+    const w = window as any, s = w.__spike, emu = s.rom.emu, txt = s.art.sym('gDisplayedStringBattle');
+    w.__lines = [] as string[];
+    emu.onFrame(() => {
+      const raw = emu.bytes(txt, 128) as Uint8Array;
+      let n = 0;
+      while (n < 128 && raw[n] !== 0xff) n++;
+      const line = n ? battleText(raw.subarray(0, n)) : '';
+      if (line && w.__lines.at(-1) !== line) w.__lines.push(line);
+    });
+    const room = s.link.room, a = room.actor(s.link.me), q = room.patchesOn('MAP_ROUTE117')[0];
+    a.battling = true;
+    s.startFor({ type: 'wild', tick: room.tick, id: a.id, map: 'MAP_ROUTE117', x: q.x, y: q.y, key: q.key });
+  });
+  const fogLines = () => page.evaluate(() => ((window as any).__lines as string[]).filter((l) => /hurt by the fog!/.test(l)).length);
+  const battleFog = () => spike(page, (s) => s.rom.emu.read(s.art.sym('gBrRing') + 31, 8));
+  await expect(page.locator('.bm-cell').first()).toBeVisible({ timeout: 25_000 });
+  expect(await battleFog(), 'no fog in the fight yet').toBe(0);
+  // The ring comes while the fight waits on my move.
+  await expect.poll(inFog, { timeout: 110_000, intervals: [500] }).toBe(true);
+  expect(await spike(page, (s) => !!s.battle), 'still in the fight').toBe(true);
+  expect(await fogLines(), 'nothing said before a turn has ended').toBe(0);
+  await expect.poll(async () => {
+    if (await page.locator('.bm-cell').first().isVisible().catch(() => false)) await page.locator('.bm-cell').first().click({ timeout: 2000 }).catch(() => undefined);
+    else await page.keyboard.press('z');
+    return fogLines();
+  }, { timeout: 60_000, intervals: [400] }).toBeGreaterThan(0);
+  await shot(page, 'own-fight-fog');
+  expect(await battleFog()).toBe(1);
+  await ctx.close();
+});
+
 test('in the fog a trainer goes purple, as poison does, me and the others', async ({ browser }) => {
   test.setTimeout(180_000);
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
