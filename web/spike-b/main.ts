@@ -20,6 +20,7 @@ import type { PeekBag } from './shared/wire';
 import { lineAt, voiceFor } from '../src/bots/lines';
 import type { PackedMon } from '../src/net/wire';
 import { FIELD_CUT, FIELD_STRENGTH, isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
+import { battleOrder, leadIndex } from './battleorder';
 import { arrived, routeTo } from './tapwalk';
 import { loadPatches } from '../src/bots/patches';
 import { rungForPhase } from '../src/bots/party';
@@ -2873,15 +2874,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
   const touch = new TouchLayer({ emu, canvas: gbaCanvas, surface: gbaCanvas, symbols, rom: files.rom });
   touch.attach();
   const root = document.getElementById('battle-menu')!;
-  // The party's slot on the ROM's own screen (party_menu.c GetPartyIdFromBattleSlot): which is
-  // out, and sending another out by walking that screen, unseen.
   const partyAt = sym('gPlayerParty'), countAt = sym('gPlayerPartyCount');
-  const partyId = (slot: number) => {
-    const at = sym('gBattlePartyCurrentOrder');
-    if (at === undefined) return slot;
-    const b = emu.read(at + (slot >> 1), 8);
-    return slot & 1 ? b & 0xf : b >> 4;
-  };
   const task = sym('Task_HandleChooseMonInput'), tasks = sym('gTasks'), partyMenu = sym('gPartyMenu');
   /** struct Task: 16 of them, 40 bytes, func first and isActive after it. */
   const choosing = () => {
@@ -3008,8 +3001,6 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     firstMoves: {
       readParty: () => {
         if (partyAt === undefined || countAt === undefined) return [];
-        const out = sym('gBattlerPartyIndexes');
-        const lead = out === undefined ? 0 : emu.read(out, 16);
         const count = emu.read(countAt, 8);
         const rows = membersOf(emu.bytes(partyAt, PARTY_LEN).slice(), count);
         if (panelUp) return rows;
@@ -3020,7 +3011,8 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
         // could not be chosen: the fight stood there for good.
         const main = sym('gMain'), fight = sym('BattleMainCB2');
         const onItsScreen = main !== undefined && fight !== undefined && ((emu.read(main + 4, 32) ^ fight) & ~1) !== 0;
-        return rows.map((_, slot) => ({ ...rows[onItsScreen ? slot : partyId(slot)], active: partyId(slot) === lead }));
+        const order = battleOrder(emu, sym), lead = leadIndex(emu, sym);
+        return rows.map((_, slot) => ({ ...rows[onItsScreen ? slot : order[slot]], active: order[slot] === lead }));
       },
       icon: (species) => monIconOf(species),
       bag: () => bagArtOf(),

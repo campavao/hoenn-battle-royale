@@ -619,3 +619,64 @@ test('two real trainers walk into a real duel, a third page watches: its view en
     await room0.close();
   }
 });
+
+test("a duel: each side's rows are its own after the switches, the link's master and its slave", async ({ browser }) => {
+  test.setTimeout(600_000);
+  const room0 = await bootRoom(browser, 0);
+  const { r, host, guest, hostId, guestId } = room0;
+  try {
+    const NAMES = ['ANNA', 'BERT', 'CARL'];
+    const THREE: Craft[] = NAMES.map((name, i) => ({ species: [1, 4, 7][i], name, level: 20, moves: [45], hp: 300, stats: [10, 60, 60, 60, 60], personality: 3000 + i * 25 }));
+    await giveTeam(host, THREE);
+    await giveTeam(guest, THREE);
+    await host.evaluate(() => (window as any).__spike.link.fly('MAP_LITTLEROOT_TOWN', 9, 12));
+    await guest.evaluate(() => (window as any).__spike.link.fly('MAP_LITTLEROOT_TOWN', 11, 12));
+    await expect.poll(() => { const t = r.room().actor(hostId), g = r.room().actor(guestId); return `${t.m.spot.map},${t.m.spot.x} ${g.m.spot.map},${g.m.spot.x}`; }, { timeout: 30_000 }).toBe('MAP_LITTLEROOT_TOWN,9 MAP_LITTLEROOT_TOWN,11');
+    for (let i = 0; i < 40 && !r.room().actor(hostId).battling; i++) {
+      await host.keyboard.down('ArrowRight');
+      await host.waitForTimeout(80);
+      await host.keyboard.up('ArrowRight');
+      await host.waitForTimeout(300);
+    }
+    await expect.poll(() => { const t = r.room().actor(hostId); return t.battling ? t.foe : 0; }, { timeout: 30_000 }).toBe(guestId);
+    const pages = [host, guest];
+    /** The party's windows on `page`, as they say it now, and shut again. */
+    const rows = async (page: Page) => {
+      await expect(page.locator('.bm-cell').first()).toBeVisible({ timeout: 120_000 });
+      await page.keyboard.press('q');
+      await expect(page.locator('.bm-slot').first()).toBeVisible();
+      return spike(page, (s) => s.battleMenu.team.map((m: any) => `${m.name}${m.active ? '*' : ''}`)) as Promise<string[]>;
+    };
+    const send = async (page: Page, name: string) => {
+      const at = (await spike(page, (s) => s.battleMenu.team.map((m: any) => m.name)) as string[]).indexOf(name);
+      await page.locator('.bm-slot').nth(at).click(CLICK);
+      await page.locator('.bm-m-btn').nth(2).click(CLICK);
+    };
+    /** Who of the field's party is out on `page`'s own side. */
+    const lead = (page: Page) => spike(page, (s) => {
+      const e = s.rom.emu, pos = s.art.sym('gBattlerPositions');
+      const me = e.read(pos, 8) === 0 ? 0 : 1;
+      return e.read(s.art.sym('gBattlerPartyIndexes') + 2 * me, 16);
+    });
+    // Different switches, so that neither side's order is the other's.
+    expect(await rows(host)).toEqual(['ANNA*', 'BERT', 'CARL']);
+    expect(await rows(guest)).toEqual(['ANNA*', 'BERT', 'CARL']);
+    // A link battle, with one of each: BATTLE_TYPE_LINK, and BATTLE_TYPE_IS_MASTER on one side only.
+    const flags = await Promise.all(pages.map((p) => spike(p, (s) => s.rom.emu.read(s.art.sym('gBattleTypeFlags'), 32)))) as number[];
+    expect(flags.map((f) => f & 6).sort()).toEqual([2, 6]);
+    await send(host, 'CARL');
+    await send(guest, 'BERT');
+    await expect.poll(() => lead(host), { timeout: 60_000 }).toBe(2);
+    await expect.poll(() => lead(guest), { timeout: 60_000 }).toBe(1);
+    expect(await rows(host), "the host's, the one out first").toEqual(['CARL*', 'BERT', 'ANNA']);
+    expect(await rows(guest), "the guest's, the one out first").toEqual(['BERT*', 'ANNA', 'CARL']);
+    await send(host, 'BERT');
+    await send(guest, 'CARL');
+    await expect.poll(() => lead(host), { timeout: 60_000 }).toBe(1);
+    await expect.poll(() => lead(guest), { timeout: 60_000 }).toBe(2);
+    expect(await rows(host), "the host's, again").toEqual(['BERT*', 'CARL', 'ANNA']);
+    expect(await rows(guest), "the guest's, again").toEqual(['CARL*', 'ANNA', 'BERT']);
+  } finally {
+    await room0.close();
+  }
+});

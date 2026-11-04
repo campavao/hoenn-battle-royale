@@ -84,6 +84,18 @@ describe('readSides', () => {
     expect(readSides(emu(0), sym, shown)).not.toBeNull(); // between choices it stays
   });
 
+  it('keeps each ball with its mon while a screen the battle put up has the party in its own order', () => {
+    const fightSym = (n: string) => (n === 'BattleMainCB2' ? 0x9000 : SYM[n]);
+    const on = (cb2: number, read = emu(1)) => ({ ...read, read: (a: number, bits: 8 | 16 | 32) => (a === SYM.gMain + 4 ? cb2 : read.read(a, bits)) });
+    const shown = { serial: 0 };
+    const was = readSides(on(0x9001), fightSym, shown)!.mine.balls; // thumb bit set: the battle's own callback
+    const up = emu(1);
+    const swapped = { ...up, bytes: (a: number, n: number) => { const b = up.bytes(a, n); if (a === SYM.gPlayerParty) { b[86] = 0; b[186] = 9; b[188] = 9; } return b; } };
+    expect(readSides(on(0x7777, swapped), fightSym, shown)!.mine.balls, 'on the party screen').toEqual(was);
+    const back = readSides(on(0x9001, swapped), fightSym, shown)!.mine.balls;
+    expect(back.slice(0, 2), 'and back on the battle, as it is').toEqual(['fainted', 'empty']);
+  });
+
   it('is nothing in a wild battle', () => {
     expect(readSides(emu(1, 0), sym, { serial: 0 })).toBeNull();
   });
