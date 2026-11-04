@@ -3401,21 +3401,6 @@ function pixelate(c: HTMLCanvasElement, b: number): void {
 /** The roofs' layer while a mosaic is on: drawn apart, blocked, then laid over. */
 const coverCanvas = document.createElement('canvas');
 
-/** The next ring on the ground: where the fog is coming to (Cam, 11-02: "a line like a border"),
- *  mapwindow.ts's on the MAP. */
-function drawFogLine(home: Placed, z: number): void {
-  const ring = link.room.ring();
-  const next = ring.next;
-  if (!home.m.outdoor || next === undefined || next === Infinity || next <= 0 || next >= ring.r) return;
-  ctx.save();
-  ctx.strokeStyle = 'rgb(72, 24, 136)';
-  ctx.lineWidth = 2 / Math.min(1, z);
-  ctx.beginPath();
-  ctx.arc(ring.cx * TILE, ring.cy * TILE, next * TILE, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
-}
-
 function drawFog(x0: number, y0: number, x1: number, y1: number, home: Placed): void {
   const ring = link.room.ring();
   if (ring.r === Infinity) return;
@@ -4821,7 +4806,6 @@ function drawScene(all: Actor[], camX: number, camY: number, W: number, H: numbe
     drawFog(vx0, vy0, vx1, vy1, home);
     ctx.restore();
   } else drawFog(vx0, vy0, vx1, vy1, home);
-  drawFogLine(home, z);
   for (const b of blends) b();
   for (const { a, p } of people) if (dollShows(a, link.room.tick, frame)) drawDoll(p.x, p.y - p.lift);
   drawFlights();

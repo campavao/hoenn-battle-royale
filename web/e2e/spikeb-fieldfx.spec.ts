@@ -1,4 +1,4 @@
-// What's drawn on the field, from Cam's 11-02 play-test: the coming fog as a line, a poisoned look in
+// What's drawn on the field, from Cam's 11-02 play-test: the coming fog as a line on the MAP, a poisoned look in
 // the fog, the doll over whoever got away with one, a ball that goes when it's taken, the rod's box
 // that adds a dot, the bird for a flight, and a bike out of the BAG.
 import { expect, test, type Page } from '@playwright/test';
@@ -158,7 +158,8 @@ test('the MAP has the next fog as a line, and nothing blinks', async ({ browser 
   await fromChest(page);
   await expect.poll(() => spike(page, (s) => { const r = s.link.room.ring(); return r.phase >= 1 && r.left > 120; }), { timeout: 70_000 }).toBe(true);
   await spike(page, (s) => s.rom.fillParty());
-  // Field first: the line on the ground, ahead of the fog.
+  // Field first: standing by the next ring, there's nothing on the ground to say so. The line is the
+  // MAP's alone (Cam, 11-03).
   const place = await spike(page, (s) => {
     const room = s.link.room, ring = room.ring();
     // A cell just outside the next ring.
@@ -171,7 +172,15 @@ test('the MAP has the next fog as a line, and nothing blinks', async ({ browser 
   }) as { map: string; x: number; y: number };
   await stand(page, place.map, place.x, place.y, 1);
   await page.waitForTimeout(800);
-  await shot(page, 'field-line');
+  await shot(page, 'field-no-line');
+  const onField = await page.evaluate(() => {
+    const c = document.getElementById('world') as HTMLCanvasElement;
+    const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+    let line = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i] === 72 && d[i + 1] === 24 && d[i + 2] === 136) line++;
+    return line;
+  });
+  expect(onField, 'no ring on the ground').toBe(0);
   await spike(page, (s) => s.runMenu('13'));
   await expect(page.locator('#map-window .map-picture')).toBeVisible({ timeout: 5_000 });
   await page.waitForTimeout(400);
