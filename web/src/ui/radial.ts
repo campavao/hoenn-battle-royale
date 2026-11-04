@@ -60,7 +60,7 @@ export class Radial implements PageWindow {
       b.type = 'button';
       b.className = `bm-btn rad-cell rad-${side}`;
       b.setAttribute('role', 'menuitem');
-      b.addEventListener('pointerenter', (ev) => { if (ev.pointerType === 'mouse') this.aimAt(side); });
+      b.addEventListener('pointerenter', (ev) => { if (ev.pointerType === 'mouse' && !this.atRest(ev)) this.aimAt(side); });
       b.addEventListener('click', () => {
         this.aimAt(side);
         this.release();
@@ -74,7 +74,13 @@ export class Radial implements PageWindow {
     this.mid = new Win(mid, MID_W, CELL_H, (c) => this.paintMid(c));
     // A tap off the dial shuts it.
     pageRoot().addEventListener('click', (ev) => { if (this.isOpen && ev.target === pageRoot()) this.close(); });
-    addEventListener('pointermove', (ev) => this.lean(ev));
+    addEventListener('pointermove', (ev) => {
+      if (ev.pointerType === 'mouse') {
+        this.mouse = { x: ev.clientX, y: ev.clientY };
+        if (!this.atRest(ev)) this.rest = null;
+      }
+      this.lean(ev);
+    });
     addEventListener('pointerup', (ev) => this.lift(ev));
   }
 
@@ -87,10 +93,20 @@ export class Radial implements PageWindow {
     return this.on;
   }
 
+  /** Where the mouse last was, and where it stood as the dial came up. A dial coming up under a mouse
+   *  at rest gets a pointerenter from the browser, a moment later: that's nobody leaning, and it took
+   *  the arrow's lean away (C, then Down, with the mouse over the left cell: the ITEMFINDER). */
+  private mouse: { x: number; y: number } | null = null;
+  private rest: { x: number; y: number } | null = null;
+  private atRest(ev: PointerEvent): boolean {
+    return !!this.rest && ev.clientX === this.rest.x && ev.clientY === this.rest.y;
+  }
+
   open(items: DialItem[]): void {
     if (this.isOpen) return;
     this.items = items;
     this.on = null;
+    this.rest = this.mouse;
     this.box.hidden = false;
     pageWin.open(this);
     this.fit();
