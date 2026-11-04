@@ -63,6 +63,9 @@ export interface BattleView {
   runChance: number;
   safariBalls: number;
   moves: MoveSlot[];
+  /** gMoveSelectionCursor, my battler's: the last move chosen, as the ROM keeps it (a mon sent
+   *  out starts on its first). */
+  moveCursor: number;
   foe: { name: string; types: [number, number] };
   /** The BAG's battle pockets (ui/bag.ts), by pocket: what can be used in here. */
   bag: Map<number, Stack[]>;
@@ -122,6 +125,7 @@ export function readBattleView(
   }
   const dolls = bagHolds(emu, sym, ITEMS_POCKET, [ITEM_POKE_DOLL]).size > 0;
   const balls = sym('gNumSafariBalls');
+  const cursor = sym('gMoveSelectionCursor');
   let foeName = '';
   try {
     foeName = decodeGen3Display(Uint8Array.from(name));
@@ -135,6 +139,7 @@ export function readBattleView(
     runChance: emu.read(br + BATTLE_RUN_CHANCE, 8),
     safariBalls: balls === undefined ? 0 : emu.read(balls, 8),
     moves,
+    moveCursor: cursor === undefined ? 0 : emu.read(cursor + local, 8) & 3,
     foe: { name: foeName, types: [emu.read(foe + MON_TYPES, 8), emu.read(foe + MON_TYPES + 1, 8)] },
     bag: withBag ? readBattleBag(emu, sym, rom) : NO_BAG,
   };
@@ -1188,11 +1193,16 @@ export class BattleMenu {
     this.forgetHeadWin.show(`${f.name}|${f.move}|${at}`);
   }
 
-  /** Back on the first button of whatever is on show, or kept where it was. */
+  /** Back on the first button of whatever is on show, or kept where it was. The moves' first is
+   *  the last one chosen (Cam, 11-04: "I was on Zap Cannon, clicked it, then it reset to Giga
+   *  Drain"). */
   private settleFocus(reset = false): void {
     if (!this.shown) return;
     const list = this.targets();
-    if (reset || !this.focused || !list.includes(this.focused)) this.focused = list[0] ?? null;
+    if (reset || !this.focused || !list.includes(this.focused)) {
+      const last = this.mode === 'moves' ? this.cells[this.view?.moveCursor ?? 0]?.b : undefined;
+      this.focused = last && list.includes(last) ? last : list[0] ?? null;
+    }
     this.paintFocus();
   }
 

@@ -88,6 +88,14 @@ describe("the battle, as the phone's menu reads it", () => {
     expect(readBattleView(emu, () => undefined, null)).toBeNull();
   });
 
+  it("reads the move cursor of the battler that is mine, on the challenged side of a link too", () => {
+    const { emu, put } = fakeEmu();
+    put(SYM.gMain + MAIN_IN_BATTLE_BYTE, 2, 1);
+    put(SYM.gBattlerPositions, 1, 1); // battler 0 is the far side
+    put(0x6200 + 1, 2, 1);
+    expect(readBattleView(emu, (n) => (n === 'gMoveSelectionCursor' ? 0x6200 : SYM[n]), fakeRom())!.moveCursor).toBe(2);
+  });
+
   it('on the challenged side of a link battle we are battler 1, and the foe is 0', () => {
     const { emu, put } = fakeEmu();
     put(SYM.gMain + MAIN_IN_BATTLE_BYTE, 0x02, 1);
@@ -125,6 +133,7 @@ describe('the action windows', () => {
     dolls: false,
     runChance: 44,
     safariBalls: 0,
+    moveCursor: 0,
     moves: [{ id: 1, pp: 1, maxPp: 1 }, { id: 2, pp: 1, maxPp: 1 }, { id: 0, pp: 0, maxPp: 0 }, { id: 0, pp: 0, maxPp: 0 }],
     foe: { name: 'WOOPER', types: [WATER, GROUND] },
     bag: new Map(),
