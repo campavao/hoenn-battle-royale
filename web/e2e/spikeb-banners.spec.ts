@@ -26,7 +26,8 @@ test('the curtain as a match starts says how many are playing', async ({ page })
   await page.locator('#room-start').click({ timeout: 30_000 });
   const box = page.locator('#curtain-box');
   await expect(box).toBeAttached({ timeout: 90_000 });
-  await expect(box).toHaveAttribute('data-text', /^\d+ TRAINERS?\|.+/);
+  // MAX 8 with FILL on: the host and seven bots, not the seven alone (Cam, 11-04: "29 TRAINERS").
+  await expect(box).toHaveAttribute('data-text', /^8 TRAINERS\|.+/);
   const fits = await box.evaluate((c) => { const b = c.getBoundingClientRect(); return b.left >= 0 && b.right <= innerWidth; });
   expect(fits, 'on a phone').toBe(true);
   await shot(page, 'curtain-box-phone');
