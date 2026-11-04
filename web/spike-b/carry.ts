@@ -241,8 +241,9 @@ export function withHeld(party: Uint8Array, slot: number, item: number): Uint8Ar
 
 /** `party` with this one knowing `move` in `moveSlot`, its PP full and that slot's PP Ups gone
  *  (pokemon.c SetMonMoveSlot, RemoveMonPPBonus), and the slot marked as the player's pick, which
- *  a rung's lift keeps (br_moves.c BrMoves_Placed: a bit of the unused ribbons, 27 up). */
-export function withMove(party: Uint8Array, slot: number, moveSlot: number, move: number, pp: number): Uint8Array {
+ *  a rung's lift keeps (br_moves.c BrMoves_Placed: a bit of the unused ribbons, 27 up). Not `placed`:
+ *  nobody chose it, and the lift may better it. */
+export function withMove(party: Uint8Array, slot: number, moveSlot: number, move: number, pp: number, placed = true): Uint8Array {
   const out = party.slice();
   const v = new DataView(out.buffer, out.byteOffset, out.byteLength);
   const at = slot * 100;
@@ -255,7 +256,7 @@ export function withMove(party: Uint8Array, slot: number, moveSlot: number, move
   edit(sub('A') + (moveSlot >> 1) * 4, (w) => ((w & ~(0xffff << half)) | (move << half)) >>> 0);
   edit(sub('A') + 8, (w) => ((w & ~(0xff << (moveSlot * 8))) | (pp << (moveSlot * 8))) >>> 0);
   edit(sub('G') + 8, (w) => (w & ~(3 << (moveSlot * 2))) >>> 0);
-  edit(sub('M') + 8, (w) => (w | (1 << (27 + moveSlot))) >>> 0);
+  if (placed) edit(sub('M') + 8, (w) => (w | (1 << (27 + moveSlot))) >>> 0);
   // pokemon.c's CalculateBoxMonChecksum: the 16-bit sum of the plain block.
   let sum = 0;
   for (let i = 0; i < 12; i++) {

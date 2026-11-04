@@ -453,6 +453,59 @@ test('the MAP is the page\'s window: fog, a cursor, BACK, and no ROM screen (Cam
   await ctx.close();
 });
 
+for (const [how, size] of [['upright', { width: 375, height: 812 }], ['on its side', { width: 712, height: 327 }]] as const) {
+  test(`a phone ${how}: every window is on the glass, and the MAP has all of it (Cam, 11-04)`, async ({ browser }) => {
+    test.setTimeout(240_000);
+    const ctx = await browser.newContext({ viewport: size, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+    const page = await ctx.newPage();
+    await withTeam(page);
+    const onGlass = async (sel: string, what: string) => {
+      const boxes = await page.locator(sel).evaluateAll((els) => els.filter((e) => (e as HTMLElement).offsetParent !== null).map((e) => { const r = e.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; }));
+      expect(boxes.length, what).toBeGreaterThan(0);
+      for (const b of boxes) {
+        expect(b.top, `${what}: its top`).toBeGreaterThanOrEqual(0);
+        expect(b.left, `${what}: its left`).toBeGreaterThanOrEqual(0);
+        expect(b.bottom, `${what}: its bottom`).toBeLessThanOrEqual(size.height);
+        expect(b.right, `${what}: its right`).toBeLessThanOrEqual(size.width);
+      }
+    };
+    await spike(page, (s) => s.runMenu('13'));
+    await expect(page.locator('#map-window .map-picture')).toBeVisible({ timeout: 5000 });
+    const map = (await page.locator('#map-window .map-picture').boundingBox())!;
+    if (size.width < size.height) expect(map.width, 'the MAP, as wide as the phone').toBeGreaterThan(size.width - 16);
+    else expect(map.height, 'the MAP, as tall as the phone').toBeGreaterThan(size.height - 16);
+    await onGlass('#map-window canvas', 'the MAP');
+    await page.locator('#map-window [aria-label="BACK"]').click();
+    await page.waitForTimeout(800);
+    await page.locator('#hud-party').click();
+    await expect(page.locator('.bm-slot').first()).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(300);
+    await onGlass('.bm-slot, .bm-back', 'the party');
+    await page.locator('.bm-slot').first().click();
+    await page.waitForTimeout(300);
+    await onGlass('.bm-m-card, .bm-m-moves, .bm-m-btn', 'one of them');
+    await page.locator('.bm-m-btn[aria-label="SUMMARY"]').click();
+    await expect(page.locator('#summary')).toBeVisible();
+    await page.waitForTimeout(300);
+    await onGlass('#summary canvas', 'SUMMARY');
+    await page.locator('.sum-back').click();
+    await page.waitForTimeout(300);
+    await page.locator('.bm-m-btn[aria-label="BACK"]').click();
+    await page.locator('.bm-back:visible').click();
+    await page.waitForTimeout(800);
+    await page.locator('#hud-bag').click();
+    await page.waitForTimeout(500);
+    await onGlass('.bm-bag-head, .bm-bag-list, .bm-back', 'the BAG');
+    await page.locator('.bm-back:visible').click();
+    await page.waitForTimeout(800);
+    await spike(page, (s) => s.startFor({ type: 'bag', tick: 0, id: s.link.me, key: 0x7e0002, name: 'DRAKE', bag: { items: [{ id: 13, n: 3 }], money: 300, mons: [{ species: 373, level: 30 }] } }));
+    await expect(page.locator('#bag-panel button').first()).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(300);
+    await onGlass('#bag-panel canvas', 'a dropped bag');
+    await ctx.close();
+  });
+}
+
 test('the drop and FLY are the MAP window: pick a place, learn it, fly to a town (Cam, 11-02)', async ({ browser }) => {
   test.setTimeout(240_000);
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });

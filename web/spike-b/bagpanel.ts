@@ -4,6 +4,7 @@
 import { Win, drawFitted, drawIcon, drawItemFitted } from '../src/ui/phonehud';
 import { EmeraldCanvas, TEXT_BLUE, TEXT_DARK, TEXT_WHITE, fitText, measure, type TextColor } from '../src/ui/emerald';
 import { nextFocus, type Dir } from '../src/ui/focus';
+import { glass } from '../src/ui/pagewin';
 
 const CELL_W = 112, CELL_H = 80, GAP = 8, MENU_W = 2 * CELL_W + GAP, BACK_H = 32, ROW_H = 24, TAKE_H = 40, TITLE_H = 18;
 const ITEM_POKE_BALL = 4;
@@ -30,9 +31,12 @@ export class BagPanel {
   private focused: HTMLElement | null = null;
   private showFocus: boolean;
   private screen: 'choose' | 'items';
+  /** The windows' scale, less if they'd run off a short screen. */
+  private s: number;
 
   constructor(private readonly el: HTMLElement, private readonly deps: BagPanelDeps, focusFirst: boolean) {
     this.showFocus = focusFirst;
+    this.s = deps.scale;
     const things = deps.items.length > 0 || deps.money > 0;
     this.screen = deps.mons && things ? 'choose' : 'items';
     el.hidden = false;
@@ -46,7 +50,7 @@ export class BagPanel {
     b.setAttribute('aria-label', label);
     parent.appendChild(b);
     const win = new Win(b, w, h, (c, redo) => { c.drawFrame({ x: 0, y: 0, w, h }); paint(c, redo); });
-    win.size(w, h, this.deps.scale);
+    win.size(w, h, this.s);
     win.show(label);
     b.addEventListener('click', press);
     return b;
@@ -61,7 +65,7 @@ export class BagPanel {
       c.fillRect({ x: 0, y: 0, w, h: TITLE_H }, 'rgba(16,20,24,0.55)');
       c.drawTextCentred(text, w / 2, 1, TEXT_WHITE);
     });
-    win.size(w, TITLE_H, this.deps.scale);
+    win.size(w, TITLE_H, this.s);
     win.show(text);
   }
 
@@ -73,6 +77,19 @@ export class BagPanel {
   }
 
   private draw(): void {
+    this.s = this.deps.scale;
+    this.paint();
+    // A phone on its side hasn't the height for them (Cam, 11-04): all of them smaller, once.
+    this.el.style.setProperty('--s', String(this.s));
+    const room = glass(), h = this.el.getBoundingClientRect().height;
+    if (h > room.h - 8) {
+      this.s *= (room.h - 8) / h;
+      this.el.style.setProperty('--s', String(this.s));
+      this.paint();
+    }
+  }
+
+  private paint(): void {
     this.el.replaceChildren();
     const d = this.deps;
     if (this.screen === 'choose') {
@@ -108,7 +125,7 @@ export class BagPanel {
         });
         if (d.money) c.drawText(`¥${d.money}`, 44, 8 + d.items.length * ROW_H + 5, TEXT_DARK);
       });
-      win.size(MENU_W, h, d.scale);
+      win.size(MENU_W, h, this.s);
       win.show('list');
       this.takeAll();
       this.backButton(() => { if (d.mons) { this.screen = 'choose'; this.draw(); } else d.done(''); });

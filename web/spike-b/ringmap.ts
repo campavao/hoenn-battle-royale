@@ -15,13 +15,15 @@ export const GRID_X = 1 * CELL;
 export const GRID_Y = 2 * CELL;
 export const GRID_W = 28;
 export const GRID_H = 15;
+/** src/data/region_map/region_map_sections.json: its place in the list. */
+const MAPSEC_SOOTOPOLIS_CITY = 14;
 interface Section { id: number; x: number; y: number; w: number; h: number; letters: number[] }
 
 /** A place on the page's MAP (mapwindow.ts): its section and what it says. */
 export interface MapPlace { id: number; name: string }
 /** What the page's MAP marks, in the picture's pixels. */
 export interface MapPlots {
-  gyms: { x: number; y: number; gfx: number }[];
+  gyms: { x: number; y: number; gfx: number; beaten: boolean }[];
   events: { x: number; y: number; taken: boolean }[];
   me: { x: number; y: number; gfx: number } | null;
 }
@@ -37,7 +39,7 @@ export class RingMap {
   private zone: number | undefined;
   private zoneAt: Section | undefined;
 
-  constructor(private room: Room, art: RomArt) {
+  constructor(private room: Room, private art: RomArt) {
     const ids = new Map<number, Section>();
     for (const key of room.places.keys()) {
       const m = room.maps.get(key)!;
@@ -170,15 +172,17 @@ export class RingMap {
     return { x: Math.floor((p.x - GRID_X) / CELL), y: Math.floor((p.y - GRID_Y) / CELL) };
   }
 
-  /** The marks the page's MAP draws: the leaders the room has seen beaten, this round's events
-   *  (grey once their legendary is taken), and me. */
+  /** The marks the page's MAP draws: every leader's face, greyed once the room has seen them beaten,
+   *  as the ROM's MAP had them (br_gym.c BrGym_DrawOnMap: the drop's too), this round's events (grey
+   *  once their legendary is taken), and me. */
   plots(me: { spot: Spot; gfx: number } | null): MapPlots {
     const middle = (s: Section) => ({ x: GRID_X + (s.x + s.w / 2) * CELL, y: GRID_Y + (s.y + s.h / 2) * CELL });
     const room = this.room;
     const gyms = LEADERS.flatMap((l) => {
-      const at = room.bossDown(l.n) ? this.outdoors({ map: l.map, x: 0, y: 0 }) : undefined;
-      const s = at && this.sections.get(at.map);
-      return s ? [{ ...middle(s), gfx: l.gfx[0] }] : [];
+      // By the town the gym's in. SOOTOPOLIS isn't on this world's plane, its way in being a dive,
+      // but the ROM's MAP had JUAN's face on it all the same.
+      const s = this.sections.get(l.map.replace(/_GYM.*/, '')) ?? this.art.section(MAPSEC_SOOTOPOLIS_CITY);
+      return [{ ...middle(s as Section), gfx: l.gfx[0], beaten: !!room.bossDown(l.n) }];
     });
     const events = room.events.flatMap((e) => {
       const at = this.outdoors({ map: e.map, x: e.x, y: e.y });

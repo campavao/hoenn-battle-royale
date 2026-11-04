@@ -3,7 +3,7 @@
 // the D-pad or the arrows one way, and let go. Each item has its own side of the dial and keeps it,
 // so the thumb learns it, and one that can't go here says why in the middle rather than vanish.
 import { TEXT_DARK, TEXT_GRAY, TEXT_RED, fitText, wrapText, type EmeraldCanvas } from './emerald';
-import { pageRoot, pageWin, type PageWindow } from './pagewin';
+import { glass, pageRoot, pageScale, pageWin, type PageWindow } from './pagewin';
 import { Win, drawItemFitted } from './phonehud';
 
 export type Side = 'up' | 'right' | 'down' | 'left';
@@ -47,7 +47,7 @@ export class Radial implements PageWindow {
   private readonly mid: Win;
   private scale = 0;
 
-  constructor(private readonly deps: { scale(): number; sound?(): void }) {
+  constructor(private readonly deps: { scale(): number; touch?: boolean; sound?(): void }) {
     const doc = document;
     this.box = doc.createElement('div');
     this.box.id = 'radial';
@@ -169,10 +169,10 @@ export class Radial implements PageWindow {
   }
 
   private fit(): void {
-    const s = this.deps.scale();
+    const s = this.deps.touch ? pageScale(CELL_W + MID_W + CELL_W + 16, 3 * CELL_H + 16, this.deps.scale(), true, glass()) : this.deps.scale();
+    pageRoot().style.setProperty('--s', String(s));
     if (s === this.scale) return;
     this.scale = s;
-    pageRoot().style.setProperty('--s', String(s));
     for (const { w } of this.cells.values()) w.size(CELL_W, CELL_H, s);
     this.mid.size(MID_W, CELL_H, s);
   }
