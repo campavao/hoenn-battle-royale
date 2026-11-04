@@ -59,7 +59,8 @@ export function bitsOf(k: Keys): number {
 export interface Actor {
   id: number;
   bot: boolean;
-  /** SELECT rides the ACRO BIKE: USEd off the BAG. A new mover (a FLY, a ferry) keeps it. */
+  /** The bike USEd off the BAG, which SELECT then rides: true the ACRO BIKE, false the MACH BIKE,
+   *  neither yet whichever the ground asks for (sim.ts acroNear). A new mover (a FLY, a ferry) keeps it. */
   likeAcro?: boolean;
   name: string;
   /** The wardrobe index: what the ROM draws this trainer as in a battle. */
@@ -111,6 +112,10 @@ export interface Actor {
   /** The map a bot's team was dealt on: where it landed. A trainer's team does not turn with the
    *  ground under them, and nor does a bot's (Cam, 11-03: "the same rules as a player"). */
   dealt?: string;
+  /** The rung of the fight it is in, from the frame that fight begins until it is settled: a team is
+   *  dealt by the rung, and the team met is the team that falls (Cam, 11-04: "only one Kadabra, and
+   *  now there's two"). */
+  held?: number;
   /** The legendary a bot is fighting (`foe` LEGEND_FOE), and those it has tried: one go each,
    *  or one that lost would stand at it (brain.ts foughtLegends). */
   legendKey?: number;
@@ -148,7 +153,8 @@ const MAINLANDS = new Map<string, ReadonlySet<string>>();
 
 /** A bot's team: what it took, then what the seed deals it at this rung on the map it landed on, six
  *  at most. A trainer played on by a bot (`own`) has their own and nothing dealt. */
-export function botParty(seed: number, a: Pick<Actor, 'id' | 'm' | 'caught' | 'own' | 'moves' | 'dealt'>, phase: number): PackedMon[] {
+export function botParty(seed: number, a: Pick<Actor, 'id' | 'm' | 'caught' | 'own' | 'moves' | 'dealt' | 'held'>, atPhase: number): PackedMon[] {
+  const phase = a.held ?? atPhase;
   const taken = (a.caught ?? []).map((sp, i) => {
     const m = tradedMon(sp, phase), moves = a.moves?.[i];
     // PP is not on what a page tells of its team.
@@ -156,7 +162,8 @@ export function botParty(seed: number, a: Pick<Actor, 'id' | 'm' | 'caught' | 'o
   });
   if (a.own) return taken.slice(0, 6);
   const dealt = dealParty(seed, a.id, phase, a.dealt ?? a.m.spot.map, gradeOf(seed, a.id));
-  return taken.length ? [...taken, ...dealt].slice(0, 6) : dealt;
+  // What it took stands in for the same kind dealt: no second of a mon it carries because of the seed.
+  return taken.length ? [...taken, ...dealt.filter((m) => !taken.some((t) => t.species === m.species))].slice(0, 6) : dealt;
 }
 
 /** A bot's team as the seed deals it, with the wounds its fights left it: a fainted slot
@@ -720,7 +727,7 @@ export class Room {
     } else if (cmd.c === 'ride') {
       const a = this.actor(cmd.id);
       if (!a || a.bot) return;
-      a.likeAcro = cmd.acro || undefined;
+      a.likeAcro = cmd.acro;
       if (a.m.bike && a.m.acro !== cmd.acro && !this.base.acroAt?.(a.m.spot) && (cmd.acro || this.stepFor(a).cycling?.(a.m.spot))) {
         a.m.acro = cmd.acro;
         bikeClear(a.m);
@@ -826,8 +833,9 @@ export class Room {
       if (cmd.b === LEGEND_FOE) return this.legendOver(cmd);
       const a = this.actor(cmd.a), b = this.actor(cmd.b);
       if (!a || !b || !a.bot || !b.bot || a.foe !== b.id || b.foe !== a.id || a.judge !== cmd.id || !a.battling) return;
-      this.part(a);
-      this.part(b);
+      // Still their fight's teams, for whoever falls of it.
+      this.part(a, true);
+      this.part(b, true);
       const won = cmd.winner === a.id ? a : cmd.winner === b.id ? b : undefined;
       const lost = won === a ? b : won === b ? a : undefined;
       // Each bag spends what it used, and the winner keeps what the fight left it
@@ -843,6 +851,7 @@ export class Room {
         if (left) this.botOut(a, right ? '' : b.name);
         if (right) this.botOut(b, left ? '' : a.name);
       }
+      a.held = b.held = undefined;
     } else if (cmd.c === 'lock') {
       this.results.entrants = this.actors.map((a) => [a.id, a.name]);
       // No Safari (SAFARI 0, the live room's escape hatch): straight to a dealt drop,
@@ -896,6 +905,7 @@ export class Room {
         // Beaten: out, and its bag down where it stood (the page says nothing of a fight
         // that ran over into a new round: that was the old round's).
         if (cmd.won) this.botOut(foe, a.name);
+        foe.held = undefined;
       }
       a.foe = 0;
       // A gym leader falls once: the first to beat them closes the gym.
@@ -1464,8 +1474,15 @@ export class Room {
     a.calm = this.tick + GRACE;
   }
 
-  /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace. */
-  private part(a: Actor): void {
+  /** The fight starts: its team is this rung's until it is over. */
+  private hold(a: Actor): void {
+    a.held = this.ring().phase + 1;
+  }
+
+  /** A bot out of its bot-vs-bot fight, answered or not: walking again after the grace, its team the
+   *  ring's again (`settling`: not until the caller has seen to who fell). */
+  private part(a: Actor, settling = false): void {
+    if (!settling) a.held = undefined;
     // A legendary it let go of stands again, for whoever comes next.
     if (a.legendKey !== undefined) {
       this.picked.delete(a.legendKey);
@@ -1588,6 +1605,7 @@ export class Room {
     a.foe = LEGEND_FOE;
     a.judge = judge;
     a.since = this.tick;
+    this.hold(a);
     a.legendKey = s.key;
     a.keys = a.last = 0;
     events.push({ type: 'bots', tick: this.tick, id: judge, a: a.id, b: LEGEND_FOE, legend: { key: s.key, species } });
@@ -1613,7 +1631,7 @@ export class Room {
         this.botLearns(a);
       }
     } else if (cmd.winner === LEGEND_FOE) {
-      this.part(a);
+      this.part(a, true);
       this.botOut(a, '', { wild: true });
       return;
     } else if (cmd.drew) a.wear = cmd.drew[0].slice(0, 6).map((v) => Math.min(1, Math.max(0, v)));
@@ -1638,6 +1656,8 @@ export class Room {
   private botsFight(a: Actor, b: Actor, judge: number, events: RoomEvent[]): void {
     a.judge = b.judge = judge;
     a.since = b.since = this.tick;
+    this.hold(a);
+    this.hold(b);
     events.push({ type: 'bots', tick: this.tick, id: judge, a: a.id, b: b.id });
   }
 
@@ -1653,7 +1673,7 @@ export class Room {
     // A trainer they were fighting is still in that battle: their page ends it (their
     // ROM wins it, BrNetlink_PeerOut) and says so.
     const foe = a?.foe ? this.actor(a.foe) : undefined;
-    if (foe?.bot) foe.battling = false;
+    if (foe?.bot) { foe.battling = false; foe.held = undefined; }
     // Whoever they were meeting (the "!" or the walk-up): no battle is coming, so free.
     for (const o of this.actors) if (o.meet?.foe === id) this.unmeet(o);
     // Bots whose fight their page was running: no answer is coming, they walk on.
@@ -1945,7 +1965,7 @@ export class Room {
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
     // A bot's pickings were the old round's, as are `picked` and the spills cleared below.
-    for (const a of this.actors) if (a.bot) { a.bleedAt = undefined; a.loot = undefined; if (a.judge) this.part(a); a.caught = a.tried = a.field = a.moves = a.wear = undefined; a.own = false; a.dealt = undefined; this.botLearns(a); }
+    for (const a of this.actors) if (a.bot) { a.bleedAt = undefined; a.loot = undefined; if (a.judge) this.part(a); a.caught = a.tried = a.field = a.moves = a.wear = undefined; a.own = false; a.dealt = a.held = undefined; this.botLearns(a); }
     // The bots open in the Zone with everybody, as the live host deals them (bots/host.ts).
     if (safari) for (const a of this.actors) if (a.bot) { a.m = newMover(this.zone(a.id)[0] ?? a.m.spot, a.m.facing); a.cruise = undefined; }
     // A walk-up the old round left half done starts no battle in this one.
@@ -2004,7 +2024,7 @@ export class Room {
         const weather = this.weatherAt(h.m.spot);
         events.push({ type: 'duel', tick: this.tick, id: h.id, foe: f.id, first: true, ...(weather ? { weather } : {}) });
         events.push({ type: 'duel', tick: this.tick, id: f.id, foe: h.id, first: false, ...(weather ? { weather } : {}) });
-      } else { f.foughtBy = h.id; events.push({ type: 'fight', tick: this.tick, id: h.id, foe: f.id }); }
+      } else { f.foughtBy = h.id; this.hold(f); events.push({ type: 'fight', tick: this.tick, id: h.id, foe: f.id }); }
     }
   }
 
@@ -2218,6 +2238,7 @@ export class Room {
           foe.m.facing = foe.m.moveDir = BACK[a.m.facing];
           a.foe = foe.id;
           foe.foughtBy = a.id;
+          this.hold(foe);
           events.push({ type: 'fight', tick: this.tick, id: a.id, foe: foe.id });
         } else if (!foe && this.clerk(a)) {
           events.push({ type: 'mart', tick: this.tick, id: a.id, map: a.m.spot.map });
@@ -2312,7 +2333,7 @@ export class Room {
     fn.cycling = !a.bot && !this.ring().safari ? this.base.cycling : undefined;
     fn.acroCycling = a.bot ? undefined : this.base.acroCycling;
     fn.acroAt = this.base.acroAt;
-    fn.likeAcro = !!a.likeAcro;
+    fn.likeAcro = a.bot ? false : a.likeAcro;
     return fn;
   }
 
@@ -2328,7 +2349,7 @@ export class Room {
       mix((m.acro ? 1 : 0) | (m.acroB ? 2 : 0) | (a.likeAcro ? 4 : 0) | (m.acroState << 3) | (m.acroTurn << 6) | (m.keyDir << 9) | (m.keyBtn << 12)); mix(m.dirT | (m.btnT << 8));
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
-      mix((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bleedAt ?? 0); for (const w of a.wear ?? []) mix(Math.round(w * 1000)); str(a.dealt ?? ''); mix(a.boss ?? 0); mix(a.away ? 1 : 0); mix(a.pickBy ?? 0); mix(a.cruise ? (a.cruise.to === 'lilycove' ? 8 : 16) + LEGS.indexOf(a.cruise.leg) : 0); mix(a.cruise?.steps ?? 0); mix(a.loot?.money ?? 0); for (const sp of a.caught ?? []) mix(sp); mix(a.legendKey ?? 0); for (const st of a.loot?.items ?? []) { mix(st.id); mix(st.n); }
+      mix((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.held ?? 0); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bleedAt ?? 0); for (const w of a.wear ?? []) mix(Math.round(w * 1000)); str(a.dealt ?? ''); mix(a.boss ?? 0); mix(a.away ? 1 : 0); mix(a.pickBy ?? 0); mix(a.cruise ? (a.cruise.to === 'lilycove' ? 8 : 16) + LEGS.indexOf(a.cruise.leg) : 0); mix(a.cruise?.steps ?? 0); mix(a.loot?.money ?? 0); for (const sp of a.caught ?? []) mix(sp); mix(a.legendKey ?? 0); for (const st of a.loot?.items ?? []) { mix(st.id); mix(st.n); }
       if (a.meet) { mix(a.meet.foe); mix(a.meet.since); mix((a.meet.walk ? 1 : 0) | (a.meet.duel ? 2 : 0) | (a.meet.bots ? 4 : 0)); }
     }
     for (const [k, t] of this.taken) { mix(k); mix(t); }
@@ -2349,6 +2370,19 @@ export class Room {
   }
 }
 
+/** Hoenn's seams don't quite close: the loops round the middle of the map come back two tiles out,
+ *  which a GBA, with one map at a time, never sees. Walked in whatever order, three seams stayed
+ *  open, and one of them laid ROUTE 116's foot over VERDANTURF's top rows (Cam, 11-04: "the cave
+ *  entrance it looks completely blocked but I can still walk up that way"). All the loops share
+ *  this seam, so the walk that lays the plane doesn't cross it: every other seam meets, no two maps
+ *  share a cell, and this one's step is a glide (seamglide.ts). It's a gap of grass between forests,
+ *  whose trees lie on the same two-cell grid either way, so it shows least here. export-fill.py and
+ *  main.ts's walk leave it out too. */
+export const LOOSE_SEAM: readonly [string, string] = ['MAP_PETALBURG_CITY', 'MAP_ROUTE102'];
+export function isLooseSeam(a: string, b: string): boolean {
+  return (a === LOOSE_SEAM[0] && b === LOOSE_SEAM[1]) || (a === LOOSE_SEAM[1] && b === LOOSE_SEAM[0]);
+}
+
 /** Every outdoor map joined to Littleroot by its seams, each at its place in one plane
  *  (tiles): the maps a trainer may walk on, and where the page draws them. */
 export function layout(maps: readonly WorldMap[]): Map<string, { m: WorldMap; gx: number; gy: number }> {
@@ -2361,7 +2395,7 @@ export function layout(maps: readonly WorldMap[]): Map<string, { m: WorldMap; gx
     const p = placed.get(queue.shift()!)!;
     for (const s of p.m.seams) {
       const to = byId.get(s.to);
-      if (!to || !to.outdoor || placed.has(to.id)) continue;
+      if (!to || !to.outdoor || placed.has(to.id) || isLooseSeam(p.m.id, to.id)) continue;
       let gx = p.gx;
       let gy = p.gy;
       if (s.dir === 'north') { gx += s.offset; gy -= to.h; }

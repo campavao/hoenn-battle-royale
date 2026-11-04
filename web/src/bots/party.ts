@@ -201,6 +201,9 @@ export function tradedMon(species: number, phase: number): PackedMon {
   };
 }
 
+/** How many more draws a slot gets before a map with few kinds deals a second of one. */
+const REDEALS = 64;
+
 /** A bot's team at a given ring phase: one at the drop, another every two rungs, up to
  *  Kanto's six. Dealt from the seed and the seat, so the same match always deals the
  *  same bot the same team -- including on a client that never ran the brain. */
@@ -223,6 +226,12 @@ export function dealParty(
   const bring = grade === Grade.Ace ? 1 : grade === Grade.Rookie ? -1 : 0;
   const count = Math.max(1, Math.min(6, 1 + Math.floor(Math.max(0, phase - 1) / 2) + bring));
   const party: PackedMon[] = [];
-  for (let i = 0; i < count; i++) party.push(mon(level, rng, mapId, i === 0 ? pool : []));
+  for (let i = 0; i < count; i++) {
+    let next = mon(level, rng, mapId, i === 0 ? pool : []);
+    // Two of a kind read as a copy (Cam, 11-04: "it seems like it's duplicating"): another draw, as
+    // long as the map has others. A later rung still draws the same team first, then a slot more.
+    for (let tries = 0; tries < REDEALS && party.some((p) => p.species === next.species); tries++) next = mon(level, rng, mapId, []);
+    party.push(next);
+  }
   return party;
 }

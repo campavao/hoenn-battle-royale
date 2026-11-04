@@ -1,4 +1,4 @@
-import type { MatchTally } from '../src/match/tally';
+import { readTally, type MatchTally } from '../src/match/tally';
 import type { addTotals } from '../src/match/career';
 import HMS from '../src/data/hms.json';
 import { MOVE_CUT, MOVE_STRENGTH, MOVE_SURF } from '../src/bots/party';
@@ -382,15 +382,63 @@ export function fieldOf(party: Uint8Array, count: number): number {
   return bits;
 }
 
+/** How many moves each species used and how often each move was, as gBrTally's tables say it. */
+export interface Favourites {
+  mons: Record<number, number>;
+  moves: Record<number, number>;
+}
+export const emptyFavourites = (): Favourites => ({ mons: {}, moves: {} });
+
+const addCounts = (into: Record<number, number>, from: Record<number, number>) => {
+  for (const [id, n] of Object.entries(from)) into[Number(id)] = (into[Number(id)] ?? 0) + n;
+};
+
+/** gBrTally's species and moves, br_tally.h: from `species` up to `discard`. */
+const TABLES_FROM = 8, TABLES_TO = 50;
+
+/** A battle's end: its favourites into the page's count, and a copy of the tally with its tables empty
+ *  for the next. BrTally_Move keeps the first six species and eight moves it meets, and the hidden ROM
+ *  counts from the page's boot, so a match's later team was never counted at all (Cam, 11-04:
+ *  "FAVORITE NOSEPASS, TOP MOVE TACKLE. It doesn't feel true"). One battle fits, near enough. */
+export function drainFavourites(tally: Uint8Array<ArrayBuffer>, into: Favourites): Uint8Array<ArrayBuffer> {
+  const v = new DataView(tally.buffer, tally.byteOffset, tally.byteLength);
+  const t = readTally((a, bits) => (bits === 8 ? v.getUint8(a) : bits === 16 ? v.getUint16(a, true) : v.getUint32(a, true)), 0);
+  addCounts(into.mons, t.mons);
+  addCounts(into.moves, t.moves);
+  const left = tally.slice();
+  left.fill(0, TABLES_FROM, TABLES_TO);
+  return left;
+}
+
+/** The tally as the page says it: what battles have been drained of, and what the ROM has now. */
+export function withFavourites(t: MatchTally, sum: Favourites): MatchTally {
+  const mons = { ...sum.mons }, moves = { ...sum.moves };
+  addCounts(mons, t.mons);
+  addCounts(moves, t.moves);
+  return { ...t, mons, moves };
+}
+
+/** Whom `name` knocked out of the round, as its results say it: every trainer, and of those the people
+ *  (a fight with a person is a duel, and to lose one is to be out). The fog and a wild mon are nobody's. */
+export function beatenBy(fallen: readonly { by: string; bot?: boolean; wild?: boolean }[], name: string): { trainers: number; duelsWon: number } {
+  const mine = fallen.filter((f) => name && f.by === name && !f.wild);
+  return { trainers: mine.length, duelsWon: mine.filter((f) => !f.bot).length };
+}
+
 /** What a round added to MY STATS (career.ts's addTotals, POK-416): the hidden ROM's
  *  gBrTally now less what it had when the round began (it counts from boot here, not
  *  from a match's start), and the steps the page counted, since the ROM walks none. */
-export function tallySince(from: MatchTally | null, now: MatchTally | null, steps: number): Parameters<typeof addTotals>[1] {
+export function tallySince(
+  from: MatchTally | null,
+  now: MatchTally | null,
+  steps: number,
+  room: { trainers: number; duelsWon: number; took: number } = { trainers: 0, duelsWon: 0, took: 0 },
+): Parameters<typeof addTotals>[1] {
   const less = (a: Record<number, number>, b: Record<number, number> = {}) => {
     const out: Record<number, number> = {};
     for (const [id, n] of Object.entries(a)) { const d = n - (b[Number(id)] ?? 0); if (d > 0) out[Number(id)] = d; }
     return out;
   };
   const d = (k: 'won' | 'caught' | 'items') => Math.max(0, (now?.[k] ?? 0) - (from?.[k] ?? 0));
-  return { won: d('won'), caught: d('caught'), items: d('items'), steps, trainers: 0, duelsWon: 0, took: 0, mons: now ? less(now.mons, from?.mons) : {}, moves: now ? less(now.moves, from?.moves) : {} };
+  return { won: d('won'), caught: d('caught'), items: d('items'), steps, ...room, mons: now ? less(now.mons, from?.mons) : {}, moves: now ? less(now.moves, from?.moves) : {} };
 }

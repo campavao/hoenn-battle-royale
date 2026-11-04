@@ -137,6 +137,12 @@ export class Host {
     this.pending.push({ c: 'lock' });
   }
 
+  /** The joins and the lock in now, not on the next frame: the state a match's first `hello` carries
+   *  is the match, or a page's curtain counts its bots and nobody else (Cam, 11-04: "29 TRAINERS"). */
+  settle(): void {
+    for (const c of this.pending.splice(0)) this.room.apply(c);
+  }
+
   leave(id: number): void {
     this.players.delete(id);
     this.pending.push({ c: 'leave', id });

@@ -64,7 +64,7 @@ describe("what our own ROM counted of the match (POK-416)", () => {
       names,
     );
     expect(lines.map((l) => `${l.label} ${l.value}`)).toEqual([
-      'BATTLES WON 12', 'CAUGHT 4', 'STEPS WALKED 2000', 'ITEMS USED 9', 'TRAINERS BEATEN 7', 'DUELS WON 2', 'LOOT TAKEN 15',
+      'BATTLES WON 12', 'CAUGHT 4', 'STEPS WALKED 2000', 'ITEMS USED 9', 'TRAINERS BEATEN 7', 'PLAYERS BEATEN 2', 'LOOT TAKEN 15',
       'FAVORITE TREECKO', 'TOP MOVE POUND',
     ]);
   });

@@ -1,6 +1,6 @@
-// Hoenn's maps don't quite lie flat. The field places them in one plane by their seams, and three
-// seams close a loop two tiles out (Verdanturf and Route 116, Fallarbor and Route 114, Dewford and
-// Route 107): the GBA, with one map at a time, never sees it, and here a step over one jumped its
+// Hoenn's maps don't quite lie flat. The field places them in one plane by their seams, and the
+// loops round the middle of the map close two tiles out: the GBA, with one map at a time, never
+// sees it. One seam is left open for that (room.ts LOOSE_SEAM), and here a step over it jumped its
 // trainer, and a camera on them, two tiles. Drawn, the jump is a glide over a step's time. The Room
 // knows nothing of it: only where the page puts them.
 
