@@ -1649,7 +1649,9 @@ describe('Cam 10-30', () => {
       for (let i = 1; i < fights.length; i++) if (left[i - 1] - 1 >= 5) w = Math.max(w, fights[i] - fights[i - 1]);
       worst.push(w);
     }
-    expect(worst.reduce((a, b) => a + b, 0) / worst.length).toBeLessThan(60 * 60 * 3.5);
+    // Six seeds are dice here too: 3.07 on these and 2.68 over 24 until a bot's TMs stopped taking a
+    // slot in its fights (bag.ts FIGHT_ITEMS), 3.97 and 2.82 since (Cam, 11-04).
+    expect(worst.reduce((a, b) => a + b, 0) / worst.length).toBeLessThan(60 * 60 * 4.5);
   }, 60_000);
 });
 
