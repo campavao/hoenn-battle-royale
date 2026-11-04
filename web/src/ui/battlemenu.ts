@@ -294,6 +294,10 @@ const ITEM_POKE_BALL = 4, ITEM_ESCAPE_ROPE = 85, ITEM_POKEBLOCK_CASE = 273, ITEM
 const ICON_BOX = 15;
 const SLOT_MENU_PARTY = 2, SLOT_RUN = 3;
 const USE_HEAD_W = 100, USE_HEAD_H = 34;
+/** A catch's question, the ROM's two lines. */
+const CATCH_HEAD_H = 34;
+/** From a catch's window opening: a press to end the battle's last line is not the answer. */
+const CATCH_DEAF_MS = 400;
 
 /** A button's icon and word, side by side and centred. A long word (RUN 100%) has a smaller
  *  icon rather than be cut. */
@@ -475,6 +479,13 @@ export class BattleMenu {
   private drop: { who: string; rows: PartyMember[]; take(at: number, give?: number): void; close(): void; pick: boolean } | null = null;
   private dropCan: ((m: PartyMember) => boolean) | null = null;
   private dropAt: number | null = null;
+  /** A catch with a full party, over the six: who gives way for it. */
+  private releasing: PartyMember | null = null;
+  private deafUntil = 0;
+  private readonly catchHead: HTMLElement;
+  private readonly catchHeadWin: Win;
+  private readonly catchCard: HTMLButtonElement;
+  private readonly catchWin: Win;
   private forgetting: { name: string; move: number; done(row: number | null): void } | null = null;
   private readonly forgetHead: HTMLElement;
   private readonly forgetHeadWin: Win;
@@ -525,6 +536,7 @@ export class BattleMenu {
     this.backBtn.setAttribute('aria-label', 'Back');
     this.backWin = new Win(this.backBtn, MENU_W, BACK_H, (c) => {
       c.drawFrame({ x: 0, y: 0, w: MENU_W, h: BACK_H });
+      if (this.releasing) { c.drawTextCentred('KEEP PARTY', MENU_W / 2, 9, TEXT_DARK); return; }
       if (this.deps.firstMoves) drawBackArrow(c, MENU_W / 2 - 24, BACK_H / 2);
       c.drawTextCentred('BACK', MENU_W / 2, 9, TEXT_DARK);
     });
@@ -641,6 +653,24 @@ export class BattleMenu {
       c.drawTextCentred(fitText(top, USE_HEAD_W - 8), USE_HEAD_W / 2, 3, TEXT_WHITE);
       c.drawTextCentred('Which POKeMON?', USE_HEAD_W / 2, 18, TEXT_WHITE);
     });
+    this.catchHead = doc.createElement('div');
+    this.catchHead.className = 'bm-catch-head';
+    this.catchHead.hidden = true;
+    this.partyBox.appendChild(this.catchHead);
+    this.catchHeadWin = new Win(this.catchHead, MENU_W, CATCH_HEAD_H, (c) => {
+      c.fillRect({ x: 0, y: 0, w: MENU_W, h: CATCH_HEAD_H }, 'rgba(16,20,24,0.6)');
+      c.drawTextCentred('Your party is full.', MENU_W / 2, 3, TEXT_WHITE);
+      c.drawTextCentred('Release one for the new catch?', MENU_W / 2, 18, TEXT_WHITE);
+    });
+    // Nothing to choose in the new one: pressed or held, it says what it is.
+    this.catchCard = button('bm-catch', this.partyBox);
+    this.catchCard.hidden = true;
+    this.catchWin = new Win(this.catchCard, MENU_W, MEMBER_CARD_H, (c) => this.drawCard(c, this.releasing));
+    const catchHold = doc.createElement('span');
+    catchHold.className = 'bm-hold';
+    this.catchCard.appendChild(catchHold);
+    this.wireSlot(this.catchCard, catchHold, -1);
+    this.catchCard.addEventListener('click', () => this.summaryOf(-1));
     for (let i = 0; i < 6; i++) {
       const b = button('bm-slot', this.partyBox);
       const w = new Win(b, CELL_W, PARTY_H, (c) => this.paintSlot(c, i));
@@ -652,6 +682,7 @@ export class BattleMenu {
       b.addEventListener('click', () => {
         if (!this.team[i] || b.getAttribute('aria-disabled') === 'true') return;
         if (this.drop) {
+          if (performance.now() < this.deafUntil) return;
           const first = this.deps.firstMoves;
           if (this.drop.pick) {
             this.drop.take(i);
@@ -869,6 +900,26 @@ export class BattleMenu {
     this.settleFocus(true);
   }
 
+  /** A catch with a full party (br_catch.c): who gives way for it, or KEEP PARTY and it goes. */
+  openRelease(mon: PartyMember, take: (slot: number) => void, keep: () => void): void {
+    this.forced = false;
+    this.releasing = mon;
+    this.openPick('', take, keep);
+    this.deafUntil = performance.now() + CATCH_DEAF_MS;
+    this.catchHeadWin.show('catch');
+    this.catchWin.show(JSON.stringify(mon));
+    this.catchCard.setAttribute('aria-label', `The new catch, ${mon.name}, level ${mon.level}`);
+    this.backWin.show('keep');
+    this.backBtn.setAttribute('aria-label', 'Keep the party');
+  }
+
+  /** `scale`, or what leaves a catch's window whole on this glass: with the question and the new
+   *  one over the six, a phone on its side had them off the top. */
+  fitScale(scale: number): number {
+    if (!this.releasing) return scale;
+    return Math.min(scale, (innerHeight - 8) / (this.deps.root.getBoundingClientRect().height / this.scale));
+  }
+
   /** One of the party's page, as it stands now. */
   showMember(slot: number): void {
     this.memberAt = slot;
@@ -918,7 +969,8 @@ export class BattleMenu {
   }
 
   private paintDrop(): void {
-    this.useHead.hidden = false;
+    this.useHead.hidden = !!this.releasing;
+    this.catchHead.hidden = this.catchCard.hidden = !this.releasing;
     this.useHeadWin.show(`${this.drop?.who}|${this.dropAt}`);
     this.partyCells.forEach(({ b, w }, i) => {
       const m = this.team[i];
@@ -950,6 +1002,12 @@ export class BattleMenu {
     this.dropCan = null;
     this.drop = null;
     this.dropAt = null;
+    if (this.releasing) {
+      this.releasing = null;
+      this.catchHead.hidden = this.catchCard.hidden = true;
+      this.backWin.show('back');
+      this.backBtn.setAttribute('aria-label', 'Back');
+    }
     this.fieldHome = null;
     this.using = null;
     this.swapFrom = null;
@@ -1013,7 +1071,10 @@ export class BattleMenu {
   }
 
   private paintCard(c: EmeraldCanvas): void {
-    const m = this.team[this.memberAt];
+    this.drawCard(c, this.team[this.memberAt]);
+  }
+
+  private drawCard(c: EmeraldCanvas, m: PartyMember | null | undefined): void {
     c.drawFrame({ x: 0, y: 0, w: MENU_W, h: MEMBER_CARD_H });
     if (!m) return;
     const icon = this.deps.firstMoves?.icon(m.species);
@@ -1147,6 +1208,8 @@ export class BattleMenu {
       return true;
     }
     if (k === 'a') { this.focused?.click(); return true; }
+    // B lets a catch go for good: to the button, for A to say so.
+    if (k === 'b' && this.releasing) { this.focused = this.backBtn; this.paintFocus(); return true; }
     if (k === 'b' && this.fieldHome) { this.goBack(); return true; }
     if (k === 'b') {
       if (this.mode === 'info') this.setMode('moves');
@@ -1414,15 +1477,22 @@ export class BattleMenu {
       unfill(hold);
     };
     b.addEventListener('pointerdown', () => {
-      if (!this.team[i]) return;
+      if (i >= 0 && !this.team[i]) return;
       fill(hold);
       timer = setTimeout(() => {
         end();
         eatLiftClick();
-        this.deps.firstMoves?.showMon(this.team, i);
+        this.summaryOf(i);
       }, HOLD_MS);
     });
     for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, end);
+  }
+
+  /** A slot's SUMMARY. With a catch asking it comes first (-1), to step along to the party and
+   *  back. */
+  private summaryOf(slot: number): void {
+    const rows = this.releasing ? [this.releasing, ...this.team] : this.team;
+    this.deps.firstMoves?.showMon(rows, this.releasing ? slot + 1 : slot);
   }
 
   /** What holding A on the focus would open, as a thumb's hold does: a move's details, a mon's
@@ -1435,7 +1505,7 @@ export class BattleMenu {
       return { fill: this.cells[cell].hold, go: () => { this.info = cell; this.setMode('info'); } };
     }
     const slot = this.partyCells.findIndex((x) => x.b === at);
-    if (slot >= 0 && this.team[slot]) return { fill: this.partyCells[slot].hold, go: () => this.deps.firstMoves?.showMon(this.team, slot) };
+    if (slot >= 0 && this.team[slot]) return { fill: this.partyCells[slot].hold, go: () => this.summaryOf(slot) };
     return null;
   }
 
@@ -1509,6 +1579,7 @@ export class BattleMenu {
   private goBack(): void {
     if (this.forgetting) { this.forgetting.done(null); return; }
     if (this.drop) {
+      if (performance.now() < this.deafUntil) return;
       if (this.dropAt !== null) {
         this.dropAt = null;
         this.team = this.drop.rows;
@@ -1593,6 +1664,8 @@ export class BattleMenu {
     for (const w of this.actionWins) w.size(this.actionW, this.actionH, scale);
     this.useHeadWin.size(USE_HEAD_W, USE_HEAD_H, scale);
     this.forgetHeadWin.size(MENU_W, FORGET_HEAD_H, scale);
+    this.catchHeadWin.size(MENU_W, CATCH_HEAD_H, scale);
+    this.catchWin.size(MENU_W, MEMBER_CARD_H, scale);
     for (const { w } of this.useMoveWins) w.size(CELL_W, USE_MOVE_H, scale);
     for (const { w } of this.partyCells) w.size(CELL_W, PARTY_H, scale);
     for (const { w, ww, hh } of this.memberWins) w.size(ww, hh, scale);
@@ -1754,7 +1827,7 @@ export class BattleMenu {
    *  above it: Cam, 11-02, iPhone 13 mini) stand on the bottom of the glass instead, over the
    *  picture, so SELECT and BACK can always be reached. Measured only when something changed. */
   private fitGlass(): void {
-    const key = `${this.mode}|${this.room}|${this.scale}|${this.useHead.hidden}|${this.shown}|${innerHeight}`;
+    const key = `${this.mode}|${this.room}|${this.scale}|${this.useHead.hidden}|${!!this.releasing}|${this.shown}|${innerHeight}`;
     if (key === this.fitKey || !this.shown) return;
     this.fitKey = key;
     const root = this.deps.root;

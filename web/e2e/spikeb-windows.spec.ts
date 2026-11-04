@@ -797,3 +797,130 @@ test('the key hints are the pad\'s once a pad is what was last used, and the key
   await snap('battle-pad');
   await ctx.close();
 });
+
+/** A wild one caught with a MASTER BALL and six in the party, up to the window. Watching from the
+ *  start for any frame of the ROM's own: its field and "Your party is full." (Cam, 11-02). */
+async function catchWithFullParty(page: Page): Promise<void> {
+  await spike(page, (s) => s.rom.give(1, 5));
+  await intoBattle(page);
+  await page.evaluate(() => {
+    const s = (window as any).__spike, e = s.rom.emu, y = (n: string) => s.art.sym(n);
+    const el = document.getElementById('battle')!, fight = y('BattleMainCB2');
+    const w = window as any;
+    w.romSeen = 0;
+    const look = () => {
+      if (e.read(y('gBrCatch'), 8) && ((e.read(y('gMain') + 4, 32) ^ fight) & ~1) !== 0 && el.classList.contains('on') && !el.classList.contains('panel')) w.romSeen++;
+      requestAnimationFrame(look);
+    };
+    look();
+  });
+  await page.locator('.bm-act-bag').click();
+  await expect(page.locator('.bm-bag-head')).toBeVisible();
+  // The keys on a phone too: their first press only shows the focus.
+  await spike(page, (s) => { s.battleMenu.showFocus = true; });
+  await page.keyboard.press('ArrowRight');
+  const row = await spike(page, (s) => s.battleMenu.stacks().findIndex((x: any) => x.item === 1));
+  expect(row, 'the MASTER BALL in its pocket').toBeGreaterThanOrEqual(0);
+  for (let i = 0; i < row; i++) await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('z');
+  await page.locator('.bm-bag-use').click();
+  await expect(page.locator('.bm-catch')).toBeVisible({ timeout: 60_000 });
+}
+const partyNow = (page: Page) => spike(page, (s) => s.battleMenu.deps.firstMoves.readParty().map((m: any) => m.species)) as Promise<number[]>;
+const newCatch = (page: Page) => spike(page, (s) => s.battleMenu.releasing.species) as Promise<number>;
+const spillsOf = (page: Page, species: number) => page.evaluate((sp) => [...(window as any).__spike.link.room.spills.values()].filter((b: any) => b.bag.mons.some((m: any) => m.species === sp)).length, species);
+
+test('a catch with a full party asks on the windows: SUMMARY held, one let go for it, and the ROM unseen', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await withTeam(page);
+  const before = await partyNow(page);
+  expect(before.length).toBe(6);
+  const was = await spillsOf(page, before[2]);
+  await catchWithFullParty(page);
+  const caught = await newCatch(page);
+  await expect(page.locator('.bm-slot:visible')).toHaveCount(6);
+  await expect(page.locator('#gba'), 'no ROM screen for it').toBeHidden();
+  await page.waitForTimeout(600);
+  await shot(page, 'phone-full-party');
+  const box = (await page.locator('#battle-menu').boundingBox())!;
+  expect(box.y + box.height, 'all of it on the glass').toBeLessThanOrEqual(844);
+  // A phone on its side: smaller, the question and the new one still on the glass.
+  await page.setViewportSize({ width: 844, height: 390 });
+  await expect.poll(async () => (await page.locator('.bm-catch-head').boundingBox())!.y).toBeGreaterThanOrEqual(0);
+  await expect.poll(async () => { const b = (await page.locator('.bm-back').boundingBox())!; return b.y + b.height; }).toBeLessThanOrEqual(390);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(async () => (await page.locator('.bm-catch').boundingBox())!.width).toBeGreaterThan(300);
+
+  // Held, whichever it is: its SUMMARY, the new one first and the party after it.
+  const hold = async (sel: ReturnType<Page['locator']>) => {
+    const b = (await sel.boundingBox())!;
+    const cdp = await page.context().newCDPSession(page);
+    const at = [{ x: b.x + b.width / 2, y: b.y + b.height / 2 }];
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: at });
+    await page.waitForTimeout(700);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    // eatLiftClick lingers 80 ms past the lift for the click it makes: quicker than any thumb.
+    await page.waitForTimeout(200);
+  };
+  await hold(page.locator('.bm-slot').nth(1));
+  await expect(page.locator('#summary')).toBeVisible();
+  await expect(page.locator('#summary')).toHaveAttribute('data-at', '2');
+  await shot(page, 'phone-full-party-summary');
+  await page.keyboard.press('x');
+  await expect(page.locator('#summary')).toBeHidden();
+  await expect.poll(() => spike(page, (s) => s.battleMenu.isShown), { message: 'nobody let go by the hold' }).toBe(true);
+  await hold(page.locator('.bm-catch'));
+  await expect(page.locator('#summary')).toHaveAttribute('data-at', '0');
+  await page.keyboard.press('x');
+  await expect(page.locator('#summary')).toBeHidden();
+
+  // The third goes: the catch in its slot, the rest as they were, and it on the ground.
+  await page.locator('.bm-slot').nth(2).click();
+  await expect.poll(() => spike(page, (s) => !!s.battle), { timeout: 20_000 }).toBe(false);
+  expect(await partyNow(page)).toEqual(before.map((sp, i) => (i === 2 ? caught : sp)));
+  await expect.poll(() => spillsOf(page, before[2]), { message: 'the one let go, on the ground for anybody' }).toBe(was + 1);
+  expect(await page.evaluate(() => (window as any).romSeen), 'frames of the ROM\'s own screen').toBe(0);
+  await shot(page, 'phone-full-party-done');
+  await ctx.close();
+});
+
+test('a catch with a full party on the keys: B only reaches KEEP PARTY, A says it, and nothing changes but the catch gone', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 960, height: 640 } });
+  const page = await ctx.newPage();
+  await withTeam(page);
+  const before = await partyNow(page);
+  const was = await spillsOf(page, before[0]);
+  await catchWithFullParty(page);
+  const caught = await newCatch(page);
+  const wasCaught = await spillsOf(page, caught);
+  await expect(page.locator('#gba'), 'no ROM screen for it').toBeHidden();
+  await page.waitForTimeout(600);
+  await shot(page, 'desk-full-party');
+  const box = (await page.locator('#battle-menu').boundingBox())!;
+  expect(box.y + box.height, 'all of it on the window').toBeLessThanOrEqual(640);
+
+  // A held on one of the party is its SUMMARY, not its release.
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('.bm-slot.bm-focus')).toHaveCount(1);
+  await page.keyboard.down('z');
+  await expect(page.locator('#summary')).toBeVisible();
+  await page.keyboard.up('z');
+  await page.keyboard.press('x');
+  await expect(page.locator('#summary')).toBeHidden();
+  // B on its own lets nothing go.
+  await page.keyboard.press('x');
+  await expect(page.locator('#battle-menu .bm-back')).toHaveClass(/bm-focus/);
+  await page.waitForTimeout(500);
+  expect(await spike(page, (s) => !!s.battle), 'still asking').toBe(true);
+  await page.keyboard.press('z');
+  await expect.poll(() => spike(page, (s) => !!s.battle), { timeout: 20_000 }).toBe(false);
+  expect(await partyNow(page), 'the party as it was').toEqual(before);
+  await page.waitForTimeout(1000);
+  expect(await spillsOf(page, before[0]), 'nobody on the ground').toBe(was);
+  expect(await spillsOf(page, caught), 'nor the catch').toBe(wasCaught);
+  expect(await page.evaluate(() => (window as any).romSeen), 'frames of the ROM\'s own screen').toBe(0);
+  await ctx.close();
+});

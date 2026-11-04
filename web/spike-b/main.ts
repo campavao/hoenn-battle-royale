@@ -1208,6 +1208,7 @@ function useKeyItem(item: number): boolean {
 }
 /** The party as the windows read it. */
 let readTeam: () => PartyMember[] = () => [];
+let readMon: (mon: Uint8Array) => PartyMember | null = () => null;
 /** What this one could learn now: its learnset, then the machines in the bag (ui/movesbox.ts). */
 function learnRows(m: { species: number; level: number; moves: readonly { id: number }[] }): LearnRow[] {
   return learnList(romTables, m, rom ? readPocket(rom.emu, romTables.sym, POCKET_TMHM).map((s) => s.item) : []);
@@ -1312,6 +1313,30 @@ function askForget(slot: number, move: number): Promise<number | null> {
   });
 }
 romAsks.forget = askForget;
+/** A catch with a full party (br_catch.c): who gives way for it, or nobody and it goes, on the
+ *  windows, over the ROM's field and its question, which are walked unseen on the answer. Nothing
+ *  of them changes until then: the one released lands beside the trainer (endBattle). */
+function askRelease(mon: Uint8Array): Promise<number | null> {
+  return new Promise((resolve) => {
+    const row = readMon(mon);
+    if (!battleMenu || !row) { resolve(null); return; }
+    panelUp = true;
+    held.clear();
+    battleEl.classList.remove('screen', 'see', 'fight');
+    battleEl.classList.add('on', 'panel');
+    const done = (slot: number | null) => {
+      battleMenu!.closeField();
+      panelUp = false;
+      battleEl.classList.remove('on', 'panel');
+      held.clear();
+      pressed.clear();
+      resolve(slot);
+    };
+    battleMenu.openRelease(row, done, () => done(null));
+    dispatchEvent(new Event('resize'));
+  });
+}
+romAsks.release = askRelease;
 /** Which of the party, on the windows; null for BACK. */
 function askParty(title: string, can?: (m: PartyMember) => boolean): Promise<number | null> {
   return new Promise((resolve) => {
@@ -2908,6 +2933,15 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       else touch.tapKey('a');
     }
   });
+  const membersOf = (bytes: Uint8Array, count: number) => teamMembers(bytes, count, speciesName).map((m) => ({
+    ...m,
+    moves: m.moves.map((v, n) => ({ ...v, maxPp: ppWithBonus(moveInfo(tables, v.id)?.pp ?? 0, m.ppBonuses, n) })),
+    itemName: art?.itemName(m.item) ?? '',
+    ability: art?.abilityName(m.species, m.ability) ?? '',
+    abilityNum: m.ability,
+    active: false,
+  }));
+  readMon = (mon) => membersOf(mon, 1)[0] ?? null;
   const menu = new BattleMenu({
     root,
     rom: tables,
@@ -2920,14 +2954,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
         const out = sym('gBattlerPartyIndexes');
         const lead = out === undefined ? 0 : emu.read(out, 16);
         const count = emu.read(countAt, 8);
-        const rows = teamMembers(emu.bytes(partyAt, PARTY_LEN).slice(), count, speciesName).map((m) => ({
-          ...m,
-          moves: m.moves.map((v, n) => ({ ...v, maxPp: ppWithBonus(moveInfo(tables, v.id)?.pp ?? 0, m.ppBonuses, n) })),
-          itemName: art?.itemName(m.item) ?? '',
-          ability: art?.abilityName(m.species, m.ability) ?? '',
-          abilityNum: m.ability,
-          active: false,
-        }));
+        const rows = membersOf(emu.bytes(partyAt, PARTY_LEN).slice(), count);
         if (panelUp) return rows;
         // A slot here is a slot of the ROM's party screen, which shows the battle's order, the one out
         // first. The party is only in that order while that screen is up (party_menu.c
@@ -2990,14 +3017,14 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
   const resize = () => {
     // The windows alone: no picture for them to follow, on a phone either.
     if (touchPad && battleEl.classList.contains('panel')) {
-      const s = windowScale();
+      const s = menu.fitScale(windowScale());
       battleEl.style.setProperty('--s', String(s));
       menu.setScale(s);
       menu.setRoom(Infinity);
       return;
     }
     if (!touchPad) {
-      const s = windowScale();
+      const s = Math.max(1, Math.floor(menu.fitScale(windowScale())));
       battleEl.style.setProperty('--s', String(s));
       battleEl.style.setProperty('--pic', String(Math.max(2, Math.floor((innerHeight - (DESK_MENU_H + 8) * s - 8) / 160))));
       menu.setScale(s);
