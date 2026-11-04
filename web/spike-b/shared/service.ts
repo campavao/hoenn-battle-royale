@@ -448,7 +448,7 @@ export class WorldService {
     this.where.delete(p.id);
     if (!room) return;
     room.members.delete(p.id);
-    if (toBot) room.host?.toBot(p.id);
+    if (toBot) room.host?.toBot(p.id, p.team, p.bag);
     else room.host?.leave(p.id);
     room.streams.delete(p.id);
     this.closeLog(room, p.id);

@@ -245,6 +245,10 @@ export function translate(lines: readonly string[], names: LogNames, winnerSeat:
         text(`${names.trainers[side]} used ${p[2]}!`);
         break;
       }
+      case 'say':
+        // Ours too: what a ball or a RUN comes to.
+        text(p[1]);
+        break;
       case 'move': {
         const w = who(p[1]);
         lastMove = names.moveNum(p[2]);

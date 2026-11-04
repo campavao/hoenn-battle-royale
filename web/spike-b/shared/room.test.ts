@@ -835,7 +835,7 @@ describe('item balls', () => {
     expect(room.spillAt('MAP_PETALBURG_CITY', 11, 22)!.bag.items).not.toContainEqual({ id: 22, n: 1 });
   });
 
-  it('a hurt bot walks to a CENTER and comes out whole (brain.ts HURT and healHere)', () => {
+  it('a hurt bot walks to a CENTER and is whole again at its nurse (brain.ts HURT)', () => {
     const room = makeRoom(MAPS, PATCHES, 4242);
     (room as unknown as { opening: number }).opening = 0;
     // Oldale's CENTER door is (6,16); its doorstep is the cell below.
@@ -854,21 +854,16 @@ describe('item balls', () => {
     expect(health(bot)).toBeLessThan(HURT);
     walk(60 * 60);
     expect(bot.wear).toBeUndefined();
-    expect(bot.m.spot).toEqual({ map: 'MAP_OLDALE_TOWN', x: 6, y: 17 });
+    expect(bot.m.spot).toEqual({ map: 'MAP_OLDALE_TOWN_POKEMON_CENTER_1F', x: 7, y: 4 });
   });
 
-  it("the heal and a potion are the room's own: a copy that never runs the bots heals them on the same frame", () => {
+  it("a potion is the room's own: a copy that never runs the bots has it on the same frame", () => {
     const room = makeRoom(MAPS, PATCHES, 4242);
     (room as unknown as { opening: number }).opening = 0;
     room.apply({ c: 'join', id: 7, bot: true, name: 'BOT', skin: 0, spot: { map: 'MAP_OLDALE_TOWN', x: 6, y: 17 }, facing: 1 });
     const bot = room.actor(7)!;
     bot.calm = 1e9;
-    // On the doorstep with no brain at all (a page's copy): whole on the next frame.
-    bot.wear = [0.1];
-    room.step();
-    expect(bot.wear).toBeUndefined();
-    // Off it, hurt, with a POTION: within QUAFF_FRAMES it drinks it, the worst mon up 20 HP.
-    bot.m = { ...bot.m, spot: { map: 'MAP_OLDALE_TOWN', x: 10, y: 12 } };
+    // Hurt, with a POTION: within QUAFF_FRAMES it drinks it, the worst mon up 20 HP.
     bot.loot = { items: [{ id: 13, n: 1 }], money: 0 };
     bot.wear = [0.25, 1];
     for (let i = 0; i < 600 && bot.loot.items.length; i++) room.step();
@@ -1553,15 +1548,15 @@ describe("the ring's size", () => {
 });
 
 describe('a bag in a bot\'s way', () => {
-  it('gives the bot its items and money; the Pokémon stay in it, and the bot steps over', () => {
+  it('gives the bot all of it, its Pokémon too, and it walks on', () => {
     const room = makeRoom(MAPS, PATCHES, 99);
     const L = 'MAP_LITTLEROOT_TOWN';
     room.apply({ c: 'join', id: 1, bot: true, name: 'BOT', skin: 4, spot: { map: L, x: 10, y: 12 }, facing: 4 });
     room.spills.set(SPILL_KEY + 50, { key: SPILL_KEY + 50, map: L, x: 11, y: 12, name: 'MAY', bag: { items: [{ id: 13, n: 2 }], money: 300, mons: [{ species: 25, level: 9 }] } });
     room.actor(1)!.calm = 0;
     for (let i = 0; i < 40; i++) { room.actor(1)!.keys = KEY_RIGHT | KEY_A; room.step(); }
-    const bag = room.spillAt(L, 11, 12)!;
-    expect(bag.bag).toEqual({ items: [], money: 0, mons: [{ species: 25, level: 9 }] });
+    expect(room.spillAt(L, 11, 12)).toBeUndefined();
+    expect(room.actor(1)!.caught).toEqual([25]);
     expect(room.actor(1)!.loot).toEqual({ items: [{ id: 13, n: 2 }], money: 300 });
     expect(room.actor(1)!.m.spot.x).toBeGreaterThan(11);
     // A new round's bag starts empty of the old round's pickings (review of batch 12).
@@ -1627,7 +1622,34 @@ describe('Cam 10-30', () => {
       expect(w, `seed ${seed}`).toBeLessThan(60 * 60 * 7);
       worst.push(w);
     }
-    expect(worst.reduce((a, b) => a + b, 0) / worst.length).toBeLessThan(60 * 60 * 4);
+    // Six seeds' worst gaps are the dice as well: 3.46 minutes on these six and 3.13 over 24 when bots
+    // had the short cuts, 4.22 and 3.30 once they did not (Cam, 11-03).
+    expect(worst.reduce((a, b) => a + b, 0) / worst.length).toBeLessThan(60 * 60 * 4.5);
+  }, 60_000);
+
+  it('and the same with the host fighting them, as a room does: 2.5 minutes over 24 seeds, either way', async () => {
+    const worst: number[] = [];
+    for (const seed of [7, 8, 9, 10, 11, 12]) {
+      const r = makeRoom(MAPS, PATCHES, seed);
+      r.ringPhase = 120 * 60; r.opening = 60 * 60; r.simBots = true;
+      const host = new Host(r, 7, MAPS, 0);
+      await host.simReady();
+      const me = host.join('ME', 0, undefined, 1000);
+      host.lock();
+      const fights: number[] = [], left: number[] = [];
+      for (let f = 0; f < 60 * 60 * 12; f++) {
+        host.input(me, f + 1, [0]);
+        for (const e of host.advance().events) {
+          if (e.type === 'bots' && e.b > 0) { fights.push(f); left.push(r.results.entrants.length - r.results.fallen.length); }
+          if (e.type === 'fight') host.end(me);
+        }
+      }
+      expect(fights.length, `seed ${seed}`).toBeGreaterThanOrEqual(3);
+      let w = 0;
+      for (let i = 1; i < fights.length; i++) if (left[i - 1] - 1 >= 5) w = Math.max(w, fights[i] - fights[i - 1]);
+      worst.push(w);
+    }
+    expect(worst.reduce((a, b) => a + b, 0) / worst.length).toBeLessThan(60 * 60 * 3.5);
   }, 60_000);
 });
 
