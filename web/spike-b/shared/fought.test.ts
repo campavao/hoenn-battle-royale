@@ -1,3 +1,4 @@
+import { dealParty } from '../../src/bots/party';
 // A loser's spill is the team that was fought (Cam, 11-04: "only one Kadabra, and now there's two").
 // MAY had two balls in her fight and her bag held KADABRA, MIGHTYENA, KADABRA: the ring moved on while
 // they fought, and a team is one mon longer every two rungs, so the bag was dealt a slot nobody met.
@@ -118,5 +119,32 @@ describe('a bot\'s team while it walks', () => {
     expect(who(4), 'the map under it').toEqual(here);
     expect(who(5).slice(0, here.length), 'the next rung').toEqual(here);
     expect(who(5).length).toBe(here.length + 1);
+  });
+});
+
+// PHOEBE's GLOOM, AZUMARILL, AZUMARILL, GLOOM, MINUN, CASTFORM were really dealt her: the same draw
+// twice reads as a copy, whoever's bag it lands in (Cam, 11-04: "it seems like it's duplicating").
+describe('a dealt team', () => {
+  it('has no two of a kind while the map has others to deal', () => {
+    for (let seat = 1; seat <= 40; seat++) {
+      const kinds = dealParty(1234, seat, 7, 'MAP_ROUTE123').map((m) => m.species);
+      expect(new Set(kinds).size, `seat ${seat}: ${kinds}`).toBe(kinds.length);
+    }
+  });
+
+  it('is the same team a slot longer at a later rung', () => {
+    const now = dealParty(77, 5, 5, 'MAP_ROUTE123').map((m) => m.species);
+    const later = dealParty(77, 5, 7, 'MAP_ROUTE123').map((m) => m.species);
+    expect(later.length).toBeGreaterThan(now.length);
+    expect(later.slice(0, now.length)).toEqual(now);
+  });
+});
+
+describe('a team dealt under what a bot took', () => {
+  it('leaves out what it already carries', () => {
+    const a = { id: 5, m: { spot: { map: 'MAP_ROUTE123', x: 0, y: 0 } } } as unknown as Parameters<typeof botParty>[1];
+    const dealt = botParty(77, a, 7).map((m) => m.species);
+    const team = botParty(77, { ...a, caught: [dealt[1]] }, 7).map((m) => m.species);
+    expect(team.filter((sp) => sp === dealt[1])).toHaveLength(1);
   });
 });

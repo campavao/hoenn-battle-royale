@@ -282,10 +282,14 @@ function dealParty(seed, seat, phase, mapId, grade = 1 /* Regular */, pool = [])
   const bring = grade === 2 /* Ace */ ? 1 : grade === 0 /* Rookie */ ? -1 : 0;
   const count = Math.max(1, Math.min(6, 1 + Math.floor(Math.max(0, phase - 1) / 2) + bring));
   const party = [];
-  for (let i = 0; i < count; i++) party.push(mon(level, rng, mapId, i === 0 ? pool : []));
+  for (let i = 0; i < count; i++) {
+    let next = mon(level, rng, mapId, i === 0 ? pool : []);
+    for (let tries = 0; tries < REDEALS && party.some((p) => p.species === next.species); tries++) next = mon(level, rng, mapId, []);
+    party.push(next);
+  }
   return party;
 }
-var EXPORTED, ENCOUNTERS, LADDER, MOVE_SURF, MOVE_CUT, MOVE_FLY, MOVE_STRENGTH, SURF_RUNG, CUT_RUNG, FLY_RUNG, POOL;
+var EXPORTED, ENCOUNTERS, LADDER, MOVE_SURF, MOVE_CUT, MOVE_FLY, MOVE_STRENGTH, SURF_RUNG, CUT_RUNG, FLY_RUNG, POOL, REDEALS;
 var init_party = __esm({
   "web/src/bots/party.ts"() {
     "use strict";
@@ -324,6 +328,7 @@ var init_party = __esm({
       // THUNDER SHOCK
       { species: 335, name: "MAKUHITA", moves: [4, 43] }
     ];
+    REDEALS = 64;
   }
 });
 
@@ -12463,7 +12468,7 @@ function botParty(seed, a, atPhase) {
   });
   if (a.own) return taken.slice(0, 6);
   const dealt = dealParty(seed, a.id, phase, a.dealt ?? a.m.spot.map, gradeOf(seed, a.id));
-  return taken.length ? [...taken, ...dealt].slice(0, 6) : dealt;
+  return taken.length ? [...taken, ...dealt.filter((m) => !taken.some((t7) => t7.species === m.species))].slice(0, 6) : dealt;
 }
 function wornParty(party, wear) {
   if (!wear) return party;
@@ -16062,4 +16067,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "78a4ef607473";
+export const WORLD_HASH = "6f5b8714a24a";

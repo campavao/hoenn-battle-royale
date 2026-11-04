@@ -161,7 +161,8 @@ export function botParty(seed: number, a: Pick<Actor, 'id' | 'm' | 'caught' | 'o
   });
   if (a.own) return taken.slice(0, 6);
   const dealt = dealParty(seed, a.id, phase, a.dealt ?? a.m.spot.map, gradeOf(seed, a.id));
-  return taken.length ? [...taken, ...dealt].slice(0, 6) : dealt;
+  // What it took stands in for the same kind dealt: no second of a mon it carries because of the seed.
+  return taken.length ? [...taken, ...dealt.filter((m) => !taken.some((t) => t.species === m.species))].slice(0, 6) : dealt;
 }
 
 /** A bot's team as the seed deals it, with the wounds its fights left it: a fainted slot
