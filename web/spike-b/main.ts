@@ -74,7 +74,7 @@ import { PadPrefsControl } from '../src/ui/padprefs';
 import { inputKeyboard, inputPad } from '../src/ui/hints';
 import { wireDpad } from './dpad';
 import { StartMenu } from './startmenu';
-import { MapWindow } from './mapwindow';
+import { MapWindow, mapFit } from './mapwindow';
 import { FLY_SPOTS } from './flyspots';
 import { ARRIVES, FLIGHT_LEN, POISON_COLOUR, dollShows, flew, flightFade, flightPose, poisonBeat, poisonLook } from './looks';
 import type { MapPlace } from './ringmap';
@@ -84,7 +84,7 @@ import { BAG_POSITION_POCKET, POCKET_BALLS, POCKET_TMHM, isMachine, readBattleBa
 import type { Rom } from '../src/battle/movebook';
 import { BATTLE_MENU, MENU_ACTION, MENU_PARTY, TouchLayer } from '../src/touch';
 import { romAsks, type TeamRow } from './rom';
-import { eatLiftClick, pageWin } from '../src/ui/pagewin';
+import { eatLiftClick, glass, pageWin } from '../src/ui/pagewin';
 import { SummaryWindow } from '../src/ui/summary';
 import { Radial, type DialItem } from '../src/ui/radial';
 import { ITEM_HM01, ITEM_TM01, MovesBox, learnList, type LearnRow } from '../src/ui/movesbox';
@@ -976,7 +976,8 @@ function askKey(k: string): void {
  *  (`start`) is its own window on the field; a MART's `shelf` and `roller` are shop.c's. */
 function ask(title: string, rows: [string, string][], start = false, more: { pick?: number; shelf?: Shelf; roller?: Roller } = {}): Promise<string> {
   return new Promise((resolve) => {
-    asking = { pick: 0, start, title, rows, ...more, done: (c) => { asking = null; startMenu.hide(); askBox.hide(); calmUntil = frame + 30; resolve(c); } };
+    document.body.classList.add('ask-up');
+    asking = { pick: 0, start, title, rows, ...more, done: (c) => { asking = null; document.body.classList.remove('ask-up'); startMenu.hide(); askBox.hide(); calmUntil = frame + 30; resolve(c); } };
     askPaint();
   });
 }
@@ -1034,7 +1035,7 @@ function openMapWindow(o: { verb: string | null; can(p: MapPlace): boolean; prom
       back: o.back ? () => asking?.done('') : null,
       choose: (p) => { picked = p; rom?.sound(SE_SELECT); asking?.done(''); },
       moved: () => rom?.sound(SE_SELECT),
-      scale: Math.min(windowScale(), Math.max(1, Math.min(Math.floor(innerWidth / 240), Math.floor((innerHeight - 16) / (160 + 36 + 32 + 16))))),
+      fit: () => mapFit(touchPad, glass(), windowScale()),
       start,
     });
     // The drop's clock: the place under the cursor is the choice, as br_pick.c's timeout has it.
@@ -1153,7 +1154,7 @@ const ITEM_ITEMFINDER = 261;
 /** A pad's right trigger in the standard layout, unless a remap has put a button of the game's on it. */
 const PAD_RT = 7;
 const RADIAL_KEY = 'c';
-const radial = new Radial({ scale: windowScale, sound: () => rom?.sound(SE_SELECT) });
+const radial = new Radial({ scale: windowScale, touch: matchMedia('(pointer: coarse)').matches, sound: () => rom?.sound(SE_SELECT) });
 /** The word over the round button that it has a dial behind it (ui/dialtip.ts). */
 const dialTip = new Tag(document.getElementById('dial-tip') as HTMLCanvasElement);
 let dialTipLeft = dialTipDue();
@@ -3048,6 +3049,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     choose: (which, slot, move) => touch.chooseBattle(which, slot, move),
     back: () => touch.tapKey('b'),
     focusFirst: !touchPad,
+    refit: touchPad ? () => resize() : undefined,
     firstMoves: {
       readParty: () => {
         if (partyAt === undefined || countAt === undefined) return [];
@@ -3117,11 +3119,11 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
   const DESK_MENU_H = 136;
   const resize = () => {
     // The windows alone: no picture for them to follow, on a phone either.
-    if (touchPad && battleEl.classList.contains('panel')) {
-      const s = menu.fitScale(windowScale());
+    if (touchPad && (battleEl.classList.contains('panel') || (innerWidth > innerHeight && menu.standsAlone))) {
+      menu.setRoom(Infinity);
+      const s = menu.fillScale();
       battleEl.style.setProperty('--s', String(s));
       menu.setScale(s);
-      menu.setRoom(Infinity);
       return;
     }
     if (!touchPad) {

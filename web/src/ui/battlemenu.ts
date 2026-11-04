@@ -21,7 +21,7 @@ import { EmeraldCanvas, TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_GREEN, TEXT_RED, T
 import { hintFor, onHintsChange } from './hints';
 import { ITEMS_POCKET, Win, bagHolds, drawFitted, drawIcon, drawItemFitted, drawKeycap, picture } from './phonehud';
 import { nextFocus, type Dir } from './focus';
-import { eatLiftClick } from './pagewin';
+import { TOUCH_MAX_SCALE, eatLiftClick, glass } from './pagewin';
 import { BAG_POCKETS, FIELD_POCKETS, POCKET_BALLS, asksMove, asksWhoInField, isMachine, itemEffect, itemInfo, medicineHelps, takesMachine, readBattleBag, usableInField, usedOnOne, type Stack } from './bag';
 
 // ---- what the ROM says ---------------------------------------------------------------
@@ -372,6 +372,8 @@ export interface BattleMenuDeps {
   };
   /** Has the focus show from the start: nothing here is touched. */
   focusFirst?: boolean;
+  /** What's on show changed its shape: the page's sizing, again (a phone's: fillScale). */
+  refit?(): void;
 }
 
 /** The bag's windows, GBA pixels: the pocket bar, the list and BACK under it. A tap on
@@ -842,6 +844,7 @@ export class BattleMenu {
   }
 
   private selectBtn: HTMLButtonElement | null = null;
+  private refitting = false;
   private heldWin!: HTMLElement;
   /** Which of the four the forget window's head is telling of; null is the new move. */
   private forgetShown: number | null = null;
@@ -926,6 +929,26 @@ export class BattleMenu {
   fitScale(scale: number): number {
     if (!this.releasing) return scale;
     return Math.min(scale, (innerHeight - 8) / (this.deps.root.getBoundingClientRect().height / this.scale));
+  }
+
+  /** On a phone's side: windows with no business beside the picture. The moves keep their place under it. */
+  get standsAlone(): boolean {
+    return this.mode === 'party' || this.mode === 'member' || this.mode === 'bag' || this.mode === 'item' || this.mode === 'usemove';
+  }
+
+  /** What makes all the glass of what's on show now (Cam, 11-04: "on mobile the menus like the map and
+   *  everything else should take up the full screen"), every window scaling together. */
+  fillScale(): number {
+    let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
+    for (const el of this.deps.root.querySelectorAll<HTMLElement>(':scope > *')) {
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      left = Math.min(left, r.left); right = Math.max(right, r.right);
+      top = Math.min(top, r.top); bottom = Math.max(bottom, r.bottom);
+    }
+    if (right <= left) return this.scale;
+    const room = glass();
+    return Math.min(TOUCH_MAX_SCALE, (room.w - 8) / ((right - left) / this.scale), (room.h - 8) / ((bottom - top) / this.scale));
   }
 
   /** One of the party's page, as it stands now. */
@@ -1849,7 +1872,14 @@ export class BattleMenu {
     this.fitKey = key;
     const root = this.deps.root;
     root.classList.remove('bm-lift');
-    if (root.getBoundingClientRect().bottom > innerHeight) root.classList.add('bm-lift');
+    if (!this.refitting) {
+      this.refitting = true;
+      this.deps.refit?.();
+      this.refitting = false;
+    }
+    // ...and on a phone's side, over the battle, whose dim is the band's.
+    const alone = !!this.deps.refit && innerWidth > innerHeight && this.standsAlone && !root.closest('.panel');
+    if (alone || root.getBoundingClientRect().bottom > innerHeight) root.classList.add('bm-lift');
   }
 
   /** How tall a cell is now: a move's four lines, or the Safari's word. */

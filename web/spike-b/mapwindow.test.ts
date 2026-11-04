@@ -1,8 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { snapCell } from './mapwindow';
+import { mapFit, snapCell } from './mapwindow';
 import { CELL, GRID_X, GRID_Y } from './ringmap';
 
 const px = (cx: number, cy: number) => ({ x: GRID_X + cx * CELL + CELL / 2, y: GRID_Y + cy * CELL + CELL / 2 });
+
+describe('the MAP on a screen', () => {
+  it('fills a phone upright, to its width', () => {
+    const f = mapFit(true, { w: 375, h: 812 }, 1.5);
+    expect(f.s * 240).toBeCloseTo(367);
+    expect(f.col).toBe(0);
+  });
+  it('fills a phone on its side, to its height, its words in a column beside it', () => {
+    const f = mapFit(true, { w: 712, h: 327 }, 2);
+    expect(f.s * 160).toBeCloseTo(319);
+    expect(f.col).toBeGreaterThanOrEqual(104);
+    expect((240 + f.col) * f.s + 4).toBeLessThanOrEqual(712);
+  });
+  it('keeps whole pixels with a mouse', () => {
+    expect(mapFit(false, { w: 1920, h: 1080 }, 3)).toEqual({ s: 3, col: 0 });
+  });
+});
 
 describe("the MAP's cursor under a mouse", () => {
   const none = { events: [], gyms: [] };
