@@ -7,7 +7,7 @@ import { layout } from './shared/room';
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 
 describe('the seams that do not meet', () => {
-  it('are three, two tiles out, and each gives the same answer both ways', () => {
+  it('are the one left open, two tiles out, and it gives the same answer both ways', () => {
     const placed = layout(MAPS);
     const off: string[] = [];
     for (const p of placed.values()) {
@@ -22,13 +22,27 @@ describe('the seams that do not meet', () => {
       }
     }
     expect(off.sort()).toEqual([
-      'MAP_DEWFORD_TOWN>MAP_ROUTE107 0,-2',
-      'MAP_FALLARBOR_TOWN>MAP_ROUTE114 0,2',
-      'MAP_ROUTE107>MAP_DEWFORD_TOWN 0,2',
-      'MAP_ROUTE114>MAP_FALLARBOR_TOWN 0,-2',
-      'MAP_ROUTE116>MAP_VERDANTURF_TOWN 0,-2',
-      'MAP_VERDANTURF_TOWN>MAP_ROUTE116 0,2',
+      'MAP_PETALBURG_CITY>MAP_ROUTE102 0,2',
+      'MAP_ROUTE102>MAP_PETALBURG_CITY 0,-2',
     ]);
+  });
+
+  // Cam, 11-04: "the cave entrance it looks completely blocked but I can still walk up that way".
+  // ROUTE 116's foot lay over VERDANTURF's top rows, the Rusturf mouth and the MART's roof with them.
+  it('no two maps of the plane share a cell, so what is drawn at a cell is what stands there', () => {
+    const owner = new Map<string, string>();
+    const shared: string[] = [];
+    for (const p of layout(MAPS).values()) {
+      for (let y = 0; y < p.m.h; y++) {
+        for (let x = 0; x < p.m.w; x++) {
+          const k = `${p.gx + x},${p.gy + y}`, was = owner.get(k);
+          if (was) shared.push(`${was} ${p.m.id} ${k}`);
+          owner.set(k, p.m.id);
+        }
+      }
+    }
+    expect(owner.size).toBeGreaterThan(40_000);
+    expect(shared).toEqual([]);
   });
 
   it('glide: the jump undone at once, and none left after a step', () => {

@@ -14373,6 +14373,10 @@ var Room = class {
     return h;
   }
 };
+var LOOSE_SEAM = ["MAP_PETALBURG_CITY", "MAP_ROUTE102"];
+function isLooseSeam(a, b2) {
+  return a === LOOSE_SEAM[0] && b2 === LOOSE_SEAM[1] || a === LOOSE_SEAM[1] && b2 === LOOSE_SEAM[0];
+}
 function layout(maps) {
   const byId = new Map(maps.map((m) => [m.id, m]));
   const placed = /* @__PURE__ */ new Map();
@@ -14383,7 +14387,7 @@ function layout(maps) {
     const p = placed.get(queue.shift());
     for (const s of p.m.seams) {
       const to = byId.get(s.to);
-      if (!to || !to.outdoor || placed.has(to.id)) continue;
+      if (!to || !to.outdoor || placed.has(to.id) || isLooseSeam(p.m.id, to.id)) continue;
       let gx = p.gx;
       let gy = p.gy;
       if (s.dir === "north") {
@@ -16067,4 +16071,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "6f5b8714a24a";
+export const WORLD_HASH = "f55908170077";

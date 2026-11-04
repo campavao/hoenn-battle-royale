@@ -2369,6 +2369,19 @@ export class Room {
   }
 }
 
+/** Hoenn's seams don't quite close: the loops round the middle of the map come back two tiles out,
+ *  which a GBA, with one map at a time, never sees. Walked in whatever order, three seams stayed
+ *  open, and one of them laid ROUTE 116's foot over VERDANTURF's top rows (Cam, 11-04: "the cave
+ *  entrance it looks completely blocked but I can still walk up that way"). All the loops share
+ *  this seam, so the walk that lays the plane doesn't cross it: every other seam meets, no two maps
+ *  share a cell, and this one's step is a glide (seamglide.ts). It's a gap of grass between forests,
+ *  whose trees lie on the same two-cell grid either way, so it shows least here. export-fill.py and
+ *  main.ts's walk leave it out too. */
+export const LOOSE_SEAM: readonly [string, string] = ['MAP_PETALBURG_CITY', 'MAP_ROUTE102'];
+export function isLooseSeam(a: string, b: string): boolean {
+  return (a === LOOSE_SEAM[0] && b === LOOSE_SEAM[1]) || (a === LOOSE_SEAM[1] && b === LOOSE_SEAM[0]);
+}
+
 /** Every outdoor map joined to Littleroot by its seams, each at its place in one plane
  *  (tiles): the maps a trainer may walk on, and where the page draws them. */
 export function layout(maps: readonly WorldMap[]): Map<string, { m: WorldMap; gx: number; gy: number }> {
@@ -2381,7 +2394,7 @@ export function layout(maps: readonly WorldMap[]): Map<string, { m: WorldMap; gx
     const p = placed.get(queue.shift()!)!;
     for (const s of p.m.seams) {
       const to = byId.get(s.to);
-      if (!to || !to.outdoor || placed.has(to.id)) continue;
+      if (!to || !to.outdoor || placed.has(to.id) || isLooseSeam(p.m.id, to.id)) continue;
       let gx = p.gx;
       let gy = p.gy;
       if (s.dir === 'north') { gx += s.offset; gy -= to.h; }
