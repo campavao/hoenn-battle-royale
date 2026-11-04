@@ -88,11 +88,12 @@ test('a Safari catch, the drop on the fly map, and out of the Safari', async ({ 
   await expect.poll(() => s((s) => !!s.link?.room.actor(s.link.me)), { timeout: 60_000 }).toBe(true);
   const spot = () => s((s) => { const p = s.link.room.actor(s.link.me)?.m.spot; return p ? `${p.map}:${p.x}:${p.y}` : ''; });
 
-  // To marked spots until something is caught: A once every two seconds in a battle
+  // To marked spots nobody has been through (a bot's step takes one, as a trainer's does) until
+  // something is caught: A once every two seconds in a battle
   // (BALL is where the cursor starts), never a spot spent on a ROM still booting.
   let caught = 0;
   for (let tries = 0; tries < 12 && !caught; tries++) {
-    const dirs = await route(page, '(p, room) => room.patchesOn(p.map).some((q) => q.x === p.x && q.y === p.y) && !room.taken.has(room.patchKey ? room.patchKey(p) : -1)');
+    const dirs = await route(page, '(p, room) => room.patchesOn(p.map).some((q) => q.x === p.x && q.y === p.y && !room.isTaken(q.key))');
     expect(dirs, 'a marked spot to walk to').not.toBeNull();
     for (const d of dirs!) {
       const was = await spot();

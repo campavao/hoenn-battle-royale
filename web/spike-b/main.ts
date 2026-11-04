@@ -24,8 +24,10 @@ import { arrived, routeTo } from './tapwalk';
 import { loadPatches } from '../src/bots/patches';
 import { rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
-import { battleItems } from '../src/bots/bag';
+import { ballsIn, battleItems } from '../src/bots/bag';
 import { acroFrame, acroNear, DIR_EAST } from './sim';
+import { ballTakes, catchRateOf, patchBalls, wildMon, zoneBalls, zoneFight } from './shared/wild';
+import { logMs } from './shared/battlelog';
 import { ATTENDANT, BOATS, isLooseSeam, DOCKS, MOORINGS, TIDAL_MAPS, TIDAL_SAILOR, islandMaps, type Cruise, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, FIELD_DIVE, diveTo, emptyBag, interiors, makeRoom, botParty, legendMon, LEGEND_CATCH, LEGEND_FOE, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
@@ -1672,7 +1674,7 @@ function startFor(e: RoomEvent): void {
  *  fought out in the hidden ROM, and the winner told to the room. No answer (no ROM, a
  *  fight that would not end, a draw): 0, and both walk on. */
 const LEGEND_SEAT = 255;
-async function judgeBots(ida: number, idb: number, legend?: { key: number; species: number }): Promise<void> {
+async function judgeBots(ida: number, idb: number, legend?: { key: number; species: number; patch?: boolean; zone?: boolean }): Promise<void> {
   const l = link, r = l.room;
   const side = (id: number) => {
     const b = r.actor(id);
@@ -1680,14 +1682,33 @@ async function judgeBots(ida: number, idb: number, legend?: { key: number; speci
     return { seat: id, party: b ? wornParty(botParty(r.seed, b, r.ring().phase + 1), b.wear) : [], items: battleItems(b?.loot?.items ?? []) };
   };
   // A legendary is a side of one, on a seat the ROM's wire can carry; nobody's in a room this size.
-  const a = side(ida), b = legend ? { seat: LEGEND_SEAT, party: [legendMon(legend.species, r.ring().phase + 1)], items: [] } : side(idb);
+  const foeMon = legend?.patch ? wildMon : legendMon;
+  const a = side(ida), b = legend ? { seat: LEGEND_SEAT, party: [foeMon(legend.species, r.ring().phase + 1)], items: [] } : side(idb);
   // This meeting, not the pair: they can be let go (the room's own cap) and meet again,
   // and an answer for the old one would end the new one.
   const since = r.actor(ida)?.since;
   const wanted = () => link === l && !!since && l.room.actor(ida)?.since === since && (legend ? l.room.actor(ida)?.foe === LEGEND_FOE : l.room.actor(idb)?.foe === ida);
+  // The Zone's battle has no ROM in it (wild.ts): the throws, and as long as they would take.
+  if (legend?.zone) {
+    const fought = zoneFight({ seat: ida, name: '', skin: 0, party: a.party, balls: zoneBalls(a.party.length, r.actor(ida)?.zoneThrown) }, legend.species, { seed: (r.seed ^ Math.imul(since ?? 0, 0x9e3779b1) ^ ida) >>> 0 });
+    await new Promise((done) => setTimeout(done, logMs(fought.log)));
+    if (wanted()) l.bots(ida, idb, fought.winner, fought.caught ? fought.shareA : undefined, [fought.usedA, []]);
+    return;
+  }
   const out = judge ? await judge(a, b, wanted).catch(() => null) : null;
   if (!wanted()) return;
   if (!out) { l.bots(ida, idb, 0); return; }
+  // Off a marked spot: a ROM's duel has no throw in it, so the one it would have thrown at the last of
+  // the mon, at the ROM's odds, once the bot has beaten it. Beaten and not caught, nobody's: the spot
+  // is taken, and the bot has what the fight left it. Lost, it is out.
+  if (legend?.patch) {
+    const won = out.winner === ida;
+    const shares = a.party.map((m, i) => (m.maxHp > 0 ? Math.min(1, (out.a[i]?.hp ?? m.hp) / m.maxHp) : 0));
+    const ball = patchBalls(a.party.length, ballsIn(r.actor(ida)?.loot?.items ?? []))[0];
+    const caught = won && !!ball && ballTakes(ball.id, { hp: 1, maxhp: b.party[0].maxHp, status: '' }, catchRateOf(legend.species), false, Math.random);
+    l.bots(ida, idb, caught ? ida : !won && out.winner === LEGEND_SEAT ? LEGEND_FOE : 0, shares, [caught ? [...out.usedA, ball.id] : out.usedA, out.usedB]);
+    return;
+  }
   // What the winner has left, mon for mon (brain.ts settleAnswered), as shares.
   // A legendary it brought low enough to catch is the bot's, however the rest of its team did.
   const m0 = b.party[0];
