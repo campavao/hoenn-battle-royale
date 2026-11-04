@@ -2,6 +2,7 @@
 // and the layout on a phone and a desktop. The live match's feedback, howto, chunk-reload and
 // phone specs went with its page; these are the same promises on /.
 import { devices, expect, test, type Page } from '@playwright/test';
+import { key } from './spike';
 import { romExists, romHashParam, romPath } from './symbols';
 
 test.skip(!romExists(), `no ROM at ${romPath()} -- set HBR_ROM or place pokeemerald.gba at the repo root, then run tools/br/dev-patch.sh`);
@@ -77,6 +78,47 @@ async function inMatch(page: Page): Promise<void> {
 }
 
 const boxOf = (page: Page, sel: string) => page.locator(sel).boundingBox();
+
+test('sideways on an iPhone 13 mini: the corner, the bike, the moves and the thumbs each have their own place', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 712, height: 327 }, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await page.goto(`/?rom=${romHashParam()}#solo&nobots&safari=0&fog=900&seed=7`);
+  await page.locator('#intro-go').click({ timeout: 90_000 });
+  await onField(page);
+  // A team out of the DAY CARE's chest and the rest filled in, so the moves' column is up.
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  await page.evaluate(() => { const s = (window as any).__spike, a = s.link.room.actor(s.link.me), spot = { map: 'MAP_ROUTE117_POKEMON_DAY_CARE', x: 5, y: 6 }; a.m = { ...a.m, spot, prev: spot, facing: 2, moveDir: 2, action: null, px: 0, py: 0, bike: false }; a.calm = 1e9; });
+  await page.waitForTimeout(800);
+  const party = () => page.evaluate(() => (window as any).__spike.rom.partyCount() as number);
+  for (let i = 0; i < 40 && !(await party()); i++) {
+    if (await page.locator('.bm-slot').first().isVisible()) { await page.locator('.bm-slot').first().click({ force: true }); await page.waitForTimeout(1500); }
+    else if (!(await page.evaluate(() => (window as any).__spike.swapping))) { await key(page, 'z', true); await page.waitForTimeout(90); await key(page, 'z', false); await page.waitForTimeout(800); }
+    else await page.waitForTimeout(500);
+  }
+  await expect.poll(() => page.evaluate(() => (window as any).__spike.swapping), { timeout: 30_000 }).toBe(false);
+  await page.evaluate(() => (window as any).__spike.rom.fillParty());
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+  await expect(page.locator('.hud-moves:not(.gone)')).toBeVisible({ timeout: 20_000 });
+  const parts = ['.hud-fog', '.hud-moves', '.hud-ctx-round', '#pad .ab', '#pad .dpad', '#hud-party', '#hud-bag', '#hud-menu'];
+  // Safari's window with its bars, then the whole screen, then a bigger phone's.
+  for (const size of [{ width: 712, height: 327 }, { width: 812, height: 375 }, { width: 844, height: 390 }]) {
+    await page.setViewportSize(size);
+    await page.waitForTimeout(500);
+    const boxes = await Promise.all(parts.map((p) => boxOf(page, p)));
+    const clash: string[] = [];
+    boxes.forEach((a, i) => {
+      if (!a) { clash.push(`${parts[i]} is not there`); return; }
+      if (a.x < 0 || a.y < 0 || a.x + a.width > size.width || a.y + a.height > size.height) clash.push(`${parts[i]} runs off the glass: ${JSON.stringify(a)}`);
+      boxes.slice(i + 1).forEach((b, j) => {
+        if (b && a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height) clash.push(`${parts[i]} on ${parts[i + 1 + j]}`);
+      });
+    });
+    if (size.height === 327) await page.screenshot({ path: test.info().outputPath('sideways.png') });
+    expect(clash, `${size.width}x${size.height}`).toEqual([]);
+  }
+  await ctx.close();
+});
 
 test('a phone gets the map and both thumbs, either way up; a desktop gets the keys and no pad', async ({ browser }) => {
   test.setTimeout(240_000);

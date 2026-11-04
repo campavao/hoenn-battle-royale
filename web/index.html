@@ -166,6 +166,14 @@
       #pdock.hud-bumpers .hud-btn[hidden] { display: none; }
       .hud-ctx-round { position: fixed; right: calc(env(safe-area-inset-right) + 24px); bottom: calc(env(safe-area-inset-bottom) + var(--s, 1.5) * 52px + 88px); width: calc(var(--s, 1.5) * 36px); height: calc(var(--s, 1.5) * 36px); border-radius: 50%; background: rgba(32, 38, 44, 0.45) !important; }
       .hud-ctx-round[aria-disabled="true"] { opacity: 0.45; }
+      /* A phone on its side has no room down the right edge for all of these (iPhone 13 mini, 327
+         high in Safari): the corner a little smaller and clear of the thumbs, the moves beside it,
+         the bike beside B. */
+      @media (orientation: landscape) and (pointer: coarse) and (max-height: 480px) {
+        body:not(.desk-hud) .hud-mini { transform: scale(0.75); transform-origin: top right; }
+        body:not(.desk-hud) .hud-moves { top: calc(env(safe-area-inset-top) + var(--s, 1.5) * 4px); right: calc(var(--s, 1.5) * 52px + 4px); transform: scale(0.75); transform-origin: top right; }
+        body:not(.desk-hud) .hud-ctx-round { right: calc(env(safe-area-inset-right) + 16px + 72px + 12px + 72px + 8px); bottom: calc(env(safe-area-inset-bottom) + var(--s, 1.5) * 48px + 12px); }
+      }
       body.desk-hud #pad { display: grid; pointer-events: none; }
       body.desk-hud #pad .dpad, body.desk-hud #pad .ab, body.desk-hud #pad .st { display: none; }
       /* A desktop's quick action beside the BAG (Cam, 11-02, 10:31: "we don't see the quick action
