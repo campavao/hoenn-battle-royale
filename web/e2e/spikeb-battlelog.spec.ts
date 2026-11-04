@@ -558,6 +558,52 @@ test('a switch, then the one switched in faints: the party has the other come ou
   }
 });
 
+test('a switch in a duel, its unseen party at speed on one side only: the two ROMs stay together', async ({ browser }) => {
+  test.setTimeout(420_000);
+  const room0 = await bootRoom(browser, 0);
+  const { r, host, guest, hostId, guestId } = room0;
+  try {
+    const TWO: Craft[] = [
+      { species: 258, name: 'MUDKIP', level: 20, moves: [33], hp: 14, stats: [90, 15, 12, 12, 12], personality: 2222 },
+      { species: 129, name: 'MAGIKARP', level: 20, moves: [33], hp: 14, stats: [90, 15, 12, 12, 12], personality: 1111 },
+    ];
+    await giveTeam(host, TWO);
+    await giveTeam(guest, TWO);
+    await host.evaluate(() => (window as any).__spike.link.fly('MAP_LITTLEROOT_TOWN', 9, 12));
+    await guest.evaluate(() => (window as any).__spike.link.fly('MAP_LITTLEROOT_TOWN', 11, 12));
+    await expect.poll(() => { const t = r.room().actor(hostId), g = r.room().actor(guestId); return `${t.m.spot.map},${t.m.spot.x} ${g.m.spot.map},${g.m.spot.x}`; }, { timeout: 30_000 }).toBe('MAP_LITTLEROOT_TOWN,9 MAP_LITTLEROOT_TOWN,11');
+    for (let i = 0; i < 40 && !r.room().actor(hostId).battling; i++) {
+      await host.keyboard.down('ArrowRight');
+      await host.waitForTimeout(80);
+      await host.keyboard.up('ArrowRight');
+      await host.waitForTimeout(300);
+    }
+    await expect.poll(() => spike(host, (s) => !!s.battle), { timeout: 60_000 }).toBe(true);
+    await expect.poll(() => spike(guest, (s) => !!s.battle), { timeout: 60_000 }).toBe(true);
+    await expect(host.locator('.bm-cell').first()).toBeVisible({ timeout: 90_000 });
+    await expect(guest.locator('.bm-cell').first()).toBeVisible({ timeout: 90_000 });
+    step('both at their first menu');
+    const out = (p: typeof host, n: string) => p.evaluate((n) => { const s = (window as any).__spike; return s.rom.emu.read(s.art.sym(n), 16) as number; }, n);
+    await host.keyboard.press('q');
+    await host.locator('.bm-slot').nth(1).click(CLICK);
+    await host.locator('.bm-m-btn').nth(2).click(CLICK);
+    await guest.locator('.bm-cell').first().click(CLICK);
+    await expect.poll(() => out(host, 'gBattlerPartyIndexes'), { timeout: 30_000 }).toBe(1);
+    step('host switched');
+    // The turn plays on both, each with the same one out (gBattleMons[0] on each, its own side first
+    // or not as its link id says: both the host's new one and the guest's first are on both).
+    const mons = (p: typeof host) => p.evaluate(() => { const s = (window as any).__spike, at = s.art.sym('gBattleMons'); return [s.rom.emu.read(at, 16), s.rom.emu.read(at + 0x58, 16)] as number[]; });
+    await expect.poll(async () => (await mons(guest)).sort().join(), { timeout: 60_000, message: 'the guest sees the switch' }).toBe('129,258');
+    await expect.poll(async () => (await mons(host)).sort().join(), { timeout: 60_000 }).toBe('129,258');
+    step('both see it');
+    await Promise.all([play(host), play(guest)]);
+    expect(await spike(host, (s) => !!s.battle)).toBe(false);
+    expect(await spike(guest, (s) => !!s.battle)).toBe(false);
+  } finally {
+    await room0.close();
+  }
+});
+
 test('two real trainers walk into a real duel, a third page watches: its view ends on the ROMs', async ({ browser }) => {
   test.setTimeout(900_000);
   // No bots: one that met either of them first would have that trainer fighting it, not the other.

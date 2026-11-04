@@ -1123,6 +1123,19 @@ describe('the see-through battle', () => {
     keyPicture(px);
     expect([px[3], px[7], px[11], px[15], px[19]]).toEqual([0, 0, 255, 255, 255]);
   });
+
+  it('a fade taking the key down darkens the world behind it, and no solid blue (Cam, 11-04)', () => {
+    const pixels = () => new Uint8ClampedArray([0, 0, 120, 255, 0, 0, 255, 255, 0, 0, 0, 255, 8, 0, 120, 255]);
+    const px = pixels();
+    keyPicture(px, true);
+    expect([...px.subarray(0, 4)], 'half down: black at half').toEqual([0, 0, 0, 135]);
+    expect(px[7], 'the key itself still clear').toBe(0);
+    expect([...px.subarray(8, 12)], 'all the way down: black').toEqual([0, 0, 0, 255]);
+    expect([...px.subarray(12, 16)], 'with any red in it, a colour').toEqual([8, 0, 120, 255]);
+    const still = pixels();
+    keyPicture(still);
+    expect([...still.subarray(0, 4)], 'with no fade on, a navy').toEqual([0, 0, 120, 255]);
+  });
 });
 
 // PR #103's review: a cover is BG1's top layer, and the ROM draws an object at elevation

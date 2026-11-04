@@ -1791,12 +1791,52 @@ let partyGone = false;
 let partyHeld = 0;
 /** Frames the picture waits on the party's unseen walk, at most. */
 const PARTY_HOLD = 900;
+/** Pictures since a hold ended that were not yet the battle's, and how many may be. */
+let heldTail = -1;
+const HELD_TAIL = 30;
+/** The battle's picture and not a black one: its backdrop is keyed out (keyPicture has run), about
+ *  40-60% of the glass in every one measured. */
+function drawnPicture(rgba: Uint8ClampedArray): boolean {
+  let keyed = 0;
+  for (let i = 3; i < rgba.length; i += 4 * 8) if (rgba[i] === 0) keyed++;
+  return keyed * 8 * 8 >= 240 * 160;
+}
+/** The prompt off the held picture from the moment a choice is made: the windows go, and this says
+ *  the click landed while the ROM's screens are walked. B_WIN_MSG, tiles 2,15 and 26x4. */
+let promptOff = false;
+const MSG_X = 16, MSG_Y = 120, MSG_W = 208, MSG_H = 32;
+function clearPrompt(): void {
+  const c = keyCanvas.getContext('2d');
+  if (!c) return;
+  const [r, g, b, a] = c.getImageData(MSG_X, MSG_Y, 1, 1).data;
+  c.fillStyle = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
+  c.fillRect(MSG_X, MSG_Y, MSG_W, MSG_H);
+}
 let battleMenu: BattleMenu | null = null;
 let bagFrames = 0;
 const BAG_HOLD = 150;
+/** ROM frames after the battle's callback is back before its picture is one to show. With the
+ *  see-through on it has no fade in (reshow_battle_screen.c), and its first frames are black, then
+ *  the bases and the box with no mon and no healthbox on them. Shown at once, that one picture was
+ *  Cam's "flashes" (11-04). */
+const BACK_SETTLE = 6;
+let backAt = -1;
+let bagRanAt = 0;
+/** The battle's own screen again, and drawn. */
+function battleBack(): boolean { return !!rom && backAt >= 0 && rom.emu.ran - backAt >= BACK_SETTLE; }
+/** The unseen part of a choice is at speed, or when it last was. */
+let hiding = false;
+let hidUntil = 0;
+/** ...and in the picture: at HURRY_SPEED the core does not draw every frame, so the last one it did
+ *  can be older than the RAM says. One in seven of them was still that bare frame. */
+function pictureBack(): boolean { return battleBack() && !hiding && !!rom && rom.emu.ran - hidUntil >= BACK_SETTLE; }
 const ITEM_FLUFFY_TAIL = ITEM_POKE_DOLL + 1;
 /** A USE walked on the ROM's BAG: frames to read what became of it, and the most it may take. */
 const BAG_USE_READ = 45, BAG_USE_MAX = 1200;
+/** ROM frames the unseen part of a choice may run fast, at most: what is still going then is not one. */
+const UNSEEN_MAX = 2400;
+/** ...and to leave the battle's screen at all: a press or two, and the start of its fade. */
+const UNSEEN_START = 180;
 /** What the ROM's BAG says of an item it won't use (item_use.c), in its words. */
 function refusedLine(pocket: number, item: number): string {
   if (pocket === POCKET_BALLS) return 'The BOX is full.';
@@ -1807,14 +1847,18 @@ function trackBag(): void {
   const main = sym('gMain'), run = sym('CB2_BagMenuRun'), pick = sym('gBrBag'), battleCb = sym('BattleMainCB2');
   if (!rom || main === undefined || run === undefined || pick === undefined || battleCb === undefined) return;
   const cb2 = rom.emu.read(main + 4, 32);
+  const step = Math.max(1, rom.emu.ran - bagRanAt);
+  bagRanAt = rom.emu.ran;
+  if (((cb2 ^ battleCb) & ~1) !== 0 || romFading()) backAt = -1;
+  else if (backAt < 0) backAt = rom.emu.ran;
   const is = (n: string | number | undefined) => { const a = typeof n === 'string' ? sym(n) : n; return a !== undefined && ((cb2 ^ a) & ~1) === 0; };
   const bag = rom.emu.read(pick, 16) !== 0 || is(run);
   if (!bag && !romBag) return;
   if (romBag === 'free') { if (!bag) romBag = null; return; }
   if (bag) romBag = 'bag';
   else if (romBag === 'bag') romBag = is('CB2_SetUpReshowBattleScreenAfterMenu2') || is('ReshowBattleScreenAfterMenu') || is(battleCb) ? 'reshow' : null;
-  else if (is(battleCb) && !romFading()) romBag = null;
-  bagFrames = romBag ? bagFrames + 1 : 0;
+  else if (pictureBack()) romBag = null;
+  bagFrames = romBag ? bagFrames + step : 0;
   if (bagFrames > BAG_HOLD) romBag = 'free';
 }
 function romFading(): boolean {
@@ -1852,13 +1896,19 @@ function seeFrame(): void {
     if (partyHold && main !== undefined && fight !== undefined) {
       const inFight = ((rom!.emu.read(main + 4, 32) ^ fight) & ~1) === 0;
       if (!inFight) partyGone = true;
-      if ((partyGone && inFight && !romFading()) || ++partyHeld > PARTY_HOLD) partyHold = false;
+      if ((partyGone && inFight && pictureBack()) || ++partyHeld > PARTY_HOLD) partyHold = false;
     }
+    heldTail = 0;
     return;
   }
   if (keyed) {
-    keyPicture(keyImage.data);
+    keyPicture(keyImage.data, romFading());
+    if (heldTail >= 0) {
+      if (!drawnPicture(keyImage.data) && ++heldTail <= HELD_TAIL) return;
+      heldTail = -1;
+    }
     keyCanvas.getContext('2d')?.putImageData(keyImage, 0, 0);
+    if (promptOff) clearPrompt();
   } else if (rom && !up) rom.seeThrough(false);
   if (keyed !== seeing) { seeing = keyed; battleEl.classList.toggle('see', keyed); }
   battleEl.classList.toggle('screen', up && !battle);
@@ -2984,9 +3034,30 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     return false;
   };
   const PARTY_SLOT_ID = 9;
-  let walk: { slot: number; step: number; frames: number; item: boolean; move?: number; forced?: boolean } | null = null;
+  /** gBrPartyScreen: a pointer in the ROM to the party screen's callback. */
+  const partyCbAt = sym('gBrPartyScreen');
+  const partyCb = partyCbAt === undefined ? undefined : new DataView(files.rom.buffer, files.rom.byteOffset).getUint32(partyCbAt - 0x08000000, true);
+  const partyUp = () => {
+    const main = sym('gMain');
+    return main === undefined || partyCb === undefined || ((emu.read(main + 4, 32) ^ partyCb) & ~1) === 0;
+  };
+  // All of it counted in the ROM's frames, as the keys it presses are (touch.ts): it runs at
+  // HURRY_SPEED, when the page sees about one in eight.
+  let walk: { slot: number; step: number; frames: number; beat: number; item: boolean; move?: number; forced?: boolean } | null = null;
+  /** The ROM's BAG and party under the windows, from the click until the battle is back and drawn:
+   *  nobody sees them, so at HURRY_SPEED. Cam, 11-04: "selected an item, selected the Pokemon, and
+   *  we fully waited like five seconds". */
+  let unseen: { gone: boolean; frames: number } | null = null;
+  const hide = () => {
+    rom?.unseen(true);
+    unseen = { gone: false, frames: 0 };
+    hiding = true;
+    promptOff = true;
+    if (seeing) clearPrompt();
+  };
   const walkParty = (slot: number) => {
-    walk = { slot, step: 0, frames: 0, item: false };
+    hide();
+    walk = { slot, step: 0, frames: 0, beat: 0, item: false };
     partyHold = true;
     partyGone = false;
     partyHeld = 0;
@@ -3001,22 +3072,24 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
   /** A USE with nobody to ask about (an X item, a ball, a doll): the ROM's BAG does it, unseen, and
    *  stood there on its own screen when it refused. Its line goes on the page's box instead and B
    *  leaves it, the turn still ours; used, its line is pressed past. */
-  let bagUse: { pocket: number; item: number; was: number; frames: number; waited: number; said: boolean } | null = null;
+  let bagUse: { pocket: number; item: number; was: number; frames: number; next: number; waited: number; said: boolean } | null = null;
   const useFromBag = (pocket: number, item: number) => {
-    bagUse = { pocket, item, was: readPocket(emu, sym, pocket).find((x) => x.item === item)?.n ?? 0, frames: 0, waited: 0, said: false };
+    hide();
+    bagUse = { pocket, item, was: readPocket(emu, sym, pocket).find((x) => x.item === item)?.n ?? 0, frames: 0, next: BAG_USE_READ, waited: 0, said: false };
     pickFromBag(pocket, item);
   };
-  const bagUseFrame = () => {
+  const bagUseFrame = (step: number) => {
     const u = bagUse;
     if (!u) return;
     const main = sym('gMain'), bag = sym('CB2_BagMenuRun');
-    if (main === undefined || bag === undefined || ++u.waited > BAG_USE_MAX) { bagUse = null; return; }
+    if (main === undefined || bag === undefined || (u.waited += step) > BAG_USE_MAX) { bagUse = null; return; }
     const inBag = ((emu.read(main + 4, 32) ^ bag) & ~1) === 0;
     // Asked for and not up yet; or up, and now gone: the battle has it.
     if (!inBag) { if (u.frames) bagUse = null; return; }
     if (emu.read(sym('gBrBag')!, 16)) return;
     bagFrames = 0;
-    if (++u.frames < BAG_USE_READ || u.frames % 30) return;
+    if ((u.frames += step) < u.next) return;
+    u.next = u.frames + 30;
     const left = readPocket(emu, sym, u.pocket).find((x) => x.item === u.item)?.n ?? 0;
     if (left < u.was) { touch.tapKey('a'); return; }
     if (!u.said) {
@@ -3026,14 +3099,32 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     touch.tapKey('b');
   };
   const useOn = (pocket: number, item: number, slot: number, move?: number) => {
-    walk = { slot, step: 0, frames: 0, item: true, move };
+    hide();
+    walk = { slot, step: 0, frames: 0, beat: 0, item: true, move };
     partyHold = true;
     partyGone = false;
     partyHeld = 0;
     pickFromBag(pocket, item);
   };
+  let ranAt = 0;
   emu.onFrame(() => {
-    bagUseFrame();
+    const step = Math.max(1, emu.ran - ranAt);
+    ranAt = emu.ran;
+    bagUseFrame(step);
+    if (unseen) {
+      const main = sym('gMain'), fight = sym('BattleMainCB2');
+      const inFight = main !== undefined && fight !== undefined && ((emu.read(main + 4, 32) ^ fight) & ~1) === 0;
+      if (!inFight) unseen.gone = true;
+      unseen.frames += step;
+      // Never left the battle (the clock took the turn as the click landed): that turn is one to see.
+      if (!battle || unseen.frames > (unseen.gone ? UNSEEN_MAX : UNSEEN_START) || (!walk && !bagUse && unseen.gone && battleBack())) {
+        rom?.unseen(false);
+        unseen = null;
+        hiding = false;
+        hidUntil = emu.ran;
+        promptOff = false;
+      }
+    }
     // One has fainted: the ROM's fade and party stay behind the picture until it is answered.
     const brAt = sym('gBrBattle');
     if (brAt !== undefined && emu.read(brAt + BATTLE_MENU, 8) === MENU_PARTY) {
@@ -3041,20 +3132,26 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     }
     menu.away = !!walk;
     if (!walk) return;
-    walk.frames++;
+    walk.frames += step;
+    walk.beat += step;
+    const every = (n: number) => { if (walk!.beat < n) return false; walk!.beat = 0; return true; };
     if (walk.step === 0) {
-      if (choosing()) {
+      // Its screen up and its fade over: its task is there a frame before the fade begins, and takes
+      // no keys through it.
+      if (choosing() && partyUp() && !romFading()) {
         emu.write(partyMenu! + PARTY_SLOT_ID, walk.slot, 8);
         touch.tapKey('a');
         walk.step = walk.item ? (walk.move === undefined ? 5 : 6) : 1;
         walk.frames = 0;
+        walk.beat = 0;
       } else if (walk.frames > 400) { walk = null; partyHold = false; }
     } else if (walk.step === 1 && walk.frames > 40) {
       // Its little menu: SHIFT, SUMMARY, CANCEL.
       touch.tapKey('a');
       walk.step = 3;
       walk.frames = 0;
-    } else if (walk.step === 3 && walk.frames % 30 === 0) {
+      walk.beat = 0;
+    } else if (walk.step === 3 && every(30)) {
       // SHIFT is taken once its question has printed: pressed again until the party is gone.
       // Back on the party's list means the ROM said no (trapped, say): its line, then out.
       const main = sym('gMain'), fight = sym('BattleMainCB2');
@@ -3065,10 +3162,10 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       else touch.tapKey('a');
     } else if (walk.step === 6) {
       // An ETHER's "restore which move?": down to it, and A.
-      if (walk.frames > 40 && walk.frames % 12 === 0) {
-        if (walk.move! > 0) { touch.tapKey('down'); walk.move!--; } else { touch.tapKey('a'); walk.step = 5; walk.frames = 0; }
+      if (walk.frames > 40 && every(12)) {
+        if (walk.move! > 0) { touch.tapKey('down'); walk.move!--; } else { touch.tapKey('a'); walk.step = 5; walk.frames = 0; walk.beat = 0; }
       }
-    } else if (walk.step === 5 && walk.frames % 30 === 0) {
+    } else if (walk.step === 5 && every(30)) {
       // Its line on the party's own screen is pressed past, until the battle is back. The bag
       // again means the ROM would not have it (nothing to cure, say): out, the turn still ours.
       const main = sym('gMain'), fight = sym('BattleMainCB2'), bag = sym('CB2_BagMenuRun');
@@ -3121,7 +3218,7 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       switchTo: (slot) => walkParty(slot),
       showMon: (rows, at) => summaryWin?.open(rows.map((r) => (r.joins ? { ...r, ...r.joins } : r)), at, () => menu.isShown),
       useOn,
-      sendOut: (slot) => { walk = { slot, step: 0, frames: 0, item: false, forced: true }; },
+      sendOut: (slot) => { hide(); walk = { slot, step: 0, frames: 0, beat: 0, item: false, forced: true }; },
       field: {
         close: closePanel,
         readBag: () => readFieldBag(emu, sym),

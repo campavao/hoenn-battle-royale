@@ -1,0 +1,36 @@
+# items-hp-at-once: pret's party menu counts HP up a point a frame, and the page's windows walk that
+# screen unseen, so a MAX POTION on 63/343 stood the battle there for 280 frames (Cam's 2026-11-04
+# play-test, 16:12: "we fully waited like five seconds"). party_menu.c PartyMenuModifyHP: all of it
+# in one step, with the amount its line says still right.
+#
+# A REVIVE (it stays on one mon: items-heal.txt) on a mon whose max HP is 400: 200 points.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+poke u16 gPlayerParty+0x58 400
+poke u16 gPlayerParty+0x56 0
+pokebytes gDecompressionBuffer 01 18 00 01
+mailsend gBrMailbox 30 gDecompressionBuffer 4
+wait 60
+expect u16 *gSaveBlock1Ptr+0x560 24
+# START, down to BAG, in; the REVIVE is first; USE; and the one mon.
+tap START
+wait 40
+tap DOWN
+wait 10
+tap A
+wait 120
+tap A
+wait 30
+tap A
+wait 60
+shot pick
+expect u16 gPlayerParty+0x56 0
+tap A
+# A tap is a few frames: 200 frames were 200 points, and now it is done well before.
+wait 12
+shot done
+expect u16 gPlayerParty+0x56 200
+say hp at once ok
