@@ -14626,6 +14626,7 @@ var LOG_MSG_CHARS = 3800;
 var LOG_TEXT_MAX = 160;
 var LOG_STREAM_EVENTS = 1500;
 var LOG_STREAM_CHARS = 96 * 1024;
+var SEAT_MIN = -2;
 var int = (v2, lo, hi2) => typeof v2 === "number" && Number.isInteger(v2) && v2 >= lo && v2 <= hi2 ? v2 : void 0;
 function line(v2, max) {
   if (typeof v2 !== "string") return void 0;
@@ -14652,7 +14653,7 @@ function monOf(m) {
 function sideTeam(s) {
   if (!s || typeof s !== "object") return void 0;
   const o = s;
-  const seat = int(o.seat, 0, 2147483647), skin = int(o.skin, 0, 255), name = line(o.name, 24);
+  const seat = int(o.seat, SEAT_MIN, 2147483647), skin = int(o.skin, 0, 255), name = line(o.name, 24);
   if (seat === void 0 || skin === void 0 || name === void 0 || !Array.isArray(o.team) || o.team.length > 6) return void 0;
   const team = [];
   for (const m of o.team) {
@@ -14699,7 +14700,7 @@ function cleanEvent(raw) {
       return side !== void 0 ? { e: "faint", side } : void 0;
     }
     case "end": {
-      const winner = int(o.winner, 0, 2147483647);
+      const winner = int(o.winner, SEAT_MIN, 2147483647);
       return winner !== void 0 ? { e: "end", winner } : void 0;
     }
     default:
@@ -15413,4 +15414,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "a5d503597144";
+export const WORLD_HASH = "288f1c30458f";
