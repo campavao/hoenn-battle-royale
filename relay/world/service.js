@@ -12023,6 +12023,15 @@ function tick(m, keys, step) {
   }
 }
 var BIKE_PX = [1, 2, 4];
+var ACRO_NEAR = 2;
+function acroNear(step, s) {
+  for (let dy = -ACRO_NEAR; dy <= ACRO_NEAR; dy++) {
+    for (let dx = -ACRO_NEAR; dx <= ACRO_NEAR; dx++) {
+      if (step.acroAt?.({ map: s.map, x: s.x + dx, y: s.y + dy })) return true;
+    }
+  }
+  return false;
+}
 function begin(m, keys, step) {
   m.prev = m.spot;
   const press = !!keys.select && !m.sel;
@@ -12030,7 +12039,7 @@ function begin(m, keys, step) {
   const under = step.acroAt?.(m.spot) ?? 0;
   if (press && (m.bike ? under < ACRO_ISO_V : step.cycling?.(m.spot) || step.acroCycling?.(m.spot))) {
     m.bike = !m.bike;
-    if (m.bike) m.acro = !step.cycling?.(m.spot) || under !== 0 || !!step.likeAcro;
+    if (m.bike) m.acro = !step.cycling?.(m.spot) || under !== 0 || (step.likeAcro ?? acroNear(step, m.spot));
     bikeClear(m);
     if (m.bike && m.acro && under === ACRO_BUMPY) m.acroState = ACRO_WHEELIE;
     m.acroB = !!keys.b;
@@ -12734,7 +12743,7 @@ var Room = class {
     } else if (cmd.c === "ride") {
       const a = this.actor(cmd.id);
       if (!a || a.bot) return;
-      a.likeAcro = cmd.acro || void 0;
+      a.likeAcro = cmd.acro;
       if (a.m.bike && a.m.acro !== cmd.acro && !this.base.acroAt?.(a.m.spot) && (cmd.acro || this.stepFor(a).cycling?.(a.m.spot))) {
         a.m.acro = cmd.acro;
         bikeClear(a.m);
@@ -14239,7 +14248,7 @@ var Room = class {
     fn.cycling = !a.bot && !this.ring().safari ? this.base.cycling : void 0;
     fn.acroCycling = a.bot ? void 0 : this.base.acroCycling;
     fn.acroAt = this.base.acroAt;
-    fn.likeAcro = !!a.likeAcro;
+    fn.likeAcro = a.bot ? false : a.likeAcro;
     return fn;
   }
   /** A short fingerprint of the room: two machines that disagree find out within a second. */
@@ -16071,4 +16080,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "f55908170077";
+export const WORLD_HASH = "965f84975bf1";

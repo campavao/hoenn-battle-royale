@@ -25,7 +25,7 @@ import { loadPatches } from '../src/bots/patches';
 import { rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { battleItems } from '../src/bots/bag';
-import { acroFrame, DIR_EAST } from './sim';
+import { acroFrame, acroNear, DIR_EAST } from './sim';
 import { ATTENDANT, BOATS, isLooseSeam, DOCKS, MOORINGS, TIDAL_MAPS, TIDAL_SAILOR, islandMaps, type Cruise, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, FIELD_DIVE, diveTo, emptyBag, interiors, makeRoom, botParty, legendMon, LEGEND_CATCH, LEGEND_FOE, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
@@ -1159,7 +1159,7 @@ function bikeNow(me: Actor): { item: number; label: 'BIKE' | 'WALK'; enabled: bo
   const has = rom ? bagHolds(rom.emu, romTables.sym, KEYITEMS_POCKET, [ITEM_MACH_BIKE, ITEM_ACRO_BIKE]) : new Set<number>();
   const step = link.room.stepFor(me), spot = me.m.spot;
   // The one that SELECT would get on (sim.ts begin), or is on.
-  const acro = me.m.bike ? me.m.acro : !step.cycling?.(spot) && !!step.acroCycling?.(spot) || !!step.acroAt?.(spot) || !!me.likeAcro || (!!has.size && !has.has(ITEM_MACH_BIKE));
+  const acro = me.m.bike ? me.m.acro : !step.cycling?.(spot) && !!step.acroCycling?.(spot) || !!step.acroAt?.(spot) || (me.likeAcro ?? acroNear(step, spot)) || (!!has.size && !has.has(ITEM_MACH_BIKE));
   return {
     item: acro ? ITEM_ACRO_BIKE : ITEM_MACH_BIKE,
     label: me.m.bike ? 'WALK' : 'BIKE',
