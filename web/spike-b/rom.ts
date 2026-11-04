@@ -29,12 +29,13 @@ import { FADE_COLOR_WORD, FADE_Y_WORD, fadeOf } from '../src/field';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 import { CATCH_UP_SPEED, seatBstart, spectatePace } from '../src/match/spectate';
 import { BAG_POSITION_POCKET } from '../src/ui/bag';
-import { withHeld } from './carry';
+import { withHeld, withMove } from './carry';
 import type { SpMsg } from './shared/wire';
 import { readTally, type MatchTally } from '../src/match/tally';
 import type { FameMon } from '../src/ui/results';
 import { MUSIC_ASKED, MUSIC_QUIET, MUS_HEAL, MUS_VS_TRAINER, type MusicAsk } from './music';
 
+const ALL_KEYS: GbaKey[] = ['a', 'b', 'start', 'select', 'up', 'down', 'left', 'right'];
 /** SaveBlock2's options halfword (include/global.h). */
 const OPTIONS_AT = 0x14;
 /** sizeof(struct BrTally) (include/br/br_tally.h). */
@@ -140,12 +141,15 @@ export interface DuelLink {
 /** The page has asked already: the ROM's BAG and party are gone through unseen. A screen that
  *  is the ROM's alone (an evolution, the SUMMARY) is shown when it settles. */
 export type MenuWalk =
-  | { to: 'summary' | 'moves'; slot: number }
   | { to: 'use'; pocket: number; item: number; slot?: number; move?: number };
 
 /** What a walk needs the page to ask. `forget`: a new move and four known, which goes, by the
- *  row; null keeps the four. */
-export const romAsks: { forget: ((slot: number, move: number) => Promise<number | null>) | null } = { forget: null };
+ *  row; null keeps the four. `release`: a catch with a full party (a mon's 100 bytes), who gives
+ *  way for it, by the slot; null keeps the party and lets it go. */
+export const romAsks: {
+  forget: ((slot: number, move: number) => Promise<number | null>) | null;
+  release: ((mon: Uint8Array) => Promise<number | null>) | null;
+} = { forget: null, release: null };
 
 export interface MirrorFeed {
   /** The next message not yet handed to the ROM, or null. */
@@ -279,6 +283,8 @@ export interface RomBattles {
   reorder(a: number, b: number): Promise<void>;
   /** This one holds `item` now, 0 for nothing: what it held is not the bag's business here. */
   setHeld(slot: number, item: number): Promise<void>;
+  /** This one knows `move` in `moveSlot`, its PP full: the page's write, as setHeld is. */
+  setMove(slot: number, moveSlot: number, move: number, pp: number): Promise<void>;
   menu(action: number, onStart: () => void, onEnd: () => void, walk?: MenuWalk): Promise<{ up: boolean; said: string }>;
   /** Somebody else's battle, replayed on this ROM as the match's spectator replays it
    *  (br_spectate.c: a BSTART, its TURNs, a RESULT to finish), the trainer watched near
@@ -470,6 +476,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
   const mainFunc = sym('gBattleMainFunc');
   const outcomeAt = sym('gBattleOutcome');
   const catchAt = sym('gBrCatch');
+  const pendingAt = sym('gBrPendingCatch');
   const ringAt = sym('gBrRing');
   const levelsAt = sym('gBrLevels');
   // gBrTally (POK-416), carried with the trainer like the levels: every battle ends in the
@@ -684,6 +691,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     emu.release('b');
   };
   const taskFn = sym('Task_HandleChooseMonInput'), tasksAt = sym('gTasks');
+  /** The page has the keys while it answers for the ROM: a press of the player's would be an answer. */
+  let romDeaf = false;
   /** struct Task: 16 of them, 40 bytes, func first and isActive after it. */
   const choosing = () => {
     if (taskFn === undefined || tasksAt === undefined) return false;
@@ -699,42 +708,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
   };
   const screenIs = (cb: number | undefined) => cb !== undefined && ((emu.read(sym('gMain')! + 4, 32) ^ cb) & ~1) === 0;
   const walkMenu = async (walk: MenuWalk, onStart: () => void, onEnd: () => void) => {
-    const tap = async (k: GbaKey) => { emu.press(k); await frames(emu, 3); emu.release(k); await frames(emu, 3); };
     hurryOn();
-    if (walk.to !== 'use') {
-      // The party's row: SUMMARY first, then MOVES (party_menu.c SetPartyMonFieldSelectionActions).
-      // Its task is up before its screen is, and takes no keys until the fade is done.
-      await until(emu, () => choosing() && screenIs(partyScreen()) && !fade().active, 240);
-      emu.write(partyMenuAt + 9, walk.slot, 8);
-      await tap('a');
-      // Its little menu takes keys once "Do what with this" has printed.
-      await frames(emu, 45);
-      // MOVES says so for a frame (gBrCatch.movesSlot): at full speed, or the page misses it.
-      if (walk.to === 'moves') { await tap('down'); hurryOff(); }
-      const partyCb = partyScreen();
-      for (let i = 0; i < 8 && screenIs(partyCb); i++) {
-        await tap('a');
-        await frames(emu, 30);
-      }
-      if (walk.to === 'moves') {
-        // Back on the field first: the relearner opens from there (BrCatch_Tick).
-        await until(emu, onField, 300);
-        hurryOff();
-        return;
-      }
-      hurryOff();
-      await settled();
-      onStart();
-      // Out of it, the party comes back with B: the page has that, so it goes on unseen.
-      const summary = emu.read(sym('gMain')! + 4, 32);
-      const off = emu.onFrame(() => {
-        if (emu.read(sym('gMain')! + 4, 32) !== summary) { off(); onEnd(); leaving = true; }
-      });
-      await backOnField();
-      off();
-      onEnd();
-      return;
-    }
     await pickLoop(walk.slot, walk.move, onStart, onEnd);
   };
   /** The ROM's BAG and party, unseen, until the field: who gets it, which move, and each line
@@ -807,6 +781,34 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     for (const k of ['a', 'b', 'down'] as GbaKey[]) emu.release(k);
     if (showing) onEnd();
     hurryOff();
+  };
+  /** The windows have a catch's answer: past the ROM's line and through its party, unseen, at
+   *  HURRY_SPEED. False if it never got there. */
+  const answerRelease = async (slot: number | null) => {
+    hurryOn();
+    const partyCb = partyScreen();
+    const picks: GbaKey = slot === null ? 'b' : 'a';
+    let n = 0, inParty = false;
+    const press = (k: GbaKey, every: number) => {
+      if (n % every === 0) emu.press(k);
+      else if (n % every === 3) emu.release(k);
+    };
+    const done = await until(emu, () => {
+      n++;
+      if (!emu.read(catchAt, 8)) return true;
+      if (screenIs(partyCb)) {
+        if (!inParty) { inParty = true; emu.release('a'); n = 0; }
+        // Pressed again until it is taken: the box closing is the task moving on.
+        if (choosing() && !fade().active) {
+          if (slot !== null) emu.write(partyMenuAt + 9, slot, 8);
+          press(picks, 30);
+        }
+      } else if (!inParty) press('a', 12);
+      return false;
+    }, 1800);
+    for (const k of ['a', 'b'] as GbaKey[]) emu.release(k);
+    hurryOff();
+    return done;
   };
   /** The parked field made to stand where `look` says, for the MAP's player icon
    *  (region_map.c InitMapBasedOnPlayerLocation): the section, and a spot on the parked
@@ -968,6 +970,20 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     lastStart = { ms: performance.now() - t0, frames: n };
     let result: Fought = { ok: false, outcome: 0, species: 0, level: 0 };
     let stopped = false;
+    // A catch with a full party: the windows, from the moment the battle has gone (br_catch.c
+    // parks it there and asks back on the field), so the hidden field and its "Your party is
+    // full." are nobody's to see (Cam, 11-02: new windows everywhere), nor the pad's to press.
+    const asked = { answer: null as Promise<number | null> | null };
+    const battleCb = sym('BattleMainCB2');
+    const release = romAsks.release;
+    const stopAsking = shown && release ? emu.onFrame(() => {
+      if (!emu.read(catchAt, 8) || screenIs(battleCb)) return;
+      stopAsking();
+      romDeaf = true;
+      for (const k of ALL_KEYS) emu.release(k);
+      quieten(true);
+      asked.answer = release(emu.bytes(pendingAt, 100).slice());
+    }) : () => undefined;
     // However long it takes: a battle is never pulled out from under the player.
     if (shown) {
       onStart();
@@ -1008,6 +1024,13 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       // a slow thumb.
       if (!await until(emu, () => emu.read(catchAt, 8) === 0 || emu.read(catchAt + 1, 8) !== 0, 600))
         console.warn('spike: a catch is still waiting for its prompt after 10 s', { catch: [...emu.bytes(catchAt, 8)], callback2: emu.read(sym('gMain') + 4, 32).toString(16) });
+      // The windows ask and the ROM's own screen is walked on the answer. Lost on the way, the
+      // player has the ROM's screen and the keys back rather than a trainer stood there for good.
+      if (asked.answer && !await answerRelease(await asked.answer)) {
+        console.warn('spike: a catch\'s answer did not get through', { catch: [...emu.bytes(catchAt, 8)], callback2: emu.read(sym('gMain') + 4, 32).toString(16) });
+        romDeaf = false;
+        onStart();
+      }
       await until(emu, () => emu.read(catchAt, 8) === 0, Infinity);
       // A loss is a whiteout: in a match the trainer is out. Here the team goes back to
       // how it came in (the ring and elimination are the match's, later).
@@ -1019,6 +1042,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       else carried = { ...(carried ?? start), tally: now.tally };
     }
     if (stopped || (!result.ok && aborted())) result = { ok: false, outcome: 0, species: 0, level: 0, stalled: true };
+    stopAsking();
+    romDeaf = false;
     fighting = false;
     weatherOff();
     pub();
@@ -1038,8 +1063,8 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
 
   return {
     emu,
-    press: (k) => emu.press(k),
-    release: (k) => emu.release(k),
+    press: (k) => { if (!romDeaf) emu.press(k); },
+    release: (k) => { if (!romDeaf) emu.release(k); },
     sound(id) {
       // Only while the song plays: a ROM standing still would play it when it next ran.
       // Nor while a battle's song is starting, silent anyway: the ROM takes one request at a time,
@@ -1401,6 +1426,15 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         carried = last = next;
       });
     },
+    setMove(slot, moveSlot, move, pp) {
+      return inTurn(async () => {
+        if (broken) return;
+        const k = carried ?? kept();
+        const next = { ...k, party: withMove(k.party, slot, moveSlot, move, pp) as typeof k.party };
+        keep(next);
+        carried = last = next;
+      });
+    },
     menu(action, onStart, onEnd, walk) {
       return onCore(async () => {
         if (broken || !startMenu) return { up: false, said: '' };
@@ -1408,17 +1442,11 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         lay();
         emu.resume();
         drain(() => undefined);
-        // MOVES off the team is noted as it is asked (gBrCatch.movesSlot), for the line its
-        // field says when there is nothing to learn.
-        let moves = false;
         if (walk?.to === 'use') {
           emu.write(sym('gBagPosition')! + BAG_POSITION_POCKET, walk.pocket, 8);
           emu.write(sym('gBrBag')!, walk.item, 16);
         }
-        const watch = emu.onFrame(() => {
-          drain(() => undefined);
-          if (!Number.isNaN(catchAt) && emu.read(catchAt + 2, 8) !== 0xff) moves = true;
-        });
+        const watch = emu.onFrame(() => drain(() => undefined));
         // Page frames, eight of the ROM's each here: walking to a row was a third of a second a key.
         const tap = async (k: GbaKey) => { emu.press(k); await frames(emu, 2); emu.release(k); await frames(emu, 2); };
         let up = false;
@@ -1479,8 +1507,6 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
             await frames(emu, 12);
             await tap('b');
           } else back = again;
-          // MOVES with nothing to teach: BrCatch_Tick said so on the hidden field's HUD.
-          if (moves && !again) said = 'No new moves at this level.';
         }
         await frames(emu, 10);
         watch();

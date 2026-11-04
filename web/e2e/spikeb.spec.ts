@@ -194,9 +194,8 @@ test('a dropped bag opens its team, and MOVES off the team opens the move screen
   await idle();
   expect(await s((s) => s.rom!.partyCount()), 'both mons taken out of the bag').toBe(2);
 
-  // START > POKeMON, the page's windows > a mon > MOVES: the party's row is walked unseen and the
-  // field opens the move relearner (BrCatch_Tick), the ROM's on purpose. It did that on the
-  // hidden field after the page took the screen back, so nothing showed (Cam, 10-30).
+  // START > POKeMON, the page's windows > a mon > MOVES: a small box (Cam, 11-02: "not full
+  // screen"), spikeb-summary.spec.ts has the rest.
   const moves = async (slot: number) => {
     await press('m');
     await expect.poll(() => s((s) => s.asking), { timeout: 5_000 }).toBe(true);
@@ -206,12 +205,15 @@ test('a dropped bag opens its team, and MOVES off the team opens the move screen
     await page.locator('.bm-m-btn', { hasNot: page.locator('[hidden]') }).nth(4).click();
   };
   await moves(0);
-  await expect(page.locator('#gba'), "TREECKO's move screen on show").toBeVisible({ timeout: 20_000 });
-  expect(await s((s) => s.swapping)).toBe(true);
-  for (let i = 0; i < 12 && (await s((s) => s.swapping)); i++) await press('x');
+  await expect(page.locator('#moves-box'), "TREECKO's moves on show").toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('#gba')).toBeHidden();
+  await press('x');
+  await expect(page.locator('#moves-box')).toBeHidden();
+  await press('x');
+  await press('x');
   await idle();
 
-  // Nothing to learn: the ROM says so on its own field, and the page says it on its own.
+  // Nothing to learn: the page says so.
   await moves(1);
   await expect(page.locator('.bm-member')).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('#msg')).toHaveAttribute('data-text', /No new moves/, { timeout: 5_000 });

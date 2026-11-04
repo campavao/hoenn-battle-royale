@@ -182,6 +182,10 @@ export interface TeamMember {
   moves: { id: number; pp: number }[];
   /** struct PokemonSubstruct0's ppBonuses: two bits a move. */
   ppBonuses: number;
+  /** struct Pokemon's calculated stats, as the SUMMARY shows them. */
+  stats: { attack: number; defense: number; speed: number; spAttack: number; spDefense: number };
+  /** GetNatureFromPersonality. */
+  nature: number;
 }
 
 /** The party's members, in its order, from the same bytes as fameTeam. */
@@ -214,6 +218,8 @@ export function teamMembers(party: Uint8Array, count: number, nameOf: (species: 
       ability: word('M', 4) >>> 31,
       moves: ids.map((id, n) => ({ id, pp: (pp >>> (n * 8)) & 0xff })).filter((m) => m.id > 0),
       ppBonuses: word('G', 8) & 0xff,
+      stats: { attack: v.getUint16(at + 90, true), defense: v.getUint16(at + 92, true), speed: v.getUint16(at + 94, true), spAttack: v.getUint16(at + 96, true), spDefense: v.getUint16(at + 98, true) },
+      nature: personality % 25,
     });
   }
   return out;
@@ -230,6 +236,33 @@ export function withHeld(party: Uint8Array, slot: number, item: number): Uint8Ar
   const g = (v.getUint32(off, true) ^ key) >>> 0;
   v.setUint32(off, ((g & 0xffff) | (item << 16)) ^ key, true);
   v.setUint16(at + 28, (v.getUint16(at + 28, true) - (g >>> 16) + item) & 0xffff, true);
+  return out;
+}
+
+/** `party` with this one knowing `move` in `moveSlot`, its PP full and that slot's PP Ups gone
+ *  (pokemon.c SetMonMoveSlot, RemoveMonPPBonus), and the slot marked as the player's pick, which
+ *  a rung's lift keeps (br_moves.c BrMoves_Placed: a bit of the unused ribbons, 27 up). */
+export function withMove(party: Uint8Array, slot: number, moveSlot: number, move: number, pp: number): Uint8Array {
+  const out = party.slice();
+  const v = new DataView(out.buffer, out.byteOffset, out.byteLength);
+  const at = slot * 100;
+  const personality = v.getUint32(at, true);
+  const key = (personality ^ v.getUint32(at + 4, true)) >>> 0;
+  const order = ORDERS[personality % 24];
+  const sub = (s: string) => at + 32 + 12 * order.indexOf(s);
+  const edit = (off: number, f: (w: number) => number) => v.setUint32(off, (f((v.getUint32(off, true) ^ key) >>> 0) ^ key) >>> 0, true);
+  const half = moveSlot & 1 ? 16 : 0;
+  edit(sub('A') + (moveSlot >> 1) * 4, (w) => ((w & ~(0xffff << half)) | (move << half)) >>> 0);
+  edit(sub('A') + 8, (w) => ((w & ~(0xff << (moveSlot * 8))) | (pp << (moveSlot * 8))) >>> 0);
+  edit(sub('G') + 8, (w) => (w & ~(3 << (moveSlot * 2))) >>> 0);
+  edit(sub('M') + 8, (w) => (w | (1 << (27 + moveSlot))) >>> 0);
+  // pokemon.c's CalculateBoxMonChecksum: the 16-bit sum of the plain block.
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    const w = (v.getUint32(at + 32 + i * 4, true) ^ key) >>> 0;
+    sum = (sum + (w & 0xffff) + (w >>> 16)) & 0xffff;
+  }
+  v.setUint16(at + 28, sum, true);
   return out;
 }
 
