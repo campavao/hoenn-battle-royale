@@ -92,7 +92,6 @@ import { SummaryWindow } from '../src/ui/summary';
 import { Radial, type DialItem } from '../src/ui/radial';
 import { ITEM_HM01, ITEM_TM01, MovesBox, learnList, type LearnRow } from '../src/ui/movesbox';
 import { learnsByNow } from '../src/ui/monfacts';
-import { fullPp, takenMon, teamSeed } from '../src/ui/taken';
 import { DIAL_TIP_MS, dialKnown, dialTipDue, dialTipShown, dialTipWords } from '../src/ui/dialtip';
 import { TMHM_MOVES } from '../src/ui/tmhm';
 import { HUD } from '../src/net/hud';
@@ -1303,14 +1302,19 @@ function closePanel(): void {
   calmUntil = frame + 30;
   panelDone?.();
 }
+/** ui/taken.ts, its own chunk: main is at its budget (vite.config.ts), and only a SUMMARY off the
+ *  ground asks. Fetched as the page starts; until it comes, that SUMMARY has no moves to show. */
+let takenLib: typeof import('../src/ui/taken') | null = null;
+void import('../src/ui/taken').then((m) => { takenLib = m; }, (e) => console.warn('spike taken', e));
 /** What taking this one would make of it (ui/taken.ts), for its SUMMARY: `at` is its place on the team
  *  screen, whose key seeds it, or null for a trader's, which the ROM rolls when he hands it over. Under
  *  the rung it comes up to the rung (br_loot.c MakeTaken). */
 function joinsAs(species: number, level: number, at: number | null): NonNullable<PartyMember['joins']> {
   const was = Math.max(level, rungForPhase(link.room.ring().phase + 1));
-  const t = takenMon(romTables, species, was, at === null || !rom ? null : teamSeed(rom.matchSeed(), at), rom?.localHour());
-  if (!t) return { species, name: speciesName(species), level: was, moves: [] };
-  return { species: t.species, name: speciesName(t.species), level: t.level, moves: t.moves.map((id) => { const pp = fullPp(romTables, id); return { id, pp, maxPp: pp }; }) };
+  const lib = takenLib;
+  const t = lib?.takenMon(romTables, species, was, at === null || !rom ? null : lib.teamSeed(rom.matchSeed(), at), rom?.localHour());
+  if (!lib || !t) return { species, name: speciesName(species), level: was, moves: [] };
+  return { species: t.species, name: speciesName(t.species), level: t.level, moves: t.moves.map((id) => { const pp = lib.fullPp(romTables, id); return { id, pp, maxPp: pp }; }) };
 }
 /** The one who just joined knows what its SUMMARY said (ui/taken.ts says why it might not yet): by the
  *  party against what it was, unless it came out another species, which SUMMARY got wrong anyway. */
