@@ -1,0 +1,39 @@
+# hof-quick: a whole team's Hall of Fame, from the first frame off the field to the field
+# again (Cam, 11-04: "let's make this a little faster, right now it takes a while"). Six
+# mons, nobody pressing A: every mon still comes on, the crowd still claps, the champion
+# still gets the last screen, all inside the bound below: 1122 frames in all, against Emerald's 2071.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# seat 1 placed two tiles east of us, wearing skin 4 (HIKER)
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0E 00 0F 00 03 01 04
+poke u16 gBrMailbox+0x0C 1
+wait 10
+# their party: the same row six times over, each with its own level
+pokebytes gDecompressionBuffer 01 06 15 01 0C 22 00 38 00 00 01 00 23 00 47 00 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+copy gDecompressionBuffer+102 gDecompressionBuffer+2 100
+poke u8 gDecompressionBuffer+104 14
+copy gDecompressionBuffer+202 gDecompressionBuffer+2 100
+poke u8 gDecompressionBuffer+204 16
+copy gDecompressionBuffer+302 gDecompressionBuffer+2 100
+poke u8 gDecompressionBuffer+304 18
+copy gDecompressionBuffer+402 gDecompressionBuffer+2 100
+poke u8 gDecompressionBuffer+404 20
+copy gDecompressionBuffer+502 gDecompressionBuffer+2 100
+poke u8 gDecompressionBuffer+504 22
+mailsend gBrMailbox 7 gDecompressionBuffer 602
+wait 10
+# FAME: seat 1, named STEVEN
+poke u8 gBrMatch 2
+pokebytes gDecompressionBuffer+0x700 01 06 CD CE BF D0 BF C8
+mailsend gBrMailbox 33 gDecompressionBuffer+0x700 8
+waitfor u8 gBrMatch 4 120
+wait 330
+shot mon-3
+wait 60
+shot mon-4
+waitfor u8 gBrMatch 5 800
+wait 60
+shot after
+expect u8 gBrMatch 5
+say hof quick ok

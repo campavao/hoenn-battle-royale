@@ -164,12 +164,13 @@ void BrHof_PrintPlayer(u8 windowId, const u8 *colors)
     CopyWindowToVram(windowId, COPYWIN_FULL);
 }
 
-// Four seconds on LEAGUE CHAMPION! before a watcher's parade lets go.
-#define BR_HOF_LET_GO_FRAMES 240
+// A moment on LEAGUE CHAMPION!, the champion's own parade too: nobody is made to press A
+// to get their results.
+#define BR_HOF_LET_GO_FRAMES 100
 
 bool8 BrHof_LetGo(u16 frames)
 {
-    return sParty != NULL && frames >= BR_HOF_LET_GO_FRAMES;
+    return frames >= BR_HOF_LET_GO_FRAMES;
 }
 
 void BrHof_Done(void)

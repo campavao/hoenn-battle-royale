@@ -27,20 +27,20 @@ poke u8 gBrMatch 2
 pokebytes gDecompressionBuffer+0x400 01 06 CD CE BF D0 BF C8
 mailsend gBrMailbox 33 gDecompressionBuffer+0x400 8
 waitfor u8 gBrMatch 4 120
-wait 330
+wait 80
 shot mon-1
 # The un-nicknamed TREECKO first, in its own colours: a row without BR_MON_SHINY is never shiny (HBR-22, the
 # play-test's parade was all shiny). OBJ palette 1 is its pic's; colour 4 is 0x29BF shiny.
 expect u16 0x05000228 0x42E9
-wait 200
+wait 120
 shot mon-2
-wait 400
+wait 140
 shot team
 waitfor u8 gBrMatch 4 1
-wait 200
+wait 240
 shot champion
-# ...and no A: a watcher's last screen moves on by itself (BrHof_LetGo), four seconds in
-waitfor u8 gBrMatch 5 600
+# ...and no A: the last screen moves on by itself (BrHof_LetGo)
+waitfor u8 gBrMatch 5 200
 wait 120
 shot after
 expect u8 gBrMatch 5
