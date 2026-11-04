@@ -88,6 +88,21 @@ describe('a loser\'s spill', () => {
     expect(bagOf(room, 1)).toEqual(fought);
   });
 
+  it('is the team that lost on a marked spot, on the rung it stepped on it', () => {
+    const room = nearTheTurn();
+    room.simBots = true;
+    const p = room.patchesOn('MAP_ROUTE101')[0];
+    room.apply({ c: 'join', id: 1, bot: true, name: 'ONE', skin: 4, spot: { map: 'MAP_ROUTE101', x: p.x, y: p.y }, facing: 1 });
+    const a = room.actor(1)!;
+    a.calm = 0;
+    (room as unknown as { botOnPatch(a: unknown, e: unknown[]): void }).botOnPatch(a, []);
+    expect(a.foe).toBe(LEGEND_FOE);
+    const fought = species(room, 1);
+    pastTheTurn(room);
+    room.apply({ c: 'bots', id: a.judge!, a: 1, b: LEGEND_FOE, winner: LEGEND_FOE });
+    expect(bagOf(room, 1)).toEqual(fought);
+  });
+
   it('a fight run from lets the team grow with the ring again', () => {
     const room = fightOf();
     const fought = species(room, 1);

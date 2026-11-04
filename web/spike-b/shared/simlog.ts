@@ -15,6 +15,8 @@ export interface LogNames {
   mon: (side: Side, slot: number) => string;
   /** A move's number, for the flash (0 for none known). */
   moveNum: (name: string) => number;
+  /** The far side is a wild mon, with no trainer to send it out: "Wild ZIGZAGOON". */
+  wild?: boolean;
 }
 
 /** The ROM's status1 bits, what the battle view reads (include/constants/battle.h): sleep in the
@@ -167,7 +169,7 @@ export function translate(lines: readonly string[], names: LogNames, winnerSeat:
     const side = (ident.startsWith('p2') ? 1 : 0) as Side;
     const slot = Number(ident.slice(ident.indexOf('M') + 1));
     const bareName = names.mon(side, slot);
-    return { side, slot, name: side === 1 ? `Foe ${bareName}` : bareName };
+    return { side, slot, name: side === 1 ? `${names.wild ? 'Wild' : 'Foe'} ${bareName}` : bareName };
   };
   const team = (ident: string) => (ident.startsWith('p2') ? "Foe's team" : 'Your team');
   const tag = (parts: string[], key: string): string | undefined => {
@@ -223,6 +225,7 @@ export function translate(lines: readonly string[], names: LogNames, winnerSeat:
         }
         out[w.side] = w.slot;
         if (kind === 'drag') say(`${w.name} was dragged out!`);
+        else if (w.side === 1 && names.wild) say(`Wild ${names.mon(1, w.slot)} appeared!`);
         else say(w.side === 1 ? `${trainer} sent out ${names.mon(1, w.slot)}!` : `Go! ${names.mon(0, w.slot)}!`);
         ev.push({ e: 'send', side: w.side, slot: w.slot });
         // What it comes back with, only if the bench changed it (the start says the rest): an event

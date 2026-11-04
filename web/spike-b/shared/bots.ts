@@ -129,7 +129,8 @@ function planeOf(room: Room, s: Spot): { x: number; y: number } | null {
 function safariGoal(room: Room, a: Actor, b: Brain): Spot | null {
   const { map, x, y } = a.m.spot;
   const reach = room.world.reachOnMap(a.m.spot, surfs(a), cuts(a));
-  const spots: { x: number; y: number }[] = [...room.patchesOn(map)];
+  // Grass nobody has been through yet, while it has room for what it catches: taken, it shows nothing.
+  const spots: { x: number; y: number }[] = partyRoom(room, a) ? room.patchesOn(map).filter((p) => !room.isTaken(p.key)) : [];
   for (const g of room.ground().values()) if (g.map === map && !g.gift && !room.picked.has(g.key)) spots.push(g);
   const near = spots
     .filter((s) => (s.x !== x || s.y !== y) && reach.cell(s.x, s.y))
@@ -387,6 +388,16 @@ function leg(room: Room, a: Actor, to: Spot, avoid?: ReadonlySet<number>): Path 
   return over?.length ? findPathToAny(w, from, over, 6000, surf, cut, avoid) : null;
 }
 
+/** A trainer sees the marked grass and can go round it, and one with somewhere to be does: hurt, in
+ *  the fog, or hunting the last of them. A wild mon that costs it the match is no way to go. */
+function pastPatches(room: Room, a: Actor, b: Brain): ReadonlySet<number> | undefined {
+  if (!hunting(room) && health(a) >= HURT && !room.inFog(a.m.spot)) return b.avoid;
+  const out = new Set(b.avoid);
+  const { map } = a.m.spot;
+  for (const p of room.patchesOn(map)) if (!room.isTaken(p.key)) out.add(room.world.key({ map, x: p.x, y: p.y }));
+  return out;
+}
+
 /** brain.ts HUNT_AT: under this many still standing, the hunt. */
 const HUNT_AT = 3;
 function hunting(room: Room): boolean {
@@ -429,11 +440,13 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
   // There, or given up: on somewhere else after a few seconds (brain.ts's next wander).
   const idle = !b.goal && !b.steps?.length && (room.tick + a.id * 7) % (ring.safari ? 60 : 300) === 0;
   if (!a.cruise && (b.plan !== at || hunt || idle || (!b.goal && room.inFog(a.m.spot, ring))) && (room.tick + a.id * 7) % 30 === 0) {
+    // A hunter looking again has nowhere new to be: what it gave up on stays given up on. A trader in
+    // a corridor had one walking into him, forgetting him every 4 s, until the fog came (seed 4242).
+    if (b.plan !== at) b.avoid = undefined;
     b.plan = at;
     b.goal = goal(room, a, b);
     b.steps = undefined;
     b.legs = 0;
-    b.avoid = undefined;
   }
   // The fog has it and its team could FLY: out at once, wherever its walk was going.
   if (!ring.safari && (room.tick + a.id * 7) % 30 === 0 && room.inFog(a.m.spot, ring)) {
@@ -448,7 +461,9 @@ export function botKeys(room: Room, a: Actor, b: Brain): number {
   }
   // Between legs, on its own frame: the next one, until it is there (or has tried enough).
   if (b.goal && !b.steps?.length && (room.tick + a.id * 7) % 30 === 0) {
-    let path = !sameSpot(a.m.spot, b.goal) && (b.legs = (b.legs ?? 0) + 1) <= 24 ? leg(room, a, b.goal, b.avoid) : null;
+    let path = !sameSpot(a.m.spot, b.goal) && (b.legs = (b.legs ?? 0) + 1) <= 24 ? leg(room, a, b.goal, pastPatches(room, a, b)) : null;
+    // No way round: through it.
+    if (!path?.found && !sameSpot(a.m.spot, b.goal) && (b.legs ?? 0) <= 24) path = leg(room, a, b.goal, b.avoid);
     // No way on foot: the boat on the way, up to its boatman and his word, as a trainer does.
     if (!path?.found && b.byBoat && !a.cruise && (b.legs ?? 0) <= 24) {
       const ride = rideFor(room, a, b.goal);

@@ -2,23 +2,29 @@
 // Each of these held a bot to less than a trainer until it was changed; the first describes the one
 // that was already so.
 import { describe, expect, it } from 'vitest';
-import { decodeGrid, type Spot, type WorldMap } from '../../src/bots/world';
+import { decodeGrid, sameSpot, type Spot, type WorldMap } from '../../src/bots/world';
 import type { PatchTable } from '../../src/bots/patches';
-import { dealParty, teamField } from '../../src/bots/party';
+import { dealParty, rungForPhase, speciesName, teamField } from '../../src/bots/party';
+import { findPath } from '../../src/bots/path';
+import encounters from '../../src/data/encounters.json';
 import { gradeOf } from '../../src/bots/roster';
 import { WEATHER_DOWNPOUR } from '../../src/match/events';
 import worldJson from '../data/world.json';
 import patchJson from '../../src/data/patches.json';
-import { botKeys, type Brain } from './bots';
+import { HURT, botKeys, health, type Brain } from './bots';
 import { Host, play } from './host';
 import { simulate } from './battlesim';
-import { BOT_BITE, FIELD_SURF, HOST_JUDGE, KEY_A, KEY_B, KEY_RIGHT, KEY_UP, LEGEND_FOE, RELEASED_SPILL, SPILL_KEY, botParty, legendMon, makeRoom, type Actor, type Room } from './room';
+import type { BattleEvent } from './battlelog';
+import { cleanEvents } from './logwire';
+import { ITEM_SAFARI_BALL, nationalOn, patchBalls, rollWild, wildDice, wildMon, zoneBalls, zoneFight, zoneRate } from './wild';
+import { BOT_BITE, FIELD_SURF, HOST_JUDGE, KEY_A, KEY_B, KEY_RIGHT, KEY_UP, LEGEND_CATCH, LEGEND_FOE, RELEASED_SPILL, SAFARI, SPILL_KEY, botParty, legendMon, makeRoom, type Actor, type Room } from './room';
 import type { PackedMon } from '../../src/net/wire';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
 const OLDALE = 'MAP_OLDALE_TOWN';
 const SEED = 4242;
+const evolvesInto = (species: number) => !(encounters as unknown as { zone: number[] }).zone.includes(species);
 const KEY = 1 << 20;
 const ROYALE = 4, MASTER = 1;
 
@@ -246,6 +252,485 @@ describe('a bot at a legendary', () => {
     const a = atIt(room, [{ id: ROYALE, n: 12 }]);
     room.apply({ c: 'bots', id: HOST_JUDGE, a: 7, b: LEGEND_FOE, winner: 0, used: [Array(8).fill(ROYALE), []] });
     expect(a.loot?.items).toEqual([{ id: ROYALE, n: 4 }]);
+  });
+});
+
+// Cam, 11-04: "an actual player when they stepped over a tile would initiate a battle and then leaving
+// that tile would leave it no longer with a wild Pokemon, that's how a bot should do it too ... if we
+// don't treat bots like normal players then we run into issues that we don't even know about."
+describe('a bot on a wild patch', () => {
+  /** A marked spot on `map` whose cell to the west is open ground, to step onto it from. */
+  const spotOn = (room: Room, map = 'MAP_ROUTE101') => {
+    for (const p of room.patchesOn(map)) {
+      if (room.world.cell(map, p.x, p.y) !== 0 && room.world.cell(map, p.x, p.y) !== 7) continue;
+      const west = { map, x: p.x - 1, y: p.y };
+      if (room.stepFor(bot(room, { map: 'MAP_LITTLEROOT_TOWN', x: 3, y: 3 }, 900), true)(west, 4)) { room.apply({ c: 'leave', id: 900 }); return { p, west }; }
+      room.apply({ c: 'leave', id: 900 });
+    }
+    throw new Error(`no way onto a spot on ${map}`);
+  };
+  /** One bot, a step from a spot, and the frames of the step: what the frames started. */
+  const step = (room: Room, a: Actor) => {
+    const out: ReturnType<Room['step']> = [];
+    a.keys = KEY_RIGHT | KEY_B;
+    out.push(...room.step());
+    a.keys = 0;
+    for (let i = 0; i < 40 && a.m.action; i++) out.push(...room.step());
+    return out.filter((e) => e.type === 'bots' || e.type === 'wild');
+  };
+  const onIt = (room: Room, id = 7) => {
+    const { p, west } = spotOn(room);
+    const a = bot(room, west, id, 4);
+    return { a, p, events: step(room, a) };
+  };
+
+  it('its step takes the spot and starts the fight, on the frame a trainer\'s would', () => {
+    const r1 = stage(), r2 = stage();
+    const { p, west } = spotOn(r1);
+    const b = bot(r1, west, 7, 4);
+    const t = bot(r2, west, 7, 4);
+    t.bot = false;
+    t.calm = 0;
+    const seen = step(r1, b);
+    const heard: ReturnType<Room['step']> = [];
+    heard.push(...r2.step(new Map([[7, [KEY_RIGHT | KEY_B]]])));
+    for (let i = 0; i < 40 && !heard.some((e) => e.type === 'wild'); i++) heard.push(...r2.step(new Map([[7, [0]]])));
+    expect(r1.isTaken(p.key)).toBe(true);
+    expect(r2.isTaken(p.key)).toBe(true);
+    expect(r1.taken.get(p.key), 'the same frame').toBe(r2.taken.get(p.key));
+    expect(b.battling).toBe(true);
+    expect(b.judge).toBe(HOST_JUDGE);
+    expect(seen).toMatchObject([{ type: 'bots', id: HOST_JUDGE, a: 7, b: LEGEND_FOE, legend: { key: p.key, patch: true } }]);
+    expect(heard).toMatchObject([{ type: 'wild', id: 7, key: p.key }]);
+  });
+
+  it('a mirror has the spot gone and the same mon, from the keys alone', () => {
+    const room = stage();
+    const mirror = makeRoom(MAPS, PATCHES, room.seed);
+    mirror.opening = 0;
+    const { p, west } = spotOn(room);
+    const a = bot(room, west, 7, 4);
+    mirror.load(structuredClone(room.state()));
+    mirror.simBots = true;
+    a.keys = mirror.actor(7)!.keys = KEY_RIGHT | KEY_B;
+    for (let i = 0; i < 40; i++) {
+      room.step();
+      mirror.step();
+      if (i === 0) a.keys = mirror.actor(7)!.keys = 0;
+    }
+    expect(mirror.isTaken(p.key)).toBe(true);
+    expect(mirror.actor(7)!.wildFight).toEqual(a.wildFight);
+    expect(mirror.hash()).toBe(room.hash());
+  });
+
+  it('taken, the next over it gets nothing, and nor does a trainer', () => {
+    const room = stage();
+    const { a, p } = onIt(room);
+    room.apply({ c: 'bots', id: HOST_JUDGE, a: 7, b: LEGEND_FOE, winner: 0, drew: [[1], [0]] });
+    expect(a.battling).toBe(false);
+    a.m = { ...a.m, spot: { map: 'MAP_ROUTE101', x: 3, y: 3 } };
+    const west = { map: 'MAP_ROUTE101', x: p.x - 1, y: p.y };
+    const c = bot(room, west, 8, 4);
+    expect(step(room, c)).toEqual([]);
+    expect(c.battling).toBe(false);
+    expect(c.m.spot).toMatchObject({ x: p.x, y: p.y });
+    c.m = { ...c.m, spot: { map: 'MAP_ROUTE101', x: 4, y: 3 } };
+    const t = bot(room, west, 9, 4);
+    t.bot = false;
+    const heard = [...room.step(new Map([[9, [KEY_RIGHT | KEY_B]]]))];
+    for (let i = 0; i < 40; i++) heard.push(...room.step(new Map([[9, [0]]])));
+    expect(heard.filter((e) => e.type === 'wild')).toEqual([]);
+    expect(t.battling).toBe(false);
+  });
+
+  it('it is back on the next phase, as a trainer\'s is (br_patch.c Regrow)', () => {
+    const room = stage();
+    room.ringPhase = 600;
+    const { p } = onIt(room);
+    expect(room.isTaken(p.key)).toBe(true);
+    const was = room.ring().phase;
+    for (let i = 0; i < 1300 && room.ring().phase === was; i++) room.step();
+    expect(room.ring().phase).toBeGreaterThan(was);
+    expect(room.isTaken(p.key)).toBe(false);
+  });
+
+  it('what lives there is the map\'s own table at Emerald\'s odds, or this match\'s stand-in for it', () => {
+    const counts = new Map<number, number>();
+    const m = { id: 'MAP_ROUTE101', group: 0, num: 16 };
+    const rng = wildDice(SEED, 3, 5);
+    // The seed's stand-ins aside: a seed of 0 has none (BrZone_NationalOn), so this is the table.
+    for (let i = 0; i < 20000; i++) { const s = rollWild(0, m, false, rng); counts.set(s, (counts.get(s) ?? 0) + 1); }
+    // src/data/wild_encounters.json's ROUTE101 slot by slot: WURMPLE, POOCHYENA, WURMPLE (20+10+...).
+    const [wurmple, poochyena, zigzagoon] = [290, 286, 288];
+    expect([...counts.keys()].sort()).toEqual([poochyena, zigzagoon, wurmple].sort());
+    expect(counts.get(wurmple)! / 20000).toBeCloseTo(0.45, 1);
+    expect(counts.get(poochyena)! / 20000).toBeCloseTo(0.45, 1);
+    expect(counts.get(zigzagoon)! / 20000).toBeCloseTo(0.10, 1);
+    expect(rollWild(0, { id: 'MAP_ROUTE101', group: 0, num: 16 }, true, rng), 'no water table: nothing').toBe(0);
+  });
+
+  it('a water spot rolls the water table', () => {
+    const rng = wildDice(SEED, 3, 5);
+    const m = { id: 'MAP_ROUTE103', group: 0, num: 18 };
+    const seen = new Set(Array.from({ length: 2000 }, () => rollWild(0, m, true, rng)));
+    // src/data/wild_encounters.json's ROUTE103 water_mons: TENTACOOL, WINGULL, PELIPPER.
+    expect([...seen].sort((p, q) => p - q)).toEqual([72, 309, 310]);
+  });
+
+  it('the stand-in is br_zone.c\'s: half stay, the rest share a type and a weight, and a route keeps its one all match', () => {
+    let swapped = 0, same = 0;
+    for (let seed = 1; seed <= 400; seed++) {
+      const s = nationalOn(seed, 0, 16, 288);
+      expect(nationalOn(seed, 0, 16, 288)).toBe(s);
+      if (s === 288) { same++; continue; }
+      swapped++;
+      const [total, a, b] = (encounters as unknown as { stats: Record<string, number[]> }).stats[s];
+      const [t0, t1, t2] = (encounters as unknown as { stats: Record<string, number[]> }).stats[288];
+      expect(Math.abs(total - t0)).toBeLessThanOrEqual(60);
+      expect([a, b].some((v) => v === t1 || v === t2)).toBe(true);
+    }
+    expect(same / 400).toBeGreaterThan(0.4);
+    expect(swapped / 400).toBeGreaterThan(0.4);
+    // Nothing that is no wild mon stands in: a legendary's stats would have it level with a pseudo.
+    expect((encounters as unknown as { stats: Record<string, number[]> }).stats[404]).toBeUndefined();
+  });
+
+  it('what it met is at the rung and not grown: a level 50 ZIGZAGOON is a ZIGZAGOON', () => {
+    const m = wildMon(288, 5);
+    expect(m.species).toBe(288);
+    expect(m.level).toBe(rungForPhase(5));
+    expect(m.hp).toBe(m.maxHp);
+  });
+
+  describe('the fight', () => {
+    /** A bot on a spot, a Host running it, and everything that comes of the fight. */
+    const fought = async (seed = SEED, set?: (a: Actor) => void) => {
+      const room = stage(true, seed);
+      const logs: BattleEvent[][] = [];
+      const host = new Host(room, 0, MAPS, 0, { onLog: (_s, l) => logs.push(l) });
+      await host.simReady();
+      const { p, west } = spotOn(room);
+      const a = bot(room, west, 7, 4);
+      set?.(a);
+      host.brains.set(7, { rng: 5, wait: 1e9, dir: 1, goal: null });
+      room.apply({ c: 'lock' });
+      a.keys = KEY_RIGHT | KEY_B;
+      room.step();
+      a.keys = 0;
+      const mirror = makeRoom(MAPS, PATCHES, room.seed);
+      mirror.load(structuredClone(room.state()));
+      for (let i = 0; i < 40 && a.m.action; i++) play(mirror, host.advance().frame);
+      expect(a.battling).toBe(true);
+      const species = a.wildFight!.species;
+      for (let i = 0; i < 60 * 60 * 4 && room.actor(7)?.battling; i++) play(mirror, host.advance().frame);
+      return { room, mirror, a, p, logs, species };
+    };
+
+    it('is simulated, turn by turn, and leaves the bot its wounds', async () => {
+      const { a, logs, room, mirror, species } = await fought();
+      expect(logs.length).toBe(1);
+      const log = logs[0];
+      const text = log.filter((e) => e.e === 'text').map((e) => (e as { text: string }).text);
+      expect(text[0]).toBe(`Wild ${speciesName(species)} appeared!`);
+      expect(log.some((e) => e.e === 'hp')).toBe(true);
+      expect(a.battling).toBe(false);
+      expect(a.foe).toBe(0);
+      expect(a.wildFight).toBeUndefined();
+      expect(a.wear?.length).toBeGreaterThan(0);
+      expect(mirror.hash(), 'and a mirror has it from the frames').toBe(room.hash());
+    }, 60_000);
+
+    it('uses its wear: it goes in with what it had left', async () => {
+      const { logs } = await fought(SEED, (a) => { a.wear = [0.25]; });
+      const start = logs[0][0] as Extract<BattleEvent, { e: 'start' }>;
+      expect(start.a.team[0].hp / start.a.team[0].maxHp).toBeCloseTo(0.25, 1);
+    }, 60_000);
+
+    it('a ball and room: a throw on the first turn, by the ROM\'s odds, and what it catches is its own', async () => {
+      // Whichever a seed's roll is: every one of these throws, and most take it.
+      let took = 0;
+      for (const seed of [SEED, SEED + 1, SEED + 2, SEED + 3]) {
+        const { a, logs, species } = await fought(seed, (b) => { b.loot = { items: [{ id: ROYALE, n: 5 }], money: 0 }; });
+        const text = logs[0].filter((e) => e.e === 'text').map((e) => (e as { text: string }).text);
+        const threw = text.filter((t) => /used ROYALE BALL/.test(t)).length;
+        expect(threw, text.join(' / ')).toBeGreaterThan(0);
+        expect(a.loot?.items, 'spent').toEqual(threw === 5 ? [] : [{ id: ROYALE, n: 5 - threw }]);
+        if (text.some((t) => /^Gotcha/.test(t))) {
+          took++;
+          expect(a.caught).toEqual([species]);
+          expect(botParty(SEED, a, 1)[0].species).toBe(species);
+        }
+      }
+      expect(took).toBeGreaterThan(0);
+    }, 120_000);
+
+    it('never a MASTER BALL on what lives in the grass, and no throw with no room', () => {
+      expect(patchBalls(3, [{ id: 1, n: 1 }, { id: ROYALE, n: 2 }])).toEqual([{ id: ROYALE, n: 2 }]);
+      expect(patchBalls(6, [{ id: ROYALE, n: 2 }])).toEqual([]);
+    });
+
+    it('a win is no catch, and the spot stays taken', () => {
+      const room = stage();
+      const { a, p } = onIt(room);
+      room.apply({ c: 'bots', id: HOST_JUDGE, a: 7, b: LEGEND_FOE, winner: 0, drew: [[0.6], [0]] });
+      expect(a.caught).toBeUndefined();
+      expect(a.wear).toEqual([0.6]);
+      expect(a.battling).toBe(false);
+      expect(room.isTaken(p.key)).toBe(true);
+    });
+
+    it('its whole team lost is the match, as a trainer\'s is: out, by a wild POKeMON, its bag where it stood', () => {
+      const room = stage();
+      bot(room, { map: OLDALE, x: 3, y: 3 }, 8).calm = 1e9;
+      const { a } = onIt(room);
+      const at = { ...a.m.spot };
+      room.results.entrants = [[7, 'B7'], [8, 'B8'], [9, 'B9']];
+      room.apply({ c: 'bots', id: HOST_JUDGE, a: 7, b: LEGEND_FOE, winner: LEGEND_FOE });
+      expect(room.actor(7)).toBeUndefined();
+      expect(room.results.fallen).toMatchObject([{ id: 7, wild: true, bot: true }]);
+      const bag = room.spills.get(SPILL_KEY + 7)!;
+      expect(bag.map).toBe(at.map);
+    });
+
+    it('with the last of its team low it runs for it, by the ROM\'s odds, and it can fail', () => {
+      const mon = (species: number, level: number, hp = 1): PackedMon => { const m = wildMon(species, 1); return { ...m, species, level, hp: Math.max(1, Math.round(m.maxHp * hp)), maxHp: m.maxHp }; };
+      const wild = { catchRate: 255, catchAt: LEGEND_CATCH, patch: true };
+      let ran = 0, lost = 0;
+      for (let seed = 1; seed <= 24; seed++) {
+        const out = simulate({ seat: 7, name: 'B', skin: 0, party: [mon(290, 8, 0.2)] }, { seat: LEGEND_FOE, name: 'X', skin: 0, party: [mon(382, 40)] }, { seed, wild });
+        if (out.ran) ran++;
+        if (out.winner === LEGEND_FOE) lost++;
+        expect(out.caught ?? false).toBe(false);
+      }
+      expect(ran).toBeGreaterThan(0);
+      expect(lost).toBeGreaterThan(0);
+    });
+
+    it('a whole team with no ball fights it out rather than run', () => {
+      const mon = (species: number, level: number): PackedMon => ({ ...wildMon(species, 1), species, level });
+      const wild = { catchRate: 255, catchAt: LEGEND_CATCH, patch: true };
+      for (let seed = 1; seed <= 6; seed++) {
+        const out = simulate({ seat: 7, name: 'B', skin: 0, party: [mon(382, 40)] }, { seat: LEGEND_FOE, name: 'X', skin: 0, party: [mon(290, 5)] }, { seed, wild });
+        expect(out.ran ?? false, `seed ${seed}`).toBe(false);
+        expect(out.winner).toBe(7);
+      }
+    });
+
+    it('a page\'s hidden ROM runs it with no simulator, and with no page free the bot walks on and the spot stands', () => {
+      const room = stage(false);
+      const { p, west } = spotOn(room);
+      const a = bot(room, west, 7, 4);
+      expect(step(room, a)).toEqual([]);
+      expect(a.battling).toBe(false);
+      expect(room.isTaken(p.key)).toBe(false);
+      a.m = { ...a.m, spot: west };
+      const t = bot(room, { map: OLDALE, x: 3, y: 3 }, 8);
+      t.bot = false;
+      t.calm = 1e9;
+      a.keys = KEY_RIGHT | KEY_B;
+      const heard = [...room.step(new Map([[8, [0]]]))];
+      a.keys = 0;
+      for (let i = 0; i < 40 && a.m.action; i++) heard.push(...room.step(new Map([[8, [0]]])));
+      expect(heard.filter((e) => e.type === 'bots')).toMatchObject([{ id: 8, a: 7, b: LEGEND_FOE, legend: { key: p.key, patch: true } }]);
+      expect(room.isTaken(p.key)).toBe(true);
+      // Its answer: beaten and not caught, what the fight left the team, and it walks on.
+      room.apply({ c: 'bots', id: 8, a: 7, b: LEGEND_FOE, winner: 0, hp: [0.3] });
+      expect(a.wear).toEqual([0.3]);
+      expect(a.battling).toBe(false);
+      // A page's ROM has duels to fight: not another of these for a minute.
+      const other = spotOn(room, 'MAP_ROUTE102');
+      const c = bot(room, other.west, 9, 4);
+      expect(step(room, c)).toEqual([]);
+      expect(c.battling).toBe(false);
+      expect(room.isTaken(other.p.key)).toBe(false);
+    });
+  });
+
+  describe('in the Zone', () => {
+    const ZONE = 'MAP_SAFARI_ZONE_SOUTH';
+    const inZone = () => {
+      const room = makeRoom(MAPS, PATCHES, SEED);
+      room.opening = 60 * 60;
+      room.simBots = true;
+      return room;
+    };
+
+    it('its step takes the spot, and the Zone\'s roll is any first stage', () => {
+      const room = inZone();
+      expect(room.ring().safari).toBe(true);
+      const { p, west } = spotOn(room, ZONE);
+      const a = bot(room, west, 7, 4);
+      const seen = step(room, a);
+      expect(room.isTaken(p.key)).toBe(true);
+      expect(seen).toMatchObject([{ type: 'bots', b: LEGEND_FOE, legend: { key: p.key, patch: true, zone: true } }]);
+      expect(evolvesInto(a.wildFight!.species), 'no evolved mon').toBe(false);
+    });
+
+    it('a battle of balls: thrown until it is caught or runs, the ROM\'s sums, and nobody hurt', () => {
+      const side = { seat: 7, name: 'B', skin: 0, party: [wildMon(290, 1)], balls: zoneBalls(1) };
+      let caught = 0, ran = 0, thrown = 0;
+      for (let seed = 1; seed <= 400; seed++) {
+        const out = zoneFight(side, 1, { seed }); // BULBASAUR: 45 to the ROM, 38 by way of its share of 1275
+        if (out.caught) caught++;
+        if (out.ran) ran++;
+        thrown += out.usedA.length;
+        expect(out.shareA).toEqual([1]);
+        expect(out.log[0].e).toBe('start');
+        expect(out.log.at(-1)).toEqual({ e: 'end', winner: out.caught ? 7 : 0 });
+      }
+      expect(caught + ran).toBe(400);
+      // With 15% to run a turn and 20%, then 11%, to take it (battle_ai_script_commands.c, atkcatch).
+      expect(caught / 400).toBeGreaterThan(0.35);
+      expect(caught / 400).toBeLessThan(0.6);
+      expect(thrown / 400).toBeGreaterThan(2.5);
+      expect(thrown / 400).toBeLessThan(4.5);
+    });
+
+    it('its log goes down the wire to a watcher, with nobody on the near side', () => {
+      const out = zoneFight({ seat: 7, name: 'B', skin: 4, party: [wildMon(290, 1)], balls: zoneBalls(1) }, 1, { seed: 3, map: 'MAP_SAFARI_ZONE_SOUTH' });
+      expect(cleanEvents(JSON.parse(JSON.stringify(out.log)), 400)).toEqual(out.log);
+    });
+
+    it('255 goes round its share of 1275 whole, and a common mon goes at the first throw', () => {
+      expect(zoneRate(290)).toBe(255);
+      expect(zoneFight({ seat: 7, name: 'B', skin: 0, party: [], balls: zoneBalls(1) }, 290, { seed: 5 }).usedA.length).toBe(1);
+    });
+
+    it('no balls left or no room: away, with no throw', () => {
+      const out = zoneFight({ seat: 7, name: 'B', skin: 0, party: [], balls: [] }, 290, { seed: 5 });
+      expect(out.ran).toBe(true);
+      expect(out.usedA).toEqual([]);
+      expect(zoneBalls(6)).toEqual([]);
+      expect(zoneBalls(1, 30)).toEqual([{ id: ITEM_SAFARI_BALL, n: 0 }]);
+    });
+
+    it('what it catches is its team, off what it was dealt for it, and its thirty balls go down', async () => {
+      const room = inZone();
+      const host = new Host(room, 0, MAPS, 0);
+      await host.simReady();
+      const { west } = spotOn(room, ZONE);
+      const a = bot(room, west, 7, 4);
+      const dealt = botParty(room.seed, a, 1).length;
+      host.brains.set(7, { rng: 5, wait: 1e9, dir: 1, goal: null });
+      a.keys = KEY_RIGHT | KEY_B;
+      room.step();
+      a.keys = 0;
+      for (let i = 0; i < 40 && a.m.action; i++) host.advance();
+      const species = a.wildFight!.species;
+      for (let i = 0; i < 60 * 60 && a.battling; i++) host.advance();
+      expect(a.battling).toBe(false);
+      expect(a.zoneThrown).toBeGreaterThan(0);
+      expect(a.loot?.items ?? [], 'none out of its bag').toEqual([]);
+      if (a.caught) {
+        expect(a.caught).toEqual([species]);
+        expect(a.zoneCaught).toBe(1);
+        expect(botParty(room.seed, a, 1).length, 'in place of a dealt row').toBe(Math.max(1, dealt));
+      }
+    }, 60_000);
+
+    it('it goes for grass nobody has been through, and past it with a full team', () => {
+      const room = inZone();
+      const { p, west } = spotOn(room, ZONE);
+      const a = bot(room, west, 7, 4);
+      a.calm = 1e9;
+      const others = room.patchesOn(ZONE);
+      for (const q of others) if (q.key !== p.key) room.taken.set(q.key, room.tick);
+      for (const g of room.ground().values()) if (g.map === ZONE) room.picked.set(g.key, 99);
+      const goalOf = () => {
+        const brain: Brain = { rng: 7, wait: 0, dir: 1 };
+        for (let i = 0; i < 30 && !brain.goal; i++) { botKeys(room, a, brain); room.step(); }
+        return brain.goal;
+      };
+      expect(goalOf()).toEqual({ map: ZONE, x: p.x, y: p.y });
+      room.taken.set(p.key, room.tick);
+      expect(goalOf(), 'all taken: nothing to go for').toBeFalsy();
+      room.taken.delete(p.key);
+      a.caught = [277, 280, 283, 286, 288, 290];
+      expect(goalOf(), 'nothing to catch it with').toBeFalsy();
+    });
+
+    it('the buzzer pulls it out of a battle, as a trainer\'s does, and an answer after it is nobody\'s', () => {
+      const room = inZone();
+      room.opening = 200;
+      const { west } = spotOn(room, ZONE);
+      const a = bot(room, west, 7, 4);
+      step(room, a);
+      expect(a.battling).toBe(true);
+      for (let i = 0; i < 260 && room.ring().safari; i++) room.step();
+      room.step();
+      expect(a.m.spot.map.startsWith(SAFARI)).toBe(false);
+      expect(a.battling).toBe(false);
+      expect(a.wildFight).toBeUndefined();
+      room.apply({ c: 'bots', id: HOST_JUDGE, a: 7, b: LEGEND_FOE, winner: 7, caught: 1 });
+      expect(a.caught).toBeUndefined();
+    });
+
+    it('a new round has its balls back', () => {
+      const room = inZone();
+      const a = bot(room, { map: ZONE, x: 10, y: 10 });
+      a.zoneThrown = 12;
+      a.zoneCaught = 2;
+      (room as unknown as { newRound(n: number): void }).newRound(room.results.round + 1);
+      expect(a.zoneThrown).toBeUndefined();
+      expect(a.zoneCaught).toBeUndefined();
+    });
+  });
+
+  describe('going round it', () => {
+    /** A spot on an open row, with an open row beside it: the straight way is over it, and there is
+     *  another. */
+    const line = () => {
+      const room = stage();
+      const open = (map: string, x: number, y: number) => { const c = room.world.cell(map, x, y); return (c === 0 || c === 7) && !room.groundAt(map, x, y) && !room.patchesOn(map).some((q) => q.x === x && q.y === y); };
+      for (const map of ['MAP_ROUTE101', 'MAP_ROUTE102', 'MAP_ROUTE103', 'MAP_ROUTE104', 'MAP_ROUTE110', 'MAP_ROUTE117']) {
+        for (const p of room.patchesOn(map)) {
+          const xs = [-2, -1, 1, 2, 3, 4];
+          if (!xs.every((d) => open(map, p.x + d, p.y))) continue;
+          if (![-2, -1, 0, 1, 2, 3, 4].every((d) => open(map, p.x + d, p.y + 1))) continue;
+          return { room, p, west: { map, x: p.x - 1, y: p.y }, far: { map, x: p.x + 4, y: p.y } };
+        }
+      }
+      throw new Error('no open row with a spot on it');
+    };
+    const walked = (room: Room, a: Actor, to: Spot, p: { key: number }) => {
+      const brain: Brain = { rng: 7, wait: 0, dir: 1, goal: to, plan: `${room.ring().round}:${room.ring().phase}:${room.events.length}${health(a) < HURT ? ':hurt' : ''}` };
+      for (let i = 0; i < 1200 && !sameSpot(a.m.spot, to) && !a.battling; i++) { a.keys = botKeys(room, a, brain); room.step(); }
+      return room.isTaken(p.key);
+    };
+
+    it('whole, it walks over what is in the way', () => {
+      const { room, p, west, far } = line();
+      const a = bot(room, west, 7, 4);
+      a.calm = 1e9;
+      expect(findPath(room.world, west, far, 2000).steps.some((s) => s.to.x === p.x && s.to.y === p.y), 'the straight way').toBe(true);
+      expect(walked(room, a, far, p)).toBe(true);
+    });
+
+    it('hurt, it does not, when there is a way round', () => {
+      const { room, p, west, far } = line();
+      const a = bot(room, west, 7, 4);
+      a.calm = 1e9;
+      a.wear = [0.2];
+      expect(walked(room, a, far, p)).toBe(false);
+      expect(a.m.spot, 'and it got there').toEqual(far);
+    });
+  });
+});
+
+describe('a hunter that has given up on a cell', () => {
+  it('still has when it looks for its quarry again, though it forgets on a new phase', () => {
+    const room = stage();
+    const a = bot(room, { map: OLDALE, x: 10, y: 12 }, 7);
+    const q = bot(room, { map: OLDALE, x: 10, y: 3 }, 8);
+    a.calm = q.calm = 1e9;
+    room.results.entrants = [[7, 'A'], [8, 'Q']];
+    const ring = room.ring();
+    const brain: Brain = { rng: 7, wait: 0, dir: 1, plan: `${ring.round}:${ring.phase}:0`, avoid: new Set([123]) };
+    for (let i = 0; i < 300; i++) { brain.steps = undefined; a.keys = 0; botKeys(room, a, brain); room.step(); }
+    expect(brain.avoid?.has(123)).toBe(true);
+    brain.plan = 'an old one';
+    for (let i = 0; i < 300 && brain.plan === 'an old one'; i++) { botKeys(room, a, brain); room.step(); }
+    expect(brain.avoid?.has(123) ?? false).toBe(false);
   });
 });
 
