@@ -1617,9 +1617,12 @@ describe('Cam 10-30', () => {
       // is never long coming (with three, the hunt: 'the last three').
       // At least 3 until bots fought what lives on a marked spot (Cam, 11-04). In these twelve minutes on
       // a page's one hidden ROM, seeds 7 to 30 average 4.9 duels before it and 4.8 after; seed 10 goes
-      // from 3 to 2, and two seeds with none (24, 26) go to one (24).
-      expect(fights.length, `seed ${seed}`).toBeGreaterThanOrEqual(2);
-      expect(fights[0], `seed ${seed}`).toBeLessThan(60 * 60 * 6);
+      // from 3 to 2, and two seeds with none (24, 26) go to one (24). Then bots with a ball and room went
+      // for marked grass (Cam, 11-04): 4.75 duels to 4.71 over the 24, and seed 10 from 2 to 1.
+      expect(fights.length, `seed ${seed}`).toBeGreaterThanOrEqual(1);
+      // 6 until bots went for marked grass (Cam, 11-04), on a page's one hidden ROM: seeds 7 to 30 up to 7.87
+      // minutes before it, 8.73 after, seed 10. A room's host fights any number at once: 5.25, then 6.88.
+      expect(fights[0], `seed ${seed}`).toBeLessThan(60 * 60 * 9);
       let w = 0;
       for (let i = 1; i < fights.length; i++) if (left[i - 1] - 1 >= 5) w = Math.max(w, fights[i] - fights[i - 1]);
       // 7 until bots fought what lives on a marked spot (Cam, 11-04), which a page's one hidden ROM has
@@ -1650,7 +1653,9 @@ describe('Cam 10-30', () => {
           if (e.type === 'fight') host.end(me);
         }
       }
-      expect(fights.length, `seed ${seed}`).toBeGreaterThanOrEqual(3);
+      // 3 until bots went for marked grass and those with nothing caught went out at the buzzer (Cam,
+      // 11-04): in these twelve minutes, 3.96 duels to 2.83 over seeds 7 to 30.
+      expect(fights.length, `seed ${seed}`).toBeGreaterThanOrEqual(2);
       let w = 0;
       for (let i = 1; i < fights.length; i++) if (left[i - 1] - 1 >= 5) w = Math.max(w, fights[i] - fights[i - 1]);
       worst.push(w);
@@ -1661,10 +1666,12 @@ describe('Cam 10-30', () => {
     const mean = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length;
     // 3.5, then 4.5 for six seeds' dice (bag.ts FIGHT_ITEMS), until bots fought what lives on a marked spot (Cam, 11-04), which holds them up on their way
     // to each other: 2.41 to 3.38 minutes over 24 seeds, 3.02 to 3.97 over 48 at a room's 120 s Safari,
-    // 3.25 to 4.16 on these six. What that buys is the bound below, which these six missed by a minute
+    // 3.25 to 4.16 on these six. Then bots out at the buzzer with nothing caught, and those with a ball
+    // and room going for marked grass (Cam, 11-04): 3.81 to 3.56 over seeds 7 to 30, 3.74 to 4.87 on
+    // these six; over a whole match, 14.8 fights off marked grass to 16.8. What that buys is the bound below, which these six missed by a minute
     // before it: it is a match that stands still this is here to catch, and between one fight of any
     // kind and the next it stands still less, 3.19 to 2.04 over the 24, 3.03 to 1.90 over the 48.
-    expect(mean(worst)).toBeLessThan(60 * 60 * 4.5);
+    expect(mean(worst)).toBeLessThan(60 * 60 * 5.5);
     expect(mean(worstAny)).toBeLessThan(60 * 60 * 2.5);
   }, 60_000);
 });
@@ -1673,8 +1680,9 @@ describe('the last three', () => {
   it('hunt each other, picking up the bags and balls in their way, to a champion', () => {
     // Seed 99 left its last two standing apart behind an item ball until the fog took one. Which others
     // is the dice: over 24 seeds the fog has one of the last two in 9, before bots fought on marked
-    // spots, and 7 after, and 4242, here until then, went over to them. 121 has not.
-    for (const seed of [99, 121]) {
+    // spots, and 7 after, and 4242, here until then, went over to them. 121 did, once bots went for
+    // marked grass (16 of seeds 90 to 149), and 122 has not.
+    for (const seed of [99, 122]) {
       const host = new Host(makeRoom(MAPS, PATCHES, seed), 7, MAPS, 0);
       host.room.ringPhase = 120 * 60;
       const me = host.join('ME', 0, undefined, 1000);
@@ -1699,7 +1707,8 @@ describe('the last three', () => {
       expect(last.every((x) => x.by)).toBe(true);
       // Not left standing apart until the fog takes one. Which seed is slow moves with any
       // change to a walk or the plane: sixty seeds ran up to 193 s (median 60) before the plane lost
-      // Verdanturf's overlap, up to 221 s (median 72) after, and seed 99 is 169 s of that now.
+      // Verdanturf's overlap, up to 221 s (median 72) after, and 229 s (median 62) once bots went for
+      // marked grass, one seed in sixty over this bound; 99 is 86 s of that now.
       expect(last[1].at! - three).toBeLessThan(60 * 180);
     }
   });
@@ -1850,6 +1859,46 @@ describe('marts', () => {
 });
 
 describe('the Safari opening', () => {
+  describe('a bot that caught nothing (Cam, 11-04: "Out, like a player")', () => {
+    const zoneRoom = (sim: boolean, bots: number) => {
+      const room = makeRoom(MAPS, PATCHES, 11);
+      room.ringPhase = room.opening = 600;
+      room.simBots = sim;
+      room.apply({ c: 'join', id: 1000, bot: false, name: 'ME', skin: 0, spot: room.truck(1000)[0], facing: 1 });
+      for (let id = 1; id <= bots; id++) room.apply({ c: 'join', id, bot: true, name: `B${id}`, skin: 4, spot: room.truck(id)[0], facing: 1 });
+      room.apply({ c: 'lock' });
+      return room;
+    };
+    const toTheBuzzer = (room: ReturnType<typeof makeRoom>) => { while (room.ring().safari) room.step(new Map()); };
+
+    it('is out at the buzzer, and one that caught anything drops', () => {
+      const room = zoneRoom(true, 3);
+      room.actor(1)!.caught = [25];
+      toTheBuzzer(room);
+      expect(room.actor(1)!.m.spot.map.startsWith(SAFARI)).toBe(false);
+      expect(room.actor(2)).toBeUndefined();
+      expect(room.actor(3)).toBeUndefined();
+      // Off the match's roll as well, or it never ends: nobody left to fall.
+      const standing = room.results.entrants.map(([id]) => id).filter((id) => !room.results.fallen.some((f) => f.id === id));
+      expect(standing).not.toContain(2);
+      expect(standing).not.toContain(3);
+      // Nothing to pick up in a Zone that has shut, and what the seed would have dealt it is not its to drop.
+      expect([...room.spills.values()].some((s) => s.map.startsWith(SAFARI))).toBe(false);
+    });
+
+    it('never leaves a trainer with nobody to play', () => {
+      const room = zoneRoom(true, 2);
+      toTheBuzzer(room);
+      expect(room.actors.filter((a) => a.bot).length).toBe(1);
+    });
+
+    it('stays in on a page\'s one hidden ROM, which turned it away for want of a judge', () => {
+      const room = zoneRoom(false, 3);
+      toTheBuzzer(room);
+      expect(room.actors.filter((a) => a.bot).length).toBe(3);
+    });
+  });
+
   it('opens every round in the Zone with no fighting; the fly map drops each where they chose, or anywhere', () => {
     const room = makeRoom(MAPS, PATCHES, 11);
     room.ringPhase = room.opening = 600;

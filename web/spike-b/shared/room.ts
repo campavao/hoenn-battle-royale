@@ -1340,7 +1340,15 @@ export class Room {
     // The Safari is over: the bots drop at once, anywhere (they have no fly map).
     else if (was.safari && !ring.safari) {
       // Pulled out of a Zone battle at the buzzer, as a trainer is (main.ts safariFrame).
-      for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) { if (a.judge) this.part(a); this.dropOne(a); this.botLearns(a); }
+      for (const a of [...this.actors]) if (a.bot && a.m.spot.map.startsWith(SAFARI)) {
+        if (a.judge) this.part(a);
+        // Caught nothing: out, as a trainer is (Cam, 11-04: "Out, like a player"). Not on a page's one
+        // hidden ROM (no simBots), which turned it away for want of a judge, or if that would leave
+        // somebody with nobody to play.
+        if (this.simBots && !a.caught?.length && this.actors.length > 2) { this.fall(a, ''); this.remove(a.id); continue; }
+        this.dropOne(a);
+        this.botLearns(a);
+      }
     }
     else if (ring.phase !== was.phase) {
       // ISLAND CAVE's wall opens by itself once the ring has moved on a phase (br_story.c).

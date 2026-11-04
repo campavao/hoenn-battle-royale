@@ -13420,8 +13420,13 @@ var Room = class {
     const end = this.roundEnd();
     if (end !== void 0 && this.tick >= end + AFTER_WIN) this.newRound(r.round + 1);
     else if (was.safari && !ring.safari) {
-      for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) {
+      for (const a of [...this.actors]) if (a.bot && a.m.spot.map.startsWith(SAFARI)) {
         if (a.judge) this.part(a);
+        if (this.simBots && !a.caught?.length && this.actors.length > 2) {
+          this.fall(a, "");
+          this.remove(a.id);
+          continue;
+        }
         this.dropOne(a);
         this.botLearns(a);
       }
@@ -14789,7 +14794,7 @@ function goal(room, a, b2) {
     if (near2.length) return near2[Math.floor(rand(b2) * near2.length)];
   }
   const cells = insideNext(room);
-  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return (lootMood ? lootGoal(room, a, b2) : null) ?? wander(room, a, b2);
+  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return (lootMood ? lootGoal(room, a, b2) : null) ?? patchGoal(room, a, b2) ?? wander(room, a, b2);
   const p = planeOf(room, a.m.spot);
   if (!p) return null;
   const { x: x2, y } = p;
@@ -14924,6 +14929,15 @@ function lootGoal(room, a, b2, legendOnly = false) {
   return near[Math.floor(rand(b2) * Math.min(3, near.length))].s;
 }
 var partyRoom = (room, a) => botParty(room.seed, a, room.ring().phase + 1).length < 6;
+function patchGoal(room, a, b2) {
+  if (!partyRoom(room, a) || !hasBall(a.loot?.items ?? []) || health(a) < HURT) return null;
+  const { map, x: x2, y } = a.m.spot;
+  const reach = room.world.reachOnMap(a.m.spot, surfs(a), cuts(a));
+  const near = room.patchesOn(map).filter((p2) => (p2.x !== x2 || p2.y !== y) && !room.isTaken(p2.key) && reach.cell(p2.x, p2.y) && !room.inFog({ map, x: p2.x, y: p2.y })).map((p2) => ({ p: p2, d: Math.abs(p2.x - x2) + Math.abs(p2.y - y) })).sort((p2, q2) => p2.d - q2.d).slice(0, 3);
+  if (!near.length) return null;
+  const { p } = near[Math.floor(rand(b2) * near.length)];
+  return { map, x: p.x, y: p.y };
+}
 var SPREAD = 6;
 var HEART = /* @__PURE__ */ new WeakMap();
 function heart(room) {
@@ -16290,4 +16304,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "4ae753c88c70";
+export const WORLD_HASH = "698c46e00df7";

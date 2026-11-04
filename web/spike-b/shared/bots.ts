@@ -185,7 +185,7 @@ function goal(room: Room, a: Actor, b: Brain): Spot | null {
     if (near.length) return near[Math.floor(rand(b) * near.length)];
   }
   const cells = insideNext(room);
-  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return (lootMood ? lootGoal(room, a, b) : null) ?? wander(room, a, b);
+  if (!cells.length || cells.some((s) => sameSpot(s, a.m.spot))) return (lootMood ? lootGoal(room, a, b) : null) ?? patchGoal(room, a, b) ?? wander(room, a, b);
   const p = planeOf(room, a.m.spot);
   if (!p) return null;
   const { x, y } = p;
@@ -344,6 +344,23 @@ function lootGoal(room: Room, a: Actor, b: Brain, legendOnly = false): Spot | nu
 }
 
 const partyRoom = (room: Room, a: Actor) => botParty(room.seed, a, room.ring().phase + 1).length < 6;
+
+/** Marked grass on this map, one of the nearest it can walk to, for a bot that needs Pokemon: room on
+ *  its team and a ball to throw, and fit for a fight (Cam, 11-04: "If they need pokemon, they should go
+ *  for wild patches, like a trainer would"). Nothing in the fog. */
+export function patchGoal(room: Room, a: Actor, b: Brain): Spot | null {
+  if (!partyRoom(room, a) || !hasBall(a.loot?.items ?? []) || health(a) < HURT) return null;
+  const { map, x, y } = a.m.spot;
+  const reach = room.world.reachOnMap(a.m.spot, surfs(a), cuts(a));
+  const near = room.patchesOn(map)
+    .filter((p) => (p.x !== x || p.y !== y) && !room.isTaken(p.key) && reach.cell(p.x, p.y) && !room.inFog({ map, x: p.x, y: p.y }))
+    .map((p) => ({ p, d: Math.abs(p.x - x) + Math.abs(p.y - y) }))
+    .sort((p, q) => p.d - q.d)
+    .slice(0, 3);
+  if (!near.length) return null;
+  const { p } = near[Math.floor(rand(b) * near.length)];
+  return { map, x: p.x, y: p.y };
+}
 
 /** goal: how much further than the nearest cell inside the ring a bot may aim. */
 const SPREAD = 6;
