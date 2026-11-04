@@ -192,11 +192,10 @@ test('the Hall of Fame: a window in the middle with a mouse, the curtain down be
   await page.locator('#lobby-rows button', { hasText: 'HOST A ROOM' }).click({ timeout: 90_000 });
   await page.locator('#room-start').click({ timeout: 30_000 });
   await page.waitForFunction(() => { const s = (window as any).__spike; return !!s.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 90_000 });
-  // A team of six to parade, and everybody else out.
-  await spike(page, (s) => s.rom.fillParty());
+  // One bot left standing, with the team the match dealt it: its parade, on my ROM.
   await page.waitForFunction(() => (window as any).__spike.link.room.results.entrants.length >= 2, undefined, { timeout: 120_000 });
   const crowned = Date.now();
-  await spike(page, (s) => { const room = s.link.room; for (const a of [...room.actors]) if (a.id !== s.link.me) { room.fall(a, 'the fog'); room.remove(a.id); } });
+  await spike(page, (s) => { const room = s.link.room; const left = room.actors.find((a: any) => a.bot); for (const a of [...room.actors]) if (a !== left) { room.fall(a, 'the fog'); room.remove(a.id); } });
 
   const fame = page.locator('#battle.on.fame');
   await expect(fame, 'the parade is up').toBeAttached({ timeout: 30_000 });
@@ -210,6 +209,7 @@ test('the Hall of Fame: a window in the middle with a mouse, the curtain down be
   expect(hung.top, 'all the way down').toBe(0);
   expect(hung.bottom).toBeGreaterThanOrEqual(1040);
   expect(Number(hung.z), 'behind the ROM').toBeLessThan(Number(await fame.evaluate((b) => getComputedStyle(b).zIndex)));
+  await expect(page.locator('#keys'), 'the keys are not over it').toBeHidden();
   await shot(page, 'fame-desktop');
 
   // Nobody presses A. The clock is the game's own speed on a machine that may be busy, so a
@@ -218,4 +218,5 @@ test('the Hall of Fame: a window in the middle with a mouse, the curtain down be
   const took = Date.now() - crowned;
   console.log(`crown to the parade's end: ${took} ms`);
   await expect(page.locator('#curtain'), 'and up').toHaveCount(0, { timeout: 5000 });
+  await expect(page.locator('#results-panel, #win.on').first(), 'and on to the results').toBeVisible({ timeout: 30_000 });
 });

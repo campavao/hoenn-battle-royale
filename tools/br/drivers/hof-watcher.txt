@@ -31,9 +31,9 @@ wait 80
 shot mon-1
 # ZIGGY first, in its own colours: a row without BR_MON_SHINY is never shiny (HBR-22, the
 # play-test's parade was all shiny). OBJ palette 1 is its pic's; colour 4 is 0x29BF shiny.
-expect u16 0x05000228 0x42E9
 wait 120
 shot mon-2
+expect u16 0x05000228 0x42E9
 wait 140
 shot team
 waitfor u8 gBrMatch 4 1

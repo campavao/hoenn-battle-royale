@@ -27,7 +27,7 @@ poke u8 gBrMatch 2
 pokebytes gDecompressionBuffer+0x400 01 06 CD CE BF D0 BF C8
 mailsend gBrMailbox 33 gDecompressionBuffer+0x400 8
 waitfor u8 gBrMatch 4 120
-wait 80
+wait 200
 shot mon-1
 # ZIGGY, shiny: OBJ palette 1 is its pic's, and colour 4 is 0x42E9 when it is not
 expect u16 0x05000228 0x29BF
