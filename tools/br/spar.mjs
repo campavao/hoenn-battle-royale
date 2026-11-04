@@ -170,7 +170,7 @@ try {
   }
   say(`in the match, ROM ${await hasRom()}`);
 
-  let flyAt = 0, fights = 0, was = false, teamed = false;
+  let flyAt = 0, fights = 0, was = false, teamed = false, outAt = 0;
   while (Date.now() < deadline) {
     if (await page.locator('#results-panel').isVisible().catch(() => false)) {
       say(`results up after ${fights} fight${fights === 1 ? '' : 's'}`);
@@ -187,7 +187,13 @@ try {
       const s = window.__spike, a = s.link.room.actor(s.link.me);
       return { out: !a || s.isOut, safari: !!s.link.room.ring().safari, party: s.rom.partyCount(), other: s.link.room.actors.some((o) => !o.bot && o.id !== s.link.me) };
     });
-    if (state.out) { say('out of the match'); await page.waitForTimeout(2000); continue; }
+    // Out, with the results not up in two minutes: gone, or an open page keeps the relay's `world` from 0.
+    if (state.out) {
+      if (!outAt) { outAt = Date.now(); say('out of the match'); }
+      if (Date.now() - outAt > 120_000) { say('out, no results up: leaving'); break; }
+      await page.waitForTimeout(2000);
+      continue;
+    }
     if (!teamed && !state.party && !state.safari) {
       await page.evaluate(() => window.__spike.rom.fillParty());
       teamed = true;
