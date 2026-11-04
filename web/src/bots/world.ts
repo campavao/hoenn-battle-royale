@@ -46,6 +46,11 @@ export interface WorldMap {
   deep?: string;
   emerge?: string;
   nosurf?: string;
+  /** The ACRO BIKE's ground (tools/br/export-acro.py): [cell (y * w + x), kind], kinds 1 a
+   *  bumpy slope, 2 and 3 an isolated vertical and horizontal rail, 4 and 5 a vertical and
+   *  horizontal rail. All class 1 in `grid`, walls to anybody who walks; `elev` keeps their
+   *  real height. Only sim.ts's rider goes on one. */
+  acro?: [number, number][];
 }
 
 export interface Warp {
@@ -224,6 +229,7 @@ function cellClass(map: WorldMap, x: number, y: number): number {
 export class World {
   private readonly maps = new Map<string, WorldMap>();
   private readonly grids = new Map<string, Uint8Array>();
+  private readonly acros = new Map<string, Map<number, number>>();
   private readonly warps = new Map<string, Warp>();
 
   // ---- the cell graph (POK-330 #49) ----------------------------------------------
@@ -552,6 +558,27 @@ export class World {
 
   map(id: string): WorldMap | undefined {
     return this.maps.get(id);
+  }
+
+  /** What the ACRO BIKE makes of this cell (WorldMap.acro), 0 for nothing or off the map. */
+  acroAt(id: string, x: number, y: number): number {
+    const m = this.maps.get(id);
+    if (!m?.acro || x < 0 || y < 0 || x >= m.w || y >= m.h) return 0;
+    let kinds = this.acros.get(id);
+    if (!kinds) this.acros.set(id, kinds = new Map(m.acro));
+    return kinds.get(y * m.w + x) ?? 0;
+  }
+
+  /** Where the ACRO BIKE's step off `spot` lands, on its own map, whatever the cell's class:
+   *  sim.ts has asked whether it may. Only the heights are left to say no. */
+  acroStep(spot: Spot, dir: SeamDir): Spot | null {
+    const m = this.maps.get(spot.map);
+    const here = this.key(spot);
+    if (!m || here < 0) return null;
+    const move = STEP_OF[dir], x = spot.x + move.dx, y = spot.y + move.dy;
+    if (x < 0 || y < 0 || x >= m.w || y >= m.h) return null;
+    const to = this.key({ map: spot.map, x, y });
+    return heightsMeet(this.carried(here), this.elev[to], CLASS_WALL, false) ? { map: spot.map, x, y } : null;
   }
 
   /** The cell class, or the wall class for anything off the map or unknown. */

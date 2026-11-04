@@ -44,7 +44,7 @@ import { cableOrDoll, isTm, type BagRows } from './items';
 import { SIGHT_RANGE, eitherSees, seesOver, type Facing } from '../../src/bots/sight';
 import { SAFARI_CELLS } from '../../src/match/safari';
 import { RING_RADII } from '../../src/match/clock';
-import { CLASS_WATER, DIR_NORTH, dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
+import { bikeClear, CLASS_WATER, DIR_NORTH, dirOf, newMover, stepFn, tick, type Keys, type Mover, type StepFn } from '../sim';
 
 export const KEY_UP = 1, KEY_DOWN = 2, KEY_LEFT = 4, KEY_RIGHT = 8, KEY_B = 16, KEY_A = 32, KEY_SELECT = 64;
 
@@ -59,6 +59,8 @@ export function bitsOf(k: Keys): number {
 export interface Actor {
   id: number;
   bot: boolean;
+  /** SELECT rides the ACRO BIKE: USEd off the BAG. A new mover (a FLY, a ferry) keeps it. */
+  likeAcro?: boolean;
   name: string;
   /** The wardrobe index: what the ROM draws this trainer as in a battle. */
   skin: number;
@@ -490,6 +492,8 @@ export const BALLS_TM_IN = 3;
 export type Command =
   | { c: 'join'; id: number; bot: boolean; name: string; skin: number; spot: Spot; facing: number }
   | { c: 'leave'; id: number }
+  /** The bike SELECT rides, off the BAG: the ACRO BIKE or not. Riding the other, changes to it. */
+  | { c: 'ride'; id: number; acro: boolean }
   /** `fled`: the fight never got going or was run from (a link that never answered,
    *  a forfeit): that pair keeps apart a while (BrEngage_NoAnswer). `won`: a bot was
    *  beaten, and is out of the round. */
@@ -707,6 +711,14 @@ export class Room {
     if (cmd.c === 'field') {
       const a = this.actor(cmd.id);
       if (a && !a.bot) a.field = cmd.bits & 15;
+    } else if (cmd.c === 'ride') {
+      const a = this.actor(cmd.id);
+      if (!a || a.bot) return;
+      a.likeAcro = cmd.acro || undefined;
+      if (a.m.bike && a.m.acro !== cmd.acro && !this.base.acroAt?.(a.m.spot) && (cmd.acro || this.stepFor(a).cycling?.(a.m.spot))) {
+        a.m.acro = cmd.acro;
+        bikeClear(a.m);
+      }
     } else if (cmd.c === 'pick') {
       const a = this.actor(cmd.id);
       // The fly map's answer (br_pick.h): out of the Zone now, onto a free cell of the
@@ -1672,7 +1684,13 @@ export class Room {
   zone(id: number): Spot[] {
     let h = Math.imul(this.seed ^ Math.imul(id + 1, 0x9e3779b1), 0x85ebca6b);
     h ^= h >>> 13;
-    const c = SAFARI_CELLS[(h >>> 0) % SAFARI_CELLS.length];
+    let c = SAFARI_CELLS[(h >>> 0) % SAFARI_CELLS.length];
+    // Five of them lie past the rails, the ACRO BIKE's way in: dealt one, you start at another.
+    const onFoot = (s: { map: string; x: number; y: number }) => this.safariCells().some((o) => o.map === s.map && o.x === s.x && o.y === s.y);
+    if (!onFoot(c)) {
+      const cells = SAFARI_CELLS.filter(onFoot);
+      if (cells.length) c = cells[(h >>> 0) % cells.length];
+    }
     // Nobody within two steps, while there is room: a crowd dealt one cell starts apart.
     const near = (s: Spot, r: number) => this.actors.some((a) => a.m.spot.map === s.map && Math.abs(a.m.spot.x - s.x) <= r && Math.abs(a.m.spot.y - s.y) <= r);
     const d = (s: Spot) => (s.map === c.map ? 0 : 1 << 16) + Math.abs(s.x - c.x) + Math.abs(s.y - c.y);
@@ -2215,11 +2233,11 @@ export class Room {
    *  standing there (a step's destination is the trainer's spot from its first frame, so
    *  two can't both walk into one cell). */
   stepFor(a: Actor, onWay = false): StepFn {
-    const fn: StepFn = (from, dir) => {
+    const fn: StepFn = (from, dir, ride) => {
       // A bot goes where its team could, as a trainer does (POK-437; a wanderer keeps to land and
       // off ledges all the same, Room.move).
       const bits = a.field ?? 0;
-      const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir) : this.base(from, dir);
+      const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir, ride) : this.base(from, dir, ride);
       if (!r || !this.maps.has(r.to.map)) return null;
       // A townsperson stays out in the street, or in the Zone's (live's bots wander the
       // Safari's pool through the opening, brain.ts setTargets): no Zone map is a place
@@ -2244,6 +2262,9 @@ export class Room {
       return r;
     };
     fn.cycling = !a.bot && !this.ring().safari ? this.base.cycling : undefined;
+    fn.acroCycling = a.bot ? undefined : this.base.acroCycling;
+    fn.acroAt = this.base.acroAt;
+    fn.likeAcro = !!a.likeAcro;
     return fn;
   }
 
@@ -2256,6 +2277,7 @@ export class Room {
       const m = a.m;
       mix(a.id); str(m.spot.map); mix(m.spot.x); mix(m.spot.y); str(m.prev.map); mix(m.prev.x); mix(m.prev.y);
       mix(m.facing); mix(m.moveDir); mix(m.runningState); mix(m.run ? 1 : 0); mix(m.strides); mix(m.bike ? 1 + m.bikeSpeed * 4 + m.bikeCount * 16 : 0);
+      mix((m.acro ? 1 : 0) | (m.acroB ? 2 : 0) | (a.likeAcro ? 4 : 0) | (m.acroState << 3) | (m.acroTurn << 6) | (m.keyDir << 9) | (m.keyBtn << 12)); mix(m.dirT | (m.btnT << 8));
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
       mix((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bites ?? 0); mix(a.bleedAt ?? 0); mix(a.boss ?? 0); mix(a.away ? 1 : 0); mix(a.pickBy ?? 0); mix(a.cruise ? (a.cruise.to === 'lilycove' ? 8 : 16) + LEGS.indexOf(a.cruise.leg) : 0); mix(a.cruise?.steps ?? 0); mix(a.loot?.money ?? 0); for (const sp of a.caught ?? []) mix(sp); mix(a.legendKey ?? 0); for (const st of a.loot?.items ?? []) { mix(st.id); mix(st.n); }

@@ -174,6 +174,11 @@ export class Host {
     if (this.players.has(id)) this.pending.push({ c: 'field', id, bits: bits & 15 });
   }
 
+  /** The bike SELECT rides, off the BAG. */
+  ride(id: number, acro: boolean): void {
+    if (this.players.has(id)) this.pending.push({ c: 'ride', id, acro });
+  }
+
   /** The page fought two bots for the room (a `bots` event): who won, 0 for nobody. */
   bots(id: number, a: number, b: number, winner: number, hp?: number[], used?: [number[] | undefined, number[] | undefined]): void {
     if (this.players.has(id)) this.pending.push({ c: 'bots', id, a, b, winner, ...(hp ? { hp } : {}), ...(used?.some(Boolean) ? { used: [used[0] ?? [], used[1] ?? []] as [number[], number[]] } : {}) });

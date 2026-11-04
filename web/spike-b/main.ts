@@ -25,7 +25,7 @@ import { loadPatches } from '../src/bots/patches';
 import { rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { battleItems } from '../src/bots/bag';
-import { DIR_EAST } from './sim';
+import { acroFrame, DIR_EAST } from './sim';
 import { ATTENDANT, BOATS, DOCKS, MOORINGS, TIDAL_MAPS, TIDAL_SAILOR, islandMaps, type Cruise, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, FIELD_DIVE, diveTo, emptyBag, interiors, makeRoom, botParty, legendMon, LEGEND_CATCH, LEGEND_FOE, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
@@ -45,7 +45,7 @@ import { OUT_BATCH_MS, event, felled, opening, outs, won } from '../src/match/ti
 import { MessageBox } from './msgbox';
 import { Fishing, fishPose, rodOf, type Rod } from './fish';
 import { Ticks } from './ticks';
-import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_CONTEST_CURTAIN_FALL, SE_CONTEST_CURTAIN_RISE, SE_DOOR, SE_EXIT, SE_FAILURE, SE_FIELD_POISON, SE_LEDGE, SE_M_FLY, SE_SELECT, SE_SHOP, SE_USE_ITEM, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
+import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_CONTEST_CURTAIN_FALL, SE_CONTEST_CURTAIN_RISE, SE_DOOR, SE_EXIT, SE_FAILURE, SE_BIKE_HOP, SE_FIELD_POISON, SE_LEDGE, SE_M_FLY, SE_SELECT, SE_SHOP, SE_USE_ITEM, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { devRomParam, importRom } from './import';
 import { askToKeepStorage, registerServiceWorker } from '../src/pwa';
@@ -118,6 +118,7 @@ const OBJ_EVENT_GFX_MART_EMPLOYEE = 83;
 const OBJ_EVENT_GFX_GENTLEMAN = 48;
 const OBJ_EVENT_GFX_BRENDAN_SURFING = 2, OBJ_EVENT_GFX_MAY_SURFING = 92;
 const BIKE_GFX = [1, 90]; // OBJ_EVENT_GFX_BRENDAN_MACH_BIKE, _MAY_MACH_BIKE
+const ACRO_GFX = [63, 91]; // OBJ_EVENT_GFX_BRENDAN_ACRO_BIKE, _MAY_ACRO_BIKE
 const OBJ_EVENT_GFX_CUTTABLE_TREE = 82, OBJ_EVENT_GFX_BREAKABLE_ROCK = 86, OBJ_EVENT_GFX_PUSHABLE_BOULDER = 87;
 // export-world.py's classes for them.
 const CLASS_WATER = 2, CLASS_CUT = 9, CLASS_BOULDER = 10;
@@ -1152,12 +1153,16 @@ const PAD_RT = 7;
 const RADIAL_KEY = 'c';
 const radial = new Radial({ scale: windowScale, sound: () => rom?.sound(SE_SELECT) });
 /** Riding, or the bike in the bag: SELECT gets on or off where a bike may go (sim.ts). */
-function bikeNow(me: Actor): { item: number; label: string; enabled: boolean } {
+function bikeNow(me: Actor): { item: number; label: 'BIKE' | 'WALK'; enabled: boolean } {
   const has = rom ? bagHolds(rom.emu, romTables.sym, KEYITEMS_POCKET, [ITEM_MACH_BIKE, ITEM_ACRO_BIKE]) : new Set<number>();
+  const step = link.room.stepFor(me), spot = me.m.spot;
+  // The one that SELECT would get on (sim.ts begin), or is on.
+  const acro = me.m.bike ? me.m.acro : !step.cycling?.(spot) && !!step.acroCycling?.(spot) || !!step.acroAt?.(spot) || !!me.likeAcro || (!!has.size && !has.has(ITEM_MACH_BIKE));
   return {
-    item: has.has(ITEM_MACH_BIKE) || !has.size ? ITEM_MACH_BIKE : ITEM_ACRO_BIKE,
+    item: acro ? ITEM_ACRO_BIKE : ITEM_MACH_BIKE,
     label: me.m.bike ? 'WALK' : 'BIKE',
-    enabled: me.m.bike || !!link.room.stepFor(me).cycling?.(me.m.spot),
+    // No getting off on a rail.
+    enabled: me.m.bike ? (step.acroAt?.(spot) ?? 0) < 2 : !!step.cycling?.(spot) || !!step.acroCycling?.(spot),
   };
 }
 /** What SELECT would do with the rod here: casts it facing water, on foot or surfing (room.ts). */
@@ -1191,7 +1196,13 @@ function useKeyItem(item: number): boolean {
   if (!me) return false;
   if (item === ITEM_MACH_BIKE || item === ITEM_ACRO_BIKE) {
     closePanel();
-    if (bikeNow(me).enabled) pressSelect(); else say("There's a time and place for everything! But not now.");
+    const acro = item === ITEM_ACRO_BIKE, step = link.room.stepFor(me), spot = me.m.spot, same = me.m.bike && me.m.acro === acro;
+    // gText_CantDismountBike: on a rail, whichever bike was asked for.
+    if (me.m.bike && (step.acroAt?.(spot) ?? 0) >= 2) { say("You can't dismount your BIKE here."); return true; }
+    if (!same && !step.cycling?.(spot) && !(acro && step.acroCycling?.(spot))) { say("There's a time and place for everything! But not now."); return true; }
+    link.ride(acro);
+    // Riding the other, the room changes bikes itself.
+    if (!me.m.bike || same) pressSelect();
     return true;
   }
   if (item === ITEM_ITEMFINDER) {
@@ -2800,7 +2811,7 @@ function wirePhoneHud(desk = false): void {
       // Facing water on foot (or surfing), the rod: SELECT casts it there (room.ts).
       ctx: !me.m.bike && classAt(aheadOf(me)) === CLASS_WATER && rodOf(rom?.rod() ?? 0) >= 0
         ? { label: 'FISH', item: rom!.rod(), enabled: true }
-        : { label: me.m.bike ? 'WALK' : 'BIKE', item: ITEM_MACH_BIKE, enabled: me.m.bike || !!link.room.stepFor(me).cycling?.(me.m.spot) },
+        : bikeNow(me),
       party: rom?.partyCount() ?? 0,
       moves: mine && !mine.battling ? fieldChips(mine) : [],
     });
@@ -3171,14 +3182,20 @@ function soundFrame(): void {
   // mat or stairs (SE_EXIT, DoWarp) at each warp.
   const a = follow ? link.room.actor(follow) : undefined;
   const act = a?.m.action;
+  // Its one line, the first time on it: nothing on the bike says what B does now.
+  if (!acroSaid && a && a.id === link.me && a.m.bike && a.m.acro) {
+    acroSaid = true;
+    say('Hold B to hop. B and a sideways press jumps.', 4000);
+  }
   if (act && act !== heardAction) {
     if (act.kind === 'bump') rom?.sound(SE_WALL_HIT);
-    else if (act.kind === 'hop') rom?.sound(SE_LEDGE);
+    else if (act.kind === 'hop') rom?.sound(act.arc === undefined ? SE_LEDGE : SE_BIKE_HOP);
     else if (act.kind === 'warp') rom?.sound(placed.get(a!.m.spot.map)?.m.outdoor ? SE_DOOR : SE_EXIT);
   }
   heardAction = act;
 }
 let heardAction: unknown = null;
+let acroSaid = false;
 const cue = new MusicCue();
 /** Where the followed trainer stands for the song: through a door, the other side. */
 function whereFollowed(): Where | null {
@@ -3848,6 +3865,8 @@ function seamFrame(all: readonly Actor[]): void {
  *  twice Emerald's cadence. */
 function frameOf(a: Actor): number {
   const act = a.m.action;
+  const wheelie = a.m.bike && a.m.acro && a.skin < 2 ? acroFrame(a.m) : null;
+  if (wheelie !== null) return wheelie;
   const run = !a.m.bike && a.m.run && act?.kind === 'step' && SHEETS[String(SKIN_GFX[a.skin])].frames >= 18;
   if (act?.kind === 'step') {
     const late = act.t / act.len >= (run ? 5 / 8 : 1 / 2) ? 1 : 0;
@@ -4714,8 +4733,8 @@ function drawScene(all: Actor[], camX: number, camY: number, W: number, H: numbe
     // My rod out (fish.ts), on foot or on the blob: Brendan's and May's fishing sheet,
     // nudged toward the water as AlignFishingAnimationFrames does.
     const rod = casting && a.id === link.me && a.skin < 2 ? fishPose(casting.f.anim, casting.f.animT, a.m.facing) : null;
-    // On the MACH BIKE: Brendan's and May's own; any other look rides on foot (br_skin.c).
-    const gfx = rod ? FISH_GFX[a.skin] : under && a.skin < 2 ? DIVE_GFX[a.skin] : surf ? surfGfx : a.m.bike && a.skin < 2 ? BIKE_GFX[a.skin] : SKIN_GFX[a.skin];
+    // On a bike: Brendan's and May's own; any other look rides on foot (br_skin.c).
+    const gfx = rod ? FISH_GFX[a.skin] : under && a.skin < 2 ? DIVE_GFX[a.skin] : surf ? surfGfx : a.m.bike && a.skin < 2 ? (a.m.acro ? ACRO_GFX : BIKE_GFX)[a.skin] : SKIN_GFX[a.skin];
     const info = SHEETS[String(gfx)];
     const s = sheet(gfx);
     if (!s) return;
