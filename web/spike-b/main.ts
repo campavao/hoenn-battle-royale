@@ -1834,7 +1834,7 @@ function seeFrame(): void {
     return;
   }
   if (keyed) {
-    keyPicture(keyImage.data);
+    keyPicture(keyImage.data, romFading());
     if (heldTail >= 0) {
       if (!drawnPicture(keyImage.data) && ++heldTail <= HELD_TAIL) return;
       heldTail = -1;

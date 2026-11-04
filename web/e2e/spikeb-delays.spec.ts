@@ -52,10 +52,10 @@ async function intoBattle(page: Page): Promise<void> {
   await page.waitForTimeout(800);
 }
 
-type Pic = { t: number; luma: number; changed: number; keyed: number; shown: boolean; url?: string };
+type Pic = { t: number; luma: number; changed: number; keyed: number; blue: number; shown: boolean; url?: string };
 type Stage = { t: number; rom: number; cb: string };
 type Speed = { t: number; x: number; outcome: number };
-type Probe = { pics: Pic[]; stages: Stage[]; clicked: number; speeds: Speed[] };
+type Probe = { pics: Pic[]; stages: Stage[]; clicked: number; speeds: Speed[]; moves: number[] };
 
 /** Every picture the player saw and every screen the ROM went through, from the next click on. */
 function arm(page: Page): Promise<void> {
@@ -68,7 +68,7 @@ function arm(page: Page): Promise<void> {
     const names: [string, number][] = ['BattleMainCB2', 'CB2_BagMenuRun', 'CB2_SetUpReshowBattleScreenAfterMenu2', 'ReshowBattleScreenAfterMenu'].map((n) => [n, sym(n)] as [string, number]);
     const cbName = (cb: number) => names.find(([, a]) => a !== undefined && !Number.isNaN(a) && ((a ^ cb) & ~1) === 0)?.[0] ?? `0x${(cb >>> 0).toString(16)}`;
     const romFrame = () => emu.read(main + 0x24, 32) as number;
-    const p: Probe = { pics: [], stages: [], clicked: 0, speeds: [] };
+    const p: Probe = { pics: [], stages: [], clicked: 0, speeds: [], moves: [] };
     (window as any).__probe = p;
     const clock = () => performance.now() - p.clicked;
     const clicked = () => { if (!p.clicked) p.clicked = performance.now(); };
@@ -80,21 +80,24 @@ function arm(page: Page): Promise<void> {
       if (!p.clicked) return;
       const cb = emu.read(main + 4, 32);
       if (cb !== was) { was = cb; p.stages.push({ t: clock(), rom: romFrame(), cb: cbName(cb) }); }
+      const move = emu.read(sym('gCurrentMove'), 16) as number;
+      if (p.moves.at(-1) !== move) p.moves.push(move);
     });
     let last: Uint8ClampedArray | null = null;
     let stopped = false;
-    let urls = 0;
+    let urls = 0, lowUrls = 0;
     const paint = () => {
       if (stopped) return;
       requestAnimationFrame(paint);
       const d = c2d.getImageData(0, 0, 240, 160).data;
-      let luma = 0, changed = 0, keyed = 0;
+      let luma = 0, changed = 0, keyed = 0, blue = 0;
       for (let i = 0; i < d.length; i += 4) {
         luma += d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11;
         if (!d[i + 3]) keyed++;
+        else if (d[i + 3] === 255 && !d[i] && !d[i + 1] && d[i + 2] > 40) blue++;
         if (last && (last[i] !== d[i] || last[i + 1] !== d[i + 1] || last[i + 2] !== d[i + 2] || last[i + 3] !== d[i + 3])) changed++;
       }
-      if (p.clicked && (changed || !p.pics.length)) p.pics.push({ t: clock(), luma: Math.round(luma / 38400), changed, keyed, shown: !menu.hidden, ...(urls++ < 8 ? { url: canvas.toDataURL() } : {}) });
+      if (p.clicked && (changed || !p.pics.length)) p.pics.push({ t: clock(), luma: Math.round(luma / 38400), changed, keyed, blue, shown: !menu.hidden, ...(urls++ < 8 || urls % 12 === 0 || (keyed < 240 * 160 / 4 && lowUrls++ < 12) ? { url: canvas.toDataURL() } : {}) });
       last = d;
     };
     requestAnimationFrame(paint);
@@ -104,7 +107,7 @@ function arm(page: Page): Promise<void> {
 
 /** The times, and the two things that hold on any machine: at speed from the click to the battle's
  *  return and not after, and no picture that is not the battle's on the way back. */
-async function report(page: Page, name: string): Promise<void> {
+async function report(page: Page, name: string, walked = true): Promise<void> {
   const p = await page.evaluate(() => (window as any).__probeOff() as Probe);
   const dir = process.env.HBR_DELAYS_OUT;
   // The first picture after the click: the prompt coming off the box, and then the fight going on.
@@ -114,7 +117,9 @@ async function report(page: Page, name: string): Promise<void> {
   const start = p.stages[0];
   // One picture darker than those either side: with the bases and the box up, and no mon on them, it
   // is the battle's first frames shown before they were drawn. Cam's "flashes".
-  const dips = p.pics.filter((x, i) => i > 0 && i + 1 < p.pics.length && (x.keyed < 240 * 160 / 8 || x.luma < Math.min(p.pics[i - 1].luma, p.pics[i + 1].luma) - 10));
+  const dips = !walked ? [] : p.pics.filter((x, i) => i > 0 && i + 1 < p.pics.length && (x.keyed < 240 * 160 / 8 || x.luma < Math.min(p.pics[i - 1].luma, p.pics[i + 1].luma) - 10));
+  // The key dimmed by a fade and left standing: solid blue where the world should be.
+  const blue = p.pics.filter((x) => x.blue > 1000);
   const line = {
     name,
     promptOffMs: Math.round(pics[0]?.t ?? -1),
@@ -123,7 +128,10 @@ async function report(page: Page, name: string): Promise<void> {
     romFrames: back && start ? back.rom - start.rom : -1,
     stages: p.stages.map((x) => `${Math.round(x.t)}ms f${x.rom - (start?.rom ?? 0)} ${x.cb}`),
     speeds: p.speeds.map((x) => `${Math.round(x.t)}ms x${x.x}${x.outcome ? ' over' : ''}`),
+    moves: p.moves,
     dips: dips.map((x) => `${Math.round(x.t)}ms luma ${x.luma} keyed ${x.keyed}`),
+    bluePictures: blue.length,
+    blueMs: blue.length ? Math.round(blue.at(-1)!.t - blue[0].t) : 0,
   };
   console.log(JSON.stringify(line));
   if (dir) {
@@ -133,9 +141,10 @@ async function report(page: Page, name: string): Promise<void> {
     p.pics.forEach((x, i) => { if (x.url) writeFileSync(`${dir}/${name}-${stamp}-${i}-${Math.round(x.t)}ms.png`, Buffer.from(x.url.split(',')[1], 'base64')); });
   }
   expect.soft(line.dips, `${name}: every picture is the battle's`).toEqual([]);
+  expect.soft(line.bluePictures, `${name}: no solid blue`).toBe(0);
   const fast = p.speeds.filter((x) => !x.outcome);
-  expect.soft(fast.map((x) => x.x), `${name}: fast from the click, then one steady speed`).toEqual([8, 1]);
-  expect.soft(fast[0]?.t ?? 999, `${name}: fast from the click`).toBeLessThan(100);
+  expect.soft(fast.map((x) => x.x), `${name}: fast from the click, then one steady speed`).toEqual(walked ? [8, 1] : []);
+  if (walked) expect.soft(fast[0]?.t ?? 999, `${name}: fast from the click`).toBeLessThan(100);
 }
 
 const leadIndex = (page: Page) => spike(page, (s) => s.rom.emu.read(s.art.sym('gBattlerPartyIndexes'), 16));
@@ -250,3 +259,32 @@ test('a ball: fast to the throw, then one speed through the catch', async ({ bro
   await report(page, 'ball');
   await ctx.close();
 });
+
+for (const [name, move] of [['futuresight', 248], ['psychic', 94], ['thunderwave', 86]] as const) {
+  test(`${name}: its fade plays at one speed and the battle's picture stays whole`, async ({ browser }) => {
+    test.setTimeout(240_000);
+    const ctx = await browser.newContext(desk);
+    const page = await ctx.newPage();
+    await withTeam(page);
+    // The room's ANIM on, as Cam's was: a #solo page has it off.
+    await spike(page, (s) => s.rom.pace(5, true));
+    await intoBattle(page);
+    await page.evaluate((move) => {
+      const s = (window as any).__spike, at = s.art.sym('gBattleMons');
+      s.rom.emu.write(at + 0x0c, move, 16);
+      s.rom.emu.write(at + 0x24, 10, 8);
+      // ...and the foe with it too: Cam's was the foe's.
+      for (const m of [0x64, 0x66, 0x68, 0x6a]) s.rom.emu.write(at + m, move, 16);
+    }, move);
+    await page.waitForTimeout(200);
+    await arm(page);
+    await page.locator('.bm-cell').first().click();
+    await expect(page.locator('#battle-menu')).toBeHidden({ timeout: 300 });
+    const dir = process.env.HBR_DELAYS_OUT;
+    if (dir) for (let i = 0; i < 26; i++) await page.screenshot({ path: `${dir}/${name}-page-${String(i).padStart(2, '0')}.jpg`, quality: 70, scale: 'css' });
+    await page.waitForTimeout(500);
+    await windowsBack(page);
+    await report(page, name, false);
+    await ctx.close();
+  });
+}

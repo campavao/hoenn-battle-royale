@@ -32,7 +32,7 @@ export const FILE_SECONDS = {
   'spikeb-people.spec.ts': 125,
   'spikeb-flow.spec.ts': 250,
   'spikeb-radial.spec.ts': 130,
-  'spikeb-delays.spec.ts': 300,
+  'spikeb-delays.spec.ts': 330,
   'spikeb-summary.spec.ts': 130,
   'spikeb-windows.spec.ts': 542,
   'spikeb-room.spec.ts': 230,

@@ -845,9 +845,18 @@ export function seeThroughAlpha(r: number, g: number, b: number): number {
  *  (seeThroughAlpha). Safari draws the url() filter on a WebGL canvas not at all -- the
  *  key itself, solid blue (Cam's 2026-10-08 phone shot) -- so where the core lets the
  *  page copy the picture, the page keys the copy instead. */
-export function keyPicture(rgba: Uint8ClampedArray): void {
+export function keyPicture(rgba: Uint8ClampedArray, fading = false): void {
   for (let i = 0; i < rgba.length; i += 4) {
-    rgba[i + 3] = Math.round(255 * seeThroughAlpha(rgba[i] / 255, rgba[i + 1] / 255, rgba[i + 2] / 255));
+    const r = rgba[i], g = rgba[i + 1], b = rgba[i + 2];
+    rgba[i + 3] = Math.round(255 * seeThroughAlpha(r / 255, g / 255, b / 255));
+    // The key on its way down a fade (a move's fadetobg: FUTURE SIGHT, PSYCHIC): the blue dims off
+    // the key, and stood there solid (Cam, 11-04, 10:28). As far down as it has gone, the world
+    // behind it goes dark instead, which is what a fade is. A fade to black keeps red and green at
+    // nothing; with none on, a navy is a navy.
+    if (fading && !r && !g && b && rgba[i + 3]) {
+      rgba[i + 2] = 0;
+      rgba[i + 3] = 255 - b;
+    }
   }
 }
 
