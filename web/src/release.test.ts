@@ -249,7 +249,7 @@ class FakeCache {
 /** sw.js with a network that serves `files` (path+search -> body) unless `offline`. */
 function runWorker(files: Record<string, string>) {
   const cache = new FakeCache();
-  const net = { offline: false, asked: [] as string[] };
+  const net = { offline: false, delayMs: 0, asked: [] as string[] };
   const listeners: Record<string, (e: unknown) => void> = {};
   const self = {
     location: new URL('/sw.js', ORIGIN),
@@ -263,6 +263,7 @@ function runWorker(files: Record<string, string>) {
     const u = new URL(req.url);
     net.asked.push(u.pathname + u.search);
     if (net.offline) throw new TypeError('Failed to fetch');
+    if (net.delayMs) await new Promise((done) => setTimeout(done, net.delayMs));
     const body = files[u.pathname + u.search] ?? files[u.pathname];
     // vite preview answers every file with `Vary: Origin`, as a CORS-aware server may.
     return body === undefined ? new Response('nope', { status: 404 }) : new Response(body, { status: 200, headers: { vary: 'Origin' } });
@@ -450,12 +451,37 @@ describe('the service worker (POK-330 #23)', () => {
     expect(assets()).toEqual([]);
   });
 
-  it('everything else is served from the cache and freshened behind it', async () => {
+  // Cam's 11-04 play-test, a day after new How to Play pictures went live: "This still hasn't
+  // changed". A file with a fixed name came from the cache and was freshened behind it, so a
+  // release reached a player's second look.
+  it("a file with a fixed name is the server's on the first look after a release", async () => {
     const files = { '/field-maps/A.png': 'still-1' };
     const sw = runWorker(files);
     expect(await sw.get('/field-maps/A.png')).toBe('still-1');
     files['/field-maps/A.png'] = 'still-2';
+    expect(await sw.get('/field-maps/A.png')).toBe('still-2');
+    sw.net.offline = true;
+    expect(await sw.get('/field-maps/A.png')).toBe('still-2');
+  });
+
+  it('a slow network does not hold a file it has up: the copy now, the new one for next time', async () => {
+    const files = { '/field-maps/A.png': 'still-1' };
+    const sw = runWorker(files);
+    await sw.get('/field-maps/A.png');
+    files['/field-maps/A.png'] = 'still-2';
+    sw.net.delayMs = 2000;
     expect(await sw.get('/field-maps/A.png')).toBe('still-1');
+    sw.net.delayMs = 0;
+    expect(await sw.get('/field-maps/A.png')).toBe('still-2');
+  });
+
+  it("a server's refusal does not take away a file it has", async () => {
+    const files: Record<string, string> = { '/field-maps/A.png': 'still-1' };
+    const sw = runWorker(files);
+    await sw.get('/field-maps/A.png');
+    delete files['/field-maps/A.png'];
+    expect(await sw.get('/field-maps/A.png')).toBe('still-1');
+    files['/field-maps/A.png'] = 'still-2';
     expect(await sw.get('/field-maps/A.png')).toBe('still-2');
   });
 
