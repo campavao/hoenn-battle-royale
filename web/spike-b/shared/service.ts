@@ -448,7 +448,7 @@ export class WorldService {
     this.where.delete(p.id);
     if (!room) return;
     room.members.delete(p.id);
-    if (toBot) room.host?.toBot(p.id);
+    if (toBot) room.host?.toBot(p.id, p.team, p.bag);
     else room.host?.leave(p.id);
     room.streams.delete(p.id);
     this.closeLog(room, p.id);
@@ -556,6 +556,7 @@ export class WorldService {
     const host = new Host(r, bots, this.opts.maps, undefined, { onLog: (seat, log) => { this.publishLog(room.code, seat, log); } });
     for (const p of room.members.values()) { host.join(p.name, p.skin, undefined, p.id); p.heard = room.t0 = this.opts.now(); }
     host.lock();
+    host.settle();
     room.host = host;
     room.startsAt = null;
     room.t0 = this.opts.now();

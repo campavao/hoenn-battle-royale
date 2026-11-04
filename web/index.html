@@ -262,6 +262,11 @@
       #battle canvas { image-rendering: pixelated; width: min(100vw, 150vh); aspect-ratio: 240 / 160; height: auto; }
       /* A phone on its side: the battle between the pad's two halves, not under them. */
       @media (orientation: landscape) and (pointer: coarse) { #battle canvas { width: min(calc(100vw - 2 * (env(safe-area-inset-left) + 200px)), 150vh); } }
+      /* The Hall of Fame with a mouse: a window's size in the middle, the curtain behind it. */
+      body.desk-hud #battle.on.fame { background: transparent; place-items: center; align-content: center; padding-top: 0; }
+      body.desk-hud #battle.on.fame canvas { width: calc(var(--fame, 3) * 240px); }
+      body.desk-hud:has(#battle.on.fame) :is(#pad, #keys) { visibility: hidden; }
+      #battle.on.fame { background: transparent; }
       #battle .note { position: absolute; top: 12px; left: 12px; right: 12px; text-align: center; color: #9fb3c0; }
           /* The live game's stage (web/index.html, ui/stage.ts): the menu and the room. */
       #stage {

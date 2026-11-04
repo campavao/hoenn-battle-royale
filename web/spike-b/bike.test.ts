@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ACRO_HOPPING, ACRO_NORMAL, ACRO_WHEELIE, acroFrame, DIR_EAST, newMover, tick, type Keys, type Mover, type StepFn } from './sim';
+import { ACRO_HOPPING, ACRO_NORMAL, ACRO_WHEELIE, acroFrame, acroNear, DIR_EAST, newMover, tick, type Keys, type Mover, type StepFn } from './sim';
 import type { WorldMap } from '../src/bots/world';
 import type { PatchTable } from '../src/bots/patches';
 import patchJson from '../src/data/patches.json';
@@ -100,7 +100,7 @@ describe('the ACRO BIKE on its own ground', () => {
     room.opening = opening;
     room.apply({ c: 'join', id: 1, bot: false, name: 'A', skin: 0, spot: { map, x, y }, facing });
     room.actor(1)!.calm = 1e9;
-    if (acro) room.apply({ c: 'ride', id: 1, acro: true });
+    room.apply({ c: 'ride', id: 1, acro });
     return room;
   };
   const hold = (room: Room, bits: number, frames: number) => { for (let i = 0; i < frames; i++) room.step(new Map([[1, [bits]]])); };
@@ -125,6 +125,39 @@ describe('the ACRO BIKE on its own ground', () => {
     expect([2, 3, 4, 5].map((k) => count('MAP_ROUTE119', k))).toEqual([3, 4, 10, 34]);
     const w = makeRoom(MAPS, patchJson as unknown as PatchTable, 1).world;
     for (const m of MAPS) for (const [cell] of m.acro ?? []) expect(w.cell(m.id, cell % m.w, Math.floor(cell / m.w)), m.id).toBe(1);
+  });
+
+  describe('SELECT near its ground', () => {
+    const fresh = (map: string, x: number, y: number) => {
+      const room = at(map, x, y, NORTH);
+      room.actor(1)!.likeAcro = undefined;
+      return room;
+    };
+
+    it('gets on the ACRO BIKE beside a rock or a rail, and the MACH BIKE away from them', () => {
+      for (const [map, x, y] of [['MAP_JAGGED_PASS', 22, 19], ['MAP_ROUTE119', 19, 7]] as const) {
+        const room = fresh(map, x, y);
+        mount(room);
+        expect(room.actor(1)!.m.acro, map).toBe(true);
+      }
+      const far = fresh('MAP_ROUTE101', 8, 8);
+      mount(far);
+      expect(far.actor(1)!.m.acro).toBe(false);
+    });
+
+    it('reaches two tiles, not three', () => {
+      const step: StepFn = () => null;
+      step.acroAt = (s) => (s.x === 10 && s.y === 10 ? 1 : 0);
+      expect(acroNear(step, { map: 'M', x: 12, y: 10 })).toBe(true);
+      expect(acroNear(step, { map: 'M', x: 12, y: 12 })).toBe(true);
+      expect(acroNear(step, { map: 'M', x: 13, y: 10 })).toBe(false);
+    });
+
+    it('the MACH BIKE USEd off the BAG is still the MACH BIKE there', () => {
+      const room = at('MAP_JAGGED_PASS', 22, 19, NORTH, false);
+      mount(room);
+      expect(room.actor(1)!.m.acro).toBe(false);
+    });
   });
 
   describe('Jagged Pass, (22,19) up the rocks to (22,15)', () => {

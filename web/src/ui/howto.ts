@@ -3,6 +3,7 @@
 // game plays out". Offered once after a player's first ROM import, and a row on the menu.
 // POK-430 gave it Cam's own sections and words, each over a picture out of the game's own
 // art (tools/br/export-howto.py's sheet), some of them moving.
+import SHEET_URL from './howto-sheet.png?url';
 import { TEXT_BLUE, TEXT_DARK, TEXT_GRAY, measure, skinSheet, wrapText, type EmeraldCanvas, type Rect } from './emerald';
 import { ROW_H, W, paintButtons, type ButtonSpec } from './screens';
 import type { DrawnScreen, Painted, Widget } from './stage';
@@ -64,8 +65,10 @@ export const PANELS: readonly Panel[] = [
   },
 ];
 
-/** tools/br/export-howto.py's sheet: its pictures, the screen's width and this tall. */
-export const SHEET = 'howto.png';
+/** tools/br/export-howto.py's sheet: its pictures, the screen's width and this tall. Named by
+ *  the build, by its bytes: a fixed name in /ui/ gets the service worker's copy first, so Cam's
+ *  11-04 play-test, a day after the new pictures went live, was still shown the old ones. */
+export const SHEET = SHEET_URL;
 export const ART_H = 150;
 /** The evolution backdrop's twelve frames, from the sheet's sixth picture down. */
 const EVO_Y = ART_H * 5;
@@ -212,7 +215,7 @@ export function howToScreen(model: () => HowToModel): DrawnScreen {
       if (artY !== undefined) c.drawUiPicture(SHEET, 0, artY, W, ART_H, art.x, art.y);
       const you = skinSheet(m.skin);
       if (panel.art === 'fog') {
-        // You, on Route 101, as the fog rolls over it.
+        // You, in Rustboro, as the fog rolls over it.
         if (you) c.drawSprite(you.gfx, Math.floor((W - you.w) / 2), art.y + 96 - you.h);
         fogOver(c, art, drift, 0.6);
       } else if (panel.art === 'evolve') {

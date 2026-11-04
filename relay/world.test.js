@@ -56,11 +56,13 @@ test("/world: two phones share one room at 60 Hz", async () => {
     assert.equal(hb.id, rb.you);
     // MAX 8 with FILL on, the live room's own: six bots for the seats nobody has.
     assert.equal(ha.state.actors.filter((x) => x.bot).length, 6, "the bots are in");
-    // The first frame puts them both at the truck and locks the match to everybody in it.
+    // The hello is the match itself: both of them in it and locked to everybody, or a page's curtain
+    // counts the bots and nobody else (Cam, 11-04: "29 TRAINERS"). No frame joins them a second time.
+    for (const id of [ha.id, hb.id]) assert.ok(ha.state.actors.some((x) => x.id === id), `${id} in the hello`);
+    assert.equal(ha.state.results.entrants.length, 8, "locked to all eight");
     const first = await a.until((m) => m.t === "f");
     const cmds = first.f[0].cmds ?? [];
-    assert.deepEqual(cmds.filter((c) => c.c === "join").map((c) => c.id), [ha.id, hb.id]);
-    assert.equal(cmds.at(-1).c, "lock");
+    assert.deepEqual(cmds.filter((c) => c.c === "join" || c.c === "lock"), []);
     assert.equal((await b.until((m) => m.t === "room")).playing, true);
     // a walks: its keys come back acked
     a.send({ t: "in", s: 1, k: Array(20).fill(2) });

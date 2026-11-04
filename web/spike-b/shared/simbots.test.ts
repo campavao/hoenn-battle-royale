@@ -267,7 +267,8 @@ describe('Room.simBots', () => {
     await import('./battlesim');
     const heard: { from: number; f: number; events: BattleEvent[]; ago?: number }[] = [];
     link.onBattleLog = (from, f, events, ago) => heard.push({ from, f, events, ago });
-    const fighters = () => room.actors.filter((a) => a.bot && a.judge);
+    // Two bots: one on a marked spot has a fight too (bot-rules.test.ts).
+    const fighters = () => room.actors.filter((a) => a.bot && a.judge && a.foe > 0);
     const step = () => { link.frame(0); };
     for (let i = 0; i < 60 * 600 && !fighters().length; i++) step();
     const a = fighters()[0];

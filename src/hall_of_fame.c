@@ -616,7 +616,11 @@ static void Task_Hof_PrintMonInfoAfterAnimating(u8 taskId)
     {
         monSprite->oam.affineMode = ST_OAM_AFFINE_OFF;
         HallOfFame_PrintMonInfo(currMon, 0, 14);
+#if BR
+        gTasks[taskId].tFrameCount = BR_HOF_MON_FRAMES;
+#else
         gTasks[taskId].tFrameCount = 120;
+#endif
         gTasks[taskId].func = Task_Hof_TryDisplayAnotherMon;
     }
 }
@@ -660,7 +664,11 @@ static void Task_Hof_PaletteFadeAndPrintWelcomeText(u8 taskId)
 
     HallOfFame_PrintWelcomeText(0, 15);
     PlaySE(SE_APPLAUSE);
+#if BR
+    gTasks[taskId].tFrameCount = BR_HOF_CONFETTI_FRAMES;
+#else
     gTasks[taskId].tFrameCount = 400;
+#endif
     gTasks[taskId].func = Task_Hof_DoConfetti;
 }
 
@@ -672,7 +680,11 @@ static void Task_Hof_DoConfetti(u8 taskId)
 
         // Create new confetti every 4th frame for the first 290 frames
         // For the last 110 frames wait for the existing confetti to fall offscreen
+#if BR
+        if ((gTasks[taskId].tFrameCount & BR_HOF_CONFETTI_EVERY) == 0 && gTasks[taskId].tFrameCount > 110)
+#else
         if ((gTasks[taskId].tFrameCount & 3) == 0 && gTasks[taskId].tFrameCount > 110)
+#endif
             CreateHofConfettiSprite();
     }
     else
@@ -719,7 +731,11 @@ static void Task_Hof_DisplayPlayer(u8 taskId)
 #endif
     LoadWindowGfx(1, gSaveBlock2Ptr->optionsWindowFrameType, 0x21D, BG_PLTT_ID(13));
     LoadPalette(GetTextWindowPalette(1), BG_PLTT_ID(14), PLTT_SIZE_4BPP);
+#if BR
+    gTasks[taskId].tFrameCount = BR_HOF_PLAYER_FRAMES;
+#else
     gTasks[taskId].tFrameCount = 120;
+#endif
     gTasks[taskId].func = Task_Hof_WaitAndPrintPlayerInfo;
 }
 

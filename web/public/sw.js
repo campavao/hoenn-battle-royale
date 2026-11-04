@@ -27,8 +27,12 @@
 //     does not send it again.
 //   - `/emu/*`: the core, a js/wasm pair that must match. Network first, so both come
 //     from the same deploy: the HTTP cache makes that a 304 when nothing moved.
-//   - anything else of ours (map stills, sprites, icons): cache first, revalidated in
-//     the background.
+//   - anything else of ours (map stills, sprites, /ui/, icons): a fixed name, so what it
+//     holds can change under it. The server's copy if it answers in a moment, the kept one
+//     if it is slow, offline or refuses; the store is freshened either way. Served from the
+//     cache and freshened behind it, a release reached a player's second look (Cam, 11-04:
+//     "This still hasn't changed", a day after the new pictures went live). The request is
+//     the one the freshening made anyway; the HTTP cache makes it a 304 when nothing moved.
 //
 // Cross-origin isolation survives this. A cached Response carries the headers it was
 // stored with, and those came from a server that sets COOP/COEP (vercel.json), so
@@ -46,6 +50,9 @@ const VERSION_PATH = '/patch/br-version.json';
  *  matched on Vary, all of them missed offline and the page came back without its script
  *  (pwa.spec, POK-246). Nothing we serve differs by who asks. */
 const MATCH = { ignoreVary: true };
+
+/** How long a file we already hold waits for the server's before it goes up as it is. */
+const FRESH_WAIT_MS = 400;
 
 /** The one thing runtime caching cannot reach on its own. The navigation that loads the
  *  page happens BEFORE this worker controls anything, so `/` is never a fetch we see --
@@ -109,7 +116,7 @@ self.addEventListener('fetch', (event) => {
   } else if (path.startsWith('/emu/')) {
     event.respondWith(networkFirst(event, request));
   } else {
-    event.respondWith(cacheFirst(event, request));
+    event.respondWith(freshOrKept(event, request));
   }
 });
 
@@ -198,25 +205,17 @@ async function immutable(event, request, { onePerPath = false } = {}) {
   return response;
 }
 
-async function cacheFirst(event, request) {
-  const cached = await caches.match(request, MATCH);
-  if (cached) {
-    // Freshen it for next time, but do not make this load wait on the network.
-    event.waitUntil(revalidate(request));
-    return cached;
-  }
-  const response = await fetch(request);
-  if (storable(response)) event.waitUntil(put(request, response.clone()));
-  return response;
-}
-
-async function revalidate(request) {
-  try {
-    const response = await fetch(request);
-    if (storable(response)) await put(request, response);
-  } catch {
-    // Offline, or the file is gone: the cached copy stands.
-  }
+async function freshOrKept(event, request) {
+  const fresh = fetch(request).then((response) => {
+    if (storable(response)) event.waitUntil(put(request, response.clone()));
+    return response;
+  });
+  // The store happens whenever the server answers, this load or not.
+  event.waitUntil(fresh.catch(() => {}));
+  const kept = await caches.match(request, MATCH);
+  if (!kept) return fresh;
+  const late = new Promise((done) => setTimeout(done, FRESH_WAIT_MS, kept));
+  return Promise.race([fresh.then((response) => (response.ok ? response : kept), () => kept), late]);
 }
 
 /** Every /assets/ name a page or script mentions. A script names the chunks it imports
