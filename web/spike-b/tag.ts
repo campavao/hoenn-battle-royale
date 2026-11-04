@@ -26,8 +26,10 @@ export class Tag {
   /** `text` centred over (x, y), CSS pixels, kept on the window. */
   show(text: string, x: number, y: number, icon: HTMLCanvasElement | null = null): void {
     if (text !== this.text || icon !== this.icon) { this.text = text; this.icon = icon; this.el.dataset.text = text; this.paint(); }
-    const w = this.el.getBoundingClientRect().width;
-    const h = ((this.icon ? ICON_H : H) + POINT) * this.scale;
+    // Its size as painted: hidden, the element measures 0 wide, and the tag came up half its width
+    // to the right of where it stays (Cam, 11-04: "Is this still zooming in from the right?").
+    const w = this.c.width * this.scale;
+    const h =((this.icon ? ICON_H : H) + POINT) * this.scale;
     const left = Math.max(4, Math.min(innerWidth - w - 4, x - w / 2));
     this.el.style.transform = `translate(${Math.round(left)}px, ${Math.round(Math.max(4, y - h))}px)`;
     this.el.hidden = false;
