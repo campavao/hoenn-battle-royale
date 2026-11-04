@@ -84,6 +84,13 @@ test('sideways on an iPhone 13 mini: the corner, the bike, the moves and the thu
   const ctx = await browser.newContext({ viewport: { width: 712, height: 327 }, isMobile: true, hasTouch: true });
   const page = await ctx.newPage();
   await page.goto(`/?rom=${romHashParam()}#solo&nobots&safari=0&fog=900&seed=7`);
+  // Start can be reached on any glass: the panel scrolls when it's taller than the screen.
+  await page.setViewportSize({ width: 712, height: 180 });
+  await page.locator('#intro-go').scrollIntoViewIfNeeded({ timeout: 90_000 });
+  const start = (await boxOf(page, '#intro-go'))!;
+  expect(start.y + start.height, 'Start on the glass').toBeLessThanOrEqual(180);
+  expect(start.y).toBeGreaterThanOrEqual(0);
+  await page.setViewportSize({ width: 712, height: 327 });
   await page.locator('#intro-go').click({ timeout: 90_000 });
   await onField(page);
   // A team out of the DAY CARE's chest and the rest filled in, so the moves' column is up.

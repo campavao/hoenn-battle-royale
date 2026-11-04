@@ -232,7 +232,7 @@
       @media (orientation: landscape) and (pointer: coarse) { #battleview-host { left: calc(env(safe-area-inset-left) + 200px); right: calc(env(safe-area-inset-left) + 200px); } }
       /* A phone held upright: the battle at the top, the pad (which drives it) below. */
       @media (orientation: portrait) { #battle { place-items: start center; align-content: start; padding-top: calc(env(safe-area-inset-top) + 56px); } }
-      #intro { z-index: 4; position: fixed; inset: 0; display: grid; place-items: center; background: #000c; padding: 16px; }
+      #intro { z-index: 4; position: fixed; inset: 0; display: grid; place-items: safe center; overflow-y: auto; background: #000c; padding: 16px; }
       #intro div { max-width: 420px; background: #1b252c; border: 1px solid #4c7a99; border-radius: 10px; padding: 18px 20px; display: grid; gap: 10px; font-size: 15px; }
       #intro b { font-size: 17px; }
       #intro ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
