@@ -27,6 +27,7 @@
 // ROM's are; A at one takes it, for that trainer and off everybody's map.
 
 import { clerkAt, type Clerk } from './marts';
+import { rollWild, rollZone, wildDice } from './wild';
 import { leaderAt } from './gyms';
 import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, clashWeather, draw, eventForRing, legendOf } from '../../src/match/events';
 import { DOOR_Y, FINAL_CHANCE, STORIES, STORY_CHANCE, type Story, type StoryDoor } from '../../src/match/story';
@@ -120,6 +121,13 @@ export interface Actor {
    *  or one that lost would stand at it (brain.ts foughtLegends). */
   legendKey?: number;
   tried?: number[];
+  /** What a bot is fighting off a marked spot it stepped on (`foe` LEGEND_FOE, as a legendary): it is
+   *  nobody's to come back to, the spot is taken. `zone`: the Safari's battle (wild.ts zoneFight). */
+  wildFight?: { species: number; zone?: boolean };
+  /** The SAFARI BALLs a bot has thrown this Safari (a trainer's thirty), and what they took: its team
+   *  was dealt it for what it would have caught, and what it did catch comes off that (botParty). */
+  zoneThrown?: number;
+  zoneCaught?: number;
   /** The trainer a bot's last fight was with: theirs is the one word on its wounds. */
   foughtBy?: number;
   /** A bot's wounds: each slot's HP as a share of its most, as its last fight left it
@@ -152,8 +160,9 @@ export function legendMon(species: number, phase: number): PackedMon {
 const MAINLANDS = new Map<string, ReadonlySet<string>>();
 
 /** A bot's team: what it took, then what the seed deals it at this rung on the map it landed on, six
- *  at most. A trainer played on by a bot (`own`) has their own and nothing dealt. */
-export function botParty(seed: number, a: Pick<Actor, 'id' | 'm' | 'caught' | 'own' | 'moves' | 'dealt' | 'held'>, atPhase: number): PackedMon[] {
+ *  at most, less a row for each it really caught in the Zone, which is what the first rows stand for.
+ *  A trainer played on by a bot (`own`) has their own and nothing dealt. */
+export function botParty(seed: number, a: Pick<Actor, 'id' | 'm' | 'caught' | 'own' | 'moves' | 'dealt' | 'held' | 'zoneCaught'>, atPhase: number): PackedMon[] {
   const phase = a.held ?? atPhase;
   const taken = (a.caught ?? []).map((sp, i) => {
     const m = tradedMon(sp, phase), moves = a.moves?.[i];
@@ -161,7 +170,7 @@ export function botParty(seed: number, a: Pick<Actor, 'id' | 'm' | 'caught' | 'o
     return moves?.length ? { ...m, moves: moves.map((id) => ({ id, pp: 15, ppUps: 0 })), romMoves: true } : m;
   });
   if (a.own) return taken.slice(0, 6);
-  const dealt = dealParty(seed, a.id, phase, a.dealt ?? a.m.spot.map, gradeOf(seed, a.id));
+  const dealt = dealParty(seed, a.id, phase, a.dealt ?? a.m.spot.map, gradeOf(seed, a.id)).slice(a.zoneCaught ?? 0);
   // What it took stands in for the same kind dealt: no second of a mon it carries because of the seed.
   return taken.length ? [...taken, ...dealt.filter((m) => !taken.some((t) => t.species === m.species))].slice(0, 6) : dealt;
 }
@@ -244,7 +253,7 @@ export type RoomEvent =
   | { type: 'boss'; tick: number; id: number; n: number }
   /** Two bots saw each other: `id`'s page fights `a` against `b` in a hidden ROM and
    *  says who won (`bots`). Nobody's coin flip (CLAUDE.md: simulate every battle). */
-  | { type: 'bots'; tick: number; id: number; a: number; b: number; legend?: { key: number; species: number } };
+  | { type: 'bots'; tick: number; id: number; a: number; b: number; legend?: { key: number; species: number; patch?: boolean; zone?: boolean } };
 
 /** What a trainer who is out carried: the bag's items (not its key items or machines),
  *  money, and their team. */
@@ -417,6 +426,10 @@ const KEY_TO: Record<number, number> = { 1: KEY_DOWN, 2: KEY_UP, 3: KEY_LEFT, 4:
  *  once decided a full room before the first ring moved. A simulated fight holds its two for as long
  *  as it takes to play, a minute as a rule, which paces a room without this. */
 export const BOT_DUEL_GAP = 60 * 12;
+/** ...and a bot's fight off a marked spot at most this often, on a page's one hidden ROM (no simBots),
+ *  which a duel wants more: at every chance they took it, the first duel came 1.5 minutes later on
+ *  average, and up to 8.5 minutes in. The simulator has no one fight at a time, and no such limit. */
+export const BOT_WILD_GAP = 60 * 60;
 /** `judge` for a bot-vs-bot fight the host simulates itself (Room.simBots, battlesim.ts): no
  *  trainer's id is ever this, so no page takes it for its own. */
 export const HOST_JUDGE = -1;
@@ -566,6 +579,7 @@ export interface RoomState {
   opening?: number;
   /** No bot-vs-bot fight starts before this frame (BOT_DUEL_GAP). */
   duelAfter?: number;
+  wildAfter?: number;
   /** Room.simBots. */
   simBots?: boolean;
   events?: EventMark[];
@@ -648,6 +662,7 @@ export class Room {
   bench: Benched[] = [];
   results: Results = { round: 0, entrants: [], fallen: [], winner: 0 };
   duelAfter = 0;
+  wildAfter = 0;
   /** Bot-vs-bot fights are the host's to simulate (battlesim.ts), not a page's hidden ROM's: any
    *  number at once, when they meet. Off, as ever, until it has been played enough. */
   simBots = false;
@@ -695,7 +710,7 @@ export class Room {
   }
 
   state(): RoomState {
-    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...(this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}), ...(this.epoch ? { epoch: this.epoch } : {}), ...(this.opening ? { opening: this.opening } : {}), ...(this.duelAfter ? { duelAfter: this.duelAfter } : {}), ...(this.simBots ? { simBots: true } : {}), ...(this.events.length ? { events: structuredClone(this.events) } : {}), ...(this.gyms.length ? { gyms: structuredClone(this.gyms) } : {}), homes: structuredClone(this.homes) };
+    return { tick: this.tick, seed: this.seed, actors: structuredClone(this.actors), taken: [...this.taken], picked: [...this.picked], spills: structuredClone([...this.spills.values()]), bench: structuredClone(this.bench), results: structuredClone(this.results), ...(this.ringPhase !== RING_PHASE ? { ringPhase: this.ringPhase } : {}), ...(this.epoch ? { epoch: this.epoch } : {}), ...(this.opening ? { opening: this.opening } : {}), ...(this.duelAfter ? { duelAfter: this.duelAfter } : {}), ...(this.wildAfter ? { wildAfter: this.wildAfter } : {}), ...(this.simBots ? { simBots: true } : {}), ...(this.events.length ? { events: structuredClone(this.events) } : {}), ...(this.gyms.length ? { gyms: structuredClone(this.gyms) } : {}), homes: structuredClone(this.homes) };
   }
 
   load(s: RoomState): void {
@@ -704,6 +719,7 @@ export class Room {
     this.epoch = s.epoch ?? 0;
     this.opening = s.opening ?? 0;
     this.duelAfter = s.duelAfter ?? 0;
+    this.wildAfter = s.wildAfter ?? 0;
     this.simBots = s.simBots ?? false;
     this.events = structuredClone(s.events ?? []);
     this.gyms = structuredClone(s.gyms ?? []);
@@ -1323,7 +1339,8 @@ export class Room {
     if (end !== undefined && this.tick >= end + AFTER_WIN) this.newRound(r.round + 1);
     // The Safari is over: the bots drop at once, anywhere (they have no fly map).
     else if (was.safari && !ring.safari) {
-      for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) { this.dropOne(a); this.botLearns(a); }
+      // Pulled out of a Zone battle at the buzzer, as a trainer is (main.ts safariFrame).
+      for (const a of this.actors) if (a.bot && a.m.spot.map.startsWith(SAFARI)) { if (a.judge) this.part(a); this.dropOne(a); this.botLearns(a); }
     }
     else if (ring.phase !== was.phase) {
       // ISLAND CAVE's wall opens by itself once the ring has moved on a phase (br_story.c).
@@ -1483,6 +1500,7 @@ export class Room {
    *  ring's again (`settling`: not until the caller has seen to who fell). */
   private part(a: Actor, settling = false): void {
     if (!settling) a.held = undefined;
+    a.wildFight = undefined;
     // A legendary it let go of stands again, for whoever comes next.
     if (a.legendKey !== undefined) {
       this.picked.delete(a.legendKey);
@@ -1612,18 +1630,56 @@ export class Room {
     if (!this.simBots) this.duelAfter = this.tick + BOT_DUEL_GAP;
   }
 
+  /** A bot's step landed it on a marked spot nobody has taken. As a trainer's (Room.move, below) it is
+   *  taken that frame, for everybody, until the next phase (isTaken); and what lives there is a battle,
+   *  which only the host's simulator or a page's hidden ROM can fight. Neither free, on a room with no
+   *  simulator, and the bot walks on over it, for want of anybody to fight it: never a coin flip. */
+  private botOnPatch(a: Actor, events: RoomEvent[]): void {
+    const { map: id, x, y } = a.m.spot;
+    const p = this.patchesOn(id).find((q) => q.x === x && q.y === y && !this.isTaken(q.key));
+    const m = p && this.maps.get(id);
+    if (!p || !m) return;
+    const zone = !!this.ring().safari;
+    if (!this.simBots && !zone && this.tick < Math.max(this.duelAfter, this.wildAfter)) return;
+    const judges = this.simBots ? [] : this.freeJudges();
+    if (!this.simBots && !judges.length) return;
+    const rng = wildDice(this.seed, p.key, this.tick);
+    const species = zone ? rollZone(rng) : rollWild(this.seed, m, this.world.cell(id, x, y) === CLASS_WATER, rng);
+    // A table with nothing for this ground (br_wild.c's SPECIES_NONE): the spot's a trainer's to take,
+    // and theirs comes to no battle. So it does here.
+    this.taken.set(p.key, this.tick);
+    if (!species) return;
+    const judge = this.simBots ? HOST_JUDGE : judges[(this.tick >>> 3) % judges.length].id;
+    a.battling = true;
+    a.foe = LEGEND_FOE;
+    a.judge = judge;
+    a.since = this.tick;
+    this.hold(a);
+    a.wildFight = { species, ...(zone ? { zone } : {}) };
+    a.keys = a.last = 0;
+    events.push({ type: 'bots', tick: this.tick, id: judge, a: a.id, b: LEGEND_FOE, legend: { key: p.key, species, patch: true, ...(zone ? { zone } : {}) } });
+    if (!this.simBots && !zone) {
+      this.duelAfter = this.tick + BOT_DUEL_GAP;
+      this.wildAfter = this.tick + BOT_WILD_GAP;
+    }
+  }
+
   /** How a bot's legendary went, as it goes for a trainer (main.ts): caught, it is theirs, and off the
    *  map for good; their team down, they are out of the match; knocked out or run from, it stands
-   *  again as it was, and they have what the fight left them. A bot has one go at each. */
+   *  again as it was, and they have what the fight left them. A bot has one go at each. What it met on
+   *  a marked spot goes the same way, and there is nothing to stand again: the spot stays taken. */
   private legendOver(cmd: Extract<Command, { c: 'bots' }>): void {
     const a = this.actor(cmd.a);
-    if (!a?.bot || a.foe !== LEGEND_FOE || a.judge !== cmd.id || !a.battling || a.legendKey === undefined) return;
-    // Up to a bag's worth of balls: more than the four a fight with a trainer can spend.
-    if (cmd.used && a.loot) spend(a.loot.items, cmd.used[0].slice(0, 32));
+    if (!a?.bot || a.foe !== LEGEND_FOE || a.judge !== cmd.id || !a.battling || (a.legendKey === undefined && !a.wildFight)) return;
+    // Up to a bag's worth of balls: more than the four a fight with a trainer can spend. The Zone's are
+    // the Zone's, and none of them in its bag.
+    if (a.wildFight?.zone) a.zoneThrown = (a.zoneThrown ?? 0) + (cmd.used?.[0].length ?? 0);
+    else if (cmd.used && a.loot) spend(a.loot.items, cmd.used[0].slice(0, 32));
     if (cmd.winner === a.id) {
-      const species = this.spills.get(a.legendKey)?.bag.mons?.[0]?.species;
+      const species = a.wildFight?.species ?? this.spills.get(a.legendKey!)?.bag.mons?.[0]?.species;
       const left = cmd.hp?.slice(0, 5).map((v) => Math.min(1, Math.max(0, v))) ?? a.wear ?? [];
       a.legendKey = undefined;
+      if (a.wildFight?.zone) a.zoneCaught = (a.zoneCaught ?? 0) + 1;
       if (species) {
         a.caught = [species, ...(a.caught ?? [])];
         a.moves = a.moves && [[], ...a.moves];
@@ -1635,6 +1691,8 @@ export class Room {
       this.botOut(a, '', { wild: true });
       return;
     } else if (cmd.drew) a.wear = cmd.drew[0].slice(0, 6).map((v) => Math.min(1, Math.max(0, v)));
+    // A page's hidden ROM says it in `hp`: knocked out and not caught, what the fight left its team.
+    else if (cmd.hp && a.wildFight) a.wear = cmd.hp.slice(0, 6).map((v) => Math.min(1, Math.max(0, v)));
     this.part(a);
   }
 
@@ -1965,12 +2023,12 @@ export class Room {
     this.actors = [...this.actors.filter((a) => a.bot), ...humans];
     this.actors.sort((p, q) => p.id - q.id);
     // A bot's pickings were the old round's, as are `picked` and the spills cleared below.
-    for (const a of this.actors) if (a.bot) { a.bleedAt = undefined; a.loot = undefined; if (a.judge) this.part(a); a.caught = a.tried = a.field = a.moves = a.wear = undefined; a.own = false; a.dealt = a.held = undefined; this.botLearns(a); }
+    for (const a of this.actors) if (a.bot) { a.bleedAt = undefined; a.loot = undefined; if (a.judge) this.part(a); a.held = a.caught = a.tried = a.field = a.moves = a.wear = a.zoneThrown = a.zoneCaught = undefined; a.own = false; a.dealt = undefined; this.botLearns(a); }
     // The bots open in the Zone with everybody, as the live host deals them (bots/host.ts).
     if (safari) for (const a of this.actors) if (a.bot) { a.m = newMover(this.zone(a.id)[0] ?? a.m.spot, a.m.facing); a.cruise = undefined; }
     // A walk-up the old round left half done starts no battle in this one.
     for (const a of this.actors) if (a.meet) { a.meet = undefined; a.battling = false; a.foe = 0; }
-    this.duelAfter = 0;
+    this.duelAfter = this.wildAfter = 0;
     this.events = [];
     this.gyms = [];
     this.homes = this.dealHomes(round);
@@ -2252,7 +2310,12 @@ export class Room {
           if (c && a.m.spot.x === c.counterX && a.m.spot.y === c.counterY) events.push({ type: 'nurse', tick: this.tick, id: a.id, map: a.m.spot.map });
         }
       }
-    } else if (!a.m.action) a.arriving = false;
+    } else if (!a.m.action) {
+      // A bot's step does to a marked spot what a trainer's does (Cam, 11-04: "if we don't treat bots
+      // like normal players then we run into issues").
+      if (a.arriving) this.botOnPatch(a, events);
+      a.arriving = false;
+    }
     a.last = bits;
   }
 
@@ -2356,7 +2419,7 @@ export class Room {
     for (const [k, by] of this.picked) { mix(k); mix(by); }
     for (const b of this.bench) { mix(b.id); mix(b.skin); mix(b.away ? 1 : 0); str(b.name); }
     const r = this.results;
-    mix(r.round); mix(r.winner); mix(r.wonAt ?? 0); mix(this.epoch); mix(this.opening); mix(this.duelAfter); for (const [n, w] of this.gyms) { mix(n); mix(w.length); }
+    mix(r.round); mix(r.winner); mix(r.wonAt ?? 0); mix(this.epoch); mix(this.opening); mix(this.duelAfter); mix(this.wildAfter); for (const [n, w] of this.gyms) { mix(n); mix(w.length); }
     for (const h of this.homes) { mix(h.n); mix(h.species); mix(h.busy); mix(h.gone ? 1 : 0); }
     for (const e of this.events) { mix(e.key); mix(e.x); mix(e.y); mix(e.species); mix(e.story?.length ?? 0); mix(e.opened ? 1 : 0); if (e.trader) { mix(e.trader.x); mix(e.trader.y); mix(e.trader.species); mix(e.trader.busy); } }
     for (const [id] of r.entrants) mix(id);

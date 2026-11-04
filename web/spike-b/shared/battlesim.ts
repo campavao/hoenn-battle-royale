@@ -19,6 +19,7 @@ import { logMs, START_MS, type BattleEvent, type LogMon, type LogSide, type Side
 import { decide, pickNext } from './simbrain';
 import { translate, STATUS_BITS } from './simlog';
 import { BAG_ITEMS, heldId, type BagItem } from './simnames';
+import { ITEM_MASTER_BALL, ballTakes } from './wild';
 import LEARNSET_FIXES from './learnset-fixes.json';
 
 export interface SimSide {
@@ -46,7 +47,15 @@ export interface SimOptions {
   /** `b` is a wild mon, as a trainer's legendary is: `a` can throw and run, and has to do one or the
    *  other to come away with anything. The ROM's own sums for both (battle_script_commands.c,
    *  br_catch.c, battle_util.c). */
-  wild?: { catchRate: number; catchAt: number };
+  wild?: {
+    catchRate: number;
+    catchAt: number;
+    /** On a marked spot and no legendary (room.ts botOnPatch): what a trainer does there, who is not
+     *  there for it alone. A ball at once, which is when a ROYALE BALL's odds are best; the fight on
+     *  with none, a KO being the only other way past it; and away once the last of the team is low,
+     *  before it costs the match. What's out in the grass picks its moves at random, as Emerald's do. */
+    patch?: boolean;
+  };
   /** TURN_CAP, for a test. */
   turnCap?: number;
 }
@@ -384,24 +393,8 @@ function useItem(battle: any, side: any, row: { item: BagItem | null; used: bool
 
 const FOG = { id: 'fog', name: 'fog', fullname: 'fog', effectType: 'Condition' };
 
-const ITEM_MASTER_BALL = 1;
 /** Every ball but the MASTER BALL is a ROYALE BALL in a match (br_items.c). */
 const BALL_NAME = (id: number) => (id === ITEM_MASTER_BALL ? 'MASTER BALL' : 'ROYALE BALL');
-/** A ball thrown at `mon`, with the ROM's sums: atkcatch's odds and shakes, a ROYALE BALL's ULTRA odds
- *  doubled on the first turn (br_catch.c BrCatch_BallMultiplier). */
-export function ballTakes(ball: number, mon: { hp: number; maxhp: number; status: string }, catchRate: number, firstTurn: boolean, rng: () => number): boolean {
-  if (ball === ITEM_MASTER_BALL) return true;
-  const multiplier = firstTurn ? 40 : 20;
-  let odds = Math.floor((Math.floor((catchRate * multiplier) / 10) * (mon.maxhp * 3 - mon.hp * 2)) / (3 * mon.maxhp));
-  if (mon.status === 'slp' || mon.status === 'frz') odds *= 2;
-  else if (mon.status === 'psn' || mon.status === 'tox' || mon.status === 'brn' || mon.status === 'par') odds = Math.floor((odds * 15) / 10);
-  if (odds > 254) return true;
-  if (odds <= 0) return false;
-  const shakes = Math.floor(1048560 / Math.floor(Math.sqrt(Math.floor(Math.sqrt(Math.floor(16711680 / odds))))));
-  for (let i = 0; i < 4; i++) if (rng() * 65536 >= shakes) return false;
-  return true;
-}
-
 /** RUN from a wild mon, with the ROM's sums (battle_util.c TryRunFromBattle): a faster one always
  *  gets away, a slower one on a byte's odds that grow with each try. */
 function runTakes(mine: number, theirs: number, tries: number, rng: () => number): boolean {
@@ -449,6 +442,7 @@ export function* simulation(a: SimSide, b: SimSide, opts: SimOptions): Generator
     trainers: [a.name, b.name] as [string, string],
     mon: (side: Side, slot: number) => speciesName(inputs[side].party[slot]?.species ?? 0),
     moveNum: (name: string) => numOfMove.get(name) ?? 0,
+    ...(opts.wild ? { wild: true } : {}),
   };
 
   if (opts.fog) {
@@ -490,12 +484,20 @@ export function* simulation(a: SimSide, b: SimSide, opts: SimOptions): Generator
         if (!next || !battle.choose(side.id, `switch ${side.pokemon.indexOf(next) + 1}`)) battle.choose(side.id, 'default');
         continue;
       }
+      // Emerald's wild mons have no AI flags: every move scores the same (battle_ai_script_commands.c).
+      if (n === 1 && opts.wild?.patch) {
+        const moves: { pp?: number; disabled?: boolean }[] = request.active[0].moves;
+        const can = moves.map((_, i) => i).filter((i) => !moves[i].disabled && moves[i].pp !== 0);
+        if (!can.length || !battle.choose(side.id, `move ${can[Math.floor(rng() * can.length)] + 1}`)) battle.choose(side.id, 'default');
+        continue;
+      }
       // At a wild mon, what a trainer goes there for: a ball, once it is low enough to be worth one
       // (a MASTER BALL at once); with none left, away, before it costs the match.
       if (n === 0 && opts.wild) {
         const me = side.active[0], wild = side.foe.active[0];
         const ball = left[0];
-        if (ball && (ball.id === ITEM_MASTER_BALL || wild.hp / wild.maxhp <= opts.wild.catchAt)) {
+        const patch = opts.wild.patch;
+        if (ball && (ball.id === ITEM_MASTER_BALL || wild.hp / wild.maxhp <= opts.wild.catchAt || (patch && battle.turn <= 1))) {
           if (--ball.n <= 0) left.shift();
           thrown.push(ball.id);
           battle.add('bag', side.id, BALL_NAME(ball.id));
@@ -509,7 +511,8 @@ export function* simulation(a: SimSide, b: SimSide, opts: SimOptions): Generator
           battle.choose(side.id, 'default');
           continue;
         }
-        if (!ball) {
+        const lastLow = patch && me.hp / me.maxhp <= opts.wild.catchAt && !side.pokemon.some((p: { hp: number; isActive: boolean }) => p.hp > 0 && !p.isActive);
+        if (patch ? lastLow : !ball) {
           if (runTakes(me.storedStats.spe, wild.storedStats.spe, runs++, rng)) {
             ran = true;
             battle.add('say', 'Got away safely!');

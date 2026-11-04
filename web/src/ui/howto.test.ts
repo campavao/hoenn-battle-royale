@@ -115,6 +115,10 @@ describe('the HOW TO PLAY screen', () => {
     expect(Math.abs(top - (520 - (foot.y + foot.h)))).toBeLessThanOrEqual(1);
   });
 
+  it("asks for the sheet by the build's name, not a fixed one in /ui/ that the worker keeps", () => {
+    expect(SHEET).toMatch(/^\/.*howto-sheet.*\.png$/);
+  });
+
   it('draws each picture off the sheet, and the fog over the whole screen', () => {
     const screen = screenAt(0, 2);
     const rows: Record<string, number> = {};

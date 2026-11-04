@@ -16,11 +16,19 @@ something a trainer chose to do, and a bot has neither the stone nor the friend.
 And the maps with a fishing table, for spike B's rod (web/spike-b/fish.ts): a cast where
 there is none is never a bite (Fishing_CheckForBite's DoesCurrentMapHaveFishingMons).
 
+And what a bot's step on a marked spot needs to meet what a trainer's meets (Cam, 11-04): each
+map's tables slot by slot, every species' catch rate, and the numbers br_zone.c's stand-ins and
+any-first-stage draw go by.
+
 Writes web/src/data/encounters.json:
   { "maps": { "MAP_ROUTE101": [277, 288, 290], ... },   species ids, commonest first
     "fish": ["MAP_ROUTE102", ...],                      maps with a fishing table
     "evolve": { "277": [16, 278], ... },                species -> [level, into]
-    "names": { "277": "TREECKO", ... } }                species -> the ROM's name
+    "names": { "277": "TREECKO", ... },                 species -> the ROM's name
+    "slots": { "MAP_ROUTE101": { "land": [...12] } },   the tables, slot by slot (and "water", 5)
+    "catch": { "277": 45, ... },                        species -> catch rate
+    "stats": { "277": [310, 7, 7], ... },               br_zone.c's Wild(): stat total, two types
+    "zone": [1, 4, ...] }                               ...and of those, what nothing evolves into
 
 The names are every species with one (src/data/text/species_names.h), not just the
 ones a bot is dealt: a bot's mon grows into its evolution, and a mon a player drops
@@ -85,6 +93,37 @@ def load_species_names(ids):
     return by_name
 
 
+def load_species_info(ids):
+    """species id -> (base stat total, type names, catch rate), off species_info.h, for what a
+    marked spot rolls (web/spike-b/shared/wild.ts): a catch's odds and br_zone.c's stand-ins.
+    The placeholder rows are a macro with no stats of their own, and do not match."""
+    text = open(rp("src", "data", "pokemon", "species_info.h"), encoding="utf-8").read()
+    row = re.compile(
+        r"\[(SPECIES_[A-Z0-9_]+)\]\s*=\s*\{\s*"
+        r"\.baseHP\s*=\s*(\d+),\s*\.baseAttack\s*=\s*(\d+),\s*\.baseDefense\s*=\s*(\d+),\s*"
+        r"\.baseSpeed\s*=\s*(\d+),\s*\.baseSpAttack\s*=\s*(\d+),\s*\.baseSpDefense\s*=\s*(\d+),\s*"
+        r"\.types\s*=\s*\{\s*(TYPE_\w+)\s*,\s*(TYPE_\w+)\s*\},\s*\.catchRate\s*=\s*(\d+)"
+    )
+    out = {}
+    for m in row.finditer(text):
+        if m.group(1) in ids:
+            out[ids[m.group(1)]] = (sum(int(m.group(i)) for i in range(2, 8)), (m.group(8), m.group(9)), int(m.group(10)))
+    return out
+
+
+def load_not_wild(ids):
+    """br_zone.c's sNotWild: what no route or Zone ever rolls."""
+    text = open(rp("src", "br", "br_zone.c"), encoding="utf-8").read()
+    body = re.search(r"sNotWild\[\]\s*=\s*\{(.*?)\};", text, re.S).group(1)
+    return {ids[name] for name in re.findall(r"SPECIES_[A-Z0-9_]+", body)}
+
+
+def load_evolved(ids):
+    """Everything anything evolves into, by any means (br_zone.c's MarkEvolved)."""
+    text = open(rp("src", "data", "pokemon", "evolution.h"), encoding="utf-8").read()
+    return {ids[name] for name in re.findall(r"\{EVO_\w+,\s*\w+,\s*(SPECIES_[A-Z0-9_]+)\}", text) if name in ids}
+
+
 def main():
     ids = load_species_ids()
     with open(rp("src", "data", "wild_encounters.json"), encoding="utf-8") as f:
@@ -93,6 +132,9 @@ def main():
     out = {}
     fish = set()
     unknown = set()
+    # Slot by slot, for a roll at Emerald's odds (br_wild.c's LandSlot and WaterSlot); `maps` above
+    # is the bot dealer's, with the slots folded.
+    slots = {}
     for group in groups:
         # The Pyramid and Pike headers have no `map` -- they are the Frontier's own
         # rotating tables, not a place a bot can stand.
@@ -101,6 +143,14 @@ def main():
         for entry in group.get("encounters", []):
             if entry.get("fishing_mons") and "map" in entry:
                 fish.add(entry["map"])
+            if "map" in entry and entry["map"] not in slots:
+                row = {}
+                for field, key in (("land_mons", "land"), ("water_mons", "water")):
+                    mons = entry.get(field, {}).get("mons", [])
+                    if mons:
+                        row[key] = [ids[m["species"]] for m in mons if m["species"] in ids]
+                if row:
+                    slots[entry["map"]] = row
             land = entry.get("land_mons")
             if not land or "map" not in entry:
                 continue
@@ -126,11 +176,22 @@ def main():
 
     evolve = load_level_evolutions(ids)
     names = load_species_names(ids)
+    info = load_species_info(ids)
+    not_wild = load_not_wild(ids)
+    evolved = load_evolved(ids)
+    # br_zone.c's Wild(): every species with stats, but the ones it names.
+    wild = sorted(s for s in info if s not in not_wild)
+    type_names = sorted({t for _, types, _ in info.values() for t in types})
+    stats = {str(s): [info[s][0], type_names.index(info[s][1][0]), type_names.index(info[s][1][1])] for s in wild}
 
     path = rp("web", "src", "data", "encounters.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"maps": flat, "fish": sorted(fish), "evolve": {str(k): v for k, v in sorted(evolve.items())},
-                   "names": {str(k): v for k, v in sorted(names.items())}},
+                   "names": {str(k): v for k, v in sorted(names.items())},
+                   "slots": {k: slots[k] for k in sorted(slots)},
+                   "catch": {str(s): info[s][2] for s in sorted(info)},
+                   "stats": stats,
+                   "zone": [s for s in wild if s not in evolved]},
                   f, separators=(",", ":"))
 
     print(json.dumps({

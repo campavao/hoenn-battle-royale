@@ -13,6 +13,7 @@ import { ballsIn, battleItems, type Stack } from '../../src/bots/bag';
 import { WEATHER_DOWNPOUR, WEATHER_DROUGHT } from '../../src/match/events';
 import type { FameMon } from '../../src/ui/results';
 import type { SimOutcome, SimSide, simulation as Simulation } from './battlesim';
+import { catchRateOf, patchBalls, wildMon, zoneBalls, zoneFight } from './wild';
 
 /** One frame as a mirror needs it: what changed before anybody moved, the bots whose
  *  keys changed, and the trainers' inputs the frame used. Most frames a trainer uses one
@@ -55,8 +56,9 @@ interface SimFight {
   b: number;
   /** The meeting, as the room has it: an answer for an earlier one must not end a later one. */
   since: number;
-  /** `b` LEGEND_FOE: the legendary it is, not a bot. */
-  legend?: { key: number; species: number };
+  /** `b` LEGEND_FOE: the legendary it is, or what lived on the spot it stepped on (`patch`; `zone`, in
+   *  the Safari), not a bot. */
+  legend?: { key: number; species: number; patch?: boolean; zone?: boolean };
   /** The fight, a turn at a time. */
   run?: Generator<void, SimOutcome, void>;
   /** The answer and the frame it is due, once it has run. */
@@ -372,8 +374,15 @@ export class Host {
   }
 
   /** A legendary's side: its one mon at the rung. */
-  private legendSide({ species }: { key: number; species: number }): SimSide {
-    return { seat: LEGEND_FOE, name: speciesName(species), skin: 0, party: [legendMon(species, this.room.ring().phase + 1)] };
+  private legendSide({ species, patch }: { key: number; species: number; patch?: boolean }): SimSide {
+    const phase = this.room.ring().phase + 1;
+    return { seat: LEGEND_FOE, name: speciesName(species), skin: 0, party: [patch ? wildMon(species, phase) : legendMon(species, phase)] };
+  }
+
+  /** A bot's side on a marked spot: `simSide` with the balls it would throw there. */
+  private patchSide(id: number, zone?: boolean): SimSide {
+    const side = this.simSide(id);
+    return { ...side, ...(zone ? { items: [], balls: zoneBalls(side.party.length, this.room.actor(id)?.zoneThrown) } : { balls: patchBalls(side.party.length, side.balls ?? []) }) };
   }
 
   /** The meeting this fight is for is still on. */
@@ -412,9 +421,10 @@ export class Host {
   private simRun(f: SimFight): void {
     const r = this.room;
     try {
+      // Every number in it from the match: a fight can be run again from its seed.
+      const seed = (Math.imul(r.seed ^ f.since, 0x9e3779b1) ^ Math.imul(f.a, 0x85ebca6b) ^ Math.imul(f.b, 0xc2b2ae35)) >>> 0;
+      if (!f.run && f.legend?.zone) f.run = zoneRun(this.patchSide(f.a, true), f.legend.species, { seed, map: r.actor(f.a)?.m.spot.map ?? '' });
       if (!f.run) {
-        // Every number in it from the match: a fight can be run again from its seed.
-        const seed = (Math.imul(r.seed ^ f.since, 0x9e3779b1) ^ Math.imul(f.a, 0x85ebca6b) ^ Math.imul(f.b, 0xc2b2ae35)) >>> 0;
         // In the fog where they stand, it bites them as it does a trainer in a fight (Cam, 11-02),
         // from the turn the ring gets there: the fight plays out from the frame they met, so the ring
         // of the frame a turn ends on is known now (Cam, 11-03).
@@ -423,7 +433,8 @@ export class Host {
         // The weather a trainer would fight in here (room.ts weatherAt, br_story.c's), for all of it.
         const w = at ? r.weatherAt(at) : 0;
         const weather = w === WEATHER_DOWNPOUR ? 'raindance' : w === WEATHER_DROUGHT ? 'sunnyday' : undefined;
-        f.run = this.simulation!(this.simSide(f.a), f.legend ? this.legendSide(f.legend) : this.simSide(f.b), { seed, map: at?.map ?? '', fog, ...(weather ? { weather } as const : {}), ...(f.legend ? { wild: { catchRate: catchRateOf(f.legend.species), catchAt: LEGEND_CATCH } } : {}) });
+        const mine = f.legend?.patch ? this.patchSide(f.a) : this.simSide(f.a);
+        f.run = this.simulation!(mine, f.legend ? this.legendSide(f.legend) : this.simSide(f.b), { seed, map: at?.map ?? '', fog, ...(weather ? { weather } as const : {}), ...(f.legend ? { wild: { catchRate: catchRateOf(f.legend.species), catchAt: LEGEND_CATCH, ...(f.legend.patch ? { patch: true } : {}) } } : {}) });
       }
       const step = f.run.next();
       if (!step.done) return;
@@ -455,17 +466,19 @@ export class Host {
       b: f.b,
       winner,
       ...(hp ? { hp } : {}),
-      ...(winner ? {} : { drew: [out.shareA, out.shareB] as [number[], number[]] }),
+      // Nobody's hurt in the Zone.
+      ...(winner || f.legend?.zone ? {} : { drew: [out.shareA, out.shareB] as [number[], number[]] }),
       ...(out.caught ? { caught: out.shareB[0] } : {}),
       ...(out.usedA.length || out.usedB.length ? { used: [out.usedA, out.usedB] as [number[], number[]] } : {}),
     });
   }
 }
 
-/** A legendary's catch rate (src/data/pokemon/species_info.h): three, but GROUDON's and KYOGRE's five,
- *  and the two mythical gifts'. */
-const CATCH_RATES: Record<number, number> = { 404: 5, 405: 5, 151: 45, 251: 45 };
-const catchRateOf = (species: number) => CATCH_RATES[species] ?? 3;
+/** A Zone battle as a fight the host runs: all at once, it has no engine in it to wait for. */
+// eslint-disable-next-line require-yield
+function* zoneRun(side: SimSide, species: number, opts: { seed: number; map: string }): Generator<void, SimOutcome, void> {
+  return zoneFight(side, species, opts);
+}
 
 /** A mirror's frame: the same order the host used. */
 export function play(room: Room, f: Frame): RoomEvent[] {
