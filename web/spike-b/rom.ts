@@ -200,6 +200,9 @@ export interface RomBattles {
    *  as before it, the fight log ends, and the call resolves `{ ok: false, stalled: true }`.
    *  Does nothing on a ROM with no fight asked for. */
   abort(): void;
+  /** The fight's own BAG and party are being walked behind the page's windows: HURRY_SPEED and
+   *  quiet until `false`, or the fight's end. */
+  unseen(on: boolean): void;
   /** A choice menu is up in the fight under way (gBrBattle.menu): from here the shot clock is the
    *  one that counts. False with no fight under way; true on a patch that cannot say. */
   menuUp(): boolean;
@@ -659,6 +662,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
   // quiet: from a tap to the PARTY was 1.46 s (Cam, 2026-11-01, "there is always a delay").
   const hurryOn = () => { emu.setSpeed(HURRY_SPEED); quieten(true); };
   const hurryOff = () => { emu.setSpeed(1); quieten(false); };
+  let unseenOn = false;
   const settled = async () => {
     if (Number.isNaN(paletteAt)) return;
     hurryOn();
@@ -666,12 +670,12 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     await until(emu, () => { const f = fade(); return !f.active && f.y === 0; }, 90);
     hurryOff();
   };
-  /** Any fade from here until the call it returns: at HURRY_SPEED and quiet. */
-  const briskFades = () => {
+  /** Any fade from here until the call it returns, where `when` says: at HURRY_SPEED and quiet. */
+  const briskFades = (when: () => boolean = () => true) => {
     let on = false;
     const off = emu.onFrame(() => {
       const now = fade();
-      const f = now.active || now.y > 0; // and a screen held black while the next one loads
+      const f = (now.active || now.y > 0) && when(); // and a screen held black while the next one loads
       if (f === on) return;
       on = f;
       if (f) hurryOn(); else hurryOff();
@@ -989,7 +993,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       onStart();
       // Seen from here, so at the game's own speed from here (Cam, 11-02: "once something is about
       // to paint onto the screen for the first time, the animation should be normal"). The quick
-      // steps were for what nobody sees; a fade is hurried again once the first menu is up.
+      // steps were for what nobody sees; the fades of its end are hurried again, and only those. A
+      // ball opening and some moves fade the battle's palettes too, and went eight times as fast
+      // for as long as the fade ran (Cam, 11-04: "a quick speed up there as the ball catches").
       let calm: () => void = () => undefined;
       let unarmed: () => void = () => undefined;
       if (hurry) {
@@ -997,13 +1003,14 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         unarmed = emu.onFrame(() => {
           if (!emu.read(sym('gBrBattle') + BATTLE_MENU_AT, 8)) return;
           unarmed();
-          calm = briskFades();
+          calm = briskFades(() => emu.read(sym('gBattleOutcome'), 8) !== 0);
         });
       }
       // ...but for the stuck-fight net (stuck.ts), which ends one that never reached its menu.
       await until(emu, () => over() || aborted(), Infinity);
       unarmed();
       calm();
+      if (unseenOn) { unseenOn = false; hurryOff(); }
       weatherOff();
       if (buzzed) { emu.write(match, BR_PHASE_PLAY, 8); buzzed = false; }
       // The ring is the battle's: back on the field nothing of it is left to bleed the
@@ -1243,6 +1250,11 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       else foeLeft = true;
     },
     abort() { abortGen++; },
+    unseen(on) {
+      if (on === unseenOn || (on && (!fighting || broken))) return;
+      unseenOn = on;
+      if (on) hurryOn(); else hurryOff();
+    },
     menuUp() {
       const at = sym('gBrBattle');
       // A patch with no such symbol cannot say, and the net would take every fight for stuck.
