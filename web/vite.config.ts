@@ -117,6 +117,8 @@ export default defineConfig({
         main: resolve(__dirname, "index.html"),
         classic: resolve(__dirname, "classic/index.html"),
         spike: resolve(__dirname, "spike/index.html"),
+        // The map painter (spike-b/map-page.ts): Cam's, not linked from the game.
+        map: resolve(__dirname, "map/index.html"),
       },
     },
     outDir: "dist", // Forces Vite to output to the "dist" folder

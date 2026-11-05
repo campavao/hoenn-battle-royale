@@ -70,7 +70,7 @@ import { Watch } from './watch';
 import { BattleView } from './battleview';
 import { coverScreen, curtainBehind, curtainLines, raiseCurtain, type Cover } from './curtain';
 import { frameOf as fxFrame, grassUnderAsh, isFloor, MB_ASHGRASS, SHEETS as FX_SHEETS, stepEffects, type Effect, type FxKind } from './fieldfx';
-import { CHUNK, ChunkCache, WorldFill, chunksOver, type FillFile } from './worldfill';
+import { CHUNK, ChunkCache, SEA_METATILE, WorldFill, chunksOver, mainlandPlane, type FillFile } from './worldfill';
 import { ROOM_GAP, clampZoom, loadZoom, nextZoom, pickedZoom, roomFloor, saveZoom, wheelSteps, zoomLabel, zoomRange } from './zoom';
 import { closingFade, fieldScale, FADE_COLOR_WORD, FADE_MODE_WORD, FADE_SELECTED, FADE_Y_WORD, FOG_EVA, FOG_EVB, fadeOf, keyPicture } from '../src/field';
 import { PadPrefsControl } from '../src/ui/padprefs';
@@ -165,8 +165,6 @@ function decode(grid: string, cells: number): Uint8Array {
   return out;
 }
 
-/** BFS over the seams from Littleroot: a neighbour's origin is this map's, shifted by the
- *  connection's offset along the shared edge (World.landAcross is the same sum backwards). */
 /** The ferry's islands (room.ts islandMaps): not a place to drop. */
 const ISLANDS = new Set<string>();
 /** The maps joined up by their seams: Hoenn's plane, which worldfill.ts carries on past the edges.
@@ -175,25 +173,10 @@ const MAINLAND = new Set<string>();
 function layout(maps: WorldMap[]): Map<string, Placed> {
   const byId = new Map(maps.map((m) => [m.id, m]));
   const placed = new Map<string, Placed>();
-  const start = byId.get('MAP_LITTLEROOT_TOWN')!;
-  placed.set(start.id, { m: start, gx: 0, gy: 0, classes: decode(start.grid, start.w * start.h) });
-  const queue = [start.id];
-  while (queue.length) {
-    const p = placed.get(queue.shift()!)!;
-    for (const s of p.m.seams) {
-      const to = byId.get(s.to);
-      if (!to || !to.outdoor || placed.has(to.id) || isLooseSeam(p.m.id, to.id)) continue;
-      let gx = p.gx;
-      let gy = p.gy;
-      if (s.dir === 'north') { gx += s.offset; gy -= to.h; }
-      else if (s.dir === 'south') { gx += s.offset; gy += p.m.h; }
-      else if (s.dir === 'west') { gx -= to.w; gy += s.offset; }
-      else { gx += p.m.w; gy += s.offset; }
-      placed.set(to.id, { m: to, gx, gy, classes: decode(to.grid, to.w * to.h) });
-      queue.push(to.id);
-    }
+  for (const [id, { m, gx, gy }] of mainlandPlane(maps, isLooseSeam)) {
+    placed.set(id, { m, gx, gy, classes: decode(m.grid, m.w * m.h) });
+    MAINLAND.add(id);
   }
-  for (const id of placed.keys()) MAINLAND.add(id);
   // The buildings and caves, each on its own, in rows well east of Hoenn: drawn where the
   // camera follows a trainer in, and never in sight of the outdoors.
   let right = 0, top = Infinity;
@@ -4606,8 +4589,6 @@ function mapUnder(x: number, y: number): Placed | null {
 // ---- past the edge of a map (POK-431, worldfill.ts) ------------------------------------
 
 let worldFill: WorldFill | null = null;
-/** The sea's metatile (General's), whichever map's tilesets draw it. */
-const SEA_METATILE = 0x170;
 const fillCuts = new ChunkCache<{ cv: HTMLCanvasElement; anims: { sheet: HTMLCanvasElement; states: Uint8Array; cells: number[] }[] }>();
 /** A pattern per look of the sea, and a pattern per block of one forest or ridge: laid in the
  *  world's coordinates, so they stay on the grid however the camera moves. */
