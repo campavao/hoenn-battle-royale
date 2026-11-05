@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="robots" content="noindex" />
+    <title>Map painter</title>
+    <style>
+      :root { color-scheme: dark; --bg: #14181c; --panel: #1e252b; --line: #39444d; --ink: #e8eef2; --dim: #9fb3c0; --on: #4fb3ff; --bad: #ff8a80; }
+      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font: 15px system-ui, sans-serif; overscroll-behavior: none; }
+      body { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100dvh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+      button, select, .file { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; min-height: 44px; padding: 0 10px; touch-action: manipulation; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+      button:disabled { opacity: .35; cursor: default; }
+      button[aria-pressed="true"] { border-color: var(--on); background: #1f3140; }
+      #top { display: flex; gap: 6px; align-items: center; padding: 6px 8px; min-width: 0; }
+      #say { flex: 1; min-width: 0; color: var(--dim); font-size: 13px; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+      #say.bad { color: var(--bad); }
+      #top button { flex: none; width: 44px; padding: 0; }
+      #stage { position: relative; min-height: 0; min-width: 0; background: #0b1116; overflow: hidden; }
+      #world { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
+      #panel { display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; min-width: 0; }
+      .row { display: flex; gap: 6px; min-width: 0; }
+      .row > button { flex: 1; min-width: 0; padding: 0 2px; }
+      #stamps { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 1px; }
+      #stamps button { flex: none; width: 48px; height: 48px; padding: 2px; }
+      #stamps canvas { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; pointer-events: none; }
+      #more { display: none; flex-direction: column; gap: 6px; max-height: 45dvh; overflow-y: auto; }
+      #more.open { display: flex; }
+      #more select { width: 100%; }
+      #link { width: 100%; height: 3.4em; resize: none; font: 12px ui-monospace, monospace; background: #0e1114; color: var(--dim); border: 1px solid var(--line); border-radius: 8px; }
+      .note { color: var(--dim); font-size: 13px; line-height: 1.35; margin: 0; }
+      .file input { display: none; }
+      #keys { display: none; }
+      #ask { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0, 0, 0, .6); padding: 16px; }
+      #ask.open { display: flex; }
+      #ask > div { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; max-width: 360px; display: flex; flex-direction: column; gap: 12px; }
+      #boot { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; padding: 16px; text-align: center; color: var(--dim); }
+      #rom-pick { display: none; }
+      #emu { display: none; }
+      /* A computer: the world beside everything, with a mouse's and a keyboard's ways in. */
+      @media (min-width: 900px) {
+        body { grid-template-columns: minmax(0, 1fr) 300px; grid-template-rows: auto minmax(0, 1fr); }
+        #top { grid-column: 1 / -1; }
+        #stage { grid-column: 1; grid-row: 2; }
+        #panel { grid-column: 2; grid-row: 2; overflow-y: auto; }
+        #stamps { flex-wrap: wrap; overflow: visible; }
+        #more { display: flex; max-height: none; overflow: visible; }
+        #menu { display: none !important; }
+        #keys { display: block; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="top">
+      <div id="say"></div>
+      <button id="undo" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>↶</button>
+      <button id="redo" title="Redo (Ctrl+Y)" aria-label="Redo" disabled>↷</button>
+      <button id="menu" aria-label="More" aria-pressed="false">≡</button>
+    </div>
+    <div id="stage">
+      <canvas id="world"></canvas>
+      <div id="boot">
+        <span id="boot-say">Waking the ROM…</span>
+        <label class="file" id="rom-pick">PICK ROM<input type="file" id="rom-input" /></label>
+      </div>
+    </div>
+    <div id="panel">
+      <div class="row">
+        <button id="t-move" title="Move (M)">MOVE</button>
+        <button id="t-pick" title="Pick up tiles: tap one, or drag a block (P)">PICK</button>
+        <button id="t-brush" title="Paint (B)">BRUSH</button>
+        <button id="t-box" title="Fill a rectangle (X)">BOX</button>
+        <button id="t-snap" title="Keep a block in step with the trees it came from (S)">SNAP</button>
+      </div>
+      <div id="stamps"></div>
+      <div id="more">
+        <select id="go" aria-label="Go to a map"></select>
+        <div class="row">
+          <button id="o-maps" title="Outlines and names on the real maps (L)">MAPS</button>
+          <button id="o-mine" title="Tint what you painted (T)">MINE</button>
+          <button id="o-grid" title="The grid when you're close (G)">GRID</button>
+        </div>
+        <div class="row">
+          <button id="copy">COPY LINK</button>
+          <button id="share">SHARE</button>
+        </div>
+        <div class="row">
+          <button id="save">SAVE FILE</button>
+          <label class="file" style="flex: 1">OPEN FILE<input type="file" id="open" accept=".json,application/json" /></label>
+        </div>
+        <textarea id="link" readonly aria-label="The link"></textarea>
+        <p class="note">Your painting stays on this device. Open the link on your computer or phone to carry on there. Send it to Claude and it goes in the next release.</p>
+        <div class="row"><button id="clear">CLEAR ALL</button></div>
+        <p class="note" id="keys">Drag: the tool. Wheel: zoom. Right or middle drag, or Space: move. Alt-click: pick. M P B X move, pick, brush, box. E eraser. S snap. L T G maps, mine, grid. Ctrl+Z undo. Arrows move, + − zoom.</p>
+        <p class="note" id="build"></p>
+      </div>
+    </div>
+    <div id="ask">
+      <div>
+        <span id="ask-say"></span>
+        <div class="row">
+          <button id="ask-add">ADD</button>
+          <button id="ask-replace">REPLACE</button>
+          <button id="ask-no">KEEP MINE</button>
+        </div>
+      </div>
+    </div>
+    <canvas id="emu"></canvas>
+    <script type="module" src="/spike-b/map-page.ts"></script>
+  </body>
+</html>

@@ -10,6 +10,36 @@
 
 /** Cells a side of a chunk. Small, so cutting one is a few milliseconds of a frame. */
 export const CHUNK = 16;
+/** The sea's metatile (General's), whichever map's tilesets draw it. */
+export const SEA_METATILE = 0x170;
+
+interface PlaneMap { id: string; w: number; h: number; outdoor?: boolean; seams: { to: string; dir: string; offset: number }[] }
+
+/** BFS over the seams from Littleroot: a neighbour's origin is this map's, shifted by the
+ *  connection's offset along the shared edge (World.landAcross is the same sum backwards). The
+ *  maps joined up by their seams are Hoenn's plane, which this file carries on past the edges. */
+export function mainlandPlane<M extends PlaneMap>(maps: readonly M[], loose: (a: string, b: string) => boolean): Map<string, { m: M; gx: number; gy: number }> {
+  const byId = new Map(maps.map((m) => [m.id, m]));
+  const start = byId.get('MAP_LITTLEROOT_TOWN')!;
+  const placed = new Map([[start.id, { m: start, gx: 0, gy: 0 }]]);
+  const queue = [start.id];
+  while (queue.length) {
+    const p = placed.get(queue.shift()!)!;
+    for (const s of p.m.seams) {
+      const to = byId.get(s.to);
+      if (!to || !to.outdoor || placed.has(to.id) || loose(p.m.id, to.id)) continue;
+      let gx = p.gx;
+      let gy = p.gy;
+      if (s.dir === 'north') { gx += s.offset; gy -= to.h; }
+      else if (s.dir === 'south') { gx += s.offset; gy += p.m.h; }
+      else if (s.dir === 'west') { gx -= to.w; gy += s.offset; }
+      else { gx += p.m.w; gy += s.offset; }
+      placed.set(to.id, { m: to, gx, gy });
+      queue.push(to.id);
+    }
+  }
+  return placed;
+}
 
 /** One symbol of the file: its metatiles by world x & 1, y & 1, and the map whose tilesets
  *  draw them (null: General's, the same on any). */

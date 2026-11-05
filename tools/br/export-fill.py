@@ -31,6 +31,10 @@ seams):
      real mountain (Cam, 11-04: "we should never have a hard cut"; "ideally we should never see
      a tree cut off"). solve() does it, and `seams()` counts what it couldn't.
 
+  7. map-paint.json goes on top of all that, cell for cell: what Cam painted at /map/
+     (Cam, 11-05: "use a tile editor or something on mobile to clean up the map").
+     apply-map-paint.py adds to it.
+
 What ships is metatile numbers, from the pret tree, as the rest of the world's data does; the
 page cuts the pictures from the player's own ROM (romart.ts fillChunk). Nothing here is
 random from run to run. Only the page reads this: the relay never sees it, so it is
@@ -44,11 +48,13 @@ import json
 import math
 import os
 import struct
+import sys
 
 import numpy as np
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 OUT = os.path.join(ROOT, 'web', 'spike-b', 'data', 'world-fill.json')
+PAINT = os.path.join(ROOT, 'tools', 'br', 'map-paint.json')
 
 WATER, SAND, GRASS, TREE, ROCK = 0, 1, 2, 3, 4
 NAMES = 'WSGTR'
@@ -949,6 +955,26 @@ def generate():
     return plane, x0, y0, W, H, out, palette, None
 
 
+def lay_paint(plane, x0, y0, W, H, out, palette):
+    """Cam's hand over the solver's: nothing here looks at what's next to it. A cell the maps have
+    since grown over, or a map that has gone, stops the build rather than draw the wrong thing."""
+    if not os.path.exists(PAINT):
+        return 0
+    doc = json.load(open(PAINT, encoding='utf-8'))
+    bad = []
+    for x, y, r, mid in doc['cells']:
+        ref = doc['refs'][r] if r >= 0 else None
+        cx, cy = x - x0, y - y0
+        if not (0 <= cx < W and 0 <= cy < H) or out[cy, cx] < 0 or (ref is not None and ref not in plane.at):
+            bad.append((x, y, ref, mid))
+            continue
+        entry = ('sea',) if mid == SEA and ref is None else ('block', ref, mid, mid, mid, mid)
+        out[cy, cx] = palette.setdefault(entry, len(palette))
+    if bad:
+        sys.exit(f'map-paint.json: {len(bad)} cells are on a real map or off the file, first {bad[:5]}')
+    return len(doc['cells'])
+
+
 def rle(row):
     parts = []
     run, val = 0, None
@@ -971,10 +997,11 @@ def main():
     ap.add_argument('--crop')
     a = ap.parse_args()
     plane, x0, y0, W, H, out, palette, _ = generate()
+    painted = lay_paint(plane, x0, y0, W, H, out, palette)
     entries = sorted(palette, key=palette.get)
     doc = {'x0': x0, 'y0': y0, 'w': W, 'h': H, 'blocks': [list(e[1:]) if e[0] == 'block' else [] for e in entries], 'rows': rle((out.clip(min=0)).reshape(-1).tolist())}
     json.dump(doc, open(OUT, 'w', encoding='utf-8'), separators=(',', ':'))
-    print('wrote', OUT, os.path.getsize(OUT), 'bytes;', len(entries), 'blocks;', W, 'x', H, 'cells;', len(plane.seams_left), 'unseen pairs')
+    print('wrote', OUT, os.path.getsize(OUT), 'bytes;', len(entries), 'blocks;', W, 'x', H, 'cells;', len(plane.seams_left), 'unseen pairs;', painted, 'painted')
     if a.preview:
         preview(plane, x0, y0, W, H, out, entries, a)
 
