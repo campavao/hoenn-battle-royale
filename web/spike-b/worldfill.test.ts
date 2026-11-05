@@ -147,7 +147,7 @@ describe('the fill and the real maps meet', () => {
       expect(sand(fill.metatile(beach.x, beach.y)?.id ?? -1), `${x}`).toBe(true);
     }
     // ROUTE 103's pond starts at its top row: over it, General's rock stands on its front-facing foot.
-    for (let x = 34; x <= 36; x++) {
+    for (let x = 35; x <= 36; x++) {
       const c = at('MAP_ROUTE103', x, -1);
       expect(fill.metatile(c.x, c.y)?.id, `${x}`).toBe(0x79);
     }

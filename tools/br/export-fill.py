@@ -256,8 +256,12 @@ UNSEEN = 0.02
 
 
 RANGES = MOUNTAINS + [PLAIN_ROCK]
-FOOT_ON_WATER = 0x79
-WATER_CORNERS = {0x182, 0x184}
+# General's rock's rim and foot, by what it meets, as the real maps lay them.
+EDGES = {
+    GRASS: {'t': 0x69, 'tl': 0x68, 'tr': 0x6A, 'l': 0x70, 'r': 0x72, 'b': 0x79, 'bl': 0x78, 'br': 0x7A},
+    SAND: {'t': 0x81, 'tl': 0x80, 'tr': 0x82, 'l': 0x88, 'r': 0x8A, 'b': 0x91, 'bl': 0x90, 'br': 0x92},
+    WATER: {'t': 0x173, 'tl': 0x172, 'tr': 0x174, 'l': 0x17A, 'r': 0x17C, 'b': 0x79, 'bl': 0x182, 'br': 0x184},
+}
 # General's rock, on grass, sand and water.
 PLAIN_PIECES = set(range(0x68, 0x80)) | set(range(0x80, 0x98)) | set(range(0x172, 0x188))
 
@@ -629,12 +633,32 @@ def draw_range(plane, pairs, sources, calm, n, tile, family, blank, grid, x0, y0
     for _ in range(2):
         for x, y in sorted(cells, key=lambda c: (-c[1], c[0])):
             tile[y, x] = draw(x, y)
-    # General's rock stands in water on its foot, as every real map has it (Cam, 11-04: "This should
-    # be front facing"). Whatever the texture said.
+    # General's flat rock never just stops: where it meets anything else it has the rim or the
+    # front-facing foot a real map has there (Cam, 11-04: "This should be front facing"), whatever
+    # the texture said.
     if n >= len(MOUNTAINS):
+        def rock(u, v):
+            return not (0 <= u < W and 0 <= v < H) or family[v, u] == n or (not blank[v, u] and grid[v, u] == ROCK)
+        def beside(u, v):
+            g = int(grid[v, u]) if 0 <= u < W and 0 <= v < H else WATER
+            return g if g in EDGES else GRASS
+        rims = []
         for x, y in cells:
-            if y + 1 < H and grid[y + 1, x] == WATER and int(tile[y, x]) not in WATER_CORNERS:
-                tile[y, x] = FOOT_ON_WATER
+            # Over water, any piece: it stands on its foot.
+            if y + 1 < H and grid[y + 1, x] == WATER and rock(x - 1, y) and rock(x + 1, y):
+                rims.append((x, y, EDGES[WATER]['b']))
+                continue
+            if int(tile[y, x]) != ROCK_BODY:
+                continue
+            up, down, left, right = rock(x, y - 1), rock(x, y + 1), rock(x - 1, y), rock(x + 1, y)
+            if up and down and left and right:
+                continue
+            side = 'b' if not down else 't' if not up else ''
+            side += 'l' if not left else 'r' if not right else ''
+            other = (x, y + 1) if not down else (x, y - 1) if not up else (x - 1, y) if not left else (x + 1, y)
+            rims.append((x, y, EDGES[beside(*other)][side]))
+        for x, y, piece in rims:
+            tile[y, x] = piece
 
 
 def unseen_at(pairs, tile, tset, x, y, W, H):
