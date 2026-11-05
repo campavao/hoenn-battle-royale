@@ -6,6 +6,26 @@ import type { BattleEvent, LogMon } from '../shared/battlelog';
 const SHARPEDO = 331, POOCHYENA = 286, TREECKO = 277;
 const mon = (species: number, level: number, hp: number, gender: number, extra: Partial<LogMon> = {}): LogMon => ({ species, level, hp, maxHp: hp, status: 0, gender, ...extra });
 
+/** A wild one: nobody sends it out, and it is there as the fight opens. */
+export const WILD_LOG: BattleEvent[] = [
+  {
+    e: 'start',
+    a: { seat: 1, name: 'SHELLY', skin: 5, team: [mon(SHARPEDO, 5, 23, 1)] },
+    b: { seat: -2, name: 'POOCHYENA', skin: 0, team: [mon(POOCHYENA, 3, 15, 0)], wild: true },
+    map: 'MAP_ROUTE117',
+  },
+  { e: 'text', text: 'Wild POOCHYENA appeared!' },
+  { e: 'send', side: 1, slot: 0 },
+  { e: 'text', text: 'Go! SHARPEDO!' },
+  { e: 'send', side: 0, slot: 0 },
+  { e: 'text', text: 'SHARPEDO used BITE!' },
+  { e: 'hit', side: 1, move: 44 },
+  { e: 'hp', side: 1, hp: 0 },
+  { e: 'faint', side: 1 },
+  { e: 'text', text: 'Wild POOCHYENA fainted!' },
+  { e: 'end', winner: 1 },
+];
+
 export const CANNED_LOG: BattleEvent[] = [
   {
     e: 'start',

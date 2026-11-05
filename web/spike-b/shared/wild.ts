@@ -147,7 +147,7 @@ export function zoneFight(a: SimSide, species: number, opts: { seed: number; map
   const rate = zoneRate(species);
   const mon: LogMon = { species, level: card.level, hp: card.hp, maxHp: card.maxHp, status: 0, gender: 2 };
   const log: BattleEvent[] = [
-    { e: 'start', a: { seat: a.seat, name: a.name, skin: a.skin, team: [] }, b: { seat: -2, name, skin: 0, team: [mon] }, map: opts.map ?? '' },
+    { e: 'start', a: { seat: a.seat, name: a.name, skin: a.skin, team: [] }, b: { seat: -2, name, skin: 0, team: [mon], wild: true }, map: opts.map ?? '' },
     { e: 'text', text: `Wild ${name} appeared!` },
     { e: 'send', side: 1, slot: 0 },
   ];

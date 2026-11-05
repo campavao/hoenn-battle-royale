@@ -201,6 +201,16 @@ describe('a bot at a legendary', () => {
   const side = (party: PackedMon[], balls?: { id: number; n: number }[]) => ({ seat: 7, name: 'B', skin: 0, party, balls });
   const foe = (party: PackedMon[]) => ({ seat: LEGEND_FOE, name: 'KYOGRE', skin: 0, party });
 
+  it('says in its log that the far side is wild, so a watcher draws no trainer', () => {
+    const start = (log: BattleEvent[]) => log[0] as Extract<BattleEvent, { e: 'start' }>;
+    const fought = simulate(side([mon(25, 50)]), foe([mon(404, 50)]), { seed: 5, wild });
+    expect(start(fought.log).b.wild).toBe(true);
+    expect(start(fought.log).a.wild).toBeUndefined();
+    expect(start(simulate(side([mon(25, 50)]), foe([mon(404, 50)]), { seed: 5 }).log).b.wild).toBeUndefined();
+    const zone = zoneFight({ seat: 1, name: 'A', skin: 0, party: [], balls: [{ id: ITEM_SAFARI_BALL, n: 1 }] }, 286, { seed: 5 });
+    expect(start(zone.log).b.wild).toBe(true);
+  });
+
   it('a MASTER BALL takes it at the first throw, and is spent', () => {
     const out = simulate(side([mon(25, 50)], [{ id: MASTER, n: 1 }]), foe([mon(404, 50)]), { seed: 5, wild });
     expect(out.caught).toBe(true);

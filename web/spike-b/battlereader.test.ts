@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { encodeGen3 } from '../src/text/gen3';
 import { BattleReader, battleText, statusKind, statusOf, type Mem, type ReaderSyms } from './battlereader';
+import type { ReaderCtx } from './battlereader';
 import { applyEvent, emptyState, type BattleEvent } from './shared/battlelog';
 
 const BASE = 0x02000000;
@@ -82,10 +83,10 @@ const theirs: M[] = [
 ];
 const CTX = { me: { seat: 1001, name: 'CAM', skin: 3 }, foe: { seat: 7, name: 'YOUNGSTER', skin: 9 }, map: 'MAP_ROUTE101', genderOf: (species: number, personality: number) => (species === 261 ? 2 : personality % 2) };
 
-function rig() {
+function rig(ctx: ReaderCtx = CTX) {
   const f = new Fake();
   const out: BattleEvent[][] = [];
-  const r = new BattleReader(f, SYM, CTX, (evs) => out.push(evs));
+  const r = new BattleReader(f, SYM, ctx, (evs) => out.push(evs));
   putParty(f, SYM.player, mine);
   putParty(f, SYM.enemy, theirs);
   f.w(SYM.count, 2, 8);
@@ -114,6 +115,19 @@ describe('battleText', () => {
 });
 
 describe('BattleReader', () => {
+  it("says a wild side is wild, and nothing on a trainer's", () => {
+    const opened = (ctx?: ReaderCtx) => {
+      const { f, run, all } = rig(ctx);
+      f.w(SYM.mainFunc, 0x08001234, 32);
+      putMon(f, 0, mine[0], 0);
+      putMon(f, 1, theirs[0], 0);
+      run(3);
+      return all()[0] as Extract<BattleEvent, { e: 'start' }>;
+    };
+    expect(opened({ ...CTX, foe: { seat: 0, name: '', skin: 0, wild: true } }).b.wild).toBe(true);
+    expect(opened().b.wild).toBeUndefined();
+  });
+
   it('says nothing before the battle runs, then the start, the sends and the lines', () => {
     const { f, run, all } = rig();
     run(5);

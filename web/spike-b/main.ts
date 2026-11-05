@@ -622,7 +622,7 @@ const handoff: number[] = []; // ms from the trigger to the ROM's first battle f
 /** A battle the ROM fights, the page showing it from its first frame and taking the
  *  screen back when it is over. */
 let logFight = 0;
-function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>, opts: { log?: boolean; weather?: number; label?: { name: string; skin: number } } = {}): void {
+function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>, opts: { log?: boolean; weather?: number; label?: { name: string; skin: number }; wild?: boolean } = {}): void {
   // One battle at a time: one still running from the match before (its ROM is busy with
   // it) turns this one down, or its end would be credited to this foe.
   if (battle) { link.end(); return; }
@@ -645,7 +645,7 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
   if (link.online && me && opts.log !== false) {
     const l = link, f = ++logFight & 0xffff;
     rom.logTo({
-      ctx: { me: { seat: l.me, name: me.name, skin: me.skin }, foe: { seat: foe?.id ?? 0, name: foe?.name ?? opts.label?.name ?? '', skin: foe?.skin ?? opts.label?.skin ?? 0 }, map: me.m.spot.map },
+      ctx: { me: { seat: l.me, name: me.name, skin: me.skin }, foe: { seat: foe?.id ?? 0, name: foe?.name ?? opts.label?.name ?? '', skin: foe?.skin ?? opts.label?.skin ?? 0, ...(opts.wild ? { wild: true } : {}) }, map: me.m.spot.map },
       emit: (events) => l.bl(f, events),
     });
   }
@@ -718,7 +718,7 @@ function fishFrame(): void {
   if (end !== 'hooked' || !p || !art) { link.end(); return; }
   const fog = inFogNow();
   const behavior = art.behavior(p.m.group, p.m.num, c.x, c.y);
-  handOff(null, (r, onStart) => r.fish(p.m.group, p.m.num, behavior, c.rod, onStart, fog));
+  handOff(null, (r, onStart) => r.fish(p.m.group, p.m.num, behavior, c.rod, onStart, fog), { wild: true });
 }
 
 const itemTag = new Tag(document.getElementById('item-tag') as HTMLCanvasElement);
@@ -1646,7 +1646,7 @@ function startFor(e: RoomEvent): void {
     handOff(null, (r, onStart) => r.legend(e.species, e.level, onStart, fog).then((f) => {
       if (!(f.ok && f.outcome === CAUGHT)) l.drop(key);
       return f;
-    }, (err) => { l.drop(key); throw err; }));
+    }, (err) => { l.drop(key); throw err; }), { wild: true });
     return;
   }
   if (e.type === 'bots') { void judgeBots(e.a, e.b, e.legend); return; }
@@ -1712,7 +1712,7 @@ function startFor(e: RoomEvent): void {
   } else {
     const m = placed.get(e.map)!.m;
     const fog = inFogNow();
-    handOff(null, (r, onStart) => r.wild(m.group, m.num, art!.behavior(m.group, m.num, e.x, e.y), onStart, fog));
+    handOff(null, (r, onStart) => r.wild(m.group, m.num, art!.behavior(m.group, m.num, e.x, e.y), onStart, fog), { wild: true });
   }
 }
 

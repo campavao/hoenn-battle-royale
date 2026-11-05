@@ -75,7 +75,7 @@ export interface ReaderSyms {
  *  trainer. A wild POKeMON has seat 0 and no name. */
 export interface ReaderCtx {
   me: { seat: number; name: string; skin: number };
-  foe: { seat: number; name: string; skin: number };
+  foe: { seat: number; name: string; skin: number; wild?: boolean };
   map: string;
   /** A mon's gender from its species and personality (0 male, 1 female, 2 neither), out of the
    *  ROM's gSpeciesInfo, which the reader's memory does not hold. None: not said. */
@@ -329,7 +329,7 @@ export class BattleReader {
     if ((!me || !fo) && ++this.waitedForParty < WAIT_FOR_PARTY) return;
     this.teams = [logTeam(me ?? this.party.me!, this.ctx.genderOf), logTeam(fo ?? this.party.foe!, this.ctx.genderOf)];
     // What a watcher believes of a mon on the field starts as its team entry.
-    const side = (x: ReaderCtx['me'], team: LogMon[]): LogSide => ({ seat: x.seat, name: x.name, skin: x.skin, team });
+    const side = (x: ReaderCtx['foe'], team: LogMon[]): LogSide => ({ seat: x.seat, name: x.name, skin: x.skin, team, ...(x.wild ? { wild: true } : {}) });
     this.started = true;
     this.say({ e: 'start', a: side(this.ctx.me, structuredClone(this.teams[0])), b: side(this.ctx.foe, structuredClone(this.teams[1])), map: this.ctx.map });
     this.poll();
