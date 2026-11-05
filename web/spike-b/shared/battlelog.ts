@@ -32,6 +32,8 @@ export interface LogSide {
   /** Their look (room.ts `skin`), for the trainer picture. */
   skin: number;
   team: LogMon[];
+  /** A wild POKeMON, with no trainer to draw or to speak for it. */
+  wild?: boolean;
 }
 
 export type Side = 0 | 1;

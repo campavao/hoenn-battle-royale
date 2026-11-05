@@ -105,6 +105,25 @@ test.describe('the page-drawn battle', () => {
     expect((await snap(page)).far!.hp).toBe(19);
   });
 
+  test('a wild POKeMON comes with no trainer and is there from the start', async ({ browser }) => {
+    const page = await (await browser.newContext({ viewport: { width: 960, height: 640 } })).newPage();
+    await openView(page, '&wild&hold&at=2100');
+    const shot = async (name: string) => {
+      if (SHOTS) await page.locator('#battleview-host canvas').screenshot({ path: join(SHOTS, `${name}.png`) });
+    };
+    await page.waitForTimeout(500);
+    await shot('wild-announced');
+    const said = await snap(page);
+    await page.evaluate(() => (window as any).__battleview.seek(900));
+    await page.waitForTimeout(300);
+    await shot('wild-opening');
+    const open = await snap(page);
+    expect(said.far?.species).toBe(286);
+    expect(said.text).toBe('Wild POOCHYENA appeared!');
+    expect(open.far?.species).toBe(286);
+    expect(open.text).toBe('');
+  });
+
   test('flips for a watcher who follows side 1: that trainer is near, back to the camera', async ({ browser }) => {
     const page = await (await browser.newContext({ viewport: { width: 960, height: 640 } })).newPage();
     await openView(page, '&hold&at=7100');

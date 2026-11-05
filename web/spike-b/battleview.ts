@@ -15,7 +15,7 @@
 import { EmeraldCanvas, glyphIds, type TextColor } from '../src/ui/emerald';
 import type { BattleEvent, LogMon, Side } from './shared/battlelog';
 import { HB, type BattleEnv, type HealthboxArt, type RomArt, type RomFont } from './romart';
-import { BOX_FROM, H, W, advance, envFor, fitScale, namesShown, readsFor, revealed, sceneAt, slotOf, type Scene, type SideScene, type Slot } from './battlescene';
+import { H, W, advance, boxUp, envFor, fitScale, namesShown, readsFor, revealed, sceneAt, slotOf, type Scene, type SideScene, type Slot } from './battlescene';
 import { logMs } from './shared/battlelog';
 
 /** What the view needs from the ROM's art: RomArt, or a stand-in in a test. */
@@ -278,7 +278,7 @@ export class BattleView {
     ctx.fillRect(0, 0, W, H);
     // What a person using a screen reader, or a spec, can read of it, written only when it changes
     // (an attribute written every frame is a style recalculation every frame).
-    const label = `${sc.near.name || 'Trainer'} against ${sc.far.name || 'trainer'}: ${sc.text.replace(/\n/g, ' ')}`;
+    const label = `${sc.near.name || 'Trainer'} against ${sc.far.wild ? 'a wild POKéMON' : sc.far.name || 'trainer'}: ${sc.text.replace(/\n/g, ' ')}`;
     if (label !== this.label) {
       this.label = label;
       this.canvas.setAttribute('aria-label', label);
@@ -290,8 +290,8 @@ export class BattleView {
       this.drawGround(sc);
       this.drawSide(art, sc.far, 'far');
       this.drawSide(art, sc.near, 'near');
-      if (sc.far.mon && sc.far.appear > BOX_FROM) this.drawBox(art, sc.far, 'far');
-      if (sc.near.mon && sc.near.appear > BOX_FROM) this.drawBox(art, sc.near, 'near');
+      if (boxUp(sc.far)) this.drawBox(art, sc.far, 'far');
+      if (boxUp(sc.near)) this.drawBox(art, sc.near, 'near');
       this.drawMessage(art, sc);
       this.drawNames(sc);
     }
@@ -348,7 +348,7 @@ export class BattleView {
     const pic = art.monPic(mon.species, slot === 'near', !!mon.shiny);
     const c = art.monCoords(mon.species, slot === 'near');
     const base = slot === 'near' ? NEAR_MON : FAR_MON;
-    const cx = base.x, cy = base.y + (c ? c.y - (slot === 'far' ? c.lift : 0) : 0);
+    const cx = base.x + v.monDx, cy = base.y + (c ? c.y - (slot === 'far' ? c.lift : 0) : 0);
     const x = cx - 32, y = cy - 32;
     if (!pic) {
       this.standIn(cx - 24, cy - 24, 48, 48, '#c0c0c0');

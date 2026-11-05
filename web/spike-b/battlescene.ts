@@ -122,6 +122,10 @@ export interface SideScene {
    *  (negative for the near trainer, who slides from the left); null when it is not on the screen
    *  (before the start, or once their first mon is out). */
   trainerDx: number | null;
+  /** A wild POKeMON's side: no trainer, and the mon there from the start. */
+  wild: boolean;
+  /** How far the mon is from where it stands, as `trainerDx`: a wild one slides in as they do. */
+  monDx: number;
   /** The mon on the field, and its place in the team; null for none. */
   mon: LogMon | null;
   slot: number;
@@ -200,15 +204,22 @@ export function sceneAt(log: readonly BattleEvent[], ms: number, follow: Side = 
     const ls = side === 0 ? sides.a : sides.b;
     const mine = ev && 'side' in ev && ev.side === side ? ev : null;
     const dir = slotOf(side, follow) === 'near' ? -1 : 1;
-    let slot = state.active[side];
+    const wild = !!ls?.wild;
+    // Nobody sends a wild one out: it is there until the log has it sent, and the sending shows nothing.
+    let slot = wild && !sent[side] ? 0 : state.active[side];
     let appear = 1, vanish = 0, blink = false;
     let leave: SideScene['leave'] = null;
-    let trainerDx: number | null = ls && !sent[side] ? 0 : null;
-    if (ev?.e === 'start' && ls) trainerDx = dir * SLIDE * (1 - easeOut(clamp01(p / SLIDE_IN)));
+    let trainerDx: number | null = ls && !sent[side] && !wild ? 0 : null;
+    let monDx = 0;
+    if (ev?.e === 'start' && ls) {
+      const dx = dir * SLIDE * (1 - easeOut(clamp01(p / SLIDE_IN)));
+      if (wild) monDx = dx;
+      else trainerDx = dx;
+    }
     if (mine?.e === 'send') {
       slot = mine.slot;
-      appear = easeOut(clamp01(p / APPEAR));
-      if (!sent[side] && ls) trainerDx = dir * SLIDE * easeIn(clamp01(p / SLIDE_OUT));
+      if (!wild) appear = easeOut(clamp01(p / APPEAR));
+      if (!sent[side] && ls && !wild) trainerDx = dir * SLIDE * easeIn(clamp01(p / SLIDE_OUT));
     }
     if (mine?.e === 'back') { leave = 'back'; vanish = easeOut(clamp01(p / SINK)); }
     if (mine?.e === 'faint') { leave = 'faint'; vanish = easeOut(clamp01(p / SINK)); }
@@ -219,7 +230,7 @@ export function sceneAt(log: readonly BattleEvent[], ms: number, follow: Side = 
     if (mon && mine?.e === 'hp') hp = Math.round(mon.hp + (Math.max(0, Math.min(mon.maxHp, mine.hp)) - mon.hp) * clamp01(p / DRAIN));
     if (mon && mine?.e === 'status') status = mine.status;
     if (mon && mine?.e === 'faint') hp = 0;
-    return { side, name: ls?.name ?? '', skin: ls?.skin ?? 0, trainerDx, mon, slot: mon ? slot : -1, hp, status, appear, vanish, leave, blink };
+    return { side, name: ls?.name ?? '', skin: ls?.skin ?? 0, trainerDx, wild, monDx, mon, slot: mon ? slot : -1, hp, status, appear, vanish, leave, blink };
   };
   const sa = sideScene(0), sb = sideScene(1);
   const near = follow === 0 ? sa : sb, far = follow === 0 ? sb : sa;
@@ -228,9 +239,10 @@ export function sceneAt(log: readonly BattleEvent[], ms: number, follow: Side = 
     text = ev.text;
     chars = Math.floor(elapsed / CHAR_MS);
   } else if (ev?.e === 'start') {
-    text = introLine(far.name);
+    // A wild one has nobody to say this: the box is empty until "Wild X appeared!", as on a cart.
+    text = far.wild ? '' : introLine(far.name);
     chars = Math.floor(elapsed / CHAR_MS);
-  } else if (!text && sides.a && !sent[0] && !sent[1]) {
+  } else if (!text && sides.a && !sent[0] && !sent[1] && !far.wild) {
     text = introLine(far.name);
   }
   const ended = next >= log.length && state.winner !== null;
@@ -240,6 +252,11 @@ export function sceneAt(log: readonly BattleEvent[], ms: number, follow: Side = 
 /** A health box is up from this far through its mon's coming out. */
 export const BOX_FROM = 0.3;
 
+/** A mon's health box is on the screen: it is far enough out of its ball, or done sliding in. */
+export function boxUp(v: SideScene): boolean {
+  return !!v.mon && v.appear > BOX_FROM && !v.monDx;
+}
+
 /** Which trainers' names have room over their pictures. The ROM has no such labels, so they make way:
  *  each goes as its trainer sends their first mon out and slides off the edge with its name cut, and
  *  the near one's, which sits where the far health box goes (its line, y 34, is inside the box's),
@@ -247,7 +264,7 @@ export const BOX_FROM = 0.3;
 export function namesShown(s: Scene): { near: boolean; far: boolean } {
   return {
     far: s.far.trainerDx !== null && !!s.far.name && !s.far.mon,
-    near: s.near.trainerDx !== null && !!s.near.name && !s.near.mon && !(s.far.mon && s.far.appear > BOX_FROM),
+    near: s.near.trainerDx !== null && !!s.near.name && !s.near.mon && !boxUp(s.far),
   };
 }
 

@@ -411,7 +411,7 @@ function zoneFight(a, species, opts) {
   const rate = zoneRate(species);
   const mon2 = { species, level: card.level, hp: card.hp, maxHp: card.maxHp, status: 0, gender: 2 };
   const log = [
-    { e: "start", a: { seat: a.seat, name: a.name, skin: a.skin, team: [] }, b: { seat: -2, name, skin: 0, team: [mon2] }, map: opts.map ?? "" },
+    { e: "start", a: { seat: a.seat, name: a.name, skin: a.skin, team: [] }, b: { seat: -2, name, skin: 0, team: [mon2], wild: true }, map: opts.map ?? "" },
     { e: "text", text: `Wild ${name} appeared!` },
     { e: "send", side: 1, slot: 0 }
   ];
@@ -9943,7 +9943,7 @@ function* simulation(a, b2, opts) {
       const slot = cardOf(mon2);
       team[slot] = logMon(s.party[slot], mon2, realHp(s.party[slot].hp, s.party[slot].maxHp, mon2.maxhp));
     }
-    return { seat: s.seat, name: s.name, skin: s.skin, team };
+    return { seat: s.seat, name: s.name, skin: s.skin, team, ...n === 1 && opts.wild ? { wild: true } : {} };
   };
   const said = translate(battle.log, names, winner, [a.seat, b2.seat]);
   const log = [{ e: "start", a: logSide(0), b: logSide(1), map }, ...said.log];
@@ -15548,7 +15548,7 @@ function sideTeam(s) {
     if (!mon2) return void 0;
     team.push(mon2);
   }
-  return { seat, name, skin, team };
+  return { seat, name, skin, team, ...o.wild === true ? { wild: true } : {} };
 }
 function cleanEvent(raw) {
   if (!raw || typeof raw !== "object") return void 0;
@@ -16304,4 +16304,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "698c46e00df7";
+export const WORLD_HASH = "59c8e92bb65e";

@@ -60,7 +60,7 @@ function sideTeam(s: unknown): LogSide | undefined {
     if (!mon) return undefined;
     team.push(mon);
   }
-  return { seat, name, skin, team };
+  return { seat, name, skin, team, ...(o.wild === true ? { wild: true } : {}) };
 }
 
 /** One event rebuilt from its allowed fields, or undefined. */

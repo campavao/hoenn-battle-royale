@@ -573,7 +573,7 @@ export function* simulation(a: SimSide, b: SimSide, opts: SimOptions): Generator
       const slot = cardOf(mon);
       team[slot] = logMon(s.party[slot], mon, realHp(s.party[slot].hp, s.party[slot].maxHp, mon.maxhp));
     }
-    return { seat: s.seat, name: s.name, skin: s.skin, team };
+    return { seat: s.seat, name: s.name, skin: s.skin, team, ...(n === 1 && opts.wild ? { wild: true } : {}) };
   };
   const said = translate(battle.log, names, winner, [a.seat, b.seat]);
   const log: BattleEvent[] = [{ e: 'start', a: logSide(0), b: logSide(1), map }, ...said.log];

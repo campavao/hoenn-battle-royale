@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { eventMs, logMs, stateAt, type BattleEvent } from './shared/battlelog';
-import { CANNED_LOG } from './fixtures/battlelog-canned';
-import { BLINK_MS, CHAR_MS, advance, boxLines, envFor, fitScale, introLine, namesShown, readsFor, revealed, sceneAt, sideOf, slotOf } from './battlescene';
+import { CANNED_LOG, WILD_LOG } from './fixtures/battlelog-canned';
+import { BLINK_MS, CHAR_MS, advance, boxLines, boxUp, envFor, fitScale, introLine, namesShown, readsFor, revealed, sceneAt, sideOf, slotOf } from './battlescene';
 import { barColour, barPixels, statusKind, trainerPicFor } from './battleview';
 
 /** The ms at which event `i` of the canned log starts. */
@@ -29,6 +29,48 @@ describe('which side is near', () => {
     expect(a.far.trainerDx).toBeGreaterThan(0);
     expect(b.near.name).toBe('LASS ROSE');
     expect(b.near.trainerDx).toBeLessThan(0);
+  });
+});
+
+describe('a wild POKeMON', () => {
+  const at = (i: number) => WILD_LOG.slice(0, i).reduce((t, e) => t + eventMs(e), 0);
+  it('has no trainer: nobody slides in for it, stands over it or says anything for it', () => {
+    for (const ms of [100, 1900, at(1) + 10, at(2) + 10]) {
+      const s = sceneAt(WILD_LOG, ms);
+      expect(s.far.trainerDx).toBeNull();
+      expect(namesShown(s).far).toBe(false);
+      expect(s.text).not.toMatch(/would like to battle/);
+    }
+  });
+  it('slides in as the fight opens, with the box still empty and its own box not up', () => {
+    const s = sceneAt(WILD_LOG, 100);
+    expect(s.far.mon?.species).toBe(POOCHYENA);
+    expect(s.far.monDx).toBeGreaterThan(0);
+    expect(s.text).toBe('');
+    expect(boxUp(s.far)).toBe(false);
+    expect(namesShown(s).near).toBe(true);
+    expect(s.near.trainerDx).toBeLessThan(0);
+  });
+  it('is standing there by the time it is announced, and the log sending it out changes nothing', () => {
+    const said = sceneAt(WILD_LOG, at(1) + 10);
+    expect(said.text).toBe('Wild POOCHYENA appeared!');
+    expect(said.far.monDx).toBe(0);
+    expect(boxUp(said.far)).toBe(true);
+    const sent = sceneAt(WILD_LOG, at(2) + 10);
+    expect(sent.far.mon?.species).toBe(POOCHYENA);
+    expect(sent.far.appear).toBe(1);
+  });
+  it('stays gone once it has fainted', () => {
+    const s = sceneAt(WILD_LOG, at(WILD_LOG.length - 1) + 10);
+    expect(s.far.mon).toBeNull();
+    expect(s.far.trainerDx).toBeNull();
+  });
+  it("leaves the trainer's side as it was: slides in, then sends out", () => {
+    expect(sceneAt(WILD_LOG, at(1) + 10).near.trainerDx).not.toBeNull();
+    const out = sceneAt(WILD_LOG, at(4) + 10);
+    expect(out.near.mon?.species).toBe(SHARPEDO);
+    expect(out.near.appear).toBeLessThan(1);
+    expect(sceneAt(CANNED_LOG, 100).far.monDx).toBe(0);
   });
 });
 
