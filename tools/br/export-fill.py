@@ -18,12 +18,18 @@ seams):
      Land stops LAND_REACH cells out, so a hole with the sea in it, or open to the world
      outside, is a coast with sea beyond. A hole shut in with little water on its rim is all
      land. Past the rectangle, for ever, is the sea.
-  3. Each kind is cut from General's own pieces, the ones the real maps use: sand on water
-     for an open coast (then grass, then whole trees), a ridge's rim, faces and foot on
-     whatever is next to it. Same metatiles, same palettes, so it reads as one map.
+  3. An open coast is sand on water, then grass, then trees. Same metatiles, same palettes as the
+     real maps, so it reads as one map.
   4. Nobody can stand on any of it, so near where somebody can stand it doesn't look as if they
-     could (Cam, 11-04: "it almost looks like I can walk over here but I can't"): no grass or
-     sand within WALK_GAP cells of a map's walkable cell, trees instead.
+     could (Cam, 11-04: "it almost looks like I can walk over here but I can't"): no grass within
+     WALK_GAP cells of a map's walkable cell, trees instead. Water keeps its beach all the same
+     (Cam, 11-04: "let's change this to beaches along the water in general").
+  5. MOUNTAINS say where Hoenn is one range (Cam, 11-04: "it looks like this all is one big
+     mountain region", and the map of Hoenn Cam sent), each in the rock of the real map beside it.
+  6. Which metatile goes in a cell is learnt from the real maps: a piece goes only beside what the
+     maps put it beside, the real cells at the edge included, and a mountain's face comes from a
+     real mountain (Cam, 11-04: "we should never have a hard cut"; "ideally we should never see
+     a tree cut off"). solve() does it, and `seams()` counts what it couldn't.
 
 What ships is metatile numbers, from the pret tree, as the rest of the world's data does; the
 page cuts the pictures from the player's own ROM (romart.ts fillChunk). Nothing here is
@@ -183,20 +189,8 @@ class Plane:
         return self.kinds[k]
 
 
-# General's own pieces, as the real maps lay them: each kind's nine-slice on what is next to it.
-SAND_ON_WATER = {'tl': 0x11B, 't': 0x11C, 'tr': 0x11D, 'l': 0x123, 'c': 0x124, 'r': 0x125, 'bl': 0x12B, 'b': 0x12C, 'br': 0x12D,
-                 'nw': 0x13D, 'ne': 0x13E, 'sw': 0x145, 'se': 0x146}
-SAND_ON_GRASS = {'tl': 0x118, 't': 0x119, 'tr': 0x11A, 'l': 0x120, 'c': 0x121, 'r': 0x122, 'bl': 0x128, 'b': 0x129, 'br': 0x12A,
-                 'nw': 0x121, 'ne': 0x121, 'sw': 0x121, 'se': 0x121}
+# General's own pieces.
 ROCK_BODY = 0x71
-ROCK_ON_GRASS = {'tl': 0x68, 't': 0x69, 'tr': 0x6A, 'l': 0x70, 'c': ROCK_BODY, 'r': 0x72, 'bl': 0x78, 'b': 0x79, 'br': 0x7A,
-                 'nw': ROCK_BODY, 'ne': ROCK_BODY, 'sw': 0x77, 'se': 0x76}
-ROCK_ON_SAND = {'tl': 0x80, 't': 0x81, 'tr': 0x82, 'l': 0x88, 'c': ROCK_BODY, 'r': 0x8A, 'bl': 0x90, 'b': 0x91, 'br': 0x92,
-                'nw': ROCK_BODY, 'ne': ROCK_BODY, 'sw': 0x77, 'se': 0x76}
-ROCK_ON_WATER = {'tl': 0x172, 't': 0x173, 'tr': 0x174, 'l': 0x17A, 'c': ROCK_BODY, 'r': 0x17C, 'bl': 0x182, 'b': 0x17D, 'br': 0x184,
-                 'nw': ROCK_BODY, 'ne': ROCK_BODY, 'sw': 0x77, 'se': 0x76}
-# The row above a cliff's foot: rock darkening into the face.
-ROCK_FACE = 0x89
 GRASS_CELL = 0x1
 # The forests: inside, as a 2 x 2 (x & 1, y & 1 on its own map's grid); the top row over open
 # ground; the bottom row over open ground.
@@ -207,6 +201,8 @@ FOREST_B_IDS = {0xC6, 0xC7, 0xE, 0xF, 0x16, 0x17, 0x4, 0xD, 0x15}
 SEA_RIM = 0.35
 # Fewer land cells than this along an edge is a rock in the sea, not a shore.
 SHORE_RUN = 6
+# A ridge is at least this many cells each way from its middle.
+RIDGE = 3
 # Sand this thick on an open coast, then grass, then the trees.
 BEACH = 3
 MEADOW = 5
@@ -216,26 +212,58 @@ WALK_GAP = 4
 CLASS_WALL, CLASS_WATER = 1, 2
 
 
-def slice_of(table, here):
-    """`here(dx, dy)` is True where this kind goes on: the piece for that shape."""
-    n, e, s, w = here(0, -1), here(1, 0), here(0, 1), here(-1, 0)
-    if not n:
-        return table['tl'] if not w else table['tr'] if not e else table['t']
-    if not s:
-        return table['bl'] if not w else table['br'] if not e else table['b']
-    if not w:
-        return table['l']
-    if not e:
-        return table['r']
-    if not here(-1, -1):
-        return table['nw']
-    if not here(1, -1):
-        return table['ne']
-    if not here(-1, 1):
-        return table['sw']
-    if not here(1, 1):
-        return table['se']
-    return table['c']
+# Hoenn's ranges, where the holes between the maps are one mountain, in the picture's pixels (
+# world-artboard.json: a cell is a pixel >> 4, then plane.worldX, worldY). Each: a map whose
+# tilesets draw it, the rectangle of that map whose faces it takes after, and where.
+# `calm` is how much of it is the rock's flat top rather than its faces, 0 to 1, that top's pieces,
+# how many faces may stand side by side, and how long a cliff may run (None: as the real rock has).
+MOUNTAINS = [
+    # Behind ROUTE 114, FALLARBOR and ROUTE 113, in ROUTE 114's terraces.
+    ('MAP_ROUTE114', [('MAP_ROUTE114', (4, 1, 30, 9))], (0.35, {0x279}, None, None), [(720, 60), (3380, 60), (3380, 256), (1536, 256), (896, 256), (896, 560), (720, 560)]),
+    # ROUTE 114's and 115's grey range, on past the map's edge to the east and south.
+    ('MAP_ROUTE114', [('MAP_ROUTE114', (0, 28, 40, 50))], (0.8, {0x241}, None, None), [(500, 640), (860, 560), (1560, 560), (1940, 576), (1940, 1200), (1880, 1560), (1650, 1820), (880, 1840), (780, 1700), (896, 1536), (896, 896), (500, 896)]),
+    # MT. CHIMNEY's, where the ropeway goes, north and west of LAVARIDGE.
+    ('MAP_ROUTE112', [('MAP_ROUTE112', (0, 8, 28, 40))], (0.6, {0x271, 0x269}, 3, None), [(2160, 576), (2830, 576), (2830, 1536), (3000, 1720), (2500, 2040), (2100, 1760), (2090, 1560), (2160, 1200)]),
+]
+# Any other rock the land has, and the massifs: General's, as the maps lay it on grass, sand and water.
+PLAIN_ROCK = ('MAP_ROUTE116', [('MAP_ROUTE116', (0, 0, 60, 20)), ('MAP_ROUTE103', (0, 0, 80, 22)), ('MAP_ROUTE118', (0, 0, 80, 20)), ('MAP_ROUTE120', (0, 0, 40, 100))], (0.85, {ROCK_BODY}, None, 7), [])
+# Whole massifs of plain rock, in the same pixels, that stand where they are.
+MASSIFS = [
+    # Between ROUTE 116, LAVARIDGE and ROUTE 111.
+    [(1500, 1800), (2000, 1760), (2500, 2040), (3000, 1720), (3440, 1650), (3440, 2440), (1500, 2440)],
+    # East of ROUTE 111, down to ROUTE 118.
+    [(4096, 40), (4400, 40), (4400, 2496), (4096, 2496)],
+    # North of ROUTE 112, against ROUTE 111.
+    [(3380, 40), (4100, 40), (4100, 256), (3380, 256)],
+]
+TAPERS = {'MAP_ROUTE103', 'MAP_ROUTE110', 'MAP_ROUTE117', 'MAP_ROUTE118', 'MAP_ROUTE119', 'MAP_ROUTE120', 'MAP_ROUTE121', 'MAP_ROUTE122', 'MAP_ROUTE123', 'MAP_ROUTE124', 'MAP_ROUTE126', 'MAP_FORTREE_CITY', 'MAP_LILYCOVE_CITY', 'MAP_MAUVILLE_CITY'}
+# How far a range's outline wanders off the polygon, in cells.
+RAGGED = 7
+# What a real map's rock may not lend a range: the ropeway, a cave's mouth, a sign, what grows on it.
+ROPEWAY = set(range(0x250, 0x266))
+NOT_FACES = {
+    'gTileset_Lavaridge': ROPEWAY | {0x203, 0x210, 0x211, 0x218, 0x21A, 0x224, 0x241, 0x24A, 0x2EE, 0x3B8},
+    'gTileset_Fallarbor': {0x208, 0x20E, 0x20F, 0x22A},
+}
+# General's, in any tileset: grass, stairs, the forests.
+NOT_ROCK_PIECES = {0x1, 0xAF, 0xCF, 0xC6, 0xC7, 0xE, 0xF, 0x16, 0x17, 0x4, 0xD, 0x15, 0x1D4, 0x1D5, 0x1DC, 0x1DD, 0x1D6, 0x1D7, 0x1E4, 0x1E5}
+# Rarer than this in its rectangle isn't part of the rock.
+FACE_MIN = 4
+# Pieces a cell of each kind may be, the commonest of its tileset's.
+CHOICES = 36
+# The pair count a pair never seen in a real map scores.
+UNSEEN = 0.02
+
+
+RANGES = MOUNTAINS + [PLAIN_ROCK]
+# General's rock's rim and foot, by what it meets, as the real maps lay them.
+EDGES = {
+    GRASS: {'t': 0x69, 'tl': 0x68, 'tr': 0x6A, 'l': 0x70, 'r': 0x72, 'b': 0x79, 'bl': 0x78, 'br': 0x7A},
+    SAND: {'t': 0x81, 'tl': 0x80, 'tr': 0x82, 'l': 0x88, 'r': 0x8A, 'b': 0x91, 'bl': 0x90, 'br': 0x92},
+    WATER: {'t': 0x173, 'tl': 0x172, 'tr': 0x174, 'l': 0x17A, 'r': 0x17C, 'b': 0x79, 'bl': 0x182, 'br': 0x184},
+}
+# General's rock, on grass, sand and water.
+PLAIN_PIECES = set(range(0x68, 0x80)) | set(range(0x80, 0x98)) | set(range(0x172, 0x188))
 
 
 def edge_runs(plane):
@@ -268,11 +296,393 @@ def forest_of(plane, map_id, mid):
     return ('a',)
 
 
-def rock_of(plane, map_id):
-    border = [b & 0x3ff for b in struct.unpack('<4H', open(os.path.join(ROOT, plane.layouts[map_id]['border_filepath']), 'rb').read()[:8])]
-    if plane.kind(map_id, border[0]) == ROCK and border[0] >= 512:
-        return ('own', map_id, tuple(border))
-    return ('body',)
+class Pairs:
+    """What the real maps put beside what, per tileset; General's pieces over all of them."""
+
+    def __init__(self, plane):
+        self.plane = plane
+        self.h = collections.defaultdict(collections.Counter)
+        self.v = collections.defaultdict(collections.Counter)
+        self.h_to = collections.defaultdict(collections.Counter)
+        self.v_to = collections.defaultdict(collections.Counter)
+        self.count = collections.defaultdict(collections.Counter)
+        self.faces = {}
+        for n, (_, sources, _, _) in enumerate(RANGES):
+            c = collections.Counter()
+            for i, r in sources:
+                m = plane.maps[i]
+                for y in range(r[1], min(m['h'], r[1] + r[3])):
+                    for x in range(r[0], min(m['w'], r[0] + r[2])):
+                        c[plane.blocks[i][y * m['w'] + x] & 0x3ff] += 1
+            i = sources[0][0]
+            if n < len(MOUNTAINS):
+                no = NOT_ROCK_PIECES | NOT_FACES.get(self.key(i), set())
+                self.faces[n] = {t: k for t, k in c.items() if k >= FACE_MIN and t not in no and plane.kind(i, t) != WATER}
+            else:
+                self.faces[n] = {t: k for t, k in c.items() if t in PLAIN_PIECES}
+        for i in plane.at:
+            m = plane.maps[i]
+            w, h = m['w'], m['h']
+            b = plane.blocks[i]
+            t = self.key(i)
+            for y in range(h):
+                for x in range(w):
+                    a = b[y * w + x] & 0x3ff
+                    self.count[t][a] += 1
+                    if x + 1 < w:
+                        self.note(self.h, self.h_to, t, a, b[y * w + x + 1] & 0x3ff, i)
+                    if y + 1 < h:
+                        self.note(self.v, self.v_to, t, a, b[(y + 1) * w + x] & 0x3ff, i)
+
+    def key(self, map_id):
+        return self.plane.layouts[map_id]['secondary_tileset']
+
+    def note(self, pairs, to, t, a, b, i):
+        pairs[t][(a, b)] += 1
+        if a < 512 and b < 512:
+            pairs[None][(a, b)] += 1
+        to[t][(a, self.plane.kind(i, b))] += 1
+
+    def seen(self, pairs, ta, a, tb, b):
+        if a < 512 and b < 512:
+            return pairs[None][(a, b)]
+        if ta == tb or b < 512:
+            return pairs[ta][(a, b)]
+        if a < 512:
+            return pairs[tb][(a, b)]
+        return 0
+
+
+def tree_kind(plane, map_id, mid):
+    """Which forest carries on from this edge piece of `map_id`."""
+    if mid is not None:
+        for name, t in (('a', FOREST_A), ('b', FOREST_B)):
+            if any(mid in part for part in t.values()):
+                return name
+    return forest_of(plane, map_id, mid if mid is not None else 0)[0]
+
+
+def lay_forests(plane, grid, blank, family, cover, tile, tset, pairs, near, x0, y0, W, H):
+    """The forests, in whole trees on the two by two their own map's grid has, as the page tiles a
+    map's border: so a tree stops at a map's edge where a tree of that map would, and is never cut
+    (Cam, 11-04: "ideally we should never see a tree cut off"). Where two forests' trees won't fit
+    together what's left over is grass, a clearing rather than a line between them."""
+    forest = {}
+    # Grass left beside where somebody can stand, by a neck of sand or the like, is trees all the same.
+    for y, x in zip(*np.nonzero(blank & (grid == GRASS) & (family < 0) & near)):
+        if (int(x), int(y)) in cover:
+            grid[y, x] = TREE
+    for y, x in zip(*np.nonzero(blank & (grid == TREE) & (family < 0))):
+        x, y = int(x), int(y)
+        i, mid, _ = cover[(x, y)]
+        name = tree_kind(plane, i, mid)
+        gx, gy = plane.at[i]
+        forest[(x, y)] = (name, gx & 1, gy & 1, i if name == 'own' else None)
+    def real_tree(u, v):
+        return 0 <= u < W and 0 <= v < H and not blank[v, u] and grid[v, u] == TREE
+    # Beside where somebody can stand it stays trees (rule 4), so the rest of each of those trees is
+    # a tree too, whatever the coast's grass would have been.
+    for (x, y), f in list(forest.items()):
+        if not near[y, x]:
+            continue
+        tx = x - ((x + x0 - f[1]) & 1)
+        ty = y - ((y + y0 - f[2]) & 1)
+        for a, b in ((0, 0), (1, 0), (0, 1), (1, 1)):
+            u, v = tx + a, ty + b
+            if 0 <= u < W and 0 <= v < H and blank[v, u] and family[v, u] < 0 and grid[v, u] in (GRASS, SAND, TREE) and (u, v) in cover:
+                grid[v, u] = TREE
+                forest[(u, v)] = f
+    whole = {}
+    for (x, y), f in forest.items():
+        tx = x - ((x + x0 - f[1]) & 1)
+        ty = y - ((y + y0 - f[2]) & 1)
+        whole[(x, y)] = f[0] == 'own' or all(forest.get((tx + a, ty + b)) == f or real_tree(tx + a, ty + b) for a in (0, 1) for b in (0, 1))
+    for c, ok in whole.items():
+        if not ok:
+            grid[c[1], c[0]] = GRASS
+            del forest[c]
+    blocks = {}
+    def by_world(ids, f):
+        # As the file has a block: by the world's x & 1, y & 1.
+        return tuple(ids[((yy ^ f[2]) << 1) | (xx ^ f[1])] for yy in (0, 1) for xx in (0, 1))
+    for (x, y), f in forest.items():
+        wx, wy = x + x0, y + y0
+        u, v = (wx - f[1]) & 1, (wy - f[2]) & 1
+        if f[0] == 'own':
+            border = forest_of(plane, f[3], 0)[2]
+            tile[y, x] = border[(v << 1) | u]
+            blocks[(x, y)] = (f[3],) + by_world(border, f)
+        else:
+            t = FOREST_A if f[0] == 'a' else FOREST_B
+            if v == 0 and forest.get((x, y - 2)) != f and not real_tree(x, y - 2):
+                tile[y, x] = t['top'][u]
+            elif v == 1 and forest.get((x, y + 2)) != f and not real_tree(x, y + 2):
+                tile[y, x] = t['bottom'][u]
+            else:
+                tile[y, x] = t['inside'][(v << 1) | u]
+                blocks[(x, y)] = (None,) + by_world(t['inside'], f)
+        tset[(x, y)] = pairs.key(cover[(x, y)][0])
+    return blocks
+
+
+def solve(plane, ids, owner, x0, y0, W, H, blank, grid, family, ts_of, cover, near):
+    """A metatile for every cell of the holes, outward from the real maps: at each step the cell with
+    the most neighbours settled takes the piece the real maps best agree goes there."""
+    pairs = Pairs(plane)
+    default = next(iter(plane.at))
+    tile = np.full((H, W), -1, dtype=int)
+    tset = {}
+    for n, i in enumerate(ids):
+        gx, gy = plane.at[i]
+        m = plane.maps[i]
+        t = pairs.key(i)
+        for y in range(m['h']):
+            for x in range(m['w']):
+                tile[gy + y - y0, gx + x - x0] = plane.blocks[i][y * m['w'] + x] & 0x3ff
+                tset[(gx + x - x0, gy + y - y0)] = t
+    sea = blank & (grid == WATER)
+    tile[sea] = SEA
+    ref_of = {}
+
+    def choices(k, f, i):
+        t = pairs.key(i)
+        key = (k, f, t)
+        if key not in ref_of:
+            if f >= 0:
+                c = list(pairs.faces[f])
+            else:
+                c = [a for a, _ in pairs.count[t].most_common() if plane.kind(i, a) == k and a not in ROPEWAY][:CHOICES]
+            ref_of[key] = c or [GRASS_CELL]
+        return ref_of[key]
+
+    def score(x, y, t, a, f):
+        total = 0.0
+        for dx, dy, pp, to, here_first in ((1, 0, pairs.h, pairs.h_to, True), (-1, 0, pairs.h, pairs.h_to, False), (0, 1, pairs.v, pairs.v_to, True), (0, -1, pairs.v, pairs.v_to, False)):
+            u, v = x + dx, y + dy
+            if not (0 <= u < W and 0 <= v < H):
+                continue
+            b = tile[v, u]
+            if b >= 0:
+                tb = tset.get((u, v), t)
+                n = pairs.seen(pp, t, int(a), tb, int(b)) if here_first else pairs.seen(pp, tb, int(b), t, int(a))
+                total += math.log(n + UNSEEN)
+            elif here_first:
+                total += 0.4 * math.log(to[t][(int(a), int(grid[v, u]))] + UNSEEN)
+        return total
+
+    def settle(x, y):
+        i = ts_of.get((x, y), default)
+        t = pairs.key(i)
+        tset[(x, y)] = t
+        f = int(family[y, x])
+        cs = choices(int(grid[y, x]), f, i)
+        return max((score(x, y, t, a, f), a) for a in cs)[1]
+
+    # The ranges first: everything else fits round them.
+    for n, (i, sources, calm, _) in enumerate(RANGES):
+        draw_range(plane, pairs, sources, calm, n, tile, family, blank, grid, x0, y0, W, H)
+        t = pairs.key(i)
+        for y, x in zip(*np.nonzero(family == n)):
+            tset[(int(x), int(y))] = t
+    forest_blocks = lay_forests(plane, grid, blank, family, cover, tile, tset, pairs, near, x0, y0, W, H)
+    todo = {(int(x), int(y)) for y, x in zip(*np.nonzero(blank & ~sea & (family < 0) & (tile < 0)))}
+    def settled_round(x, y):
+        return sum(1 for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)) if 0 <= x + dx < W and 0 <= y + dy < H and tile[y + dy, x + dx] >= 0)
+    heap = [(-settled_round(x, y), y, x) for x, y in todo]
+    heapq.heapify(heap)
+    while heap:
+        n, y, x = heapq.heappop(heap)
+        if (x, y) not in todo:
+            continue
+        have = settled_round(x, y)
+        if -n != have:
+            heapq.heappush(heap, (-have, y, x))
+            continue
+        tile[y, x] = settle(x, y)
+        todo.discard((x, y))
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            u, v = x + dx, y + dy
+            if (u, v) in todo:
+                heapq.heappush(heap, (-settled_round(u, v), v, u))
+    # What greed painted itself into: another look at any cell beside a pair no map has.
+    repair(plane, pairs, tile, tset, blank, grid, family, sea, W, H, score, choices, ts_of, cover, default)
+    plane.seams_left = seams(pairs, tile, tset, blank, W, H)
+    palette = {}
+    def sym(entry):
+        return palette.setdefault(entry, len(palette))
+    sym(('sea',))
+    out = np.zeros((H, W), dtype=int)
+    for y in range(H):
+        for x in range(W):
+            if not blank[y, x]:
+                out[y, x] = -1
+            elif tile[y, x] != SEA and not (x in (0, W - 1) or y in (0, H - 1)):
+                a = int(tile[y, x])
+                ref = ts_of.get((x, y), default) if a >= 512 else None
+                # A forest's inside is one symbol, so a chunk of it is a pattern and never cut.
+                out[y, x] = sym(('block',) + forest_blocks[(x, y)]) if (x, y) in forest_blocks else sym(('block', ref, a, a, a, a))
+    return out, palette
+
+
+def repair(plane, pairs, tile, tset, blank, grid, family, sea, W, H, score, choices, ts_of, cover, default):
+    cells = sorted((int(x), int(y)) for y, x in zip(*np.nonzero(blank & ~sea & (family < 0) & (grid != TREE))))
+    for _ in range(6):
+        changed = 0
+        for x, y in cells:
+            i = ts_of.get((x, y), default)
+            t = pairs.key(i)
+            f = int(family[y, x])
+            a = tile[y, x]
+            if score(x, y, t, a, f) > 4 * math.log(1 + UNSEEN) - 0.01 and not unseen_at(pairs, tile, tset, x, y, W, H):
+                continue
+            best = max((score(x, y, t, c, f), c) for c in choices(int(grid[y, x]), f, i))
+            if best[1] != a and best[0] > score(x, y, t, a, f):
+                tile[y, x] = best[1]
+                changed += 1
+        if not changed:
+            break
+
+
+# Round a cell, with what agreeing on each is worth: the sides tell the most, and two cells off
+# keep a long terrace going.
+ROUND = [(-1, 0, 4), (0, -1, 4), (1, 0, 4), (0, 1, 4), (-1, -1, 2), (1, -1, 2), (-1, 1, 2), (1, 1, 2), (-2, 0, 1), (0, -2, 1), (2, 0, 1), (0, 2, 1)]
+# What isn't this rock, as it matters to a cliff's foot.
+EDGE_WEIGHT = 3
+ANY_ROCK = -9
+NOT_ROCK = {WATER: -2, SAND: -3, GRASS: -4, TREE: -4, ROCK: -4}
+
+
+def draw_range(plane, pairs, sources, calm, n, tile, family, blank, grid, x0, y0, W, H):
+    """A range's cells, a row at a time, each copied from somewhere on the real maps whose rock it is,
+    a place with the same neighbours: its pieces, in their order, ending as that rock ends, on what
+    it ends on."""
+    faces = pairs.faces[n]
+    around, pick = [], []
+    for i, r in sources:
+        m = plane.maps[i]
+        w, h = m['w'], m['h']
+        src = np.array([plane.blocks[i][y * w + x] & 0x3ff for y in range(h) for x in range(w)]).reshape(h, w)
+        rock = np.isin(src, list(faces))
+        cls = np.zeros((h, w), dtype=int)
+        for y in range(h):
+            for x in range(w):
+                cls[y, x] = src[y, x] if rock[y, x] else NOT_ROCK[plane.kind(i, int(src[y, x]))]
+        pad = np.pad(cls, 2, constant_values=NOT_ROCK[GRASS])
+        inside = np.zeros((h, w), dtype=bool)
+        inside[r[1]:r[1] + r[3], r[0]:r[0] + r[2]] = True
+        ys, xs = np.nonzero(rock & inside)
+        around.append(np.array([pad[ys + 2 + dy, xs + 2 + dx] for dx, dy, _ in ROUND]))
+        pick.append(src[ys, xs])
+    around = np.concatenate(around, axis=1)
+    pick = np.concatenate(pick)
+    calm, flats, run, drop = calm
+    is_flat = np.isin(pick, list(flats))
+    def known(x, y):
+        got = []
+        for k, (dx, dy, wt) in enumerate(ROUND):
+            u, v = x + dx, y + dy
+            if not (0 <= u < W and 0 <= v < H):
+                got.append((k, NOT_ROCK[WATER], wt))
+            elif family[v, u] == n:
+                got.append((k, int(tile[v, u]) if tile[v, u] >= 0 else ANY_ROCK, wt))
+            elif not blank[v, u] and int(tile[v, u]) in faces:
+                got.append((k, int(tile[v, u]), wt))
+            else:
+                got.append((k, NOT_ROCK[int(grid[v, u])], wt))
+        return tuple(got)
+    cache = {}
+    def stripe(x, y):
+        if run is None:
+            return False
+        return all(x - k >= 0 and family[y, x - k] == n and tile[y, x - k] >= 0 and int(tile[y, x - k]) not in flats for k in range(1, run + 1))
+    def too_long(x, y):
+        # A cliff no longer than a real one: by neighbours alone a face follows the last for ever.
+        return drop is not None and all(y - k >= 0 and family[y - k, x] == n and tile[y - k, x] >= 0 and int(tile[y - k, x]) not in flats for k in range(1, drop + 1))
+    def draw(x, y):
+        key = known(x, y)
+        best = cache.get(key)
+        if best is None:
+            sc = np.zeros(len(pick), dtype=int)
+            for k, val, wt in key:
+                if val == ANY_ROCK:
+                    sc += (around[k] >= 0) * wt * EDGE_WEIGHT
+                elif val < 0:
+                    sc += (around[k] == val) * wt * EDGE_WEIGHT
+                else:
+                    # This rock at all, on a side that has it, then this piece.
+                    sc += (around[k] == val) * wt + (around[k] >= 0) * wt
+            top = np.nonzero(sc == sc.max())[0]
+            flat = top[is_flat[top]]
+            best = (top, flat)
+            cache[key] = best
+        top, flat = best
+        # A cell at the rock's edge is what the real rock has there: a foot, a rim. Inside, patches of
+        # quiet rock among the faces: a field over the range, not a per-cell coin.
+        inside = not any(val < 0 and val != ANY_ROCK for _, val, _ in key)
+        if inside and (too_long(x, y) or (len(flat) and (hash_noise(x + x0 + 13, y + y0 - 29, 9) < calm or stripe(x, y)))):
+            if len(flat):
+                top = flat
+            else:
+                return min(flats)
+        r = (hash_noise(x + x0, y + y0, 1) * 7919.0 + hash_noise(y + y0 + 91, x + x0 + 17, 1) * 104729.0) % 1
+        return int(pick[top[int(r * len(top))]])
+    cells = [(int(x), int(y)) for y, x in zip(*np.nonzero(family == n))]
+    for x, y in sorted(cells, key=lambda c: (c[1], c[0])):
+        tile[y, x] = draw(x, y)
+    # Now with everything round them known, for what a row couldn't know of the real map below it.
+    for _ in range(2):
+        for x, y in sorted(cells, key=lambda c: (-c[1], c[0])):
+            tile[y, x] = draw(x, y)
+    # General's flat rock never just stops: where it meets anything else it has the rim or the
+    # front-facing foot a real map has there (Cam, 11-04: "This should be front facing"), whatever
+    # the texture said.
+    if n >= len(MOUNTAINS):
+        def rock(u, v):
+            return not (0 <= u < W and 0 <= v < H) or family[v, u] == n or (not blank[v, u] and grid[v, u] == ROCK)
+        def beside(u, v):
+            g = int(grid[v, u]) if 0 <= u < W and 0 <= v < H else WATER
+            return g if g in EDGES else GRASS
+        rims = []
+        for x, y in cells:
+            # Over water, any piece: it stands on its foot.
+            if y + 1 < H and grid[y + 1, x] == WATER and rock(x - 1, y) and rock(x + 1, y):
+                rims.append((x, y, EDGES[WATER]['b']))
+                continue
+            if int(tile[y, x]) != ROCK_BODY:
+                continue
+            up, down, left, right = rock(x, y - 1), rock(x, y + 1), rock(x - 1, y), rock(x + 1, y)
+            if up and down and left and right:
+                continue
+            side = 'b' if not down else 't' if not up else ''
+            side += 'l' if not left else 'r' if not right else ''
+            other = (x, y + 1) if not down else (x, y - 1) if not up else (x - 1, y) if not left else (x + 1, y)
+            rims.append((x, y, EDGES[beside(*other)][side]))
+        for x, y, piece in rims:
+            tile[y, x] = piece
+
+
+def unseen_at(pairs, tile, tset, x, y, W, H):
+    a, t = int(tile[y, x]), tset[(x, y)]
+    for dx, dy, pp, first in ((1, 0, pairs.h, True), (-1, 0, pairs.h, False), (0, 1, pairs.v, True), (0, -1, pairs.v, False)):
+        u, v = x + dx, y + dy
+        if 0 <= u < W and 0 <= v < H and tile[v, u] >= 0:
+            tb = tset.get((u, v), t)
+            if not (pairs.seen(pp, t, a, tb, int(tile[v, u])) if first else pairs.seen(pp, tb, int(tile[v, u]), t, a)):
+                return True
+    return False
+
+
+def seams(pairs, tile, tset, blank, W, H):
+    """The pairs of cells, one or both of them the fill's, that no real map has side by side."""
+    bad = []
+    for y in range(H):
+        for x in range(W):
+            for dx, dy, pp in ((1, 0, pairs.h), (0, 1, pairs.v)):
+                u, v = x + dx, y + dy
+                if u < W and v < H and (blank[y, x] or blank[v, u]) and tile[y, x] != SEA and tile[v, u] != SEA:
+                    if not pairs.seen(pp, tset.get((x, y)), int(tile[y, x]), tset.get((u, v)), int(tile[v, u])):
+                        bad.append((x, y, u, v))
+    return bad
 
 
 def generate():
@@ -365,7 +775,7 @@ def generate():
                 u, v = x + dx, y + dy
                 if not (0 <= u < W and 0 <= v < H) or not blank[v, u]:
                     continue
-                nd = d + 0.6 + 0.8 * noise(u + x0, v + y0)
+                nd = d + 0.25 + 1.5 * noise(u + x0, v + y0)
                 if nd < dist[v, u]:
                     dist[v, u] = nd
                     if carry:
@@ -441,6 +851,10 @@ def generate():
                 k = TREE
             if k == GRASS:
                 k = TREE
+            # A map's edge of rock doesn't carry on as a block ruled off by the next map's edge: it
+            # comes down into the forest, however far this bit of it goes.
+            if k == ROCK and i in TAPERS and dland[y, x] > 3 + 13 * hash_noise(x + x0 + 71, y + y0 + 13, 9):
+                k = TREE
             if k == ROCK and forest_of(plane, i, mid)[0] == 'own':
                 # ROUTE 114's ash: its rock has no pieces in General's colours; its ashen
                 # trees (the border the ROM repeats there) carry on instead.
@@ -452,20 +866,21 @@ def generate():
                     k = SAND
                 elif dcoast[y, x] <= MEADOW + wob and k == TREE:
                     k = GRASS
-                if near[y, x]:
+                if near[y, x] and k != SAND:
                     k = TREE
             grid[y, x] = k
             cover[(x, y)] = (i, mid, k)
-    # A ridge is as thick as its pieces need, as the land is: three by three, or it is trees. (A
-    # house on a map's edge has a cliff's colours: its "ridge" is a sliver, and goes.)
+    # A ridge is as thick as a cliff's faces and foot need, RIDGE across, or it is trees: a strip of
+    # faces is nothing a real mountain has. (A house on a map's edge has a cliff's colours: its
+    # "ridge" is a sliver, and goes.)
     solid = grid == ROCK
     square = np.ones((H, W), dtype=bool)
-    for dy in (-1, 0, 1):
-        for dx in (-1, 0, 1):
+    for dy in range(-RIDGE, RIDGE + 1):
+        for dx in range(-RIDGE, RIDGE + 1):
             square &= np.roll(np.roll(solid, dy, 0), dx, 1)
     kept = square.copy()
-    for dy in (-1, 0, 1):
-        for dx in (-1, 0, 1):
+    for dy in range(-RIDGE, RIDGE + 1):
+        for dx in range(-RIDGE, RIDGE + 1):
             kept |= np.roll(np.roll(square, dy, 0), dx, 1)
     grid[blank & (grid == ROCK) & ~kept] = TREE
     # Grass round a ridge, where trees would run straight into its foot, away from anybody.
@@ -476,37 +891,6 @@ def generate():
             grown |= np.roll(np.roll(near_rock, dy, 0), dx, 1)
     grid[blank & grown & ~near & (grid == TREE)] = GRASS
 
-    # The forests in whole trees, on a lattice of 2 x 2: anything left over is grass.
-    forest = {}
-    for (x, y), (i, mid, k) in cover.items():
-        if grid[y, x] == TREE:
-            forest[(x, y)] = forest_of(plane, i, mid)
-    # Where two forests meet, a tree is all one of them, or the line between them is a row of holes.
-    lattice = {}
-    for (x, y), f in sorted(forest.items(), key=lambda c: c[0][::-1]):
-        lattice.setdefault(((x + x0) & ~1, (y + y0) & ~1), f)
-    for (x, y) in forest:
-        forest[(x, y)] = lattice[((x + x0) & ~1, (y + y0) & ~1)]
-    whole = {}
-    for (x, y), f in forest.items():
-        tx, ty = (x + x0) & ~1, (y + y0) & ~1
-        cells = [(tx - x0 + a, ty - y0 + b) for a in (0, 1) for b in (0, 1)]
-        whole[(x, y)] = all(forest.get(c) == f or (c[0] < W and c[1] < H and not blank[c[1], c[0]] and kind[c[1], c[0]] == TREE) for c in cells)
-    for c, ok in whole.items():
-        if not ok:
-            grid[c[1], c[0]] = GRASS
-            forest.pop(c, None)
-    # A tileset's own forest is a block that repeats (ROUTE 114's ash): what's left over beside it is
-    # more of it. General's grass is the wrong colour there.
-    grow = collections.deque(c for c, f in forest.items() if f[0] == 'own')
-    while grow:
-        x, y = grow.popleft()
-        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)):
-            u, v = x + dx, y + dy
-            if 0 <= u < W and 0 <= v < H and blank[v, u] and grid[v, u] == GRASS and (u, v) not in forest:
-                grid[v, u] = TREE
-                forest[(u, v)] = forest[(x, y)]
-                grow.append((u, v))
     # A neck of sand has no piece either.
     for _ in range(2):
         for y in range(1, H - 1):
@@ -539,74 +923,30 @@ def generate():
                 for x, y in cells:
                     grid[y, x] = GRASS
 
-    palette = {}
-    def sym(entry):
-        return palette.setdefault(entry, len(palette))
-    sym(('sea',))
-    def single(mid):
-        return sym(('block', None, mid, mid, mid, mid))
-    out = np.zeros((H, W), dtype=int)
-    for y in range(H):
-        for x in range(W):
-            if not blank[y, x]:
-                out[y, x] = -1
-                continue
-            k = int(grid[y, x])
-            if k == WATER or x in (0, W - 1) or y in (0, H - 1):
-                continue
-            g = grid[y - 1:y + 2, x - 1:x + 2]
-            if k == GRASS:
-                out[y, x] = single(GRASS_CELL)
-            elif k == SAND:
-                table = SAND_ON_WATER if (g == WATER).any() else SAND_ON_GRASS
-                # Sand against a real map's cliff or trees just stops: as if it went on.
-                if table is SAND_ON_WATER:
-                    goes_on = lambda dx, dy: grid[y + dy, x + dx] != WATER
-                else:
-                    goes_on = lambda dx, dy: grid[y + dy, x + dx] != GRASS and grid[y + dy, x + dx] != TREE
-                out[y, x] = single(slice_of(table, goes_on))
-            elif k == ROCK:
-                table = ROCK_ON_WATER if (g == WATER).any() else ROCK_ON_SAND if (g == SAND).any() else ROCK_ON_GRASS
-                goes_on = lambda dx, dy: grid[y + dy, x + dx] == ROCK
-                piece = slice_of(table, goes_on)
-                if piece == ROCK_BODY:
-                    i, mid, _ = cover.get((x, y), ('MAP_LITTLEROOT_TOWN', 0, ROCK))
-                    if y + 2 < H and grid[y + 1, x] == ROCK and grid[y + 2, x] != ROCK:
-                        out[y, x] = single(ROCK_FACE)
-                        continue
-                    own = rock_of(plane, i)
-                    if own[0] == 'own':
-                        out[y, x] = sym(('block', own[1]) + phased(own[2], plane.at[own[1]]))
-                        continue
-                out[y, x] = single(piece)
-            else:
-                f = forest.get((x, y))
-                if not f:
-                    out[y, x] = single(GRASS_CELL)
-                elif f[0] == 'own':
-                    out[y, x] = sym(('block', f[1]) + phased(f[2], plane.at[f[1]]))
-                else:
-                    t = FOREST_B if f[0] == 'b' else FOREST_A
-                    wx, wy = x + x0, y + y0
-                    # The row of a tree this cell is in, and whether a tree stands over or under it.
-                    if not (wy & 1):
-                        real = y >= 2 and not blank[y - 2, x] and kind[y - 2, x] == TREE
-                        if forest.get((x, y - 2)) != f and not real:
-                            out[y, x] = single(t['top'][wx & 1])
-                            continue
-                    else:
-                        real = y + 2 < H and not blank[y + 2, x] and kind[y + 2, x] == TREE
-                        if forest.get((x, y + 2)) != f and not real:
-                            out[y, x] = single(t['bottom'][wx & 1])
-                            continue
-                    out[y, x] = sym(('block', None) + t['inside'])
+    # The ranges, over what the land was going to be.
+    family = np.full((H, W), -1, dtype=int)
+    plain = len(MOUNTAINS)
+    for n, poly in [(plain, q) for q in MASSIFS] + [(n, m[3]) for n, m in enumerate(MOUNTAINS)]:
+        cells = [((px >> 4) - 136 - x0, (py >> 4) - 298 - y0) for px, py in poly]
+        for y, x in zip(*np.nonzero(blank & land & (grid != WATER) & (dcoast > BEACH))):
+            # An outline a ruler didn't draw.
+            wx, wy = x + RAGGED * (2 * noise(x + x0 + 311, y + y0 - 77) - 1), y + RAGGED * (2 * noise(x + x0 - 53, y + y0 + 149) - 1)
+            inside = False
+            for (ax, ay), (bx, by) in zip(cells, cells[1:] + cells[:1]):
+                if (ay <= wy) != (by <= wy) and wx < ax + (wy - ay) * (bx - ax) / (by - ay):
+                    inside = not inside
+            if inside:
+                family[y, x] = n
+                grid[y, x] = ROCK
+    # Rock anywhere else: the plain range. (A house's walls on a map's edge are no rock to carry on.)
+    family[blank & (grid == ROCK) & (family < 0)] = plain
+    ts_of = {}
+    for (x, y), (i, _, _) in cover.items():
+        ts_of[(x, y)] = i
+    for (x, y) in zip(*np.nonzero(family >= 0)[::-1]):
+        ts_of[(int(x), int(y))] = RANGES[family[y, x]][0]
+    out, palette = solve(plane, ids, owner, x0, y0, W, H, blank, grid, family, ts_of, cover, near)
     return plane, x0, y0, W, H, out, palette, None
-
-
-def phased(block, at):
-    """A border block on its own map's grid, as the plane's x & 1, y & 1."""
-    px, py = at[0] & 1, at[1] & 1
-    return tuple(block[((yy ^ py) << 1) | (xx ^ px)] for yy in (0, 1) for xx in (0, 1))
 
 
 def rle(row):
@@ -634,7 +974,7 @@ def main():
     entries = sorted(palette, key=palette.get)
     doc = {'x0': x0, 'y0': y0, 'w': W, 'h': H, 'blocks': [list(e[1:]) if e[0] == 'block' else [] for e in entries], 'rows': rle((out.clip(min=0)).reshape(-1).tolist())}
     json.dump(doc, open(OUT, 'w', encoding='utf-8'), separators=(',', ':'))
-    print('wrote', OUT, os.path.getsize(OUT), 'bytes;', len(entries), 'blocks;', W, 'x', H, 'cells')
+    print('wrote', OUT, os.path.getsize(OUT), 'bytes;', len(entries), 'blocks;', W, 'x', H, 'cells;', len(plane.seams_left), 'unseen pairs')
     if a.preview:
         preview(plane, x0, y0, W, H, out, entries, a)
 
