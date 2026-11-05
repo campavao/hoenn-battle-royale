@@ -28,7 +28,7 @@ export class WorldFill {
   readonly w: number;
   readonly h: number;
   readonly blocks: (FillBlock | null)[];
-  private cells: Uint8Array;
+  private cells: Uint16Array;
   private chunks = new Map<number, FillChunk>();
 
   constructor(file: FillFile) {
@@ -37,7 +37,7 @@ export class WorldFill {
     this.w = file.w;
     this.h = file.h;
     this.blocks = file.blocks.map((b) => (b.length ? { ref: b[0] as string | null, ids: b.slice(1, 5) as FillBlock['ids'] } : null));
-    this.cells = new Uint8Array(file.w * file.h);
+    this.cells = new Uint16Array(file.w * file.h);
     let i = 0;
     for (const run of file.rows.split(';')) {
       const [n, v] = run.split('x').map(Number);
