@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-09T02:12:22.599Z",
+ "readAt": "2026-11-09T09:47:04.191Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -27,7 +27,7 @@
      "mode": "host",
      "trainers": 2,
      "watching": 0,
-     "secs": null
+     "secs": 1761
     }
    ],
    "live": true,
@@ -3813,7 +3813,7 @@
   {
    "id": "a6f8be76",
    "first": "2026-10-14T22:34:17.163Z",
-   "last": "2026-11-09T01:49:53.489Z",
+   "last": "2026-11-09T02:20:46.735Z",
    "since": "2026-10-14",
    "versions": [
     "2",
@@ -3826,7 +3826,7 @@
     "world-59c8e92b"
    ],
    "solo": 1,
-   "checkins": 45,
+   "checkins": 46,
    "v": "world-59c8e92b"
   },
   {
@@ -3976,6 +3976,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-09T02:20:08.639Z",
+   "code": "6V54AP",
+   "v": "97a422c",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1107,
+   "drifts": 0,
+   "deploy": "b82eb791"
+  },
+  {
+   "t": "2026-11-09T02:20:08.620Z",
+   "code": "6V54AP",
+   "v": "97a422c",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1760,
+   "drifts": 0,
+   "deploy": "b82eb791"
+  },
   {
    "t": "2026-11-09T01:50:20.568Z",
    "code": "FFCVXA",
