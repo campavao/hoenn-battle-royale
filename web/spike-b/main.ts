@@ -21,6 +21,7 @@ import { lineAt, voiceFor } from '../src/bots/lines';
 import type { PackedMon } from '../src/net/wire';
 import { FIELD_CUT, FIELD_STRENGTH, isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
 import { battleOrder, leadIndex } from './battleorder';
+import { battleText } from './battlereader';
 import { arrived, routeTo } from './tapwalk';
 import { loadPatches } from '../src/bots/patches';
 import { rungForPhase } from '../src/bots/party';
@@ -29,7 +30,7 @@ import { ballsIn, battleItems } from '../src/bots/bag';
 import { acroFrame, acroNear, DIR_EAST } from './sim';
 import { ballTakes, catchRateOf, patchBalls, wildMon, zoneBalls, zoneFight } from './shared/wild';
 import { logMs } from './shared/battlelog';
-import { ATTENDANT, BOATS, isLooseSeam, DOCKS, MOORINGS, TIDAL_MAPS, TIDAL_SAILOR, islandMaps, type Cruise, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, FIELD_DIVE, diveTo, emptyBag, interiors, makeRoom, botParty, legendMon, LEGEND_CATCH, LEGEND_FOE, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
+import { ATTENDANT, BOATS, CLOSED_DOORS, isLooseSeam, DOCKS, MOORINGS, TIDAL_MAPS, TIDAL_SAILOR, islandMaps, type Cruise, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, FIELD_DIVE, diveTo, emptyBag, interiors, makeRoom, botParty, legendMon, LEGEND_CATCH, LEGEND_FOE, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
@@ -222,6 +223,22 @@ function layout(maps: WorldMap[]): Map<string, Placed> {
         else { gx += p.m.w; gy += s.offset; }
         placed.set(to.id, { m: to, gx, gy, classes: decode(to.grid, to.w * to.h) });
         q.push(to.id);
+      }
+    }
+    // ...and what its doors lead into (its REST HOUSE), each on its own past it, as the islands'
+    // buildings are. The room lets a trainer in; with nowhere here to stand, every page drawing them
+    // threw on every frame and the match stopped for all (Cam, 11-08).
+    let zx = right + 200;
+    for (const p of placed.values()) if (p.m.id.startsWith(SAFARI)) zx = Math.max(zx, p.gx + p.m.w + GAP);
+    const zy = y + rowH + 200;
+    const doors = [...placed.keys()].filter((id) => id.startsWith(SAFARI));
+    while (doors.length) {
+      for (const w of placed.get(doors.shift()!)!.m.warps ?? []) {
+        const to = byId.get(w.to);
+        if (!to || placed.has(to.id) || CLOSED_DOORS.has(to.id)) continue;
+        placed.set(to.id, { m: to, gx: zx, gy: zy, classes: decode(to.grid, to.w * to.h) });
+        zx += to.w + GAP;
+        doors.push(to.id);
       }
     }
   }
@@ -3017,9 +3034,11 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
     const main = sym('gMain');
     return main === undefined || partyCb === undefined || ((emu.read(main + 4, 32) ^ partyCb) & ~1) === 0;
   };
+  /** The party screen's own prompt, which a refusal's line gives way to. */
+  const CHOOSE_MON = /^Choose a POK/;
   // All of it counted in the ROM's frames, as the keys it presses are (touch.ts): it runs at
   // HURRY_SPEED, when the page sees about one in eight.
-  let walk: { slot: number; step: number; frames: number; beat: number; item: boolean; move?: number; forced?: boolean } | null = null;
+  let walk: { slot: number; step: number; frames: number; beat: number; item: boolean; move?: number; forced?: boolean; why?: string } | null = null;
   /** The ROM's BAG and party under the windows, from the click until the battle is back and drawn:
    *  nobody sees them, so at HURRY_SPEED. Cam, 11-04: "selected an item, selected the Pokemon, and
    *  we fully waited like five seconds". */
@@ -3129,11 +3148,23 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
       walk.beat = 0;
     } else if (walk.step === 3 && every(30)) {
       // SHIFT is taken once its question has printed: pressed again until the party is gone.
-      // Back on the party's list means the ROM said no (trapped, say): its line, then out.
+      // Back on the party's list means the ROM said no (trapped, say): its line, then out. The
+      // line was on the ROM's screen, which nobody sees: the page went back to "What will ALAKAZAM
+      // do?" with no word why, whichever mon was picked (Cam, 11-08). TrySwitchInPokemon leaves it
+      // in gStringVar4 ("ALAKAZAM can't be switched out!", "...'s SHADOW TAG prevents switching!")
+      // while its message is up; back on the list, it is "Choose a POKéMON." again.
       const main = sym('gMain'), fight = sym('BattleMainCB2');
       const inFight = main !== undefined && fight !== undefined && ((emu.read(main + 4, 32) ^ fight) & ~1) === 0;
+      const at = sym('gStringVar4');
+      const line = at === undefined ? '' : battleText(emu.bytes(at, 120));
+      if (!inFight && !choosing() && line && !CHOOSE_MON.test(line)) walk.why ??= line;
       if (inFight) walk = null;
-      else if (choosing()) { touch.tapKey('b'); walk = null; }
+      else if (choosing()) {
+        say(walk.why ?? "It can't be switched out!", 4000);
+        rom?.sound(SE_FAILURE);
+        touch.tapKey('b');
+        walk = null;
+      }
       else if (walk.frames > 400) { touch.tapKey('b'); walk = null; }
       else touch.tapKey('a');
     } else if (walk.step === 6) {
@@ -5048,6 +5079,7 @@ function loop(now: number): void {
   draw();
   watch.frame();
   if (sayUntil && performance.now() > sayUntil) { sayUntil = tickUntil = 0; msgBox.hide(); }
+  msgBox.place();
   const t2 = performance.now();
   simMs = simMs * 0.9 + (t1 - t0) * 0.1;
   drawMs = drawMs * 0.9 + (t2 - t1) * 0.1;
