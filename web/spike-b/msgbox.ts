@@ -81,14 +81,24 @@ export class MessageBox {
     this.el.removeAttribute('data-text');
   }
 
+  /** Above the dock when it is up, and over a battle's windows, just above them, when they are: a
+   *  line said in a battle (a switch the ROM turned down) went under them, unread. The stylesheet's
+   *  place otherwise. Asked every frame while a line is up: the windows come and go under it. */
+  place(): void {
+    if (!this.wanted) return;
+    const dock = document.getElementById('pdock');
+    const menu = document.body.classList.contains('battle-menu') ? document.getElementById('battle-menu') : null;
+    const tops = [dock && !dock.hidden ? dock.getBoundingClientRect().top : 0, menu && !menu.hidden ? menu.getBoundingClientRect().top : 0].filter((t) => t > 0);
+    const top = tops.length ? Math.min(...tops) : 0;
+    this.el.style.bottom = top > 0 ? `${Math.round(innerHeight - top + 4 * this.scale)}px` : '';
+    this.el.classList.toggle('over', !!menu && !menu.hidden);
+  }
+
   private paint(): void {
     const w = this.wanted;
     if (!w) return;
     const key = `${w.alert}:${w.lines}:${w.text}`;
-    // Above the dock when it is up; the stylesheet's place otherwise.
-    const dock = document.getElementById('pdock');
-    const top = dock && !dock.hidden ? dock.getBoundingClientRect().top : 0;
-    this.el.style.bottom = top > 0 ? `${Math.round(innerHeight - top + 4 * this.scale)}px` : '';
+    this.place();
     if (key === this.shown) return;
     const sameBox = this.shown.startsWith(`${w.alert}:${w.lines}:`);
     this.shown = key;

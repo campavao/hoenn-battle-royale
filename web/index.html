@@ -230,6 +230,7 @@
       #msg { z-index: 2; position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 300px); transform: translateX(-50%); display: none; pointer-events: none; }
       @media (pointer: fine) { #msg { bottom: 32px; } }
       #msg.on { display: block; }
+      #msg.over { z-index: 4; }
       #msg canvas { display: block; image-rendering: pixelated; }
       #win { z-index: 1; position: fixed; left: 50%; top: 18%; transform: translateX(-50%); background: #26313aee; color: #e8eef2; border: 2px solid #b48ad6; border-radius: 10px; padding: 14px 18px; text-align: center; display: none; }
       #win.on { display: block; }

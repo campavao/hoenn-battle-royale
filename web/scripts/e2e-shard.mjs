@@ -50,6 +50,9 @@ export const FILE_SECONDS = {
   'spikeb-weather.spec.ts': 180,
   'spikeb-watch-log.spec.ts': 420,
   'spikeb-stuck.spec.ts': 255,
+  'spikeb-resthouse.spec.ts': 45,
+  'spikeb-switch.spec.ts': 210,
+  'spikeb-duel-switch.spec.ts': 300,
   // Skipped in CI: these need the deployed site, or HBR_SOAK.
   'live-room.spec.ts': 0,
   'live.spec.ts': 0,
