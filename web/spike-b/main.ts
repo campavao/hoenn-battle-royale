@@ -549,9 +549,13 @@ function myBits(): number {
     if (held.size && !toldLoading) { toldLoading = true; tick('Getting the game ready…'); }
     return 0;
   }
-  const bits = (held.has('up') ? KEY_UP : 0) | (held.has('down') ? KEY_DOWN : 0) | (held.has('left') ? KEY_LEFT : 0) |
-    (held.has('right') ? KEY_RIGHT : 0) | (held.has('b') ? KEY_B : 0) | (held.has('a') && frame >= calmUntil ? KEY_A : 0) |
-    (held.has('select') || frame < selectUntil ? KEY_SELECT : 0);
+  // Held now, or pressed since the last frame: a tap whose keyup came before this frame ran
+  // (a quick thumb, or both events queued behind a long frame) is still one frame's press,
+  // where reading `held` alone lost it (Cam 11-10, "the first click doesn't go through").
+  const on = (k: string) => held.has(k) || pressed.has(k);
+  const bits = (on('up') ? KEY_UP : 0) | (on('down') ? KEY_DOWN : 0) | (on('left') ? KEY_LEFT : 0) |
+    (on('right') ? KEY_RIGHT : 0) | (on('b') ? KEY_B : 0) | (on('a') && frame >= calmUntil ? KEY_A : 0) |
+    (on('select') || frame < selectUntil ? KEY_SELECT : 0);
   // A thumb on the pad takes over from a tapped walk.
   if (bits) { tapWalk = null; return bits; }
   return tapBits();

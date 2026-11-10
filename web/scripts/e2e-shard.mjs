@@ -52,6 +52,7 @@ export const FILE_SECONDS = {
   'spikeb-stuck.spec.ts': 255,
   'spikeb-resthouse.spec.ts': 45,
   'spikeb-pickup-time.spec.ts': 90,
+  'spikeb-first-press.spec.ts': 95,
   'spikeb-switch.spec.ts': 210,
   'spikeb-duel-switch.spec.ts': 300,
   // Skipped in CI: these need the deployed site, or HBR_SOAK.

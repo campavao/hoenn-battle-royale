@@ -14303,6 +14303,9 @@ var Room = class {
           events.push({ type: "wild", tick: this.tick, id: a.id, map: a.m.spot.map, x: p.x, y: p.y, key: p.key });
         }
       }
+    }
+    if (!a.bot && (!a.m.action || a.m.action.kind === "bump" || a.m.action.kind === "turn")) {
+      const c = a.cruise;
       const wall = !a.battling && bits & KEY_A && !(a.last & KEY_A) && atWall(a) ? this.events.find((e) => e.map === a.m.spot.map && e.story && DOORS[e.story] && !e.opened) : void 0;
       const ferry = !wall && !a.battling && bits & KEY_A && !(a.last & KEY_A) ? ferryAt(a.m.spot.map, ...this.ahead(a)) : void 0;
       const bed = !wall && !ferry && c && !a.battling && bits & KEY_A && !(a.last & KEY_A) && bedAt(a.m.spot.map, ...this.ahead(a));
@@ -14376,7 +14379,7 @@ var Room = class {
           if (c2 && a.m.spot.x === c2.counterX && a.m.spot.y === c2.counterY) events.push({ type: "nurse", tick: this.tick, id: a.id, map: a.m.spot.map });
         }
       }
-    } else if (!a.m.action) {
+    } else if (a.bot && !a.m.action) {
       if (a.arriving) this.botOnPatch(a, events);
       a.arriving = false;
     }
@@ -16304,4 +16307,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "59c8e92bb65e";
+export const WORLD_HASH = "28abaea6dc25";
