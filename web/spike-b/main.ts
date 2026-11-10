@@ -1031,7 +1031,9 @@ function openMapWindow(o: { verb: string | null; can(p: MapPlace): boolean; prom
       },
       fogKey: () => {
         const ring = link.room.ring();
-        const next = ring.next !== undefined && ring.next !== Infinity ? `${ring.next}|${ring.cx.toFixed(0)}|${ring.cy.toFixed(0)}` : '';
+        // The next ring's line only while the fog moves in to it (Cam, 11-10: "only show the fog
+        // ring on the map as the fog is actively closing in. It shouldn't show on initial drop").
+        const next = ring.next !== undefined && ring.next !== Infinity && fogClosing(ring) ? `${ring.next}|${ring.cx.toFixed(0)}|${ring.cy.toFixed(0)}` : '';
         return { key: `${ring.last}|${ring.r.toFixed(1)}|${ring.cx.toFixed(0)}|${ring.cy.toFixed(0)}`, next };
       },
       placeAt: (cx, cy) => map.placeAt(cx, cy),
@@ -1195,14 +1197,36 @@ function bikeNow(me: Actor): { item: number; label: 'BIKE' | 'WALK'; enabled: bo
     on: !!me.m.bike,
   };
 }
+/** One bike's cell on the dial: WALK, lit, on the one ridden; the other changes bikes where it may
+ *  go (useKeyItem, as the BAG's USE). */
+function bikeCell(me: Actor, item: number, side: 'up' | 'upright'): DialItem {
+  const acro = item === ITEM_ACRO_BIKE, step = link.room.stepFor(me), spot = me.m.spot;
+  const same = !!me.m.bike && !!me.m.acro === acro, rail = (step.acroAt?.(spot) ?? 0) >= 2;
+  const here = !!step.cycling?.(spot) || (acro && !!step.acroCycling?.(spot));
+  return {
+    side,
+    item,
+    label: same ? 'WALK' : acro ? 'ACRO' : 'MACH',
+    enabled: !(me.m.bike && rail) && (same || here),
+    why: me.m.bike && rail ? "Can't get off here." : "Can't ride here.",
+    go: () => void useKeyItem(item),
+  };
+}
 /** What SELECT would do with the rod here: casts it facing water, on foot or surfing (room.ts). */
 const rodReady = (me: Actor) => !me.m.bike && classAt(aheadOf(me)) === CLASS_WATER;
 const pressSelect = () => { selectUntil = frame + 40; };
 /** The key items that do something on the field, each on its own side of the dial. */
 function dialItems(me: Actor): DialItem[] {
   const out: DialItem[] = [];
-  const bike = bikeNow(me);
-  out.push({ side: 'up', ...bike, why: "Can't ride here.", go: pressSelect });
+  // Both bikes in the bag, both on the dial (Cam, 11-10): the MACH BIKE up, the ACRO BIKE in the
+  // corner beside it. One, or none yet, up: the one SELECT would ride.
+  const has = rom ? bagHolds(rom.emu, romTables.sym, KEYITEMS_POCKET, [ITEM_MACH_BIKE, ITEM_ACRO_BIKE]) : new Set<number>();
+  if (has.size === 2) {
+    out.push(bikeCell(me, ITEM_MACH_BIKE, 'up'), bikeCell(me, ITEM_ACRO_BIKE, 'upright'));
+  } else {
+    const bike = bikeNow(me);
+    out.push({ side: 'up', ...bike, why: "Can't ride here.", go: pressSelect });
+  }
   const rod = rom?.rod() ?? 0;
   if (rodOf(rod) >= 0) out.push({ side: 'right', item: rod, label: 'FISH', enabled: rodReady(me), why: me.m.bike ? 'Off the bike first.' : 'Face the water.', go: pressSelect });
   // The MAP and FLY are one screen (lookAtMap): one side, named for what it will do.
@@ -2227,6 +2251,11 @@ function safeWay(): string {
   return me && ringMap ? ringMap.way(me.m.spot) : '';
 }
 
+/** The fog is moving in now (room.ts ring: over the end of a phase, its radius falls a frame at
+ *  a time), not holding where it is. */
+function fogClosing(ring: Ring): boolean {
+  return !ring.safari && !ring.last && link.room.ring(link.room.tick + 1).r < ring.r;
+}
 function inFogNow(): boolean {
   const me = link.room.actor(link.me);
   return !!me && link.room.inFog(me.m.spot);
