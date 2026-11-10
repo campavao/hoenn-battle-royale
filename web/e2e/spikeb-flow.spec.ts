@@ -263,7 +263,8 @@ test('how long a TM takes, from picking who to the field', async ({ page }) => {
   await page.locator('.bm-slot').nth(slot).click();
   // Which move to forget, if it asks: the first, as soon as it does.
   const forget = page.locator('.bm-pick-move:visible').first();
-  const done = () => page.evaluate(() => (window as any).__tm.some((l: any) => l[0] === 'end' && l[1] === 'menu'));
+  // Through when the move is in: the page writes it now (main.ts learn), no ROM menu to wait out.
+  const done = async () => JSON.stringify(await movesOf(slot)) !== JSON.stringify(before);
   let asked = 0, answered = 0;
   for (let i = 0; i < 1200 && !(await done()); i++) {
     if (!asked && await forget.isVisible()) {
