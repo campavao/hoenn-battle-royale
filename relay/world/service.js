@@ -13496,34 +13496,93 @@ var Room = class {
       return Math.hypot(p.gx + s.x + 0.5 - ring.cx, p.gy + s.y + 0.5 - ring.cy);
     };
     const final = n === EVENT_MAX - 1 ? STORIES.find((s) => s.id === this.centre(ring.round).final) : void 0;
-    if (final && !this.events.some((e) => e.story === final.id)) return this.tellStory(n, ring, final, rng);
+    if (final && !this.events.some((e2) => e2.story === final.id)) return this.tellStory(n, ring, final, rng);
     const story = n < EVENT_MAX - 1 && rng() < STORY_CHANCE ? this.storyFor(rng, ring) : void 0;
     if (story) return this.tellStory(n, ring, story, rng);
     let from;
-    if (n === EVENT_MAX - 1) for (const s of all) {
-      if (!from || plane(s) < plane(from)) from = s;
-    }
+    if (n === EVENT_MAX - 1) from = all.slice().sort((p, q2) => plane(p) - plane(q2)).find((s) => this.reaches(s, [s]));
     else {
       const inside = all.filter((s) => !this.inFog(s, ring));
-      from = inside[Math.min(inside.length - 1, Math.floor(rng() * inside.length))];
+      const at2 = Math.min(inside.length - 1, Math.floor(rng() * inside.length));
+      for (let i = 0; i < inside.length && !from; i++) {
+        const s = inside[(at2 + i) % inside.length];
+        if (this.reaches(s, [s])) from = s;
+      }
     }
     if (!from) return;
     const f = from;
     const d = (s) => Math.abs(s.x - f.x) + Math.abs(s.y - f.y);
-    const cells = all.filter((s) => s.map === f.map && d(s) <= 8 && d(s) !== 1).sort((p, q2) => d(p) - d(q2) || p.y - q2.y || p.x - q2.x).slice(0, 1 + EVENT_RARES + EVENT_GOLD + 2);
+    const near = all.filter((s) => s.map === f.map && d(s) <= 8 && d(s) !== 1 && s !== f).sort((p, q2) => d(p) - d(q2) || p.y - q2.y || p.x - q2.x);
     const level = rungForPhase(ring.phase + 1);
     const legends = LEGENDS[Math.min(n, LEGENDS.length - 1)];
     const species = [legendOf(legends, this.seed, rng), ...draw(rng, RARES, EVENT_RARES)];
     const bags = [...draw(rng, GOLD, EVENT_GOLD).map((id2) => [{ id: id2, n: 1 }]), SUPPLIES.map((r) => ({ ...r }))];
-    const spot = cells.length > species.length + bags.length ? cells.pop() : void 0;
-    const offers = RARES.filter((r) => !species.includes(r));
-    const trader = spot && offers.length ? { x: spot.x, y: spot.y, species: offers[Math.min(offers.length - 1, Math.floor(rng() * offers.length))], busy: 0 } : void 0;
-    cells.forEach((c, i) => {
+    const laid = [];
+    const lay = (c) => {
+      const i = laid.length;
       const key = eventPiece(n, i);
       const bag = i < species.length ? { items: [], money: 0, mons: [{ species: species[i], level }] } : { items: bags[i - species.length], money: 0 };
       this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: "", bag, ...i === 0 ? { legend: true } : {} });
-    });
-    this.events.push({ n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0], ...trader ? { trader } : {} });
+      if (this.reaches(f, [...laid, c])) laid.push(c);
+      else this.spills.delete(key);
+    };
+    lay(f);
+    for (const c of near) {
+      if (laid.length >= species.length + bags.length) break;
+      lay(c);
+    }
+    const e = { n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0] };
+    this.events.push(e);
+    const offers = RARES.filter((r) => !species.includes(r));
+    const spare = near.filter((c) => !laid.includes(c));
+    if (laid.length === species.length + bags.length && offers.length) {
+      const pick = offers[Math.min(offers.length - 1, Math.floor(rng() * offers.length))];
+      for (const c of spare.slice(0, 6)) {
+        e.trader = { x: c.x, y: c.y, species: pick, busy: 0 };
+        if (this.reaches(f, [...laid, c])) break;
+        delete e.trader;
+      }
+    }
+  }
+  /** Whether a trainer can walk up to each of `targets` (the cells of a piece, or a trader)
+   *  from outside the cluster round `f`: with every ball, bag, trader and gift-giver a wall, a
+   *  standing cell beside each that some cell over eight steps from `f` walks to, the walk's
+   *  ledges and doors as they are. */
+  reaches(f, targets) {
+    const R2 = 10, key = (x2, y) => `${x2},${y}`;
+    const wall = (map, x2, y) => !!(this.groundAt(map, x2, y) || this.spillAt(map, x2, y) || this.traderAt(map, x2, y) || clerkAt(map, x2, y) || ferryAt(map, x2, y) || leaderAt(map, x2, y) || this.spentAt(map, x2, y));
+    const walk = (x2, y) => this.world.cell(f.map, x2, y) === 0 && !wall(f.map, x2, y);
+    const rev = /* @__PURE__ */ new Map();
+    for (let y = f.y - R2; y <= f.y + R2; y++) for (let x2 = f.x - R2; x2 <= f.x + R2; x2++) {
+      if (!walk(x2, y)) continue;
+      for (let dir = 1; dir <= 4; dir++) {
+        const r = this.base({ map: f.map, x: x2, y }, dir);
+        if (!r || r.warp || r.to.map !== f.map || wall(r.to.map, r.to.x, r.to.y)) continue;
+        const k = key(r.to.x, r.to.y);
+        (rev.get(k) ?? rev.set(k, []).get(k)).push([x2, y]);
+      }
+    }
+    for (const t7 of targets) {
+      const seen = /* @__PURE__ */ new Set(), q2 = [];
+      for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) if (walk(t7.x + dx, t7.y + dy)) {
+        q2.push([t7.x + dx, t7.y + dy]);
+        seen.add(key(t7.x + dx, t7.y + dy));
+      }
+      let out = false;
+      while (q2.length && !out) {
+        const [x2, y] = q2.pop();
+        if (Math.abs(x2 - f.x) + Math.abs(y - f.y) > 8) {
+          out = true;
+          break;
+        }
+        for (const p of rev.get(key(x2, y)) ?? []) if (!seen.has(key(...p))) {
+          seen.add(key(...p));
+          q2.push(p);
+        }
+      }
+      if (!out) return false;
+    }
+    return true;
   }
   /** A story event this round has not had (story.ts), where Emerald set that beat, inside
    *  the ring. The ones the page can tell: a place and its reward, or a person handing it
@@ -16307,4 +16366,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "28abaea6dc25";
+export const WORLD_HASH = "38330a9bb663";
