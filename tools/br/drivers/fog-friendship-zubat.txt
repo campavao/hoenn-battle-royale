@@ -26,9 +26,15 @@ expect u8 gPlayerParty+9 0xCF
 expect u8 gPlayerParty+0x54 5
 say stage 0 rung 5
 dump gPlayerParty 100
+# ring 1 (the match's first, tier 0, the rung it began at): nothing is warmer yet. Real
+# matches go 1 then 2, so the step must not fire here too.
+poke u8 gBrRing+1 1
+poke u8 gBrRing 1
+wait 200
+say stage 5 ring 1
+dump gPlayerParty 100
 # ring 2: rung 15
 poke u8 gBrRing+1 2
-poke u8 gBrRing 1
 wait 200
 expect u8 gBrLevels 15
 expect u8 gPlayerParty+0x54 15

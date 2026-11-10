@@ -48,9 +48,9 @@ def main():
     name = os.environ.get("BR_DRIVER", "")
     got = stages(sys.stdin.read())
     if "feebas" in name:
-        want = {0: ("beauty", 0), 1: ("beauty", 60), 2: ("beauty", 120), 3: ("beauty", 180)}
+        want = {5: ("beauty", 0), 0: ("beauty", 0), 1: ("beauty", 60), 2: ("beauty", 120), 3: ("beauty", 180)}
     else:
-        want = {0: ("friendship", 70), 1: ("friendship", 120), 2: ("friendship", 170),
+        want = {5: ("friendship", 70), 0: ("friendship", 70), 1: ("friendship", 120), 2: ("friendship", 170),
                 3: ("friendship", 220), 4: ("friendship", 255)}
     bad = 0
     for st, (field, v) in sorted(want.items()):

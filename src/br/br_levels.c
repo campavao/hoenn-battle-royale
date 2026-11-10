@@ -194,7 +194,29 @@ static void WarmTo(struct Pokemon *mon)
 // fires on a level-up and no others, so a stone stays something you go to Lilycove for.
 // A friendship or beauty one is a level-up one too, and asks the mon's real numbers
 // (above), not the most it could be.
-static void GrowUp(struct Pokemon *mon)
+//
+// `fondOnly` is a mon the ring did not level (it was already past the rung: a crafted
+// Lv30 SQUIRT, a taken mon, one whose evolution was cancelled). Its level evolutions are
+// not ours to fire on a lift that did not move its level -- it would change species
+// under the player -- so only a friendship or beauty result goes through.
+static bool8 FondEvolution(struct Pokemon *mon, u16 target)
+{
+    u8 friendship = GetMonData(mon, MON_DATA_FRIENDSHIP, NULL);
+    u8 beauty = GetMonData(mon, MON_DATA_BEAUTY, NULL);
+    u8 none = 0;
+    u16 without;
+
+    // The evolution table is private to pokemon.c, so ask again of the same mon with no
+    // fondness and no beauty: whatever still evolves it is a level one.
+    SetMonData(mon, MON_DATA_FRIENDSHIP, &none);
+    SetMonData(mon, MON_DATA_BEAUTY, &none);
+    without = GetEvolutionTargetSpecies(mon, EVO_MODE_NORMAL, ITEM_NONE);
+    SetMonData(mon, MON_DATA_FRIENDSHIP, &friendship);
+    SetMonData(mon, MON_DATA_BEAUTY, &beauty);
+    return without != target;
+}
+
+static void GrowUpWith(struct Pokemon *mon, bool8 fondOnly)
 {
     u8 i;
 
@@ -211,6 +233,8 @@ static void GrowUp(struct Pokemon *mon)
 
         if (target == SPECIES_NONE || target == before)
             break;
+        if (fondOnly && !FondEvolution(mon, target))
+            break;
         GetMonData(mon, MON_DATA_NICKNAME, nickname);
         SetMonData(mon, MON_DATA_SPECIES, &target);
         CalculateMonStats(mon);
@@ -219,6 +243,11 @@ static void GrowUp(struct Pokemon *mon)
         if (StringCompare(nickname, gSpeciesNames[before]) == 0)
             SetMonData(mon, MON_DATA_NICKNAME, gSpeciesNames[target]);
     }
+}
+
+static void GrowUp(struct Pokemon *mon)
+{
+    GrowUpWith(mon, FALSE);
 }
 
 // ---- a move worth having (POK-311) -----------------------------------------------
@@ -570,6 +599,11 @@ static void LiftParty(u8 level)
         if (species == SPECIES_NONE)
             continue;
         lifted = GetMonData(mon, MON_DATA_LEVEL) < level;
+        // The first ring keeps the rung the match began at (phase 1 is tier 0, as no ring
+        // is): nothing closed yet, so nothing is warmer, and a mon already past the rung
+        // is left exactly as it was -- not rewritten for nothing.
+        if (!lifted && gBrLevels.tier == 0)
+            continue;
         hp = GetMonData(mon, MON_DATA_HP);
         maxBefore = GetMonData(mon, MON_DATA_MAX_HP);
         if (lifted)
@@ -581,11 +615,12 @@ static void LiftParty(u8 level)
         // The ring closing is a friendship and beauty step for everyone in the party, one
         // already past the rung included: a friendship or beauty evolution is waiting on
         // exactly this, so a mon the levels did not move is asked too.
-        Warm(mon);
+        if (gBrLevels.tier > 0)
+            Warm(mon);
         // Evolve before the moves are worked out, so the learnset walked is the one it
         // will be standing in when the fighting starts. Then it takes the best of what its
         // levels teach, around the moves the player set.
-        GrowUp(mon);
+        GrowUpWith(mon, !lifted);
         if (lifted || GetMonData(mon, MON_DATA_SPECIES) != species)
             LearnThrough(mon, GetMonData(mon, MON_DATA_LEVEL), TRUE);
         // Keep the wound: the new max grows, the missing HP stays missing.
