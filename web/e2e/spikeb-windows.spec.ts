@@ -142,14 +142,12 @@ test('a medicine asks on the party windows: a Revive for the fainted, a Potion f
   await expect(page.locator('#bag-panel')).toBeHidden();
   // The third fainted, the fourth hurt.
   const hp = (slot: number) => spike(page, new Function('s', `return s.rom.emu.read(s.art.sym('gPlayerParty') + ${slot} * 100 + 86, 16)`) as (s: any) => number);
-  // Once the take is through: its party write, landing after ours on a slow runner, put the HP back
-  // (CI 11-10, three tries out of three on a push run, never here).
-  await expect.poll(() => spike(page, (s) => s.swapping || s.asking), { timeout: 30_000 }).toBe(false);
-  await expect.poll(async () => {
-    await spike(page, (s) => { const at = s.art.sym('gPlayerParty'); s.rom.emu.write(at + 2 * 100 + 86, 0, 16); s.rom.emu.write(at + 3 * 100 + 86, 1, 16); });
-    await page.waitForTimeout(500);
-    return [await hp(2), await hp(3)].join();
-  }, { timeout: 20_000, intervals: [250] }).toBe('0,1');
+  // On the team the page carries, not only in the ROM: between battles the page puts its own copy
+  // back on every turn it takes, so a write straight into gPlayerParty came back as 23 HP in the
+  // fight whenever one landed first (CI 11-10, some runs).
+  await spike(page, (s) => s.rom.setHp(2, 0));
+  await spike(page, (s) => s.rom.setHp(3, 1));
+  expect([await hp(2), await hp(3)].join()).toBe('0,1');
   await intoBattle(page);
   expect(await hp(2), 'still fainted in the fight').toBe(0);
 
@@ -340,7 +338,8 @@ test('PARTY and BAG on the field are the windows: switch, hold, summary, and use
   await expect.poll(() => spike(page, (s) => s.swapping)).toBe(false);
 
   // BAG: a REVIVE asks, and only the fainted can take it.
-  await spike(page, (s) => { const at = s.art.sym('gPlayerParty'); s.rom.emu.write(at + 86, 5, 16); s.rom.emu.write(at + 2 * 100 + 86, 0, 16); });
+  await spike(page, (s) => s.rom.setHp(0, 5));
+  await spike(page, (s) => s.rom.setHp(2, 0));
   await page.keyboard.press('e');
   await expect(page.locator('.bm-bag-head')).toBeVisible();
   await shot(page, 'desk-field-bag');
@@ -983,5 +982,18 @@ test('a catch with a full party on the keys: B only reaches KEEP PARTY, A says i
   expect(await spillsOf(page, before[0]), 'nobody on the ground').toBe(was);
   expect(await spillsOf(page, caught), 'nor the catch').toBe(wasCaught);
   expect(await page.evaluate(() => (window as any).romSeen), 'frames of the ROM\'s own screen').toBe(0);
+  await ctx.close();
+});
+
+test('setHp holds across a turn the page takes between battles (a straight ROM write came back as 23)', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  const page = await ctx.newPage();
+  await withTeam(page);
+  const hp = (slot: number) => spike(page, new Function('s', `return s.rom.emu.read(s.art.sym('gPlayerParty') + ${slot} * 100 + 86, 16)`) as (s: any) => number);
+  await spike(page, (s) => s.rom.setHp(2, 0));
+  expect(await hp(2), 'written').toBe(0);
+  await spike(page, (s) => s.rom.fillParty());
+  expect(await hp(2), 'after a rom turn').toBe(0);
   await ctx.close();
 });
