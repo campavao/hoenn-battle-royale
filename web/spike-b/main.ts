@@ -1366,7 +1366,7 @@ void import('../src/ui/taken').then((m) => { takenLib = m; }, (e) => console.war
 function joinsAs(species: number, level: number, at: number | null): NonNullable<PartyMember['joins']> {
   const was = Math.max(level, rungForPhase(link.room.ring().phase + 1));
   const lib = takenLib;
-  const t = lib?.takenMon(romTables, species, was, at === null || !rom ? null : lib.teamSeed(rom.matchSeed(), at), rom?.localHour());
+  const t = lib?.takenMon(romTables, species, was, at === null || !rom ? null : lib.teamSeed(rom.matchSeed(), at), rom?.localHour(), Math.min(5, link.room.ring().phase));
   if (!lib || !t) return { species, name: speciesName(species), level: was, moves: [] };
   return { species: t.species, name: speciesName(t.species), level: t.level, moves: t.moves.map((id) => { const pp = lib.fullPp(romTables, id); return { id, pp, maxPp: pp }; }) };
 }

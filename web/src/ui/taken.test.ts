@@ -65,10 +65,18 @@ describe('takenMon', () => {
     expect(takenMon(rom, 2, 60, null)!.species, 'a big jump is two').toBe(4);
   });
 
-  it('asks the clock of one that evolves by the hour, and is as fond as can be', () => {
+  it('asks the clock of one that evolves by the hour, once the rings have made it fond enough (tier 3: 220)', () => {
     const rom = cart({ 2: [[1, 1]], 3: [[1, 1]], 4: [[1, 1]] }, { 2: [[2, 0, 3], [3, 0, 4]] });
-    expect(takenMon(rom, 2, 5, null, 15)!.species).toBe(3);
-    expect(takenMon(rom, 2, 5, null, 3)!.species).toBe(4);
+    expect(takenMon(rom, 2, 5, null, 15, 3)!.species).toBe(3);
+    expect(takenMon(rom, 2, 5, null, 3, 3)!.species).toBe(4);
+    expect(takenMon(rom, 2, 5, null, 15, 2)!.species, 'tier 2 is 170: not yet').toBe(2);
+    expect(takenMon(rom, 2, 5, null, 15)!.species, "the first ring is the catch's own").toBe(2);
+  });
+
+  it('evolves by friendship or beauty at the tier the rings have reached', () => {
+    const rom = cart({ 2: [[1, 1]], 3: [[1, 1]], 4: [[1, 1]] }, { 2: [[1, 0, 3]], 3: [[15, 170, 4]] });
+    expect(takenMon(rom, 2, 5, null, 15, 3)!.species, 'friendship 220 -> 3, beauty 180 >= 170 -> 4').toBe(4);
+    expect(takenMon(rom, 2, 5, null, 15, 2)!.species, 'friendship 170, beauty 120').toBe(2);
   });
 
   it('says nothing without the tables', () => {
