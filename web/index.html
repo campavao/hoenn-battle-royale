@@ -71,6 +71,8 @@
       #hud-ctx { grid-area: 2 / 3; }
       .hud-menu { grid-area: 1 / 2 / 3 / 3; align-self: center; width: calc(var(--s, 1.5) * 32px); height: calc(var(--s, 1.5) * 32px); border-radius: 50%; border: calc(var(--s, 1.5) * 2px) solid rgba(255, 255, 255, 0.55); background: rgba(74, 74, 106, 0.75); color: #fff; font: calc(var(--s, 1.5) * 14px) / 1 system-ui, sans-serif; cursor: pointer; }
       body.phone-hud #hud > button, body.phone-hud #corner { display: none; }
+      /* Nor the dev's buttons before the HUD is wired (main.ts wirePhoneHud, once the ROM is in). */
+      body:not(.phone-hud):not(.desk-hud) #hud > button { display: none; }
       /* The fog window (ui/phonehud.ts FOG_W, 120 GBA pixels and its margin) stays up for a
          trainer out and watching: the watch strip wraps short of it, not under it. */
       body.phone-hud #hud { right: calc(env(safe-area-inset-right) + var(--s, 1.5) * 128px); }
@@ -254,7 +256,10 @@
       @media (orientation: landscape) and (pointer: coarse) { #battleview-host { left: calc(env(safe-area-inset-left) + 200px); right: calc(env(safe-area-inset-left) + 200px); } }
       /* A phone held upright: the battle at the top, the pad (which drives it) below. */
       @media (orientation: portrait) { #battle { place-items: start center; align-content: start; padding-top: calc(env(safe-area-inset-top) + 56px); } }
-      #intro { z-index: 4; position: fixed; inset: 0; display: grid; place-items: safe center; overflow-y: auto; background: #000c; padding: 16px; }
+      /* The old engine preview's notes: the debug #solo world's alone (main.ts). Shown from the
+         first paint, the live page flashed it before the script took it away (Cam, 11-10). */
+      #intro { display: none; }
+      body.dev-intro #intro { z-index: 4; position: fixed; inset: 0; display: grid; place-items: safe center; overflow-y: auto; background: #000c; padding: 16px; }
       #intro div { max-width: 420px; background: #1b252c; border: 1px solid #4c7a99; border-radius: 10px; padding: 18px 20px; display: grid; gap: 10px; font-size: 15px; }
       #intro b { font-size: 17px; }
       #intro ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }

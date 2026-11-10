@@ -5300,7 +5300,8 @@ async function boot(): Promise<void> {
   };
   if (q.has('solo') || parseRoomHash(location.hash)?.mode === 'solo') {
     // The debug path (Cam, 2026-10-29): straight into a world of the page's own, the bots
-    // and nobody else.
+    // and nobody else, under the old preview's notes.
+    document.body.classList.add('dev-intro');
     startMatch(solo());
   } else {
     // The live game's way in: the menu, a room, START (lobby.ts).
