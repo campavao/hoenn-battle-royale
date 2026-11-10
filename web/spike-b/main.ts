@@ -351,6 +351,9 @@ function miniFrame(a: Actor | undefined): string {
 const SEALED_CHAMBER: [number, number, number][] = [[7, 19, 0x22a], [8, 19, 0x22b], [9, 19, 0x22c], [7, 20, 0x232], [8, 20, 0x233], [9, 20, 0x234]];
 /** METATILE_Cave_EntranceCover over SealedChamberBraille_Mid: the wall before it opens. */
 const HIDDEN_CHAMBER: [number, number, number][] = [[7, 19, 0x229], [8, 19, 0x229], [9, 19, 0x229], [7, 20, 0x235], [8, 20, 0x235], [9, 20, 0x235]];
+/** The beams across MAUVILLE's gym that shut Wattson's room, off (METATILE_MauvilleGym_*BeamH{3,4}_On
+ *  to _Off, as MauvilleGymDeactivatePuzzle lays them): the grid has them open, so the picture does. */
+const MAUVILLE_BEAMS_OFF: Record<number, number> = { 0x228: 0x238, 0x229: 0x239, 0x22a: 0x23a, 0x22b: 0x23b };
 const DOOR_MAPS = new Set(STORIES.filter((s) => s.door).map((s) => s.map));
 /** A wall opened since its map was painted: painted again. */
 function doorsFrame(): void {
@@ -371,6 +374,13 @@ function paint(p: Placed): boolean {
   // sealed chamber's entrance on its six cells (br_story.c's Open).
   const wall = !DOOR_MAPS.has(p.m.id) ? undefined : p.open ? SEALED_CHAMBER : HIDDEN_CHAMBER;
   const over = wall ? new Map(wall.map(([x, y, block]) => [y * p.m.w + x, block])) : new Map<number, number>();
+  // MAUVILLE's gym with its puzzle off, as it is walked (tools/br/open-gym-puzzles.py).
+  if (p.m.id === 'MAP_MAUVILLE_CITY_GYM') {
+    for (let i = 0; i < p.m.w * p.m.h; i++) {
+      const block = art.blockAt(p.m.group, p.m.num, i % p.m.w, Math.floor(i / p.m.w)), off = MAUVILLE_BEAMS_OFF[block & 0x3ff];
+      if (off) over.set(i, off);
+    }
+  }
   for (const i of ashGone.get(p.m.id) ?? []) over.set(i, grassUnderAsh(art.blockAt(p.m.group, p.m.num, i % p.m.w, Math.floor(i / p.m.w))));
   const a = art.map(p.m.group, p.m.num, over);
   p.ground = a.ground;
