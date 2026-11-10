@@ -340,8 +340,9 @@ function miniFrame(a: Actor | undefined): string {
   if (s) {
     c.imageSmoothingEnabled = false;
     const { w, h } = SHEETS[String(gfx)];
-    // The head, a frame's lower rows from the top: a person stands at the bottom of their frame.
-    c.drawImage(s, 0, Math.max(0, h - 26), w, 16, Math.round(at.x - sx - w / 2), Math.round(at.y - sy - 8), w, 16);
+    // The head, rows 9-24 of a 32-row frame (hair from row 10, chin at 22, the 11-04 crop stopped at 21 and cut the chin), kept whole inside the picture at its edges.
+    const dx = Math.max(0, Math.min(n - w, Math.round(at.x - sx - w / 2))), dy = Math.max(0, Math.min(n - 16, Math.round(at.y - sy - 8)));
+    c.drawImage(s, 0, Math.max(0, h - 23), w, 16, dx, dy, w, 16);
   }
   return key;
 }
