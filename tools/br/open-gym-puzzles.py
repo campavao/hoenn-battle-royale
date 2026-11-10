@@ -30,6 +30,10 @@ spec.loader.exec_module(ew)
 # metatile_labels.h: METATILE_MauvilleGym_{Green,Red}BeamH{3,4}_On, the beams that carry
 # MAPGRID_IMPASSABLE in the layout, and the ids MauvilleGymDeactivatePuzzle swaps them for.
 BEAMS_OFF = {0x228: 0x238, 0x229: 0x239, 0x22A: 0x23A, 0x22B: 0x23B}
+# ...and the cells the same function lays down with no MAPGRID_IMPASSABLE: the vertical beam's lower half
+# becomes plain floor (V2 -> FloorTile) and the pole's top its "off" picture (PoleTop_On -> _Off).
+# (The beams' upper halves, the V1 beams and the poles' bottoms stay walls or stay passable as they were.)
+OPENED = {0x248, 0x249, 0x250}
 
 
 def decode(grid, cells):
@@ -53,7 +57,7 @@ def main():
     grid, elev = decode(m["grid"], n), decode(m["elev"], n)
     opened = []
     for i, val in enumerate(blocks[:n]):
-        if (val & ew.MAPGRID_METATILE_ID_MASK) in BEAMS_OFF and grid[i] == 1:
+        if ((val & ew.MAPGRID_METATILE_ID_MASK) in BEAMS_OFF or (val & ew.MAPGRID_METATILE_ID_MASK) in OPENED) and grid[i] == 1:
             grid[i] = 0
             elev[i] = val >> ew.MAPGRID_ELEVATION_SHIFT
             opened.append((i % m["w"], i // m["w"]))

@@ -353,7 +353,10 @@ const SEALED_CHAMBER: [number, number, number][] = [[7, 19, 0x22a], [8, 19, 0x22
 const HIDDEN_CHAMBER: [number, number, number][] = [[7, 19, 0x229], [8, 19, 0x229], [9, 19, 0x229], [7, 20, 0x235], [8, 20, 0x235], [9, 20, 0x235]];
 /** The beams across MAUVILLE's gym that shut Wattson's room, off (METATILE_MauvilleGym_*BeamH{3,4}_On
  *  to _Off, as MauvilleGymDeactivatePuzzle lays them): the grid has them open, so the picture does. */
-const MAUVILLE_BEAMS_OFF: Record<number, number> = { 0x228: 0x238, 0x229: 0x239, 0x22a: 0x23a, 0x22b: 0x23b };
+const MAUVILLE_BEAMS_OFF: Record<number, number> = {
+  0x220: 0x230, 0x221: 0x231, 0x228: 0x238, 0x229: 0x239, 0x222: 0x232, 0x223: 0x233, 0x22a: 0x23a, 0x22b: 0x23b,
+  0x240: 0x242, 0x241: 0x243, 0x248: 0x21a, 0x249: 0x21a, 0x250: 0x251,
+};
 const DOOR_MAPS = new Set(STORIES.filter((s) => s.door).map((s) => s.map));
 /** A wall opened since its map was painted: painted again. */
 function doorsFrame(): void {
