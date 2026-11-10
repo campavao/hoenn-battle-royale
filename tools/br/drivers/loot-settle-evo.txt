@@ -1,11 +1,16 @@
 # loot-settle-evo: a ball taken at the rung is where a lift would have left it (2026-10-05
 # play-test: "zubat did not evolve when picked up at around level 50"). ZUBAT evolves at
-# 22 and GOLBAT on friendship, which nothing in a match ever raises -- so a ZUBAT at 50
-# comes out a CROBAT. The same shape as loot-trade-evo.txt.
+# 22 and GOLBAT on friendship. A ring that closes now raises friendship (fog-friendship-
+# zubat.txt), and a mon that joined late is as fond as one that rode every ring (WarmTo):
+# at rung 50 (tier 3, 70 + 3 x 50 = 220) a ZUBAT at 50 comes out a CROBAT. The same shape
+# as loot-trade-evo.txt.
 wait 30
 pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
 expect u8 gPlayerPartyCount 0
+# the match is at rung 50: ladder index 3
+poke u8 gBrLevels 50
+poke u8 gBrLevels+2 3
 # SPILL from seat 2: one ZUBAT (species 41) at level 50, on the cell we face
 pokebytes gBrMailbox+0x1018 0B 11 0E 00 00 02 00 09 01 00 02 0C 00 10 00 29 00 32 00
 poke u16 gBrMailbox+0x0C 1

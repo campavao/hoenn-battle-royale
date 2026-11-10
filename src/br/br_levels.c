@@ -124,31 +124,90 @@ static u8 TierForPhase(u8 phase)
 // no battle awards EXP (BrLevels_NoExp) and the rung writes the level straight on. So
 // both happen here, where the lift happens.
 
+// ---- fondness and beauty close in with the fog (Cam, 2026-11-10) -------------------
+//
+// "We should raise friendship and beauty levels of pokemon while they are in your party as
+// fog closes in (similar to level up) so that pokemon that evolve via those methods or
+// moves that get stronger via those work." Nothing in a match pets, feeds or grooms a mon,
+// so the ring does it, in the same lift that raises the level.
+//
+// Friendship: a catch starts at 70 and each ring that closes adds 50 -- 120, 170, 220 at
+// the third lift (rung 50) -- which is FRIENDSHIP_EVO_THRESHOLD, so GOLBAT becomes CROBAT,
+// CHANSEY BLISSEY, the baby line (PICHU, CLEFFA, IGGLYBUFF, TOGEPI, AZURILL) and EEVEE its
+// day/night forms from the middle rings, not from the first (GrowUp used to ask as if every
+// mon were at 255). It reaches the 255 cap a ring later, which is also RETURN at its
+// strongest (102 power; FRUSTRATION goes to 0). Beauty adds 60 a ring -- 60, 120, 180 at the
+// same third lift -- past the 170 EVO_BEAUTY wants, so FEEBAS becomes MILOTIC there.
+#define BR_FRIENDSHIP_START 70
+#define BR_FRIENDSHIP_STEP  50
+#define BR_BEAUTY_STEP      60
+
+static u8 Raised(u8 now, u16 by)
+{
+    u16 v = now + by;
+
+    return v > 255 ? 255 : v;
+}
+
+// An egg keeps its hatch counter in the friendship slot.
+static bool8 Fondable(struct Pokemon *mon)
+{
+    return !GetMonData(mon, MON_DATA_IS_EGG, NULL);
+}
+
+// What a ring that closes does to a mon already in the party.
+static void Warm(struct Pokemon *mon)
+{
+    u8 friendship, beauty;
+
+    if (!Fondable(mon))
+        return;
+    friendship = Raised(GetMonData(mon, MON_DATA_FRIENDSHIP, NULL), BR_FRIENDSHIP_STEP);
+    beauty = Raised(GetMonData(mon, MON_DATA_BEAUTY, NULL), BR_BEAUTY_STEP);
+    SetMonData(mon, MON_DATA_FRIENDSHIP, &friendship);
+    SetMonData(mon, MON_DATA_BEAUTY, &beauty);
+}
+
+// What a mon that was not in the party for the rings so far -- a ball taken, a catch, a
+// trainer's team -- has by now: at least what a mon that rode every ring would. So a ZUBAT
+// taken at 50 is as fond as the one that was there for it, and a gym leader's team is the
+// same as ours at the same rung. The first rung asks nothing (the catch's own 70).
+static void WarmTo(struct Pokemon *mon)
+{
+    u8 friendship, beauty, floor;
+
+    if (gBrLevels.tier == 0 || !Fondable(mon))
+        return;
+    friendship = GetMonData(mon, MON_DATA_FRIENDSHIP, NULL);
+    floor = Raised(BR_FRIENDSHIP_START, BR_FRIENDSHIP_STEP * gBrLevels.tier);
+    if (friendship < floor)
+        SetMonData(mon, MON_DATA_FRIENDSHIP, &floor);
+    beauty = GetMonData(mon, MON_DATA_BEAUTY, NULL);
+    floor = Raised(0, BR_BEAUTY_STEP * gBrLevels.tier);
+    if (beauty < floor)
+        SetMonData(mon, MON_DATA_BEAUTY, &floor);
+}
+
 // Cam's rule, 2026-09-17: "if they can evolve by leveling up, then they do. If they have
 // to evolve via some other way, like a stone or anything like that, then we leave that
 // off." EVO_MODE_NORMAL is exactly that question -- it answers for the evolutions vanilla
 // fires on a level-up and no others, so a stone stays something you go to Lilycove for.
+// A friendship or beauty one is a level-up one too, and asks the mon's real numbers
+// (above), not the most it could be.
 static void GrowUp(struct Pokemon *mon)
 {
     u8 i;
 
+    WarmTo(mon);
     // A big jump is two evolutions: MUDKIP to MARSHTOMP to SWAMPERT. Bounded rather than
     // a while loop, because a species that evolved into itself would hang the match.
     for (i = 0; i < 3; i++)
     {
         u16 before = GetMonData(mon, MON_DATA_SPECIES, NULL);
-        u8 friendship = GetMonData(mon, MON_DATA_FRIENDSHIP, NULL);
-        u8 full = MAX_FRIENDSHIP;
         u16 target;
         u8 nickname[POKEMON_NAME_LENGTH + 1];
 
-        // A friendship evolution is a level-up one too -- GOLBAT to CROBAT happens on a
-        // level-up -- but nothing in a match ever raises friendship, so it never came:
-        // a ZUBAT taken at 50 was a GOLBAT at most (2026-10-05 play-test). Asked as if
-        // the mon were as fond as it can be; what it really is stays on it.
-        SetMonData(mon, MON_DATA_FRIENDSHIP, &full);
         target = GetEvolutionTargetSpecies(mon, EVO_MODE_NORMAL, ITEM_NONE);
-        SetMonData(mon, MON_DATA_FRIENDSHIP, &friendship);
 
         if (target == SPECIES_NONE || target == before)
             break;
@@ -506,22 +565,32 @@ static void LiftParty(u8 level)
         u16 species = GetMonData(mon, MON_DATA_SPECIES);
         u32 exp;
         u16 hp, maxBefore, maxAfter;
+        bool8 lifted;
 
-        if (species == SPECIES_NONE || GetMonData(mon, MON_DATA_LEVEL) >= level)
+        if (species == SPECIES_NONE)
             continue;
-        exp = gExperienceTables[gSpeciesInfo[species].growthRate][level];
+        lifted = GetMonData(mon, MON_DATA_LEVEL) < level;
         hp = GetMonData(mon, MON_DATA_HP);
         maxBefore = GetMonData(mon, MON_DATA_MAX_HP);
-        SetMonData(mon, MON_DATA_EXP, &exp);
-        CalculateMonStats(mon);
+        if (lifted)
+        {
+            exp = gExperienceTables[gSpeciesInfo[species].growthRate][level];
+            SetMonData(mon, MON_DATA_EXP, &exp);
+            CalculateMonStats(mon);
+        }
+        // The ring closing is a friendship and beauty step for everyone in the party, one
+        // already past the rung included: a friendship or beauty evolution is waiting on
+        // exactly this, so a mon the levels did not move is asked too.
+        Warm(mon);
         // Evolve before the moves are worked out, so the learnset walked is the one it
         // will be standing in when the fighting starts. Then it takes the best of what its
         // levels teach, around the moves the player set.
         GrowUp(mon);
-        LearnThrough(mon, level, TRUE);
+        if (lifted || GetMonData(mon, MON_DATA_SPECIES) != species)
+            LearnThrough(mon, GetMonData(mon, MON_DATA_LEVEL), TRUE);
         // Keep the wound: the new max grows, the missing HP stays missing.
         maxAfter = GetMonData(mon, MON_DATA_MAX_HP);
-        if (hp > 0)
+        if (hp > 0 && maxAfter != maxBefore)
         {
             hp += maxAfter - maxBefore;
             SetMonData(mon, MON_DATA_HP, &hp);
@@ -546,6 +615,7 @@ void BrLevels_LiftTrainer(struct Pokemon *party, u8 count)
 
         if (species == SPECIES_NONE || GetMonData(mon, MON_DATA_LEVEL) == level)
             continue;
+        was = GetMonData(mon, MON_DATA_LEVEL); // was never set: `level > was` read the stack
         exp = gExperienceTables[gSpeciesInfo[species].growthRate][level];
         SetMonData(mon, MON_DATA_EXP, &exp);
         CalculateMonStats(mon);

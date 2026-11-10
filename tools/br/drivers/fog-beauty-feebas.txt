@@ -1,0 +1,48 @@
+# fog-beauty-feebas: beauty rises as the fog closes (Cam, 2026-11-10), so FEEBAS can
+# become MILOTIC (EVO_BEAUTY 170) the way a contest-fed one would. Beauty goes up 60 a
+# ring: 60 at rung 15, 120 at rung 30, 180 at rung 50 -- the first lift past 170. A
+# FEEBAS never evolved at all before, because nothing in a match ever raised it.
+#
+# Beauty is encrypted on a party mon; tools/br/fog-friendship.py decrypts the dumps.
+# checked-by: tools/br/fog-friendship.py
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 0
+# SPILL from seat 2: one FEEBAS (328 = 0x148) at level 5 on the cell we face
+pokebytes gBrMailbox+0x1018 0B 11 0E 00 00 02 00 09 01 00 02 0C 00 10 00 48 01 05 00
+poke u16 gBrMailbox+0x0C 1
+wait 20
+tap A
+wait 30
+expect u8 gPlayerPartyCount 1
+# F E E B A S
+expect u8 gPlayerParty+8 0xC0
+expect u8 gPlayerParty+9 0xBF
+expect u8 gPlayerParty+0x54 5
+say stage 0 rung 5
+dump gPlayerParty 100
+poke u8 gBrRing+1 2
+poke u8 gBrRing 1
+wait 200
+expect u8 gBrLevels 15
+say stage 1 rung 15
+dump gPlayerParty 100
+poke u8 gBrRing+1 3
+wait 200
+expect u8 gBrLevels 30
+# still a FEEBAS: beauty 120 is short of 170
+expect u8 gPlayerParty+8 0xC0
+say stage 2 rung 30
+dump gPlayerParty 100
+poke u8 gBrRing+1 4
+wait 200
+expect u8 gBrLevels 50
+# M I L O T I C
+expect u8 gPlayerParty+8 0xC7
+expect u8 gPlayerParty+9 0xC3
+expect u8 gPlayerParty+10 0xC6
+expect u8 gPlayerParty+11 0xC9
+say stage 3 rung 50
+dump gPlayerParty 100
+say fog beauty feebas ok
