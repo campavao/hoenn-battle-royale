@@ -458,8 +458,13 @@ export class Stage {
     const scale = stageScale(cssW, cssH);
     const w = Math.max(STAGE_WIDTH, Math.floor(cssW / scale));
     const h = Math.floor(cssH / scale);
+    // ...and the canvas past it, up under the notch and down under the home bar: on a phone's
+    // home-screen app nothing of the browser's covers those, and #stage's own colour there was
+    // a black bar over and under the menu's backdrop (Cam, 11-10). Only the backdrop paints them.
+    const top = Math.ceil((parseFloat(pad.paddingTop) || 0) / scale);
+    const bottom = Math.ceil((this.root.clientHeight - (parseFloat(pad.paddingTop) || 0) - h * scale) / scale);
     const c = this.canvas;
-    if (c.width !== w || c.height !== h || c.scale !== scale) c.resize(w, h, scale);
+    if (c.width !== w || c.height !== h || c.scale !== scale || c.top !== top || c.bottom !== bottom) c.resize(w, h, scale, top, Math.max(0, bottom));
     c.origin = Math.floor((w - STAGE_WIDTH) / 2);
     // Over the running game the canvas is clear, and the screen dims what it wants dimmed.
     if (this.look() === 'overlay') c.clearAll();

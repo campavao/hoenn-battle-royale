@@ -37,14 +37,17 @@ export function paintPan(c: EmeraldCanvas, t: number, h: number): void {
   const left = -c.origin;
   const wx = cam.x - Math.floor(c.width / 2);
   const wy = cam.y - Math.floor(h / 2);
+  // The rows past the screen too (EmeraldCanvas.top/bottom): a home-screen app's notch and
+  // home bar show the pan, not a black bar.
+  const up = c.top, down = c.bottom;
   c.setFilter('blur(1px)');
   for (const [id, mx, my, mw, mh] of MAPS) {
     const x0 = Math.max(mx, wx);
-    const y0 = Math.max(my, wy);
+    const y0 = Math.max(my, wy - up);
     const x1 = Math.min(mx + mw, wx + c.width);
-    const y1 = Math.min(my + mh, wy + h);
+    const y1 = Math.min(my + mh, wy + h + down);
     if (x1 > x0 && y1 > y0) c.drawUiPicture(`/field-maps/MAP_${id}.png`, x0 - mx, y0 - my, x1 - x0, y1 - y0, left + x0 - wx, y0 - wy);
   }
   c.setFilter('none');
-  c.fillRect({ x: left, y: 0, w: c.width, h }, '#101418', 0.45);
+  c.fillRect({ x: left, y: -up, w: c.width, h: h + up + down }, '#101418', 0.45);
 }
