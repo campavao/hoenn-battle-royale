@@ -38,7 +38,7 @@ export interface WorldLink {
   /** My trainer as it is drawn (none for the frame before the room has me). */
   mine(): Actor | undefined;
   /** My battle is over (`fled`: it never got going, or was run from; `won`: I beat a bot). */
-  end(fled?: boolean, won?: boolean): void;
+  end(fled?: boolean, won?: boolean, team?: { sp: number; lv: number }[]): void;
   /** The link's own account (jank.ts): Rooms loaded again, and the frames' hashes compared. */
   health?(): { resyncs: number; checks: number; drifts: number };
   /** How smooth the match looked from here, to the relay's log. */
@@ -159,7 +159,7 @@ export function soloLink(maps: WorldMap[], patches: PatchTable, world: World, se
       return events.filter((e) => e.id === me);
     },
     mine: () => host.room.actor(me),
-    end: (fled, won) => host.end(me, fled, won),
+    end: (fled, won, team) => host.end(me, fled, won, team),
     field: (bits) => host.field(me, bits),
     ride: (acro) => host.ride(me, acro),
     bots: (a, b, winner, hp, used) => host.bots(me, a, b, winner, hp, used),
@@ -372,7 +372,7 @@ export class Online implements WorldLink {
     return (this.predicted = a);
   }
 
-  end(fled = false, won = false): void { this.send({ t: 'end', ...(fled ? { fled } : {}), ...(won ? { won } : {}) }); }
+  end(fled = false, won = false, team?: { sp: number; lv: number }[]): void { this.send({ t: 'end', ...(fled ? { fled } : {}), ...(won ? { won } : {}), ...(won && team?.length ? { team } : {}) }); }
   field(bits: number): void { this.send({ t: 'field', bits }); }
   ride(acro: boolean): void { this.send({ t: 'ride', acro }); }
 

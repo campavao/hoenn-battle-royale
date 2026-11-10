@@ -81,8 +81,8 @@ wait 70
 tap B
 wait 70
 shot purse
-# The purse: TM39 ROCK TOMB (item 327) is in the TM pocket, its first slot...
-expect u16 *gSaveBlock1Ptr+0x690 327
+# The purse: TM31 BRICK BREAK (item 319) is in the TM pocket, its first slot...
+expect u16 *gSaveBlock1Ptr+0x690 319
 # ...she is gone, like any beaten trainer (and for everybody: NPCOUT, POK-287)...
 expectge u8 gBrLoot+0xA3 1
 # ...and the gym's own script never ran: FLAG_DEFEATED_RUSTBORO_GYM (0x4F0) is the first

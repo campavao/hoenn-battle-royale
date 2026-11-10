@@ -243,8 +243,8 @@ export class Host {
     if (this.players.has(id) && typeof to === 'string' && to.length <= 32) this.pending.push({ c: 'sail', id, to });
   }
 
-  end(id: number, fled = false, won = false): void {
-    if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: 'end', id, ...(fled ? { fled: true } : {}), ...(won ? { won: true } : {}) });
+  end(id: number, fled = false, won = false, team?: { sp: number; lv: number }[]): void {
+    if (this.players.has(id) && this.room.actor(id)?.battling) this.pending.push({ c: 'end', id, ...(fled ? { fled: true } : {}), ...(won ? { won: true } : {}), ...(won && team?.length ? { team: team.slice(0, 6) } : {}) });
   }
 
   /** The ball `key` would not go in the phone's bag: back on the ground. A bag goes back

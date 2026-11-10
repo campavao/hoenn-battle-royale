@@ -28,7 +28,7 @@
 
 import { clerkAt, type Clerk } from './marts';
 import { rollWild, rollZone, wildDice } from './wild';
-import { leaderAt } from './gyms';
+import { LEADERS, leaderAt } from './gyms';
 import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, clashWeather, draw, eventForRing, legendOf } from '../../src/match/events';
 import { DOOR_Y, FINAL_CHANCE, STORIES, STORY_CHANCE, type Story, type StoryDoor } from '../../src/match/story';
 import { dealParty, rungForPhase, teamField, teamFlies, tradedMon } from '../../src/bots/party';
@@ -492,6 +492,8 @@ export function zoneBalls(seed: number): number[] {
 export const CHEST: Spot = { map: 'MAP_ROUTE117_POKEMON_DAY_CARE', x: 5, y: 5 };
 export const CHEST_SPECIES: readonly number[] = [397, 400, 334, 359, 329, 394, 366, 384, 376, 331, 343, 391, 389, 307, 338, 285, 279, 282];
 const CHEST_KEY = 4 << 20;
+/** A beaten gym leader's team, one bag a leader (`leaderDrops`). */
+export const LEADER_SPILL = 5 << 20;
 
 /** Item balls a map gets: the match deals two a section, and a spike map is two or three
  *  of them (Cam, POK-354: "more items all over the place"). */
@@ -522,7 +524,7 @@ export type Command =
   /** `fled`: the fight never got going or was run from (a link that never answered,
    *  a forfeit): that pair keeps apart a while (BrEngage_NoAnswer). `won`: a bot was
    *  beaten, and is out of the round. */
-  | { c: 'end'; id: number; fled?: boolean; won?: boolean }
+  | { c: 'end'; id: number; fled?: boolean; won?: boolean; team?: { sp: number; lv: number }[] }
   /** The ball `key` would not go in `id`'s bag: it lies where it was (POK-294, nothing
    *  leaves the match). A bag goes back down holding `rest`, what did not fit. */
   | { c: 'drop'; id: number; key: number; rest?: Bag }
@@ -926,7 +928,10 @@ export class Room {
       a.foe = 0;
       // A gym leader falls once: the first to beat them closes the gym.
       if (a.boss) {
-        if (cmd.won && !this.bossDown(a.boss - 1)) this.gyms.push([a.boss - 1, a.name]);
+        if (cmd.won && !this.bossDown(a.boss - 1)) {
+          this.gyms.push([a.boss - 1, a.name]);
+          this.leaderDrops(a, a.boss - 1, cmd.team);
+        }
         a.boss = undefined;
       }
     }
@@ -942,6 +947,19 @@ export class Room {
       out.push({ id: e.story!, name: e.place ?? e.story! });
     }
     return out;
+  }
+
+  /** A beaten leader's team lies in a bag beside whoever beat them, to take (Kanto's npcDefeated, and
+   *  the old BrLoot_TrainerBeaten: a fallen team is loot). The species and levels are the ones the
+   *  winner's ROM fought, at the rung, as it sent them in its `end`; the room only puts them down, so
+   *  every page has the same bag. */
+  private leaderDrops(by: Actor, n: number, team?: { sp: number; lv: number }[]): void {
+    const mons = (team ?? []).slice(0, 6).filter((r) => Number.isInteger(r.sp) && r.sp > 0 && r.sp < 412 && Number.isInteger(r.lv) && r.lv >= 1 && r.lv <= 100).map((r) => ({ species: r.sp, level: r.lv }));
+    if (!mons.length) return;
+    const at = this.beside(by) ?? this.nearestBare(by.m.spot);
+    if (!at) return;
+    const key = LEADER_SPILL | n;
+    this.spills.set(key, { key, map: at.map, x: at.x, y: at.y, name: LEADERS[n].name, bag: { items: [], money: 0, mons } });
   }
 
   /** Gym leader `n` has been beaten this round. */

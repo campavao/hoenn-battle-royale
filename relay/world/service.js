@@ -12770,6 +12770,7 @@ function zoneBalls2(seed) {
 var CHEST = { map: "MAP_ROUTE117_POKEMON_DAY_CARE", x: 5, y: 5 };
 var CHEST_SPECIES = [397, 400, 334, 359, 329, 394, 366, 384, 376, 331, 343, 391, 389, 307, 338, 285, 279, 282];
 var CHEST_KEY = 4 << 20;
+var LEADER_SPILL = 5 << 20;
 var GROUND_PER_MAP = 6;
 var GROUND_APART = 6;
 var ZONE_EXTRA = 2;
@@ -13064,7 +13065,10 @@ var Room = class {
       }
       a.foe = 0;
       if (a.boss) {
-        if (cmd.won && !this.bossDown(a.boss - 1)) this.gyms.push([a.boss - 1, a.name]);
+        if (cmd.won && !this.bossDown(a.boss - 1)) {
+          this.gyms.push([a.boss - 1, a.name]);
+          this.leaderDrops(a, a.boss - 1, cmd.team);
+        }
         a.boss = void 0;
       }
     }
@@ -13079,6 +13083,18 @@ var Room = class {
       out.push({ id: e.story, name: e.place ?? e.story });
     }
     return out;
+  }
+  /** A beaten leader's team lies in a bag beside whoever beat them, to take (Kanto's npcDefeated, and
+   *  the old BrLoot_TrainerBeaten: a fallen team is loot). The species and levels are the ones the
+   *  winner's ROM fought, at the rung, as it sent them in its `end`; the room only puts them down, so
+   *  every page has the same bag. */
+  leaderDrops(by, n, team) {
+    const mons = (team ?? []).slice(0, 6).filter((r) => Number.isInteger(r.sp) && r.sp > 0 && r.sp < 412 && Number.isInteger(r.lv) && r.lv >= 1 && r.lv <= 100).map((r) => ({ species: r.sp, level: r.lv }));
+    if (!mons.length) return;
+    const at2 = this.beside(by) ?? this.nearestBare(by.m.spot);
+    if (!at2) return;
+    const key = LEADER_SPILL | n;
+    this.spills.set(key, { key, map: at2.map, x: at2.x, y: at2.y, name: LEADERS[n].name, bag: { items: [], money: 0, mons } });
   }
   /** Gym leader `n` has been beaten this round. */
   bossDown(n) {
@@ -15324,8 +15340,8 @@ var Host = class {
   sail(id2, to) {
     if (this.players.has(id2) && typeof to === "string" && to.length <= 32) this.pending.push({ c: "sail", id: id2, to });
   }
-  end(id2, fled = false, won = false) {
-    if (this.players.has(id2) && this.room.actor(id2)?.battling) this.pending.push({ c: "end", id: id2, ...fled ? { fled: true } : {}, ...won ? { won: true } : {} });
+  end(id2, fled = false, won = false, team) {
+    if (this.players.has(id2) && this.room.actor(id2)?.battling) this.pending.push({ c: "end", id: id2, ...fled ? { fled: true } : {}, ...won ? { won: true } : {}, ...won && team?.length ? { team: team.slice(0, 6) } : {} });
   }
   /** The ball `key` would not go in the phone's bag: back on the ground. A bag goes back
    *  with what did not fit, never more than it held. */
@@ -15938,7 +15954,7 @@ var WorldService = class {
         } else if (m.t === "end") {
           room.streams.delete(phone.id);
           this.closeLog(room, phone.id);
-          host.end(phone.id, m.fled === true, m.won === true);
+          host.end(phone.id, m.fled === true, m.won === true, Array.isArray(m.team) ? m.team.filter((r) => Number.isInteger(r?.sp) && r.sp > 0 && r.sp < 412 && Number.isInteger(r.lv) && r.lv >= 1 && r.lv <= 100).slice(0, 6) : void 0);
         } else if (m.t === "out") {
           room.streams.delete(phone.id);
           this.closeLog(room, phone.id);
@@ -16366,4 +16382,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "84401385c3b1";
+export const WORLD_HASH = "cd4434dd76af";

@@ -2043,6 +2043,42 @@ describe('gym leaders', () => {
   });
 });
 
+describe("a beaten leader's team", () => {
+  const G = 'MAP_RUSTBORO_CITY_GYM';
+  const fought = (team?: { sp: number; lv: number }[], seed = 7) => {
+    const room = makeRoom(MAPS, PATCHES, seed);
+    room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: G, x: 5, y: 3 }, facing: 2 });
+    room.step(new Map([[2, [KEY_A]]]));
+    room.apply({ c: 'end', id: 2, won: true, ...(team ? { team } : {}) });
+    return room;
+  };
+  it('lies in a bag beside whoever won, for anybody to take (Kanto: a leader falls, their team drops)', () => {
+    const room = fought([{ sp: 74, lv: 15 }, { sp: 74, lv: 15 }, { sp: 299, lv: 15 }]);
+    const bag = [...room.spills.values()].filter((b) => b.map === G);
+    expect(bag).toMatchObject([{ name: 'ROXANNE', bag: { items: [], money: 0, mons: [{ species: 74, level: 15 }, { species: 74, level: 15 }, { species: 299, level: 15 }] } }]);
+    // Not on the leader, nor on the one who beat them: both stand where they stood.
+    expect([bag[0].x, bag[0].y]).not.toEqual([5, 2]);
+    expect([bag[0].x, bag[0].y]).not.toEqual([5, 3]);
+    expect(room.stepFor(room.actor(2)!)({ map: G, x: 5, y: 3 }, 2)).toBeNull();
+    // Taken, it is gone; the same on a copy.
+    const copy = makeRoom(MAPS, PATCHES, 7);
+    copy.load(room.state());
+    expect(copy.hash()).toBe(room.hash());
+  });
+
+  it('is only what the win said (a leader lost to, or no team, drops nothing), and once', () => {
+    expect([...fought().spills.values()].filter((b) => b.map === G)).toEqual([]);
+    const room = fought([{ sp: 74, lv: 15 }]);
+    room.apply({ c: 'join', id: 3, bot: false, name: 'B', skin: 0, spot: { map: G, x: 4, y: 2 }, facing: 4 });
+    // A second win over a fallen leader (a late phone) changes nothing.
+    const before = JSON.stringify([...room.spills.values()]);
+    room.apply({ c: 'end', id: 3, won: true, team: [{ sp: 1, lv: 5 }] });
+    expect(JSON.stringify([...room.spills.values()])).toBe(before);
+    // A page cannot send a species or level the game has none of.
+    expect([...fought([{ sp: 999, lv: 15 }, { sp: 74, lv: 0 }]).spills.values()].filter((b) => b.map === G)).toEqual([]);
+  });
+});
+
 describe('field moves', () => {
   it('a team that could SURF walks onto water, at SURF pace; one that could not stays on the shore', () => {
     const room = makeRoom(MAPS, PATCHES, 99);

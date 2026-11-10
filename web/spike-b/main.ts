@@ -2121,8 +2121,8 @@ function endBattle(r: Fought | null): void {
   // fleer off its pursuer): without it the bot stood beside me and fought again after the
   // two-second grace. Not the RUN that leaves a fight the match was won in.
   const ranFromBot = !!battle?.foe?.bot && !!r?.ok && (r.outcome & 0x7f) === 4 && link.room.results.winner !== link.me;
-  (battle?.link ?? link).end((duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f))) || ranFromBot || !!r?.stalled, !stale && (!!battle?.foe?.bot || boss !== undefined) && !!r?.ok && r.outcome === 1);
-  if (!stale && boss !== undefined && r?.ok && r.outcome === 1) say(`You beat ${LEADERS[boss].name}! Took their TM and ¥1000.`);
+  (battle?.link ?? link).end((duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f))) || ranFromBot || !!r?.stalled, !stale && (!!battle?.foe?.bot || boss !== undefined) && !!r?.ok && r.outcome === 1, boss !== undefined ? r?.team : undefined);
+  if (!stale && boss !== undefined && r?.ok && r.outcome === 1) say(`You beat ${LEADERS[boss].name}! Took their TM and ¥1000. Their team is up for grabs.`);
   const wild = battle && !battle.foe && boss === undefined;
   const by = battle?.foe?.id;
   battle = null;
