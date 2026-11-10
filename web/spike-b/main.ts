@@ -107,6 +107,7 @@ import { CLERKS, priceOf, shelf } from './shared/marts';
 import { KEY_BIT, type GbaKey } from '../src/emu';
 import { KeyLegend } from '../src/ui/keys';
 import { KEYMAP, MARK_KEY, legendMap } from './keys';
+import { spillName } from './spillname';
 import { SPIKE_MS, recorder, saveRecording, watchPage } from './recorder';
 import { FirstMenuNet, LostNet, NET_LIMITS } from './stuck';
 import { stallLine, watch as watchRom } from '../src/emu/watchdog';
@@ -740,12 +741,7 @@ function nameOn(map: string, x: number, y: number): string {
     const row = s.bag.items[0], mon = s.bag.mons?.[0];
     return row ? art.itemName(row.id) || '' : mon ? speciesName(mon.species) : '';
   }
-  if (s) {
-    const mons = s.bag.mons ?? [];
-    // A POKeMON alone on the ground says which (Cam, 11-03); the tag draws it too (iconOn).
-    if (mons.length && !s.bag.items.length && !s.bag.money) return `${speciesName(mons[0].species)}${mons.length > 1 ? ` +${mons.length - 1}` : ''}`;
-    return `${s.name}'s BAG`;
-  }
+  if (s) return spillName(s, "'s BAG", (id) => art?.itemName(id) ?? '');
   return '';
 }
 function iconOn(map: string, x: number, y: number): HTMLCanvasElement | null {
@@ -3954,7 +3950,7 @@ const watch = new Watch({
     const s = r.spills.get(key);
     if (!s || s.legend || s.person?.gate !== undefined) return null;
     if (s.person) return s.bag.items[0] ? art?.itemName(s.bag.items[0].id) || null : null;
-    return `${s.name}'s bag`;
+    return spillName(s, "'s bag", (id) => art?.itemName(id) ?? '');
   },
   tell: (text) => tick(text),
   cover,
