@@ -326,8 +326,8 @@ function iconButton(c: EmeraldCanvas, w: number, h: number, icon: (cx: number, c
   // Too narrow for the two side by side (four across, a wild fight's BALL among them): a small
   // icon over the word, so RUN's odds still read whole.
   if (w < 60 && h >= 30) {
-    icon(w / 2, 8, 10);
-    c.drawTextCentred(fitText(word, w - 6), w / 2, h - 18, color);
+    icon(w / 2, 10, 10);
+    c.drawTextCentred(fitText(word, w - 6), w / 2, h - 17, color);
     return;
   }
   const box = tw + ICON_BOX + 4 > w - 8 ? 10 : ICON_BOX;
