@@ -2237,6 +2237,15 @@ export class Room {
           events.push({ type: 'wild', tick: this.tick, id: a.id, map: a.m.spot.map, x: p.x, y: p.y, key: p.key });
         }
       }
+    }
+    // A, where Emerald reads it: standing, or walking in place -- into a ball or a person
+    // (the bump) or turning to face one -- which UpdatePlayerAvatarTransitionState leaves
+    // T_NOT_MOVING, so FieldGetPlayerInput takes the press. Read only once the walk in place
+    // was over, a press that landed in its 32 frames was spent and the ball taken by the
+    // next ("the first click doesn't go through", Cam 11-10). A step between two tiles
+    // (T_TILE_TRANSITION) still has no A, as there.
+    if (!a.bot && (!a.m.action || a.m.action.kind === 'bump' || a.m.action.kind === 'turn')) {
+      const c = a.cruise;
       const wall = !a.battling && (bits & KEY_A) && !(a.last & KEY_A) && atWall(a) ? this.events.find((e) => e.map === a.m.spot.map && e.story && DOORS[e.story] && !e.opened) : undefined;
       const ferry = !wall && !a.battling && (bits & KEY_A) && !(a.last & KEY_A) ? ferryAt(a.m.spot.map, ...this.ahead(a)) : undefined;
       const bed = !wall && !ferry && c && !a.battling && (bits & KEY_A) && !(a.last & KEY_A) && bedAt(a.m.spot.map, ...this.ahead(a));
@@ -2318,7 +2327,7 @@ export class Room {
           if (c && a.m.spot.x === c.counterX && a.m.spot.y === c.counterY) events.push({ type: 'nurse', tick: this.tick, id: a.id, map: a.m.spot.map });
         }
       }
-    } else if (!a.m.action) {
+    } else if (a.bot && !a.m.action) {
       // A bot's step does to a marked spot what a trainer's does (Cam, 11-04: "if we don't treat bots
       // like normal players then we run into issues").
       if (a.arriving) this.botOnPatch(a, events);
