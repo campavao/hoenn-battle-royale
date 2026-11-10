@@ -142,8 +142,16 @@ test('a medicine asks on the party windows: a Revive for the fainted, a Potion f
   await expect(page.locator('#bag-panel')).toBeHidden();
   // The third fainted, the fourth hurt.
   const hp = (slot: number) => spike(page, new Function('s', `return s.rom.emu.read(s.art.sym('gPlayerParty') + ${slot} * 100 + 86, 16)`) as (s: any) => number);
-  await spike(page, (s) => { const at = s.art.sym('gPlayerParty'); s.rom.emu.write(at + 2 * 100 + 86, 0, 16); s.rom.emu.write(at + 3 * 100 + 86, 1, 16); });
+  // Once the take is through: its party write, landing after ours on a slow runner, put the HP back
+  // (CI 11-10, three tries out of three on a push run, never here).
+  await expect.poll(() => spike(page, (s) => s.swapping || s.asking), { timeout: 30_000 }).toBe(false);
+  await expect.poll(async () => {
+    await spike(page, (s) => { const at = s.art.sym('gPlayerParty'); s.rom.emu.write(at + 2 * 100 + 86, 0, 16); s.rom.emu.write(at + 3 * 100 + 86, 1, 16); });
+    await page.waitForTimeout(500);
+    return [await hp(2), await hp(3)].join();
+  }, { timeout: 20_000, intervals: [250] }).toBe('0,1');
   await intoBattle(page);
+  expect(await hp(2), 'still fainted in the fight').toBe(0);
 
   const use = (item: number) => useFromBag(page, item);
 
