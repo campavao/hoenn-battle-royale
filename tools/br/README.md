@@ -93,6 +93,11 @@ Run order matters for 1 → 2, 1 → 3, and 3 and 4 → 9; the rest stand alone 
 version file are per build, not per data change: `symbols.py` and `version-json.sh`, run
 by `dev-patch.sh` and CI after every ROM build.
 
+Two edit the page's own grid, `web/spike-b/data/world.json`, in place and idempotently, after 1:
+`export-acro.py` (the ACRO BIKE's ground) and `open-gym-puzzles.py` (MAUVILLE's gym beams laid as
+the game leaves them once Wattson falls: the page has no switches to press, so Wattson's room was
+shut). Rerun both, then `node tools/br/bundle-world.mjs`.
+
 Two more write the mailbox's contract into C and TypeScript both, and a vitest fails
 when either side is stale: `rom-limits.py` (the species, move, level and map bounds, from
 the pret sources) and `wire-ids.py` (the message ids and reassembly caps, from

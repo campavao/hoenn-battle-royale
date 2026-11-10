@@ -39,7 +39,7 @@ export type WorldUp =
   /** My keys for frames `s`, `s`+1, ... (numbered from 1, never reset). */
   | { t: 'in'; s: number; k: number[] }
   /** My battle is over (`fled`: it never got going, or was run from). */
-  | { t: 'end'; fled?: boolean; won?: boolean }
+  | { t: 'end'; fled?: boolean; won?: boolean; team?: { sp: number; lv: number }[] }
   | { t: 'field'; bits: number }
   | { t: 'ride'; acro: boolean }
   /** The two bots the room gave me to fight (a `bots` event), and who won: 0, nobody. */

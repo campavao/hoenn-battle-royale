@@ -374,7 +374,7 @@ export class WorldService {
         } else if (m.t === 'end') {
           room.streams.delete(phone.id);
           this.closeLog(room, phone.id);
-          host.end(phone.id, m.fled === true, m.won === true);
+          host.end(phone.id, m.fled === true, m.won === true, Array.isArray(m.team) ? m.team.filter((r) => Number.isInteger(r?.sp) && r.sp > 0 && r.sp < 412 && Number.isInteger(r.lv) && r.lv >= 1 && r.lv <= 100).slice(0, 6) : undefined);
         } else if (m.t === 'out') {
           room.streams.delete(phone.id);
           this.closeLog(room, phone.id);

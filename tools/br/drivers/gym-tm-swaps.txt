@@ -1,0 +1,5360 @@
+# gym-tm-swaps: the leaders' prizes are the power picks (Cam, 2026-11-10: "good loot"):
+# ROXANNE TM31 BRICK BREAK, WATTSON TM24 THUNDERBOLT, JUAN TM13 ICE BEAM, each with the
+# 1000 purse. TATE&LIZA's PSYCHIC (TM29) needs two POKeMON standing and this harness has one.
+# The page's ask (br_wild.h BR_WILD_BOSS, as spike-boss.txt does) starts each leader's own
+# battle; TREECKO's ATTACK held at 999 wins it, and the prize lands in the TM pocket in the
+# order they fell (SaveBlock1 +0x690, a slot a u16 item and a u16 count).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 D3 C9 CF FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 4
+wait 2
+pokebytes gBrWildAsk+1 FF 00 00
+poke u8 gBrWildAsk 1
+wait 10
+expect u8 gBrWildAsk 2
+wait 600
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+expect u8 gBrWildAsk 3
+expect u8 gBrWildAsk+7 1
+shot leader0
+pokebytes gBrWildAsk+1 FF 02 00
+poke u8 gBrWildAsk 1
+wait 10
+expect u8 gBrWildAsk 2
+wait 600
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+expect u8 gBrWildAsk 3
+expect u8 gBrWildAsk+7 1
+shot leader2
+pokebytes gBrWildAsk+1 FF 07 00
+poke u8 gBrWildAsk 1
+wait 10
+expect u8 gBrWildAsk 2
+wait 600
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+poke u16 gBattleMons+0x02 999
+poke u16 gBattleMons+0x04 999
+poke u16 gBattleMons+0x0A 999
+poke u16 gBattleMons+0x28 999
+poke u16 gBattleMons+0x2C 999
+tap A
+wait 60
+expect u8 gBrWildAsk 3
+expect u8 gBrWildAsk+7 1
+shot leader7
+expect u16 *gSaveBlock1Ptr+0x690 319
+expect u16 *gSaveBlock1Ptr+0x694 312
+expect u16 *gSaveBlock1Ptr+0x698 301
+say gym tm swaps ok
