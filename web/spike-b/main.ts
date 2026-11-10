@@ -107,6 +107,7 @@ import { CLERKS, priceOf, shelf } from './shared/marts';
 import { KEY_BIT, type GbaKey } from '../src/emu';
 import { KeyLegend } from '../src/ui/keys';
 import { KEYMAP, MARK_KEY, legendMap } from './keys';
+import { spillName } from './spillname';
 import { SPIKE_MS, recorder, saveRecording, watchPage } from './recorder';
 import { FirstMenuNet, LostNet, NET_LIMITS } from './stuck';
 import { stallLine, watch as watchRom } from '../src/emu/watchdog';
@@ -339,8 +340,9 @@ function miniFrame(a: Actor | undefined): string {
   if (s) {
     c.imageSmoothingEnabled = false;
     const { w, h } = SHEETS[String(gfx)];
-    // The head, a frame's lower rows from the top: a person stands at the bottom of their frame.
-    c.drawImage(s, 0, Math.max(0, h - 26), w, 16, Math.round(at.x - sx - w / 2), Math.round(at.y - sy - 8), w, 16);
+    // The head, rows 9-24 of a 32-row frame (hair from row 10, chin at 22, the 11-04 crop stopped at 21 and cut the chin), kept whole inside the picture at its edges.
+    const dx = Math.max(0, Math.min(n - w, Math.round(at.x - sx - w / 2))), dy = Math.max(0, Math.min(n - 16, Math.round(at.y - sy - 8)));
+    c.drawImage(s, 0, Math.max(0, h - 23), w, 16, dx, dy, w, 16);
   }
   return key;
 }
@@ -349,6 +351,12 @@ function miniFrame(a: Actor | undefined): string {
 const SEALED_CHAMBER: [number, number, number][] = [[7, 19, 0x22a], [8, 19, 0x22b], [9, 19, 0x22c], [7, 20, 0x232], [8, 20, 0x233], [9, 20, 0x234]];
 /** METATILE_Cave_EntranceCover over SealedChamberBraille_Mid: the wall before it opens. */
 const HIDDEN_CHAMBER: [number, number, number][] = [[7, 19, 0x229], [8, 19, 0x229], [9, 19, 0x229], [7, 20, 0x235], [8, 20, 0x235], [9, 20, 0x235]];
+/** The beams across MAUVILLE's gym that shut Wattson's room, off (METATILE_MauvilleGym_*BeamH{3,4}_On
+ *  to _Off, as MauvilleGymDeactivatePuzzle lays them): the grid has them open, so the picture does. */
+const MAUVILLE_BEAMS_OFF: Record<number, number> = {
+  0x220: 0x230, 0x221: 0x231, 0x228: 0x238, 0x229: 0x239, 0x222: 0x232, 0x223: 0x233, 0x22a: 0x23a, 0x22b: 0x23b,
+  0x240: 0x242, 0x241: 0x243, 0x248: 0x21a, 0x249: 0x21a, 0x250: 0x251,
+};
 const DOOR_MAPS = new Set(STORIES.filter((s) => s.door).map((s) => s.map));
 /** A wall opened since its map was painted: painted again. */
 function doorsFrame(): void {
@@ -369,6 +377,13 @@ function paint(p: Placed): boolean {
   // sealed chamber's entrance on its six cells (br_story.c's Open).
   const wall = !DOOR_MAPS.has(p.m.id) ? undefined : p.open ? SEALED_CHAMBER : HIDDEN_CHAMBER;
   const over = wall ? new Map(wall.map(([x, y, block]) => [y * p.m.w + x, block])) : new Map<number, number>();
+  // MAUVILLE's gym with its puzzle off, as it is walked (tools/br/open-gym-puzzles.py).
+  if (p.m.id === 'MAP_MAUVILLE_CITY_GYM') {
+    for (let i = 0; i < p.m.w * p.m.h; i++) {
+      const block = art.blockAt(p.m.group, p.m.num, i % p.m.w, Math.floor(i / p.m.w)), off = MAUVILLE_BEAMS_OFF[block & 0x3ff];
+      if (off) over.set(i, off);
+    }
+  }
   for (const i of ashGone.get(p.m.id) ?? []) over.set(i, grassUnderAsh(art.blockAt(p.m.group, p.m.num, i % p.m.w, Math.floor(i / p.m.w))));
   const a = art.map(p.m.group, p.m.num, over);
   p.ground = a.ground;
@@ -740,12 +755,7 @@ function nameOn(map: string, x: number, y: number): string {
     const row = s.bag.items[0], mon = s.bag.mons?.[0];
     return row ? art.itemName(row.id) || '' : mon ? speciesName(mon.species) : '';
   }
-  if (s) {
-    const mons = s.bag.mons ?? [];
-    // A POKeMON alone on the ground says which (Cam, 11-03); the tag draws it too (iconOn).
-    if (mons.length && !s.bag.items.length && !s.bag.money) return `${speciesName(mons[0].species)}${mons.length > 1 ? ` +${mons.length - 1}` : ''}`;
-    return `${s.name}'s BAG`;
-  }
+  if (s) return spillName(s, "'s BAG", (id) => art?.itemName(id) ?? '');
   return '';
 }
 function iconOn(map: string, x: number, y: number): HTMLCanvasElement | null {
@@ -1031,7 +1041,9 @@ function openMapWindow(o: { verb: string | null; can(p: MapPlace): boolean; prom
       },
       fogKey: () => {
         const ring = link.room.ring();
-        const next = ring.next !== undefined && ring.next !== Infinity ? `${ring.next}|${ring.cx.toFixed(0)}|${ring.cy.toFixed(0)}` : '';
+        // The next ring's line only while the fog moves in to it (Cam, 11-10: "only show the fog
+        // ring on the map as the fog is actively closing in. It shouldn't show on initial drop").
+        const next = ring.next !== undefined && ring.next !== Infinity && fogClosing(ring) ? `${ring.next}|${ring.cx.toFixed(0)}|${ring.cy.toFixed(0)}` : '';
         return { key: `${ring.last}|${ring.r.toFixed(1)}|${ring.cx.toFixed(0)}|${ring.cy.toFixed(0)}`, next };
       },
       placeAt: (cx, cy) => map.placeAt(cx, cy),
@@ -1195,14 +1207,36 @@ function bikeNow(me: Actor): { item: number; label: 'BIKE' | 'WALK'; enabled: bo
     on: !!me.m.bike,
   };
 }
+/** One bike's cell on the dial: WALK, lit, on the one ridden; the other changes bikes where it may
+ *  go (useKeyItem, as the BAG's USE). */
+function bikeCell(me: Actor, item: number, side: 'up' | 'upright'): DialItem {
+  const acro = item === ITEM_ACRO_BIKE, step = link.room.stepFor(me), spot = me.m.spot;
+  const same = !!me.m.bike && !!me.m.acro === acro, rail = (step.acroAt?.(spot) ?? 0) >= 2;
+  const here = !!step.cycling?.(spot) || (acro && !!step.acroCycling?.(spot));
+  return {
+    side,
+    item,
+    label: same ? 'WALK' : acro ? 'ACRO' : 'MACH',
+    enabled: !(me.m.bike && rail) && (same || here),
+    why: me.m.bike && rail ? "Can't get off here." : "Can't ride here.",
+    go: () => void useKeyItem(item),
+  };
+}
 /** What SELECT would do with the rod here: casts it facing water, on foot or surfing (room.ts). */
 const rodReady = (me: Actor) => !me.m.bike && classAt(aheadOf(me)) === CLASS_WATER;
 const pressSelect = () => { selectUntil = frame + 40; };
 /** The key items that do something on the field, each on its own side of the dial. */
 function dialItems(me: Actor): DialItem[] {
   const out: DialItem[] = [];
-  const bike = bikeNow(me);
-  out.push({ side: 'up', ...bike, why: "Can't ride here.", go: pressSelect });
+  // Both bikes in the bag, both on the dial (Cam, 11-10): the MACH BIKE up, the ACRO BIKE in the
+  // corner beside it. One, or none yet, up: the one SELECT would ride.
+  const has = rom ? bagHolds(rom.emu, romTables.sym, KEYITEMS_POCKET, [ITEM_MACH_BIKE, ITEM_ACRO_BIKE]) : new Set<number>();
+  if (has.size === 2) {
+    out.push(bikeCell(me, ITEM_MACH_BIKE, 'up'), bikeCell(me, ITEM_ACRO_BIKE, 'upright'));
+  } else {
+    const bike = bikeNow(me);
+    out.push({ side: 'up', ...bike, why: "Can't ride here.", go: pressSelect });
+  }
   const rod = rom?.rod() ?? 0;
   if (rodOf(rod) >= 0) out.push({ side: 'right', item: rod, label: 'FISH', enabled: rodReady(me), why: me.m.bike ? 'Off the bike first.' : 'Face the water.', go: pressSelect });
   // The MAP and FLY are one screen (lookAtMap): one side, named for what it will do.
@@ -2114,8 +2148,8 @@ function endBattle(r: Fought | null): void {
   // fleer off its pursuer): without it the bot stood beside me and fought again after the
   // two-second grace. Not the RUN that leaves a fight the match was won in.
   const ranFromBot = !!battle?.foe?.bot && !!r?.ok && (r.outcome & 0x7f) === 4 && link.room.results.winner !== link.me;
-  (battle?.link ?? link).end((duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f))) || ranFromBot || !!r?.stalled, !stale && (!!battle?.foe?.bot || boss !== undefined) && !!r?.ok && r.outcome === 1);
-  if (!stale && boss !== undefined && r?.ok && r.outcome === 1) say(`You beat ${LEADERS[boss].name}! Took their TM and ¥1000.`);
+  (battle?.link ?? link).end((duel && (!r?.ok || [4, 9].includes(r.outcome & 0x7f))) || ranFromBot || !!r?.stalled, !stale && (!!battle?.foe?.bot || boss !== undefined) && !!r?.ok && r.outcome === 1, boss !== undefined ? r?.team : undefined);
+  if (!stale && boss !== undefined && r?.ok && r.outcome === 1) say(`You beat ${LEADERS[boss].name}! Took their TM and ¥1000. Their team is up for grabs.`);
   const wild = battle && !battle.foe && boss === undefined;
   const by = battle?.foe?.id;
   battle = null;
@@ -2227,6 +2261,11 @@ function safeWay(): string {
   return me && ringMap ? ringMap.way(me.m.spot) : '';
 }
 
+/** The fog is moving in now (room.ts ring: over the end of a phase, its radius falls a frame at
+ *  a time), not holding where it is. */
+function fogClosing(ring: Ring): boolean {
+  return !ring.safari && !ring.last && link.room.ring(link.room.tick + 1).r < ring.r;
+}
 function inFogNow(): boolean {
   const me = link.room.actor(link.me);
   return !!me && link.room.inFog(me.m.spot);
@@ -3954,7 +3993,7 @@ const watch = new Watch({
     const s = r.spills.get(key);
     if (!s || s.legend || s.person?.gate !== undefined) return null;
     if (s.person) return s.bag.items[0] ? art?.itemName(s.bag.items[0].id) || null : null;
-    return `${s.name}'s bag`;
+    return spillName(s, "'s bag", (id) => art?.itemName(id) ?? '');
   },
   tell: (text) => tick(text),
   cover,

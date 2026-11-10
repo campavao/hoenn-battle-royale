@@ -1,7 +1,7 @@
 # gym-purse-juan: the longest purse line still ends in its "!" (POK-330 #55).
 #
 # BrGym_Beaten builds "TOOK <prize>\nAND 1000 IN PRIZE MONEY!" on the stack in a
-# 42-byte line. JUAN's WATER PULSE made it 41 characters and an EOS -- the line exactly
+# 42-byte line. JUAN's WATER PULSE (now ICE BEAM, shorter; THUNDERBOLT and BRICK BREAK are the longest at 11 too) made it 41 characters and an EOS -- the line exactly
 # full, one letter from writing past it -- and the box keeps 40, so his "!" was cut. The
 # purse text is shorter now, and the line is built with BrHud_Append, which stops at
 # the buffer's end whatever the table hands it.
@@ -77,12 +77,12 @@ wait 70
 tap B
 wait 70
 shot purse
-# "TOOK WATER PULSE" / "AND 1000 PRIZE MONEY!": 38 characters, the newline at 16 and
+# "TOOK ICE BEAM" / "AND 1000 PRIZE MONEY!": 35 characters, the newline at 13 and
 # the "!" last, then the EOS
-expect u8 gBrHud+0x14D 38
+expect u8 gBrHud+0x14D 35
 expect u8 gBrHud+0x14E 0xCE
-expect u8 gBrHud+0x153 0xD1
-expect u8 gBrHud+0x15E 0xFE
-expect u8 gBrHud+0x173 0xAB
-expect u8 gBrHud+0x174 0xFF
+expect u8 gBrHud+0x153 0xC3
+expect u8 gBrHud+0x15B 0xFE
+expect u8 gBrHud+0x170 0xAB
+expect u8 gBrHud+0x171 0xFF
 say gym purse juan ok

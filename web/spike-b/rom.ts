@@ -125,6 +125,9 @@ export interface Fought {
   foe?: { hp: number; maxHp: number }[];
   /** What the bot spent of the items its card carried (br_bot.c SendSpent). */
   spent?: number[];
+  /** A leader's team as the fight left it (gEnemyParty, the species and level it was fought at):
+   *  what drops for whoever beat them. */
+  team?: { sp: number; lv: number }[];
   /** The stuck-fight net stopped it (stuck.ts, `abort`): no winner, nothing changed. */
   stalled?: boolean;
 }
@@ -955,6 +958,15 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     const syms = out ? readerSyms() : null;
     const reader = out && syms ? new BattleReader(emu, syms, { ...out.ctx, genderOf }, out.emit, () => performance.now()) : null;
     const readerOff = reader ? emu.onFrame(() => reader.frame()) : () => undefined;
+    // The foe's team as the first menu finds it, whole and at the rung: the ROM zeroes gEnemyParty at the
+    // fight's end, and a leader's team is what drops for whoever beat them (room.ts leaderDrops).
+    let foeTeam: { sp: number; lv: number }[] | undefined;
+    const foeOff = emu.onFrame(() => {
+      if (foeTeam || !emu.read(sym('gBrBattle') + BATTLE_MENU_AT, 8)) return;
+      // Six slots, the empty ones skipped: gEnemyPartyCount is not always set for a trainer's party.
+      const t = teamOf(emu.bytes(sym('gEnemyParty'), PARTY_LEN), 6);
+      if (t.length) foeTeam = t.map((m) => ({ sp: m.species, lv: m.level }));
+    });
     const pub = emu.onFrame(() => drain((m) => {
       if (m.t === 'spill' && m.seat === ME && !m.bag) for (const r of m.mons) released.push({ species: r.species, level: r.level });
       else if (m.t === 'party' && m.seat === FOE_SEAT) foe = m.mons.map((r) => ({ hp: r.hp, maxHp: r.maxHp }));
@@ -1033,7 +1045,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       stopped = !over();
     }
     if (shown && !stopped) {
-      result = { ok: true, ...after(), released, ...(foe ? { foe } : {}), ...(spent?.length ? { spent } : {}) };
+      result = { ok: true, ...after(), released, ...(foe ? { foe } : {}), ...(spent?.length ? { spent } : {}), ...(foeTeam ? { team: foeTeam } : {}) };
       // The end of the fight, said at once: a catch's prompt after it can take a while. Won or
       // caught, the page's trainer; lost, the foe's seat (none for a wild one); a run, nobody.
       if (reader && out) reader.finish(result.outcome === 1 || result.outcome === CAUGHT_OUTCOME ? out.ctx.me.seat : result.outcome === LOST ? out.ctx.foe.seat : 0);
@@ -1070,6 +1082,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     fighting = false;
     weatherOff();
     pub();
+    foeOff();
     readerOff();
     if (reader) { reader.finish(0); lastLog = reader.stats; }
     await partyDone();

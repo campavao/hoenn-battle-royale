@@ -466,7 +466,10 @@ pinned. LINK/SAVE/OPTION gone from START. The Centre closes when fog arrives, an
 nurse asks one question. A menu is not a hiding place. Every PC is out of order. Loot
 balls are gifts. A ball that changes hands is a trade and triggers trade evolutions; a
 LINK CABLE from the bag does the same for a mon you kept.
-Beaten sprites vanish, balls remain. Gyms are one-shot bosses, first-to-beat closes them.
+Beaten sprites vanish, balls remain. Gyms are one-shot bosses, first-to-beat closes them. A leader pays a power-pick TM (BRICK BREAK,
+BULK UP, THUNDERBOLT, OVERHEAT, FACADE, AERIAL ACE, PSYCHIC, ICE BEAM; Kanto's rule) and 1000, and
+their team, at the rung it was fought at, lies in a bag beside the winner to take (spike B: the winner's
+`end` carries the species and levels their ROM fought; `Room.leaderDrops`).
 Bots use their own bag. Two bots fighting is a real battle. Quick play has no host. Solo
 play opens no socket. Backfill is wrong for a battle royale. One ticker line when the ring
 moves, and a ticker line is something you act on or would ask about -- outs (the ones that

@@ -28,7 +28,7 @@
 
 import { clerkAt, type Clerk } from './marts';
 import { rollWild, rollZone, wildDice } from './wild';
-import { leaderAt } from './gyms';
+import { LEADERS, leaderAt } from './gyms';
 import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, clashWeather, draw, eventForRing, legendOf } from '../../src/match/events';
 import { DOOR_Y, FINAL_CHANCE, STORIES, STORY_CHANCE, type Story, type StoryDoor } from '../../src/match/story';
 import { dealParty, rungForPhase, teamField, teamFlies, tradedMon } from '../../src/bots/party';
@@ -492,6 +492,8 @@ export function zoneBalls(seed: number): number[] {
 export const CHEST: Spot = { map: 'MAP_ROUTE117_POKEMON_DAY_CARE', x: 5, y: 5 };
 export const CHEST_SPECIES: readonly number[] = [397, 400, 334, 359, 329, 394, 366, 384, 376, 331, 343, 391, 389, 307, 338, 285, 279, 282];
 const CHEST_KEY = 4 << 20;
+/** A beaten gym leader's team, one bag a leader (`leaderDrops`). */
+export const LEADER_SPILL = 5 << 20;
 
 /** Item balls a map gets: the match deals two a section, and a spike map is two or three
  *  of them (Cam, POK-354: "more items all over the place"). */
@@ -522,7 +524,7 @@ export type Command =
   /** `fled`: the fight never got going or was run from (a link that never answered,
    *  a forfeit): that pair keeps apart a while (BrEngage_NoAnswer). `won`: a bot was
    *  beaten, and is out of the round. */
-  | { c: 'end'; id: number; fled?: boolean; won?: boolean }
+  | { c: 'end'; id: number; fled?: boolean; won?: boolean; team?: { sp: number; lv: number }[] }
   /** The ball `key` would not go in `id`'s bag: it lies where it was (POK-294, nothing
    *  leaves the match). A bag goes back down holding `rest`, what did not fit. */
   | { c: 'drop'; id: number; key: number; rest?: Bag }
@@ -926,7 +928,10 @@ export class Room {
       a.foe = 0;
       // A gym leader falls once: the first to beat them closes the gym.
       if (a.boss) {
-        if (cmd.won && !this.bossDown(a.boss - 1)) this.gyms.push([a.boss - 1, a.name]);
+        if (cmd.won && !this.bossDown(a.boss - 1)) {
+          this.gyms.push([a.boss - 1, a.name]);
+          this.leaderDrops(a, a.boss - 1, cmd.team);
+        }
         a.boss = undefined;
       }
     }
@@ -942,6 +947,19 @@ export class Room {
       out.push({ id: e.story!, name: e.place ?? e.story! });
     }
     return out;
+  }
+
+  /** A beaten leader's team lies in a bag beside whoever beat them, to take (Kanto's npcDefeated, and
+   *  the old BrLoot_TrainerBeaten: a fallen team is loot). The species and levels are the ones the
+   *  winner's ROM fought, at the rung, as it sent them in its `end`; the room only puts them down, so
+   *  every page has the same bag. */
+  private leaderDrops(by: Actor, n: number, team?: { sp: number; lv: number }[]): void {
+    const mons = (team ?? []).slice(0, 6).filter((r) => Number.isInteger(r.sp) && r.sp > 0 && r.sp < 412 && Number.isInteger(r.lv) && r.lv >= 1 && r.lv <= 100).map((r) => ({ species: r.sp, level: r.lv }));
+    if (!mons.length) return;
+    const at = this.beside(by) ?? this.nearestBare(by.m.spot);
+    if (!at) return;
+    const key = LEADER_SPILL | n;
+    this.spills.set(key, { key, map: at.map, x: at.x, y: at.y, name: LEADERS[n].name, bag: { items: [], money: 0, mons } });
   }
 
   /** Gym leader `n` has been beaten this round. */
@@ -1422,32 +1440,84 @@ export class Room {
     if (final && !this.events.some((e) => e.story === final.id)) return this.tellStory(n, ring, final, rng);
     const story = n < EVENT_MAX - 1 && rng() < STORY_CHANCE ? this.storyFor(rng, ring) : undefined;
     if (story) return this.tellStory(n, ring, story, rng);
+    // The legendary stands where a trainer can walk up to it from outside the cluster (a
+    // corridor, a ledge or a ball may shut a cell off by itself): the draw's cell, or the next.
     let from: Spot | undefined;
-    if (n === EVENT_MAX - 1) for (const s of all) { if (!from || plane(s) < plane(from)) from = s; }
+    if (n === EVENT_MAX - 1) from = all.slice().sort((p, q) => plane(p) - plane(q)).find((s) => this.reaches(s, [s]));
     else {
       const inside = all.filter((s) => !this.inFog(s, ring));
-      from = inside[Math.min(inside.length - 1, Math.floor(rng() * inside.length))];
+      const at = Math.min(inside.length - 1, Math.floor(rng() * inside.length));
+      for (let i = 0; i < inside.length && !from; i++) { const s = inside[(at + i) % inside.length]; if (this.reaches(s, [s])) from = s; }
     }
     if (!from) return;
     const f = from;
     const d = (s: Spot) => Math.abs(s.x - f.x) + Math.abs(s.y - f.y);
     // Within eight, never on the legendary's four sides (events.ts's clusterCells).
-    const cells = all.filter((s) => s.map === f.map && d(s) <= 8 && d(s) !== 1)
-      .sort((p, q) => d(p) - d(q) || p.y - q.y || p.x - q.x).slice(0, 1 + EVENT_RARES + EVENT_GOLD + 2);
+    const near = all.filter((s) => s.map === f.map && d(s) <= 8 && d(s) !== 1 && s !== f)
+      .sort((p, q) => d(p) - d(q) || p.y - q.y || p.x - q.x);
     const level = rungForPhase(ring.phase + 1);
     const legends = LEGENDS[Math.min(n, LEGENDS.length - 1)];
     const species = [legendOf(legends, this.seed, rng), ...draw(rng, RARES, EVENT_RARES)];
     const bags = [...draw(rng, GOLD, EVENT_GOLD).map((id) => [{ id, n: 1 }]), SUPPLIES.map((r) => ({ ...r }))];
-    // The cell past the pieces is the trader's, with a rare the event did not drop.
-    const spot = cells.length > species.length + bags.length ? cells.pop()! : undefined;
-    const offers = RARES.filter((r) => !species.includes(r));
-    const trader = spot && offers.length ? { x: spot.x, y: spot.y, species: offers[Math.min(offers.length - 1, Math.floor(rng() * offers.length))], busy: 0 } : undefined;
-    cells.forEach((c, i) => {
+    // Every piece is solid: it takes the nearest cell that still leaves the legendary and every
+    // piece laid so far a way in from outside (a ball in a one-tile gap would shut it).
+    const laid: Spot[] = [];
+    const lay = (c: Spot) => {
+      const i = laid.length;
       const key = eventPiece(n, i);
       const bag: Bag = i < species.length ? { items: [], money: 0, mons: [{ species: species[i], level }] } : { items: bags[i - species.length], money: 0 };
       this.spills.set(key, { key, map: c.map, x: c.x, y: c.y, name: '', bag, ...(i === 0 ? { legend: true } : {}) });
-    });
-    this.events.push({ n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0], ...(trader ? { trader } : {}) });
+      if (this.reaches(f, [...laid, c])) laid.push(c);
+      else this.spills.delete(key);
+    };
+    lay(f);
+    for (const c of near) { if (laid.length >= species.length + bags.length) break; lay(c); }
+    const e: EventMark = { n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0] };
+    this.events.push(e);
+    // The cell past the pieces is the trader's, with a rare the event did not drop.
+    const offers = RARES.filter((r) => !species.includes(r));
+    const spare = near.filter((c) => !laid.includes(c));
+    if (laid.length === species.length + bags.length && offers.length) {
+      const pick = offers[Math.min(offers.length - 1, Math.floor(rng() * offers.length))];
+      for (const c of spare.slice(0, 6)) {
+        e.trader = { x: c.x, y: c.y, species: pick, busy: 0 };
+        if (this.reaches(f, [...laid, c])) break;
+        delete e.trader;
+      }
+    }
+  }
+
+  /** Whether a trainer can walk up to each of `targets` (the cells of a piece, or a trader)
+   *  from outside the cluster round `f`: with every ball, bag, trader and gift-giver a wall, a
+   *  standing cell beside each that some cell over eight steps from `f` walks to, the walk's
+   *  ledges and doors as they are. */
+  private reaches(f: Spot, targets: Spot[]): boolean {
+    const R = 10, key = (x: number, y: number) => `${x},${y}`;
+    const wall = (map: string, x: number, y: number) => !!(this.groundAt(map, x, y) || this.spillAt(map, x, y) || this.traderAt(map, x, y) || clerkAt(map, x, y) || ferryAt(map, x, y) || leaderAt(map, x, y) || this.spentAt(map, x, y));
+    const walk = (x: number, y: number) => this.world.cell(f.map, x, y) === 0 && !wall(f.map, x, y);
+    // Who can step to a cell, over the box round `f`.
+    const rev = new Map<string, [number, number][]>();
+    for (let y = f.y - R; y <= f.y + R; y++) for (let x = f.x - R; x <= f.x + R; x++) {
+      if (!walk(x, y)) continue;
+      for (let dir = 1; dir <= 4; dir++) {
+        const r = this.base({ map: f.map, x, y }, dir);
+        if (!r || r.warp || r.to.map !== f.map || wall(r.to.map, r.to.x, r.to.y)) continue;
+        const k = key(r.to.x, r.to.y);
+        (rev.get(k) ?? rev.set(k, []).get(k)!).push([x, y]);
+      }
+    }
+    for (const t of targets) {
+      const seen = new Set<string>(), q: [number, number][] = [];
+      for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) if (walk(t.x + dx, t.y + dy)) { q.push([t.x + dx, t.y + dy]); seen.add(key(t.x + dx, t.y + dy)); }
+      let out = false;
+      while (q.length && !out) {
+        const [x, y] = q.pop()!;
+        if (Math.abs(x - f.x) + Math.abs(y - f.y) > 8) { out = true; break; }
+        for (const p of rev.get(key(x, y)) ?? []) if (!seen.has(key(...p))) { seen.add(key(...p)); q.push(p); }
+      }
+      if (!out) return false;
+    }
+    return true;
   }
 
   /** A story event this round has not had (story.ts), where Emerald set that beat, inside
