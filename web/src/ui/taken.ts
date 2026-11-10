@@ -16,11 +16,14 @@ const MAX_MOVES = 4;
 const MOVE_EFFECT = 0;
 /** struct SpeciesInfo (include/pokemon.h). */
 const SPECIES_INFO = 0x1c;
-const INFO_ATTACK = 1, INFO_DEFENSE = 2, INFO_SPATK = 4, INFO_TYPES = 6, INFO_GROWTH = 0x13;
+const INFO_ATTACK = 1, INFO_DEFENSE = 2, INFO_SPATK = 4, INFO_TYPES = 6, INFO_FRIENDSHIP = 0x12, INFO_GROWTH = 0x13;
 /** struct Evolution, EVOS_PER_MON of them a species: three u16s, which agbcc pads to 8 bytes (a
  *  release's) and a modern compiler does not. BULBASAUR's first row says which. */
 const EVOS_PER_MON = 5;
-const EVO_FRIENDSHIP = 1, EVO_DAY = 2, EVO_NIGHT = 3, EVO_LEVEL = 4, EVO_ATK_GT = 8, EVO_ATK_EQ = 9, EVO_ATK_LT = 10, EVO_SILCOON = 11, EVO_CASCOON = 12, EVO_NINJASK = 13;
+const EVO_FRIENDSHIP = 1, EVO_DAY = 2, EVO_NIGHT = 3, EVO_LEVEL = 4, EVO_ATK_GT = 8, EVO_ATK_EQ = 9, EVO_ATK_LT = 10, EVO_SILCOON = 11, EVO_CASCOON = 12, EVO_NINJASK = 13, EVO_BEAUTY = 15;
+/** FRIENDSHIP_EVO_THRESHOLD, and br_levels.c's BR_FRIENDSHIP_START / _STEP and BR_BEAUTY_STEP: what a mon that
+ *  joins at ladder tier t is as fond and as beautiful as one that rode every ring (WarmTo). */
+const FRIENDSHIP_EVO = 220, FRIENDSHIP_START = 70, FRIENDSHIP_STEP = 50, BEAUTY_STEP = 60;
 /** rtc.h's DAY_EVO_HOUR_BEGIN and END: the day is the afternoon, in Emerald. */
 const DAY_FROM = 12, DAY_TO = 24;
 const LEARN_END = 0xffff, LEARN_MOVE = 0x1ff, LEARN_LEVEL_SHIFT = 9;
@@ -152,7 +155,7 @@ export interface Taken {
 /** The mon `species` at `level` would be, from `seed` and its ball's `key`: MakeTaken and then
  *  BrLevels_Settle. `rng` is that mon's seed, or null where the ROM rolls freely (a trader's,
  *  br_event.c Offered): mid-range IVs and a plain nature stand in. Null without the tables. */
-export function takenMon(rom: Rom, species: number, level: number, rng: number | null, hour = DAY_FROM): Taken | null {
+export function takenMon(rom: Rom, species: number, level: number, rng: number | null, hour = DAY_FROM, tier = 0): Taken | null {
   const info = rom.sym('gSpeciesInfo'), sets = rom.sym('gLevelUpLearnsets'), moves = rom.sym('gBattleMoves');
   const evos = rom.sym('gEvolutionTable'), natures = rom.sym('gNatureStatTable'), exp = rom.sym('gExperienceTables');
   if (info === undefined || sets === undefined || moves === undefined || evos === undefined || natures === undefined || exp === undefined || species <= 0) return null;
@@ -206,7 +209,11 @@ export function takenMon(rom: Rom, species: number, level: number, rng: number |
     return k > 0 ? Math.floor((n * 110) / 100) : k < 0 ? Math.floor((n * 90) / 100) : n;
   };
 
-  // GrowUp: as fond as it can be, as far as levelling takes it; a big jump is two evolutions.
+  // WarmTo: the species' own friendship, raised to what the rings so far would have made it (nothing
+  // at tier 0); beauty from nothing the same way. Then GrowUp asks with those, as the ROM does.
+  const friendship = tier > 0 ? Math.max(base(species, INFO_FRIENDSHIP), Math.min(255, FRIENDSHIP_START + FRIENDSHIP_STEP * tier)) : base(species, INFO_FRIENDSHIP);
+  const beauty = tier > 0 ? Math.min(255, BEAUTY_STEP * tier) : 0;
+  // GrowUp: as far as levelling, friendship and beauty take it; a big jump is two evolutions.
   let sp = species;
   for (let step = 0; step < 3; step++) {
     let target = 0;
@@ -216,9 +223,11 @@ export function takenMon(rom: Rom, species: number, level: number, rng: number |
       const method = u16(rom, e), param = u16(rom, e + 2), to = u16(rom, e + 4);
       const up = param <= lv;
       const day = hour >= DAY_FROM && hour < DAY_TO;
-      if (method === EVO_FRIENDSHIP) target = to;
-      else if (method === EVO_DAY) { if (day) target = to; }
-      else if (method === EVO_NIGHT) { if (!day) target = to; }
+      const fond = friendship >= FRIENDSHIP_EVO;
+      if (method === EVO_FRIENDSHIP) { if (fond) target = to; }
+      else if (method === EVO_DAY) { if (fond && day) target = to; }
+      else if (method === EVO_NIGHT) { if (fond && !day) target = to; }
+      else if (method === EVO_BEAUTY) { if (param <= beauty) target = to; }
       else if (method === EVO_LEVEL || method === EVO_NINJASK) { if (up) target = to; }
       else if (method === EVO_ATK_GT) { if (up && atk > def) target = to; }
       else if (method === EVO_ATK_EQ) { if (up && atk === def) target = to; }
