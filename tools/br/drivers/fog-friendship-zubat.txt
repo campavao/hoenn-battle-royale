@@ -1,0 +1,65 @@
+# fog-friendship-zubat: friendship rises as the fog closes (Cam, 2026-11-10: "raise
+# friendship and beauty levels of pokemon while they are in your party as fog closes in
+# (similar to level up) so that pokemon that evolve via those methods or moves that get
+# stronger via those work"). A ZUBAT taken at rung 5 is as fond of you as any catch is
+# (70); each ring that closes adds 50 -- 120, 170, 220, then the 255 cap -- so GOLBAT
+# becomes CROBAT at the third lift (rung 50, where friendship first reaches the 220
+# FRIENDSHIP_EVO_THRESHOLD), not the first. Before this, GrowUp asked as if every mon
+# were at 255, so CROBAT came at rung 30 and RETURN never got stronger.
+#
+# Friendship is encrypted on a party mon; tools/br/fog-friendship.py decrypts the dumps.
+# checked-by: tools/br/fog-friendship.py
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 0
+# SPILL from seat 2: one ZUBAT (41) at level 5 on the cell we face, taken at rung 5
+pokebytes gBrMailbox+0x1018 0B 11 0E 00 00 02 00 09 01 00 02 0C 00 10 00 29 00 05 00
+poke u16 gBrMailbox+0x0C 1
+wait 20
+tap A
+wait 30
+expect u8 gPlayerPartyCount 1
+# Z U B A T
+expect u8 gPlayerParty+8 0xD4
+expect u8 gPlayerParty+9 0xCF
+expect u8 gPlayerParty+0x54 5
+say stage 0 rung 5
+dump gPlayerParty 100
+# ring 2: rung 15
+poke u8 gBrRing+1 2
+poke u8 gBrRing 1
+wait 200
+expect u8 gBrLevels 15
+expect u8 gPlayerParty+0x54 15
+say stage 1 rung 15
+dump gPlayerParty 100
+# ring 3: rung 30 -- GOLBAT (22) but friendship is only 170: still no CROBAT
+poke u8 gBrRing+1 3
+wait 200
+expect u8 gBrLevels 30
+expect u8 gPlayerParty+0x54 30
+# G O L B A T
+expect u8 gPlayerParty+8 0xC1
+expect u8 gPlayerParty+9 0xC9
+expect u8 gPlayerParty+10 0xC6
+say stage 2 rung 30
+dump gPlayerParty 100
+# ring 4: rung 50 -- friendship 220, CROBAT
+poke u8 gBrRing+1 4
+wait 200
+expect u8 gBrLevels 50
+expect u8 gPlayerParty+0x54 50
+# C R O B A T
+expect u8 gPlayerParty+8 0xBD
+expect u8 gPlayerParty+9 0xCC
+expect u8 gPlayerParty+10 0xC9
+say stage 3 rung 50
+dump gPlayerParty 100
+# ring 5: rung 75 -- the cap
+poke u8 gBrRing+1 5
+wait 200
+expect u8 gBrLevels 75
+say stage 4 rung 75
+dump gPlayerParty 100
+say fog friendship zubat ok
