@@ -149,7 +149,7 @@ test("the rod's box adds a dot: it does not print its line again from nothing", 
   await ctx.close();
 });
 
-test('the MAP has the next fog as a line, and nothing blinks', async ({ browser }) => {
+test('the MAP has the next fog as a line while it closes in, and nothing blinks', async ({ browser }) => {
   test.setTimeout(180_000);
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   const page = await ctx.newPage();
@@ -201,7 +201,17 @@ test('the MAP has the next fog as a line, and nothing blinks', async ({ browser 
   await shot(page, 'map-line-2');
   const fogs = seen.map((x) => x.fog);
   expect(Math.max(...fogs) - Math.min(...fogs), 'the fog does not blink').toBeLessThan(0.02 * Math.max(...fogs));
-  expect(Math.min(...seen.map((x) => x.line)), 'the line is on it').toBeGreaterThan(100);
+  // Holding, no line: it shows only as the fog moves in (Cam, 11-10: "only show the fog ring on
+  // the map as the fog is actively closing in").
+  expect(Math.max(...seen.map((x) => x.line)), 'no line while the ring holds').toBe(0);
+  await page.keyboard.press('x');
+  await expect(page.locator('#map-window .map-picture')).toBeHidden({ timeout: 5_000 });
+  await expect.poll(() => spike(page, (s) => { const room = s.link.room; return room.ring(room.tick + 1).r < room.ring().r; }), { timeout: 60_000, intervals: [250] }).toBe(true);
+  await spike(page, (s) => s.runMenu('13'));
+  await expect(page.locator('#map-window .map-picture')).toBeVisible({ timeout: 5_000 });
+  await page.waitForTimeout(400);
+  await shot(page, 'map-line-closing');
+  expect((await pale()).line, 'the line is on it while it closes').toBeGreaterThan(100);
   await ctx.close();
 });
 

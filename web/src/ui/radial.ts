@@ -6,9 +6,12 @@ import { TEXT_DARK, TEXT_GRAY, TEXT_RED, fitText, wrapText, type EmeraldCanvas }
 import { glass, pageRoot, pageScale, pageWin, type PageWindow } from './pagewin';
 import { Win, drawItemFitted } from './phonehud';
 
-export type Side = 'up' | 'right' | 'down' | 'left';
-const SIDES: readonly Side[] = ['up', 'right', 'down', 'left'];
-const WAYS: Record<Side, [number, number]> = { up: [0, -1], right: [1, 0], down: [0, 1], left: [-1, 0] };
+// The corner between UP and RIGHT holds the second bike (Cam, 11-10: "quick wheel should show both
+// mach and acro bikes"): a stick or a finger leans to it, keys go UP then RIGHT.
+export type Side = 'up' | 'right' | 'down' | 'left' | 'upright';
+const SIDES: readonly Side[] = ['up', 'right', 'down', 'left', 'upright'];
+const DIAG = Math.SQRT1_2;
+const WAYS: Record<Side, [number, number]> = { up: [0, -1], right: [1, 0], down: [0, 1], left: [-1, 0], upright: [DIAG, -DIAG] };
 
 export interface DialItem {
   side: Side;
@@ -32,6 +35,11 @@ export function aimed(sides: readonly Side[], dx: number, dy: number): Side | nu
   }
   // Square across from anything there is: no pick, rather than the nearest of two behind it.
   return most > 0 ? best : null;
+}
+
+/** The corner between a side and the arrow pressed from it, if there is one. */
+export function cornerOf(from: Side, k: 'up' | 'down' | 'left' | 'right'): Side | null {
+  return (from === 'up' && k === 'right') || (from === 'right' && k === 'up') ? 'upright' : null;
 }
 
 /** GBA pixels. */
@@ -137,7 +145,13 @@ export class Radial implements PageWindow {
   key(k: string): void {
     if (k === 'a') this.release();
     else if (k === 'b') this.close();
-    else if (k === 'up' || k === 'down' || k === 'left' || k === 'right') this.aim(WAYS[k][0], WAYS[k][1]);
+    else if (k === 'up' || k === 'down' || k === 'left' || k === 'right') {
+      // From a side, the arrow a quarter round from it goes to the corner between them, if
+      // something stands there: UP then RIGHT is the corner.
+      const corner = this.on ? cornerOf(this.on, k) : null;
+      if (corner && this.items.some((x) => x.side === corner)) this.aimAt(corner);
+      else this.aim(WAYS[k][0], WAYS[k][1]);
+    }
   }
 
   /** Opened by a finger still down at (x, y): sliding away leans, and lifting it picks. Lifted

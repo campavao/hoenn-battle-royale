@@ -59,6 +59,9 @@ export interface BattleView {
   /** A fight with somebody (a trainer, a bot, another player): RUN needs a POKe DOLL. */
   trainer: boolean;
   dolls: boolean;
+  /** A ROYALE BALL in the bag, for BALL to throw (its item, 0 for none): a few slots a frame, as
+   *  the POKe DOLL is. */
+  ball?: number;
   /** The odds of the next RUN, in percent: the ROM works them out (BrBattle_RunChance). */
   runChance: number;
   safariBalls: number;
@@ -124,6 +127,7 @@ export function readBattleView(
     name.push(b);
   }
   const dolls = bagHolds(emu, sym, ITEMS_POCKET, [ITEM_POKE_DOLL]).size > 0;
+  const ball = bagHolds(emu, sym, POCKET_BALLS, ROYALE_BALLS);
   const balls = sym('gNumSafariBalls');
   const cursor = sym('gMoveSelectionCursor');
   let foeName = '';
@@ -136,6 +140,7 @@ export function readBattleView(
     menu: emu.read(br + BATTLE_MENU, 8),
     trainer: (flags & (BATTLE_TYPE_TRAINER | BATTLE_TYPE_LINK)) !== 0 && !(flags & BATTLE_TYPE_SAFARI),
     dolls,
+    ball: ROYALE_BALLS.find((b) => ball.has(b)) ?? 0,
     runChance: emu.read(br + BATTLE_RUN_CHANCE, 8),
     safariBalls: balls === undefined ? 0 : emu.read(balls, 8),
     moves,
@@ -281,6 +286,10 @@ export interface PartyMember {
 
 /** The buttons under the moves (Cam's sketch, 11-01), three across MENU_W. */
 const ACTION_W = 72;
+/** Four across, with a wild one's BALL among them: the widest that fit MENU_W. */
+const ACTION_W4 = 55;
+/** Four down a keyboard's column, the moves' height. */
+const ACTION_H4 = 32;
 const PARTY_H = 44;
 const MEMBER_CARD_H = 56;
 const MEMBER_HELD_H = 32;
@@ -297,6 +306,9 @@ const SAFARI_H = 40;
 export function powerText(m: MoveInfo): string {
   return m.power ? String(m.power) : '---';
 }
+/** The balls a match's bag holds but the MASTER BALL, kept for when it is chosen: each a ROYALE BALL
+ *  (br_items.h), the POKe BALL's slot first. */
+const ROYALE_BALLS = [4, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12];
 const ITEM_POKE_BALL = 4, ITEM_ESCAPE_ROPE = 85, ITEM_POKEBLOCK_CASE = 273, ITEM_TM_CASE = 364;
 const ICON_BOX = 15;
 const SLOT_MENU_PARTY = 2, SLOT_RUN = 3;
@@ -311,6 +323,13 @@ const CATCH_DEAF_MS = 400;
 function iconButton(c: EmeraldCanvas, w: number, h: number, icon: (cx: number, cy: number, box: number) => void, word: string, color: TextColor): void {
   c.drawFrame({ x: 0, y: 0, w, h });
   const tw = measure(word);
+  // Too narrow for the two side by side (four across, a wild fight's BALL among them): a small
+  // icon over the word, so RUN's odds still read whole.
+  if (w < 60 && h >= 30) {
+    icon(w / 2, 10, 10);
+    c.drawTextCentred(fitText(word, w - 6), w / 2, h - 17, color);
+    return;
+  }
   const box = tw + ICON_BOX + 4 > w - 8 ? 10 : ICON_BOX;
   const left = Math.round((w - tw - box - 4) / 2);
   icon(left + box / 2, h / 2, box);
@@ -623,29 +642,33 @@ export class BattleMenu {
     this.actions.className = 'bm-actions';
     deps.root.insertBefore(this.actions, this.backBtn);
     const first = deps.firstMoves;
-    const WORDS = ['PARTY', 'BAG', 'RUN'];
+    // BALL in a wild fight, a ROYALE BALL thrown at once (Cam, 11-10: "there should be a quick
+    // action in a wild battle to throw a royale ball"), rather than BAG, BALLS, the ball, USE.
+    const WORDS = ['PARTY', 'BAG', 'BALL', 'RUN'] as const;
     // With a keyboard they stand in a column beside the moves, wider, for the keys' caps.
     this.actionW = first?.keys ? 88 : ACTION_W;
     this.actionH = first?.keys ? 40 : BACK_H;
-    WORDS.forEach((word, i) => {
+    WORDS.forEach((word) => {
       const b = button(`bm-act bm-act-${word.toLowerCase()}`, this.actions);
       b.setAttribute('aria-label', word);
       const w = new Win(b, this.actionW, this.actionH, (c, redo) => {
-        const run = i === 2 ? this.runLabel() : null;
+        const run = word === 'RUN' ? this.runLabel() : null;
         const label = run?.label ?? word;
         const color = run && !run.enabled ? TEXT_GRAY : TEXT_DARK;
-        iconButton(c, this.actionW, this.actionH, (cx, cy, box) => {
-          if (i === 1) { const bag = first?.bag(); if (bag) drawFitted(c, 'bag', bag, 0, 0, 64, 64, cx, cy, box); }
-          else drawItemFitted(c, i === 0 ? ITEM_POKE_BALL : ITEM_ESCAPE_ROPE, cx, cy, box, redo);
+        const [aw, ah] = this.actSize();
+        iconButton(c, aw, ah, (cx, cy, box) => {
+          if (word === 'BAG') { const bag = first?.bag(); if (bag) drawFitted(c, 'bag', bag, 0, 0, 64, 64, cx, cy, box); }
+          else drawItemFitted(c, word === 'PARTY' ? ITEM_POKE_BALL : word === 'BALL' ? this.ballStack()?.item ?? ITEM_POKE_BALL : ITEM_ESCAPE_ROPE, cx, cy, box, redo);
         }, label, color);
-        const key = i === 0 ? first?.keys?.party : i === 1 ? first?.keys?.bag : undefined;
-        if (key) drawKeycap(c, hintFor(i === 0 ? 'l' : 'r', key), this.actionW - 3, 3);
+        const key = word === 'PARTY' ? first?.keys?.party : word === 'BAG' ? first?.keys?.bag : undefined;
+        if (key) drawKeycap(c, hintFor(word === 'PARTY' ? 'l' : 'r', key), aw - 3, 3);
       });
       this.actionWins.push(w);
       b.addEventListener('click', () => {
         if (b.getAttribute('aria-disabled') === 'true') return;
-        if (i === 0) this.openParty();
-        else this.act(i === 1 ? 1 : SLOT_RUN);
+        if (word === 'PARTY') this.openParty();
+        else if (word === 'BALL') this.throwBall();
+        else this.act(word === 'BAG' ? 1 : SLOT_RUN);
       });
     });
 
@@ -859,6 +882,27 @@ export class BattleMenu {
 
   private setPartyHidden(): void {
     this.actions.hidden = this.partyBox.hidden = this.memberBox.hidden = this.useMoveBox.hidden = true;
+  }
+
+  /** The ball BALL throws: a wild fight's (not the Safari's, which has its own), off a battle's bag,
+   *  the first that is not a MASTER BALL, which is kept for when it is chosen. */
+  private ballStack(): { item: number } | undefined {
+    const v = this.view;
+    if (!v || v.trainer || v.menu === MENU_SAFARI || this.lastShown === MENU_SAFARI || this.fieldHome || !this.deps.useItem || !v.ball) return undefined;
+    return { item: v.ball };
+  }
+
+  /** The action buttons' size: four across, or down, with BALL among them. */
+  private actSize(): [number, number] {
+    const four = !!this.ballStack();
+    return this.deps.firstMoves?.keys ? [this.actionW, four ? ACTION_H4 : this.actionH] : [four ? ACTION_W4 : this.actionW, this.actionH];
+  }
+
+  private throwBall(): void {
+    const ball = this.ballStack();
+    if (!ball || !this.deps.useItem) return;
+    this.mode = 'action';
+    this.send(() => this.deps.useItem!(POCKET_BALLS, ball.item));
   }
 
   private runLabel(): { label: string; enabled: boolean } | null {
@@ -1709,7 +1753,8 @@ export class BattleMenu {
     this.bagDescWin.size(MENU_W, this.itemHeight(), scale);
     this.bagBackWin.size(BAG_BACK_W, BACK_H, scale);
     this.bagUseWin.size(MENU_W - BAG_BACK_W - GAP, BACK_H, scale);
-    for (const w of this.actionWins) w.size(this.actionW, this.actionH, scale);
+    const [aw, ah] = this.actSize();
+    for (const w of this.actionWins) w.size(aw, ah, scale);
     this.useHeadWin.size(USE_HEAD_W, USE_HEAD_H, scale);
     this.forgetHeadWin.size(MENU_W, FORGET_HEAD_H, scale);
     this.catchHeadWin.size(MENU_W, CATCH_HEAD_H, scale);
@@ -1813,11 +1858,16 @@ export class BattleMenu {
     this.useMoveBox.hidden = !usemove;
     if (first && moves && !info) {
       const run = labels[SLOT_RUN];
-      const runB = this.actions.children[2] as HTMLElement;
+      const runB = this.actions.children[3] as HTMLElement;
       runB.setAttribute('aria-disabled', String(!(run?.enabled ?? true)));
-      this.actionWins[2].show(JSON.stringify(run ?? null));
-      this.actionWins[0].show('p');
-      this.actionWins[1].show('b');
+      const ball = this.ballStack();
+      (this.actions.children[2] as HTMLElement).hidden = !ball;
+      const [aw, ah] = this.actSize();
+      for (const w of this.actionWins) if (w.c.width !== aw || w.c.height !== ah) w.size(aw, ah, this.scale);
+      this.actionWins[3].show(`${JSON.stringify(run ?? null)}|${aw}`);
+      this.actionWins[2].show(`${ball?.item}|${aw}`);
+      this.actionWins[0].show(`p|${aw}`);
+      this.actionWins[1].show(`b|${aw}`);
     }
     if (party) this.partyCells.forEach(({ b }, i) => { b.hidden = !this.team[i]; b.setAttribute('aria-label', this.team[i]?.name ?? ''); });
     if (member) {
