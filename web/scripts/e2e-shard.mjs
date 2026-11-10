@@ -38,7 +38,7 @@ export const FILE_SECONDS = {
   'spikeb-landing.spec.ts': 20,
   'spikeb-delays.spec.ts': 330,
   'spikeb-summary.spec.ts': 220,
-  'spikeb-windows.spec.ts': 692,
+  'spikeb-windows.spec.ts': 740,
   'spikeb-room.spec.ts': 230,
   'spikeb.spec.ts': 526,
   'spikeb-two.spec.ts': 102,

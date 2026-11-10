@@ -221,6 +221,9 @@ export interface RomBattles {
   setPhase(phase: number): void;
   /** For the specs: a full team of copies of the first (a lift takes longest for six). */
   fillParty(): Promise<void>;
+  /** For the specs: slot `slot`'s HP, on the team the page carries as well as in the ROM.
+   *  A write straight into gPlayerParty between battles is lost to the next turn's `keep`. */
+  setHp(slot: number, hp: number): Promise<void>;
   /** The Safari opening (br_zone.c): wild battles draw any first stage while it runs. */
   setSafari(on: boolean): void;
   /** ROYALe BALLs left to throw in this round's Safari (gNumSafariBalls, 30 a round). */
@@ -1312,6 +1315,16 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         const party = k.party.slice();
         for (let i = k.count; i < 6; i++) party.set(party.subarray(0, 100), i * 100);
         const next = { ...k, count: 6, party: party as typeof k.party };
+        keep(next);
+        carried = last = next;
+      });
+    },
+    setHp(slot: number, hp: number) {
+      return inTurn(async () => {
+        const k = carried ?? kept();
+        const party = k.party.slice();
+        new DataView(party.buffer, party.byteOffset, party.byteLength).setUint16(slot * 100 + 86, hp, true);
+        const next = { ...k, party: party as typeof k.party };
         keep(next);
         carried = last = next;
       });
