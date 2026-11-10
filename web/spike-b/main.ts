@@ -873,6 +873,7 @@ function giveNext(): void {
   if (screen) { if (gift) say(line); romUp = true; }
   const said = screen && gift ? new Promise((done) => setTimeout(done, GIFT_LINE_MS)) : Promise.resolve();
   const r = rom;
+  let taught = false;
   // Who gets it is the windows'; BACK keeps it in the bag.
   const who = () => askParty(name(item), isMachine(item) ? (m) => takesMachine(m, item) : undefined);
   const took = screen
@@ -882,13 +883,16 @@ function giveNext(): void {
       // the agbcc build), and then it went in the bag after the player had already said who.
       const got = await r.give(item, 1);
       if (slot === null || !got?.items.some((g) => g.id === item)) return got;
-      if (isMachine(item)) await r.menu(2, () => battleEl.classList.add('on'), () => battleEl.classList.remove('on'), { to: 'use', pocket: POCKET_TMHM, item, slot });
-      else {
-        const was = battleMenu?.heldBy(slot) ?? 0;
-        if (await r.take(item)) await r.setHeld(slot, item);
-        if (was) await r.give(was, 1);
+      if (isMachine(item)) {
+        // The page's own write, as the team's MOVES teaches (learn): the ROM's screens were the wait.
+        const move = TMHM_MOVES[item - ITEM_TM01];
+        if (await learn(slot, move, item, () => askForget(slot, move))) taught = true;
+        return got;
       }
-      return { ...got, items: readPocket(r.emu, romTables.sym, isMachine(item) ? POCKET_TMHM : 0).some((x) => x.item === item) ? got.items : [] };
+      const was = battleMenu?.heldBy(slot) ?? 0;
+      if (await r.take(item)) await r.setHeld(slot, item);
+      if (was) await r.give(was, 1);
+      return { ...got, items: readPocket(r.emu, romTables.sym, 0).some((x) => x.item === item) ? got.items : [] };
     }).finally(() => { romUp = false; battleEl.classList.remove('on'); })
     : r.give(item, groundCount(item));
   took.then((got) => {
@@ -900,7 +904,7 @@ function giveNext(): void {
       else link.drop(key); // it stays where it lay
     } else if (screen) {
       rom?.sound(MUS_OBTAIN_TMHM);
-      const kept = got.items.some((g) => g.id === item);
+      const kept = isMachine(item) ? !taught : got.items.some((g) => g.id === item);
       if (kept) say(`${name(item)} went in the BAG.`);
       else if (!gift) say(`Taught ${name(item)}!`);
     }
@@ -1253,23 +1257,35 @@ function learnRows(m: { species: number; level: number; moves: readonly { id: nu
  *  which goes, on the windows, and a move that only a TM gave goes back in the bag; a TM that
  *  taught it is spent, an HM is not. BACK at the question keeps the four. */
 async function teach(slot: number, row: LearnRow, menu: BattleMenu): Promise<void> {
-  const r = rom;
-  const m = readTeam()[slot];
-  if (!r || !m) return;
-  let at = m.moves.length;
-  if (at >= 4) {
-    const up = panelUp;
+  const up = panelUp;
+  const taught = await learn(slot, row.move, row.machine, async () => {
     const pick = await askForget(slot, row.move);
-    if (!panelUp || !up) return;
+    if (!panelUp || !up) return null;
     // Its windows closed themselves: back behind the box.
     battleEl.classList.add('panel');
     menu.openField('party');
     menu.showMember(slot);
-    if (pick === null) return;
+    return pick;
+  });
+  if (taught) rom?.sound(SE_USE_ITEM);
+}
+/** `move` into `slot`'s four, by the page's write: four known, `forget` says which goes (null keeps
+ *  them). A TM that taught it is spent, an HM is not, and a forgotten move only a TM gave goes back
+ *  in the bag. Whether it learned it. A TM off the ground came this way too, not through the hidden
+ *  ROM's START, BAG and party, which held the field still 1.7 s on a desktop (Cam, 11-09: "delays
+ *  when picking up an item or teaching it"). */
+async function learn(slot: number, move: number, machine: number, forget: () => Promise<number | null>): Promise<boolean> {
+  const r = rom;
+  const m = readTeam()[slot];
+  if (!r || !m || m.moves.some((x) => x.id === move)) return false;
+  let at = m.moves.length;
+  if (at >= 4) {
+    const pick = await forget();
+    if (pick === null || rom !== r) return false;
     at = pick;
   }
   const gone = at < m.moves.length ? m.moves[at].id : 0;
-  await r.setMove(slot, at, row.move, moveInfo(romTables, row.move)?.pp ?? 0);
+  await r.setMove(slot, at, move, moveInfo(romTables, move)?.pp ?? 0);
   if (gone) {
     const tm = TMHM_MOVES.indexOf(gone) + ITEM_TM01;
     const isTm = tm >= ITEM_TM01 && tm < ITEM_HM01;
@@ -1278,8 +1294,8 @@ async function teach(slot: number, row: LearnRow, menu: BattleMenu): Promise<voi
       say(`${moveInfo(romTables, gone)?.name ?? 'It'} went in the BAG.`);
     }
   }
-  if (row.machine && row.machine < ITEM_HM01) await r.take(row.machine);
-  r.sound(SE_USE_ITEM);
+  if (machine && machine < ITEM_HM01) await r.take(machine);
+  return true;
 }
 function openPanel(home: 'party' | 'bag'): void {
   if (!battleMenu) return;
@@ -5330,7 +5346,7 @@ async function boot(): Promise<void> {
     }
   }
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
-  (window as unknown as { __spike: unknown }).__spike = { watch, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, get movesBox() { return movesBox; }, radial, moveName: (id: number) => moveInfo(romTables, id)?.name ?? '' };
+  (window as unknown as { __spike: unknown }).__spike = { watch, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, get movesBox() { return movesBox; }, pocket: (n: number) => (rom ? readPocket(rom.emu, romTables.sym, n) : []), radial, moveName: (id: number) => moveInfo(romTables, id)?.name ?? '' };
 }
 
 void boot();

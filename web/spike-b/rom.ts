@@ -583,10 +583,14 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     // br_loot.c's HandleGive: straight into AddBagItem when no bag of ours is waiting.
     lay();
     emu.resume();
+    // Nothing of it is seen or heard: the frames it waits on go at HURRY_SPEED (Cam, 11-09, "delays when
+    // picking up an item": a bag of eight rows was 0.8 s at the ROM's own speed on a desktop).
+    hurryOn();
     send({ t: 'give', items: [{ id: item, n }] });
     await until(emu, () => box.pending() === 0, 60);
     await frames(emu, 1);
     await partyDone();
+    hurryOff();
     emu.pause();
     const after = kept();
     // Back to parked with what it left, as after a battle: a refusal's NO ROOM box and
