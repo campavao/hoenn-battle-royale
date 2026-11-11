@@ -234,6 +234,11 @@ export class EmeraldCanvas {
   scale = 1;
   /** Added to every x drawn: where a 240-wide screen sits on a wider canvas. */
   origin = 0;
+  /** Rows of canvas above y = 0 and below `height`, in GBA pixels: a home-screen app's
+   *  notch and home bar, which only a backdrop paints into (Stage, menubg.ts). */
+  top = 0;
+  bottom = 0;
+  private bled = false;
 
   constructor(public readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -251,32 +256,43 @@ export class EmeraldCanvas {
     return this.ready;
   }
 
-  /** `w` x `h` GBA pixels shown at `scale` CSS pixels each. */
-  resize(w: number, h: number, scale: number): void {
+  /** `w` x `h` GBA pixels shown at `scale` CSS pixels each, with `top` and `bottom` rows
+   *  past them: the canvas reaches up and down that far, and y = 0 stays where it was. */
+  resize(w: number, h: number, scale: number, top = 0, bottom = 0): void {
     this.scale = scale;
     this.width = w;
     this.height = h;
+    this.top = top;
+    this.bottom = bottom;
     this.canvas.width = w;
-    this.canvas.height = h;
+    this.canvas.height = h + top + bottom;
     this.canvas.style.width = `${w * scale}px`;
-    this.canvas.style.height = `${h * scale}px`;
+    this.canvas.style.height = `${(h + top + bottom) * scale}px`;
+    // Only a bleed this canvas set is taken back: one placed with its own `top` (the
+    // curtain's box, top:60%) keeps it.
+    if (top || this.bled) {
+      this.canvas.style.position = top ? 'relative' : '';
+      this.canvas.style.top = top ? `${-top * scale}px` : '';
+      this.bled = top > 0;
+    }
+    this.ctx.setTransform(1, 0, 0, 1, 0, top);
     this.ctx.imageSmoothingEnabled = false;
   }
 
   /** A CSS point on the canvas, in GBA pixels. */
   toPixel(clientX: number, clientY: number): { x: number; y: number } {
     const r = this.canvas.getBoundingClientRect();
-    return { x: Math.floor((clientX - r.left) / this.scale), y: Math.floor((clientY - r.top) / this.scale) };
+    return { x: Math.floor((clientX - r.left) / this.scale), y: Math.floor((clientY - r.top) / this.scale) - this.top };
   }
 
   clear(color = STAGE_FILL): void {
     this.ctx.fillStyle = color;
-    this.ctx.fillRect(0, 0, this.width, this.height);
+    this.ctx.fillRect(0, -this.top, this.width, this.height + this.top + this.bottom);
   }
 
   /** Nothing at all: the game under an overlay shows through. */
   clearAll(): void {
-    this.ctx.clearRect(0, 0, this.width, this.height);
+    this.ctx.clearRect(0, -this.top, this.width, this.height + this.top + this.bottom);
   }
 
   fillRect(r: Rect, color: string, alpha = 1): void {
