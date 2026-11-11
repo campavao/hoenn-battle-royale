@@ -265,12 +265,18 @@ jobs:
             patch/br-version.json
           if-no-files-found: error
 
+      # The compiler is in the key: libmgba.a is LTO bytecode, and a runner image with a newer
+      # gcc cannot link the old one (11-11: gcc 15 against a 13.1 cache failed all 435 drivers).
+      - name: Host compiler
+        id: cc
+        run: echo "v=$(gcc -dumpfullversion)" >> "$GITHUB_OUTPUT"
+
       - name: Cache libmgba (harness)
         id: mgba-cache
         uses: actions/cache@v6
         with:
           path: tools/br/.mgba
-          key: libmgba-harness-0.10.5-v2-${{ runner.os }}
+          key: libmgba-harness-0.10.5-v2-${{ runner.os }}-gcc${{ steps.cc.outputs.v }}
 
       - name: Drive the fork ROM
         if: needs.scope.outputs.driven-rom == ''
