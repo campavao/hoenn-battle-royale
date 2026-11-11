@@ -232,6 +232,15 @@
       #corner:empty { display: none; }
       #corner.fog { color: #c03028; }
       #stats:not(.debug) { display: none; }
+      /* The loading screen (spike-b/loading.ts): on from the first paint, over the pad and the
+         world, dark with its line until the ride is cut from the player's ROM. */
+      #loading { position: fixed; inset: 0; z-index: 60; background: #101418; color: #f8f8f8; transition: opacity .4s ease; overflow: hidden; }
+      #loading.leaving { opacity: 0; pointer-events: none; }
+      #loading canvas { display: none; position: absolute; left: 0; top: var(--top, 0); image-rendering: pixelated; }
+      #loading.riding { background: linear-gradient(var(--sky, #101418) 0 50%, var(--grass, #101418) 50% 100%); }
+      #loading.riding canvas { display: block; }
+      .loading-line { position: absolute; left: 0; right: 0; top: 50%; padding: 0 16px; text-align: center; font: 700 15px/1.4 system-ui, sans-serif; letter-spacing: .02em; text-shadow: 0 2px 0 #20301c, 0 0 6px #20301ccc; }
+      #loading.riding .loading-line { top: calc(var(--top, 0px) + var(--px, 2px) * 134); font-size: max(15px, calc(var(--px, 2px) * 7)); }
       #msg { z-index: 2; position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 300px); transform: translateX(-50%); display: none; pointer-events: none; }
       @media (pointer: fine) { #msg { bottom: 32px; } }
       #msg.on { display: block; }
@@ -453,6 +462,7 @@
     </style>
   </head>
   <body>
+    <div id="loading"><canvas></canvas><div class="loading-line" role="status">Loading…</div></div>
     <canvas id="world"></canvas>
     <div id="battleview-dim" hidden><div id="battleview-host"></div></div>
     <div id="hud">
