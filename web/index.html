@@ -297,6 +297,10 @@
       #battle.see { background: #0007; }
       #battle.see #gba { visibility: hidden; }
       #battle.see #gba-key { display: block; }
+      /* No WebGL for the core (its own canvas blank): the page draws every screen of the ROM's on
+         the key canvas, unkeyed -- the Hall of Fame was the curtain alone (Cam's 11-11 Firefox). */
+      #battle.plain #gba { visibility: hidden; }
+      #battle.plain #gba-key { display: block; }
       body:has(#battle.see) #hud { visibility: hidden; }
       #battle canvas { image-rendering: pixelated; width: min(100vw, 150vh); aspect-ratio: 240 / 160; height: auto; }
       /* A phone on its side: the battle between the pad's two halves, not under them. */

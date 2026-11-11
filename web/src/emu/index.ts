@@ -955,6 +955,13 @@ export class Emulator {
     return { width, height, left: b.left, top: b.top, data };
   }
 
+  /** Whether the core draws its own canvas: emscripten's WebGL context. A browser that gave it
+   *  none (Cam's Firefox, 11-11: "Failed to create WebGL context") leaves #gba blank, while
+   *  the picture itself (lcdPixels) is all there. */
+  drawsItself(): boolean {
+    return !!(this.m as unknown as { ctx?: object }).ctx;
+  }
+
   /** The LCD's 240x160 of the picture into `out` as RGBA (alpha whatever the core left):
    *  the see-through battle's keyed copy (field.ts), from the same frame as picture().
    *  False on a core without the exports, or with nothing loaded. */

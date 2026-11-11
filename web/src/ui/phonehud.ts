@@ -500,8 +500,16 @@ export function miniLines(v: HudView): Line[] {
     v.flash === 2 ? { text: 'Fog!', color: TEXT_RED } : v.flash === 1 ? undefined : { text: clockText(v.clock), color: v.clock <= 30 ? TEXT_RED : TEXT_DARK };
   const lines: Line[] = [{ left: { text: String(v.left), color: TEXT_BLUE }, right: clock }];
   if (v.safe) lines.push({ left: { text: fitText(v.safe, inner), color: TEXT_RED } });
-  if (v.lead) lines.push({ left: { text: fitText(v.lead, inner), color: TEXT_RED } });
+  if (v.lead) lines.push({ left: { text: leadFit(v.lead, inner), color: TEXT_RED } });
   return lines;
+}
+
+/** The lead's HP in the window's width: "HP 184/243" came out "HP 184/…" there, the half
+ *  that says how hurt it is cut off (Cam's 11-11 recording). The word goes, not the numbers. */
+export function leadFit(text: string, maxW: number): string {
+  if (measure(text) <= maxW) return text;
+  const bare = text.replace(/^HP /, '');
+  return measure(bare) <= maxW ? bare : fitText(bare, maxW);
 }
 function miniHeight(lines: number): number {
   return MINI_MAP + 16 + lines * LINE + 2;

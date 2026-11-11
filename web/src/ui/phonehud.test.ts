@@ -29,6 +29,9 @@ import {
   type HudView,
   OffField,
   OFF_FIELD_GRACE,
+  leadFit,
+  miniLines,
+  MINI_W,
 } from './phonehud';
 import { measure, TEXT_RED } from './emerald';
 import { FIELD_ICONS, ICON_COLORS, ICON_SIZE } from './fieldicons';
@@ -280,5 +283,22 @@ describe('off the field', () => {
     const battle = Array.from({ length: OFF_FIELD_GRACE + 1 }, () => off.step(false));
     expect(battle[OFF_FIELD_GRACE - 1]).toBe(false);
     expect(battle[OFF_FIELD_GRACE]).toBe(true);
+  });
+});
+
+describe("the fog window's lead line", () => {
+  // Cam's 11-11 recording: "HP 184/…" in the corner, the max cut off.
+  it('keeps both numbers: the word HP goes first', () => {
+    const inner = MINI_W - 16;
+    for (const [hp, max] of [[184, 243], [9, 21], [106, 323], [999, 999]]) {
+      const line = leadFit(`HP ${hp}/${max}`, inner);
+      expect(line, `HP ${hp}/${max}`).toContain(`${hp}/${max}`);
+      expect(measure(line)).toBeLessThanOrEqual(inner);
+    }
+    expect(leadFit('HP 9/21', inner), 'short enough keeps its word').toBe('HP 9/21');
+  });
+  it('is what the window draws', () => {
+    const v = { left: 6, clock: 100, flash: 0, safe: 'Safe ◆', lead: 'HP 184/243' } as unknown as HudView;
+    expect(miniLines(v).map((l) => l.left?.text)).toContain('184/243');
   });
 });
