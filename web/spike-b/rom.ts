@@ -1871,9 +1871,23 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         // Its cry asks the room for it (BR_LEGEND_CLAIM_KEY): this page has already had the
         // room's yes, so the answer is ours at once. Then the battle, and back on the field.
         // battle()'s drain hears it (published): it runs before anything registered here.
-        pickupTo = (m) => { if (m.key === (LEGEND_KEY | 0x0800)) send({ t: 'pickup', seat: emu.read(seatAt, 8), key: LEGEND_KEY }); };
+        let asked = false;
+        pickupTo = (m) => { if (m.key === (LEGEND_KEY | 0x0800)) { asked = true; send({ t: 'pickup', seat: emu.read(seatAt, 8), key: LEGEND_KEY }); } };
         stop = emu.onFrame(() => { if (!onField()) seen = true; });
-        void frames(emu, 3).then(async () => { emu.press('a'); await frames(emu, 4); emu.release('a'); });
+        // A until its cry has asked: one press went unheard at times, and the legendary stood
+        // there with no battle (Cam's 11-11 recording, KYOGRE in OLDALE: "spike: no battle"
+        // twice). The bag's and the trader's A ask again too. Not once it has asked: the
+        // battle's own first menu is next, and an A there would choose FIGHT.
+        void (async () => {
+          await frames(emu, 3);
+          for (let n = 0; n < 15 && !asked && !seen && !aborted(); n++) {
+            if (n) console.info('spike: legend A again', n);
+            emu.press('a');
+            await frames(emu, 4);
+            emu.release('a');
+            await frames(emu, 16);
+          }
+        })();
       }, () => emu.read(mainFunc, 32) !== 0, () => {
         return seen && onField();
       }, onStart, () => ({ outcome: emu.read(outcomeAt, 8), species, level }))).finally(() => { stop?.(); pickupTo = null; });

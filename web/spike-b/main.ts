@@ -1967,6 +1967,16 @@ function seeFrame(): void {
     keyCanvas.getContext('2d')?.putImageData(keyImage, 0, 0);
     if (promptOff) clearPrompt();
   } else if (rom && !up) rom.seeThrough(false);
+  // A core with no WebGL draws nothing on #gba: whatever the ROM shows unkeyed (its Hall of
+  // Fame, a party screen) comes from the picture itself, as the keyed battle's does.
+  const plain = up && !keyed && !rom!.emu.drawsItself() && rom!.picture(keyImage.data);
+  if (plain) {
+    // The core leaves its alpha as it likes (lcdPixels): every pixel solid, or the curtain shows through.
+    const px = keyImage.data;
+    for (let i = 3; i < px.length; i += 4) px[i] = 255;
+    keyCanvas.getContext('2d')?.putImageData(keyImage, 0, 0);
+  }
+  battleEl.classList.toggle('plain', plain);
   if (keyed !== seeing) { seeing = keyed; battleEl.classList.toggle('see', keyed); }
   battleEl.classList.toggle('screen', up && !battle);
   battleEl.classList.toggle('fight', up && !!battle);

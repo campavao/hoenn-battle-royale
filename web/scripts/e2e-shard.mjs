@@ -38,6 +38,8 @@ export const FILE_SECONDS = {
   'spikeb-landing.spec.ts': 20,
   'spikeb-pwa-edges.spec.ts': 25,
   'spikeb-loading.spec.ts': 60,
+  'spikeb-legend-start.spec.ts': 460,
+  'spikeb-fame-mine.spec.ts': 260,
   'spikeb-delays.spec.ts': 330,
   'spikeb-summary.spec.ts': 220,
   'spikeb-windows.spec.ts': 740,
