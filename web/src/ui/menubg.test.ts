@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import pan from '../data/menupan.json';
 import { panAt } from './menubg';
@@ -41,5 +43,24 @@ describe("the main menu's pan over Hoenn (HBR-30)", () => {
     for (const [x, y] of pan.path) {
       expect(maps.some(([, mx, my, mw, mh]) => x >= mx && x < mx + mw && y >= my && y < my + mh)).toBe(true);
     }
+  });
+
+  // Cam, 11-11: "make sure this is also the map that's shown in the background when on the
+  // main menu" -- the fill between the maps, painting and all, as the game draws it.
+  it('has the ground between the maps under every view of the pan, no black left', { timeout: 60_000 }, () => {
+    const fill = pan.fill as { size: number; tiles: [number, number, string][] };
+    for (const [, , name] of fill.tiles) expect(existsSync(resolve(__dirname, `../../public/field-maps/fill/${name}.png`)), name).toBe(true);
+    const rects = [...fill.tiles.map(([x, y]) => [x, y, fill.size, fill.size]), ...(pan.maps as [string, number, number, number, number][]).map((m) => m.slice(1))];
+    const covered = (x: number, y: number) => rects.some(([rx, ry, rw, rh]) => x >= rx && x < rx + rw && y >= ry && y < ry + rh);
+    // A tall phone's menu (240 x 520 game pixels) and a wide screen's (1280 x 400) round the
+    // camera, every few seconds of the tour.
+    const black: string[] = [];
+    for (const [vw, vh] of [[240, 520], [1280, 400]]) {
+      for (let t = 0; t < 1_200_000; t += 2000) {
+        const c = panAt(t);
+        for (let dy = -vh / 2; dy <= vh / 2; dy += 20) for (let dx = -vw / 2; dx <= vw / 2; dx += 20) if (!covered(c.x + dx, c.y + dy)) black.push(`${vw}x${vh} at ${t} ms, ${c.x + dx},${c.y + dy}`);
+      }
+    }
+    expect(black.slice(0, 5)).toEqual([]);
   });
 });
