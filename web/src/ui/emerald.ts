@@ -238,6 +238,7 @@ export class EmeraldCanvas {
    *  notch and home bar, which only a backdrop paints into (Stage, menubg.ts). */
   top = 0;
   bottom = 0;
+  private bled = false;
 
   constructor(public readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -267,9 +268,12 @@ export class EmeraldCanvas {
     this.canvas.height = h + top + bottom;
     this.canvas.style.width = `${w * scale}px`;
     this.canvas.style.height = `${(h + top + bottom) * scale}px`;
-    if (top || this.canvas.style.top) {
+    // Only a bleed this canvas set is taken back: one placed with its own `top` (the
+    // curtain's box, top:60%) keeps it.
+    if (top || this.bled) {
       this.canvas.style.position = top ? 'relative' : '';
       this.canvas.style.top = top ? `${-top * scale}px` : '';
+      this.bled = top > 0;
     }
     this.ctx.setTransform(1, 0, 0, 1, 0, top);
     this.ctx.imageSmoothingEnabled = false;
