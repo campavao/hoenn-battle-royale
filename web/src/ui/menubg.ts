@@ -7,6 +7,10 @@ import type { EmeraldCanvas } from './emerald';
 
 const MAPS = pan.maps as [string, number, number, number, number][];
 const PATH = pan.path as [number, number][];
+/** What stands between the maps, as the game draws it (export-fill.py's cells and Cam's own
+ *  painting on /map/), baked along the path: Cam, 11-11, "make sure this is also the map
+ *  that's shown in the background when on the main menu". */
+const FILL = pan.fill as { size: number; tiles: [number, number, string][] };
 /** Pixels a second: a town to the next in half a minute or so. */
 const SPEED = 24;
 const LEGS = PATH.slice(1).map((p, i) => Math.hypot(p[0] - PATH[i][0], p[1] - PATH[i][1]));
@@ -41,6 +45,14 @@ export function paintPan(c: EmeraldCanvas, t: number, h: number): void {
   // home bar show the pan, not a black bar.
   const up = c.top, down = c.bottom;
   c.setFilter('blur(1px)');
+  const s = FILL.size;
+  for (const [fx, fy, name] of FILL.tiles) {
+    const x0 = Math.max(fx, wx);
+    const y0 = Math.max(fy, wy - up);
+    const x1 = Math.min(fx + s, wx + c.width);
+    const y1 = Math.min(fy + s, wy + h + down);
+    if (x1 > x0 && y1 > y0) c.drawUiPicture(`/field-maps/fill/${name}.png`, x0 - fx, y0 - fy, x1 - x0, y1 - y0, left + x0 - wx, y0 - wy);
+  }
   for (const [id, mx, my, mw, mh] of MAPS) {
     const x0 = Math.max(mx, wx);
     const y0 = Math.max(my, wy - up);
