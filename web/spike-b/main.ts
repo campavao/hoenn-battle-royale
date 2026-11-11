@@ -53,6 +53,8 @@ import { Ticks } from './ticks';
 import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_CONTEST_CURTAIN_FALL, SE_CONTEST_CURTAIN_RISE, SE_DOOR, SE_EXIT, SE_FAILURE, SE_BIKE_HOP, SE_FIELD_POISON, SE_LEDGE, SE_M_FLY, SE_SELECT, SE_SHOP, SE_USE_ITEM, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { devRomParam, importRom } from './import';
+import { LoadingScreen } from './loading';
+import { introArt } from './introart';
 import { askToKeepStorage, registerServiceWorker } from '../src/pwa';
 import { devPace, parseRoomHash, withRoom, withoutRoom } from '../src/hash';
 import { recordSolo, statFlushed, statMessage } from '../src/match/stats';
@@ -5098,6 +5100,16 @@ let acc = 0;
 let simMs = 0;
 let drawMs = 0;
 
+/** The loading screen (loading.ts), up from the first paint until there is something to do:
+ *  the menu, or a match whose battle ROM is booted and whose team is back. */
+/** Dev: `?loading` keeps it up, to look at. */
+const stayLoading = import.meta.env.DEV && new URLSearchParams(location.search).has('loading');
+const loading = new LoadingScreen(() => {
+  if (stayLoading) return false;
+  if (matchOn) return !!rom && !comingBack;
+  return !!lobby?.shown;
+});
+
 function loop(now: number): void {
   const dt = now - last;
   last = now;
@@ -5242,7 +5254,16 @@ async function boot(): Promise<void> {
   void import('./data/world-fill.json').then((d) => { worldFill = new WorldFill(d.default as unknown as FillFile); }).catch((e) => console.warn('[world-fill]', e));
   let files: Awaited<ReturnType<typeof loadRom>>;
   try {
-    files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; }, (emu) => importRom(emu, ''), devRomParam());
+    // The ROM picker is the player's to answer: the loading screen steps aside for it.
+    const pick = async (emu: Parameters<typeof importRom>[0]) => {
+      if (devRomParam()) return importRom(emu, ''); // a test's file, read without asking
+      loading.hold(true);
+      try { await importRom(emu, ''); } finally { loading.hold(false); }
+    };
+    files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; loading.say(t); }, pick, devRomParam(), (bytes) => {
+      try { loading.ride(introArt(bytes), me().skin % 2 === 1); } catch (e) { console.warn('[loading] no ride', e); }
+    });
+    loading.say('Drawing Hoenn…');
     romEmu = files.emu;
     versionLine = files.version;
     recorder.setVersion({ line: files.version, romSha1: files.romSha, world: WORLD_HASH_SHORT });
@@ -5255,6 +5276,7 @@ async function boot(): Promise<void> {
     }
   } catch (e) {
     console.warn('spike ROM not loaded', e);
+    loading.hide();
     didNotStart(e instanceof Error ? e.message : String(e));
     return;
   }
@@ -5389,7 +5411,8 @@ async function boot(): Promise<void> {
       lobby.menu(lobby.rewatch ? 'Too late to rejoin the match. WATCH it from here.' : '');
     }
   }
-  bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => console.warn('spike ROM not booted', e));
+  loading.say(token() ? 'Back to your match…' : 'Getting the game ready…');
+  bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => { console.warn('spike ROM not booted', e); loading.hide(); });
   (window as unknown as { __spike: unknown }).__spike = { watch, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, get movesBox() { return movesBox; }, pocket: (n: number) => (rom ? readPocket(rom.emu, romTables.sym, n) : []), radial, moveName: (id: number) => moveInfo(romTables, id)?.name ?? '' };
 }
 

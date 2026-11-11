@@ -392,17 +392,21 @@ export interface RomFiles {
 /** A dev sidecar's br-symbols.json, its hex strings as numbers. */
 const asTable = (json: Record<string, string>) => new Map(Object.entries(json).map(([n, at]) => [n, Number(at)]));
 
-export async function loadRom(canvas: HTMLCanvasElement, say: (text: string) => void, pick: (emu: Emulator) => Promise<void>, devRom: string | null): Promise<RomFiles> {
+/** `seen` gets the player's ROM as it lies on the device (retail, before the patch) as soon as
+ *  there is one: the loading screen's ride is drawn from it. */
+export async function loadRom(canvas: HTMLCanvasElement, say: (text: string) => void, pick: (emu: Emulator) => Promise<void>, devRom: string | null, seen: (rom: Uint8Array) => void = () => {}): Promise<RomFiles> {
   const emu = await Emulator.create(canvas);
   const devJson = (url: string) => fetch(url).then((r) => (r.ok && !r.headers.get('content-type')?.includes('html') ? r.json() : null), () => null) as Promise<Record<string, string> | null>;
   const dev = !import.meta.env.DEV || devRom ? null : await devJson('/spike-rom/br-symbols.json');
   if (dev) {
     const rom = new Uint8Array(await (await fetch('/spike-rom/rom.gba')).arrayBuffer());
+    seen(rom);
     const romSha = (await sha1Hex(rom)).slice(0, 7);
     return { emu, rom, sym: (n) => Number(dev[n]), table: asTable(dev), version: `spike B · local build · rom ${romSha}`, romSha };
   }
   // No ROM on this device yet (or a dev `?rom=`, which always wins): ask for one.
   if (!emu.hasRom() || devRom) await pick(emu);
+  seen(emu.readRom());
   // Dev: a local build stored as it is runs without a patch, on the sidecars
   // tools/br/dev-patch.sh writes next to it (as app.ts does).
   if (import.meta.env.DEV && isPrePatched(emu.readRom())) {
