@@ -1,5 +1,3 @@
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import pan from '../data/menupan.json';
 import { panAt } from './menubg';
@@ -49,8 +47,12 @@ describe("the main menu's pan over Hoenn (HBR-30)", () => {
   // main menu" -- the fill between the maps, painting and all, as the game draws it.
   it('has the ground between the maps under every view of the pan, no black left', { timeout: 60_000 }, () => {
     const fill = pan.fill as { size: number; tiles: [number, number, string][] };
-    for (const [, , name] of fill.tiles) expect(existsSync(resolve(__dirname, `../../public/field-maps/fill/${name}.png`)), name).toBe(true);
-    const rects = [...fill.tiles.map(([x, y]) => [x, y, fill.size, fill.size]), ...(pan.maps as [string, number, number, number, number][]).map((m) => m.slice(1))];
+    const pictures = new Set(Object.keys(import.meta.glob('../../public/field-maps/fill/*.png')).map((k) => k.split('/').pop()));
+    for (const [, , name] of fill.tiles) expect(pictures.has(`${name}.png`), name).toBe(true);
+    const rects: [number, number, number, number][] = [
+      ...fill.tiles.map(([x, y]): [number, number, number, number] => [x, y, fill.size, fill.size]),
+      ...(pan.maps as [string, number, number, number, number][]).map(([, x, y, w, h]): [number, number, number, number] => [x, y, w, h]),
+    ];
     const covered = (x: number, y: number) => rects.some(([rx, ry, rw, rh]) => x >= rx && x < rx + rw && y >= ry && y < ry + rh);
     // A tall phone's menu (240 x 520 game pixels) and a wide screen's (1280 x 400) round the
     // camera, every few seconds of the tour.
