@@ -525,6 +525,69 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  it('between matches a dropped socket comes back to its own seat, the host still host (11-12: four "players")', async () => {
+    let t = 0;
+    const lines: string[] = [];
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 3, cap: 30, now: () => t, log: (l) => lines.push(l) });
+    try {
+      const [a, b, c] = [phone(), phone(), phone()];
+      const sa = svc.open(a.link), sb = svc.open(b.link), sc = svc.open(c.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, code }));
+      sc.onText(JSON.stringify({ t: 'join', name: 'cy', skin: 0, code }));
+      sa.onText(JSON.stringify({ t: 'start' }));
+      t += 1000; svc.pump();
+      const rooms = svc as unknown as { rooms: Map<string, unknown>; finish(r: unknown): void };
+      rooms.finish(rooms.rooms.get(code));
+      type R = { t: 'room'; you: number; key: string; owner: number; members: { id: number }[] };
+      const last = (p: { got: { t: string }[] }) => p.got.filter((m) => m.t === 'room').at(-1) as unknown as R;
+      const seat = last(a);
+      expect(seat.owner).toBe(seat.you);
+      // The host's page drops its socket four times on the results, and each time comes
+      // back as it does (net.ts onReconnected): a join with the room's key.
+      let s = sa;
+      for (let i = 0; i < 4; i++) {
+        s.onClose();
+        t += 3000; svc.pump();
+        const next = phone();
+        s = svc.open(next.link);
+        s.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, code, again: { code, id: seat.you, key: seat.key } }));
+        expect(last(next)).toMatchObject({ you: seat.you, owner: seat.you });
+      }
+      expect(last(b).members).toHaveLength(3);
+      expect(last(b).owner).toBe(seat.you);
+      // The play log saw three people in this room, not seven.
+      const { parseLine } = await import('../../../tools/br/play-log.mjs' as string) as { parseLine(m: string, at: string): { kind: string; code?: string } | null };
+      const joins = lines.map((l) => parseLine(l, '2026-11-12T04:13:00Z')).filter((e) => e && (e.kind === 'join' || e.kind === 'host') && e.code === code);
+      expect(joins).toHaveLength(3);
+      // Gone for good: past the hold the seat goes, and START with it.
+      s.onClose();
+      t += 21_000; svc.pump();
+      expect(last(b).members).toHaveLength(2);
+      expect(last(b).owner).not.toBe(seat.you);
+    } finally {
+      svc.stop();
+    }
+  });
+  it('a seat held between matches is not dealt into the next one', () => {
+    const t = 5000; // `away` is a time, and 0 is none
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 3, cap: 30, now: () => t, log: () => undefined });
+    try {
+      const [a, b] = [phone(), phone()];
+      const sa = svc.open(a.link), sb = svc.open(b.link);
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, code }));
+      const bob = (b.got.filter((m) => m.t === 'room').at(-1) as unknown as { you: number }).you;
+      sb.onClose();
+      sa.onText(JSON.stringify({ t: 'start' }));
+      const hello = a.got.find((m) => m.t === 'hello') as unknown as { state: { actors: { id: number }[] } };
+      expect(hello.state.actors.some((x) => x.id === bob)).toBe(false);
+    } finally {
+      svc.stop();
+    }
+  });
   it('a reload within a minute is the same trainer; later, it watches', () => {
     // Bots on the map keep the match going after bob is the last trainer left.
     let t = 0;

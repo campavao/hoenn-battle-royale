@@ -44,7 +44,7 @@ export const FILE_SECONDS = {
   'spikeb-delays.spec.ts': 330,
   'spikeb-summary.spec.ts': 220,
   'spikeb-windows.spec.ts': 740,
-  'spikeb-room.spec.ts': 230,
+  'spikeb-room.spec.ts': 250,
   'spikeb.spec.ts': 526,
   'spikeb-two.spec.ts': 102,
   'spikeb-passcode.spec.ts': 9,
