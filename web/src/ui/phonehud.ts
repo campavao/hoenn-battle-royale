@@ -491,9 +491,11 @@ export function drawKeycap(c: EmeraldCanvas, key: string, right: number, y: numb
   c.drawText(key, right - w + 2, y - 1, TEXT_WHITE);
 }
 
-/** The minimap's window: the map, then the count and clock, then what the fog says. */
-export const MINI_W = 64;
-export const MINI_MAP = 48;
+/** The minimap's window: the map, then the count and clock, then what the fog says. The
+ *  map is the MAP's own picture at its own pixels, 72 a side (Cam, 11-11, after a player's
+ *  "the minimap need to be bigger": the third of four mocks, more of the map round you). */
+export const MINI_MAP = 72;
+export const MINI_W = MINI_MAP + 16;
 export function miniLines(v: HudView): Line[] {
   const inner = MINI_W - 16;
   const clock: Line['right'] =

@@ -31,6 +31,7 @@ import {
   OFF_FIELD_GRACE,
   leadFit,
   miniLines,
+  MINI_MAP,
   MINI_W,
 } from './phonehud';
 import { measure, TEXT_RED } from './emerald';
@@ -286,6 +287,15 @@ describe('off the field', () => {
   });
 });
 
+describe('the minimap', () => {
+  // A player, 11-11: "the minimap need to be bigger". Cam picked the third of four mocks: the
+  // map's own picture, 72 pixels a side (9 of its squares, was 6), the window round it.
+  it('shows 72 pixels of the MAP, in a window 16 wider', () => {
+    expect(MINI_MAP).toBe(72);
+    expect(MINI_W).toBe(MINI_MAP + 16);
+  });
+});
+
 describe("the fog window's lead line", () => {
   // Cam's 11-11 recording: "HP 184/…" in the corner, the max cut off.
   it('keeps both numbers: the word HP goes first', () => {
@@ -299,6 +309,7 @@ describe("the fog window's lead line", () => {
   });
   it('is what the window draws', () => {
     const v = { left: 6, clock: 100, flash: 0, safe: 'Safe ◆', lead: 'HP 184/243' } as unknown as HudView;
-    expect(miniLines(v).map((l) => l.left?.text)).toContain('184/243');
+    // Both numbers, with or without the word (the 72-pixel window has room for it).
+    expect(miniLines(v).some((l) => l.left?.text.endsWith('184/243'))).toBe(true);
   });
 });
