@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrived, BAG_AT, BAG_LEN, beatenBy, drainFavourites, emptyFavourites, fameTeam, fieldOf, healed, partySettled, partyWhole, rekey, spentLine, spillOf, spillShows, tallySince, teamMembers, teamOf, withFavourites, withHeld, withMoney, withMove } from './carry';
+import { arrived, BAG_AT, BAG_LEN, beatenBy, drainFavourites, emptyFavourites, fameTeam, fieldOf, healed, hpAt, hpTaken, joinedSlot, withHp, partySettled, partyWhole, rekey, spentLine, spillOf, spillShows, tallySince, teamMembers, teamOf, withFavourites, withHeld, withMoney, withMove } from './carry';
 import { favourite, TALLY_BYTES } from '../src/match/tally';
 import HMS from '../src/data/hms.json';
 
@@ -94,6 +94,58 @@ describe('teamOf', () => {
     put(1, 7, 0xdeadbeef, 25, 12);
     expect(teamOf(party, 2)).toEqual([{ species: 277, level: 5 }, { species: 25, level: 12 }]);
     expect(teamOf(party, 1)).toHaveLength(1);
+  });
+});
+
+// Cam, 11-11: a mon let go keeps the health it had, whoever takes it back. The ROM makes a
+// ball's mon fresh (br_loot.c MakeTaken), at full HP; the page puts the HP back.
+describe('the HP one of ours left the party with', () => {
+  const party = (rows: [personality: number, hp: number, maxHp: number][]) => {
+    const p = new Uint8Array(600);
+    const v = new DataView(p.buffer);
+    rows.forEach(([personality, hp, maxHp], i) => {
+      v.setUint32(i * 100, personality, true);
+      v.setUint16(i * 100 + 86, hp, true);
+      v.setUint16(i * 100 + 88, maxHp, true);
+    });
+    return p;
+  };
+  it('is read off its slot before the ROM overwrites it', () => {
+    const p = party([[1, 40, 40], [2, 7, 33], [3, 0, 28]]);
+    expect(hpAt(p, 1)).toEqual({ hp: 7, maxHp: 33 });
+    expect(hpAt(p, 2)).toEqual({ hp: 0, maxHp: 28 });
+  });
+  it('is the same number on the same most, the same share on another; 0 stays 0, hurt never comes back full', () => {
+    expect(hpTaken({ hp: 7, maxHp: 33 }, 33)).toBe(7);
+    expect(hpTaken({ hp: 0, maxHp: 28 }, 28)).toBe(0);
+    expect(hpTaken({ hp: 0, maxHp: 28 }, 60)).toBe(0);
+    // made again from its ball, its IVs are the ball's, or the rung lifted it: its share
+    expect(hpTaken({ hp: 10, maxHp: 40 }, 80)).toBe(20);
+    expect(hpTaken({ hp: 1, maxHp: 200 }, 20)).toBe(1);
+    expect(hpTaken({ hp: 39, maxHp: 40 }, 41)).toBe(40);
+    expect(hpTaken({ hp: 199, maxHp: 200 }, 20)).toBe(19);
+    // full, or nothing said (an old page's ball, a beaten trainer's): left as the ROM made it
+    expect(hpTaken({ hp: 33, maxHp: 33 }, 35)).toBeNull();
+    expect(hpTaken({}, 35)).toBeNull();
+    expect(hpTaken({ hp: 3 }, 35)).toBeNull();
+    expect(hpTaken({ hp: 3, maxHp: 0 }, 35)).toBeNull();
+  });
+  it('goes on the one that joined, found by the personality the party did not have', () => {
+    const before = party([[1, 40, 40], [2, 7, 33], [3, 0, 28]]);
+    // the swap's: 2 went down, 9 came up and the party closed ranks
+    const after = party([[1, 40, 40], [3, 0, 28], [9, 33, 33]]);
+    expect(joinedSlot(before, 3, after, 3)).toBe(2);
+    const fresh = party([[1, 40, 40], [9, 33, 33], [3, 0, 28]]);
+    expect(joinedSlot(before, 3, fresh, 3), 'by personality, wherever it is').toBe(1);
+    // Two off the same place on the screen are the same personality (MakeTaken's seed): the last
+    // slot, where MovePicked puts what came across (the e2e's second TREECKO).
+    const again = party([[1, 40, 40], [3, 0, 28], [2, 33, 33]]);
+    expect(joinedSlot(before, 3, again, 3)).toBe(2);
+    expect(joinedSlot(before, 3, again, 0)).toBe(-1);
+    const out = withHp(after, 2, 7);
+    expect(hpAt(out, 2)).toEqual({ hp: 7, maxHp: 33 });
+    expect(hpAt(after, 2), 'a copy').toEqual({ hp: 33, maxHp: 33 });
+    expect([...out.subarray(0, 200)]).toEqual([...after.subarray(0, 200)]);
   });
 });
 

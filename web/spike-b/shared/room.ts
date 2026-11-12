@@ -41,7 +41,7 @@ import { blueTm, scatterItem } from '../../src/match/scatter';
 import roomsJson from '../data/rooms.json';
 import tableBallsJson from '../data/table-balls.json';
 import { GIFTS } from '../../src/match/gifts';
-import { cableOrDoll, groundCount, isTm, type BagRows } from './items';
+import { cableOrDoll, groundCount, groundMon, isTm, type BagRows, type GroundMon } from './items';
 import { SIGHT_RANGE, eitherSees, seesOver, type Facing } from '../../src/bots/sight';
 import { SAFARI_CELLS } from '../../src/match/safari';
 import { RING_RADII } from '../../src/match/clock';
@@ -545,7 +545,7 @@ export type Command =
   | { c: 'traded'; id: number; n: number; given: number }
   /** `id` caught one more than a party holds and let `mons` go: they lie beside them, as
    *  balls anybody can take (POK-294, BrLoot_Released: nothing leaves the match). */
-  | { c: 'released'; id: number; mons: { species: number; level: number }[] }
+  | { c: 'released'; id: number; mons: GroundMon[] }
   /** `id` opened event `n`'s REGI wall (a Flying-type in their party, the page saw). */
   | { c: 'open'; id: number; n: number }
   /** `id` flew off the MAP (FLY, br_map.c) and landed at `to`. */
@@ -836,7 +836,7 @@ export class Room {
         used.add(`${to.map}:${to.x}:${to.y}`);
         let key = RELEASED_SPILL | ((cmd.id & 0xff) << 12) | (this.tick & 0xfff);
         while (this.spills.has(key)) key++;
-        this.spills.set(key, { key, map: to.map, x: to.x, y: to.y, name: '', bag: { items: [], money: 0, mons: [{ species: mon.species, level: mon.level }] } });
+        this.spills.set(key, { key, map: to.map, x: to.x, y: to.y, name: '', bag: { items: [], money: 0, mons: [groundMon(mon)] } });
       }
     } else if (cmd.c === 'traded') {
       const t: (Trader & { gives?: boolean; gone?: boolean; by?: number }) | undefined = this.events.find((e) => e.n === cmd.n)?.trader ?? this.homes.find((h) => h.n === cmd.n);
@@ -2514,7 +2514,7 @@ export class Room {
     for (const b of this.spills.values()) {
       mix(b.key); str(b.map); mix(b.x); mix(b.y); mix(b.bag.money);
       for (const r of b.bag.items) { mix(r.id); mix(r.n); }
-      for (const m of b.bag.mons ?? []) { mix(m.species); mix(m.level); }
+      for (const m of b.bag.mons ?? []) { mix(m.species); mix(m.level); if (m.hp !== undefined) mix(m.hp); }
     }
     return h;
   }

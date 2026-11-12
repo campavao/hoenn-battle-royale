@@ -11987,10 +11987,25 @@ var MAX_MONEY = 999999;
 var BAG_ROWS = 30 + 16 + 46;
 var NUM_SPECIES2 = 412;
 var MAX_LEVEL2 = 100;
+var MAX_HP = 999;
 var isMon = (m) => {
   const { species, level } = m ?? {};
   return Number.isInteger(species) && species > 0 && species < NUM_SPECIES2 && Number.isInteger(level) && level >= 1 && level <= MAX_LEVEL2;
 };
+function groundMon(m) {
+  const { species, level, hp: hp2, maxHp } = m;
+  if (!Number.isInteger(hp2) || !Number.isInteger(maxHp) || maxHp < 1 || maxHp > MAX_HP) return { species, level };
+  return { species, level, hp: Math.min(Math.max(hp2, 0), maxHp), maxHp };
+}
+function cleanReleased(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const r of raw.slice(0, 6)) {
+    const m = { species: r?.sp, level: r?.lv };
+    if (isMon(m)) out.push(groundMon({ ...m, hp: r.hp, maxHp: r.mhp }));
+  }
+  return out;
+}
 function cleanBag(raw) {
   if (!raw || typeof raw !== "object") return null;
   const { items, money, mons } = raw;
@@ -12001,7 +12016,7 @@ function cleanBag(raw) {
     const id2 = Number(r?.id), n = Number(r?.n);
     if (Number.isInteger(id2) && id2 > 0 && id2 < ITEMS_COUNT && Number.isInteger(n) && n > 0 && !isTm(id2) && !isKeyItem(id2)) out.items.push({ id: id2, n: Math.min(n, 999) });
   }
-  if (Array.isArray(mons) && mons.length) out.mons = mons.map(({ species, level }) => ({ species, level }));
+  if (Array.isArray(mons) && mons.length) out.mons = mons.map(groundMon);
   return out;
 }
 function within(rest, was) {
@@ -12016,7 +12031,7 @@ function within(rest, was) {
     }
   }
   const out = { items, money: Math.min(rest.money, was.money) };
-  if (rest.mons?.length) out.mons = rest.mons.slice(0, 6).map(({ species, level }) => ({ species, level }));
+  if (rest.mons?.length) out.mons = rest.mons.slice(0, 6).map(groundMon);
   return out;
 }
 
@@ -12967,7 +12982,7 @@ var Room = class {
         used.add(`${to.map}:${to.x}:${to.y}`);
         let key = RELEASED_SPILL | (cmd.id & 255) << 12 | this.tick & 4095;
         while (this.spills.has(key)) key++;
-        this.spills.set(key, { key, map: to.map, x: to.x, y: to.y, name: "", bag: { items: [], money: 0, mons: [{ species: mon2.species, level: mon2.level }] } });
+        this.spills.set(key, { key, map: to.map, x: to.x, y: to.y, name: "", bag: { items: [], money: 0, mons: [groundMon(mon2)] } });
       }
     } else if (cmd.c === "traded") {
       const t7 = this.events.find((e) => e.n === cmd.n)?.trader ?? this.homes.find((h) => h.n === cmd.n);
@@ -14651,6 +14666,7 @@ var Room = class {
       for (const m of b2.bag.mons ?? []) {
         mix3(m.species);
         mix3(m.level);
+        if (m.hp !== void 0) mix3(m.hp);
       }
     }
     return h;
@@ -15320,9 +15336,10 @@ var Host = class {
   traded(id2, n, given) {
     if (this.players.has(id2)) this.pending.push({ c: "traded", id: id2, n, given });
   }
-  /** The page's catch with a full party let `mons` go (room.ts `released`). */
+  /** The page's catch with a full party let `mons` go (room.ts `released`), each with the HP
+   *  it left with (items.ts GroundMon). */
   released(id2, mons) {
-    if (this.players.has(id2) && mons.length) this.pending.push({ c: "released", id: id2, mons: mons.slice(0, 6) });
+    if (this.players.has(id2) && mons.length) this.pending.push({ c: "released", id: id2, mons: mons.slice(0, 6).map(groundMon) });
   }
   /** The page saw a Flying-type in its team at event `n`'s REGI wall. */
   open(id2, n) {
@@ -15946,7 +15963,7 @@ var WorldService = class {
         } else if (m.t === "open") {
           if (Number.isInteger(m.n)) host.open(phone.id, m.n);
         } else if (m.t === "released") {
-          if (Array.isArray(m.mons)) host.released(phone.id, m.mons.filter((r) => Number.isInteger(r?.sp) && r.sp > 0 && r.sp < 412 && Number.isInteger(r.lv) && r.lv >= 1 && r.lv <= 100).map((r) => ({ species: r.sp, level: r.lv })));
+          host.released(phone.id, cleanReleased(m.mons));
         } else if (m.t === "traded") {
           if (Number.isInteger(m.n) && Number.isInteger(m.sp)) host.traded(phone.id, m.n, m.sp);
         } else if (m.t === "bots") {
@@ -16382,4 +16399,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "2a99e809396a";
+export const WORLD_HASH = "30b3716326ee";

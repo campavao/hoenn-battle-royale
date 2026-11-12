@@ -17,7 +17,7 @@ import { CODE_ALPHABET, CODE_LENGTH } from '../../src/match/lobby';
 import { Host } from './host';
 import { RING_PHASE, makeRoom } from './room';
 import { BOT_FILL, FOG_STEPS, MAX_STEPS, SAFARI_STEPS, dealable } from '../../src/match/room';
-import { cleanBag } from './items';
+import { cleanBag, cleanReleased } from './items';
 import type { BattleEvent } from './battlelog';
 import { LOG_MSG_CHARS, LOG_STREAM_CHARS, LOG_STREAM_EVENTS, cleanEvents } from './logwire';
 import { over } from './over';
@@ -366,7 +366,7 @@ export class WorldService {
         } else if (m.t === 'open') {
           if (Number.isInteger(m.n)) host.open(phone.id, m.n);
         } else if (m.t === 'released') {
-          if (Array.isArray(m.mons)) host.released(phone.id, m.mons.filter((r) => Number.isInteger(r?.sp) && r.sp > 0 && r.sp < 412 && Number.isInteger(r.lv) && r.lv >= 1 && r.lv <= 100).map((r) => ({ species: r.sp, level: r.lv })));
+          host.released(phone.id, cleanReleased(m.mons));
         } else if (m.t === 'traded') {
           if (Number.isInteger(m.n) && Number.isInteger(m.sp)) host.traded(phone.id, m.n, m.sp);
         } else if (m.t === 'bots') {

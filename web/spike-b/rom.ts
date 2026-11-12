@@ -29,7 +29,7 @@ import { FADE_COLOR_WORD, FADE_Y_WORD, fadeOf } from '../src/field';
 import type { PatchWorkerRequest, PatchWorkerResponse } from '../src/patch/bps.worker';
 import { CATCH_UP_SPEED, seatBstart, spectatePace } from '../src/match/spectate';
 import { BAG_POSITION_POCKET } from '../src/ui/bag';
-import { drainFavourites, emptyFavourites, withFavourites, withHeld, withMove } from './carry';
+import { drainFavourites, emptyFavourites, hpAt, hpTaken, joinedSlot, withFavourites, withHeld, withHp, withMove } from './carry';
 import type { SpMsg } from './shared/wire';
 import { readTally, type MatchTally } from '../src/match/tally';
 import type { FameMon } from '../src/ui/results';
@@ -69,7 +69,9 @@ const OBJECT_EVENT_SIZE = 0x24;
 /** A facing (DIR_SOUTH..DIR_EAST) as a step. */
 const STEP: Record<number, [number, number]> = { 1: [0, 1], 2: [0, -1], 3: [-1, 0], 4: [1, 0] };
 
-export interface TeamRow { species: number; level: number }
+/** A mon in a ball, as the room keeps it (shared/items.ts GroundMon): one of ours let go says
+ *  the HP it left with, and is taken with that (carry.ts hpTaken). */
+export interface TeamRow { species: number; level: number; hp?: number; maxHp?: number }
 // include/br/br_wild.h.
 const WILD_ASKED = 1;
 const WILD_DONE = 3;
@@ -119,7 +121,7 @@ export let lastStart: { ms: number; frames: number } | null = null;
 /** A battle's end. `released`: who a catch with a full party let go (BrLoot_Released's
  *  SPILL), for the page to lay beside the trainer. */
 export interface Fought {
-  ok: boolean; outcome: number; species: number; level: number; released?: { species: number; level: number }[];
+  ok: boolean; outcome: number; species: number; level: number; released?: TeamRow[];
   /** A bot's team as the fight left it (br_bot.c sends gEnemyParty under its seat): each
    *  slot's HP and most. */
   foe?: { hp: number; maxHp: number }[];
@@ -956,7 +958,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
     const count = emu.onFrame(() => { n++; });
     // Whatever else the ROM says meanwhile is nobody's here (a duel takes its blocks first),
     // but the mon a catch with a full party let go (BrLoot_Released): nothing leaves the match.
-    const released: { species: number; level: number }[] = [];
+    const released: TeamRow[] = [];
+    // The HP of the one the windows chose to make room, read before the ROM puts the catch in its
+    // slot (br_catch.c BrCatch_Apply): it goes down with it (Cam, 11-11).
+    let goneHp: { hp: number; maxHp: number } | undefined;
     let foe: Fought['foe'];
     let spent: number[] | undefined;
     // The battle read for a watcher, from before it starts to its end (once only: a battle's own).
@@ -975,7 +980,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       if (t.length) foeTeam = t.map((m) => ({ sp: m.species, lv: m.level }));
     });
     const pub = emu.onFrame(() => drain((m) => {
-      if (m.t === 'spill' && m.seat === ME && !m.bag) for (const r of m.mons) released.push({ species: r.species, level: r.level });
+      if (m.t === 'spill' && m.seat === ME && !m.bag) for (const r of m.mons) released.push({ species: r.species, level: r.level, ...goneHp });
       else if (m.t === 'party' && m.seat === FOE_SEAT) foe = m.mons.map((r) => ({ hp: r.hp, maxHp: r.maxHp }));
       else if (m.t === 'spent' && m.seat === FOE_SEAT) spent = m.items;
       else published(m);
@@ -1064,7 +1069,9 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         console.warn('spike: a catch is still waiting for its prompt after 10 s', { catch: [...emu.bytes(catchAt, 8)], callback2: emu.read(sym('gMain') + 4, 32).toString(16) });
       // The windows ask and the ROM's own screen is walked on the answer. Lost on the way, the
       // player has the ROM's screen and the keys back rather than a trainer stood there for good.
-      if (asked.answer && !await answerRelease(await asked.answer)) {
+      const slot = asked.answer ? await asked.answer : null;
+      if (slot !== null && slot >= 0 && slot < 6) goneHp = hpAt(emu.bytes(partyAt, PARTY_LEN), slot);
+      if (asked.answer && !await answerRelease(slot)) {
         console.warn('spike: a catch\'s answer did not get through', { catch: [...emu.bytes(catchAt, 8)], callback2: emu.read(sym('gMain') + 4, 32).toString(16) });
         romDeaf = false;
         onStart();
@@ -1396,6 +1403,13 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         lay();
         emu.resume();
         drain(() => undefined); // anything older is not this bag's
+        // Ours as it stands, before the box: the one the windows give goes down on the HP it has,
+        // and one of ours let go and taken back joins on the HP it went with (Cam, 11-11: "the
+        // Mon you released should have the same health it was at"). The ROM makes both fresh.
+        const before = emu.bytes(partyAt, PARTY_LEN).slice(), beforeCount = emu.read(countAt, 8);
+        const given = pick?.give !== undefined && pick.give < beforeCount
+          ? { species: teamOf(before.subarray(pick.give * 100, pick.give * 100 + 100), 1)[0]?.species, ...hpAt(before, pick.give), down: false }
+          : undefined;
         // The bag where the hidden trainer faces, the team in it: the match's own SPILL,
         // under a seat that is nobody here.
         const s1 = emu.read(save1, 32);
@@ -1409,11 +1423,15 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
           bag: { key: (DROP_SEAT << 8) | 0xff, x, y, items: [], money: 0, name: name.slice(0, 7) },
         });
         const taken = new Set<number>();
-        const put: { species: number; level: number }[] = [];
+        const put: TeamRow[] = [];
         const watch = emu.onFrame(() => drain((m) => {
           if (m.t === 'pickup' && keys.includes(m.key)) taken.add(m.key);
-          // One of ours put down for theirs (SwapInOurs): it stays with the bag.
-          else if (m.t === 'spill' && m.seat !== DROP_SEAT) for (const r of m.mons) put.push({ species: r.species, level: r.level });
+          // One of ours put down for theirs (SettleBoxes): it stays with the bag, on its HP.
+          else if (m.t === 'spill' && m.seat !== DROP_SEAT) for (const r of m.mons) {
+            const mine = given && !given.down && r.species === given.species;
+            if (mine) given.down = true;
+            put.push({ species: r.species, level: r.level, ...(mine ? { hp: given.hp, maxHp: given.maxHp } : {}) });
+          }
         }));
         const tap = async () => { emu.press('a'); await frames(emu, 4); emu.release('a'); };
         const off = () => ((emu.read(mainAt + 4, 32) & ~1) >>> 0) !== overworldCb;
@@ -1456,6 +1474,13 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         await partyDone();
         emu.pause();
         const now = kept();
+        // The one taken, if it was somebody's let go: on the HP it went down with.
+        const back = pick && taken.has(keys[pick.take]) ? mons[pick.take] : undefined;
+        if (back?.hp !== undefined) {
+          const at = joinedSlot(before, beforeCount, now.party, now.count);
+          const hp = at < 0 ? null : hpTaken(back, hpAt(now.party, at).maxHp);
+          if (hp !== null) now.party = withHp(now.party, at, hp) as typeof now.party;
+        }
         if (!repark(true)) broken = true;
         else keep(now);
         carried = last = now;

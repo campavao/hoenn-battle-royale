@@ -225,6 +225,52 @@ export function teamMembers(party: Uint8Array, count: number, nameOf: (species: 
   return out;
 }
 
+// A mon let go keeps the health it had, whoever takes it back (Cam, 11-11: "the Mon you released
+// should have the same health it was at, regardless of what it was at"). The ROM makes a ball's
+// mon fresh at full HP (br_loot.c MakeTaken), so releasing a hurt one and taking it straight back
+// was a free heal; the page reads the HP as it leaves and puts it back on the one that joins.
+
+/** The HP and most of the mon at `slot` (struct Pokemon's hp and maxHP, plain, at 86 and 88). */
+export function hpAt(party: Uint8Array, slot: number): { hp: number; maxHp: number } {
+  const v = new DataView(party.buffer, party.byteOffset, party.byteLength);
+  return { hp: v.getUint16(slot * 100 + 86, true), maxHp: v.getUint16(slot * 100 + 88, true) };
+}
+
+/** What a mon taken off the ground with `maxHp` has, of the HP `left` said it went down with:
+ *  the same number on the same most, else the same share (made again from its ball, its IVs
+ *  are the ball's, and a rung may have lifted it), 0 still 0 and a hurt one never full. Null
+ *  leaves it as the ROM made it, full: nothing said (an old page's ball, a beaten trainer's
+ *  team) or full when it went. */
+export function hpTaken(left: { hp?: number; maxHp?: number }, maxHp: number): number | null {
+  const { hp, maxHp: was } = left;
+  if (hp === undefined || !was || hp >= was || maxHp < 1) return null;
+  if (hp <= 0) return 0;
+  if (was === maxHp) return hp;
+  return Math.min(Math.max(Math.round((hp * maxHp) / was), 1), Math.max(maxHp - 1, 1));
+}
+
+/** The slot of `after` the mon that just joined is in: the one whose personality none of
+ *  `before`'s had, else the last, where br_swap.c's MovePicked puts what came across (ours kept
+ *  in order, then theirs). A ball's mon is made from the match's seed and its place on the
+ *  screen (br_loot.c MakeTaken), so two taken off the same place have the same personality,
+ *  and one of those already in the party hides which is new. -1 with nobody in the party. */
+export function joinedSlot(before: Uint8Array, beforeCount: number, after: Uint8Array, afterCount: number): number {
+  const v = (p: Uint8Array) => new DataView(p.buffer, p.byteOffset, p.byteLength);
+  const was = new Set<number>();
+  for (let i = 0; i < Math.min(beforeCount, 6); i++) was.add(v(before).getUint32(i * 100, true));
+  const fresh: number[] = [];
+  const n = Math.min(afterCount, 6);
+  for (let i = 0; i < n; i++) if (!was.has(v(after).getUint32(i * 100, true))) fresh.push(i);
+  return fresh.length === 1 ? fresh[0] : n - 1;
+}
+
+/** `party` with the mon at `slot` on `hp`. */
+export function withHp(party: Uint8Array, slot: number, hp: number): Uint8Array {
+  const out = party.slice();
+  new DataView(out.buffer, out.byteOffset, out.byteLength).setUint16(slot * 100 + 86, hp, true);
+  return out;
+}
+
 /** `party` with this one holding `item` (0 for nothing): the encrypted word and the checksum. */
 export function withHeld(party: Uint8Array, slot: number, item: number): Uint8Array {
   const out = party.slice();
