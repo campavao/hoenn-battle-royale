@@ -25,6 +25,12 @@ describe('the FEEDBACK screen', () => {
     expect(byId('feedback-note').text).toBe(`0/${FEEDBACK_MAX}`);
   });
 
+  it('says, in one row over the box, that a note is public', () => {
+    const { texts } = paint(model());
+    const intro = texts.filter((t) => /GitHub/.test(t.text));
+    expect(intro.map((t) => t.text)).toEqual(['Bug or idea? Notes are public on GitHub.']);
+  });
+
   it('makes the box a field holding the draft, whose typing reaches the model', () => {
     const onInput = vi.fn();
     const { byId } = paint(model({ text: 'the ferry', onInput }));
