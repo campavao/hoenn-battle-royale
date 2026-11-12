@@ -33,6 +33,7 @@ export const FILE_SECONDS = {
   'spikeb-leader-drop.spec.ts': 100,
   'spikeb-swap-heal.spec.ts': 45,
   'spikeb-people.spec.ts': 125,
+  'spikeb-phone-crash.spec.ts': 240,
   'spikeb-flow.spec.ts': 250,
   'spikeb-radial.spec.ts': 165,
   'spikeb-quick-actions.spec.ts': 120,

@@ -148,6 +148,8 @@ interface Placed {
   mips?: HTMLCanvasElement[]; // 1/4, 1/8, 1/16, each averaged from the one before
   /** Painted with its REGI wall open (br_story.c's Open). */
   open?: boolean;
+  /** The frame its full-size ground was last drawn on: unpaintFar lets the oldest go. */
+  usedAt?: number;
   classes: Uint8Array;
   /** The cut trees and Strength boulders standing on it: [x, y, gfx]. */
   props?: [number, number, number][];
@@ -394,6 +396,30 @@ function paint(p: Placed): boolean {
   p.anims = a.anims;
   if (p.door) clearVoid(a.ground, a.cover);
   return true;
+}
+
+/** What the maps' full-size pictures may hold at once (ground and cover, 4 bytes a pixel each).
+ *  All 518 maps painted was 647 MB of canvas, cut in the background a map a tick after boot: a
+ *  phone's browser killed the tab for it and it came back on the loading screen (Reddit, 11-12:
+ *  "crashing every few minutes"). Far out a map is drawn from its mips, which stay. */
+const PAINTED_BUDGET = 96e6;
+const paintedBytes = (p: Placed) => p.m.w * p.m.h * TILE * TILE * 8;
+/** A map's full-size pictures let go: paint cuts them again when it is near once more. */
+function unpaint(p: Placed): void {
+  p.ground = p.cover = p.anims = undefined;
+}
+/** Over the budget, the maps drawn longest ago let go of their full-size pictures, never one
+ *  drawn this last second. */
+function unpaintFar(): void {
+  const held = [...placed.values()].filter((p) => p.ground);
+  let bytes = held.reduce((n, p) => n + paintedBytes(p), 0);
+  if (bytes <= PAINTED_BUDGET) return;
+  held.sort((a, b) => (a.usedAt ?? -1) - (b.usedAt ?? -1));
+  for (const p of held) {
+    if (bytes <= PAINTED_BUDGET || (p.usedAt ?? -Infinity) > frame - 60) break;
+    unpaint(p);
+    bytes -= paintedBytes(p);
+  }
 }
 
 /** The black round a room (its corners, its padding), so the world shows there: every pixel of
@@ -892,17 +918,22 @@ function giveNext(): void {
   let taught = false;
   // Who gets it is the windows'; BACK keeps it in the bag.
   const who = () => askParty(name(item), isMachine(item) ? (m) => takesMachine(m, item) : undefined);
-  const took = screen
-    ? said.then(who).then(async (slot) => {
-      // Into the bag first, and from there it is what the BAG's USE or GIVE does: the ROM's own
-      // opening of its party for a thing just given did not always come (about half the time on
-      // the agbcc build), and then it went in the bag after the player had already said who.
-      const got = await r.give(item, 1);
-      if (slot === null || !got?.items.some((g) => g.id === item)) return got;
+  // Into the bag first, and from there it is what the BAG's USE or GIVE does: the ROM's own
+  // opening of its party for a thing just given did not always come (about half the time on
+  // the agbcc build). In the bag before anybody is asked, and saved so, so a reload at the
+  // question still has it (remember).
+  const bagged = screen ? r.give(item, 1) : null;
+  const took = bagged
+    ? Promise.all([bagged, said]).then(async ([got]) => {
+      if (!got?.items.some((g) => g.id === item)) return got;
+      remember(true);
+      const slot = await who();
+      if (slot === null) return got;
       if (isMachine(item)) {
         // The page's own write, as the team's MOVES teaches (learn): the ROM's screens were the wait.
         const move = TMHM_MOVES[item - ITEM_TM01];
         if (await learn(slot, move, item, () => askForget(slot, move))) taught = true;
+        remember(true);
         return got;
       }
       const was = battleMenu?.heldBy(slot) ?? 0;
@@ -1307,7 +1338,7 @@ async function teach(slot: number, row: LearnRow, menu: BattleMenu): Promise<voi
     menu.showMember(slot);
     return pick;
   });
-  if (taught) rom?.sound(SE_USE_ITEM);
+  if (taught) { rom?.sound(SE_USE_ITEM); remember(true); }
 }
 /** `move` into `slot`'s four, by the page's write: four known, `forget` says which goes (null keeps
  *  them). A TM that taught it is spent, an HM is not, and a forgotten move only a TM gave goes back
@@ -2595,6 +2626,8 @@ function voiceOfMember(id: number): { intro: string; win: string; lose: string }
 }
 /** A match of mine is on (I am in it, or watching it). */
 let matchOn = false;
+/** The room a reload mid-match asked to go back into, until the relay answers. */
+let reloadedFrom: string | null = null;
 
 // A reload within a minute comes back as the same trainer with the same team (Cam,
 // 2026-10-20): the relay holds the trainer for AWAY_MS, the page keeps what lets it back
@@ -2722,14 +2755,17 @@ function gymFrame(): void {
   toldGyms = g.length;
 }
 
-/** Every few seconds of a match: still here, and the team as it is. */
-function remember(): void {
+/** Every few seconds of a match: still here, and the team as it is. `now`: this moment, a
+ *  question up or not, because what was just put in the bag or taught is the team as it is (a TM
+ *  off the ground was in no save until its question closed, and a reload at the question lost it:
+ *  Reddit, 11-12, "it didnt even teach the move and still deleted the tm"). */
+function remember(now = false): void {
   if (!link?.online || !link.key || !room || !matchOn || isOut || !link.room.actor(link.me)) return;
-  const now = Date.now();
-  if (now - savedAt < 5000) return;
-  savedAt = now;
-  try { localStorage.setItem(AGAIN, JSON.stringify({ code: room.code, id: link.me, key: link.key, at: now })); } catch { return; }
-  if (rom && !battle && !asking && !swapping && !comingBack) {
+  const at = Date.now();
+  if (!now && at - savedAt < 5000) return;
+  savedAt = at;
+  try { localStorage.setItem(AGAIN, JSON.stringify({ code: room.code, id: link.me, key: link.key, at })); } catch { return; }
+  if (rom && !battle && (now || (!asking && !swapping)) && !comingBack) {
     void rom.save().then((t) => { try { localStorage.setItem(AGAIN_ROM, t); } catch { /* full */ } });
   }
 }
@@ -4259,11 +4295,12 @@ function clearAsh(p: Placed, x: number, y: number): void {
   let cells = ashGone.get(p.m.id);
   if (!cells) ashGone.set(p.m.id, (cells = new Set()));
   cells.add(y * p.m.w + x);
+  // Its mips go either way: let go, its pictures are cut again with the ash gone (paint).
+  p.mips = undefined;
   if (!p.ground || !art) return;
   const g = p.ground.getContext('2d')!;
   g.imageSmoothingEnabled = false;
   g.drawImage(art.blockArt(p.m.group, p.m.num, grassUnderAsh(art.blockAt(p.m.group, p.m.num, x, y))), x * TILE, y * TILE);
-  p.mips = undefined;
 }
 
 // ---- how smooth it looked (jank.ts) -------------------------------------------------------
@@ -4983,10 +5020,11 @@ function drawScene(all: Actor[], camX: number, camY: number, W: number, H: numbe
     const x = p.gx * TILE, y = p.gy * TILE;
     if (x > vx1 || y > vy1 || x + p.m.w * TILE < vx0 || y + p.m.h * TILE < vy0) continue;
     visible.push(p);
-    if ((p.ground || p === room || painted++ < 2) && paint(p)) {
+    // Far out, a map with its mips is drawn from them, its full-size pictures let go or not.
+    if ((far && p.mips) || ((p.ground || p === room || painted++ < 2) && paint(p))) {
       ctx.globalAlpha = alpha;
       if (far) ctx.drawImage(mipFor(p, z), x, y, p.m.w * TILE, p.m.h * TILE);
-      else { ctx.drawImage(p.ground!, x, y); if (alpha === 1) drawAnims(ctx, p, vx0, vy0, vx1, vy1); }
+      else { p.usedAt = frame; ctx.drawImage(p.ground!, x, y); if (alpha === 1) drawAnims(ctx, p, vx0, vy0, vx1, vy1); }
       ctx.globalAlpha = 1;
     }
   }
@@ -5162,6 +5200,7 @@ function loop(now: number): void {
     soundFrame();
     stepsFrame();
     doorsFrame();
+    if (frame % 60 === 0) unpaintFar();
     fogFrame();
     foeFrame();
     remember();
@@ -5329,7 +5368,8 @@ async function boot(): Promise<void> {
   const url = q.get('world') ?? `${(import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL}/world`;
   // The rest of Hoenn, a map a tick, so zooming out never waits.
   const rest = [...placed.values()];
-  const next = () => { const p = rest.find((r) => !r.mips); if (p) { paint(p); mipFor(p, 0); setTimeout(next, 16); } };
+  // Only its mips are kept: the full-size pictures of a map nobody is near go again (unpaint).
+  const next = () => { const p = rest.find((r) => !r.mips); if (p) { paint(p); mipFor(p, 0); if ((p.usedAt ?? -Infinity) < frame - 60) unpaint(p); setTimeout(next, 16); } };
   setTimeout(next, 500);
   const booted = (r: RomBattles) => { rom = r; r.emu.onFrame(trackBag); if (link) r.reseed(link.room.seed); if (comingBack) void takeBack(r); giveNext(); };
   // A world of the page's own, as the live game's debug flags deal it (debug.ts): #fast
@@ -5360,6 +5400,7 @@ async function boot(): Promise<void> {
     const sock = connectWorld(url, make, {
       onRoom: (r) => {
         room = r;
+        reloadedFrom = null;
         // A hosted room's link is the address bar: copy it, send it, and a friend is in.
         if (!r.quick && parseRoomHash(location.hash)?.code !== r.code) history.replaceState(null, '', `#${withRoom(location.hash, 'join', r.code)}`);
         rom?.pace(r.set.textSpeed, r.set.animations);
@@ -5373,12 +5414,18 @@ async function boot(): Promise<void> {
       onNoRoom: (code, pass, rom, full, removed) => {
         forget(); unlink();
         if (pass) { lobby!.askPass(code, knockedWithPass); return; }
+        // Back from a reload mid-match to a room that has gone: a reload in a battle is out of the
+        // match (the relay holds no battling trainer), and a bot match with nobody else in it ends
+        // there (Reddit, 11-12: "when I came back it said something like cant find room").
+        const ended = !!code && code === reloadedFrom && !rom && !full && !removed;
+        reloadedFrom = null;
+        if (ended) { lobby!.menu('The page reloaded, and your match ended without you.'); return; }
         lobby!.menu(removed ? `The host of room ${code} took you out of it.` : rom ? `Room ${code} is on another version of the game. Reload the page to update.` : full ? `Room ${code} is full.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.');
       },
       onKicked: () => { room = null; forget(); unlink(); lobby!.menu('The host took you out of the room.'); },
       onOld: () => { room = null; matchOn = false; forget(); lobby!.old(); },
       onRooms: (rooms) => lobby?.listed(rooms),
-      onMatch: (l) => startMatch(l),
+      onMatch: (l) => { reloadedFrom = null; startMatch(l); },
       onOpen: () => { lobby?.linkIs('up'); sendStat(url.replace(/\/world$/, '')); },
       onClosed: () => {
         reconnecting = false;
@@ -5434,6 +5481,7 @@ async function boot(): Promise<void> {
     // Reloaded within a minute of a match: straight back in (or, too late, in to watch).
     const back = token();
     const linked = parseRoomHash(location.hash);
+    reloadedFrom = back && !back.room ? back.code : null;
     if (back) { lobby.hide(); sock.join(me().name, me().skin, { code: back.code, again: { code: back.code, id: back.id, key: back.key } }); }
     // A room's link (#join=CODE), or #host / #quick: straight in, as the live game's are.
     else if (linked?.mode === 'join' || linked?.mode === 'host' || linked?.mode === 'quick') {
