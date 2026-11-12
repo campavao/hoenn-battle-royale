@@ -6,7 +6,7 @@
 import type { Spot, WorldMap } from '../../src/bots/world';
 import { botKeys, botSpawns, type Brain } from './bots';
 import { BOT_DUEL_MAX, HOST_JUDGE, LEGEND_CATCH, LEGEND_FOE, Room, botParty, legendMon, wornParty, type Bag, type Command, type RoomEvent } from './room';
-import { within } from './items';
+import { groundMon, within, type GroundMon } from './items';
 import { logMs, type BattleEvent } from './battlelog';
 import { speciesName } from '../../src/bots/party';
 import { ballsIn, battleItems, type Stack } from '../../src/bots/bag';
@@ -218,9 +218,10 @@ export class Host {
     if (this.players.has(id)) this.pending.push({ c: 'traded', id, n, given });
   }
 
-  /** The page's catch with a full party let `mons` go (room.ts `released`). */
-  released(id: number, mons: { species: number; level: number }[]): void {
-    if (this.players.has(id) && mons.length) this.pending.push({ c: 'released', id, mons: mons.slice(0, 6) });
+  /** The page's catch with a full party let `mons` go (room.ts `released`), each with the HP
+   *  it left with (items.ts GroundMon). */
+  released(id: number, mons: GroundMon[]): void {
+    if (this.players.has(id) && mons.length) this.pending.push({ c: 'released', id, mons: mons.slice(0, 6).map(groundMon) });
   }
 
   /** The page saw a Flying-type in its team at event `n`'s REGI wall. */

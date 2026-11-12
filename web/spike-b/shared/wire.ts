@@ -46,8 +46,9 @@ export type WorldUp =
   | { t: 'bots'; a: number; b: number; w: number; hp?: number[]; ua?: number[]; ub?: number[] }
   /** My trade with event `n`'s trader is over: I gave him `sp` (0, nothing). */
   | { t: 'traded'; n: number; sp: number }
-  /** My catch with a full party let these go (room.ts `released`): species, level. */
-  | { t: 'released'; mons: { sp: number; lv: number }[] }
+  /** My catch with a full party let these go (room.ts `released`): species, level, and the HP
+   *  each left with and its most (items.ts GroundMon; none from an old page: made full). */
+  | { t: 'released'; mons: { sp: number; lv: number; hp?: number; mhp?: number }[] }
   | { t: 'open'; n: number }
   | { t: 'sail'; to: string }
   /** FLY off the MAP landed me here (the town's heal location). */

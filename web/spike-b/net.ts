@@ -24,6 +24,7 @@ import { LOG_STREAM_EVENTS, chunkEvents, cleanEvents } from './shared/logwire';
 import { keysOf, makeRoom, type Actor, type Bag, type Room, type RoomEvent } from './shared/room';
 import type { FameMon } from '../src/ui/results';
 import type { Again, CardRecord, Listed, PeekBag, Settings, SpMsg, WireFrame, WorldDown, WorldUp } from './shared/wire';
+import type { GroundMon } from './shared/items';
 
 export interface WorldLink {
   readonly room: Room;
@@ -52,8 +53,9 @@ export interface WorldLink {
   pick(map: string): void;
   /** My trade with event `n`'s trader is over: I gave him `given` (0, nothing). */
   traded(n: number, given: number): void;
-  /** My catch with a full party let these go: they lie beside me (room.ts `released`). */
-  released(mons: { species: number; level: number }[]): void;
+  /** My catch with a full party let these go: they lie beside me (room.ts `released`), each on
+   *  the HP it left with. */
+  released(mons: GroundMon[]): void;
   /** I opened event `n`'s REGI wall. */
   open(n: number): void;
   /** I sail to story `to`'s island, or ('') back to Lilycove. */
@@ -387,7 +389,9 @@ export class Online implements WorldLink {
   }
 
   traded(n: number, given: number): void { this.send({ t: 'traded', n, sp: given }); }
-  released(mons: { species: number; level: number }[]): void { this.send({ t: 'released', mons: mons.map((m) => ({ sp: m.species, lv: m.level })) }); }
+  released(mons: GroundMon[]): void {
+    this.send({ t: 'released', mons: mons.map((m) => ({ sp: m.species, lv: m.level, ...(m.hp !== undefined && m.maxHp !== undefined ? { hp: m.hp, mhp: m.maxHp } : {}) })) });
+  }
   open(n: number): void { this.send({ t: 'open', n }); }
   sail(to: string): void { this.send({ t: 'sail', to }); }
   fly(map: string, x: number, y: number): void { this.send({ t: 'fly', map, x, y }); }

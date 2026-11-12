@@ -27,20 +27,49 @@ export const isKeyItem = (item: number): boolean => (item >= 259 && item <= 288)
 
 const ITEMS_COUNT = 377, MAX_MONEY = 999999, BAG_ROWS = 30 + 16 + 46;
 
+/** A mon in a ball on the ground: species and level, made fresh for whoever takes it
+ *  (br_loot.c MakeTaken). One of a trainer's own let go -- a full party's catch, a swap on a
+ *  bag's team -- says the HP it left the party with, and is taken with that (Cam, 11-11: "the
+ *  Mon you released should have the same health it was at"). None said, it is made full:
+ *  a beaten trainer's team, a gift, an old page's. */
+export interface GroundMon { species: number; level: number; hp?: number; maxHp?: number }
+
 export interface BagRows {
   items: { id: number; n: number }[];
   money: number;
-  /** The team inside (HBR-82), as the match's SPILL carries it: species and level, each
-   *  made fresh for whoever takes it. */
-  mons?: { species: number; level: number }[];
+  /** The team inside (HBR-82), as the match's SPILL carries it (GroundMon). */
+  mons?: GroundMon[];
 }
 
 const NUM_SPECIES = 412, MAX_LEVEL = 100;
+/** Gen 3's most is 714 (a level-100 BLISSEY); past 999 is nonsense. */
+const MAX_HP = 999;
 const isMon = (m: unknown): boolean => {
   const { species, level } = (m ?? {}) as { species?: unknown; level?: unknown };
   return Number.isInteger(species) && (species as number) > 0 && (species as number) < NUM_SPECIES &&
     Number.isInteger(level) && (level as number) >= 1 && (level as number) <= MAX_LEVEL;
 };
+
+/** A ground mon as a phone said it, held to the mon: an HP over its most is its most, under 0
+ *  is 0, and one that is not a whole number with a most of 1..999 beside it is not said at
+ *  all (made full, as before). */
+export function groundMon(m: { species: number; level: number; hp?: unknown; maxHp?: unknown }): GroundMon {
+  const { species, level, hp, maxHp } = m;
+  if (!Number.isInteger(hp) || !Number.isInteger(maxHp) || (maxHp as number) < 1 || (maxHp as number) > MAX_HP) return { species, level };
+  return { species, level, hp: Math.min(Math.max(hp as number, 0), maxHp as number), maxHp: maxHp as number };
+}
+
+/** The wire's released rows ({ sp, lv, hp?, mhp? }, wire.ts `released`), made safe: up to six,
+ *  each a real species at a real level, its HP held as groundMon holds it. */
+export function cleanReleased(raw: unknown): GroundMon[] {
+  if (!Array.isArray(raw)) return [];
+  const out: GroundMon[] = [];
+  for (const r of raw.slice(0, 6) as { sp?: unknown; lv?: unknown; hp?: unknown; mhp?: unknown }[]) {
+    const m = { species: r?.sp, level: r?.lv };
+    if (isMon(m)) out.push(groundMon({ ...(m as { species: number; level: number }), hp: r.hp, maxHp: r.mhp }));
+  }
+  return out;
+}
 
 /** A bag as a phone sent it, made safe: real item ids from the pockets a bag spills (not
  *  key items or machines), counts up to a berry stack's 999, no more rows than those three
@@ -56,12 +85,13 @@ export function cleanBag(raw: unknown): BagRows | null {
     const id = Number((r as { id?: unknown })?.id), n = Number((r as { n?: unknown })?.n);
     if (Number.isInteger(id) && id > 0 && id < ITEMS_COUNT && Number.isInteger(n) && n > 0 && !isTm(id) && !isKeyItem(id)) out.items.push({ id, n: Math.min(n, 999) });
   }
-  if (Array.isArray(mons) && mons.length) out.mons = (mons as { species: number; level: number }[]).map(({ species, level }) => ({ species, level }));
+  if (Array.isArray(mons) && mons.length) out.mons = (mons as GroundMon[]).map(groundMon);
   return out;
 }
 
 /** `rest` held to what `was` had: a bag put back never grows in items or money. Its team
- *  is whatever the taker left on the BAG screen, which can be one of theirs put down. */
+ *  is whatever the taker left on the BAG screen, which can be one of theirs put down, with
+ *  the HP it left them with. */
 export function within(rest: BagRows, was: BagRows): BagRows {
   const left = new Map<number, number>();
   for (const r of was.items) left.set(r.id, (left.get(r.id) ?? 0) + r.n);
@@ -71,6 +101,6 @@ export function within(rest: BagRows, was: BagRows): BagRows {
     if (n > 0) { items.push({ id: r.id, n }); left.set(r.id, left.get(r.id)! - n); }
   }
   const out: BagRows = { items, money: Math.min(rest.money, was.money) };
-  if (rest.mons?.length) out.mons = rest.mons.slice(0, 6).map(({ species, level }) => ({ species, level }));
+  if (rest.mons?.length) out.mons = rest.mons.slice(0, 6).map(groundMon);
   return out;
 }

@@ -18,7 +18,7 @@ import patchJson from '../../src/data/patches.json';
 import { Host, LET_GO_FRAMES, play } from './host';
 import { over } from './over';
 import { LEADERS } from './gyms';
-import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, isTm, within } from './items';
+import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, cleanReleased, isTm, within } from './items';
 import { HURT, botKeys, health } from './bots';
 import { AFTER_WIN, FIELD_DIVE, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_APART, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, WALKUP_BANG, CHEST, CHEST_SPECIES, ITEM_MASTER_BALL, ZONE_CELLS, ZONE_ITEMS, ZONE_TMS, eventPiece, makeRoom, zoneBalls, wornParty, type RoomEvent } from './room';
 
@@ -261,6 +261,50 @@ describe('released', () => {
     const late = makeRoom(MAPS, PATCHES, 99);
     late.load(host.room.state());
     expect([...late.spills.keys()].sort()).toEqual([...host.room.spills.keys()].sort());
+  });
+
+  // Cam, 11-11: "the Mon you released should have the same health it was at, regardless of what it
+  // was at". The ball made it fresh at full HP, so releasing a hurt one and taking it back healed it.
+  it('a released mon lies with the HP it left with: hurt stays hurt, fainted stays at 0, an old page\'s is full', () => {
+    const host = new Host(makeRoom(MAPS, PATCHES, 99), 0, MAPS);
+    const a = host.join('A', 0, { map: 'MAP_ROUTE101', x: 10, y: 10 });
+    host.advance();
+    host.released(a, [{ species: 25, level: 12, hp: 7, maxHp: 33 }]);
+    host.advance();
+    host.released(a, [{ species: 4, level: 9, hp: 0, maxHp: 28 }]);
+    host.advance();
+    host.released(a, [{ species: 7, level: 9 }]);
+    host.advance();
+    const ball = (room: typeof host.room, sp: number) => [...room.spills.values()].find((s) => s.bag.mons?.[0]?.species === sp)?.bag.mons?.[0];
+    expect(ball(host.room, 25)).toEqual({ species: 25, level: 12, hp: 7, maxHp: 33 });
+    expect(ball(host.room, 4)).toEqual({ species: 4, level: 9, hp: 0, maxHp: 28 });
+    expect(ball(host.room, 7), 'no HP said: made full, as before').toEqual({ species: 7, level: 9 });
+    // A page that was not there has the same HP on the same ball.
+    const late = makeRoom(MAPS, PATCHES, 99);
+    late.load(host.room.state());
+    expect(ball(late, 25)).toEqual({ species: 25, level: 12, hp: 7, maxHp: 33 });
+    expect(late.hash()).toBe(host.room.hash());
+  });
+
+  it('an HP a phone sends is held to the mon: never over its most, never under 0, nonsense is a full one', () => {
+    // The relay's reading of the wire's rows ({ sp, lv, hp, mhp }).
+    expect(cleanReleased([{ sp: 25, lv: 12, hp: 7, mhp: 33 }, { sp: 4, lv: 9, hp: 0, mhp: 28 }, { sp: 7, lv: 9 }])).toEqual([
+      { species: 25, level: 12, hp: 7, maxHp: 33 }, { species: 4, level: 9, hp: 0, maxHp: 28 }, { species: 7, level: 9 },
+    ]);
+    expect(cleanReleased([{ sp: 1, lv: 5, hp: 40, mhp: 20 }])).toEqual([{ species: 1, level: 5, hp: 20, maxHp: 20 }]);
+    expect(cleanReleased([{ sp: 1, lv: 5, hp: -3, mhp: 20 }])).toEqual([{ species: 1, level: 5, hp: 0, maxHp: 20 }]);
+    for (const bad of [{ hp: 2.5, mhp: 20 }, { hp: 3, mhp: 0 }, { hp: 3, mhp: 1000 }, { hp: 3 }, { mhp: 20 }, { hp: '3', mhp: 20 }])
+      expect(cleanReleased([{ sp: 1, lv: 5, ...bad }]), JSON.stringify(bad)).toEqual([{ species: 1, level: 5 }]);
+    expect(cleanReleased([{ sp: 412, lv: 5 }, { sp: 1, lv: 0 }, 7, null])).toEqual([]);
+    expect(cleanReleased('x')).toEqual([]);
+    expect(cleanReleased(Array(9).fill({ sp: 1, lv: 5 }))).toHaveLength(6);
+    // ...and the page's own host, offline, holds it the same.
+    const host = new Host(makeRoom(MAPS, PATCHES, 99), 0, MAPS);
+    const a = host.join('A', 0, { map: 'MAP_ROUTE101', x: 10, y: 10 });
+    host.advance();
+    host.released(a, [{ species: 25, level: 12, hp: 99, maxHp: 33 }]);
+    host.advance();
+    expect([...host.room.spills.values()].find((s) => s.bag.mons?.[0]?.species === 25)?.bag.mons?.[0]).toEqual({ species: 25, level: 12, hp: 33, maxHp: 33 });
   });
 });
 
@@ -1373,6 +1417,30 @@ describe('a fallen trainer\'s bag', () => {
     expect(cleanBag({ items: [], money: 0, mons: [7] })).toBeNull();
     expect(cleanBag({ items: [], money: 0, mons: [{ species: 25, level: 5, extra: 1 }] })).toEqual({ items: [], money: 0, mons: [{ species: 25, level: 5 }] });
     expect(within({ items: [], money: 0, mons: [mon(3)] }, bag).mons).toEqual([mon(3)]);
+  });
+
+  it('one of mine put down in a swap lies with the HP it left with, taken again or not (Cam, 11-11)', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    const at = { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 12 };
+    room.apply({ c: 'join', id: 1, bot: false, name: 'MAY', skin: 0, spot: at, facing: 1 });
+    room.apply({ c: 'join', id: 2, bot: false, name: 'B', skin: 0, spot: { ...at, x: 9 }, facing: 4 });
+    room.apply({ c: 'out', id: 1, bag: { items: [], money: 0, mons: [mon(1), mon(2)] } });
+    const key = SPILL_KEY + 1;
+    room.step(new Map([[2, [KEY_A]]]));
+    // B took MAY's first and gave a hurt one of theirs and a fainted one for it: a beaten
+    // trainer's own stay as they were, made full.
+    const hurt = { species: 9, level: 20, hp: 11, maxHp: 61 }, fainted = { species: 10, level: 8, hp: 0, maxHp: 25 };
+    const rest = cleanBag({ items: [], money: 0, mons: [mon(2), hurt, fainted] })!;
+    expect(rest.mons).toEqual([mon(2), hurt, fainted]);
+    room.apply({ c: 'drop', id: 2, key, rest: within(rest, room.spills.get(key)!.bag) });
+    expect(room.spillAt(at.map, at.x, at.y)?.bag.mons).toEqual([mon(2), hurt, fainted]);
+    const mirror = makeRoom(MAPS, PATCHES, 99);
+    mirror.load(room.state());
+    expect(mirror.spillAt(at.map, at.x, at.y)?.bag.mons).toEqual([mon(2), hurt, fainted]);
+    // The relay holds a bag's HP as it holds a released one's.
+    expect(cleanBag({ items: [], money: 0, mons: [{ species: 9, level: 20, hp: 99, maxHp: 61 }, { species: 9, level: 20, hp: 5, maxHp: 0 }] })?.mons)
+      .toEqual([{ species: 9, level: 20, hp: 61, maxHp: 61 }, { species: 9, level: 20 }]);
+    expect(within({ items: [], money: 0, mons: [{ species: 9, level: 20, hp: -1, maxHp: 61 }] }, bag).mons).toEqual([{ species: 9, level: 20, hp: 0, maxHp: 61 }]);
   });
 });
 

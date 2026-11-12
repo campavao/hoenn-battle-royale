@@ -31,6 +31,7 @@ export const FILE_SECONDS = {
   'spikeb-banners.spec.ts': 320,
   'spikeb-botbag.spec.ts': 90,
   'spikeb-leader-drop.spec.ts': 100,
+  'spikeb-swap-heal.spec.ts': 45,
   'spikeb-people.spec.ts': 125,
   'spikeb-flow.spec.ts': 250,
   'spikeb-radial.spec.ts': 165,
