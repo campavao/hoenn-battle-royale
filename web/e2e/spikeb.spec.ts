@@ -390,6 +390,39 @@ test('a tap on the map walks the trainer there, and the pad buzzes', async ({ pa
   expect(await page.evaluate(() => (window as unknown as { buzzes: number }).buzzes)).toBeGreaterThan(0);
 });
 
+// 11-12, a player on Android: "it vibrates". The D-pad buzzed at every step and every slide of
+// the thumb; A, B and START buzz as they go down, the D-pad never (an iPhone has no vibrate).
+test('on a phone the D-pad does not buzz; A and B do', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await page.addInitScript(() => { (window as unknown as { buzzes: number }).buzzes = 0; navigator.vibrate = () => { (window as unknown as { buzzes: number }).buzzes++; return true; }; });
+  await page.goto(`/?rom=${romHashParam()}`);
+  await page.locator('#lobby-rows button', { hasText: 'HOST A ROOM' }).click({ timeout: 90_000 });
+  await page.locator('#room-start').click({ timeout: 30_000 });
+  await page.waitForFunction(() => { const s = (window as unknown as { __spike: { rom?: unknown; link?: { me: number; room: { actor(id: number): unknown } } } }).__spike; return !!s.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 90_000 });
+  const buzzes = () => page.evaluate(() => (window as unknown as { buzzes: number }).buzzes);
+  const pad = page.locator('#dpad-surface');
+  await expect(pad).toBeVisible({ timeout: 30_000 });
+  const r = (await pad.boundingBox())!;
+  const before = await buzzes();
+  // A real thumb (synthetic pointer events cannot be captured): up, then sliding round to the
+  // right, then to down -- three ways while held.
+  const cdp = await ctx.newCDPSession(page);
+  const touch = (type: string, x: number, y: number) => cdp.send('Input.dispatchTouchEvent', {
+    type, touchPoints: type === 'touchEnd' ? [] : [{ x: r.x + r.width * x, y: r.y + r.height * y, id: 1 }],
+  });
+  await touch('touchStart', 0.5, 0.1);
+  await touch('touchMove', 0.9, 0.5);
+  await touch('touchMove', 0.5, 0.9);
+  await touch('touchEnd', 0, 0);
+  expect(await buzzes(), 'the D-pad, three ways').toBe(before);
+  const b = (await page.locator('#pad .k[data-k="b"]').boundingBox())!;
+  await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
+  expect(await buzzes(), 'B').toBe(before + 1);
+  await ctx.close();
+});
+
 test('two players: the room link brings a friend in, and both see one world', async ({ browser }) => {
   test.setTimeout(300_000);
   const phone = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true };
