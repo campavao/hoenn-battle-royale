@@ -39,6 +39,8 @@ export interface LobbyHooks {
   list(): void;
   /** The relay SEND FEEDBACK's note goes to (its own socket, net/feedback.ts). */
   relayUrl: string;
+  /** The build a note is about, as the sheet's last line names it (patch, shell, rom). */
+  version(): string;
   /** QUICK PLAY with no relay: the bots and nobody else, in the page (the live game's
    *  offline QUICK PLAY). */
   solo(): void;
@@ -345,7 +347,7 @@ export class Lobby {
       const text = cleanNote(this.draft);
       if (!text || this.said === 'sending') return;
       this.said = 'sending';
-      void sendFeedback(this.hooks.relayUrl, { type: 'feedback', text, v: 'spike B', where: this.overMatch || this.inSheet ? 'spikeb-match' : this.room ? 'spikeb-room' : 'spikeb-menu', name: me().name, ...(this.room ? { room: this.room.code } : {}) }).then((result) => {
+      void sendFeedback(this.hooks.relayUrl, { type: 'feedback', text, v: this.hooks.version(), where: this.overMatch || this.inSheet ? 'spikeb-match' : this.room ? 'spikeb-room' : 'spikeb-menu', name: me().name, ...(this.room ? { room: this.room.code } : {}) }).then((result) => {
         this.said = result;
         if (result === 'sent' && cleanNote(this.draft) === text) this.draft = '';
         this.stage.redraw();

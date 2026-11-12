@@ -14,14 +14,25 @@ test('SEND FEEDBACK reaches the relay and comes back to the menu', async ({ brow
   test.setTimeout(120_000);
   const ctx = await browser.newContext(PHONE);
   const page = await ctx.newPage();
+  // The note as it leaves the page: Cam, 11-11, it names the real build, not "spike B".
+  const sent: { v?: string; where?: string }[] = [];
+  page.on('websocket', (ws) => ws.on('framesent', (f) => {
+    try { const m = JSON.parse(String(f.payload)); if (m.type === 'feedback') sent.push(m); } catch { /* not JSON */ }
+  }));
   await page.goto(`/?rom=${romHashParam()}`);
   await expect(quickPlay(page)).toBeVisible({ timeout: 90_000 });
+  const version = await page.evaluate(() => (window as unknown as { __spike: { version: string } }).__spike.version);
   await page.locator('#lobby-feedback').tap();
   await expect(page.locator('#feedback-send'), 'nothing to send yet').toBeDisabled();
   await page.locator('#feedback-text').fill('a note from the new game');
   await expect(page.locator('#feedback-send')).toBeEnabled();
   await page.locator('#feedback-send').tap();
   await expect(page.locator('#feedback-note')).toHaveText('Sent. Thank you!', { timeout: 15_000 });
+  expect(sent).toHaveLength(1);
+  expect(sent[0].v, "the build, not the page's name").not.toMatch(/spike B/);
+  expect(sent[0].v).toMatch(/rom [0-9a-f]{7}/);
+  expect(sent[0].v).toBe(version.replace(/^spike B · /, ''));
+  expect(sent[0].where).toBe('spikeb-menu');
   await page.locator('#feedback-back').tap();
   await expect(quickPlay(page)).toBeVisible();
   await ctx.close();

@@ -274,7 +274,8 @@ export function parseFeedback(message, fallbackAt) {
            where: String(note.where ?? "?"), name: String(note.name ?? "?"), text: note.text };
 }
 
-const WHERE = { menu: "the main menu", "match-solo": "a solo match", "match-quick": "a quick play match",
+const WHERE = { menu: "the main menu", "spikeb-menu": "the main menu", "spikeb-room": "a room",
+                "spikeb-match": "a match", "match-solo": "a solo match", "match-quick": "a quick play match",
                 "match-host": "a hosted room", "match-daily": "the daily game", "match-join": "a room",
                 "match-watch": "watching a match" };
 
@@ -402,7 +403,7 @@ export async function fileFeedback({ deps, live, now, notes, state, read, filer,
     if (done.has(note.id)) continue;
     done.add(note.id);
     // A local dev build sends to the live relay too; those are our own tests.
-    if (note.v.startsWith("dev ")) continue;
+    if (note.v.startsWith("dev ") || note.v.includes("local build")) continue;
     if (await filer.has(note.id)) continue;
     // The issue's name only: the id is a hash of the words, and this log is public.
     log(`feedback filed as ${await filer.create(note)}`);
