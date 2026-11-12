@@ -15777,6 +15777,7 @@ var STREAM_MAX = 64 * 1024;
 var ROOM_MAX = 30;
 var AUTO_START_MS = 6e4;
 var AWAY_MS = 6e4;
+var ROOM_AWAY_MS = 2e4;
 var JANK_APART_MS = 3e4;
 var NOWHERE = { send: () => void 0, close: () => void 0 };
 var FIRST_ID = 1e3;
@@ -16028,6 +16029,13 @@ var WorldService = class {
           this.opts.log(`world: #${p.id} away from room ${room.code}`);
           return;
         }
+        if (room && !room.host) {
+          p.away = this.opts.now();
+          p.link = NOWHERE;
+          this.opts.log(`world: #${p.id} away from room ${room.code}`);
+          this.roster(room);
+          return;
+        }
         this.drop(p);
       }
     };
@@ -16056,11 +16064,11 @@ var WorldService = class {
     const room = typeof again.code === "string" ? this.rooms.get(again.code.toUpperCase()) : void 0;
     const p = room?.members.get(Number(again.id));
     if (!room || !p || p.key !== again.key || typeof again.key !== "string") return null;
-    if (!room.host && p.away) return null;
     const old = p.link;
     p.link = link;
     if (old !== NOWHERE && old !== link) old.close();
     if (!room.host) {
+      p.away = 0;
       p.heard = this.opts.now();
       this.opts.log(`world: #${p.id} back in room ${room.code}`);
       this.roster(room);
@@ -16122,6 +16130,8 @@ var WorldService = class {
    *  match locked to them. Not a match nobody could win (dealable: two at the least); a
    *  quick room's count that runs out on one counts again. */
   start(room) {
+    for (const p of [...room.members.values()]) if (p.away) this.drop(p);
+    if (!this.rooms.has(room.code)) return;
     const bots = Math.min(this.opts.bots, fillFor(room.set, room.members.size));
     if (!dealable(room.members.size, bots)) {
       if (room.quick) {
@@ -16346,7 +16356,7 @@ var WorldService = class {
         if (room.host) {
           for (const p of [...room.members.values()]) if (!p.away && now - p.heard > QUIET_MS) p.link.close();
         }
-        for (const p of [...room.members.values()]) if (p.away && (now - p.away > AWAY_MS || !room.host)) this.drop(p);
+        for (const p of [...room.members.values()]) if (p.away && now - p.away > (room.host ? AWAY_MS : ROOM_AWAY_MS)) this.drop(p);
         if (!this.rooms.has(room.code)) continue;
         if (!room.host && room.startsAt !== null && now >= room.startsAt) this.start(room);
         if (room.host && [...room.members.values()].some((p) => !p.away)) this.frames(room, now);
@@ -16399,4 +16409,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "30b3716326ee";
+export const WORLD_HASH = "ef69bfdd928d";

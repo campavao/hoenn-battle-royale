@@ -2603,22 +2603,37 @@ let matchOn = false;
 const AGAIN = 'spikeB.again';
 const AGAIN_ROM = 'spikeB.againRom';
 const AGAIN_MS = 60_000;
-interface Token { code: string; id: number; key: string; at: number }
+/** `room`: kept in the room between matches (rememberRoom), so no match to come back to. */
+interface Token { code: string; id: number; key: string; at: number; room?: boolean }
 function token(): Token | null {
   try {
     const t = JSON.parse(localStorage.getItem(AGAIN) ?? 'null') as Token | null;
     return t && Date.now() - t.at < AGAIN_MS ? t : null;
   } catch { return null; }
 }
+/** A reload's way back into a match (not a room's seat between matches). */
+function matchToken(): Token | null {
+  const t = token();
+  return t && !t.room ? t : null;
+}
 /** A match a reload left more than AGAIN_MS ago, still recent enough to be on: its room. */
 function lateCode(): string | null {
   try {
     const t = JSON.parse(localStorage.getItem(AGAIN) ?? 'null') as Token | null;
-    return t && Date.now() - t.at < 30 * 60_000 ? t.code : null;
+    return t && !t.room && Date.now() - t.at < 30 * 60_000 ? t.code : null;
   } catch { return null; }
 }
 function forget(): void {
   try { localStorage.removeItem(AGAIN); localStorage.removeItem(AGAIN_ROM); } catch { /* private window */ }
+}
+/** In a room with no match on: the seat for a reload, and no team (the next match deals
+ *  its own, so startMatch's `comingBack` finds none). */
+function rememberRoom(r: { code: string; you: number; key?: string }): void {
+  if (!r.key) return;
+  try {
+    localStorage.setItem(AGAIN, JSON.stringify({ code: r.code, id: r.you, key: r.key, at: Date.now(), room: true }));
+    localStorage.removeItem(AGAIN_ROM);
+  } catch { /* private window */ }
 }
 /** The team a reload is bringing back, until the ROM has booted to take it. */
 let comingBack: string | null = null;
@@ -2760,7 +2775,7 @@ function startMatch(l: WorldLink): void {
   if (romUp && !battle) rom?.leave();
   lobby?.hide();
   // Into a match, not back into one after a reload.
-  const curtain = l.online && token()?.id === l.me ? null : art?.contestCurtain();
+  const curtain = l.online && matchToken()?.id === l.me ? null : art?.contestCurtain();
   if (curtain) raiseCurtain(curtain, document.body, () => rom?.sound(SE_CONTEST_CURTAIN_RISE), curtainLines(l.room.results.entrants.length || l.room.actors.length, l.room.seed));
   isOut = waiting = shownWin = false;
   // Every match's rounds count from 0: what was told or recorded of the last one is not.
@@ -2779,7 +2794,7 @@ function startMatch(l: WorldLink): void {
   if (spectating) toggleSpectate();
   follow = link.me;
   savedAt = 0;
-  const back = token();
+  const back = matchToken();
   comingBack = null;
   if (back && l.online && back.id === l.me) {
     try { comingBack = localStorage.getItem(AGAIN_ROM); } catch { comingBack = null; }
@@ -5348,6 +5363,9 @@ async function boot(): Promise<void> {
         if (matchOn && !r.playing) matchOver();
         // The standings stay up until PLAY AGAIN; then the room as it is by then.
         else if (!matchOn && !winEl.classList.contains('on')) lobby!.roomIs(r);
+        // Between matches a reload is back in this seat too (the relay holds it a moment),
+        // the host still the host: the link alone made it a second trainer (11-12).
+        if (!r.playing) rememberRoom(r);
       },
       onNoRoom: (code, pass, rom, full, removed) => {
         forget(); unlink();
@@ -5405,7 +5423,8 @@ async function boot(): Promise<void> {
       // its leading word (patch, shell, rom; "local build" from a dev page).
       version: () => versionLine.replace(/^spike B · /, ''),
       // Out of the room for good: its link goes too, or the reload would walk back in.
-      leave: () => { unlink(); location.reload(); },
+      // Said to the relay first: a socket that only closes is held for a reload (11-12).
+      leave: () => { forget(); unlink(); sock.leave(); setTimeout(() => location.reload(), 300); },
       names: { species: speciesName, move: (id) => moveInfo(romTables, id)?.name },
       solo: () => { room = null; recordSolo(); startMatch(solo()); },
     });
@@ -5424,7 +5443,7 @@ async function boot(): Promise<void> {
       lobby.menu(lobby.rewatch ? 'Too late to rejoin the match. WATCH it from here.' : '');
     }
   }
-  loading.say(token() ? 'Back to your match…' : 'Getting the game ready…');
+  loading.say(matchToken() ? 'Back to your match…' : 'Getting the game ready…');
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => { console.warn('spike ROM not booted', e); loading.hide(); });
   (window as unknown as { __spike: unknown }).__spike = { watch, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, get movesBox() { return movesBox; }, pocket: (n: number) => (rom ? readPocket(rom.emu, romTables.sym, n) : []), radial, moveName: (id: number) => moveInfo(romTables, id)?.name ?? '' };
 }

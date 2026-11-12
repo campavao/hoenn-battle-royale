@@ -87,6 +87,26 @@ test('out of the match, watching the bots walk for a minute: nobody jumps and th
   await ctx.close();
 });
 
+// 11-12: a host's page reloading in the room (the link in its address bar) came back as a
+// second trainer, and START went to somebody else; the play log counted a person a reload.
+test('a reload in the room, between matches, is the same seat and still the host', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const [hc, gc] = [await browser.newContext(), await browser.newContext()];
+  const [host, guest] = [await hc.newPage(), await gc.newPage()];
+  await host.goto(`/?rom=${romHashParam()}#host`);
+  await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 90_000 });
+  await guest.goto(`/?rom=${romHashParam()}${new URL(host.url()).hash}`);
+  await expect(host.locator('#room-roster li')).toHaveCount(2, { timeout: 90_000 });
+  for (let i = 0; i < 2; i++) {
+    await host.reload();
+    await expect(host.locator('#room-start'), 'START is still the host').toBeVisible({ timeout: 90_000 });
+    await expect(guest.locator('#room-roster li'), 'two in the room, not three').toHaveCount(2, { timeout: 30_000 });
+    await expect(guest.locator('#room-start')).toHaveCount(0);
+  }
+  await hc.close();
+  await gc.close();
+});
+
 test("the host's card on a trainer: MAKE HOST hands START on, and REPLACE WITH BOT takes them out of a match with a bot in their place", async ({ browser }) => {
   test.setTimeout(420_000);
   const [hc, gc] = [await browser.newContext({ viewport: { width: 1280, height: 720 } }), await browser.newContext()];

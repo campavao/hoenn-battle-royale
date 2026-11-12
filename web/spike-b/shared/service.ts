@@ -139,6 +139,9 @@ const ROOM_MAX = 30;
 const AUTO_START_MS = 60_000;
 /** A page gone mid-match (a reload) keeps its trainer this long (Cam, 2026-10-20). */
 const AWAY_MS = 60_000;
+/** ...and between matches, in the room: long enough for the page's reconnect or a reload,
+ *  short enough that a host gone for good hands START on before anybody waits on it. */
+const ROOM_AWAY_MS = 20_000;
 /** A page's `jank` lines this far apart at the most: a line a match, not a line a keystroke. */
 const JANK_APART_MS = 30_000;
 /** Where an away phone's frames go meanwhile. */
@@ -437,6 +440,17 @@ export class WorldService {
           this.opts.log(`world: #${p.id} away from room ${room.code}`);
           return;
         }
+        // In the room between matches (or before the first), held a moment too: the page's
+        // own reconnect, or a reload, comes back with the key to the same seat, the host's
+        // START with it. Dropped at once, it came back as another trainer and the room's
+        // host passed on (11-12: one page after a match, four "players" in the play log).
+        if (room && !room.host) {
+          p.away = this.opts.now();
+          p.link = NOWHERE;
+          this.opts.log(`world: #${p.id} away from room ${room.code}`);
+          this.roster(room);
+          return;
+        }
         this.drop(p);
       },
     };
@@ -470,11 +484,11 @@ export class WorldService {
     const room = typeof again.code === 'string' ? this.rooms.get(again.code.toUpperCase()) : undefined;
     const p = room?.members.get(Number(again.id));
     if (!room || !p || p.key !== again.key || typeof again.key !== 'string') return null;
-    if (!room.host && p.away) return null;
     const old = p.link;
     p.link = link;
     if (old !== NOWHERE && old !== link) old.close();
     if (!room.host) {
+      p.away = 0;
       p.heard = this.opts.now();
       this.opts.log(`world: #${p.id} back in room ${room.code}`);
       this.roster(room);
@@ -542,6 +556,9 @@ export class WorldService {
    *  match locked to them. Not a match nobody could win (dealable: two at the least); a
    *  quick room's count that runs out on one counts again. */
   private start(room: Lobby): void {
+    // A seat held for a page that has not come back is nobody to deal a trainer to.
+    for (const p of [...room.members.values()]) if (p.away) this.drop(p);
+    if (!this.rooms.has(room.code)) return;
     const bots = Math.min(this.opts.bots, fillFor(room.set, room.members.size));
     if (!dealable(room.members.size, bots)) {
       if (room.quick) { room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS); this.roster(room); }
@@ -771,7 +788,7 @@ export class WorldService {
         // Waiting in a room a phone has nothing to say (the socket's pings keep it honest).
         if (room.host) for (const p of [...room.members.values()]) if (!p.away && now - p.heard > QUIET_MS) p.link.close();
         // Gone longer than a reload takes: out, as if they had left.
-        for (const p of [...room.members.values()]) if (p.away && (now - p.away > AWAY_MS || !room.host)) this.drop(p);
+        for (const p of [...room.members.values()]) if (p.away && now - p.away > (room.host ? AWAY_MS : ROOM_AWAY_MS)) this.drop(p);
         if (!this.rooms.has(room.code)) continue;
         if (!room.host && room.startsAt !== null && now >= room.startsAt) this.start(room);
         // Everybody away (one phone against the bots, reloading): the match waits for them,
