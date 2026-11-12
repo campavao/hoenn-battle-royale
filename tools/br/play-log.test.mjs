@@ -404,3 +404,24 @@ test("a client's version is a build tag or \"?\", never markup for /play.html", 
   assert.equal(parseLine("2026-11-11T15:00:00.000Z stat abc vworld-e0e5b5a6 | solo +0 | since 2026-11-11", "x").v, "world-e0e5b5a6");
   assert.equal(parseLine("2026-11-11T15:00:00.000Z stat abc v3 | solo +2 | since 2026-11-11", "x").v, "3");
 });
+
+test("a name coming back on a fresh connection after the match is one human, not four more (APYR7Z, 11-12)", () => {
+  // Three trainers played; then the host's name joined four more times in 15 s, each
+  // on a new connection. play.html said 7 humans.
+  const lines = [
+    "2026-11-12T03:54:19.611Z room APYR7Z hosted by HOST#1078 (open)",
+    "2026-11-12T03:54:33.542Z room APYR7Z: BEE#1079 joined",
+    "2026-11-12T03:54:33.745Z room APYR7Z: SEA#1080 joined",
+    "2026-11-12T03:54:37.379Z match APYR7Z started (host) | 3 trainers | max 8",
+    "2026-11-12T04:13:00.548Z match APYR7Z ended after 1103s",
+    "2026-11-12T04:13:02.933Z room APYR7Z: HOST#1084 joined",
+    "2026-11-12T04:13:10.865Z room APYR7Z: HOST#1085 joined",
+    "2026-11-12T04:13:14.770Z room APYR7Z: HOST#1086 joined",
+    "2026-11-12T04:13:17.976Z room APYR7Z: HOST#1087 joined",
+    "2026-11-12T04:30:00.000Z room APYR7Z closed (host_gone, no heir)",
+  ];
+  const s = derive(lines.map(l => parseLine(l, "x")).filter(Boolean)).sessions.find(r => r.code === "APYR7Z");
+  assert.equal(s.humans, 3);
+  assert.equal(s.together, 3);
+  assert.equal(s.matches, 1);
+});
