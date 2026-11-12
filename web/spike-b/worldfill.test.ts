@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fillFile from './data/world-fill.json';
+import paintFile from '../../tools/br/map-paint.json';
 import world from './data/world.json';
 import type { WorldMap } from '../src/bots/world';
 import { layout } from './shared/room';
@@ -103,6 +104,10 @@ describe('the fill and the real maps meet', () => {
   const placed = [...layout(maps).values()];
   const at = (id: string, x: number, y: number) => { const p = placed.find((q) => q.m.id === id)!; return { x: p.gx + x, y: p.gy + y }; };
 
+  // Cam's own cells off /map/ (export-fill.py's last step): what Cam painted stands, whatever the
+  // generator would have picked there.
+  const painted = new Set((paintFile.cells as number[][]).map(([x, y]) => `${x},${y}`));
+
   it('never half of a round tree', () => {
     // General's round tree: a two by two of these, as [dx to its other side, dy to its other half].
     const halves = new Map<number, [number, number]>([[0x1d4, [1, 1]], [0x1d6, [1, 1]], [0x1d5, [-1, 1]], [0x1d7, [-1, 1]], [0x1dc, [1, -1]], [0x1e4, [1, -1]], [0x1dd, [-1, -1]], [0x1e5, [-1, -1]]]);
@@ -113,7 +118,7 @@ describe('the fill and the real maps meet', () => {
     let trees = 0;
     for (let y = fill.y0 + 1; y < fill.y0 + fill.h - 1; y++) {
       for (let x = fill.x0 + 1; x < fill.x0 + fill.w - 1; x++) {
-        if (owned.has(`${x},${y}`)) continue;
+        if (owned.has(`${x},${y}`) || painted.has(`${x},${y}`)) continue;
         const h = halves.get(piece(x, y) ?? -1);
         if (!h) continue;
         trees += 1;
@@ -149,6 +154,7 @@ describe('the fill and the real maps meet', () => {
     // ROUTE 103's pond starts at its top row: over it, General's rock stands on its front-facing foot.
     for (let x = 35; x <= 36; x++) {
       const c = at('MAP_ROUTE103', x, -1);
+      if (painted.has(`${c.x},${c.y}`)) continue; // Cam painted water there, 11-11
       expect(fill.metatile(c.x, c.y)?.id, `${x}`).toBe(0x79);
     }
   });
