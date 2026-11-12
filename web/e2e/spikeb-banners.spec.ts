@@ -180,7 +180,11 @@ test('in the final ring a watched fight comes up under the curtain', async ({ pa
   await expect(page.locator('#curtain'), 'and up').toHaveCount(0, { timeout: 8000 });
   await shot(page, 'final-fight');
   const seen: any[] = await page.evaluate(() => (window as any).__cut);
-  const first = seen.findIndex((f) => f.view);
+  // The watch may still be on a fight from before the final ring when the recording starts:
+  // the one this is about is the first shown after the curtain came down.
+  const down = seen.findIndex((f) => typeof f.curtain === 'number');
+  const first = seen.findIndex((f, i) => i > down && f.view);
+  expect(down, 'the curtain comes down').toBeGreaterThanOrEqual(0);
   expect(seen[first].curtain, 'all the way down as the fight appears').toBe(0);
   expect(seen.slice(first).some((f) => typeof f.curtain === 'number' && f.curtain < -16), 'and it rises off it').toBe(true);
 });
