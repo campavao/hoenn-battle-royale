@@ -324,6 +324,9 @@
 // The data branch, read raw. Cached a few minutes by GitHub's CDN, which is fine for a
 // page that is fifteen minutes behind by design.
 const DATA = "https://raw.githubusercontent.com/campavao/hoenn-battle-royale/play-log/";
+// What a client chose (a version string) reaches this page through the relay's log, and
+// this page is the game's own origin: anything from the data is text, never markup.
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 const $ = id => document.getElementById(id);
 const day = iso => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -566,7 +569,7 @@ function drawPlay() {
             (s.migrated ? " <span>· host handed on</span>" : "") + "</td>" +
           '<td class="num ' + (s.matches ? "" : "zero") + '">' + s.matches + "</td>" +
           '<td class="num">' + (s.live ? "open" : mins(s.secs)) + "</td>" +
-          '<td class="ver">' + s.versions.map(v => "p" + v).join(", ") + "</td></tr>";
+          '<td class="ver">' + s.versions.map(v => "p" + esc(v)).join(", ") + "</td></tr>";
       }).join("") + "</tbody></table></div>" +
       (played.length > rows.length
         ? '<div class="more"><button type="button" id="moreRooms">show all ' + played.length + " rooms</button></div>"
@@ -592,7 +595,7 @@ function drawPlay() {
   const order = Object.keys(vers).sort((a, b) => Number(b) - Number(a));
   const most = Math.max.apply(null, order.map(v => vers[v]).concat([1]));
   $("versions").innerHTML = order.map(v =>
-    '<span class="v">p' + v + '</span><span class="bar"><i style="width:' + (vers[v] / most * 100) + '%"></i></span>' +
+    '<span class="v">p' + esc(v) + '</span><span class="bar"><i style="width:' + (vers[v] / most * 100) + '%"></i></span>' +
     '<span class="n">' + vers[v] + "</span>").join("");
   const latest = order[0];
   const behind = active.filter(i => Number(i.v) < Number(latest || 0)).length;
@@ -614,7 +617,7 @@ async function play() {
     drawPlay();
   } catch (e) {
     $("stamp").textContent = "no data";
-    $("playbox").innerHTML = '<div class="err">' + e.message + "</div>";
+    $("playbox").innerHTML = '<div class="err">' + esc(e.message) + "</div>";
   }
 }
 

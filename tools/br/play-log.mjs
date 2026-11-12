@@ -188,6 +188,9 @@ const who = (name, id) =>
 const TEST_NAMES = new Set(["E2E"]);
 const flag = (ev, ...names) => names.some(n => TEST_NAMES.has(n)) ? { ...ev, test: true } : ev;
 const hashId = id => createHash("sha256").update("hbr:" + id).digest("hex").slice(0, 8);
+// A version is the one free string a client puts in a logged line (stat, jank), and
+// play.json is public and drawn by /play.html: a build tag's own letters, or "?".
+const safeVersion = v => /^[\w.+-]{1,24}$/.test(v) ? v : "?";
 
 function census(text) {
   const out = {};
@@ -223,11 +226,11 @@ export function parseLine(message, fallbackAt) {
   }
 
   if ((m = body.match(/^stat ([0-9a-f]{1,32}) v(\S+) \| solo \+(\d+) \| since (\S+)$/)))
-    return { t, kind: "stat", install: hashId(m[1]), v: m[2], solo: Number(m[3]), since: m[4] };
+    return { t, kind: "stat", install: hashId(m[1]), v: safeVersion(m[2]), solo: Number(m[3]), since: m[4] };
 
   if ((m = body.match(/^jank ([A-Z0-9]+|-) v(\S+) \| watched (\d+)s \| snaps (\d+) cam (\d+) lost (\d+) \| stalls (\d+) longest (\d+)s \| checks (\d+) drifts (\d+)$/))) {
     const [snaps, cam, lost, stalls, longest, checks, drifts] = m.slice(4, 11).map(Number);
-    return { t, kind: "jank", code: m[1] === "-" ? null : m[1], v: m[2], watched: Number(m[3]),
+    return { t, kind: "jank", code: m[1] === "-" ? null : m[1], v: safeVersion(m[2]), watched: Number(m[3]),
              snaps, cam, lost, stalls, longest, checks, drifts };
   }
 

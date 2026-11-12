@@ -395,3 +395,12 @@ test("githubFiler finds filed notes by their id under the label, labels once, an
   const third = note("2026-10-19T12:00:00.000Z", "and another");
   assert.equal(await again.create(third), "#102");
 });
+
+test("a client's version is a build tag or \"?\", never markup for /play.html", () => {
+  const stat = parseLine("2026-11-11T15:00:00.000Z stat abc v<svg/onload=x> | solo +0 | since 2026-11-11", "x");
+  assert.equal(stat.v, "?");
+  const jank = parseLine("2026-11-11T15:00:00.000Z jank - v\"><b>hi | watched 5s | snaps 1 cam 1 lost 0 | stalls 0 longest 0s | checks 0 drifts 0", "x");
+  assert.equal(jank.v, "?");
+  assert.equal(parseLine("2026-11-11T15:00:00.000Z stat abc vworld-e0e5b5a6 | solo +0 | since 2026-11-11", "x").v, "world-e0e5b5a6");
+  assert.equal(parseLine("2026-11-11T15:00:00.000Z stat abc v3 | solo +2 | since 2026-11-11", "x").v, "3");
+});
