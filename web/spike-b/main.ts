@@ -5401,6 +5401,9 @@ async function boot(): Promise<void> {
       toBot: (id) => sock.toBot(id),
       list: () => sock.list(),
       relayUrl: url.replace(/\/world$/, ''),
+      // Cam, 11-11: a note names the real build, not "spike B": the sheet's line without
+      // its leading word (patch, shell, rom; "local build" from a dev page).
+      version: () => versionLine.replace(/^spike B · /, ''),
       // Out of the room for good: its link goes too, or the reload would walk back in.
       leave: () => { unlink(); location.reload(); },
       names: { species: speciesName, move: (id) => moveInfo(romTables, id)?.name },
