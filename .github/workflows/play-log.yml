@@ -13,10 +13,10 @@ name: play log
 # Needs one secret: RAILWAY_PROJECT_TOKEN (least privilege, one environment) or
 # RAILWAY_TOKEN. Kanto's relay_stats.yml is the parent of this file.
 #
-# Players' notes from the FEEDBACK screen (POK-428) are filed as Linear issues with a
-# second secret, LINEAR_API_KEY. Their words go to Linear only: this repo, its play-log
-# branch and this workflow's log are all public, so none of them ever print a note.
-# Without the key the notes wait in the relay's log.
+# Players' notes from the FEEDBACK screen (POK-428) are filed as issues on this repo,
+# labelled "player feedback", with the run's own token (Cam, 11-11: GitHub rather than
+# Linear). The issue is the one place a note goes: the play-log branch and this log never
+# print one. The screen tells the player the note is public.
 on:
   schedule:
     - cron: '*/15 * * * *'
@@ -28,6 +28,7 @@ concurrency:
 
 permissions:
   contents: write
+  issues: write # players' notes (POK-428)
 
 jobs:
   scrape:
@@ -59,7 +60,7 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
-          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
           PLAY_LOG_DIR: play-log
         run: |
           if [ -z "$RAILWAY_TOKEN$RAILWAY_PROJECT_TOKEN" ]; then

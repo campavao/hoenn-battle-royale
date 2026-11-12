@@ -3,7 +3,7 @@
 // It goes on a socket of its own, opened for the note and closed after the answer: the
 // menu's socket closes before a match starts, and solo play never opens one, so there is
 // no connection to borrow at the moment somebody wants to say something. The relay logs
-// the note as one line and play-log.yml files it in Linear. relay/server.js's `feedback`
+// the note as one line and play-log.yml files it as a public GitHub issue. relay/server.js's `feedback`
 // case is the other end, and cleans everything again: what this does is for the screen.
 import type { WebSocketFactory, WebSocketLike } from './relay';
 

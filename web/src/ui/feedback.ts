@@ -1,5 +1,5 @@
 // FEEDBACK (POK-428): a box to say what went wrong or what would be better, sent to the
-// relay and from there to Linear. The one drawn screen with free text in it, so the box
+// relay and from there to a public GitHub issue. The one drawn screen with free text in it, so the box
 // is a real <textarea> in the mirror (stage.ts `field`): a phone's own keyboard types
 // into it, and this draws what it holds in Emerald's font.
 import { FEEDBACK_MAX, cleanNote, type FeedbackResult } from '../net/feedback';
@@ -68,7 +68,9 @@ export function feedbackScreen(model: () => FeedbackModel): DrawnScreen {
       paintTitle(c, 'FEEDBACK', y);
       widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: 'FEEDBACK', id: 'feedback-title', cursor: null });
       y += 20;
-      const intro = 'A bug or an idea? Tell us here.';
+      // A note becomes a public issue on GitHub (play-log.yml), so the player is told before
+      // writing one. One row, so the box keeps its six above a phone's keyboard.
+      const intro = 'Bug or idea? Notes are public on GitHub.';
       const introRows = wrapText(intro, W - 8);
       introRows.forEach((row, i) => c.drawTextCentred(row, W / 2, y + i * ROW_H, TEXT_WHITE));
       widgets.push({ rect: { x: 0, y, w: W, h: introRows.length * ROW_H }, text: intro, cursor: null });
