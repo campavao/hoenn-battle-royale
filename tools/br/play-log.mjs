@@ -527,13 +527,20 @@ export function derive(events) {
         const spectator = ev.how === "spectate";
         // A rejoin (POK-284) is the same seat coming back, not another human.
         const was = s.members.get(ev.who);
-        s.members.set(ev.who, { spectator: was ? was.spectator : spectator, in: true });
+        // After a match has ended in the room, a fresh connection under a name that
+        // already sat in it is that player's page coming back, not somebody new:
+        // APYR7Z (11-12) logged its host's name four times in 15 s after the match
+        // and read as 7 humans for 3. Before that, two players can share a name (two
+        // CAMs) and are two.
+        const name = ev.who.split("#")[0];
+        const again = !was && s.ended && [...s.members.keys()].some((w) => w.split("#")[0] === name);
+        s.members.set(ev.who, { spectator: was ? was.spectator : spectator, in: true, again: was ? was.again : again });
         seat(ev.code, ev.who);
         if (ev.how !== "rejoin") s.joins.push({ t: ev.t, how: ev.how });
         if (spectator && !was) s.spectators += 1;
         else {
-          s.humans = [...s.members.values()].filter(m => !m.spectator).length;
-          const now = [...s.members.values()].filter(m => !m.spectator && m.in).length;
+          s.humans = [...s.members.values()].filter(m => !m.spectator && !m.again).length;
+          const now = [...s.members.values()].filter(m => !m.spectator && !m.again && m.in).length;
           s.together = Math.max(s.together, now);
         }
         lastSeat = { code: ev.code, t: ev.t };
@@ -594,6 +601,7 @@ export function derive(events) {
         if (!s) break;
         const last = s.played[s.played.length - 1];
         if (last && last.secs == null) last.secs = ev.secs;
+        s.ended = true;
         break;
       }
       case "close": {
@@ -641,7 +649,7 @@ export function derive(events) {
     settle(s);
     sessions.push(s);
   }
-  for (const s of sessions) { delete s.members; delete s.locks; delete s.opener; }
+  for (const s of sessions) { delete s.members; delete s.locks; delete s.opener; delete s.ended; }
   sessions.sort((a, b) => a.at < b.at ? 1 : -1);
 
   return {
