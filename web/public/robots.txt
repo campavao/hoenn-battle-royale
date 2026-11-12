@@ -1,0 +1,5 @@
+# The game is the page at /. /classic/, /spike/, /map/ and the painters say noindex themselves.
+User-agent: *
+Allow: /
+
+Sitemap: https://hoenn-battle-royale.vercel.app/sitemap.xml
