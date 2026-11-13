@@ -426,6 +426,19 @@ jobs:
           path: web/e2e-flaky
           if-no-files-found: error
 
+      # What a failed try showed, a retried pass's first try included: the page as text and its
+      # picture, so a flake is read from evidence and not guessed at. Never the traces next to
+      # them: a trace keeps the network's bodies, and the ROM is one.
+      - uses: actions/upload-artifact@v7
+        if: always() && env.RUN_E2E == 'true' && hashFiles('web/test-results/**/error-context.md') != ''
+        with:
+          name: e2e-failed-tries-${{ matrix.shard }}
+          path: |
+            web/test-results/**/error-context.md
+            web/test-results/**/test-failed-*.png
+          if-no-files-found: ignore
+          retention-days: 14
+
       - uses: actions/upload-artifact@v7
         if: always() && env.RUN_E2E == 'true'
         with:
