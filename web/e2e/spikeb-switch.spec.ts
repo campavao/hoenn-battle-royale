@@ -97,13 +97,27 @@ test('a hurt, badly poisoned lead switches out for each of the others, and back 
   await withTeam(page);
   await intoFight(page);
   expect(NAMES[await lead(page)]).toBe('ALAKAZAM');
-  for (let i = 0; i < 3; i++) await growl(page);
+  // GROWL until TOXIC lands, counting from the turn it does. Which turn that is, is the game's: the
+  // foe's first move was picked from its own learnset before TOXIC was written in, and the ROM plays
+  // whatever now sits in that slot (TOXIC, or a move with no PP); and TOXIC is 85% accurate, so a
+  // "missed!" is a turn with no poison.
+  let before = await out(page);
+  for (let turn = 1; !(before.status & STATUS1_TOXIC_POISON); turn++) {
+    expect(turn, 'TOXIC lands within 8 turns').toBeLessThanOrEqual(8);
+    await growl(page);
+    const now = await out(page);
+    const landed = !!(now.status & STATUS1_TOXIC_POISON);
+    console.log(`turn ${turn}: ${JSON.stringify(now)}${landed ? ', TOXIC landed' : ''}`);
+    // Gen 3's TOXIC: n/16 of max HP on the nth turn it has been poisoned (12, 24, ... of 200), the
+    // count back to 1 on a switch (battle_util.c ENDTURN_POISON).
+    expect(before.hp - now.hp, landed ? 'the turn TOXIC lands, 1/16' : 'no TOXIC yet, no hurt').toBe(landed ? 12 : 0);
+    before = now;
+  }
+  await growl(page);
   const hurt = await out(page);
-  console.log(`ALAKAZAM after three turns: ${JSON.stringify(hurt)}`);
+  console.log(`ALAKAZAM a turn after TOXIC: ${JSON.stringify(hurt)}`);
   expect(hurt.status & STATUS1_TOXIC_POISON, 'badly poisoned').toBeTruthy();
-  // Gen 3's TOXIC: n/16 of max HP on the nth turn it has been poisoned (TOXIC landed on the first,
-  // so 12 then 24 of 200), the count back to 1 on a switch (battle_util.c ENDTURN_POISON).
-  expect(hurt.hp, '1/16 then 2/16').toBe(200 - 12 - 24);
+  expect(before.hp - hurt.hp, 'the next turn, 2/16').toBe(24);
   let was = hurt.hp;
   for (const name of NAMES.slice(1, 3)) {
     await switchTo(page, name);

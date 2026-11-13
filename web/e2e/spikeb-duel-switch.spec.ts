@@ -133,13 +133,29 @@ test('in a link battle, a hurt and badly poisoned lead switches out for each of 
     const g = guestPlays(guest);
     try {
       expect(NAMES[(await mine(host)).slot]).toBe('ALAKAZAM');
-      for (let i = 0; i < 3; i++) await growl(host);
-      const hurt = await mine(host);
-      console.log(`ALAKAZAM after three turns: ${JSON.stringify(hurt)}`);
-      expect(hurt.status & STATUS1_TOXIC_POISON, 'badly poisoned').toBeTruthy();
+      // GROWL until TOXIC lands, counting from the turn it does: TOXIC is 85% accurate, so a
+      // "missed!" is a turn with no poison, and the count starts a turn later.
+      let before = await mine(host);
+      for (let turn = 1; !(before.status & STATUS1_TOXIC_POISON); turn++) {
+        expect(turn, 'TOXIC lands within 8 turns').toBeLessThanOrEqual(8);
+        await growl(host);
+        const now = await mine(host);
+        const landed = !!(now.status & STATUS1_TOXIC_POISON);
+        console.log(`turn ${turn}: ${JSON.stringify(now)}${landed ? ', TOXIC landed' : ''}`);
+        expect(before.hp - now.hp, landed ? 'the turn TOXIC lands, 1/16' : 'TOXIC missed, no hurt').toBe(landed ? 12 : 0);
+        before = now;
+      }
       // Gen 3's TOXIC: n/16 of max HP on the nth turn (12, 24, 36 of 200), the count back to 1 on a
       // switch (battle_util.c ENDTURN_POISON, STATUS1_TOXIC_COUNTER).
-      expect(hurt.hp, 'hit on turns 1-3 for 1/16, 2/16, 3/16').toBe(200 - 12 - 24 - 36);
+      for (const [n, tick] of [[2, 24], [3, 36]]) {
+        await growl(host);
+        const now = await mine(host);
+        expect(now.status & STATUS1_TOXIC_POISON, 'badly poisoned').toBeTruthy();
+        expect(before.hp - now.hp, `the turn after, ${n}/16`).toBe(tick);
+        before = now;
+      }
+      const hurt = before;
+      console.log(`ALAKAZAM three turns into TOXIC: ${JSON.stringify(hurt)}`);
       let was = hurt.hp;
       for (const name of NAMES.slice(1, 3)) {
         await switchTo(host, name);
