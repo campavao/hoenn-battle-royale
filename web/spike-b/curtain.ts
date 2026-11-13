@@ -142,15 +142,19 @@ export function curtainBehind(art: HTMLCanvasElement, parent: HTMLElement): () =
 /** A curtain coming down over a cut: `isDown` once nothing behind it can be seen. */
 export interface Cover { isDown(): boolean }
 
-/** Brings the curtain down, and raises it again once `ready` says what it covers is done. It goes
- *  by the clock, so a hidden tab's page (no frames) is not kept waiting on it. */
+/** Brings the curtain down, and raises it again once `ready` says what it covers is done. It is
+ *  down once it has been drawn all the way down, not when the clock says it should be: the clock
+ *  runs ahead of the frame the curtain was last drawn on, and what comes up under it on the
+ *  strength of the clock showed below its hem for a frame (the final ring's watched fight, 5 of 8
+ *  on a busy machine). A hidden tab's page (no frames) goes by the clock, so it is not kept
+ *  waiting on it. It holds a while after `ready`, however late that comes. */
 export function coverScreen(art: HTMLCanvasElement, parent: HTMLElement, ready: () => boolean, sound?: { fall?: () => void; rise?: () => void }): Cover {
   const { el, scale, rows } = hang(art, parent);
   el.style.transform = `translateY(${-rows * scale}px)`;
   const t0 = performance.now();
   const fallMs = (rows / RISE_PER_FRAME) * FRAME_MS;
   sound?.fall?.();
-  let upFrom = 0;
+  let upFrom = 0, down = false, readyAt = 0;
   const step = (now: number) => {
     if (!el.isConnected) return;
     const since = now - t0;
@@ -158,7 +162,9 @@ export function coverScreen(art: HTMLCanvasElement, parent: HTMLElement, ready: 
       el.style.transform = `translateY(${-(rows - Math.round(curtainFall(since, rows))) * scale}px)`;
     } else if (!upFrom) {
       el.style.transform = 'translateY(0)';
-      if ((ready() && since >= fallMs + COVER_HOLD_MS) || since >= COVER_MAX_MS) { upFrom = now; sound?.rise?.(); }
+      down = true;
+      if (!readyAt && ready()) readyAt = now;
+      if ((readyAt && now - readyAt >= COVER_HOLD_MS) || since >= COVER_MAX_MS) { upFrom = now; sound?.rise?.(); }
     } else {
       const up = curtainRise(now - upFrom, 0);
       if (up >= rows) { el.remove(); return; }
@@ -168,5 +174,5 @@ export function coverScreen(art: HTMLCanvasElement, parent: HTMLElement, ready: 
   };
   requestAnimationFrame(step);
   setTimeout(() => el.remove(), COVER_MAX_MS + fallMs * 2 + 1000);
-  return { isDown: () => performance.now() - t0 >= fallMs };
+  return { isDown: () => down || (document.hidden && performance.now() - t0 >= fallMs) };
 }
