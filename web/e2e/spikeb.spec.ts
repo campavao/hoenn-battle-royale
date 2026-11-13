@@ -83,28 +83,45 @@ test('a Safari catch, the drop on the fly map, and out of the Safari', async ({ 
   await page.locator('#lobby-rows button', { hasText: 'HOST A ROOM' }).click({ timeout: 90_000 });
   await setOption(page, 'room-safari', 'SAFARI 120s');
   await page.locator('#room-start').click();
-  type S = { link: { me: number; room: { actor(id: number): { m: { spot: { map: string; x: number; y: number } } } | undefined; ring(): { safari?: boolean } } }; rom?: { partyCount(): number }; battle: unknown; swapping: boolean };
+  type A = { m: { spot: { map: string; x: number; y: number } } };
+  type S = { link: { me: number; mine(): A | undefined; room: { actor(id: number): A | undefined; ring(): { safari?: boolean } } }; rom?: { partyCount(): number }; battle: unknown; swapping: boolean };
   const s = <T>(f: (s: S) => T) => page.evaluate((src) => new Function('s', `return (${src})(s)`)((window as unknown as { __spike: S }).__spike), f.toString()) as Promise<T>;
   await expect.poll(() => s((s) => !!s.link?.room.actor(s.link.me)), { timeout: 60_000 }).toBe(true);
   const spot = () => s((s) => { const p = s.link.room.actor(s.link.me)?.m.spot; return p ? `${p.map}:${p.x}:${p.y}` : ''; });
+  // Where my trainer is drawn (net.ts mine(): the relay's trainer and the keys it has not played yet),
+  // which is what a player watches. The relay's own copy is some frames behind: a key held until *it*
+  // moved was held past the step, the trainer walked a cell too many, and the rest of the route went
+  // off to one side of the spot: walks that ended a cell off it, two Safaris in six that caught nothing,
+  // and out at the buzzer the next route() read a trainer no longer on the map (`reading 'bot'`).
+  const drawn = () => s((s) => { const p = s.link.mine()?.m.spot; return p ? `${p.map}:${p.x}:${p.y}` : ''; });
 
   // To marked spots nobody has been through (a bot's step takes one, as a trainer's does) until
   // something is caught: A once every two seconds in a battle
-  // (BALL is where the cursor starts), never a spot spent on a ROM still booting.
+  // (BALL is where the cursor starts), never a spot spent on a ROM still booting. Until the buzzer
+  // (or the last ball) only: caught nothing by then, I am out and off the map (the rule), with no
+  // trainer left to walk.
   let caught = 0;
-  for (let tries = 0; tries < 12 && !caught; tries++) {
+  const inZone = () => s((s) => !!s.link.room.actor(s.link.me) && !!s.link.room.ring().safari);
+  for (let tries = 0; tries < 40 && !caught && (await inZone()); tries++) {
+    // The route is the relay's trainer's: stood still, the drawn one is the same.
+    await expect.poll(async () => (await drawn()) === (await spot()), { timeout: 3_000, intervals: [30] }).toBe(true).catch(() => undefined);
     const dirs = await route(page, '(p, room) => room.patchesOn(p.map).some((q) => q.x === p.x && q.y === p.y && !room.isTaken(q.key))');
+    if (!dirs && !(await inZone())) break;
     expect(dirs, 'a marked spot to walk to').not.toBeNull();
+    let blocked = false;
     for (const d of dirs!) {
-      const was = await spot();
+      const was = await drawn();
       await key(page, KEY[d], true);
-      // A bot standing on the next cell (they stand for up to 16 s in the Zone): round it,
-      // from a new route, as a player would.
-      const moved = await expect.poll(async () => (await spot()) !== was || !!(await s((s) => s.battle)), { timeout: 5_000, intervals: [30] }).toBe(true).then(() => true, () => false);
+      // A step answers the thumb within a frame or two. One that doesn't is the opening's calm, or a
+      // bot on the next cell (they stand for up to 16 s in the Zone): a new route from here, around
+      // it, as a player would, rather than a wait.
+      const moved = await expect.poll(async () => (await drawn()) !== was || !!(await s((s) => s.battle)), { timeout: 1_500, intervals: [30] }).toBe(true).then(() => true, () => false);
       await key(page, KEY[d], false);
+      blocked = !moved;
       if (!moved || (await s((s) => s.battle))) break;
     }
-    await expect.poll(() => s((s) => !!s.battle), { timeout: 5_000 }).toBe(true).catch(() => undefined);
+    // On the spot: the relay says whose it is, and a battle starts (or a bot had it first).
+    if (!blocked) await expect.poll(() => s((s) => !!s.battle), { timeout: 5_000 }).toBe(true).catch(() => undefined);
     for (let t = 0; t < 45 && (await s((s) => !!s.battle)); t++) {
       expect(await page.locator('#battle-note').textContent(), 'a real battle, not "still loading"').not.toContain('loading');
       await key(page, KEY.a, true); await page.waitForTimeout(150); await key(page, KEY.a, false);
