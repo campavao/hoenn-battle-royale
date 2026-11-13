@@ -993,7 +993,10 @@ test('setHp holds across a turn the page takes between battles (a straight ROM w
   const hp = (slot: number) => spike(page, new Function('s', `return s.rom.emu.read(s.art.sym('gPlayerParty') + ${slot} * 100 + 86, 16)`) as (s: any) => number);
   await spike(page, (s) => s.rom.setHp(2, 0));
   expect(await hp(2), 'written').toBe(0);
-  await spike(page, (s) => s.rom.fillParty());
+  // A turn the ROM takes on its own, a POTION into the bag: give lays the page's team back in first
+  // (giveNow's lay), so a write the page never knew of is gone after it. fillParty is no turn on a
+  // full team.
+  await spike(page, (s) => s.rom.give(13, 1));
   expect(await hp(2), 'after a rom turn').toBe(0);
   await ctx.close();
 });
