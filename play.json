@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-12T20:40:53.416Z",
+ "readAt": "2026-11-13T01:27:59.545Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -4523,18 +4523,25 @@
   {
    "id": "4d3cafd9",
    "first": "2026-11-11T23:03:03.128Z",
-   "last": "2026-11-12T18:43:01.285Z",
+   "last": "2026-11-13T01:06:22.606Z",
    "since": "2026-11-11",
    "versions": [
     "world-2a99e809",
-    "world-30b37163"
+    "world-30b37163",
+    "world-ef69bfdd"
    ],
-   "solo": 10,
-   "checkins": 20,
-   "v": "world-30b37163"
+   "solo": 11,
+   "checkins": 24,
+   "v": "world-ef69bfdd"
   }
  ],
  "solo": [
+  {
+   "t": "2026-11-12T22:20:49.960Z",
+   "install": "4d3cafd9",
+   "n": 1,
+   "v": "world-ef69bfdd"
+  },
   {
    "t": "2026-11-12T02:45:28.726Z",
    "install": "4d3cafd9",
@@ -4681,6 +4688,48 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-13T01:06:21.043Z",
+   "code": "CYV49W",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 174,
+   "drifts": 0,
+   "deploy": "bc508234"
+  },
+  {
+   "t": "2026-11-12T21:39:55.427Z",
+   "code": "BNY9X7",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 423,
+   "drifts": 0,
+   "deploy": "bc508234"
+  },
+  {
+   "t": "2026-11-12T21:31:50.379Z",
+   "code": "BNY9X7",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 1,
+   "checks": 1046,
+   "drifts": 0,
+   "deploy": "bc508234"
+  },
   {
    "t": "2026-11-12T20:27:21.347Z",
    "code": "Q926GX",
