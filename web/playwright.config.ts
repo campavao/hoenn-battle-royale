@@ -39,6 +39,8 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${VITE_PORT}`,
     trace: 'retain-on-failure',
+    // The picture of a failed try, for CI's e2e-failed-tries artifact (ci.yml).
+    screenshot: 'only-on-failure',
     // Cross-origin isolation (SharedArrayBuffer) comes from the dev server's own
     // COOP/COEP headers (vite.config.ts), not a Chromium flag.
   },
