@@ -3,7 +3,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { key } from './spike';
 import { romExists, romHashParam, romPath } from './symbols';
 
 test.skip(!romExists(), `no ROM at ${romPath()} -- set HBR_ROM or place pokeemerald.gba at the repo root, then run tools/br/dev-patch.sh`);
@@ -41,20 +40,7 @@ test('a gift-giver: the tag shows what they hold, they stay once it is taken, an
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await inMatch(page, 'solo&nobots&safari=0&fog=900&seed=7');
-  // A real team, out of the Day Care's chest (spikeb-flow.spec.ts withTeam): fillParty copies an
-  // empty slot when there is none, and the ROM counts that as nobody once the gift is in the bag.
-  await page.waitForTimeout(4000);
-  const tap = async (k: string) => { await key(page, k, true); await page.waitForTimeout(90); await key(page, k, false); };
-  await spike(page, (s) => { const a = s.link.room.actor(s.link.me); a.m = { ...a.m, spot: { map: 'MAP_ROUTE117_POKEMON_DAY_CARE', x: 5, y: 6 }, facing: 2 }; a.calm = 0; });
-  await page.waitForTimeout(800);
-  const party = () => spike(page, (s) => s.rom.partyCount() as number);
-  for (let i = 0; i < 40 && !(await party()); i++) {
-    if (await page.locator('.bm-slot').first().isVisible()) { await page.locator('.bm-slot').first().click(); await page.waitForTimeout(1500); }
-    else if (!(await spike(page, (s) => s.swapping))) { await tap('z'); await page.waitForTimeout(800); }
-    else await page.waitForTimeout(500);
-  }
-  expect(await party(), 'a mon out of the chest').toBeGreaterThan(0);
-  await expect.poll(() => spike(page, (s) => s.swapping), { timeout: 30_000 }).toBe(false);
+  await spike(page, (s) => s.rom.fillParty());
   const g = await toGiver(page);
   // What they hold, with its picture beside it.
   const tag = page.locator('#item-tag');
