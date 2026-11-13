@@ -78,6 +78,8 @@ const WILD_DONE = 3;
 const WILD_ASKED_SAFARI = 4;
 /** br_wild.h's BR_WILD_ASKED_TEACH: arm the teach for the item in `species`. */
 const WILD_ASKED_TEACH = 5;
+/** include/constants/species.h: fillParty's mon when there is no first to copy. */
+const SPECIES_ZIGZAGOON = 288;
 /** br_wild.h's BR_WILD_ASKED_FISH: a hooked POKeMON, `species` the rod (BR_WILD_FISH_SAFARI
  *  in the opening). */
 const WILD_ASKED_FISH = 7;
@@ -221,7 +223,10 @@ export interface RomBattles {
   /** The match's ring phase (1 the first, as the host numbers them): the level rung every
    *  battle from now on starts at. */
   setPhase(phase: number): void;
-  /** For the specs: a full team of copies of the first (a lift takes longest for six). */
+  /** For the specs: a full team of six (a lift takes longest for six), made by the ROM: the rest
+   *  are the first's species and level (a ZIGZAGOON with nobody), out of a bag on the ROM's own
+   *  swap screen, taken all at once. Never bytes copied: a copy of an empty slot was a team of
+   *  six to the page and of nobody to the ROM, once it counted again. */
   fillParty(): Promise<void>;
   /** For the specs: slot `slot`'s HP, on the team the page carries as well as in the ROM.
    *  A write straight into gPlayerParty between battles is lost to the next turn's `keep`. */
@@ -283,7 +288,7 @@ export interface RomBattles {
    *  Ours on the left, theirs on the right, picks moved across. Resolves, back on the
    *  field, with the team left in the bag. `onStart` is when the screen is up, `onEnd` when
    *  the ROM is back on its own field (the page's to cover from then on). */
-  team(mons: TeamRow[], name: string, onStart: () => void, onEnd?: () => void, pick?: { take: number; give?: number }): Promise<TeamRow[]>;
+  team(mons: TeamRow[], name: string, onStart: () => void, onEnd?: () => void, pick?: { take: number; give?: number; all?: boolean }): Promise<TeamRow[]>;
   /** The START menu's row `action` (start_menu.c's MENU_ACTION_*: POKeMON 1, BAG 2, the
    *  trainer card 4), opened the way the match's PARTY button opens it (touch.ts): START,
    *  the cursor walked to the row, A -- all on the hidden field, the page keeping the
@@ -1320,15 +1325,12 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       const l = (carried ?? start).levels;
       return l[4] | (l[5] << 8);
     },
-    fillParty() {
-      return inTurn(async () => {
-        const k = carried ?? kept();
-        const party = k.party.slice();
-        for (let i = k.count; i < 6; i++) party.set(party.subarray(0, 100), i * 100);
-        const next = { ...k, count: 6, party: party as typeof k.party };
-        keep(next);
-        carried = last = next;
-      });
+    async fillParty() {
+      const k = carried ?? kept();
+      if (k.count >= 6) return;
+      const lead = teamOf(k.party, k.count)[0] ?? { species: SPECIES_ZIGZAGOON, level: 10 };
+      const rest = Array.from({ length: 6 - k.count }, () => ({ species: lead.species, level: lead.level }));
+      await (this as RomBattles).team(rest, 'SPEC', () => {}, () => {}, { take: 0, all: true });
     },
     setHp(slot: number, hp: number) {
       return inTurn(async () => {
@@ -1454,7 +1456,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
           const at = sym('gBrSwapPick')!;
           hurryOn();
           emu.write(at, pick.give === undefined ? 0 : 1 << pick.give, 8);
-          emu.write(at + 1, 1 << pick.take, 8);
+          emu.write(at + 1, pick.all ? (1 << mons.length) - 1 : 1 << pick.take, 8);
           await until(emu, onField, 300);
           await frames(emu, 60);
           hurryOff();
