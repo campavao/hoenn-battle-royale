@@ -89,6 +89,8 @@ failure. The e2e is the new game's alone since 2026-11-01: `/classic/` takes blo
 hand until it goes. Run all of `npx vitest run` before a PR that changes shared code, and give
 a new spec a time in `web/scripts/e2e-shard.mjs`. A PR only needs the specs its change touches.
 
+A spec's shortcut may skip time, never make a state the game couldn't: a team from `rom.fillParty()` (the ROM makes it), HP from `rom.setHp()`, items from `rom.give()`. A raw `emu.write` to the party off a battle is undone by the page's own copy at the next ROM turn; in a battle it holds. A test made on an impossible state passes on it and hides the bug it was for (2026-11-12, fillParty copying an empty slot).
+
 ## How work ships (Cam, 2026-10-29)
 
 - No PR or review per change. Each workstream commits straight to its own work branch
