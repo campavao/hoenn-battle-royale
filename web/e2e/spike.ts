@@ -3,11 +3,13 @@
 import type { Page } from '@playwright/test';
 
 /** The walk to the nearest cell `goal` takes, over the room's own step function (bots
- *  walk the same one), as directions: 1 south, 2 north, 3 west, 4 east. */
+ *  walk the same one), as directions: 1 south, 2 north, 3 west, 4 east. None (null) with no
+ *  trainer of mine on the map: out, they are taken off it. */
 export async function route(page: Page, goal: string): Promise<number[] | null> {
   return page.evaluate((goal) => {
     const s = (window as unknown as { __spike: { link: { me: number; room: any } } }).__spike;
     const room = s.link.room, a = room.actor(s.link.me);
+    if (!a) return null;
     const ok = new Function('p', 'room', `return (${goal})(p, room)`) as (p: unknown, room: unknown) => boolean;
     const step = room.stepFor(a);
     const k = (p: { map: string; x: number; y: number }) => `${p.map}:${p.x}:${p.y}`;
