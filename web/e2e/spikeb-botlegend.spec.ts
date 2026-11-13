@@ -1,18 +1,31 @@
 // A bot at a legendary with the simulator off (the room as it runs live): the room hands the fight
 // to my page, whose hidden ROM fights it out and says how it went. A staged meeting on the real ROM:
 // the walk up to it is botloot.test.ts's.
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { romExists, romHashParam, romPath } from './symbols';
 
 test.skip(!romExists(), `no ROM at ${romPath()} -- set HBR_ROM or place pokeemerald.gba at the repo root, then run tools/br/dev-patch.sh`);
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/** The ROM up, the Safari over, and this page free to judge a bot's fight. Two seconds of Safari
+ *  is no time to catch anything, and whoever caught nothing is out at the buzzer (main.ts
+ *  safariFrame), half a second after the ROM is up: on the bench, which judges as a trainer in
+ *  the room does (Room.freeJudges). So not "my trainer in the room", which held only until that
+ *  curtain came down, and the START click lands on either side of it (about one try in three). */
+async function judgeReady(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const s = (window as any).__spike, room = s?.link?.room;
+    if (!s?.rom || !room || room.ring().safari) return false;
+    const me = room.actor(s.link.me);
+    return me ? !me.m.spot.map.startsWith('MAP_SAFARI_ZONE_') : room.bench.some((b: any) => b.id === s.link.me);
+  }, undefined, { timeout: 120_000 });
+}
+
 test('a hidden ROM fights a bot and a legendary, and the room hears who took it', async ({ page }) => {
   test.setTimeout(420_000);
   await page.goto(`/?rom=${romHashParam()}#solo&nosim&safari=2&fog=900&seed=7`);
   await page.locator('#intro-go').click({ timeout: 90_000 });
-  await page.waitForFunction(() => { const s = (window as any).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 120_000 });
-  await page.waitForFunction(() => !(window as any).__spike.link.room.ring().safari, undefined, { timeout: 60_000 });
+  await judgeReady(page);
   await page.waitForTimeout(3000);
   const staged = await page.evaluate(() => {
     const room = (window as any).__spike.link.room;
@@ -59,8 +72,7 @@ test('a hidden ROM fights what lives on a marked spot, and the spot is gone for 
   test.setTimeout(420_000);
   await page.goto(`/?rom=${romHashParam()}#solo&nosim&safari=2&fog=900&seed=7`);
   await page.locator('#intro-go').click({ timeout: 90_000 });
-  await page.waitForFunction(() => { const s = (window as any).__spike; return !!s?.rom && !!s.link?.room.actor(s.link.me); }, undefined, { timeout: 120_000 });
-  await page.waitForFunction(() => !(window as any).__spike.link.room.ring().safari, undefined, { timeout: 60_000 });
+  await judgeReady(page);
   await page.waitForTimeout(3000);
   const staged = await page.evaluate(() => {
     const room = (window as any).__spike.link.room;
