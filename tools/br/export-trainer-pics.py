@@ -2,7 +2,7 @@
 """Export every trainer front picture, for the trainers parked beside a battle (#18,
 web/src/ui/sides.ts).
 
-    python tools/br/export-trainer-pics.py   -> web/public/trainer-pics/<pic id>.png
+    python tools/br/export-trainer-pics.py   -> build/br-art/trainer-pics/<pic id>.png
 
 Cam's 2026-10-19 play-test: "We have the real estate to show the opposing trainer top
 right and yours bottom left ... When the trainer slides out, instead of disappearing off
@@ -24,7 +24,7 @@ import re
 from PIL import Image
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-OUT = os.path.join(ROOT, 'web', 'public', 'trainer-pics')
+OUT = os.path.join(ROOT, 'build', 'br-art', 'trainer-pics')
 
 
 def read(path):

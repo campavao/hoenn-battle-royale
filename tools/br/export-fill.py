@@ -1032,7 +1032,7 @@ def preview(plane, x0, y0, W, H, out, entries, a):
                 mid = e[2 + (((y + y0) & 1) << 1 | ((x + x0) & 1))]
             img.paste(tile(ref, mid), ((x - cx0) * 16 // S, (y - cy0) * 16 // S))
     for i, (gx, gy) in plane.at.items():
-        f = os.path.join(ROOT, 'web', 'public', 'field-maps', i + '.png')
+        f = os.path.join(ROOT, 'build', 'br-art', 'field-maps', i + '.png')
         if os.path.exists(f):
             im = Image.open(f).convert('RGB')
             im = im.resize((im.width // S, im.height // S), Image.BOX)

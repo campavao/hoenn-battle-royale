@@ -13,6 +13,7 @@
 // box says the same three things, so while this is up the page sets gBrHud.noCorner and
 // the corner comes off.
 import uiData from '../data/ui.json';
+import { onRomPictures, romPicture } from '../art/pictures';
 import regionData from '../data/regionmap.json';
 import type { WorldMap } from '../bots/world';
 import { decodeGen3 } from '../text/gen3';
@@ -358,17 +359,22 @@ function drawChip(c: EmeraldCanvas, name: string, ready: boolean, y: number): vo
 
 // ---- drawing ---------------------------------------------------------------------------
 
-const pictures = new Map<string, HTMLImageElement>();
-export function picture(src: string, onLoad: () => void): HTMLImageElement {
-  let img = pictures.get(src);
-  if (!img) {
-    img = new Image();
-    img.decoding = 'async';
-    img.src = src;
-    pictures.set(src, img);
+/** Who drew without a picture, by its path: told once it can be had. */
+const waiting = new Map<string, Set<() => void>>();
+onRomPictures(() => {
+  for (const [src, calls] of waiting) {
+    if (romPicture(src) === undefined) continue;
+    waiting.delete(src);
+    for (const f of calls) f();
   }
-  if (!img.complete) img.addEventListener('load', onLoad, { once: true });
-  return img;
+});
+
+/** One of the ROM's pictures (art/pictures.ts) by its path, null until there is one; `onLoad`
+ *  once it can be had. */
+export function picture(src: string, onLoad: () => void): HTMLCanvasElement | null {
+  const cut = romPicture(src);
+  if (cut === undefined) (waiting.get(src) ?? waiting.set(src, new Set()).get(src)!).add(onLoad);
+  return cut ?? null;
 }
 
 const ICONS = uiData.itemIcons as { cell: number; cols: number };
@@ -465,7 +471,7 @@ export function drawFitted(c: EmeraldCanvas, id: string, src: CanvasImageSource,
 /** An item's icon, fitted. */
 export function drawItemFitted(c: EmeraldCanvas, item: number, cx: number, cy: number, box: number, redo: () => void): void {
   const img = picture('/ui/items.png', redo);
-  if (!img.complete || img.naturalWidth === 0) return;
+  if (!img) return;
   const n = ICONS.cell;
   drawFitted(c, `item${item}`, img, (item % ICONS.cols) * n, Math.floor(item / ICONS.cols) * n, n, n, cx, cy, box);
 }
@@ -474,7 +480,7 @@ export function drawItemFitted(c: EmeraldCanvas, item: number, cx: number, cy: n
  *  picture has loaded. */
 export function itemCut(item: number): HTMLCanvasElement | null {
   const img = picture('/ui/items.png', () => {});
-  if (!img.complete || img.naturalWidth === 0) return null;
+  if (!img) return null;
   const n = ICONS.cell;
   const b = opaqueBox(`item${item}`, img, (item % ICONS.cols) * n, Math.floor(item / ICONS.cols) * n, n, n);
   const cut = document.createElement('canvas');
@@ -619,15 +625,13 @@ export class PhoneHud {
       // The name only on its plate: a theme not loaded yet drew the bare name for a few
       // frames on landing in Slateport (Cam's 10-23 video, HBR-60). The load redraws.
       const plate = picture(`/ui/popup-${v.theme}.png`, redo);
-      if (!plate.complete || plate.naturalWidth === 0) return;
+      if (!plate) return;
       c.drawPicture(plate, 0, 0, SIGN_W, SIGN_H, 0, 0);
       // The plate's own border is 3 pixels a side: inside it, LITTLEROOT TOWN fits whole
       // (HBR-111); only DESERT UNDERPASS is cut.
       const name = fitText(v.place, SIGN_W - SIGN_PAD);
       c.drawTextCentred(name, SIGN_W / 2, 13, TEXT_DARK);
     });
-    // Every plate up front, so a new section's sign is whole on its first frame.
-    for (const theme of new Set(['wood', ...Object.values(THEMES)])) picture(`/ui/popup-${theme}.png`, () => undefined);
     const mini = deps.mini;
     this.fog = new Win(box('hud-fog'), mini ? MINI_W : FOG_W, mini ? miniHeight(1) : fogHeight(3), (c) => {
       const v = this.view;

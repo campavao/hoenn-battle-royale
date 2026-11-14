@@ -28,6 +28,8 @@ const LAYER_COVERED = 1;
 const PAL_TAG_NONE = 0x11ff;
 /** The species ids the ROM's tables have a row for (constants/species.h, one past the last). */
 const NUM_SPECIES = 412;
+/** The pictures' tables run past it: the EGG (412), then Unown's other letters to UNOWN_QMARK. */
+const LAST_PIC = NUM_SPECIES + 27;
 
 /** A metatile with animated tiles in it (tileset_anims.c), on `cells` (y * width + x) of a
  *  map: its looks side by side in `sheet`, 16 px each, and which one is on show at each
@@ -658,9 +660,21 @@ export class RomArt {
    *  patch whose symbols predate this. */
   monPic(species: number, back: boolean, shiny = false): HTMLCanvasElement | null {
     const pics = back ? 'gMonBackPicTable' : 'gMonFrontPicTable', pals = shiny ? 'gMonShinyPaletteTable' : 'gMonPaletteTable';
-    if (!this.have(pics, pals) || !(species > 0 && species < NUM_SPECIES)) return null;
+    if (!this.have(pics, pals) || !(species > 0 && species <= LAST_PIC)) return null;
     return this.once(`mon:${species}:${back}:${shiny}`, () => {
       const data = this.u32(this.sym(pics) + species * 8), pal = this.u32(this.sym(pals) + species * 8);
+      if (data < ROM || pal < ROM) return null;
+      return this.picture(this.lz(data), 64, 64, this.words(this.lz(pal), 16));
+    });
+  }
+
+  /** A species' still front picture (gMonStillFrontPicTable, 64 x 64: the Pokédex's, not the
+   *  battle's first frame), in its palette or the shiny one. */
+  monStill(species: number, shiny: boolean): HTMLCanvasElement | null {
+    const pals = shiny ? 'gMonShinyPaletteTable' : 'gMonPaletteTable';
+    if (!this.have('gMonStillFrontPicTable', pals) || !(species > 0 && species <= LAST_PIC)) return null;
+    return this.once(`still:${species}:${shiny}`, () => {
+      const data = this.u32(this.sym('gMonStillFrontPicTable') + species * 8), pal = this.u32(this.sym(pals) + species * 8);
       if (data < ROM || pal < ROM) return null;
       return this.picture(this.lz(data), 64, 64, this.words(this.lz(pal), 16));
     });
@@ -939,6 +953,210 @@ export class RomArt {
     const tiles = this.sym('gWeatherFogHorizontalTiles'), pal = this.sym('gFogPalette');
     if (!Number.isFinite(tiles) || !Number.isFinite(pal)) return null;
     return this.sheet([tiles - ROM], 64, 64, this.palette(pal));
+  }
+
+  // ---- the page's windows outside the game (romcuts.ts), each laid out as the PNG the site
+  // used to ship under its path (tools/br/export-ui.py), so web/e2e/art.spec.ts can hold the
+  // cut to that file's hash. Null on a patch whose symbols do not name what it needs.
+
+  /** `cols` x `rows` 4bpp tiles from `bytes` at `from`, row by row, in `pal` (packed RGBA);
+   *  colour 0 clear unless `solid`. */
+  private tiles(bytes: Uint8Array, from: number, cols: number, rows: number, pal: number[], solid = false): HTMLCanvasElement {
+    const cv = document.createElement('canvas');
+    cv.width = cols * TILE;
+    cv.height = rows * TILE;
+    const ctx = cv.getContext('2d')!;
+    const id = ctx.createImageData(cv.width, cv.height);
+    const px = new Uint32Array(id.data.buffer);
+    for (let y = 0; y < cv.height; y++) {
+      for (let x = 0; x < cv.width; x++) {
+        const b = bytes[from + ((y >> 3) * cols + (x >> 3)) * 32 + (y & 7) * 4 + ((x & 7) >> 1)];
+        const c = (b >> ((x & 1) * 4)) & 0xf;
+        if (c || solid) px[y * cv.width + x] = pal[c];
+      }
+    }
+    ctx.putImageData(id, 0, 0);
+    return cv;
+  }
+
+  /** `count` colours of the 15-bit words at ROM address `at`. */
+  private colours(at: number, count: number): number[] {
+    const out: number[] = [];
+    for (let c = 0; c < count; c++) out.push(rgba(this.u16(at + c * 2)));
+    return out;
+  }
+
+  /** The normal font as a mask (ui/font-normal.png): the 512 glyphs, 16 x 16 a cell, 16 to a row;
+   *  red is the glyph's colour index (1 the letter, 2 its shadow, 3 the cell), alpha where set. */
+  fontMask(): HTMLCanvasElement | null {
+    if (!this.have('gFontNormalLatinGlyphs')) return null;
+    const glyphs = this.sym('gFontNormalLatinGlyphs') - ROM;
+    const cv = document.createElement('canvas');
+    cv.width = 256;
+    cv.height = 512;
+    const ctx = cv.getContext('2d')!;
+    const id = ctx.createImageData(256, 512);
+    const px = new Uint32Array(id.data.buffer);
+    for (let g = 0; g < 512; g++) {
+      const gx = (g & 15) * 16, gy = (g >> 4) * 16;
+      [[0, 0, 0], [8, 0, 16], [0, 8, 32], [8, 8, 48]].forEach(([ox, oy, off]) => {
+        for (let y = 0; y < 8; y++) {
+          const v = this.dv.getUint16(glyphs + g * 64 + off + y * 2, true);
+          for (let x = 0; x < 8; x++) {
+            const c = (v >> (2 * (7 - x))) & 3;
+            if (c) px[(gy + oy + y) * 256 + gx + ox + x] = (0xff << 24) | c;
+          }
+        }
+      });
+    }
+    ctx.putImageData(id, 0, 0);
+    return cv;
+  }
+
+  /** The standard window frame (ui/frame-1.png): 3 x 3 tiles of gTextWindowFrame1. */
+  windowFrame(): HTMLCanvasElement | null {
+    if (!this.have('gTextWindowFrame1_Gfx', 'gTextWindowFrame1_Pal')) return null;
+    return this.tiles(this.rom, this.sym('gTextWindowFrame1_Gfx') - ROM, 3, 3, this.colours(this.sym('gTextWindowFrame1_Pal'), 16));
+  }
+
+  /** The dialogue box's tiles (ui/message-box.png): 7 x 2 of gMessageBox_Gfx. */
+  messageBox(): HTMLCanvasElement | null {
+    if (!this.have('gMessageBox_Gfx', 'gMessageBox_Pal')) return null;
+    return this.tiles(this.rom, this.sym('gMessageBox_Gfx') - ROM, 7, 2, this.colours(this.sym('gMessageBox_Pal'), 16));
+  }
+
+  /** The map-name sign of a theme (MAPPOPUP_THEME_*, ui/popup-<theme>.png), 96 x 40: its 80 x 24
+   *  body inside a tile of outline all round, as map_name_popup.c's DrawMapNamePopUpFrame puts
+   *  them, in the palette LoadMapNamePopUpWindowBg loads. */
+  mapPopup(theme: number): HTMLCanvasElement | null {
+    const names = ['sMapPopUp_Table', 'sMapPopUp_OutlineTable', 'sMapPopUp_PaletteTable', 'sMapPopUp_Palette_Underwater'];
+    if (!this.have(...names) || theme < 0 || theme > 5) return null;
+    const UNDERWATER = 4, SIZE = 960;
+    const pal = this.colours(theme === UNDERWATER ? this.sym(names[3]) : this.sym(names[2]) + theme * 32, 16);
+    const outline = this.sym(names[1]) + theme * SIZE - ROM;
+    const cv = document.createElement('canvas');
+    cv.width = 96;
+    cv.height = 40;
+    const ctx = cv.getContext('2d')!;
+    const put = (t: number, x: number, y: number) => ctx.drawImage(this.tiles(this.rom, outline + t * 32, 1, 1, pal), x, y);
+    for (let i = 0; i < 12; i++) {
+      put(i, i * 8, 0);
+      put(18 + i, i * 8, 32);
+    }
+    for (let r = 0; r < 3; r++) {
+      put(12 + r * 2, 0, 8 + r * 8);
+      put(13 + r * 2, 88, 8 + r * 8);
+    }
+    ctx.drawImage(this.tiles(this.rom, this.sym(names[0]) + theme * SIZE - ROM, 10, 3, pal, true), 8, 8);
+    return cv;
+  }
+
+  /** The first `count` items' icons (ui/items.png), 24 x 24 a cell, 16 to a row by item id, each
+   *  in its own palette (gItemIconTable: the tiles and the palette, both compressed). */
+  itemIcons(count: number): HTMLCanvasElement | null {
+    if (!this.have('gItemIconTable')) return null;
+    const CELL = 24, COLS = 16;
+    const cv = document.createElement('canvas');
+    cv.width = COLS * CELL;
+    cv.height = Math.ceil(count / COLS) * CELL;
+    const ctx = cv.getContext('2d')!;
+    const table = this.sym('gItemIconTable');
+    for (let id = 0; id < count; id++) {
+      const gfx = this.u32(table + id * 8), palAt = this.u32(table + id * 8 + 4);
+      if (gfx < ROM || palAt < ROM) continue;
+      const tiles = this.lz(gfx), pal = this.lz(palAt);
+      const side = Math.round(Math.sqrt(tiles.length / 32));
+      const colours: number[] = [];
+      for (let c = 0; c < 16; c++) colours.push(rgba(pal[c * 2] | (pal[c * 2 + 1] << 8)));
+      ctx.drawImage(this.tiles(tiles, 0, side, side, colours), 0, 0, CELL, CELL, (id % COLS) * CELL, Math.floor(id / COLS) * CELL, CELL, CELL);
+    }
+    return cv;
+  }
+
+  /** The summary screen's type icons (ui/types.png), 32 x 16, one per row by type id: gMoveTypes_Gfx
+   *  in the one of its three palettes sMoveTypeToOamPaletteNum gives each (OBJ palette 13 on). */
+  typeIcons(): HTMLCanvasElement | null {
+    if (!this.have('gMoveTypes_Gfx', 'gMoveTypes_Pal', 'sMoveTypeToOamPaletteNum')) return null;
+    const TYPES = 18;
+    const tiles = this.lz(this.sym('gMoveTypes_Gfx')), pal = this.lz(this.sym('gMoveTypes_Pal'));
+    const cv = document.createElement('canvas');
+    cv.width = 32;
+    cv.height = TYPES * 16;
+    const ctx = cv.getContext('2d')!;
+    for (let t = 0; t < TYPES; t++) {
+      const bank = this.u8(this.sym('sMoveTypeToOamPaletteNum') + t) - 13;
+      const colours: number[] = [];
+      for (let c = 0; c < 16; c++) colours.push(rgba(pal[(bank * 16 + c) * 2] | (pal[(bank * 16 + c) * 2 + 1] << 8)));
+      ctx.drawImage(this.tiles(tiles, t * 8 * 32, 4, 2, colours), 0, t * 16);
+    }
+    return cv;
+  }
+
+  /** The TRAINER CARD's front with nothing written on it (ui/trainer-card.png), 240 x 160 a row:
+   *  each star count, 0..4, as a boy's then a girl's. trainer_card.c lays the card's bg tilemap
+   *  under its front one, both in gHoennTrainerCard_Gfx, in sHoennTrainerCardPals[stars] with the
+   *  girl's palette over palette 1, on palette 0's colour 0. */
+  trainerCards(): HTMLCanvasElement | null {
+    const names = ['gHoennTrainerCard_Gfx', 'gHoennTrainerCardBg_Tilemap', 'gHoennTrainerCardFront_Tilemap', 'sHoennTrainerCardPals', 'sHoennTrainerCardFemaleBg_Pal'];
+    if (!this.have(...names)) return null;
+    const gfx = this.lz(this.sym(names[0])), maps = [this.lz(this.sym(names[1])), this.lz(this.sym(names[2]))];
+    const W = 240, H = 160;
+    const cv = document.createElement('canvas');
+    cv.width = W;
+    cv.height = H * 10;
+    const ctx = cv.getContext('2d')!;
+    const id = ctx.createImageData(W, H * 10);
+    const px = new Uint32Array(id.data.buffer);
+    for (let stars = 0; stars < 5; stars++) {
+      for (let girl = 0; girl < 2; girl++) {
+        const pal = this.colours(this.u32(this.sym(names[3]) + stars * 4), 48);
+        if (girl) pal.splice(16, 16, ...this.colours(this.sym(names[4]), 16));
+        const top = (stars * 2 + girl) * H;
+        px.fill(pal[0], top * W, (top + H) * W);
+        for (const map of maps) {
+          for (let i = 0; i < 30 * 20; i++) {
+            const e = map[i * 2] | (map[i * 2 + 1] << 8);
+            const t = e & 0x3ff, hf = e & 0x400, vf = e & 0x800, bank = e >> 12;
+            for (let y = 0; y < TILE; y++) {
+              for (let x = 0; x < TILE; x++) {
+                const sx = hf ? 7 - x : x, sy = vf ? 7 - y : y;
+                const c = (gfx[t * 32 + sy * 4 + (sx >> 1)] >> ((sx & 1) * 4)) & 0xf;
+                if (c) px[(top + Math.floor(i / 30) * TILE + y) * W + (i % 30) * TILE + x] = pal[bank * 16 + c];
+              }
+            }
+          }
+        }
+      }
+    }
+    ctx.putImageData(id, 0, 0);
+    return cv;
+  }
+
+  /** The card's eight badges, 16 x 16, then its star, 8 x 8 (ui/card-badges.png): the badges in
+   *  their own palette, the star tile 143 of the card's tiles in sTrainerCardStar_Pal. */
+  cardBadges(): HTMLCanvasElement | null {
+    const names = ['sHoennTrainerCardBadges_Gfx', 'sHoennTrainerCardBadges_Pal', 'gHoennTrainerCard_Gfx', 'sTrainerCardStar_Pal'];
+    if (!this.have(...names)) return null;
+    const STAR_TILE = 143;
+    const cv = document.createElement('canvas');
+    cv.width = 136;
+    cv.height = 16;
+    const ctx = cv.getContext('2d')!;
+    ctx.drawImage(this.tiles(this.lz(this.sym(names[0])), 0, 16, 2, this.colours(this.sym(names[1]), 16)), 0, 0);
+    ctx.drawImage(this.tiles(this.lz(this.sym(names[2])), STAR_TILE * 32, 1, 1, this.colours(this.sym(names[3]), 16)), 128, 0);
+    return cv;
+  }
+
+  /** Trainer front pictures side by side, 64 x 64 each (ui/trainer-pics.png: a skin's portrait). */
+  trainerStrip(pics: readonly number[]): HTMLCanvasElement | null {
+    const cuts = pics.map((p) => this.trainerPic(p, false));
+    if (cuts.some((c) => !c)) return null;
+    const cv = document.createElement('canvas');
+    cv.width = 64 * pics.length;
+    cv.height = 64;
+    const ctx = cv.getContext('2d')!;
+    cuts.forEach((c, i) => ctx.drawImage(c!, i * 64, 0));
+    return cv;
   }
 
   /** `frames` of an object's SpriteFrameImage table (8 bytes each: its data, its size). */

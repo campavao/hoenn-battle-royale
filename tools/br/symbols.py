@@ -183,6 +183,25 @@ ENGINE_SYMBOLS = [
     "gBattleInterface_BallStatusBarPal", "gBattleInterface_BallDisplayPal",
     "gFontSmallLatinGlyphs", "gFontSmallLatinGlyphWidths", "gFontNormalLatinGlyphs", "gFontNormalLatinGlyphWidths", "gSpeciesNames",
 ]
+# The pictures the page draws outside the game, cut from the player's ROM rather than shipped
+# (web/spike-b/romcuts.ts): the window frame, the message box and the font's widths and
+# glyphs (above), the item icons, the type icons, and the TRAINER CARD.
+ENGINE_SYMBOLS += [
+    "gTextWindowFrame1_Gfx", "gTextWindowFrame1_Pal", "gMessageBox_Gfx", "gMessageBox_Pal",
+    "gItemIconTable", "gMoveTypes_Gfx", "gMoveTypes_Pal", "gMonStillFrontPicTable",
+    "gHoennTrainerCard_Gfx", "gHoennTrainerCardBg_Tilemap", "gHoennTrainerCardFront_Tilemap",
+]
+# ...and the ones only their own file names (`static`), which the link map does not list: these
+# come from the ELF's symbol table beside it, each a name no other file uses.
+ART_STATICS = [
+    # The map-name sign (map_name_popup.c).
+    "sMapPopUp_Table", "sMapPopUp_OutlineTable", "sMapPopUp_PaletteTable", "sMapPopUp_Palette_Underwater",
+    # Which of the three type palettes each type wears (pokemon_summary_screen.c).
+    "sMoveTypeToOamPaletteNum",
+    # The card's palette for each star count, a girl's, its badges and its star (trainer_card.c).
+    "sHoennTrainerCardPals", "sHoennTrainerCardFemaleBg_Pal", "sHoennTrainerCardBadges_Gfx",
+    "sHoennTrainerCardBadges_Pal", "sTrainerCardStar_Pal",
+]
 for _env in ("TallGrass", "LongGrass", "Sand", "Underwater", "Water", "PondWater", "Rock", "Cave", "Building", "Stadium"):
     ENGINE_SYMBOLS += ["gBattleEnvironmentTiles_" + _env, "gBattleEnvironmentTilemap_" + _env]
 for _env in ("TallGrass", "LongGrass", "Sand", "Underwater", "Water", "PondWater", "Rock", "Cave", "Plain", "Building", "Frontier", "BuildingGym", "BuildingLeader"):
@@ -208,6 +227,33 @@ def parse(path):
     return out
 
 
+def elf_statics(path, names):
+    """`names` -> address, from the ELF32's symbol table (local symbols too); a name more
+    than one file defines is left out, as it cannot be told apart."""
+    import struct
+
+    want = set(names)
+    seen = {}
+    with open(path, "rb") as f:
+        elf = f.read()
+    if elf[:4] != b"\x7fELF" or elf[4] != 1:
+        return {}
+    shoff, = struct.unpack_from("<I", elf, 0x20)
+    shentsize, shnum = struct.unpack_from("<HH", elf, 0x2E)
+    sections = [struct.unpack_from("<IIIIIIIIII", elf, shoff + i * shentsize) for i in range(shnum)]
+    for sh in sections:
+        if sh[1] != 2:  # SHT_SYMTAB
+            continue
+        strtab = sections[sh[6]]
+        for at in range(sh[4], sh[4] + sh[5], 16):
+            name_off, value = struct.unpack_from("<II", elf, at)
+            start = strtab[4] + name_off
+            name = elf[start:elf.index(b"\0", start)].decode("ascii", "replace")
+            if name in want:
+                seen.setdefault(name, set()).add(value)
+    return {n: next(iter(v)) for n, v in seen.items() if len(v) == 1}
+
+
 def rom_sha1(path):
     with open(path, "rb") as f:
         return hashlib.sha1(f.read()).hexdigest()
@@ -217,7 +263,13 @@ def main():
     if len(sys.argv) not in (2, 3):
         sys.exit(__doc__)
     syms = parse(sys.argv[1])
-    missing = [s for s in ENGINE_SYMBOLS if s not in syms]
+    elf = os.path.splitext(sys.argv[1])[0] + ".elf"
+    if os.path.isfile(elf):
+        for name, addr in elf_statics(elf, ART_STATICS).items():
+            syms.setdefault(name, addr)
+    else:
+        print("warning: no %s: the statics the page cuts pictures from are left out" % elf, file=sys.stderr)
+    missing = [s for s in ENGINE_SYMBOLS + ART_STATICS if s not in syms]
     if missing:
         print("warning: not in map: " + " ".join(missing), file=sys.stderr)
     out = {k: "0x%08X" % v for k, v in sorted(syms.items())}

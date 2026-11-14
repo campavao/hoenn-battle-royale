@@ -86,7 +86,7 @@ export async function checkWalk(page, { every = 40, out = null, log = console.lo
 
   await page.evaluate(installStill, {
     sym: { gSaveBlock1Ptr: sym.gSaveBlock1Ptr, gSaveBlock2Ptr: sym.gSaveBlock2Ptr, gTasks: sym.gTasks, gFieldCamera: sym.gFieldCamera, gMain: sym.gMain, CB2_Overworld: sym.CB2_Overworld },
-    stills: { [RUSTBORO.ref]: `/field-maps/${RUSTBORO.id}.png` },
+    stills: { [RUSTBORO.ref]: `/br-art/field-maps/${RUSTBORO.id}.png` },
     every,
     ...STILL,
   });

@@ -65,6 +65,8 @@ import { GIFTS } from '../src/match/gifts';
 import { GOLD } from '../src/match/events';
 import { FLYING, STORIES } from '../src/match/story';
 import { RomArt, type MapAnim } from './romart';
+import { romCutter } from './romcuts';
+import { romPicture, romPicturesChanged, useRomPictures } from '../src/art/pictures';
 import { AskBox } from './askbox';
 import { ANIM_COUNTER_MAX } from '../src/tile-anims';
 import { JankMeter } from './jank';
@@ -793,14 +795,14 @@ function iconOn(map: string, x: number, y: number): HTMLCanvasElement | null {
   const mons = s ? s.bag.mons ?? [] : [];
   return mons.length && !s!.bag.items.length && !s!.bag.money ? monIconOf(mons[0].species) : null;
 }
-/** An item's picture off the sheet the BAG draws from, as a canvas the tag can hold on to. */
-const itemSheet = new Image();
-itemSheet.src = '/ui/items.png';
+/** An item's picture off the sheet the BAG draws from (cut from the ROM, art/pictures.ts), as a
+ *  canvas the tag can hold on to. */
 const itemIcons = new Map<number, HTMLCanvasElement>();
 function itemIconOf(item: number): HTMLCanvasElement | null {
   let c = itemIcons.get(item);
   if (c) return c;
-  if (!itemSheet.complete || !itemSheet.naturalWidth) return null;
+  const itemSheet = romPicture('/ui/items.png');
+  if (!itemSheet) return null;
   const { cell, cols } = uiData.itemIcons as { cell: number; cols: number };
   c = document.createElement('canvas');
   c.width = c.height = cell;
@@ -5303,7 +5305,7 @@ async function boot(): Promise<void> {
   heights = new Heights((map, x, y) => hoenn.world.height(map, x, y));
   placed = layout(hoenn.maps);
   // Past the maps' edges (worldfill.ts). Until it is here, or if it never comes, the border as ever.
-  void import('./data/world-fill.json').then((d) => { worldFill = new WorldFill(d.default as unknown as FillFile); }).catch((e) => console.warn('[world-fill]', e));
+  void import('./data/world-fill.json').then((d) => { worldFill = new WorldFill(d.default as unknown as FillFile); romPicturesChanged(); }).catch((e) => console.warn('[world-fill]', e));
   let files: Awaited<ReturnType<typeof loadRom>>;
   try {
     // The ROM picker is the player's to answer: the loading screen steps aside for it.
@@ -5335,6 +5337,8 @@ async function boot(): Promise<void> {
   wireWatchdog(files);
   const t0 = performance.now();
   art = new RomArt(files.rom, files.sym);
+  // Every picture the page draws outside the game, cut from this ROM (src/art/pictures.ts).
+  useRomPictures(romCutter(art, { mapRef: (id) => hoenn.refOf(id), fill: () => worldFill }));
   // `#battleview`: the page-drawn battle (battleview.ts) on a canned log, no match.
   if (/^#battleview(&|$)/.test(location.hash)) { void import('./battleview-dev').then((m) => m.openDevBattleView(art!, location.hash)); return; }
   romTables ={ bytes: files.rom, sym: (n) => { const a = files.sym(n); return Number.isNaN(a) ? undefined : a; } };

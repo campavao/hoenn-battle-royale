@@ -27,7 +27,7 @@
 //     does not send it again.
 //   - `/emu/*`: the core, a js/wasm pair that must match. Network first, so both come
 //     from the same deploy: the HTTP cache makes that a 304 when nothing moved.
-//   - anything else of ours (map stills, sprites, /ui/, icons): a fixed name, so what it
+//   - anything else of ours (icons, the manifest): a fixed name, so what it
 //     holds can change under it. The server's copy if it answers in a moment, the kept one
 //     if it is slow, offline or refuses; the store is freshened either way. Served from the
 //     cache and freshened behind it, a release reached a player's second look (Cam, 11-04:
@@ -43,6 +43,9 @@
 const CACHE = 'hbr-v2'; // v1 kept a patch per URL for ever; activate drops it
 
 const VERSION_PATH = '/patch/br-version.json';
+
+/** Where the game's pictures were served from until 2026-11-14 (src/art/pictures.ts). */
+const ART = /^\/(field-maps|field-sprites|mon-pics|trainer-pics|ui)\//;
 
 /** Every lookup ignores Vary. A server may answer our own static files with `Vary:
  *  Origin` (vite preview does), and the first visit's files come through here as the
@@ -90,6 +93,12 @@ self.addEventListener('activate', (event) => {
     (async () => {
       for (const name of await caches.keys()) {
         if (name !== CACHE) await caches.delete(name);
+      }
+      // The game's pictures were files until 2026-11-14; the page cuts them from the player's
+      // own ROM now and the site serves none, so a copy kept from before goes.
+      const cache = await caches.open(CACHE);
+      for (const key of await cache.keys()) {
+        if (ART.test(new URL(key.url).pathname)) await cache.delete(key);
       }
       await self.clients.claim();
     })(),

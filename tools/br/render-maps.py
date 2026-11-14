@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Render every outdoor map to a PNG, for the field past the picture and the drop painter.
 
-    python tools/br/render-maps.py            -> web/public/field-maps/<MAP_ID>.png
-                                                 web/public/field-maps/<MAP_ID>.border.png
+    python tools/br/render-maps.py            -> build/br-art/field-maps/<MAP_ID>.png
+                                                 build/br-art/field-maps/<MAP_ID>.border.png
 
 Two readers. The page (web/src/field.ts, POK-317) draws these around the GBA's 240x160
 picture, scrolled with the ROM's own camera, so the game fills the screen: the GBA draws
@@ -37,7 +37,7 @@ import numpy as np
 from PIL import Image
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-OUT = os.path.join(ROOT, 'web', 'public', 'field-maps')
+OUT = os.path.join(ROOT, 'build', 'br-art', 'field-maps')
 TILE = 8
 BLOCK = 16
 # include/global.fieldmap.h: the layer type in a metatile attribute's bits 12..15.
