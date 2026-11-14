@@ -1147,6 +1147,60 @@ export class RomArt {
     return cv;
   }
 
+  /** The evolution scene's backdrop (evolution_scene.c): bg_inner's tilemap over sBgAnim_Gfx, cut
+   *  to `crop` (x, y, w, h) of its 256 x 256, once for each row of sBgAnim_PalIndexes in `rows`:
+   *  a pixel's ring picks, through that row, a colour of sBgAnim_Pal. Rings past `ring` (the
+   *  corners the screen never reaches) wear the outermost ring's colour. */
+  evolutionBackdrops(rows: readonly number[], crop: readonly [number, number, number, number], ring = 13): HTMLCanvasElement[] | null {
+    if (!this.have('sBgAnim_Gfx', 'sBgAnim_Inner_Tilemap', 'sBgAnim_Pal', 'sBgAnim_PalIndexes')) return null;
+    const tiles = this.lz(this.sym('sBgAnim_Gfx')), map = this.lz(this.sym('sBgAnim_Inner_Tilemap'));
+    const [x0, y0, w, h] = crop;
+    const index = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const X = x + x0, Y = y + y0;
+        const e = map[((Y >> 3) * 32 + (X >> 3)) * 2] | (map[((Y >> 3) * 32 + (X >> 3)) * 2 + 1] << 8);
+        const sx = e & 0x400 ? 7 - (X & 7) : X & 7, sy = e & 0x800 ? 7 - (Y & 7) : Y & 7;
+        index[y * w + x] = (tiles[(e & 0x3ff) * 32 + sy * 4 + (sx >> 1)] >> ((sx & 1) * 4)) & 0xf;
+      }
+    }
+    const pal = this.sym('sBgAnim_Pal'), table = this.sym('sBgAnim_PalIndexes');
+    return rows.map((r) => {
+      // bg.png is grey, white the 4bpp's index 0: a pixel's ring is 15 less its index.
+      const colour = Array.from({ length: 16 }, (_, i) => rgba(this.u16(pal + this.u8(table + r * 16 + Math.min(15 - i, ring)) * 2)));
+      const cv = document.createElement('canvas');
+      cv.width = w;
+      cv.height = h;
+      const ctx = cv.getContext('2d')!;
+      const id = ctx.createImageData(w, h);
+      const px = new Uint32Array(id.data.buffer);
+      for (let i = 0; i < w * h; i++) px[i] = colour[index[i]];
+      ctx.putImageData(id, 0, 0);
+      return cv;
+    });
+  }
+
+  /** The "!" over a trainer who has seen you (trainer_see.c sEmotion_ExclamationMarkGfx, its
+   *  first 16 x 16 frame), in sprite palette 0: the player's, as its TAG_NONE template draws. */
+  exclamation(playerGfx: number): HTMLCanvasElement | null {
+    if (!this.have('sEmotion_ExclamationMarkGfx')) return null;
+    const info = this.u32(this.sym('gObjectEventGraphicsInfoPointers') + playerGfx * 4);
+    const pal = this.objectPalettes().get(this.u16(info + 2));
+    return pal ? this.tiles(this.rom, this.sym('sEmotion_ExclamationMarkGfx') - ROM, 2, 2, pal) : null;
+  }
+
+  /** The gold item ball (br_balls.c sGoldPic), 16 x 16: the item ball's palette with its three
+   *  unused greens (8..10) the gold of sShades[1]. */
+  goldBall(ballGfx: number): HTMLCanvasElement | null {
+    if (!this.have('sGoldPic', 'sShades')) return null;
+    const info = this.u32(this.sym('gObjectEventGraphicsInfoPointers') + ballGfx * 4);
+    const base = this.objectPalettes().get(this.u16(info + 2));
+    if (!base) return null;
+    const pal = [...base];
+    for (let i = 0; i < 3; i++) pal[8 + i] = rgba(this.u16(this.sym('sShades') + 6 + i * 2));
+    return this.tiles(this.rom, this.sym('sGoldPic') - ROM, 2, 2, pal);
+  }
+
   /** Trainer front pictures side by side, 64 x 64 each (ui/trainer-pics.png: a skin's portrait). */
   trainerStrip(pics: readonly number[]): HTMLCanvasElement | null {
     const cuts = pics.map((p) => this.trainerPic(p, false));

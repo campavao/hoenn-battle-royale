@@ -9,11 +9,13 @@
 //   /mon-pics/<species>[s].png                   a species' still front picture, s for shiny
 //   /trainer-pics/<pic>.png                      a trainer's front picture
 //   /ui/<name>.png                               the font, the frame, the message box, the signs,
-//                                                the item and type icons, the TRAINER CARD
+//                                                the item and type icons, the TRAINER CARD,
+//                                                HOW TO PLAY's pictures (howtoart.ts)
 import spritesData from '../src/data/sprites.json';
 import type { Cutter } from '../src/art/pictures';
 import type { RomArt } from './romart';
 import { SEA_METATILE, type WorldFill } from './worldfill';
+import { howtoSheet } from './howtoart';
 
 const SHEETS = spritesData as Record<string, { frames: number }>;
 /** export-sprites.py's key for SURF's blob, past every object gfx id. */
@@ -86,6 +88,7 @@ export function romCutter(art: RomArt, deps: CutDeps): Cutter {
       case '/ui/trainer-card.png': return art.trainerCards();
       case '/ui/card-badges.png': return art.cardBadges();
       case '/ui/trainer-pics.png': return art.trainerStrip(SKIN_PICS);
+      case '/ui/howto-sheet.png': return howtoSheet(art, deps.mapRef);
       default: return null;
     }
   };

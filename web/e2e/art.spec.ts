@@ -7,6 +7,10 @@
 // hash is made), taken before they were deleted. The page's cut of the same path must hash the
 // same, so a cut that is one pixel off, a palette off, or laid out differently fails here.
 //
+// One is the page's own: /ui/howto-sheet.png, HOW TO PLAY's pictures (spike-b/howtoart.ts). Its
+// Safari panel is an 8 x 8 average of map pixels, and the old file averaged pret's 8-bit colours,
+// which the ROM does not keep; every other panel matched the old file exactly (art-hashes.py).
+//
 // A change to a graphic in the ROM changes its hash on purpose: look at the new picture, run
 // the exporters (they write build/br-art), then `python tools/br/art-hashes.py build/br-art >
 // web/e2e/art.sha1.json`.

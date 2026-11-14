@@ -201,6 +201,10 @@ ART_STATICS = [
     # The card's palette for each star count, a girl's, its badges and its star (trainer_card.c).
     "sHoennTrainerCardPals", "sHoennTrainerCardFemaleBg_Pal", "sHoennTrainerCardBadges_Gfx",
     "sHoennTrainerCardBadges_Pal", "sTrainerCardStar_Pal",
+    # HOW TO PLAY's pictures (web/spike-b/howtoart.ts): the evolution scene's backdrop, the "!"
+    # over a trainer who has seen you, and the gold item ball (br_balls.c).
+    "sBgAnim_Gfx", "sBgAnim_Inner_Tilemap", "sBgAnim_Pal", "sBgAnim_PalIndexes",
+    "sEmotion_ExclamationMarkGfx", "sGoldPic", "sShades",
 ]
 for _env in ("TallGrass", "LongGrass", "Sand", "Underwater", "Water", "PondWater", "Rock", "Cave", "Building", "Stadium"):
     ENGINE_SYMBOLS += ["gBattleEnvironmentTiles_" + _env, "gBattleEnvironmentTilemap_" + _env]

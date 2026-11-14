@@ -14,6 +14,13 @@ GBA can show it -- 0 where clear, else 0x8000 | r5 | g5 << 5 | b5 << 10 (each ch
 five bits). The font is a mask, not a picture (its red is the glyph's colour index, 1..3), so
 its pixels are 0x8000 | that index. The page hashes its cut the same way.
 
+One picture's hash is the page's own, not a file's: ui/howto-sheet.png (HOW TO PLAY, once
+web/src/ui/howto-sheet.png). Its Safari Zone panel is an 8 x 8 average of map pixels, and the
+file averaged pret's 8-bit .pal colours, which the ROM does not keep: 15,947 of that panel's
+36,000 pixels came out one 5-bit step off. Every other panel was identical when it was taken
+over (2026-11-14). This script keeps whatever art.sha1.json already says for it (PAGE_CUTS);
+after changing it on purpose, take the page's hash with HBR_ART_GOT (art.spec.ts).
+
 Left out: field-sprites/patch-*.png (the encounter marks, drawn in their files' own colours,
 which nothing has read since /classic/ went; spike B cuts its marks from gBrPatch* itself).
 """
@@ -29,6 +36,8 @@ ROOT = Path(__file__).resolve().parents[2]
 DIRS = ("field-maps", "field-sprites", "mon-pics", "trainer-pics", "ui")
 SKIP = ("/field-sprites/patch-",)
 FONT = "/ui/font-normal.png"
+PAGE_CUTS = ("/ui/howto-sheet.png",)
+HASHES = ROOT / "web/e2e/art.sha1.json"
 
 
 def digest(path: Path, key: str) -> str:
@@ -54,6 +63,10 @@ def main() -> None:
             if key.startswith(SKIP):
                 continue
             out[key] = digest(p, key)
+    kept = json.loads(HASHES.read_text()) if HASHES.exists() else {}
+    for key in PAGE_CUTS:
+        if key in kept:
+            out[key] = kept[key]
     json.dump(dict(sorted(out.items())), sys.stdout, indent=1)
     print()
     print(f"{len(out)} pictures", file=sys.stderr)
