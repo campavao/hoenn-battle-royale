@@ -20,7 +20,7 @@ import { over } from './over';
 import { LEADERS } from './gyms';
 import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, cleanReleased, isTm, within } from './items';
 import { HURT, botKeys, health } from './bots';
-import { AFTER_WIN, FIELD_DIVE, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_APART, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, WALKUP_BANG, CHEST, CHEST_SPECIES, ITEM_MASTER_BALL, ZONE_CELLS, ZONE_ITEMS, ZONE_TMS, eventPiece, makeRoom, zoneBalls, wornParty, type RoomEvent } from './room';
+import { AFTER_WIN, FIELD_DIVE, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_APART, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, WALKUP_BANG, CHEST, CHEST_SPECIES, ITEM_MASTER_BALL, ZONE_CELLS, ZONE_ITEMS, ZONE_TMS, botParty, eventPiece, makeRoom, zoneBalls, wornParty, type RoomEvent } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -1379,12 +1379,14 @@ describe('a fallen trainer\'s bag', () => {
     room.apply({ c: 'join', id: 2, bot: false, name: 'B', skin: 0, spot: { ...at, x: 9 }, facing: 4 });
     room.apply({ c: 'out', id: 1, bag: { items: [], money: 0, mons: [mon(1), mon(2)] } });
     const key = SPILL_KEY + 1;
-    expect(room.spillAt(at.map, at.x, at.y)?.bag.mons).toEqual([mon(1), mon(2)]);
+    // Fallen with her: each joins on 1 HP (Kanto's rule).
+    const down = (sp: number) => ({ ...mon(sp), fell: true });
+    expect(room.spillAt(at.map, at.x, at.y)?.bag.mons).toEqual([down(1), down(2)]);
     const before = room.hash();
-    expect(room.step(new Map([[2, [KEY_A]]]))).toMatchObject([{ type: 'bag', key, bag: { mons: [mon(1), mon(2)] } }]);
+    expect(room.step(new Map([[2, [KEY_A]]]))).toMatchObject([{ type: 'bag', key, bag: { mons: [down(1), down(2)] } }]);
     // one of theirs taken, one of B's put down in its place
-    room.apply({ c: 'drop', id: 2, key, rest: { items: [], money: 0, mons: [mon(2), mon(9)] } });
-    expect(room.spillAt(at.map, at.x, at.y)?.bag.mons).toEqual([mon(2), mon(9)]);
+    room.apply({ c: 'drop', id: 2, key, rest: { items: [], money: 0, mons: [down(2), mon(9)] } });
+    expect(room.spillAt(at.map, at.x, at.y)?.bag.mons).toEqual([down(2), mon(9)]);
     expect(room.hash()).not.toBe(before);
     const mirror = makeRoom(MAPS, PATCHES, 99);
     mirror.load(room.state());
@@ -1428,15 +1430,17 @@ describe('a fallen trainer\'s bag', () => {
     const key = SPILL_KEY + 1;
     room.step(new Map([[2, [KEY_A]]]));
     // B took MAY's first and gave a hurt one of theirs and a fainted one for it: a beaten
-    // trainer's own stay as they were, made full.
+    // trainer's own stay as they were, fallen (joins on 1 HP, Kanto's rule).
     const hurt = { species: 9, level: 20, hp: 11, maxHp: 61 }, fainted = { species: 10, level: 8, hp: 0, maxHp: 25 };
-    const rest = cleanBag({ items: [], money: 0, mons: [mon(2), hurt, fainted] })!;
-    expect(rest.mons).toEqual([mon(2), hurt, fainted]);
+    const left = room.spills.get(key)!.bag.mons![1];
+    expect(left).toEqual({ ...mon(2), fell: true });
+    const rest = cleanBag({ items: [], money: 0, mons: [left, hurt, fainted] })!;
+    expect(rest.mons).toEqual([left, hurt, fainted]);
     room.apply({ c: 'drop', id: 2, key, rest: within(rest, room.spills.get(key)!.bag) });
-    expect(room.spillAt(at.map, at.x, at.y)?.bag.mons).toEqual([mon(2), hurt, fainted]);
+    expect(room.spillAt(at.map, at.x, at.y)?.bag.mons).toEqual([left, hurt, fainted]);
     const mirror = makeRoom(MAPS, PATCHES, 99);
     mirror.load(room.state());
-    expect(mirror.spillAt(at.map, at.x, at.y)?.bag.mons).toEqual([mon(2), hurt, fainted]);
+    expect(mirror.spillAt(at.map, at.x, at.y)?.bag.mons).toEqual([left, hurt, fainted]);
     // The relay holds a bag's HP as it holds a released one's.
     expect(cleanBag({ items: [], money: 0, mons: [{ species: 9, level: 20, hp: 99, maxHp: 61 }, { species: 9, level: 20, hp: 5, maxHp: 0 }] })?.mons)
       .toEqual([{ species: 9, level: 20, hp: 61, maxHp: 61 }, { species: 9, level: 20 }]);
@@ -1615,6 +1619,84 @@ describe("the ring's size", () => {
   });
 });
 
+// Kanto's rule (README: a fallen trainer's team lands as Poke Balls, and a taken one "joins your party at
+// 1 HP, exactly as it fell"; lib/spills.lua: "each holding one of their Pokemon at 1 HP"). Every way a
+// beaten trainer's team reaches the ground says so on each mon (GroundMon `fell`), a page that takes one
+// puts it on 1 (carry.ts hpTaken), and a bot that takes one has it on 1 too (its `wear`). Cam, 11-14: "I
+// thought we fixed the bug where pokemon picked up after a battle were at full HP rather than 1 HP?"
+describe("a beaten trainer's team joins at 1 HP", () => {
+  const L = 'MAP_LITTLEROOT_TOWN';
+  const fell = (species: number, level = 5) => ({ species, level, fell: true as const });
+
+  it('a player out: their team lies fallen in their bag, and a copy has it the same', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 1, bot: false, name: 'MAY', skin: 0, spot: { map: L, x: 10, y: 12 }, facing: 1 });
+    room.apply({ c: 'out', id: 1, bag: { items: [], money: 0, mons: [{ species: 1, level: 5 }, { species: 2, level: 7 }] } });
+    expect(room.spills.get(SPILL_KEY + 1)?.bag.mons).toEqual([fell(1), fell(2, 7)]);
+    const mirror = makeRoom(MAPS, PATCHES, 99);
+    mirror.load(room.state());
+    expect(mirror.spills.get(SPILL_KEY + 1)?.bag.mons).toEqual([fell(1), fell(2, 7)]);
+    expect(mirror.hash()).toBe(room.hash());
+  });
+
+  it('a bot beaten: its team lies fallen in its bag', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 1, bot: true, name: 'BOT', skin: 4, spot: { map: L, x: 10, y: 12 }, facing: 1 });
+    room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: L, x: 9, y: 12 }, facing: 4 });
+    expect(room.step(new Map([[2, [KEY_A]]]))).toMatchObject([{ type: 'fight', id: 2, foe: 1 }]);
+    room.apply({ c: 'end', id: 2, won: true });
+    const mons = room.spillAt(L, 10, 12)!.bag.mons!;
+    expect(mons.length).toBeGreaterThan(0);
+    expect(mons.every((m) => m.fell === true), JSON.stringify(mons)).toBe(true);
+  });
+
+  it('a leader beaten: their team lies fallen beside the winner', () => {
+    const G = 'MAP_RUSTBORO_CITY_GYM';
+    const room = makeRoom(MAPS, PATCHES, 7);
+    room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: G, x: 5, y: 3 }, facing: 2 });
+    room.step(new Map([[2, [KEY_A]]]));
+    room.apply({ c: 'end', id: 2, won: true, team: [{ sp: 74, lv: 15 }, { sp: 299, lv: 15 }] });
+    expect([...room.spills.values()].find((b) => b.map === G)?.bag.mons).toEqual([fell(74, 15), fell(299, 15)]);
+  });
+
+  it('stays fallen through a swap and the relay; one put down for it has its own HP', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    const at = { map: L, x: 10, y: 12 };
+    room.apply({ c: 'join', id: 1, bot: false, name: 'MAY', skin: 0, spot: at, facing: 1 });
+    room.apply({ c: 'join', id: 2, bot: false, name: 'B', skin: 0, spot: { ...at, x: 9 }, facing: 4 });
+    room.apply({ c: 'out', id: 1, bag: { items: [], money: 0, mons: [{ species: 1, level: 5 }, { species: 2, level: 5 }] } });
+    const key = SPILL_KEY + 1;
+    room.step(new Map([[2, [KEY_A]]]));
+    const hurt = { species: 9, level: 20, hp: 11, maxHp: 61 };
+    const rest = cleanBag({ items: [], money: 0, mons: [fell(2), hurt] })!;
+    expect(rest.mons).toEqual([fell(2), hurt]);
+    room.apply({ c: 'drop', id: 2, key, rest: within(rest, room.spills.get(key)!.bag) });
+    expect(room.spillAt(at.map, at.x, at.y)?.bag.mons).toEqual([fell(2), hurt]);
+    // Only true is fallen: anything else is a mon like any other.
+    expect(cleanBag({ items: [], money: 0, mons: [{ species: 2, level: 5, fell: 1 }, { species: 2, level: 5, fell: 'yes' }] })?.mons).toEqual([{ species: 2, level: 5 }, { species: 2, level: 5 }]);
+  });
+
+  it('a bot that takes one has it on 1 HP; one let go on the share it left with; anything else whole', () => {
+    const room = makeRoom(MAPS, PATCHES, 99);
+    room.apply({ c: 'join', id: 1, bot: true, name: 'BOT', skin: 4, spot: { map: L, x: 10, y: 12 }, facing: 4 });
+    const bot = room.actor(1)!;
+    const before = botParty(room.seed, bot, room.ring().phase + 1).length;
+    room.spills.set(SPILL_KEY + 50, { key: SPILL_KEY + 50, map: L, x: 11, y: 12, name: 'MAY', bag: { items: [], money: 0, mons: [fell(25, 9), { species: 4, level: 9, hp: 7, maxHp: 28 }, { species: 7, level: 9 }] } });
+    bot.calm = 0;
+    for (let i = 0; i < 40 && room.spillAt(L, 11, 12); i++) { bot.keys = KEY_RIGHT | KEY_A; room.step(); }
+    const took = Math.min(3, 6 - before);
+    expect(took).toBeGreaterThan(0);
+    expect(bot.caught).toEqual([25, 4, 7].slice(0, took));
+    const party = wornParty(botParty(room.seed, bot, room.ring().phase + 1), bot.wear);
+    expect(party[0].species).toBe(25);
+    expect(party[0].hp, `${party[0].hp}/${party[0].maxHp}`).toBe(1);
+    if (took >= 2) expect(party[1].hp).toBe(Math.max(1, Math.round((party[1].maxHp * 7) / 28)));
+    if (took >= 3) expect(party[2].hp).toBe(party[2].maxHp);
+    // The dealt rest are as whole as they were.
+    expect(party.slice(took).every((m) => m.hp === m.maxHp)).toBe(true);
+  });
+});
+
 describe('a bag in a bot\'s way', () => {
   it('gives the bot all of it, its Pokémon too, and it walks on', () => {
     const room = makeRoom(MAPS, PATCHES, 99);
@@ -1722,8 +1804,11 @@ describe('Cam 10-30', () => {
         }
       }
       // 3 until bots went for marked grass and those with nothing caught went out at the buzzer (Cam,
-      // 11-04): in these twelve minutes, 3.96 duels to 2.83 over seeds 7 to 30.
-      expect(fights.length, `seed ${seed}`).toBeGreaterThanOrEqual(2);
+      // 11-04): in these twelve minutes, 3.96 duels to 2.83 over seeds 7 to 30. 2 until a beaten
+      // trainer's team joined on 1 HP, a bot's too (Cam, 11-14): a bot that takes a bag's team is hurt and
+      // goes to a CENTER first. 2.83 to 2.79 over the 24, the worst gap between duels 3.58 to 3.40 minutes
+      // and between fights of any kind 1.66 to 1.90; seed 11 from 2 to 1 (and 16), 17 and 22 from 3 to 4.
+      expect(fights.length, `seed ${seed}`).toBeGreaterThanOrEqual(1);
       let w = 0;
       for (let i = 1; i < fights.length; i++) if (left[i - 1] - 1 >= 5) w = Math.max(w, fights[i] - fights[i - 1]);
       worst.push(w);

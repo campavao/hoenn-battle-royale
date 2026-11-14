@@ -124,11 +124,19 @@ describe('the HP one of ours left the party with', () => {
     expect(hpTaken({ hp: 1, maxHp: 200 }, 20)).toBe(1);
     expect(hpTaken({ hp: 39, maxHp: 40 }, 41)).toBe(40);
     expect(hpTaken({ hp: 199, maxHp: 200 }, 20)).toBe(19);
-    // full, or nothing said (an old page's ball, a beaten trainer's): left as the ROM made it
+    // full, or nothing said (an old page's ball, a gift, the chest): left as the ROM made it
     expect(hpTaken({ hp: 33, maxHp: 33 }, 35)).toBeNull();
     expect(hpTaken({}, 35)).toBeNull();
     expect(hpTaken({ hp: 3 }, 35)).toBeNull();
     expect(hpTaken({ hp: 3, maxHp: 0 }, 35)).toBeNull();
+  });
+  // Kanto's rule (README: "It joins your party at 1 HP, exactly as it fell"): a beaten trainer's
+  // team fainted, and one of it taken comes up on 1, whatever its most.
+  it("is 1 for a beaten trainer's, on any most", () => {
+    expect(hpTaken({ fell: true }, 35)).toBe(1);
+    expect(hpTaken({ fell: true }, 714)).toBe(1);
+    expect(hpTaken({ fell: true }, 1)).toBe(1);
+    expect(hpTaken({ fell: true }, 0), 'no most read: left alone').toBeNull();
   });
   it('goes on the one that joined, found by the personality the party did not have', () => {
     const before = party([[1, 40, 40], [2, 7, 33], [3, 0, 28]]);

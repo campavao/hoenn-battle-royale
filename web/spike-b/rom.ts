@@ -70,8 +70,9 @@ const OBJECT_EVENT_SIZE = 0x24;
 const STEP: Record<number, [number, number]> = { 1: [0, 1], 2: [0, -1], 3: [-1, 0], 4: [1, 0] };
 
 /** A mon in a ball, as the room keeps it (shared/items.ts GroundMon): one of ours let go says
- *  the HP it left with, and is taken with that (carry.ts hpTaken). */
-export interface TeamRow { species: number; level: number; hp?: number; maxHp?: number }
+ *  the HP it left with, and is taken with that (carry.ts hpTaken); one of a beaten trainer's
+ *  team (`fell`) is taken on 1 HP. */
+export interface TeamRow { species: number; level: number; hp?: number; maxHp?: number; fell?: true }
 // include/br/br_wild.h.
 const WILD_ASKED = 1;
 const WILD_DONE = 3;
@@ -1476,9 +1477,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         await partyDone();
         emu.pause();
         const now = kept();
-        // The one taken, if it was somebody's let go: on the HP it went down with.
+        // The one taken, if it was somebody's let go: on the HP it went down with. One of a
+        // beaten trainer's team: on 1 HP, as it fell (Kanto's rule; Cam, 11-14).
         const back = pick && taken.has(keys[pick.take]) ? mons[pick.take] : undefined;
-        if (back?.hp !== undefined) {
+        if (back && (back.hp !== undefined || back.fell)) {
           const at = joinedSlot(before, beforeCount, now.party, now.count);
           const hp = at < 0 ? null : hpTaken(back, hpAt(now.party, at).maxHp);
           if (hp !== null) now.party = withHp(now.party, at, hp) as typeof now.party;

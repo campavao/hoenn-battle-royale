@@ -229,6 +229,7 @@ export function teamMembers(party: Uint8Array, count: number, nameOf: (species: 
 // should have the same health it was at, regardless of what it was at"). The ROM makes a ball's
 // mon fresh at full HP (br_loot.c MakeTaken), so releasing a hurt one and taking it straight back
 // was a free heal; the page reads the HP as it leaves and puts it back on the one that joins.
+// So too a beaten trainer's team, which joins on 1 HP (Kanto's rule).
 
 /** The HP and most of the mon at `slot` (struct Pokemon's hp and maxHP, plain, at 86 and 88). */
 export function hpAt(party: Uint8Array, slot: number): { hp: number; maxHp: number } {
@@ -238,11 +239,13 @@ export function hpAt(party: Uint8Array, slot: number): { hp: number; maxHp: numb
 
 /** What a mon taken off the ground with `maxHp` has, of the HP `left` said it went down with:
  *  the same number on the same most, else the same share (made again from its ball, its IVs
- *  are the ball's, and a rung may have lifted it), 0 still 0 and a hurt one never full. Null
- *  leaves it as the ROM made it, full: nothing said (an old page's ball, a beaten trainer's
- *  team) or full when it went. */
-export function hpTaken(left: { hp?: number; maxHp?: number }, maxHp: number): number | null {
+ *  are the ball's, and a rung may have lifted it), 0 still 0 and a hurt one never full. One of
+ *  a beaten trainer's team (`fell`) is on 1, as Kanto's joins (its README: "It joins your party
+ *  at 1 HP, exactly as it fell"; Cam, 11-14). Null leaves it as the ROM made it, full: nothing
+ *  said (an old page's ball, a gift, the chest) or full when it went. */
+export function hpTaken(left: { hp?: number; maxHp?: number; fell?: boolean }, maxHp: number): number | null {
   const { hp, maxHp: was } = left;
+  if (left.fell && hp === undefined) return maxHp >= 1 ? 1 : null;
   if (hp === undefined || !was || hp >= was || maxHp < 1) return null;
   if (hp <= 0) return 0;
   if (was === maxHp) return hp;
