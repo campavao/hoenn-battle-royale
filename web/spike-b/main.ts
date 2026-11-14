@@ -28,6 +28,7 @@ import { rungForPhase } from '../src/bots/party';
 import { gradeOf } from '../src/bots/roster';
 import { ballsIn, battleItems } from '../src/bots/bag';
 import { acroFrame, acroNear, DIR_EAST } from './sim';
+import { FACE, footPose } from './poses';
 import { ballTakes, catchRateOf, patchBalls, wildMon, zoneBalls, zoneFight } from './shared/wild';
 import { logMs } from './shared/battlelog';
 import { ATTENDANT, BOATS, CLOSED_DOORS, isLooseSeam, DOCKS, MOORINGS, TIDAL_MAPS, TIDAL_SAILOR, islandMaps, type Cruise, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, FIELD_DIVE, diveTo, emptyBag, interiors, makeRoom, botParty, legendMon, LEGEND_CATCH, LEGEND_FOE, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
@@ -470,10 +471,6 @@ function drawAnims(ctx: CanvasRenderingContext2D, p: Placed, vx0: number, vy0: n
 
 // ---- actors: the one source of position ------------------------------------------------
 
-// sAnim_GoSouth/North/West/East, and the running sheet's (frames 9..17 of BrendanNormal).
-const GO = { 1: [3, 0, 4, 0], 2: [5, 1, 6, 1], 3: [7, 2, 8, 2], 4: [7, 2, 8, 2] } as Record<number, number[]>;
-const RUN = { 1: [12, 9, 13, 9], 2: [14, 10, 15, 10], 3: [16, 11, 17, 11], 4: [16, 11, 17, 11] } as Record<number, number[]>;
-const FACE = { 1: 0, 2: 1, 3: 2, 4: 2 } as Record<number, number>;
 
 // ---- input ----------------------------------------------------------------------------
 
@@ -4183,24 +4180,12 @@ function seamFrame(all: readonly Actor[]): void {
   }
 }
 
-/** The walk anim's frame. A step plays half the anim, one foot (SetStepAnimHandleAlternation
- *  starts it at command 0 or 2 by turns): the stride frame then standing, 8+8 of a walk's 16
- *  frames, and sAnim_RunSouth's 5+3 of a run's 8. Playing the whole anim each step was
- *  twice Emerald's cadence. */
+/** The frame a trainer's sheet is drawn at: the ACRO BIKE's own, or on foot (poses.ts). One
+ *  stopped for a battle stands as the walk does, whatever it was doing as it stopped. */
 function frameOf(a: Actor): number {
-  const act = a.m.action;
   const wheelie = a.m.bike && a.m.acro && a.skin < 2 ? acroFrame(a.m) : null;
   if (wheelie !== null) return wheelie;
-  const run = !a.m.bike && a.m.run && act?.kind === 'step' && SHEETS[String(SKIN_GFX[a.skin])].frames >= 18;
-  if (act?.kind === 'step') {
-    const late = act.t / act.len >= (run ? 5 / 8 : 1 / 2) ? 1 : 0;
-    return (run ? RUN : GO)[a.m.facing][(a.m.strides & 1) * 2 + late];
-  }
-  // A turn is a walk in place, one foot like a step: sAnim_GoFastSouth's 4+4. A bump into
-  // a wall plays the whole of sAnim_GoSouth over its 32 frames.
-  if (act?.kind === 'turn') return GO[a.m.facing][(a.m.strides & 1) * 2 + (act.t / act.len >= 1 / 2 ? 1 : 0)];
-  if (act && act.kind !== 'hop' && act.kind !== 'warp') return GO[a.m.facing][Math.min(3, Math.floor((act.t / act.len) * 4))];
-  return FACE[a.m.facing];
+  return footPose(a.m, !a.battling && SHEETS[String(SKIN_GFX[a.skin])].frames >= 18);
 }
 
 
@@ -5496,7 +5481,7 @@ async function boot(): Promise<void> {
   }
   loading.say(matchToken() ? 'Back to your match…' : 'Getting the game ready…');
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => { console.warn('spike ROM not booted', e); loading.hide(); });
-  (window as unknown as { __spike: unknown }).__spike = { watch, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, get movesBox() { return movesBox; }, pocket: (n: number) => (rom ? readPocket(rom.emu, romTables.sym, n) : []), radial, moveName: (id: number) => moveInfo(romTables, id)?.name ?? '' };
+  (window as unknown as { __spike: unknown }).__spike = { watch, frameOf, get frame() { return frame; }, canvas, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, get movesBox() { return movesBox; }, pocket: (n: number) => (rom ? readPocket(rom.emu, romTables.sym, n) : []), radial, moveName: (id: number) => moveInfo(romTables, id)?.name ?? '' };
 }
 
 void boot();
