@@ -2,26 +2,26 @@
 """Emerald's own font, window frame and message box, and the skin ladder, as page assets
 for the UI outside the game (POK-320).
 
-    python tools/br/export-ui.py   -> web/public/ui/font-normal.png    the 512 glyphs, 16x16
+    python tools/br/export-ui.py   -> build/br-art/ui/font-normal.png    the 512 glyphs, 16x16
                                                                        each, R = colour index
                                                                        (1..3), A = 255 where drawn
-                                      web/public/ui/frame-1.png        the standard window
+                                      build/br-art/ui/frame-1.png        the standard window
                                                                        frame, 3x3 tiles of 8 px
-                                      web/public/ui/message-box.png    the message box, 7x2 tiles
-                                      web/public/ui/popup-<theme>.png  the map-name sign, 96x40,
+                                      build/br-art/ui/message-box.png    the message box, 7x2 tiles
+                                      build/br-art/ui/popup-<theme>.png  the map-name sign, 96x40,
                                                                        each of its six themes
-                                      web/public/ui/items.png          every item icon, 24x24,
+                                      build/br-art/ui/items.png          every item icon, 24x24,
                                                                        16 to a row by item id
-                                      web/public/ui/types.png          the summary screen's type
+                                      build/br-art/ui/types.png          the summary screen's type
                                                                        icons, 32x16, one per row
                                                                        by type id
-                                      web/public/ui/trainer-card.png   the TRAINER CARD's front with
+                                      build/br-art/ui/trainer-card.png   the TRAINER CARD's front with
                                                                        no text on it, 240x160, one
                                                                        per row: each star count
                                                                        (0..4) as a boy's then a girl's
-                                      web/public/ui/card-badges.png    the eight badges, 16x16, then
+                                      build/br-art/ui/card-badges.png    the eight badges, 16x16, then
                                                                        the card's star, 8x8
-                                      web/public/ui/trainer-pics.png   each skin's trainer portrait,
+                                      build/br-art/ui/trainer-pics.png   each skin's trainer portrait,
                                                                        64x64, in skin order
                                       web/src/data/ui.json             glyph widths, the text
                                                                        palettes, the skin ladder,
@@ -39,7 +39,7 @@ LoadMapNamePopUpWindowBg loads; `sMapSectionToThemeId` there says which section 
 which. The item icons are `gItemIconTable` (src/data/item_icon_table.h), each in its own
 palette (src/data/graphics/items.h). The skins are `sSkinGraphics` in src/br/br_ghosts.c, resolved to gfx ids through
 include/constants/event_objects.h, whose sheets export-sprites.py already wrote to
-web/public/field-sprites/<gfx>.png. The type icons are graphics/types/<type>.png, each in
+build/br-art/field-sprites/<gfx>.png. The type icons are graphics/types/<type>.png, each in
 the palette src/pokemon_summary_screen.c's sMoveTypeToOamPaletteNum gives it (OBJ
 palettes 13..15 are move_types_1..3.pal, loaded together from gMoveTypes_Pal). The card
 is src/trainer_card.c's front: `bg.bin` (BG2) under `front.bin` (BG0), both in
@@ -56,7 +56,7 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "web/public/ui"
+OUT = ROOT / "build/br-art/ui"
 OUT.mkdir(parents=True, exist_ok=True)
 
 

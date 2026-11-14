@@ -17,8 +17,8 @@
 // hand-edited and committed; landing-reach.ts never writes it. match/hand.ts has the rules
 // this and landing.test.ts share.
 //
-// The map itself is drawn under the grid, from web/public/field-maps/<MAP_ID>.png -- the
-// page's own field renders (tools/br/render-maps.py, committed), one block to sixteen
+// The map itself is drawn under the grid, from build/br-art/field-maps/<MAP_ID>.png -- the
+// exporter's render (tools/br/render-maps.py, gitignored; vite serves it at /br-art/ in dev), one block to sixteen
 // pixels. Cam: "I have to see the actual map sprites to know what I'm painting." Without
 // the PNG the grid still draws, over the class colours.
 import { HOENN } from './bots/hoenn';
@@ -291,7 +291,7 @@ function show(m: WorldMap): void {
     draw();
     status.textContent = `no render for ${m.id}: run python tools/br/render-maps.py`;
   };
-  picture.src = `/field-maps/${m.id}.png`;
+  picture.src = `/br-art/field-maps/${m.id}.png`;
   changed();
 }
 

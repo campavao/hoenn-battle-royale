@@ -3,7 +3,6 @@
 // game plays out". Offered once after a player's first ROM import, and a row on the menu.
 // POK-430 gave it Cam's own sections and words, each over a picture out of the game's own
 // art (tools/br/export-howto.py's sheet), some of them moving.
-import SHEET_URL from './howto-sheet.png?url';
 import { TEXT_BLUE, TEXT_DARK, TEXT_GRAY, measure, skinSheet, wrapText, type EmeraldCanvas, type Rect } from './emerald';
 import { ROW_H, W, paintButtons, type ButtonSpec } from './screens';
 import type { DrawnScreen, Painted, Widget } from './stage';
@@ -65,10 +64,9 @@ export const PANELS: readonly Panel[] = [
   },
 ];
 
-/** tools/br/export-howto.py's sheet: its pictures, the screen's width and this tall. Named by
- *  the build, by its bytes: a fixed name in /ui/ gets the service worker's copy first, so Cam's
- *  11-04 play-test, a day after the new pictures went live, was still shown the old ones. */
-export const SHEET = SHEET_URL;
+/** The panels' pictures, the screen's width and ART_H a picture: cut from the player's ROM
+ *  (spike-b/howtoart.ts, src/art/pictures.ts), laid out as tools/br/export-howto.py's sheet was. */
+export const SHEET = '/ui/howto-sheet.png';
 export const ART_H = 150;
 /** The evolution backdrop's twelve frames, from the sheet's sixth picture down. */
 const EVO_Y = ART_H * 5;

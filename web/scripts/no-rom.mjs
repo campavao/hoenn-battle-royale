@@ -39,6 +39,32 @@ function readHead(path) {
   }
 }
 
+/** The folders the site's Nintendo-derived pictures used to ship in (until 2026-11-14): the
+ *  page cuts every one of them from the player's own ROM now (src/art/pictures.ts), and the
+ *  exporters write their reference copies to build/br-art, never to web/public. */
+export const ART_DIRS = ['field-maps', 'field-sprites', 'mon-pics', 'trainer-pics', 'ui'];
+
+/** Every file under `dir` in one of the ART_DIRS (at its top, as public/ is copied). */
+export function findArt(dir) {
+  const found = [];
+  const walk = (d) => {
+    let names;
+    try {
+      names = readdirSync(d);
+    } catch (err) {
+      if (err.code === 'ENOENT') return;
+      throw err;
+    }
+    for (const name of names) {
+      const path = join(d, name);
+      if (statSync(path).isDirectory()) walk(path);
+      else found.push(path);
+    }
+  };
+  for (const sub of ART_DIRS) walk(join(dir, sub));
+  return found;
+}
+
 /** Every file under `dir` that is a ROM or a save, by name or by its header. */
 export function findRoms(dir) {
   const found = [];
@@ -69,5 +95,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     console.error('web/public/ before building for anybody but yourself.');
     process.exit(1);
   }
-  console.log('dist is clean: no ROM, no saves.');
+  const art = findArt('dist');
+  if (art.length > 0) {
+    console.error(`REFUSING THIS BUILD: it carries ${art.length} of the game's pictures (${ART_DIRS.join(', ')}).\n  ` + art.slice(0, 10).join('\n  '));
+    console.error("\nThe page cuts these from the player's ROM (src/art/pictures.ts); the site ships none.");
+    console.error('The exporters write theirs to build/br-art. Take them out of web/public/.');
+    process.exit(1);
+  }
+  console.log("dist is clean: no ROM, no saves, none of the game's pictures.");
 }

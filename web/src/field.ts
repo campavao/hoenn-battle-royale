@@ -1,8 +1,8 @@
 // The field past the picture (POK-317). The GBA draws 240x160 and nothing else, and on a
 // phone that is a third of the glass. Cam's reference is a Game Boy Pokémon rendered past
 // its LCD so the map fills the screen, the fight in the middle band with the field still
-// around it. So this draws the rest: a still of the map (tools/br/render-maps.py, in
-// web/public/field-maps/) scrolled in lockstep with the ROM's own camera, on a canvas
+// around it. So this draws the rest: a still of the map (tools/br/render-maps.py, then in
+// web/public/field-maps/; spike B no longer runs this view) scrolled in lockstep with the ROM's own camera, on a canvas
 // under the picture, at the picture's own scale. Nothing is zoomed and nothing is
 // stretched -- the picture is where the ROM's window is, and the map continues out of it.
 //

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import pan from '../data/menupan.json';
+import artHashes from '../../e2e/art.sha1.json';
 import { panAt } from './menubg';
 
 describe("the main menu's pan over Hoenn (HBR-30)", () => {
@@ -47,7 +48,9 @@ describe("the main menu's pan over Hoenn (HBR-30)", () => {
   // main menu" -- the fill between the maps, painting and all, as the game draws it.
   it('has the ground between the maps under every view of the pan, no black left', { timeout: 60_000 }, () => {
     const fill = pan.fill as { size: number; tiles: [number, number, string][] };
-    const pictures = new Set(Object.keys(import.meta.glob('../../public/field-maps/fill/*.png')).map((k) => k.split('/').pop()));
+    // Each piece is cut from the player's ROM (spike-b/romcuts.ts), and e2e/art.spec.ts holds
+    // every one it names to the picture that used to ship.
+    const pictures = new Set(Object.keys(artHashes).filter((k) => k.startsWith('/field-maps/fill/')).map((k) => k.split('/').pop()));
     for (const [, , name] of fill.tiles) expect(pictures.has(`${name}.png`), name).toBe(true);
     const rects: [number, number, number, number][] = [
       ...fill.tiles.map(([x, y]): [number, number, number, number] => [x, y, fill.size, fill.size]),

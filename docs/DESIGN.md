@@ -324,7 +324,9 @@ menu we would otherwise have to build in Gen 3 windows.
 Pokémon Emerald"). `tools/br/export-ui.py` writes the ROM's `latin_normal` font (a 16-cell
 mask indexed by charmap byte, with `gFontNormalLatinGlyphWidths`), its standard window
 frame, its message box, the text palettes and the skin ladder's gfx ids to
-`web/public/ui/` + `web/src/data/ui.json`; `web/src/ui/emerald.ts` draws them on a canvas
+`build/br-art/ui/` (a reference copy only, gitignored) + `web/src/data/ui.json`; the page cuts the
+same pictures from the player's own ROM (`web/src/art/pictures.ts`, `web/spike-b/romcuts.ts`:
+the site ships none of them since 2026-11-14) and `web/src/ui/emerald.ts` draws them on a canvas
 at the picture's scale (whole pixels on a desktop, the phone's own fit below that). Every
 screen outside the game -- the main menu, LOBBIES, the trainer's rows, the wardrobe with
 every sprite on the ladder, and the room with Kanto's 2×4 of seats -- is a `DrawnScreen`
@@ -371,7 +373,7 @@ home-screen install works offline after the first patch.
 
 **The picture is 240×160 and the game is not** (POK-317). The GBA draws its window and
 nothing past it, so the shell draws the rest: a still of every outdoor map
-(`tools/br/render-maps.py` → `web/public/field-maps/`) scrolled in lockstep with the ROM's
+(`tools/br/render-maps.py` → `web/public/field-maps/`, now cut from the player's ROM) scrolled in lockstep with the ROM's
 camera (`gSaveBlock1Ptr->pos`, `gFieldCamera.x/y`, one frame behind the struct, offsets
 measured by `tools/br/drivers/field-scroll*.txt`) on a canvas under the picture, at the
 picture's own scale, with the palette fade mirrored from `gPaletteFade`. In a battle or a

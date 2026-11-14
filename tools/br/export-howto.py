@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The HOW TO PLAY panels' pictures (POK-430), out of the game's own art.
 
-    python tools/br/export-howto.py   -> web/src/ui/howto-sheet.png
+    python tools/br/export-howto.py   -> build/br-art/ui/howto-sheet.png (a reference copy: the page cuts it from the ROM, spike-b/howtoart.ts)
 
 The sheet is imported by howto.ts, so the build names it by its bytes: under a name of its
 own in /ui/ a new sheet reached a player's second look, after the service worker had shown
@@ -33,7 +33,7 @@ One sheet, 240 wide (the screen's width), its pictures 150 tall, top to bottom:
 
 A panel's pictures are all of different places (Cam, 11-03), each with its trainer in the middle.
 
-The field sprites are the sheets export-sprites.py wrote to web/public/field-sprites:
+The field sprites are the sheets export-sprites.py wrote to build/br-art/field-sprites:
 standing south is frame 0, west frame 2; east is west mirrored, as the ROM draws it.
 """
 import json
@@ -43,9 +43,9 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "web/src/ui/howto-sheet.png"
-MAPS = ROOT / "web/public/field-maps"
-SPRITES = ROOT / "web/public/field-sprites"
+OUT = ROOT / "build/br-art/ui/howto-sheet.png"
+MAPS = ROOT / "build/br-art/field-maps"
+SPRITES = ROOT / "build/br-art/field-sprites"
 SHEETS = json.loads((ROOT / "web/src/data/sprites.json").read_text())
 
 BANG = ROOT / "graphics/field_effects/pics/emotion_exclamation.png"
@@ -239,6 +239,7 @@ def main():
         sheet.paste(w, (i * 64, y + 64))
     for i, im in enumerate((encounters(), pickups())):
         sheet.paste(im, (0, y + 128 + i * H))
+    OUT.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(OUT, optimize=True)
     print(f"{OUT.relative_to(ROOT)} {sheet.size[0]}x{sheet.size[1]}, {OUT.stat().st_size} bytes")
 

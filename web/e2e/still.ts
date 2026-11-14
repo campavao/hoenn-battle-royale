@@ -1,6 +1,6 @@
 // The ROM's picture held to the map's still (POK-329). Past the LCD the core draws the
 // field from the ROM's own ring of tiles, and tools/br/render-maps.py draws the same map
-// from pret's data into web/public/field-maps/<MAP_ID>.png, which the composite under the
+// from pret's data into build/br-art/field-maps/<MAP_ID>.png (/br-art/ in dev), which the composite under the
 // picture shows. So wherever the band shows inside the map, it is that still -- less the
 // sprites, the animated tiles (a flower's frames) and the GBA's 5-bit colour -- and a cell
 // of the ring holding the wrong row or column of the map, the border block, the last

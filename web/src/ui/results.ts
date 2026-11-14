@@ -146,7 +146,7 @@ const CARD_W = 74;
 const CARD_H = 78;
 const PIC = 64;
 
-/** The picture of one of the team (tools/br/export-mon-pics.py). */
+/** The picture of one of the team: its still front picture, cut from the player's ROM (src/art/pictures.ts). */
 function monPic(card: FameCard): string {
   return `/mon-pics/${card.species}${card.shiny ? 's' : ''}.png`;
 }

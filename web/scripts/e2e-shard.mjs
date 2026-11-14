@@ -39,6 +39,7 @@ export const FILE_SECONDS = {
   'spikeb-radial.spec.ts': 165,
   'spikeb-quick-actions.spec.ts': 120,
   'spikeb-landing.spec.ts': 20,
+  'art.spec.ts': 45,
   'spikeb-run-pose.spec.ts': 45,
   'spikeb-pwa-edges.spec.ts': 25,
   'spikeb-loading.spec.ts': 60,

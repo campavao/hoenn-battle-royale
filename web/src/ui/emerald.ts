@@ -1,15 +1,18 @@
 // Emerald's own look for the page outside the game (POK-320): its font, its window
 // frame, its message box and its people, drawn on a canvas at an integer scale, the
 // way the picture is. Everything here is the ROM's: the glyphs and their widths are
-// `graphics/fonts/latin_normal.png` + `gFontNormalLatinGlyphWidths`, the frame is
-// `graphics/text_window/1.png`, the colours are `text_pal1.pal`, the sprites are the
-// object-event sheets export-sprites.py wrote (tools/br/export-ui.py).
+// gFontNormalLatinGlyphs + gFontNormalLatinGlyphWidths, the frame is gTextWindowFrame1,
+// the colours are `text_pal1.pal`, the sprites are the object-event sheets -- all cut from
+// the player's own ROM (art/pictures.ts), under the paths the site once shipped them at.
+// Before there is a ROM (the import screen) the words are set in a plain font and the
+// windows get a plain edge: nothing of Nintendo's is on the page until the player brings it.
 //
 // The pure parts -- measuring text, laying out a frame's tiles, hit testing -- are
 // plain functions so ui.test.ts can pin them without a canvas.
 import uiData from '../data/ui.json';
 import spritesData from '../data/sprites.json';
 import { displayByte } from '../text/gen3';
+import { isRomPicture, onRomPictures, romPicture } from '../art/pictures';
 
 export const CELL = 16;
 export const TILE = 8;
@@ -139,18 +142,54 @@ export function skinSheet(skin: number): { gfx: number; w: number; h: number } |
   return info ? { gfx, w: info.w, h: info.h } : null;
 }
 
-async function loadImage(src: string): Promise<HTMLImageElement> {
+/** One of the ROM's pictures, once there is a ROM to cut it from. */
+function fromRom(path: string): Promise<HTMLCanvasElement> {
   return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.decoding = 'async';
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`could not load ${src}`));
-    img.src = src;
+    const tryNow = (): boolean => {
+      const cv = romPicture(path);
+      if (cv === undefined) return false;
+      if (cv) resolve(cv);
+      else reject(new Error(`the ROM has no ${path}`));
+      return true;
+    };
+    if (tryNow()) return;
+    const stop = onRomPictures(() => {
+      if (tryNow()) stop();
+    });
   });
 }
 
+/** Text in the page's own plain font, at the ROM font's own advances so the layout is the
+ *  same: what a screen says before there is a ROM to take Emerald's letters from. */
+function plainText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, color: TextColor): number {
+  const w = measure(text);
+  ctx.save();
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.textBaseline = 'top';
+  // As wide as the ROM's letters would be, never wider: whatever was laid out round them fits.
+  ctx.fillStyle = color.shadow;
+  ctx.fillText(text, x + 1, y + 2, w);
+  ctx.fillStyle = color.fg;
+  ctx.fillText(text, x, y + 1, w);
+  ctx.restore();
+  return w;
+}
+
+/** A window's plain edge, for before the ROM's frame is here. */
+const PLAIN_EDGE = '#6a6a7a';
+
+/** The canvases to tell when the ROM's pictures arrive. */
+const waitingCanvases = new Set<WeakRef<EmeraldCanvas>>();
+onRomPictures(() => {
+  for (const ref of [...waitingCanvases]) {
+    const c = ref.deref();
+    if (!c) waitingCanvases.delete(ref);
+    else c.onLoad?.();
+  }
+});
+
 /** The font mask recoloured for one text colour, once. */
-function tintFont(mask: HTMLImageElement, color: TextColor): HTMLCanvasElement {
+function tintFont(mask: HTMLCanvasElement, color: TextColor): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = mask.width;
   c.height = mask.height;
@@ -179,7 +218,7 @@ function tintFont(mask: HTMLImageElement, color: TextColor): HTMLCanvasElement {
   return c;
 }
 
-let maskLoad: Promise<HTMLImageElement> | null = null;
+let maskLoad: Promise<HTMLCanvasElement> | null = null;
 const loose = new Map<TextColor, HTMLCanvasElement>();
 
 /** One line of text as its own little canvas, `measure(text)` x 14 GBA pixels, for a
@@ -194,7 +233,7 @@ export function textImage(text: string, color: TextColor = TEXT_DARK, scale = 1)
   c.style.width = `${w * scale}px`;
   c.style.height = `${14 * scale}px`;
   c.style.imageRendering = 'pixelated';
-  maskLoad ??= loadImage('/ui/font-normal.png');
+  maskLoad ??= fromRom('/ui/font-normal.png');
   void maskLoad.then((mask) => {
     let font = loose.get(color);
     if (!font) {
@@ -219,13 +258,12 @@ export type PictureState = 'drawn' | 'loading' | 'missing';
 export class EmeraldCanvas {
   private ctx: CanvasRenderingContext2D;
   private fonts = new Map<TextColor, HTMLCanvasElement>();
-  private sheets = new Map<number, HTMLImageElement>();
   private pictures = new Map<string, HTMLImageElement>();
   private missing = new Set<string>();
   private ready: Promise<void>;
-  private mask: HTMLImageElement | null = null;
-  private frame: HTMLImageElement | null = null;
-  private box: HTMLImageElement | null = null;
+  private mask: HTMLCanvasElement | null = null;
+  private frame: HTMLCanvasElement | null = null;
+  private box: HTMLCanvasElement | null = null;
   /** Called when a sheet or the font lands, so whoever drew without it can draw again. */
   onLoad: (() => void) | null = null;
   /** The logical size, in GBA pixels. */
@@ -242,7 +280,8 @@ export class EmeraldCanvas {
 
   constructor(public readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
-    this.ready = Promise.all([loadImage('/ui/font-normal.png'), loadImage('/ui/frame-1.png'), loadImage('/ui/message-box.png')]).then(
+    waitingCanvases.add(new WeakRef(this));
+    this.ready = Promise.all([fromRom('/ui/font-normal.png'), fromRom('/ui/frame-1.png'), fromRom('/ui/message-box.png')]).then(
       ([mask, frame, box]) => {
         this.mask = mask;
         this.frame = frame;
@@ -308,7 +347,13 @@ export class EmeraldCanvas {
     const x0 = r.x + this.origin;
     ctx.fillStyle = WINDOW_FILL;
     ctx.fillRect(x0 + TILE, r.y + TILE, r.w - 2 * TILE, r.h - 2 * TILE);
-    if (!frame) return;
+    if (!frame) {
+      ctx.fillStyle = PLAIN_EDGE;
+      ctx.fillRect(x0 + 2, r.y + 2, r.w - 4, r.h - 4);
+      ctx.fillStyle = WINDOW_FILL;
+      ctx.fillRect(x0 + 4, r.y + 4, r.w - 8, r.h - 8);
+      return;
+    }
     for (const t of frameTiles(r.w, r.h)) {
       if (t.tx === 1 && t.ty === 1) continue;
       ctx.drawImage(frame, t.tx * TILE, t.ty * TILE, TILE, TILE, x0 + t.dx, r.y + t.dy, TILE, TILE);
@@ -318,8 +363,15 @@ export class EmeraldCanvas {
   /** Emerald's dialogue box over `r`, whole tiles: what a trainer says things in. */
   drawMessageBox(r: Rect): void {
     const { ctx, box } = this;
-    if (!box) return;
     const x0 = r.x + this.origin;
+    if (!box) {
+      const w = Math.floor(r.w / TILE) * TILE, h = Math.floor(r.h / TILE) * TILE;
+      ctx.fillStyle = PLAIN_EDGE;
+      ctx.fillRect(x0, r.y, w, h);
+      ctx.fillStyle = WINDOW_FILL;
+      ctx.fillRect(x0 + 2, r.y + 2, w - 4, h - 4);
+      return;
+    }
     for (const t of messageBoxTiles(Math.floor(r.w / TILE), Math.floor(r.h / TILE))) {
       const sx = (t.t % 7) * TILE;
       const sy = Math.floor(t.t / 7) * TILE;
@@ -339,7 +391,7 @@ export class EmeraldCanvas {
 
   /** Text at (x, y), the glyphs' top-left, in one colour. Returns the width drawn. */
   drawText(text: string, x: number, y: number, color: TextColor = TEXT_DARK): number {
-    if (!this.mask) return measure(text);
+    if (!this.mask) return plainText(this.ctx, text, x + this.origin, y, color);
     let font = this.fonts.get(color);
     if (!font) {
       font = tintFont(this.mask, color);
@@ -364,16 +416,9 @@ export class EmeraldCanvas {
   drawSprite(gfx: number, x: number, y: number, alpha = 1, frame = 0, scale = 1): boolean {
     const info = SHEETS[String(gfx)];
     if (!info) return true;
-    let img = this.sheets.get(gfx);
-    if (!img) {
-      const el = new Image();
-      el.decoding = 'async';
-      el.onload = () => this.onLoad?.();
-      el.src = `/field-sprites/${gfx}.png`;
-      this.sheets.set(gfx, el);
-      img = el;
-    }
-    if (!img.complete || img.naturalWidth === 0) return false;
+    const img = romPicture(`/field-sprites/${gfx}.png`);
+    if (img === undefined) return false;
+    if (!img) return true;
     this.ctx.globalAlpha = alpha;
     this.ctx.drawImage(img, Math.min(frame, info.frames - 1) * info.w, 0, info.w, info.h, x + this.origin, y, info.w * scale, info.h * scale);
     this.ctx.globalAlpha = 1;
@@ -382,8 +427,8 @@ export class EmeraldCanvas {
 
   /** Part of a picture (the sign, an item icon) at (x, y), in GBA pixels. Nothing while
    *  it is still loading; the caller draws again on its load. */
-  drawPicture(img: HTMLImageElement | null, sx: number, sy: number, w: number, h: number, x: number, y: number): void {
-    if (!img || !img.complete || img.naturalWidth === 0) return;
+  drawPicture(img: HTMLImageElement | HTMLCanvasElement | null | undefined, sx: number, sy: number, w: number, h: number, x: number, y: number): void {
+    if (!img || (img instanceof HTMLImageElement && (!img.complete || img.naturalWidth === 0))) return;
     this.ctx.drawImage(img, sx, sy, w, h, x + this.origin, y, w, h);
   }
 
@@ -400,11 +445,22 @@ export class EmeraldCanvas {
     this.ctx.filter = filter;
   }
 
-  /** Part of one of the page's own pictures (`/ui/<name>`: the trainer card, its badges,
-   *  the portraits; or a path from the root, `/field-sprites/fog.png`) at (x, y). Loaded
-   *  on first use; whoever drew without it is asked to draw again when it lands -- or
-   *  fails to, so a screen waiting on it can stop waiting and draw without it. */
+  /** Part of one of the page's pictures (`/ui/<name>`: the trainer card, its badges, the
+   *  portraits; or a path from the root, `/field-sprites/fog.png`) at (x, y). The ROM's are
+   *  cut from it (art/pictures.ts); any other is a file, loaded on first use. Whoever drew
+   *  without it is asked to draw again when it lands -- or fails to, so a screen waiting on
+   *  it can stop waiting and draw without it. */
   drawUiPicture(name: string, sx: number, sy: number, w: number, h: number, x: number, y: number, alpha = 1): PictureState {
+    const path = name.startsWith('/') ? name : `/ui/${name}`;
+    if (isRomPicture(path)) {
+      const cut = romPicture(path);
+      if (cut === undefined) return 'loading';
+      if (!cut) return 'missing';
+      this.ctx.globalAlpha = alpha;
+      this.ctx.drawImage(cut, sx, sy, w, h, x + this.origin, y, w, h);
+      this.ctx.globalAlpha = 1;
+      return 'drawn';
+    }
     let img = this.pictures.get(name);
     if (!img) {
       const el = new Image();
@@ -414,7 +470,7 @@ export class EmeraldCanvas {
         this.missing.add(name);
         this.onLoad?.();
       };
-      el.src = name.startsWith('/') ? name : `/ui/${name}`;
+      el.src = path;
       this.pictures.set(name, el);
       img = el;
     }

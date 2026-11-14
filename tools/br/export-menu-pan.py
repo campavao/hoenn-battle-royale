@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 WORLD = ROOT / "web/src/data/world.json"
 OUT = ROOT / "web/src/data/menupan.json"
-MAPS_DIR = ROOT / "web/public/field-maps"
+MAPS_DIR = ROOT / "build/br-art/field-maps"
 
 START = "MAP_LITTLEROOT_TOWN"
 FILL = ROOT / "web/spike-b/data/world-fill.json"

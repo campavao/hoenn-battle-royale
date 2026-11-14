@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from 'vite';
 import { dirname, resolve } from 'node:path';
-import { readdirSync, rmSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { worldHash } from './world-hash';
 
@@ -88,6 +88,31 @@ function bundleBudget(): Plugin {
   };
 }
 
+// The exporters' reference pictures (tools/br/render-maps.py and the rest write build/br-art,
+// gitignored) at /br-art/, for the dev tools that draw under them (painter.ts). The dev server
+// only: the site ships none of the game's pictures, the page cuts them from the player's ROM
+// (src/art/pictures.ts), and scripts/no-rom.mjs refuses a build that carries them.
+function devArt(): Plugin {
+  const root = resolve(__dirname, '../build/br-art');
+  return {
+    name: 'br-dev-art',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use('/br-art', (req, res, next) => {
+        const file = join(root, decodeURIComponent((req.url ?? '').split('?')[0]));
+        if (!file.startsWith(root) || !/\.png$/.test(file)) return next();
+        try {
+          res.setHeader('Content-Type', 'image/png');
+          res.end(readFileSync(file));
+        } catch {
+          res.statusCode = 404;
+          res.end();
+        }
+      });
+    },
+  };
+}
+
 // What the dev server hands out through /@fs/: the repo root, where the pre-patched ROM
 // the e2e and `#rom=` load lives, plus HBR_ROM's folder when a run points elsewhere. It
 // used to be ['.', 'C:/Users/cam95/Documents/Github']: every sibling repo, readable from
@@ -101,7 +126,7 @@ if (process.env.HBR_ROM) fsAllow.push(dirname(resolve(process.env.HBR_ROM)));
 const lan = process.env.HBR_LAN === '1';
 
 export default defineConfig({
-  plugins: [dropRoms(), bundleBudget()],
+  plugins: [dropRoms(), bundleBudget(), devArt()],
   define: { __WORLD_HASH__: JSON.stringify(worldHash()) },
   server: {
     headers: isolation,

@@ -79,14 +79,15 @@ from `web/`, which has vite-node):
 |---|---|---|---|
 | 1 | `python tools/br/export-world.py` | `web/src/data/world.json`, `world.meta.json`, `regionmap.json`, `landing.json` | `data/maps`, `data/layouts`, tileset attributes, region map sections |
 | 2 | `npx vite-node ../tools/br/landing-reach.ts` | `landing.json`, rewritten in place: cells with no way out marked `off`, doorsteps added | **always right after 1**, which overwrites `landing.json` and drops those marks |
-| 3 | `python tools/br/render-maps.py` | `web/public/field-maps/<MAP>.png`, `.border.png` | `world.json` from 1, layouts, tilesets |
-| 4 | `python tools/br/export-sprites.py` | `web/public/field-sprites/<gfx>.png`, `web/src/data/sprites.json` | object-event graphics tables and pics |
-| 5 | `python tools/br/export-ui.py` | `web/public/ui/*.png`, `web/src/data/ui.json` | the font, text window, message box, and the skin ladder: `sSkinGraphics` in `src/br/br_ghosts.c`, so **rerun it when that table changes**. The skins are drawn from 4's sheets |
+| 3 | `python tools/br/render-maps.py` | `build/br-art/field-maps/<MAP>.png`, `.border.png` (reference copies, gitignored: the page cuts them from the player's ROM) | `world.json` from 1, layouts, tilesets |
+| 4 | `python tools/br/export-sprites.py` | `build/br-art/field-sprites/<gfx>.png` (reference), `web/src/data/sprites.json` | object-event graphics tables and pics |
+| 5 | `python tools/br/export-ui.py` | `build/br-art/ui/*.png` (reference), `web/src/data/ui.json` | the font, text window, message box, and the skin ladder: `sSkinGraphics` in `src/br/br_ghosts.c`, so **rerun it when that table changes**. The skins are drawn from 4's sheets |
 | 6 | `python tools/br/export-encounters.py` | `web/src/data/encounters.json` | `src/data/wild_encounters.json`, `evolution.h`, `species.h`, `species_names.h` |
 | 7 | `python tools/br/export-trainers.py > web/src/data/trainers.json` | the trainers on each map | each map's `scripts.inc` |
 | 8 | `python tools/br/mine-lines.py > web/src/data/lines.json` | MY VOICE's word list | NPC text |
-| 9 | `python tools/br/export-howto.py` | `web/src/ui/howto-sheet.png` | HOW TO PLAY's pictures: 3's Safari Zone and the places they're set, 4's sheets, the region map, the evolution scene, the Charmander line |
+| 9 | `python tools/br/export-howto.py` | `build/br-art/ui/howto-sheet.png` (reference: the page cuts it from the ROM, `web/spike-b/howtoart.ts`) | HOW TO PLAY's pictures: 3's Safari Zone and the places they're set, 4's sheets, the region map, the evolution scene, the Charmander line |
 | 10 | `python tools/br/export-menu-pan.py` | `web/src/data/menupan.json` | The main menu's pan: 3's field maps placed by `world.json`'s seams from Littleroot, and a path through the towns in gym order |
+| 11 | `python tools/br/art-hashes.py build/br-art > web/e2e/art.sha1.json` | the hash of every picture the page cuts from the ROM | 3, 4, 5, the mon and trainer pictures (`export-mon-pics.py`, `export-trainer-pics.py`) and 10's fill: **after any of them changes a picture on purpose**, so `web/e2e/art.spec.ts` holds the cuts to the new truth |
 
 Run order matters for 1 → 2, 1 → 3, and 3 and 4 → 9; the rest stand alone (5's skins name sheets that
 4 writes, but it does not read them). The symbol table and
