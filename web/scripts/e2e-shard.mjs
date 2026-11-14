@@ -32,6 +32,7 @@ export const FILE_SECONDS = {
   'spikeb-botbag.spec.ts': 90,
   'spikeb-leader-drop.spec.ts': 100,
   'spikeb-swap-heal.spec.ts': 45,
+  'spikeb-taken-1hp.spec.ts': 60,
   'spikeb-people.spec.ts': 125,
   'spikeb-phone-crash.spec.ts': 240,
   'spikeb-flow.spec.ts': 250,

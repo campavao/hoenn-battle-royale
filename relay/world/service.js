@@ -11985,6 +11985,7 @@ var isKeyItem = (item) => item >= 259 && item <= 288 || item >= 349;
 var ITEMS_COUNT = 377;
 var MAX_MONEY = 999999;
 var BAG_ROWS = 30 + 16 + 46;
+var fallen = (m) => ({ species: m.species, level: m.level, fell: true });
 var NUM_SPECIES2 = 412;
 var MAX_LEVEL2 = 100;
 var MAX_HP = 999;
@@ -11994,7 +11995,7 @@ var isMon = (m) => {
 };
 function groundMon(m) {
   const { species, level, hp: hp2, maxHp } = m;
-  if (!Number.isInteger(hp2) || !Number.isInteger(maxHp) || maxHp < 1 || maxHp > MAX_HP) return { species, level };
+  if (!Number.isInteger(hp2) || !Number.isInteger(maxHp) || maxHp < 1 || maxHp > MAX_HP) return m.fell === true ? { species, level, fell: true } : { species, level };
   return { species, level, hp: Math.min(Math.max(hp2, 0), maxHp), maxHp };
 }
 function cleanReleased(raw) {
@@ -12649,6 +12650,12 @@ function wornParty(party, wear) {
     return { ...m, hp: w <= 0 ? 0 : Math.max(1, Math.min(m.maxHp, Math.round(m.maxHp * w))) };
   });
 }
+var FELL_WEAR = 1e-4;
+function takenWear(m) {
+  if (m.fell) return FELL_WEAR;
+  if (m.hp !== void 0 && m.maxHp) return Math.min(1, Math.max(0, m.hp / m.maxHp));
+  return 1;
+}
 var FIELD_SURF = 4;
 var FIELD_DIVE = 8;
 function diveTo(maps, world, s, field) {
@@ -13043,8 +13050,9 @@ var Room = class {
     } else if (cmd.c === "leave" || cmd.c === "out") {
       const a = this.actor(cmd.id);
       if (a && cmd.c === "out" && cmd.bag && !emptyBag(cmd.bag)) {
-        const key = SPILL_KEY + a.id, at2 = this.fallen(a);
-        this.spills.set(key, { key, map: at2.map, x: at2.x, y: at2.y, name: a.name, bag: structuredClone(cmd.bag) });
+        const key = SPILL_KEY + a.id, at2 = this.fallen(a), bag = structuredClone(cmd.bag);
+        if (bag.mons) bag.mons = bag.mons.map(fallen);
+        this.spills.set(key, { key, map: at2.map, x: at2.x, y: at2.y, name: a.name, bag });
       }
       this.remove(cmd.id);
       if (cmd.c === "leave") this.bench = this.bench.filter((b2) => b2.id !== cmd.id);
@@ -13104,7 +13112,7 @@ var Room = class {
    *  winner's ROM fought, at the rung, as it sent them in its `end`; the room only puts them down, so
    *  every page has the same bag. */
   leaderDrops(by, n, team) {
-    const mons = (team ?? []).slice(0, 6).filter((r) => Number.isInteger(r.sp) && r.sp > 0 && r.sp < 412 && Number.isInteger(r.lv) && r.lv >= 1 && r.lv <= 100).map((r) => ({ species: r.sp, level: r.lv }));
+    const mons = (team ?? []).slice(0, 6).filter((r) => Number.isInteger(r.sp) && r.sp > 0 && r.sp < 412 && Number.isInteger(r.lv) && r.lv >= 1 && r.lv <= 100).map((r) => fallen({ species: r.sp, level: r.lv }));
     if (!mons.length) return;
     const at2 = this.beside(by) ?? this.nearestBare(by.m.spot);
     if (!at2) return;
@@ -13885,7 +13893,7 @@ var Room = class {
     const phase = this.ring().phase + 1;
     const grade = gradeOf(this.seed, a.id);
     const party = botParty(this.seed, a, phase);
-    const bag = { items: carried(party, a.loot?.items ?? []), money: purse(phase, grade) + (a.loot?.money ?? 0), mons: party.map((m) => ({ species: m.species, level: m.level })) };
+    const bag = { items: carried(party, a.loot?.items ?? []), money: purse(phase, grade) + (a.loot?.money ?? 0), mons: party.map(fallen) };
     const key = SPILL_KEY + a.id, at2 = this.fallen(a);
     if (!emptyBag(bag)) this.spills.set(key, { key, map: at2.map, x: at2.x, y: at2.y, name: a.name, bag });
     this.fall(a, by, how);
@@ -14475,15 +14483,20 @@ var Room = class {
     }
     a.last = bits;
   }
-  /** A bot takes Pokemon out of a bag, after what it took before; those there is no room for. */
+  /** A bot takes Pokemon out of a bag, after what it took before; those there is no room for.
+   *  Each joins as a trainer's would (carry.ts hpTaken): one of a beaten trainer's team on 1 HP
+   *  (`fell`), one let go on the share it left with, anything else whole. */
   botTakes(a, mons) {
-    const room = Math.max(0, 6 - botParty(this.seed, a, this.ring().phase + 1).length);
+    const was = botParty(this.seed, a, this.ring().phase + 1).length;
+    const room = Math.max(0, 6 - was);
     const take2 = mons.slice(0, room);
     if (take2.length) {
       const at2 = a.caught?.length ?? 0;
       a.caught = [...a.caught ?? [], ...take2.map((m) => m.species)];
       if (a.moves) a.moves = [...a.moves, ...take2.map(() => [])];
-      a.wear?.splice(at2, 0, ...take2.map(() => 1));
+      const shares = take2.map(takenWear);
+      if (!a.wear && shares.some((w) => w < 1)) a.wear = Array(was).fill(1);
+      a.wear?.splice(at2, 0, ...shares);
       this.botLearns(a);
     }
     return mons.slice(room);
@@ -14667,6 +14680,7 @@ var Room = class {
         mix3(m.species);
         mix3(m.level);
         if (m.hp !== void 0) mix3(m.hp);
+        if (m.fell) mix3(-1);
       }
     }
     return h;
@@ -16409,4 +16423,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "ef69bfdd928d";
+export const WORLD_HASH = "192335f7677a";

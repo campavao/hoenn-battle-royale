@@ -30,9 +30,14 @@ const ITEMS_COUNT = 377, MAX_MONEY = 999999, BAG_ROWS = 30 + 16 + 46;
 /** A mon in a ball on the ground: species and level, made fresh for whoever takes it
  *  (br_loot.c MakeTaken). One of a trainer's own let go -- a full party's catch, a swap on a
  *  bag's team -- says the HP it left the party with, and is taken with that (Cam, 11-11: "the
- *  Mon you released should have the same health it was at"). None said, it is made full:
- *  a beaten trainer's team, a gift, an old page's. */
-export interface GroundMon { species: number; level: number; hp?: number; maxHp?: number }
+ *  Mon you released should have the same health it was at"). One of a beaten trainer's team
+ *  (`fell`: a player out, a bot beaten, a leader beaten) joins on 1 HP, as Kanto's does (its
+ *  README: "It joins your party at 1 HP, exactly as it fell"; Cam, 11-14). None said, it is
+ *  made full: a gift, the chest, an event's, an old page's. */
+export interface GroundMon { species: number; level: number; hp?: number; maxHp?: number; fell?: true }
+
+/** One of a beaten trainer's team, as it goes down: fainted with them, it joins on 1 HP. */
+export const fallen = (m: { species: number; level: number }): GroundMon => ({ species: m.species, level: m.level, fell: true });
 
 export interface BagRows {
   items: { id: number; n: number }[];
@@ -52,10 +57,11 @@ const isMon = (m: unknown): boolean => {
 
 /** A ground mon as a phone said it, held to the mon: an HP over its most is its most, under 0
  *  is 0, and one that is not a whole number with a most of 1..999 beside it is not said at
- *  all (made full, as before). */
-export function groundMon(m: { species: number; level: number; hp?: unknown; maxHp?: unknown }): GroundMon {
+ *  all (made full, as before). An HP said is the mon's own and outranks `fell`, which is only
+ *  ever true. */
+export function groundMon(m: { species: number; level: number; hp?: unknown; maxHp?: unknown; fell?: unknown }): GroundMon {
   const { species, level, hp, maxHp } = m;
-  if (!Number.isInteger(hp) || !Number.isInteger(maxHp) || (maxHp as number) < 1 || (maxHp as number) > MAX_HP) return { species, level };
+  if (!Number.isInteger(hp) || !Number.isInteger(maxHp) || (maxHp as number) < 1 || (maxHp as number) > MAX_HP) return m.fell === true ? { species, level, fell: true } : { species, level };
   return { species, level, hp: Math.min(Math.max(hp as number, 0), maxHp as number), maxHp: maxHp as number };
 }
 

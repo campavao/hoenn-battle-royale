@@ -41,7 +41,7 @@ import { blueTm, scatterItem } from '../../src/match/scatter';
 import roomsJson from '../data/rooms.json';
 import tableBallsJson from '../data/table-balls.json';
 import { GIFTS } from '../../src/match/gifts';
-import { cableOrDoll, groundCount, groundMon, isTm, type BagRows, type GroundMon } from './items';
+import { cableOrDoll, fallen, groundCount, groundMon, isTm, type BagRows, type GroundMon } from './items';
 import { SIGHT_RANGE, eitherSees, seesOver, type Facing } from '../../src/bots/sight';
 import { SAFARI_CELLS } from '../../src/match/safari';
 import { RING_RADII } from '../../src/match/clock';
@@ -184,6 +184,18 @@ export function wornParty<T extends { hp: number; maxHp: number }>(party: T[], w
     if (w === undefined) return m;
     return { ...m, hp: w <= 0 ? 0 : Math.max(1, Math.min(m.maxHp, Math.round(m.maxHp * w))) };
   });
+}
+
+/** The share of its most a bot's `wear` gives one of a beaten trainer's team it takes: wornParty
+ *  makes any share over 0 at least 1 HP, and this little is never more (a most is under 5000). */
+export const FELL_WEAR = 1e-4;
+
+/** What a mon off the ground is to a bot's `wear` (botTakes), as carry.ts hpTaken is to a page:
+ *  a beaten trainer's on 1 HP, one let go on the share it left with (0 still 0), the rest whole. */
+export function takenWear(m: GroundMon): number {
+  if (m.fell) return FELL_WEAR;
+  if (m.hp !== undefined && m.maxHp) return Math.min(1, Math.max(0, m.hp / m.maxHp));
+  return 1;
 }
 
 /** A team with somebody who could SURF: water is walkable (and up a waterfall). */
@@ -894,9 +906,11 @@ export class Room {
       // A bot fought by somebody who left walks again.
       const a = this.actor(cmd.id);
       // Where they stood: nobody else can be on that cell, nor a ball (both are solid).
+      // Their team in it fell with them: each joins whoever takes it on 1 HP (Kanto's rule).
       if (a && cmd.c === 'out' && cmd.bag && !emptyBag(cmd.bag)) {
-        const key = SPILL_KEY + a.id, at = this.fallen(a);
-        this.spills.set(key, { key, map: at.map, x: at.x, y: at.y, name: a.name, bag: structuredClone(cmd.bag) });
+        const key = SPILL_KEY + a.id, at = this.fallen(a), bag = structuredClone(cmd.bag);
+        if (bag.mons) bag.mons = bag.mons.map(fallen);
+        this.spills.set(key, { key, map: at.map, x: at.x, y: at.y, name: a.name, bag });
       }
       this.remove(cmd.id);
       if (cmd.c === 'leave') this.bench = this.bench.filter((b) => b.id !== cmd.id);
@@ -954,7 +968,7 @@ export class Room {
    *  winner's ROM fought, at the rung, as it sent them in its `end`; the room only puts them down, so
    *  every page has the same bag. */
   private leaderDrops(by: Actor, n: number, team?: { sp: number; lv: number }[]): void {
-    const mons = (team ?? []).slice(0, 6).filter((r) => Number.isInteger(r.sp) && r.sp > 0 && r.sp < 412 && Number.isInteger(r.lv) && r.lv >= 1 && r.lv <= 100).map((r) => ({ species: r.sp, level: r.lv }));
+    const mons = (team ?? []).slice(0, 6).filter((r) => Number.isInteger(r.sp) && r.sp > 0 && r.sp < 412 && Number.isInteger(r.lv) && r.lv >= 1 && r.lv <= 100).map((r) => fallen({ species: r.sp, level: r.lv }));
     if (!mons.length) return;
     const at = this.beside(by) ?? this.nearestBare(by.m.spot);
     if (!at) return;
@@ -1833,7 +1847,7 @@ export class Room {
     const grade = gradeOf(this.seed, a.id);
     const party = botParty(this.seed, a, phase);
     // And whatever it picked up on its way (bots carry what they pick up, POK-322).
-    const bag: Bag = { items: carried(party, a.loot?.items ?? []), money: purse(phase, grade) + (a.loot?.money ?? 0), mons: party.map((m) => ({ species: m.species, level: m.level })) };
+    const bag: Bag = { items: carried(party, a.loot?.items ?? []), money: purse(phase, grade) + (a.loot?.money ?? 0), mons: party.map(fallen) };
     const key = SPILL_KEY + a.id, at = this.fallen(a);
     if (!emptyBag(bag)) this.spills.set(key, { key, map: at.map, x: at.x, y: at.y, name: a.name, bag });
     this.fall(a, by, how);
@@ -2406,15 +2420,20 @@ export class Room {
     a.last = bits;
   }
 
-  /** A bot takes Pokemon out of a bag, after what it took before; those there is no room for. */
-  private botTakes(a: Actor, mons: readonly { species: number; level: number }[]): { species: number; level: number }[] {
-    const room = Math.max(0, 6 - botParty(this.seed, a, this.ring().phase + 1).length);
+  /** A bot takes Pokemon out of a bag, after what it took before; those there is no room for.
+   *  Each joins as a trainer's would (carry.ts hpTaken): one of a beaten trainer's team on 1 HP
+   *  (`fell`), one let go on the share it left with, anything else whole. */
+  private botTakes(a: Actor, mons: readonly GroundMon[]): GroundMon[] {
+    const was = botParty(this.seed, a, this.ring().phase + 1).length;
+    const room = Math.max(0, 6 - was);
     const take = mons.slice(0, room);
     if (take.length) {
       const at = a.caught?.length ?? 0;
       a.caught = [...(a.caught ?? []), ...take.map((m) => m.species)];
       if (a.moves) a.moves = [...a.moves, ...take.map(() => [])];
-      a.wear?.splice(at, 0, ...take.map(() => 1));
+      const shares = take.map(takenWear);
+      if (!a.wear && shares.some((w) => w < 1)) a.wear = Array<number>(was).fill(1);
+      a.wear?.splice(at, 0, ...shares);
       this.botLearns(a);
     }
     return mons.slice(room);
@@ -2514,7 +2533,7 @@ export class Room {
     for (const b of this.spills.values()) {
       mix(b.key); str(b.map); mix(b.x); mix(b.y); mix(b.bag.money);
       for (const r of b.bag.items) { mix(r.id); mix(r.n); }
-      for (const m of b.bag.mons ?? []) { mix(m.species); mix(m.level); if (m.hp !== undefined) mix(m.hp); }
+      for (const m of b.bag.mons ?? []) { mix(m.species); mix(m.level); if (m.hp !== undefined) mix(m.hp); if (m.fell) mix(-1); }
     }
     return h;
   }
