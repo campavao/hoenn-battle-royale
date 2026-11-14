@@ -19,10 +19,9 @@ judge, unset only when it needs this session's reasoning.
   enforces it). Write C89-ish: agbcc is GCC 2.95 (declarations before statements, no
   designated initialisers, no `//` in odd places).
 - `web/` — Vite + TypeScript. The game is spike B (`web/spike-b/`, page `web/index.html`,
-  served at `/`, its world on the relay's `/world`); the old mGBA-overworld shell
-  (`web/src/app.ts`, page `web/classic/index.html`) is at `/classic/` until about
-  2026-11-06, then deleted. Spike B still imports most of `web/src/` (bots, match, ui,
-  emu, net). `relay/` — Node WebSocket relay. `tools/br/` — harness,
+  served at `/`, its world on the relay's `/world`). The old mGBA-overworld shell
+  (`web/src/app.ts`, `/classic/`) was deleted 2026-11-14; `/classic/` redirects to `/`.
+  Spike B still imports much of `web/src/` (bots, match, ui, emu, net). `relay/` — Node WebSocket relay. `tools/br/` — harness,
   exporters, patch builder. `docs/` — design and handoffs. **Deploying (site, relay, tag):
   `docs/DEPLOY.md`** — when Cam asks to ship, that is the recipe, and read the live
   `rom` back afterwards.
@@ -85,8 +84,7 @@ call a fix done:
 A release needs no local suite: the whole e2e has passed on its tree in shards with a real ROM,
 in its own CI run or an earlier one (`docs/DEPLOY.md`), and the `release` job deploys only if
 `green`, `rom` and `pret` pass and the relay shows no live match. Run a whole-suite pass locally only when chasing a
-failure. The e2e is the new game's alone since 2026-11-01: `/classic/` takes blocker fixes by
-hand until it goes. Run all of `npx vitest run` before a PR that changes shared code, and give
+failure. Run all of `npx vitest run` before a PR that changes shared code, and give
 a new spec a time in `web/scripts/e2e-shard.mjs`. A PR only needs the specs its change touches.
 
 A spec's shortcut may skip time, never make a state the game couldn't: a team from `rom.fillParty()` (the ROM makes it), HP from `rom.setHp()`, items from `rom.give()`. A raw `emu.write` to the party off a battle is undone by the page's own copy at the next ROM turn; in a battle it holds. A test made on an impossible state passes on it and hides the bug it was for (2026-11-12, fillParty copying an empty slot).
@@ -102,7 +100,7 @@ A spec's shortcut may skip time, never make a state the game couldn't: a team fr
 - Screenshots only when pixels change. Drivers and tests are the check for logic.
 - Releases go out on a timer whenever the relay shows no live match (docs/DEPLOY.md).
   Until that job exists, the release-owner thread keeps batching them.
-- Spike B is the game. The mGBA live match (now `/classic/`) takes blocker fixes only.
+- Spike B is the game; `/classic/` is gone (2026-11-14).
 - A change to `web/spike-b/shared/` needs `node tools/br/bundle-world.mjs` (the relay runs
   the bundle). Its `WORLD_HASH` is what every page sends on join: a page built against
   another bundle is told to reload, so a dev server needs a restart after re-bundling.

@@ -7,10 +7,7 @@ import { HOENN } from '../bots/hoenn';
 import { DOORSTEPS, HAND, LANDING, worldReady } from './landing';
 import { MAP_OFFSET } from '../net/cells';
 import type { EventMsg, Msg, PackedMon, RingMsg, SpillMsg } from '../net/wire';
-import { Bots, STEP_MS } from '../bots/brain';
-import { dealBots } from '../bots/roster';
-import { MOVE_CUT, MOVE_SURF, dealParty } from '../bots/party';
-import { pageCell } from '../bots/space';
+import { MOVE_CUT, MOVE_SURF } from '../bots/party';
 import regionmapData from '../data/regionmap.json';
 import mapsecJson from '../../../src/data/region_map/region_map_sections.json';
 
@@ -265,34 +262,6 @@ describe('story events', () => {
     // Under the door, and up all six clean floors (story-sky-pillar.txt walks the door).
     'sky-pillar': { mapId: 'MAP_SKY_PILLAR_OUTSIDE', x: 14, y: 6 },
   };
-  it('a bot outside walks in and takes it', () => {
-    for (const story of STORIES.filter((s) => !s.boat && !s.noBots)) {
-      const from = OUTSIDE[story.id];
-      expect(from, story.id).toBeDefined();
-      const key = eventKey(0, 0);
-      const ground = new Map([[key, { mapId: story.cells[0].map ?? story.map, x: story.cells[0].x, y: story.cells[0].y }]]);
-      const sent: Msg[] = [];
-      const bots = new Bots({
-        world: HOENN.world,
-        targets: [from],
-        mapRef: (id) => HOENN.refOf(id)!,
-        send: (m) => void sent.push(m),
-        rng: mulberry32(3),
-        // A lead that could cross the sea and cut a tree: since #7 a bot needs one, as a player does.
-        deal: (bot, phase, mapId) => withFieldMoves(dealParty(5, bot.seat, phase, mapId)),
-        loot: {
-          all: () => [...ground].map(([k, at]) => ({ key: k, mapId: at.mapId, ...pageCell(at.x, at.y) })),
-          at: (mapId, { x, y }) => [...ground].find(([, c]) => c.mapId === mapId && c.x === x && c.y === y)?.[0],
-        },
-      });
-      bots.start(dealBots(8, 1, [], [{ ...from, map: HOENN.refOf(from.mapId)! }]), 0);
-      for (let t = STEP_MS; t <= 240_000 && ground.size > 0; t += STEP_MS) {
-        bots.tick(t);
-        for (const msg of sent) if (msg.t === 'pickup') ground.delete(msg.key);
-      }
-      expect(ground.size, story.id).toBe(0);
-    }
-  });
 
   it("keeps a REGI behind its wall, and STERN's thanks, from a bot that could not get them", () => {
     const at = (id: string, i = 0) => {

@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { encodeGen3 } from '../text/gen3';
 import { LINES } from '../bots/lines';
-import { BOSSES } from './bosses';
+import { LEADERS } from '../../spike-b/shared/gyms';
 import regionMap from '../data/regionmap.json';
 import { chest, event, felled, opening, outs, said, won } from './ticker';
 import fonts from '../../../src/fonts.c?raw';
@@ -50,7 +50,7 @@ describe('every news line fits the ticker', () => {
     ['opening', opening(0, 999)?.text],
     ['chest', chest(0, WIDE)?.text],
     ['won', won(0, WIDE)?.text],
-    ...BOSSES.map((b): [string, string | undefined] => [`felled ${b.name}`, felled(0, WIDE, b.name)?.text]),
+    ...LEADERS.map((b): [string, string | undefined] => [`felled ${b.name}`, felled(0, WIDE, b.name)?.text]),
     ...sections.flatMap((s): [string, string | undefined][] => [
       [`event ${s}`, event(0, s)?.text],
       [`rare ${s}`, event(0, s, false)?.text],

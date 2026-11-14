@@ -1,6 +1,5 @@
 // The results, drawn (POK-320): what they say, and when the champion gets to see them.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { EndGrace } from '../match/grace';
 import { ParadeHold, ReplayHold, fameOf, resultsScreen, resultsView, standingsOf, type ResultsModel } from './results';
 import { fakeCanvas } from './fakecanvas';
 
@@ -373,29 +372,6 @@ describe("the champion's Hall of Fame comes first (POK-320)", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  it('draws the results when the parade is over, and takes the exit a grace after that', () => {
-    // The page's own wiring: EndGrace polls the hold as its paradeDone.
-    let over = false;
-    const drawn = vi.fn();
-    const hold = new ParadeHold({ done: () => over, graceMs: 4_000, giveUpMs: 55_000, onParaded: drawn, now: () => Date.now() });
-    const grace = new EndGrace({ graceMs: 4_000, winMaxMs: 60_000, pollMs: 500, paradeDone: hold.finished });
-    const exit = vi.fn();
-    grace.arm(exit, true);
-    vi.advanceTimersByTime(20_000);
-    expect(hold.paraded, 'the parade is still running').toBe(false);
-    expect(drawn).not.toHaveBeenCalled();
-    over = true;
-    vi.advanceTimersByTime(500);
-    expect(drawn, 'the results come the moment it ends').toHaveBeenCalledTimes(1);
-    expect(hold.paraded).toBe(true);
-    expect(exit, 'and stay up to be read').not.toHaveBeenCalled();
-    vi.advanceTimersByTime(3_500);
-    expect(exit).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(500);
-    expect(exit).toHaveBeenCalledTimes(1);
-    expect(drawn).toHaveBeenCalledTimes(1);
-  });
-
   it('the next match waits for the next parade', () => {
     let over = true;
     let now = 0;
@@ -407,30 +383,6 @@ describe("the champion's Hall of Fame comes first (POK-320)", () => {
     over = false;
     expect(hold.paraded).toBe(false);
     expect(hold.finished()).toBe(false);
-  });
-
-  it("a parade that never ends still shows its champion the results, for the grace, before the deadline's exit", () => {
-    // POK-320 review: the results waited on BR_PHASE_DONE alone, and EndGrace's deadline
-    // took the exit regardless -- a stuck parade's champion never saw a placement at all.
-    const drawn = vi.fn();
-    const giveUpMs = 60_000 - 4_000 - 2 * 500; // app.ts's: winMaxMs less a grace and two polls
-    const hold = new ParadeHold({ done: () => false, graceMs: 4_000, giveUpMs, onParaded: drawn, now: () => Date.now() });
-    const grace = new EndGrace({ graceMs: 4_000, winMaxMs: 60_000, pollMs: 500, paradeDone: hold.finished });
-    const exit = vi.fn();
-    grace.arm(exit, true);
-    vi.advanceTimersByTime(55_000);
-    expect(drawn, 'still waiting on the parade').not.toHaveBeenCalled();
-    expect(hold.holds(1, 1)).toBe(true);
-    vi.advanceTimersByTime(500);
-    expect(drawn, 'given up on: the results go up').toHaveBeenCalledTimes(1);
-    expect(hold.holds(1, 1)).toBe(false);
-    vi.advanceTimersByTime(3_500);
-    expect(exit, 'and are read for the grace').not.toHaveBeenCalled();
-    vi.advanceTimersByTime(500);
-    expect(exit).toHaveBeenCalledTimes(1);
-    vi.advanceTimersByTime(10_000);
-    expect(exit, 'one exit: the poll took it, and the deadline with it').toHaveBeenCalledTimes(1);
-    expect(drawn).toHaveBeenCalledTimes(1);
   });
 
   it('holds anybody\'s results until the parade, a draw not at all, and nothing on a build that cannot say', () => {
