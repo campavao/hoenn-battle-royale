@@ -27,7 +27,7 @@ describe('ci-scope', () => {
   });
 
   it('runs every spec but not the ROM for the shell or the relay', () => {
-    expect(scope(['web/src/app.ts'])).toEqual({ rom: false, e2e: 'all' });
+    expect(scope(['web/src/pwa.ts'])).toEqual({ rom: false, e2e: 'all' });
     expect(scope(['relay/server.js', 'web/spike-b/main.ts'])).toEqual({ rom: false, e2e: 'all' });
   });
 

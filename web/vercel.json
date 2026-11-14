@@ -1,6 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "git": { "deploymentEnabled": false },
+  "redirects": [
+    { "source": "/classic", "destination": "/", "permanent": false },
+    { "source": "/classic/:path*", "destination": "/", "permanent": false }
+  ],
   "headers": [
     {
       "source": "/(.*)",

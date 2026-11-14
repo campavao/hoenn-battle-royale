@@ -3,7 +3,6 @@
 import { describe, expect, it } from 'vitest';
 import worldData from '../data/world.json';
 import { HOENN, WorldIndex } from './hoenn';
-import { botGround } from './host';
 import type { WorldMap } from './world';
 
 const MAPS = (worldData as { maps: WorldMap[] }).maps;
@@ -43,9 +42,4 @@ describe('the world index', () => {
     expect(decoded).toBe(1);
   });
 
-  it('is what every match of bots walks on: no second World per deal', () => {
-    expect(botGround().world).toBe(HOENN.world);
-    expect(botGround().world).toBe(botGround().world);
-    expect(botGround().idOf({ group: MAPS[0].group, num: MAPS[0].num })).toBe(MAPS[0].id);
-  });
 });

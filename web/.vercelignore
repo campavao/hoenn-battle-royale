@@ -14,8 +14,8 @@ e2e
 .vercel
 
 # The dev ROM. tools/br/dev-patch.sh leaves a full, patched, copyrighted Emerald in
-# public/patch/ so the dev shell can skip the file picker; app.ts only ever fetches it
-# under import.meta.env.DEV and says so in its own comment: "nothing ships this file".
+# public/patch/ so the dev shell can skip the file picker; spike-b/rom.ts only ever reads
+# one under import.meta.env.DEV: "nothing ships this file".
 # Nothing enforced that until now. The ROM lives on the player's device and nowhere else.
 public/patch/pokeemerald.gba
 *.gba

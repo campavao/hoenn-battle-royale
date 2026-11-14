@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { Director, type DirectorWorld } from './director';
-import { restoreDirector, snapDirector } from './hostsnap';
 import { isScatterKey } from './scatter';
 import { cellKey, withoutVetoes } from './hand';
 import type { ClockMsg, EventMsg, Msg, RingMsg, SpillMsg, StartMsg, WinMsg } from '../net/wire';
@@ -488,55 +487,3 @@ describe('events (speed-up phase 6)', () => {
   });
 });
 
-describe("the host's own reload (HBR-20)", () => {
-  it('goes on exactly as it would have: the same rings, events and draws, the out still out', () => {
-    const run = (reloadAt?: number) => {
-      let a = harness([0, 1, 2], 7, { safariSecs: 5, fogSecs: 10 });
-      a.director.start();
-      a.advance(5000);
-      a.fireOut(2);
-      a.advance(13_000);
-      if (reloadAt !== undefined) {
-        const snap = JSON.parse(JSON.stringify(snapDirector(a.director, a.now())));
-        const b = harness([0, 1, 2], 7, { safariSecs: 5, fogSecs: 10 });
-        b.advance(reloadAt); // the new page's clock is anywhere
-        restoreDirector(b.director, snap, 0);
-        b.sent.unshift(...a.sent);
-        a = b;
-      }
-      for (let i = 0; i < 6; i++) a.advance(10_000);
-      return a;
-    };
-    const straight = run();
-    const reloaded = run(123_456);
-    expect(reloaded.sent).toEqual(straight.sent);
-    expect(reloaded.director.state).toEqual(straight.director.state);
-    expect(reloaded.director.state.placements).toEqual([2]);
-  });
-
-  it('after the take-over has already put the outs in, keeps each once (HBR-75 review)', () => {
-    const a = harness([0, 1, 2, 3], 7, { safariSecs: 5, fogSecs: 10 });
-    a.director.start();
-    a.advance(5000);
-    a.fireOut(2);
-    const snap = JSON.parse(JSON.stringify(snapDirector(a.director, a.now())));
-    const b = harness([0, 1, 2, 3], 7, { safariSecs: 5, fogSecs: 10 });
-    // HostRole.begin: resume() off the wire first, then the page's own snapshot. Seat 3
-    // went out while the page was reloading.
-    b.director.resume({ ringPhase: 1, centre: { sx: 4, sy: 11 }, secsLeftInPhase: 5, out: [2, 3] });
-    restoreDirector(b.director, snap, 0);
-    expect(b.director.state.placements).toEqual([2, 3]);
-    expect(b.director.state.alive, 'and seat 3 is not standing as well').toBe(2);
-  });
-
-  it('counts the time the tab was away: a ring that fell due meanwhile goes out on the next tick', () => {
-    const a = harness([0, 1], 3, { safariSecs: 5, fogSecs: 10 });
-    a.director.start();
-    a.advance(5000);
-    const snap = JSON.parse(JSON.stringify(snapDirector(a.director, a.now())));
-    const b = harness([0, 1], 3, { safariSecs: 5, fogSecs: 10 });
-    restoreDirector(b.director, snap, 12_000);
-    b.advance(0);
-    expect((b.sent.filter((m) => m.t === 'ring') as RingMsg[]).map((r) => r.phase)).toEqual([2]);
-  });
-});
