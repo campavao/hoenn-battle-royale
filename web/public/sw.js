@@ -59,9 +59,9 @@ const FRESH_WAIT_MS = 400;
  *  and the next navigation is the offline one. Everything else the page asks for goes
  *  through us and caches itself. */
 const SHELL = ['/', '/manifest.webmanifest', '/icon.svg'];
-/** The pages, each naming its own hashed files under /assets/: the game at /, and the
- *  classic game at /classic/ for the week it stays (2026-10-30). */
-const PAGES = ['/', '/classic/'];
+/** The pages, each naming its own hashed files under /assets/: the game at /. (The
+ *  classic game at /classic/ went on 2026-11-14.) */
+const PAGES = ['/'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

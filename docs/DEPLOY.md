@@ -136,7 +136,7 @@ cd relay && railway link --project 34e1da0b-5125-40be-9954-d90fafa3e156 --enviro
 ```
 
 If the CLI is not logged in: `railway login`. The relay's address is hardcoded in the shell
-(`DEFAULT_RELAY_URL` in `web/src/app.ts`, `wss://hoenn-relay-production.up.railway.app`),
+(`DEFAULT_RELAY_URL` in `web/spike-b/main.ts`, `wss://hoenn-relay-production.up.railway.app`),
 so no env var is needed. Watch it come up:
 
 ```bash

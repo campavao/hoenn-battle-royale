@@ -9,7 +9,6 @@ import { SKIN_GFX } from './ui/emerald';
 import type { WorldMap } from './bots/world';
 import fieldHeader from '../../include/br/br_field.h?raw';
 import fieldSource from '../../src/br/br_field.c?raw';
-import appSource from './app.ts?raw';
 
 describe('the fade a battle closes on', () => {
   const OUT_TO_BLACK = 0x0143, NORMAL = 0;
@@ -190,46 +189,6 @@ describe('the picture past the LCD (POK-319)', () => {
       const got = romBand(null, null);
       got.band.top = 0;
       expect(LEGACY_BAND.top).toBe(40);
-    });
-
-    it('main() asks after the ROM is patched and the playing screen is up, before it boots: the window, then the band, both read off the bytes it boots', () => {
-      const main = appSource.slice(appSource.indexOf('async function main()'));
-      const patched = main.indexOf('await runPatchingScreen(emu)');
-      const read = main.indexOf('romPicture = romBand(bytes, symbols);');
-      const shown = main.indexOf("showScreen('playing')");
-      const ask = main.indexOf('askForBand(emu);');
-      expect(patched).toBeGreaterThan(0);
-      expect(read).toBeGreaterThan(patched);
-      expect(shown, 'measured on the playing screen').toBeGreaterThan(read);
-      expect(ask).toBeGreaterThan(shown);
-      expect(main.indexOf('emu.startBytes(')).toBeGreaterThan(ask);
-      expect(main.indexOf('emu.start()')).toBeGreaterThan(ask);
-      expect(main.slice(0, patched), 'nothing asked before the ROM is known').not.toMatch(/setViewport|setSpriteBand|askForBand/);
-      // askForBand: the layout's band inside the ROM's, then the window, then the band.
-      const fn = appSource.slice(appSource.indexOf('function askForBand('), appSource.indexOf('async function main()'));
-      const band = fn.indexOf('askBand(matchLayout(), romPicture, shownOk)');
-      const sprites = fn.indexOf('emu.setSpriteBand(romPicture.sprites)');
-      const viewport = fn.indexOf('emu.setViewport(askedBand)');
-      expect(band).toBeGreaterThan(0);
-      expect(sprites).toBeGreaterThan(band);
-      expect(viewport).toBeGreaterThan(sprites);
-      expect(fn).toMatch(/askedBand = asked;/);
-      // ...and the whole window over it, from a core that draws the world (HBR-27).
-      // The window grown to its screen too: the band is a boot's size (Cam's 2026-10-26 play-test).
-      const whole = 'askedBand = widerBand(worldBand(matchLayout()), worldBand(matchLayout(true)))';
-      expect(fn.indexOf(whole)).toBeGreaterThan(fn.indexOf('worldOn = emu.setWorld(worldAt)'));
-      expect(fn.indexOf(whole)).toBeLessThan(viewport);
-      // The match's layout, whatever is up when it is measured: in-match, and docked on a desktop.
-      const measure = appSource.slice(appSource.indexOf('function matchLayout('), appSource.indexOf('function askForBand('));
-      expect(measure).toMatch(/classList\.add\('in-match'\)/);
-      expect(measure).toMatch(/classList\.toggle\('docked', desktop\(\)\)/);
-      expect(measure).toMatch(/measureLayout\(\$\('#screen-wrap'\)[^)]*, \$\('#pad'\)[^;]*, grown\)/);
-      // PLAY AGAIN asks again, before the boot that takes it.
-      const again = appSource.slice(appSource.indexOf('async function returnToRoom()'));
-      expect(again.indexOf('askForBand(emu);')).toBeGreaterThan(0);
-      expect(again.indexOf('askForBand(emu);')).toBeLessThan(again.indexOf('await rebootIntoBr('));
-      // The field lays out with what was last asked when the emulator has nothing to say.
-      expect(appSource).toMatch(/new FieldView\(\{[^}]*\bband: \(\) => askedBand,/);
     });
 
     it('lays out with what the core draws, else -- a buffer plainly bigger than the LCD -- with what was asked', () => {
@@ -1073,32 +1032,6 @@ describe('the people the ROM let go of reach the overlay (POK-318)', () => {
     r.w(SB1 + SB1_MAP_GROUP, other.group, 8);
     r.w(SB1 + SB1_MAP_NUM, other.num, 8);
     expect(r.step([]).sprites, 'a whiteout warps').toEqual([]);
-  });
-});
-
-describe("the match's roster reaches the field (POK-323)", () => {
-  // app.ts runs on the page and no unit test drives it, and the e2e hands the field a
-  // roster of its own: without these two lines the other seats stand still in a battle,
-  // and nothing else fails.
-  /** A top-level function's body, up to the next one. */
-  const body = (name: string): string => {
-    const from = appSource.indexOf(`\nfunction ${name}(`);
-    expect(from, name).toBeGreaterThan(0);
-    const to = appSource.indexOf('\nfunction ', from + 1);
-    return appSource.slice(from, to < 0 ? undefined : to);
-  };
-
-  it("solo hands it solo's roster, and a room its Bridge's, whichever is current", () => {
-    expect(body('runSolo')).toMatch(/\n\s*fieldView\?\.setPeople\(\(\) => roster\.all\(\)\);/);
-    expect(body('wireRoom')).toMatch(/\n\s*fieldView\?\.setPeople\(\(\) => bridge\?\.roster\.all\(\) \?\? \[\]\);/);
-  });
-
-  it('the field is made before either asks for it', () => {
-    expect(body('wirePlayScreen')).toMatch(/\n\s*fieldView = new FieldView\(/);
-    const made = appSource.indexOf('\n  wirePlayScreen(emu, ');
-    expect(made).toBeGreaterThan(0);
-    expect(appSource.indexOf('runSolo(emu, mailboxBase, symbols, ')).toBeGreaterThan(made);
-    expect(appSource.indexOf('wireRoom(emu, mailboxBase, ')).toBeGreaterThan(made);
   });
 });
 

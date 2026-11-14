@@ -416,7 +416,7 @@ export async function loadRom(canvas: HTMLCanvasElement, say: (text: string) => 
   if (!emu.hasRom() || devRom) await pick(emu);
   seen(emu.readRom());
   // Dev: a local build stored as it is runs without a patch, on the sidecars
-  // tools/br/dev-patch.sh writes next to it (as app.ts does).
+  // tools/br/dev-patch.sh writes next to it.
   if (import.meta.env.DEV && isPrePatched(emu.readRom())) {
     const sym = await devJson('/patch/br-symbols.json');
     if (!sym) { say('A local build needs tools/br/dev-patch.sh run first.'); throw new Error('no dev sidecars'); }

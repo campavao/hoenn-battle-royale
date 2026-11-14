@@ -14,8 +14,8 @@ const isolation = {
 
 // public/ is copied into dist/ verbatim, and tools/br/dev-patch.sh leaves a full,
 // patched, copyrighted Emerald in public/patch/ so the dev shell can skip the file
-// picker. app.ts only ever fetches that file under import.meta.env.DEV and says so in
-// its own comment -- "nothing ships this file" -- but nothing enforced it, and one
+// picker. spike-b/rom.ts only ever reads a pre-patched build under import.meta.env.DEV, as
+// the old app.ts did and said in its own comment -- "nothing ships this file" -- but nothing enforced it, and one
 // `vite build` was all it would have taken. The ROM lives on the player's device.
 //
 // Dropped rather than refused, because a local build for `vite preview` is an ordinary
@@ -113,9 +113,9 @@ export default defineConfig({
     target: "es2022",
     rollupOptions: {
       input: {
-        // The game (spike B) at /, and the classic shell at /classic/ for its last week.
+        // The game (spike B) at /. The classic shell was dropped 2026-11-14 (vercel.json
+        // sends /classic/ home).
         main: resolve(__dirname, "index.html"),
-        classic: resolve(__dirname, "classic/index.html"),
         spike: resolve(__dirname, "spike/index.html"),
         // The map painter (spike-b/map-page.ts): Cam's, not linked from the game.
         map: resolve(__dirname, "map/index.html"),

@@ -30,7 +30,6 @@ import wireIdsH from '../../include/br/br_wire_ids.h?raw';
 import mailboxH from '../../include/br/br_mailbox.h?raw';
 import configH from '../../include/br/br_config.h?raw';
 import versionH from '../../include/br/br_version.h?raw';
-import bootH from '../../include/br/br_boot.h?raw';
 import hudH from '../../include/br/br_hud.h?raw';
 import ringH from '../../include/br/br_ring.h?raw';
 import pickH from '../../include/br/br_pick.h?raw';
@@ -46,9 +45,7 @@ import startMenuC from '../../src/start_menu.c?raw';
 import popupC from '../../src/map_name_popup.c?raw';
 import levelsC from '../../src/br/br_levels.c?raw';
 import matchC from '../../src/br/br_match.c?raw';
-import engageC from '../../src/br/br_engage.c?raw';
 import lootC from '../../src/br/br_loot.c?raw';
-import ringC from '../../src/br/br_ring.c?raw';
 import spectateC from '../../src/br/br_spectate.c?raw';
 import ghostsC from '../../src/br/br_ghosts.c?raw';
 import mapGroups from '../../data/maps/map_groups.json';
@@ -89,8 +86,6 @@ import objectEventGraphicsInfoH from '../../src/data/object_events/object_event_
 import objectEventAnimsH from '../../src/data/object_events/object_event_anims.h?raw';
 import serverJs from '../../relay/server.js?raw';
 // Copies that are not exported: read as text, the same way as the C.
-import appTs from './app.ts?raw';
-import brainTs from './bots/brain.ts?raw';
 import lootTs from './match/loot.ts?raw';
 import { PATCH_KEY_BASE } from './match/loot';
 import { LEGEND_GFX } from './match/legends';
@@ -342,13 +337,6 @@ function tsConst(src: string, name: string): number | number[] {
   return Number(v.replace(/_/g, ''));
 }
 
-/** A `const NAME = { key: <number>, ... };` out of a TypeScript source. */
-function tsObject(src: string, name: string): Record<string, number> {
-  const m = new RegExp(`\\bconst ${name} = \\{([^}]*)\\};`).exec(src);
-  if (!m) throw new Error(`no const ${name}`);
-  return Object.fromEntries([...m[1].matchAll(new RegExp(`(\\w+): ${NUMBER}`, 'g'))].map((x) => [x[1], Number(x[2])]));
-}
-
 /** data/maps/map_groups.json, which include/constants/map_groups.h is made from: a map's
  *  group is its group's place in group_order, and its num its place in the group. */
 const GROUPS = mapGroups as unknown as { group_order: string[] } & Record<string, string[]>;
@@ -485,22 +473,17 @@ describe('the mailbox (include/br/br_mailbox.h)', () => {
     for (const d of ['OUT', 'IN', 'BOOT']) expect(define(mailboxH, `BR_MAILBOX_OFF_${d}`), d).toBe(MAILBOX[`OFF_${d}` as keyof typeof MAILBOX]);
   });
 
-  it('the boot block, as app.ts writes it', () => {
-    const boot = layout(bootH, 'BrBoot');
-    // writeBootBlock puts each field at BOOT_AT's offset, and the name runs to the end.
-    expect(tsObject(appTs, 'BOOT_AT')).toEqual(boot.at);
-    expect(boot.at.name + boot.count.name).toBe(MAILBOX.BOOT_BYTES);
-    for (const mode of ['BR_BOOT_MAP', 'BR_BOOT_SAFARI', 'BR_BOOT_FLAG_TESTMON']) expect(tsConst(appTs, mode), mode).toBe(define(bootH, mode));
-    // What it writes there: a gender, and Littleroot.
-    expect([tsConst(appTs, 'MALE'), tsConst(appTs, 'FEMALE')]).toEqual([define(constantsGlobalH, 'MALE'), define(constantsGlobalH, 'FEMALE')]);
-    const town = tsObject(appTs, 'LITTLEROOT');
-    expect({ group: town.group, num: town.num }).toEqual(mapRef('LittlerootTown'));
-  });
 });
 
 // ---- what the page reads and writes in RAM -------------------------------------------------
 
 describe("the BR structs the page reads at an offset", () => {
+  it('gBrRing and gBrPick (field.ts)', () => {
+    const ring = layout(ringH, 'BrRing');
+    expect([field.RING_OUTSIDE, field.RING_TIMER]).toEqual([ring.at.outside, ring.at.damageTimer]);
+    expect(field.PICK_ACTIVE).toBe(layout(pickH, 'BrPick').at.active);
+  });
+
   it('gBrHud: the fields the header marks PAGE WRITES, and nothing else', () => {
     const hud = layout(hudH, 'BrHud');
     const writes = [...body(hudH, 'BrHud').matchAll(/\*\/\s*\w+\s+(\w+);\s*\/\/\s*PAGE WRITES/g)].map((m) => m[1]);
@@ -508,15 +491,6 @@ describe("the BR structs the page reads at an offset", () => {
     const page = Object.fromEntries(writes.map((f) => [`OFF_${snake(f)}`, hud.at[f]]));
     expect(page).toEqual({ ...HUD });
     expect(hud.size, 'the comments add up').toBe(hud.at.noBattleBox + 1);
-  });
-
-  it('gBrRing, gBrPick and gBrMatch (field.ts, app.ts)', () => {
-    const ring = layout(ringH, 'BrRing');
-    expect([field.RING_OUTSIDE, field.RING_TIMER]).toEqual([ring.at.outside, ring.at.damageTimer]);
-    expect(field.PICK_ACTIVE).toBe(layout(pickH, 'BrPick').at.active);
-    // app.ts reads the phase at the struct's base.
-    expect(layout(matchH, 'BrMatch').at.phase).toBe(0);
-    expect(tsConst(appTs, 'BR_PHASE_DONE')).toBe(define(matchH, 'BR_PHASE_DONE'));
   });
 
   it("the phone's HUD and dock: the start menu's rows, SELECT's item, and what the windows read (ui/phonehud.ts)", () => {
@@ -1094,22 +1068,13 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
 // ---- the rules both sides play by --------------------------------------------------------
 
 describe('the rules a bot plays by the ROM\'s way', () => {
-  const secs = (frames: number) => (frames * 1000) / 60;
+
+  it('sight', () => {
+    expect(SIGHT_RANGE).toBe(define(engageH, 'BR_SIGHT_RANGE'));
+  });
 
   it('the level ladder is sLadder', () => {
     expect(LADDER).toEqual(table(levelsC, 'sLadder'));
-  });
-
-  it('the fog bites every BR_FOG_TICK_FRAMES, a tenth of max HP as Bleed takes it', () => {
-    expect(tsConst(brainTs, 'FOG_TICK_MS')).toBe(secs(define(ringH, 'BR_FOG_TICK_FRAMES')));
-    const bite = /\bdmg = maxHp \/ (\d+);/.exec(ringC);
-    expect(bite, 'Bleed divides max HP').not.toBeNull();
-    expect(tsConst(brainTs, 'FOG_BITE')).toBe(Number(bite![1]));
-  });
-
-  it('sight and the re-engage grace', () => {
-    expect(SIGHT_RANGE).toBe(define(engageH, 'BR_SIGHT_RANGE'));
-    expect(tsConst(brainTs, 'ENGAGE_COOLDOWN_MS')).toBe(secs(define(engageC, 'BR_ENGAGE_GRACE')));
   });
 
   it('a spill scatters over sSpillDx/sSpillDy, in their order', () => {

@@ -381,16 +381,16 @@ describe('the page asks nothing with the browser (POK-320)', () => {
   // box from another world in the middle of Emerald's.
   // The painter (painter.html, POK-314) is Cam's own tool for picking drop cells, never a
   // screen a player meets, so its one confirm() before throwing away a painting stays.
-  const sources = import.meta.glob<string>(['../**/*.ts', '!../**/*.test.ts', '!../painter.ts'], { query: '?raw', import: 'default', eager: true });
+  const sources = import.meta.glob<string>(['../**/*.ts', '../../spike-b/**/*.ts', '!../**/*.test.ts', '!../../spike-b/**/*.test.ts', '!../painter.ts'], { query: '?raw', import: 'default', eager: true });
   const code = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 
   it('finds the page', () => {
-    expect(Object.keys(sources)).toContain('../app.ts');
+    expect(Object.keys(sources)).toContain('../../spike-b/main.ts');
   });
 
   it('calls no prompt(), confirm() or alert()', () => {
     const calls = Object.entries(sources).flatMap(([file, text]) =>
-      [...code(text).matchAll(/(?<![\w.])(?:window\.)?(prompt|confirm|alert)\s*\(/g)].map((m) => `${file}: ${m[0]}`),
+      [...code(text).matchAll(/(?<![\w.])(?:window\.)?(prompt|confirm|alert)\s*\((?!\)\s*:)/g)].map((m) => `${file}: ${m[0]}`),
     );
     expect(calls).toEqual([]);
   });

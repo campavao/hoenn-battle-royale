@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FIELD_CUT, FIELD_STRENGTH, World, type WorldMap } from './world';
 import { findPath } from './path';
-import { canCut, canSurf, fieldMoves } from './brain';
 import { dealParty } from './party';
 
 // A one-map world with a tree across the only corridor: the top row is open, the middle
@@ -46,20 +45,6 @@ describe('a tree is a tree until somebody can cut it (POK-267)', () => {
     expect(carries(dealParty(99, 31, 1), 15)).toBe(false);
   });
 
-  it('lets a team past a tree or onto the water with somebody who could learn the HM (#7)', () => {
-    const mon = (species: number, moves: number[] = [33]) => ({
-      species, level: 5, hp: 20, maxHp: 20, status: 0, moves: moves.map((id) => ({ id, pp: 10, ppUps: 0 })),
-      heldItem: 0, otId: 0, personality: 0, exp: 0, nickname: '', ot: 'BR',
-    });
-    const TREECKO = 277;
-    const MUDKIP = 283;
-    const PIDGEY = 16;
-    expect(canCut([mon(TREECKO)])).toBe(true);
-    expect(canSurf([mon(TREECKO)])).toBe(false);
-    expect(canSurf([mon(TREECKO), mon(MUDKIP)])).toBe(true);
-    expect(canCut([mon(PIDGEY)])).toBe(false);
-    expect(canSurf([mon(PIDGEY, [57])])).toBe(true); // knows it: a TM'd move counts too
-  });
 });
 
 // #7: Strength boulders are back. The exporter marks the cell one starts on class 10, and
@@ -78,14 +63,4 @@ describe('a boulder is in the way until somebody could push it (#7)', () => {
     expect(findPath(world, from, to, 500, false, true).found).toBe(true);
   });
 
-  it('asks the party whether anyone could learn STRENGTH', () => {
-    const mon = (species: number) => ({
-      species, level: 5, hp: 20, maxHp: 20, status: 0, moves: [{ id: 33, pp: 10, ppUps: 0 }],
-      heldItem: 0, otId: 0, personality: 0, exp: 0, nickname: '', ot: 'BR',
-    });
-    const MAKUHITA = 296;
-    const MAGIKARP = 129;
-    expect(fieldMoves([mon(MAGIKARP)])).toBe(0);
-    expect(fieldMoves([mon(MAKUHITA)]) & FIELD_STRENGTH).toBe(FIELD_STRENGTH);
-  });
 });

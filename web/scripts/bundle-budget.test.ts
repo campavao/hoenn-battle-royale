@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAIN_BUDGET, overBudget } from '../vite.config';
 
-const chunk = (bytes: number, moduleIds: string[] = ['/r/web/index.html?html-proxy&index=0.js', '/r/web/src/app.ts']) => ({
+const chunk = (bytes: number, moduleIds: string[] = ['/r/web/index.html?html-proxy&index=0.js', '/r/web/spike-b/main.ts']) => ({
   fileName: 'assets/main-X.js',
   code: 'x'.repeat(bytes),
   moduleIds,
@@ -22,7 +22,7 @@ describe('the bundle budget', () => {
   });
 
   it('fails a main that carries world.json or landing.json, however small', () => {
-    const problems = overBudget(chunk(1000, ['C:/r/web/src/app.ts', 'C:/r/web/src/data/world.json', '/r/web/src/data/landing.json']));
+    const problems = overBudget(chunk(1000, ['C:/r/web/spike-b/main.ts', 'C:/r/web/src/data/world.json', '/r/web/src/data/landing.json']));
     expect(problems).toHaveLength(2);
     expect(problems[0]).toContain('world.json');
     expect(problems[1]).toContain('landing.json');

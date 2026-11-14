@@ -355,8 +355,8 @@ jobs:
       - name: Sidecars for the web shell's local-build path (POK-220)
         if: env.RUN_E2E == 'true'
         # web/e2e drives the shell the same way `npm run dev` does: a pre-patched ROM
-        # plus the two sidecars (see tools/br/dev-patch.sh and app.ts's isPrePatched()
-        # branch). Same pokeemerald.gba/.map the build step just made. With the baseline
+        # plus the two sidecars (see tools/br/dev-patch.sh and spike-b/rom.ts's
+        # isPrePatched() branch). Same pokeemerald.gba/.map the build step just made. With the baseline
         # it also writes the BPS, so patch.spec.ts can patch a stock ROM in the tab the
         # way a player does, instead of skipping.
         run: tools/br/dev-patch.sh pokeemerald.map baseline/pokeemerald.gba

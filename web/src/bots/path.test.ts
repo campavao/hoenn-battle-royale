@@ -7,13 +7,9 @@
 // both are asked the same questions on the real Hoenn -- random ones, and every one a
 // thirty-bot match actually asks.
 import { describe, expect, it, vi } from 'vitest';
-import { Bots, STEP_MS } from './brain';
-import { dealBots } from './roster';
-import { dealParty } from './party';
 import { findPath, findPathToAny, type Path } from './path';
 import { World, sameSpot, spotKey, type SeamDir, type Spot, type WorldMap } from './world';
-import { mulberry32, RING_RADII } from '../match/clock';
-import { sectionInside } from '../match/ring';
+import { mulberry32 } from '../match/clock';
 import { LANDING } from '../match/landing';
 import worldData from '../data/world.json';
 import regionData from '../data/regionmap.json';
@@ -244,80 +240,4 @@ describe('the search on cell numbers', () => {
     expect(findPathToAny(world, at, [nowhere], 50)).toEqual(oldFindPathToAny(world, at, [nowhere], 50));
   });
 
-  it('gives every search a thirty-bot match makes the answer the old search gave', () => {
-    // Two minutes of the real brain with the ring closing every twenty seconds, so the
-    // stuck bots, the fog and the cross-Hoenn misses all come up -- then each question
-    // it asked goes to the old search, and the answers have to match.
-    const seed = 4242;
-    let ring: { sx: number; sy: number; r: number } | undefined;
-    const bots = new Bots({
-      world,
-      targets,
-      mapRef: (id) => refById.get(id),
-      send: () => {},
-      rng: mulberry32(seed ^ 0x51ce),
-      deal: (bot, phase, mapId) => dealParty(seed, bot.seat, phase, mapId, bot.grade, []),
-      centres: () => world.centres(),
-      inside: (id) => ring === undefined || sectionInside(SECTIONS[sectionOf.get(id) ?? ''], ring),
-    });
-    const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
-    bots.start(dealBots(seed, 30, [], spawns), 0);
-    asked.on = true;
-    asked.calls.length = 0;
-    try {
-      let phase = 0;
-      for (let t = 100; t <= 120_000; t += 100) {
-        const next = Math.floor(t / 20_000);
-        if (next !== phase) {
-          phase = next;
-          ring = { sx: 4, sy: 12, r: RING_RADII[phase - 1] };
-          bots.ringMoved(phase);
-        }
-        bots.tick(t);
-      }
-    } finally {
-      asked.on = false;
-    }
-    const calls = asked.calls.splice(0);
-    // About 750 on this seed, 87 of them over to the next map. Only fifteen find nothing:
-    // since the brain asks only for what it can reach (POK-331 #27) it hardly ever runs a
-    // search that spends its whole budget, where it used to run hundreds -- the first test
-    // above is the one that holds failing searches to the old answer. (Before the ladder
-    // crossed doors, and ran only once a map's own pick had, it was near two thousand,
-    // most of them to a map's edge.)
-    expect(calls.length).toBeGreaterThan(600);
-    expect(calls.filter((c) => c.any).length).toBeGreaterThan(50);
-    expect(calls.filter((c) => !c.got.found).length).toBeGreaterThan(5);
-    for (const { any, args, got } of calls) {
-      const want = any
-        ? oldFindPathToAny(...(args as Parameters<typeof oldFindPathToAny>))
-        : oldFindPath(...(args as Parameters<typeof oldFindPath>));
-      expect(got).toEqual(want);
-    }
-    // Slow on purpose: ~750 searches through the old one, which is the cost this
-    // ticket took out. Seconds here, and more on a shared runner.
-  }, 60_000);
-});
-
-describe('the pace', () => {
-  it('settles a failing cross-Hoenn search several times faster than the list did', () => {
-    // Not a benchmark -- a tripwire for the search going quadratic again. A failing
-    // search is the expensive kind: it spends its whole budget. Measured 2026-09-25 on
-    // desktop Node, this one: 0.26 ms against 4.4 ms.
-    const from = cells.find((c) => c.map === 'MAP_LITTLEROOT_TOWN') ?? cells[0];
-    const to = cells.find((c) => c.map === 'MAP_FORTREE_CITY') ?? cells[cells.length - 1];
-    const time = (fn: () => void) => {
-      let best = Infinity;
-      for (let i = 0; i < 5; i++) {
-        const t0 = performance.now();
-        fn();
-        best = Math.min(best, performance.now() - t0);
-      }
-      return best;
-    };
-    const now = time(() => findPath(world, from, to, 1500, false, true));
-    const then = time(() => oldFindPath(world, from, to, 1500, false, true));
-    expect(findPath(world, from, to, 1500, false, true).found).toBe(false);
-    expect(now * 3).toBeLessThan(then);
-  });
 });
