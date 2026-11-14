@@ -103,16 +103,6 @@ export function cutTo(
   return null;
 }
 
-/** Who the watch strip names (HBR-53, 10-20 play-test: "WATCHING MATT" over a fight with
- *  DRAKE's FERALIGATR in front). A replay is drawn from the side of whichever ROM sent it,
- *  so the trainer we follow can be the one facing the camera: during a fight the strip
- *  names both, ours first, and is right whichever side is in front. */
-export function watchName(on: number, battle: number | null, nameOf: (seat: number) => string): string {
-  const seats: number[] = battle === null ? [] : battleSeats(battle);
-  const other = seats.includes(on) ? seats.find((s) => s !== on && s !== NO_SEAT) : undefined;
-  return other === undefined ? nameOf(on) : `${nameOf(on)} vs ${nameOf(other)}`;
-}
-
 /** A battle id as BR_MSG_BSTART carries it: the seat pair, low seat then high. */
 export function battleId(a: number, b: number): number {
   const lo = Math.min(a, b);
@@ -146,19 +136,6 @@ export function spectatePace(behind: number, botDuel: () => boolean): number {
   if (behind === CATCH_UP_TURNS) return botDuel() ? BOT_DUEL_SPEED : CATCH_UP_SPEED;
   if (behind === CATCH_UP_LAG) return botDuel() ? BOT_DUEL_SPEED : LAG_SPEED;
   return 1;
-}
-
-/** What our ROM says it is replaying (gBrSpectate), for duePeek's `romHas` -- or undefined
- *  while RAM cannot be believed: until the ROM has read everything the page queued for it
- *  (POK-330 #10). A tab in the background runs no frames while its peeks keep firing, so
- *  the `bstart` it was handed waits in the port and RAM still says "nothing". Taken at its
- *  word, every other peek brought the whole fight again, and the copies queued up behind
- *  the first for the ROM to append when the tab came back. */
-export function romReplaying(
-  port: { readonly queued: number; readonly mailbox: { pending(): number } },
-  read: () => number | null | undefined,
-): number | null | undefined {
-  return port.queued > 0 || port.mailbox.pending() > 0 ? undefined : read();
 }
 
 export class Spectate {

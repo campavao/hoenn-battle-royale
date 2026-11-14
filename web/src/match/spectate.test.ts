@@ -1,29 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { encodeGen3 } from '../text/gen3';
-import { fitText } from '../ui/emerald';
-import { W } from '../ui/screens';
-import { battleId, battleSeats, CACHE_MAX_BYTES, cutTo, EYE_WINDOW_MS, seatBstart, nameBstart, PEEK_INTERVAL_MS, NO_SEAT, romReplaying, Spectate, spectatePace, watchName, BOT_DUEL_SPEED, CATCH_UP_LAG, CATCH_UP_SPEED, CATCH_UP_TURNS, LAG_SPEED } from './spectate';
+import { battleId, battleSeats, CACHE_MAX_BYTES, cutTo, EYE_WINDOW_MS, seatBstart, nameBstart, PEEK_INTERVAL_MS, NO_SEAT, Spectate, spectatePace, BOT_DUEL_SPEED, CATCH_UP_LAG, CATCH_UP_SPEED, CATCH_UP_TURNS, LAG_SPEED } from './spectate';
 import type { Msg } from '../net/wire';
 
 const bstart = (battle: number): Msg => ({ t: 'bstart', battle, data: [1, 2, 3] });
 const turn = (battle: number): Msg => ({ t: 'turn', battle, data: [0, 1, 0] });
-
-describe('the watch strip (HBR-53)', () => {
-  const nameOf = (s: number) => ['MATT', 'DRAKE', 'MAY'][s];
-  it('names both trainers in a fight, ours first, whoever sent the replay', () => {
-    expect(watchName(0, null, nameOf)).toBe('MATT');
-    expect(watchName(0, battleId(0, 1), nameOf)).toBe('MATT vs DRAKE');
-    expect(watchName(1, battleId(0, 1), nameOf)).toBe('DRAKE vs MATT');
-  });
-  it('names one for a wild fight, or a fight we are not following', () => {
-    expect(watchName(1, battleId(1, NO_SEAT), nameOf)).toBe('DRAKE');
-    expect(watchName(2, battleId(0, 1), nameOf)).toBe('MAY');
-  });
-  it('fits the strip with two of the longest names', () => {
-    const line = `WATCHING ${watchName(0, battleId(0, 1), () => 'WWWWWWW')}`;
-    expect(fitText(line, W - 8)).toBe(line);
-  });
-});
 
 describe('battle ids', () => {
   it('packs the seat pair low then high, either way round', () => {
@@ -323,42 +304,6 @@ describe('the fight so far, handed over once (POK-330 #10)', () => {
     peek();
     expect(rom.watching).toBe(battle);
     expect(rom.turns).toEqual([1, 7]);
-  });
-
-  // A background tab runs no frames and its peeks keep firing: RAM said "watching nothing"
-  // on every other one, the fight came again each time, and the ROM appended every copy.
-  it('is handed the fight once however many peeks a background tab makes', () => {
-    const fighter = new Spectate();
-    const watcher = new Spectate();
-    const rom = new Rom();
-    const queue: Msg[] = []; // the RomPort, which only a frame empties
-    const port = { get queued() { return queue.length; }, mailbox: { pending: () => 0 } };
-    const frame = () => queue.splice(0).forEach((m) => rom.take(m));
-    let now = 0;
-    const peek = () => {
-      const ask = watcher.duePeek(WATCHER, now, romReplaying(port, () => rom.watching));
-      if (ask?.t === 'peek') {
-        for (const part of fighter.streamFor(ask.target, ask.have)) if (watcher.wantsFromRelay(part)) queue.push(part);
-      }
-      now += PEEK_INTERVAL_MS;
-    };
-    fighter.noteOutgoing({ t: 'bstart', battle, data: [1, 2, 3] });
-    fighter.noteOutgoing(turnOf(1));
-    fighter.noteOutgoing(turnOf(2));
-    watcher.follow(FIGHTER).forEach((m) => queue.push(m));
-    for (let i = 0; i < 6; i++) peek(); // in the background: no frames
-    frame(); // back
-    peek();
-    frame();
-    expect(rom.turns).toEqual([1, 2]);
-  });
-
-  it('believes RAM once the ROM has read everything it was handed', () => {
-    const idle = { queued: 0, mailbox: { pending: () => 0 } };
-    expect(romReplaying(idle, () => battle)).toBe(battle);
-    expect(romReplaying(idle, () => null)).toBeNull();
-    expect(romReplaying({ ...idle, queued: 1 }, () => null)).toBeUndefined();
-    expect(romReplaying({ queued: 0, mailbox: { pending: () => 3 } }, () => null)).toBeUndefined();
   });
 
   it('says what it holds only when it holds something', () => {

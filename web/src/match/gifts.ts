@@ -12,7 +12,6 @@ import { pickIndex } from './clock';
 /** `BR_LOOT_KEY_GIFT_BASE` (include/br/br_loot.h). */
 export const GIFT_KEY_BASE = 0xc000;
 export const giftKey = (i: number): number => GIFT_KEY_BASE | i;
-export const isGiftKey = (key: number): boolean => (key & 0xf000) === GIFT_KEY_BASE;
 
 // include/constants/items.h: the held items a trainer would walk into a town for.
 export const ITEM_BRIGHT_POWDER = 179;

@@ -146,16 +146,6 @@ export function nextSkin(skin: number, wins = Number.POSITIVE_INFINITY): number 
   return skin; // nothing else is unlocked -- stay put rather than loop forever
 }
 
-/** The next skin after this one whether it is unlocked or not (POK-282).
- *
- *  Cam: "in Kanto you're able to preview all the different skins even if you don't have
- *  all the wins yet." A wardrobe you cannot look at is not a ladder -- there is nothing to
- *  climb towards. `nextSkin` above is what SAVES; this is what BROWSES. */
-export function peekSkin(skin: number): number {
-  const at = WARDROBE.indexOf(skin);
-  return WARDROBE[(at + 1) % WARDROBE.length];
-}
-
 /** What to say under a skin while it is being browsed: its price, or that it is yours. */
 export function skinNote(skin: number, wins: number): string {
   if (skinUnlocked(skin, wins)) return 'your sprite';
@@ -273,22 +263,6 @@ export function recordMatch(
   } catch {
     // Out of quota or a blocked store: the match still happened, the record just does
     // not survive the tab.
-  }
-  return career;
-}
-
-/** Adds to the lifetime stats of a match already recorded: what the ROM counted after
- *  the verdict, like the battle that won it (POK-416). */
-export function addCareerTotals(
-  counts: Parameters<typeof addTotals>[1],
-  store: Pick<Storage, 'getItem' | 'setItem'> = localStorage,
-): Career {
-  const career = loadCareer(store);
-  career.totals = addTotals(career.totals, counts);
-  try {
-    store.setItem(KEY, JSON.stringify(career));
-  } catch {
-    // As recordMatch: the match still happened.
   }
   return career;
 }

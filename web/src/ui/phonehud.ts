@@ -119,7 +119,7 @@ export function fieldMoves(can: number, ready: number): FieldMove[] {
 }
 
 /** gBrHmView's field moves; none with an older patch, which has no gBrHmView. */
-export function readFieldMoves(emu: HudRead, sym: (name: string) => number | undefined): FieldMove[] {
+function readFieldMoves(emu: HudRead, sym: (name: string) => number | undefined): FieldMove[] {
   const hm = sym('gBrHmView');
   return hm === undefined ? [] : fieldMoves(emu.read(hm + HM_CAN, 8), emu.read(hm + HM_READY, 8));
 }
@@ -551,7 +551,7 @@ export class OffField {
 /** The field moves the party could use (HBR-78), a column of symbols with no words: the
  *  ones that work on what we face lit, the rest faded. Gone with none. A phone's is at
  *  the field's right edge under the fog window, a desktop's at its top right (index.html). */
-export class MovesWindow {
+class MovesWindow {
   private moves: FieldMove[] = [];
   private scale = 1;
   private readonly win: Win;

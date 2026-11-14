@@ -625,46 +625,6 @@ export function measureLayout(box: HTMLElement, pad: HTMLElement | null | undefi
   return layoutField(box.clientWidth + growW, box.clientHeight + growH, inset, dpr, glass, liveAbove);
 }
 
-/** The band to ask the core for (POK-329): the rows above and below the LCD this layout
- *  shows, and no more -- each row past the LCD is 256 more pixels the core draws every
- *  frame and the page uploads, and a phone on its side shows only the sprite window's
- *  of the ROM's 336, a desktop at a phone's zoom about 120 each way. So: the layout's rows, in
- *  eights (what the core takes); never fewer than the sprite window, which is the ring
- *  every ROM before POK-329 fed and the rows the ROM keeps its people to one reading in;
- *  never more than the ROM declares. The sides are the ROM's: 16 columns at most, and a
- *  portrait phone's picture is the glass's width. A box with no size (a hidden screen)
- *  says nothing, and gets the ROM's whole band. */
-export function askBand(lay: FieldLayout, rom: FieldPicture, wideOk = false): Band {
-  const { band, sprites } = rom;
-  if (!(lay.scale > 0)) return { ...band };
-  const eights = (n: number) => Math.ceil(Math.max(0, n) / 8) * 8;
-  const rows = (need: number, window: number, most: number) => Math.min(most, Math.max(window, eights(need)));
-  const tall: Band = {
-    left: band.left,
-    top: rows(lay.lcdRow, sprites.top, band.top),
-    right: band.right,
-    bottom: rows(lay.rows - lay.lcdRow - GBA_H, sprites.bottom, band.bottom),
-  };
-  const w = rom.wide;
-  if (!wideOk || !w) return tall;
-  // The wide ring (include/br/br_field.h, THE WIDE RING): the columns the layout shows
-  // each side, in eights, up to its 128, and its 40 rows, when that is more of the
-  // layout's map than the tall ring's picture. Its left is never 0: a left is what asks
-  // the ROM for the wide ring.
-  const wide: Band = {
-    left: Math.min(w.left, Math.max(8, eights(lay.lcdCol))),
-    top: w.top,
-    right: Math.min(w.right, eights(lay.cols - lay.lcdCol - GBA_W)),
-    bottom: w.bottom,
-  };
-  // A landscape screen (more map beside the picture than above and below it) takes it
-  // even when the tall ring's 496 rows cover a little more: on a 1920x1080 desktop they
-  // did, and the live map was a 256-pixel column down the middle of a wide field of
-  // stills (Cam's 2026-10-19 play-test, POK-431: "it looks like we may be optimized for a
-  // mobile viewport... Can we extend that to the full width?").
-  return lay.lcdCol > lay.lcdRow || shownArea(lay, wide) > shownArea(lay, tall) ? wide : tall;
-}
-
 /** The whole window's band (HBR-27, include/br/br_field.h): every column and row the
  *  layout shows past the LCD, in eights, up to what the core's row buffer and rows hold.
  *  A core given the ROM's world draws all of it from the map. The rows below get a tile
@@ -673,20 +633,6 @@ export function askBand(lay: FieldLayout, rom: FieldPicture, wideOk = false): Ba
  *  measured, 174 shown), which left its bottom ten rows to the stills under the picture. */
 export const WORLD_SIDE_MAX = 512;
 export const WORLD_ROWS_MAX = 256;
-export function worldBand(lay: FieldLayout): Band {
-  const eights = (n: number, most: number) => Math.min(most, Math.ceil(Math.max(0, n) / 8) * 8);
-  return {
-    left: eights(lay.lcdCol, WORLD_SIDE_MAX),
-    top: eights(lay.lcdRow, WORLD_ROWS_MAX),
-    right: eights(lay.cols - lay.lcdCol - GBA_W, WORLD_SIDE_MAX),
-    bottom: eights(lay.rows - lay.lcdRow - GBA_H + TILE, WORLD_ROWS_MAX),
-  };
-}
-
-/** The band covering both: each side the larger. */
-export function widerBand(a: Band, b: Band): Band {
-  return { left: Math.max(a.left, b.left), top: Math.max(a.top, b.top), right: Math.max(a.right, b.right), bottom: Math.max(a.bottom, b.bottom) };
-}
 
 /** How much of a layout's map a band's picture covers, in GBA pixels. */
 export function shownArea(lay: FieldLayout, b: Band): number {
@@ -723,7 +669,6 @@ export function bandOf(drawn: Band | null, canvas: { width: number; height: numb
   if (drawn) return drawn;
   return canvas.width > GBA_W || canvas.height > GBA_H ? asked : null;
 }
-
 
 /** The ROM's rings (include/br/br_field.h, THE RING and THE WIDE RING), held to its
  *  header by field.test: the wide one is WIDE_COLUMNS metatile columns, WIDE_LEFT of them

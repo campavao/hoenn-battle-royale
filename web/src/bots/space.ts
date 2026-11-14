@@ -27,7 +27,7 @@ export function romCell(x: number, y: number): RomCell {
   return { x, y } as RomCell;
 }
 
-export function pageCell(x: number, y: number): PageCell {
+function pageCell(x: number, y: number): PageCell {
   return { x, y } as PageCell;
 }
 
@@ -36,7 +36,3 @@ export function toPage(cell: RomCell): PageCell {
   return pageCell(cell.x - MAP_OFFSET, cell.y - MAP_OFFSET);
 }
 
-/** And back. */
-export function toRom(cell: PageCell): RomCell {
-  return romCell(cell.x + MAP_OFFSET, cell.y + MAP_OFFSET);
-}

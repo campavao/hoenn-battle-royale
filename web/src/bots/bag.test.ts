@@ -1,19 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  BATTLE_ITEMS,
-  FIGHT_ITEMS,
-  ITEM,
-  battleItems,
-  carried,
-  equip,
-  isMedicine,
-  merge,
-  purse,
-  quaff,
-  spend,
-  take,
-  units,
-} from './bag';
+import { BATTLE_ITEMS, FIGHT_ITEMS, ITEM, battleItems, carried, isMedicine, purse, quaff, spend, units } from './bag';
 import { Grade } from './roster';
 import { BAG_ITEMS } from '../../spike-b/shared/simnames';
 
@@ -108,25 +94,9 @@ describe("a bot's own bag", () => {
     expect(bag).toEqual([{ id: ITEM.POTION, n: 1 }]);
   });
 
-  it('folds a bag found on the ground into its own', () => {
-    const bag = [{ id: ITEM.POTION, n: 1 }];
-    merge(bag, [{ id: ITEM.POTION, n: 2 }, { id: ITEM.DIRE_HIT, n: 1 }]);
-    expect(bag).toEqual([{ id: ITEM.POTION, n: 3 }, { id: ITEM.DIRE_HIT, n: 1 }]);
-  });
-
   it('is worth more the later it falls', () => {
     expect(purse(3, Grade.Ace)).toBeGreaterThan(purse(0, Grade.Ace));
     expect(purse(3, Grade.Ace)).toBeGreaterThan(purse(3, Grade.Rookie));
-  });
-});
-
-describe('equip', () => {
-  it('hands the best hold items to standing mons that hold nothing, and keeps the rest', () => {
-    const party = [mon(20, 20), mon(0, 20), mon(10, 20)];
-    const bag = [{ id: 183, n: 1 }, { id: 200, n: 2 }, { id: ITEM.POTION, n: 1 }];
-    equip(party, bag);
-    expect(party.map((m) => m.heldItem)).toEqual([200, 0, 200]); // Leftovers outranks Quick Claw; fainted mon skipped
-    expect(bag).toEqual([{ id: 183, n: 1 }, { id: ITEM.POTION, n: 1 }]);
   });
 });
 

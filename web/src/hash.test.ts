@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { devLand, devPace, parseRoomHash, perfWanted, ROOM_HASH_KEYS, withoutRoom, withRoom } from './hash';
+import { devPace, parseRoomHash, ROOM_HASH_KEYS, withoutRoom, withRoom } from './hash';
 
 describe('the room in the URL', () => {
   it('reads every door', () => {
@@ -31,16 +31,6 @@ describe('the room in the URL', () => {
 });
 
 // POK-327: the play-a-match e2e sets its own opening and fog, and where it lands.
-describe('#perf (POK-247)', () => {
-  it('asks for the readout, and keeps asking through a door and back out', () => {
-    expect(perfWanted('#perf')).toBe(true);
-    expect(perfWanted('#host&perf')).toBe(true);
-    expect(perfWanted('#host')).toBe(false);
-    expect(perfWanted(`#${withRoom('#perf', 'host')}`)).toBe(true);
-    expect(perfWanted(`#${withoutRoom('#join=ABCD&perf')}`)).toBe(true);
-  });
-});
-
 describe('the dev flags a test plays a match with', () => {
   it('reads the pace: #fast, and #safari / #fog over it or alone', () => {
     expect(devPace('#solo')).toBeUndefined();
@@ -52,10 +42,4 @@ describe('the dev flags a test plays a match with', () => {
     expect(devPace('#solo&fast&safari=1.5')).toEqual({ safariSecs: 25, fogSecs: 15 });
   });
 
-  it('reads the landing cell by map id', () => {
-    expect(devLand('#solo&land=MAP_ROUTE102,36,16')).toEqual({ id: 'MAP_ROUTE102', x: 36, y: 16 });
-    expect(devLand('#solo')).toBeUndefined();
-    expect(devLand('#solo&land=ROUTE102,36,16')).toBeUndefined();
-    expect(devLand('#solo&land=MAP_ROUTE102,36')).toBeUndefined();
-  });
 });

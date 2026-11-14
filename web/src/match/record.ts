@@ -15,9 +15,6 @@
 // RINGS is the one worth saying out loud: the ring phase this seat was still standing
 // at, which is "rings survived" in the sense Cam asked for -- the fog closed this many
 // times and you were still there.
-import type { Msg } from '../net/wire';
-import { isPatchKey } from './loot';
-import { claimOf, isHomeOrClaim, legendClaimOf, traderOf } from './events';
 
 export interface SeatRecord {
   /** The ring phase this seat was still alive at. 0 before the fog's first move. */
@@ -38,93 +35,3 @@ export interface RecordLine {
   wide?: boolean;
 }
 
-/** Everything but `rings`, which is not a tally -- it is read off the clock at the end. */
-interface Tally {
-  trainers: number;
-  duels: number;
-  duelsWon: number;
-  took: number;
-}
-
-function empty(): Tally {
-  return { trainers: 0, duels: 0, duelsWon: 0, took: 0 };
-}
-
-export class MatchRecord {
-  private readonly rows = new Map<number, Tally>();
-  /** Seat -> the ring phase it went out on. Absent means still in. */
-  private readonly outAt = new Map<number, number>();
-  private phase = 0;
-
-  /** A fresh match. Called from the same place `Results.start` is. */
-  start(): void {
-    this.rows.clear();
-    this.outAt.clear();
-    this.phase = 0;
-  }
-
-  private row(seat: number): Tally {
-    let row = this.rows.get(seat);
-    if (row === undefined) {
-      row = empty();
-      this.rows.set(seat, row);
-    }
-    return row;
-  }
-
-  note(msg: Msg): void {
-    switch (msg.t) {
-      case 'ring':
-        // The host resends the current ring; only a new one moves the count.
-        if (msg.phase > this.phase) this.phase = msg.phase;
-        return;
-      case 'out':
-        // Where the fog was when they stopped. First `out` wins: a seat does not go out
-        // twice, and a duplicate must not backdate a record.
-        if (!this.outAt.has(msg.seat)) this.outAt.set(msg.seat, this.phase);
-        return;
-      case 'npcout':
-        if (!msg.fog) this.row(msg.seat).trainers++; // the fog's sweep is nobody's win
-        return;
-      case 'pickup':
-        // An `item` named is one stack coming out of a bag that stays on the ground
-        // (POK-237, a bot raiding it), not a piece leaving -- the same distinction
-        // `giveBag` makes, and the reason taking one bag is not counted six times.
-        // A patch a wild battle started on is a battle, not a piece (br_patch.h), and a
-        // trade with an event's trader is a trade (br_event.h's BR_EVENT_TRADER_KEY), and so
-        // is somebody at home's Pokemon, given or traded (POK-379): his key comes twice, the
-        // host's yes and the asker's own, and neither it nor the ask is a piece.
-        if (msg.item === undefined && !isPatchKey(msg.key) && traderOf(msg.key) === undefined && claimOf(msg.key) === undefined && legendClaimOf(msg.key) === undefined && !isHomeOrClaim(msg.key))
-          this.row(msg.seat).took++;
-        return;
-      case 'dresult': {
-        const a = this.row(msg.seatA);
-        const b = this.row(msg.seatB);
-        a.duels++;
-        b.duels++;
-        // 2 is a draw, or a fight that never resolved: fought, won by nobody.
-        if (msg.winner === 0) a.duelsWon++;
-        else if (msg.winner === 1) b.duelsWon++;
-        return;
-      }
-      default:
-        return;
-    }
-  }
-
-  /** Never undefined: a seat that did nothing has a record of doing nothing, and a card
-   *  of zeroes is still the truth. */
-  forSeat(seat: number): SeatRecord {
-    return { rings: this.outAt.get(seat) ?? this.phase, ...(this.rows.get(seat) ?? empty()) };
-  }
-}
-
-/** The card, as label/value pairs for whoever is drawing it. A row that is zero is left
- *  out -- except RINGS, which is the question Cam asked and reads as an answer at 0. */
-export function recordLines(rec: SeatRecord): RecordLine[] {
-  const lines: RecordLine[] = [{ label: 'RINGS', value: String(rec.rings) }];
-  if (rec.trainers > 0) lines.push({ label: 'TRAINERS', value: String(rec.trainers) });
-  if (rec.duels > 0) lines.push({ label: 'DUELS', value: `${rec.duelsWon} of ${rec.duels}` });
-  if (rec.took > 0) lines.push({ label: 'TOOK', value: String(rec.took) });
-  return lines;
-}

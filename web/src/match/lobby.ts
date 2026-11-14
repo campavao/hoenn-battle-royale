@@ -197,14 +197,6 @@ export const HOWTO_ROW: LobbyRow = {
   art: ART.howto,
 };
 
-/** Last on the menu, once the trainer card's DEBUG MENU is on. */
-export const DEBUG_ROW: LobbyRow = {
-  label: 'DEBUG',
-  action: { kind: 'debug' },
-  id: 'lobby-debug',
-  art: ART.debug,
-};
-
 /** First on the menu after a reload that could not go back into its match (HBR-20,
  *  Cam: "After that they are out with the WATCH option"). */
 export function rewatchRow(code: string): LobbyRow {

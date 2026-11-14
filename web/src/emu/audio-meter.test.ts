@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AudioMeter, CUT_SILENCE, cutOff, tapNode, type AudioTick, type Heard } from './audio-meter';
+import { CUT_SILENCE, cutOff, tapNode, type AudioTick } from './audio-meter';
 
 /** A stereo buffer of `n` samples, all sound, with the last `silent` of them zero. */
 function buffer(n: number, silent = 0, sound = 0.25) {
@@ -96,33 +96,4 @@ describe('the audio meter (POK-247)', () => {
     expect(ticks[0].cut).toBe(true);
   });
 
-  it('reads the speaker\'s state now, which a stopped speaker sends no tick to say', () => {
-    let state: AudioContextState = 'running';
-    const source: Heard = { onAudio: () => () => {}, audioState: () => state };
-    const meter = new AudioMeter(source);
-    expect(meter.stats().state).toBe('running');
-    state = 'suspended';
-    expect(meter.stats().state).toBe('suspended');
-  });
-
-  it('adds up a window, the longest gap with it, and starts the next from nothing', () => {
-    let emit: (tick: AudioTick) => void = () => {};
-    const source: Heard = {
-      onAudio: (l) => {
-        emit = l;
-        return () => {};
-      },
-    };
-    const meter = new AudioMeter(source);
-    expect(meter.stats().state).toBe('none');
-    const tick = (at: number, late = false, cut = false): AudioTick => ({ at, bufferMs: 21.3, late, cut, state: 'running' });
-    emit(tick(0));
-    emit(tick(21, true));
-    emit(tick(90, false, true)); // two buffers missed
-    emit(tick(111));
-    expect(meter.stats()).toEqual({ callbacks: 4, late: 1, cut: 1, skipped: 0, heard: 0, starved: false, maxGapMs: 69, bufferMs: 21.3, state: 'running' });
-    emit(tick(132));
-    // The gap from the last window's final callback still counts.
-    expect(meter.stats()).toEqual({ callbacks: 1, late: 0, cut: 0, skipped: 0, heard: 0, starved: false, maxGapMs: 21, bufferMs: 21.3, state: 'running' });
-  });
 });

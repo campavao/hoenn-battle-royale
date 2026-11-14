@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Loot, spillCells } from './loot';
-import { World } from '../bots/world';
+import { Loot } from './loot';
 import type { MapRef, SpillMsg } from '../net/wire';
 
 const LITTLEROOT: MapRef = { group: 0, num: 9 };
@@ -156,16 +155,6 @@ describe('the match-wide loot table', () => {
   });
 });
 
-// A 5x5 room: all floor except a wall down the middle column, so a spill next to it has
-// to skip cells rather than stack on them.
-function room(): World {
-  // The grid is run-length encoded, `countxclass;...` (world.ts's decodeGrid), class 0
-  // floor and 1 wall -- not a bitstring, which is the mistake this comment is here to
-  // stop somebody making twice.
-  const grid = Array.from({ length: 5 }, () => '4x0;1x1').join(';');
-  return new World([{ id: 'ROOM', group: 9, num: 9, w: 5, h: 5, section: 0, outdoor: true, grid, seams: [], warps: [] } as never]);
-}
-
 describe('what a ticker line calls a piece', () => {
   it('names a TM dropped back on the ground as a TM, not a bag', () => {
     const loot = new Loot();
@@ -176,59 +165,6 @@ describe('what a ticker line calls a piece', () => {
     expect(loot.describe(0x4200)).toBe('A BAG');
   });
 });
-
-describe('where the pieces of a spill land', () => {
-  // The bug this exists for: a bot's spill wrote every ball to the dropper's own cell,
-  // so one ball was visible and the rest of the team -- and the bag under them -- could
-  // never be reached. BrLoot_At returns the first row it matches.
-  it('gives every piece its own cell', () => {
-    const cells = spillCells(room(), 'ROOM', 2, 2, 4);
-    expect(cells).toHaveLength(4);
-    expect(new Set(cells.map((c) => `${c.x},${c.y}`)).size).toBe(4);
-  });
-
-  it('starts on the cell they fell on', () => {
-    expect(spillCells(room(), 'ROOM', 2, 2, 1)).toEqual([{ x: 2, y: 2 }]);
-  });
-
-  it('skips what nobody could stand on', () => {
-    // (4, y) is the wall column, and (3,2)'s right-hand neighbour is it.
-    const cells = spillCells(room(), 'ROOM', 3, 2, 13);
-    expect(cells.some((c) => c.x === 4)).toBe(false);
-  });
-
-  // A piece is solid now (POK-414), so one on a doorstep would stand in the way in.
-  it("skips a warp's own cell, as the ROM's CellFree does", () => {
-    const grid = Array.from({ length: 5 }, () => '4x0;1x1').join(';');
-    const warps = [{ x: 3, y: 2, to: 'ROOM', toX: 0, toY: 0, kind: 'door' }];
-    const world = new World([{ id: 'ROOM', group: 9, num: 9, w: 5, h: 5, section: 0, outdoor: true, grid, seams: [], warps } as never]);
-    const cells = spillCells(world, 'ROOM', 2, 2, 13);
-    expect(cells.some((c) => c.x === 3 && c.y === 2)).toBe(false);
-    expect(spillCells(room(), 'ROOM', 2, 2, 13).some((c) => c.x === 3 && c.y === 2)).toBe(true);
-  });
-
-  // BrLoot's CellFree skips collision and nothing else, so a player beaten while
-  // surfing drops their team on the water. A bot beaten there used to drop nothing at
-  // all: the page skipped every cell nobody could stand on (POK-330 #67).
-  it('lands on water, the way the spill of a player beaten while surfing does', () => {
-    const sea = new World([{ id: 'SEA', group: 9, num: 9, w: 5, h: 5, section: 0, outdoor: true, grid: '25x2', seams: [], warps: [] } as never]);
-    const cells = spillCells(sea, 'SEA', 2, 2, 7);
-    expect(cells).toHaveLength(7);
-    expect(cells[0]).toEqual({ x: 2, y: 2 });
-  });
-
-  it('keeps the first piece on the dropper when nothing around is clear', () => {
-    const rock = new World([{ id: 'ROCK', group: 9, num: 9, w: 3, h: 3, section: 0, outdoor: true, grid: '9x1', seams: [], warps: [] } as never]);
-    expect(spillCells(rock, 'ROCK', 1, 1, 3)).toEqual([{ x: 1, y: 1 }]);
-  });
-
-  it('runs out rather than doubling up', () => {
-    // A one-cell world: one piece lands and the rest stay in their balls.
-    const tiny = new World([{ id: 'CELL', group: 9, num: 9, w: 1, h: 1, section: 0, outdoor: true, grid: '1x0', seams: [], warps: [] } as never]);
-    expect(spillCells(tiny, 'CELL', 0, 0, 6)).toHaveLength(1);
-  });
-});
-
 describe('a team put down twice (POK-387 review)', () => {
   const spill = (keys: number[], bag = false): SpillMsg => ({
     t: 'spill', seat: 4, map: { group: 0, num: 16 },

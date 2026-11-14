@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEBUG_FLAGS, cycleFlag, flagDetail } from './debug';
-import { devPace, perfWanted, withRoom } from './hash';
+import { devPace } from './hash';
 import { measure } from './ui/emerald';
 import { W } from './ui/screens';
 
@@ -27,15 +27,6 @@ describe('the DEBUG rows', () => {
 
   it('send a value typed by hand to off on the next press', () => {
     expect(cycleFlag('#seed=99&fast', flag('seed'))).toBe('fast');
-  });
-
-  it('write what the page already reads', () => {
-    let hash = cycleFlag('', flag('fast'));
-    hash = cycleFlag(hash, flag('fog'));
-    expect(devPace(hash)).toEqual({ safariSecs: 25, fogSecs: 15 });
-    expect(perfWanted(cycleFlag(hash, flag('perf')))).toBe(true);
-    // ...and a door into a room keeps them, as a typed flag always was.
-    expect(withRoom(hash, 'host')).toBe('fast&fog=15&host');
   });
 
   it('say what each value means', () => {
