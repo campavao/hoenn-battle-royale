@@ -1,7 +1,105 @@
 {
- "readAt": "2026-11-14T15:46:43.674Z",
+ "readAt": "2026-11-14T20:13:45.177Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "6XMXGV",
+   "at": "2026-11-14T19:10:41.043Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [],
+   "live": true
+  },
+  {
+   "code": "JX5R5Y",
+   "at": "2026-11-14T18:40:53.060Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [],
+   "live": true
+  },
+  {
+   "code": "8J6H8Q",
+   "at": "2026-11-14T18:22:46.463Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [
+    "world-ef69bfdd"
+   ],
+   "installs": [
+    "a6f8be76"
+   ],
+   "played": [],
+   "live": true
+  },
+  {
+   "code": "PZGT2R",
+   "at": "2026-11-14T18:00:34.159Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-14T18:00:39.463Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": 1120
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "V95UWY",
+   "at": "2026-11-14T16:21:10.989Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [],
+   "live": true
+  },
   {
    "code": "5AK7Q6",
    "at": "2026-11-14T11:40:16.087Z",
@@ -4768,7 +4866,7 @@
   {
    "id": "a6f8be76",
    "first": "2026-10-14T22:34:17.163Z",
-   "last": "2026-11-13T14:34:56.504Z",
+   "last": "2026-11-14T18:22:49.668Z",
    "since": "2026-10-14",
    "versions": [
     "2",
@@ -4783,7 +4881,7 @@
     "world-ef69bfdd"
    ],
    "solo": 1,
-   "checkins": 57,
+   "checkins": 61,
    "v": "world-ef69bfdd"
   },
   {
@@ -4979,6 +5077,118 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-14T19:18:45.927Z",
+   "code": "MZ437S",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 475,
+   "drifts": 0,
+   "deploy": "bc508234"
+  },
+  {
+   "t": "2026-11-14T19:08:36.767Z",
+   "code": "3MG7B5",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 890,
+   "drifts": 0,
+   "deploy": "bc508234"
+  },
+  {
+   "t": "2026-11-14T18:52:20.008Z",
+   "code": "U5XRZD",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 674,
+   "drifts": 0,
+   "deploy": "bc508234"
+  },
+  {
+   "t": "2026-11-14T18:40:17.388Z",
+   "code": "CY59D3",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 978,
+   "drifts": 0,
+   "deploy": "bc508234"
+  },
+  {
+   "t": "2026-11-14T18:19:19.543Z",
+   "code": "PZGT2R",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 1119,
+   "drifts": 0,
+   "deploy": "bc508234"
+  },
+  {
+   "t": "2026-11-14T17:15:31.704Z",
+   "code": "TUWX75",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 16,
+   "longest": 1,
+   "checks": 1324,
+   "drifts": 0,
+   "deploy": "bc508234"
+  },
+  {
+   "t": "2026-11-14T16:41:38.318Z",
+   "code": "F36K5Z",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 921,
+   "drifts": 0,
+   "deploy": "bc508234"
+  },
+  {
+   "t": "2026-11-14T16:26:07.933Z",
+   "code": "YXJ6FJ",
+   "v": "41bb8a3",
+   "watched": 19,
+   "snaps": 10,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 8,
+   "checks": 248,
+   "drifts": 0,
+   "deploy": "bc508234"
+  },
   {
    "t": "2026-11-14T14:10:34.229Z",
    "code": "H4PCP2",
