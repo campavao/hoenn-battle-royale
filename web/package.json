@@ -18,6 +18,7 @@
     "@types/emscripten": "^1.41.5",
     "typescript": "^5.9.3",
     "vite": "^7.3.8",
-    "vitest": "^3.2.4"
+    "vite-node": "^5.3.0",
+    "vitest": "^4.1.11"
   }
 }
