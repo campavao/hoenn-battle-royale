@@ -32,7 +32,7 @@ import { sectionInside } from './ring';
 import { FINAL_CHANCE, STORIES, STORY_CHANCE, storyCells, storyDrop, storyOf, type Story } from './story';
 import type { EventMsg, MapRef, Msg, Pace } from '../net/wire';
 
-export const DEFAULT_SAFARI_SECS = 120;
+const DEFAULT_SAFARI_SECS = 120;
 export const DEFAULT_FOG_SECS = 120;
 const CLOCK_STEP_MS = 5000;
 const DEAL_RETRY_LIMIT = 200; // generous: real world.json has thousands of landing cells for <=32 seats

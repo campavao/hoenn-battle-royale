@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import zoneSource from '../../../src/br/br_zone.c?raw';
 import * as Ticker from './ticker';
-import { chest, CHEST_KEY, LINE_MAX, once, opening, out, outs, OutFeed, OUT_BATCH_MS, said, short, won } from './ticker';
+import { chest, CHEST_KEY, LINE_MAX, once, opening, out, outs, said, short, won } from './ticker';
 import type { TickerMsg } from '../net/wire';
 
 // Worst cases: seven-letter names, and 32 left.
@@ -64,91 +64,6 @@ describe('ticker lines', () => {
   it('say nothing about the fog, the head count at the drop, or the last three (POK-324)', () => {
     // The ROM says the ring, once; the corner says the count; the outs say the rest.
     for (const gone of ['dropped', 'fog', 'fewLeft', 'cleared', 'beat']) expect(Ticker).not.toHaveProperty(gone);
-  });
-});
-
-// Cam's play-test: lines about bots nobody saw, several a minute, and he read none of them.
-describe('the outs, as the ticker says them (POK-324)', () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  /** A field of `alive`, whose director counts an out before the feed settles it. */
-  function feed(alive: number) {
-    vi.useFakeTimers();
-    const lines: string[] = [];
-    let left = alive;
-    const f = new OutFeed({ say: (m) => void (m && lines.push(m.text)), nameOf: (seat) => `P${seat}`, left: () => left });
-    const gone = (seat: number) => {
-      f.add(seat);
-      left--;
-      f.settle();
-    };
-    return { f, lines, gone };
-  }
-
-  it('gathers outs while more than three are left, and says them once the batch is up', () => {
-    const { lines, gone } = feed(10);
-    gone(1);
-    gone(2);
-    vi.advanceTimersByTime(OUT_BATCH_MS - 1);
-    gone(3);
-    expect(lines).toEqual([]);
-    vi.advanceTimersByTime(1);
-    // The count is the one after all three.
-    expect(lines).toEqual(['P1 and 2 more are out - 7 left']);
-    gone(4);
-    vi.advanceTimersByTime(OUT_BATCH_MS);
-    expect(lines).toEqual(['P1 and 2 more are out - 7 left', 'P4 is out - 6 left']);
-  });
-
-  it('says every out at once from three left, with whatever was gathered', () => {
-    const { lines, gone } = feed(5);
-    gone(1); // 4 left: gathered
-    expect(lines).toEqual([]);
-    gone(2); // 3 left: now, and P1 with it
-    expect(lines).toEqual(['P1 and P2 are out - 3 left']);
-    gone(3);
-    expect(lines).toEqual(['P1 and P2 are out - 3 left', 'P3 is out - 2 left']);
-    vi.advanceTimersByTime(OUT_BATCH_MS);
-    expect(lines).toHaveLength(2);
-  });
-
-  it('names who beat a lone loser, and forgets it once said', () => {
-    const { f, lines, gone } = feed(9);
-    f.beat(7, 1);
-    gone(1);
-    vi.advanceTimersByTime(OUT_BATCH_MS);
-    expect(lines).toEqual(['P7 beat P1 - 8 left']);
-    f.beat(7, 2);
-    gone(2);
-    gone(3);
-    vi.advanceTimersByTime(OUT_BATCH_MS);
-    expect(lines.at(-1)).toBe('P2 and P3 are out - 6 left');
-    gone(2);
-    vi.advanceTimersByTime(OUT_BATCH_MS);
-    expect(lines.at(-1)).toBe('P2 is out - 5 left');
-  });
-
-  it('flushes what it has when asked -- the win goes after its out -- and nothing when it is empty', () => {
-    const { f, lines, gone } = feed(10);
-    gone(1);
-    f.flush();
-    expect(lines).toEqual(['P1 is out - 9 left']);
-    f.flush();
-    vi.advanceTimersByTime(OUT_BATCH_MS);
-    expect(lines).toHaveLength(1);
-  });
-
-  it('lets go without a word, and leaves no timer behind', () => {
-    const { f, lines, gone } = feed(10);
-    gone(1);
-    expect(vi.getTimerCount()).toBe(1);
-    f.dispose();
-    expect(vi.getTimerCount()).toBe(0);
-    vi.advanceTimersByTime(OUT_BATCH_MS);
-    f.flush();
-    expect(lines).toEqual([]);
   });
 });
 

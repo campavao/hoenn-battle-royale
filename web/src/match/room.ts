@@ -10,7 +10,7 @@
 // guest see the host's settings and not the host's buttons".
 import type { RosterEvent } from '../net/relay';
 import type { RoomMode } from '../hash';
-import { onPromotion, type MatchSnapshot } from './lifecycle';
+import { type MatchSnapshot } from './lifecycle';
 
 /** What MAX cycles through. Kanto's ladder, and the same one the relay clamps to: the
  *  humans are capped by the relay (16, the roster's `max`) and everything above that
@@ -34,31 +34,6 @@ export interface RoomView {
   fill: number;
 }
 
-export function roomView(roster: RosterEvent, mySeat: number, fillOn: boolean): RoomView {
-  const members = roster.members.map((m) => ({
-    seat: m.id,
-    name: m.name || `P${m.id}`,
-    isMe: m.id === mySeat,
-    spectating: m.spectate === true,
-  }));
-  const players = members.filter((m) => !m.spectating).length;
-  // The seats the host asked for, not the humans the relay clamps them to: reading
-  // `max` held MAX at 16 and dealt no room more than sixteen (POK-330 #29). An older
-  // relay sends no `seats`, and its `max` is all there is.
-  const max = roster.seats ?? roster.max;
-  return {
-    code: roster.code,
-    isHost: roster.host === mySeat,
-    members,
-    players,
-    max,
-    open: roster.open,
-    pass: roster.pass,
-    fillOn,
-    fill: botFillFor(roster, players, fillOn), // what START deals: the same rule
-  };
-}
-
 /** The FILL control: how many bots START would deal, or OFF. What the host set, not what
  *  it comes to -- a room full to MAX with FILL on read FILL OFF, and pressing it to turn
  *  FILL "on" turned it off. */
@@ -74,11 +49,6 @@ export function nextMax(max: number): number {
 
 /** The door's three states, as one cycling control: listed, unlisted, passcoded. */
 export type Door = 'open' | 'private' | 'pass';
-
-export function doorOf(view: { open: boolean; pass: boolean }): Door {
-  if (view.pass) return 'pass';
-  return view.open ? 'open' : 'private';
-}
 
 export function nextDoor(door: Door): Door {
   return door === 'open' ? 'private' : door === 'private' ? 'pass' : 'open';
@@ -126,77 +96,6 @@ export const BOT_FILL = 8;
  *  automatic and abrupt"). It was 10 s. Any key or tap on the room starts it again
  *  (StartCountdown.bump). */
 export const AUTO_START_MS = 60_000;
-
-/** A room's count to its own start (quick play, the daily), and the once-a-second redraw
- *  that shows STARTS IN ticking: one count at a time, and the two let go of together
- *  (POK-331 #13). They were a bare setTimeout per count and a redraw interval for the
- *  page's life, and nothing cleared either: a START inside the count left it armed, to
- *  deal again whenever it ran out -- Kanto's POK-167, "the room just went again" -- and a
- *  page that had lost its socket or stood down counted on to a deal no longer its own. */
-export class StartCountdown {
-  private timer: ReturnType<typeof setTimeout> | null = null;
-  private tick: ReturnType<typeof setInterval> | null = null;
-  private due: number | null = null;
-  private go: (() => void) | null = null;
-
-  constructor(
-    private readonly opts: {
-      ms: number;
-      /** Draws the room again, for the seconds left. */
-      redraw(): void;
-      now?(): number;
-    },
-  ) {}
-
-  private now(): number {
-    return this.opts.now ? this.opts.now() : performance.now();
-  }
-
-  /** A count is running. */
-  get running(): boolean {
-    return this.due !== null;
-  }
-
-  /** Whole seconds to the start, for STARTS IN; null with no count running. */
-  secondsLeft(): number | null {
-    return this.due === null ? null : Math.max(0, Math.ceil((this.due - this.now()) / 1000));
-  }
-
-  /** Count down to `go`, dropping any count already running. The count is over before
-   *  `go` runs, so what `go` asks sees none; and the room is drawn once more after it,
-   *  since a deal refused (FILL off, nobody else here) leaves the room up with STARTS IN
-   *  still on it. */
-  arm(go: () => void): void {
-    this.cancel();
-    this.go = go;
-    this.due = this.now() + this.opts.ms;
-    this.timer = setTimeout(() => {
-      this.cancel();
-      go();
-      this.opts.redraw();
-    }, this.opts.ms);
-    this.tick = setInterval(() => this.opts.redraw(), 1000);
-  }
-
-  /** The player is busy on the room: a running count starts again from the top. Nothing
-   *  when no count runs, so a press in a hosted room arms nothing. */
-  bump(): void {
-    if (this.go === null) return;
-    this.arm(this.go);
-    this.opts.redraw();
-  }
-
-  /** Stop counting: a match started some other way, or this page is no longer the one
-   *  to start it. */
-  cancel(): void {
-    if (this.timer !== null) clearTimeout(this.timer);
-    if (this.tick !== null) clearInterval(this.tick);
-    this.timer = null;
-    this.tick = null;
-    this.due = null;
-    this.go = null;
-  }
-}
 
 /** Which rooms start on their own (POK-320, Cam: "if I click an option that isn't quick
  *  play, the game should not start automatically"). Quick play and the daily are
@@ -270,134 +169,9 @@ function readiesUp(s: Pick<StartState, 'mode' | 'autoStarts' | 'played' | 'count
   return s.played && startsItself(s.mode) && s.autoStarts && !s.countingDown;
 }
 
-/** This page hosts a room that is waiting on it: no match on (or the last one decided),
- *  no count running, and nothing but our START to start the next. A room that starts
- *  itself waits on nobody before its first match, and the daily is nobody's. */
-export function waitsOnHost(s: StartState): boolean {
-  if (!s.isHost || s.countingDown || s.mode === 'daily') return false;
-  if (s.match.active && !s.match.ended) return false;
-  return !(startsItself(s.mode) && s.autoStarts && !s.played);
-}
-
 /** What START says: READY UP when a press arms the count rather than dealing. */
 export function startLabel(s: Pick<StartState, 'mode' | 'autoStarts' | 'played' | 'countingDown'>): string {
   return readiesUp(s) ? 'READY UP' : 'START';
-}
-
-/** Picking a match up needs its seed: the bots' names, teams and walks are dealt from it
- *  (relay/server.js's migration note). A page that never heard the `start` -- a watcher
- *  who walked in on the match -- cannot run it, and dealing one afresh put a new `start`
- *  under every ROM in the room mid-match (POK-331 #13). Kanto keeps that page off the
- *  heir list (a late start sends can_host false), and so does this one, from the first
- *  `ring` or `clock` it hears (lifecycle.ts's offersToHost); one promoted before that
- *  hands the room on, to somebody who heard the deal. */
-function pickUp(s: StartState, members: number[]): StartDecision {
-  return s.match.seed !== 0 ? { do: 'take-over', members } : { do: 'step-aside' };
-}
-
-/** The one start policy: whether a match starts now, later, or not at all, one rule per
- *  place the page used to decide it for itself (POK-330 #42).
- *  A room that starts itself does so once (POK-331 #13, Kanto's POK-167): back from a
- *  match nothing counts it down or buzzes it -- one of two or more used to deal on its
- *  next roster at once, the results still up -- and START readies it up.
- *  Nothing counts down, or deals, over a match that is on (POK-331 #13): an attach was a
- *  count on every rejoin, mid-match included, and the buzzer and a count that ran out
- *  leaned on startDirector finding a director already there.
- *  What the page cannot do anyway -- a director already running, no seat, not the host,
- *  nobody to deal to -- is startDirector's to refuse. */
-export function decideStart(trigger: StartTrigger, s: StartState): StartDecision {
-  switch (trigger.t) {
-    case 'attached':
-      // The room's first host, in a room waiting for its first match: a rejoin into a
-      // match, into one that has been won, or into a count already running is none.
-      return s.isHost && s.autoStarts && startsItself(s.mode) && !s.roomStarted && !s.match.active && !s.countingDown && !s.played
-        ? { do: 'count-down' }
-        : { do: 'nothing' };
-    case 'promoted': {
-      // An heir to a room that starts itself (quick play, the daily) before any match
-      // counts it down, after the STARTS IN count (POK-320); the room's own first host
-      // does that from attach(), which knows it opened the room.
-      // Before any match, an heir inherits the room and nothing else: a hosted room still
-      // waits for START, now this page's (play-test 2026-09-19: the host switched apps,
-      // iOS dropped its socket, and the guest it handed to started the match unasked).
-      // After one it is the same, once the grace brings everybody back: a match that has
-      // been won is not one to take over (POK-330 #22), and the next is READY UP's.
-      const next = onPromotion(s.match);
-      if (next === 'room') {
-        return !s.roomStarted && startsItself(s.mode) && s.autoStarts && !s.countingDown && !s.played
-          ? { do: 'count-down' }
-          : { do: 'nothing' };
-      }
-      if (next === 'take-over') return pickUp(s, trigger.members);
-      return { do: 'nothing' };
-    }
-    case 'host-again':
-      return pickUp(s, trigger.members);
-    case 'roster':
-      // The buzzer: a room that starts itself goes once two are in it -- a room waiting
-      // for its first match, not one running or one back from it.
-      return trigger.members.length >= 2 && s.autoStarts && startsItself(s.mode) && !s.match.active && !s.played
-        ? { do: 'deal', members: trigger.members }
-        : { do: 'nothing' };
-    case 'start':
-      return readiesUp(s) ? { do: 'count-down' } : { do: 'deal', members: trigger.members };
-    case 'countdown':
-      return s.match.active ? { do: 'nothing' } : { do: 'deal' };
-    case 'solo':
-      return { do: 'deal' };
-  }
-}
-
-// ---- a door that will not open -----------------------------------------------------
-
-/** Refusals that leave nothing to do in this room: the page offers the lobby. `seat` is
- *  the relay opening a re-hosted room as a seat other than the one asked for, which an
- *  older relay does (net/relay.ts). */
-const DEAD_ENDS = ['locked', 'full', 'not_found', 'removed', 'passcode', 'server_full', 'version', 'seat'];
-
-/** What a shut door says, in Kanto's words (browse.lua's REFUSALS) and Emerald's font,
- *  which has no apostrophe: the relay's reason is a word for a log, not for a player. */
-const REFUSALS: Record<string, string> = {
-  passcode: 'WRONG PASSCODE',
-  full: 'THAT GAME IS FULL',
-  locked: 'THAT GAME STARTED',
-  not_found: 'THAT GAME IS GONE',
-  removed: 'HOST REMOVED YOU',
-  already_in_room: 'ALREADY IN A GAME',
-  server_full: 'THE SERVER IS FULL',
-  version: 'THAT GAME RUNS ANOTHER BUILD',
-};
-
-export function refusalLine(reason: string): string {
-  return REFUSALS[reason] ?? 'COULD NOT JOIN';
-}
-
-/** What the page does with the relay's `room_error` (POK-330 #47). A rejoin refused
- *  because the room is gone -- a relay restart, or a seat hold that ran out -- is not a
- *  dead end for the page that was running the match: the match lives in its tab, so it
- *  hosts a new room and carries on there, asking for the seat it has (HostOpts.seat).
- *  That used to be the opener's alone, since a new room seated its opener at 1 and from
- *  any other seat the page would have come back as somebody else, mid-match: an heir
- *  (POK-331 #14) lost the match to the restart. */
-export function onRefused(
-  reason: string,
-  page: { rejoining: boolean; wasHost: boolean; seat: number | null },
-): 'rehost' | 'ask-pass' | 'dead-end' | 'status' {
-  if (reason === 'not_found' && page.rejoining && page.wasHost && page.seat !== null) return 'rehost';
-  // A passcoded door asks for the code, and again when it was wrong (POK-320, Kanto's
-  // WRONG PASSCODE) -- a knock, never a rejoin, which the relay lets past the passcode.
-  if (reason === 'passcode' && !page.rejoining) return 'ask-pass';
-  return DEAD_ENDS.includes(reason) ? 'dead-end' : 'status';
-}
-
-// ---- the clock a match is picked up from ---------------------------------------------
-
-/** The seconds left in the running phase at `now`: the last clock this page heard or
- *  kept, counted off since it arrived. What a guest's strip draws, and what a director
- *  resumes from -- a host back after a 40-second drop is 40 seconds further on. */
-export function clockLeftAt(clock: { clockLeft: number; clockAt: number }, now: number): number {
-  const gone = Math.floor(Math.max(0, now - clock.clockAt) / 1000);
-  return Math.max(0, clock.clockLeft - gone);
 }
 
 // ---- match options (POK-241) --------------------------------------------------------

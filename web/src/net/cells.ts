@@ -49,11 +49,6 @@ export function shiftCells(msg: Msg, by: number): Msg {
   return out as unknown as Msg;
 }
 
-/** A page cell (the exporter's space) as the ROM wants it. */
-export function toRomCells(msg: Msg): Msg {
-  return shiftCells(msg, MAP_OFFSET);
-}
-
 /** A ROM cell as the page's world graph wants it. */
 export function toPageCells(msg: Msg): Msg {
   return shiftCells(msg, -MAP_OFFSET);

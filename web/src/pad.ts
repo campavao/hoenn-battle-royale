@@ -103,38 +103,6 @@ export function guessedStickKeys(axes: readonly number[], rest: readonly number[
  *  stick whose driver only reports part of its throw still shows up as moving. */
 export const READOUT_AXIS = 0.2;
 
-/** The sheet's line for a pad: its name, how many axes the browser gives the page, what
- *  it is pressing, and -- the part a report needs -- every axis away from rest with its
- *  value, and every button down by number. Cam's 2026-10-19 play-test: "I've never
- *  gotten a clear answer on why the analog sticks on my Bluetooth controller are not
- *  working". With this on the sheet the answer is on screen: push the stick, and either
- *  an axis moves (the page sees it; REMAP PAD teaches it which) or nothing does (the
- *  browser is not giving the page that stick at all). A non-standard pad nobody has
- *  taught says so while it is idle. */
-export function padReadout(
-  pad: { id: string; mapping: string; axes: readonly number[]; buttons: readonly { pressed: boolean }[] },
-  rest: readonly number[],
-  held: readonly string[],
-  taught: boolean,
-): string {
-  const axes: string[] = [];
-  for (let i = 0; i < pad.axes.length; i++) {
-    const away = (pad.axes[i] ?? 0) - (rest[i] ?? 0);
-    if (Math.abs(away) < READOUT_AXIS) continue;
-    axes.push(`${i}:${pad.axes[i] < 0 ? '' : '+'}${pad.axes[i].toFixed(2)}`);
-  }
-  const buttons: number[] = [];
-  pad.buttons.forEach((b, i) => {
-    if (b.pressed) buttons.push(i);
-  });
-  let line = `Gamepad: ${pad.id} (${pad.mapping || 'non-standard'}, ${pad.axes.length} axes)`;
-  if (held.length > 0) line += ` -- ${held.join(' ')}`;
-  if (axes.length > 0) line += ` [axis ${axes.join(' ')}]`;
-  if (buttons.length > 0) line += ` [button ${buttons.join(' ')}]`;
-  if (!pad.mapping && !taught && held.length + axes.length + buttons.length === 0) line += ' -- REMAP PAD to teach it';
-  return line;
-}
-
 export const STICK_KEY = 'hbr.padstick';
 
 export function loadStickMap(storage: Pick<Storage, 'getItem'> | null = typeof localStorage === 'undefined' ? null : localStorage): StickMap | null {
@@ -157,56 +125,3 @@ export interface PadWatch {
   always: boolean;
 }
 
-/** Windows, where the poll has a second job (pollPads): userAgentData where the browser
- *  has it, the user-agent string where it does not (Firefox, Safari). */
-export function onWindows(nav: { userAgent: string; userAgentData?: { platform?: string } }): boolean {
-  const platform = nav.userAgentData?.platform;
-  return platform ? platform === 'Windows' : /Windows/.test(nav.userAgent);
-}
-
-/** Runs `poll` every 16 ms while at least one pad is connected, and not at all otherwise
- *  (POK-247): sixty wakeups a second on a phone that has never seen a pad, next to its
- *  ~170 others. A browser shows a page a pad once somebody presses it, and says so with
- *  gamepadconnected; a pad the page can already see is polled from the start. The last
- *  one going gets one more poll, which lets go of whatever it held. `note` and `gone`
- *  hear the events as before. Returns a stop.
- *
- *  With `always` -- Windows -- it polls from load to unload, pad or no pad: it is the
- *  page's only timer under 32 ms, and Chromium on Windows keeps 1 ms timer resolution
- *  only while one exists. The core's pthread paces its frames with timed waits, so
- *  without it they land on the OS's 15.6 ms tick: frame p95 31/26/30.5/25.5 ms against
- *  24/18.5/24/19 with it, alternating 20 s windows of one match. A phone has no such
- *  tick to keep the frames off. */
-export function pollPads(poll: () => void, note: (e: GamepadEvent) => void, gone: (e: GamepadEvent) => void, on: PadWatch): () => void {
-  const present = new Set<number>();
-  for (const pad of on.pads()) if (pad) present.add(pad.index);
-  let timer: ReturnType<typeof setInterval> | null = null;
-  const settle = () => {
-    const want = on.always || present.size > 0;
-    if (want && timer === null) timer = setInterval(poll, 16);
-    if (!want && timer !== null) {
-      clearInterval(timer);
-      timer = null;
-      poll();
-    }
-  };
-  const connected = (e: Event) => {
-    present.add((e as GamepadEvent).gamepad.index);
-    note(e as GamepadEvent);
-    settle();
-  };
-  const disconnected = (e: Event) => {
-    present.delete((e as GamepadEvent).gamepad.index);
-    gone(e as GamepadEvent);
-    settle();
-  };
-  on.win.addEventListener('gamepadconnected', connected);
-  on.win.addEventListener('gamepaddisconnected', disconnected);
-  settle();
-  return () => {
-    if (timer !== null) clearInterval(timer);
-    timer = null;
-    on.win.removeEventListener('gamepadconnected', connected);
-    on.win.removeEventListener('gamepaddisconnected', disconnected);
-  };
-}

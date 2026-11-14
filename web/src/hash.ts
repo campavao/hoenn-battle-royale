@@ -58,13 +58,6 @@ export function withoutRoom(hash: string): string {
   return textOf(params);
 }
 
-/** `#perf`: frame times, audio, the heap and the proxy in the corner (POK-247), in a
- *  build as well as in DEV. It only reads, so it is safe on the live site -- which is
- *  where a phone's numbers come from. It rides along through every door (withRoom). */
-export function perfWanted(hash: string): boolean {
-  return paramsOf(hash).has('perf');
-}
-
 // ---- test flags (the DEBUG screen's; app.ts reads them in every build) ----------------------------------------
 
 /** A whole number of seconds, or undefined for anything else. */
@@ -89,13 +82,5 @@ export function devPace(hash: string): { safariSecs?: number; fogSecs?: number }
   if (safari !== undefined) pace.safariSecs = safari;
   if (fog !== undefined) pace.fogSecs = fog;
   return pace;
-}
-
-/** `#land=MAP_ID,x,y`: where our own drop lands, whatever section was picked, in the
- *  map's own coordinates (a `land` is map data, net/cells.ts). A test that meets a
- *  particular route trainer has to be put in front of them (POK-327). */
-export function devLand(hash: string): { id: string; x: number; y: number } | undefined {
-  const m = /^(MAP_[A-Z0-9_]+),(\d+),(\d+)$/.exec(paramsOf(hash).get('land') ?? '');
-  return m ? { id: m[1], x: Number(m[2]), y: Number(m[3]) } : undefined;
 }
 

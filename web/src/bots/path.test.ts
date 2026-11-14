@@ -12,7 +12,6 @@ import { World, sameSpot, spotKey, type SeamDir, type Spot, type WorldMap } from
 import { mulberry32 } from '../match/clock';
 import { LANDING } from '../match/landing';
 import worldData from '../data/world.json';
-import regionData from '../data/regionmap.json';
 
 // Every search the brain makes in this file, with what it got back.
 const asked = vi.hoisted(() => ({
@@ -142,11 +141,9 @@ function oldFindPathToAny(world: World, from: Spot, goals: readonly Spot[], maxV
 // ---- Hoenn ---------------------------------------------------------------------------
 
 const MAPS = (worldData as { maps: WorldMap[] }).maps;
-const SECTIONS = (regionData as { sections: Record<string, { x: number; y: number; w: number; h: number }> }).sections;
 const world = new World(MAPS);
 const refById = new Map(MAPS.map((m) => [m.id, { group: m.group, num: m.num }]));
 const outdoor = new Set(MAPS.filter((m) => m.outdoor).map((m) => m.id));
-const sectionOf = new Map(MAPS.map((m) => [m.id, m.section]));
 const targets = LANDING.filter((c) => outdoor.has(c.map) && refById.has(c.map)).map((c) => ({ mapId: c.map, x: c.x, y: c.y }));
 const cells: Spot[] = targets.map((t) => ({ map: t.mapId, x: t.x, y: t.y }));
 

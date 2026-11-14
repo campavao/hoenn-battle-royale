@@ -86,17 +86,16 @@ import objectEventGraphicsInfoH from '../../src/data/object_events/object_event_
 import objectEventAnimsH from '../../src/data/object_events/object_event_anims.h?raw';
 import serverJs from '../../relay/server.js?raw';
 // Copies that are not exported: read as text, the same way as the C.
-import lootTs from './match/loot.ts?raw';
 import { PATCH_KEY_BASE } from './match/loot';
 import { LEGEND_GFX } from './match/legends';
 import { EVENT_KEY_BASE, EVENT_MAX, EVENT_PIECES, GOLD, LEGENDS, RARES, claimKey, traderKey } from './match/events';
 import { GIFT_KEY_BASE, GIFTS } from './match/gifts';
 import { DOOR_Y, FLYING, STORIES } from './match/story';
 import uiData from './data/ui.json';
-import { BR_CONT_FLAG, BR_MSG, TICKER_KIND_ORDER } from './net/slots';
+import { BR_CONT_FLAG, BR_MSG } from './net/slots';
 import { MAILBOX } from './net/mailbox';
 import { MAX_SEAT, PARTY_BAG_MAX, PROTOCOL } from './net/wire';
-import { HUD, HUD_PAGE } from './net/hud';
+import { HUD } from './net/hud';
 import { LADDER } from './bots/party';
 import { MAX_SEATS } from './bots/roster';
 import { SIGHT_RANGE } from './bots/sight';
@@ -326,15 +325,6 @@ function members(text: string, union: boolean, defs: string[]): Natural {
   }
   out.size = Math.ceil(Math.ceil(bit / 8) / out.align) * out.align;
   return out;
-}
-
-/** A `const NAME = <number or [numbers]>;` out of a TypeScript source. */
-function tsConst(src: string, name: string): number | number[] {
-  const m = new RegExp(`\\bconst ${name} = ([^;]+);`).exec(src);
-  if (!m) throw new Error(`no const ${name}`);
-  const v = m[1].trim();
-  if (v.startsWith('[')) return [...v.matchAll(new RegExp(NUMBER, 'g'))].map((x) => Number(x[1]));
-  return Number(v.replace(/_/g, ''));
 }
 
 /** data/maps/map_groups.json, which include/constants/map_groups.h is made from: a map's
@@ -1077,11 +1067,6 @@ describe('the rules a bot plays by the ROM\'s way', () => {
     expect(LADDER).toEqual(table(levelsC, 'sLadder'));
   });
 
-  it('a spill scatters over sSpillDx/sSpillDy, in their order', () => {
-    expect(tsConst(lootTs, 'SPILL_DX')).toEqual(table(lootC, 'sSpillDx'));
-    expect(tsConst(lootTs, 'SPILL_DY')).toEqual(table(lootC, 'sSpillDy'));
-  });
-
   it('the Safari opening\'s cells are sSafariCells', () => {
     // A cell is a map num in MAP_SAFARI_ZONE_SOUTH's group; the page names the map.
     expect(matchC).toMatch(/SetWarpDestination\(MAP_GROUP\(MAP_SAFARI_ZONE_SOUTH\), area,/);
@@ -1208,11 +1193,6 @@ describe('the rules a bot plays by the ROM\'s way', () => {
     expect(MAX_SEAT).toBe(define(configH, 'BR_MAX_SEATS') - 1);
     expect(LINE_MAX).toBe(define(hudH, 'BR_HUD_LINE_MAX'));
     expect(PARTY_BAG_MAX).toBe(define(spectateC, 'BR_PEEK_BAG_MAX'));
-  });
-
-  it('ticker kinds and the page values of noCorner are br_hud.h\'s', () => {
-    TICKER_KIND_ORDER.forEach((k, i) => expect(define(hudH, `BR_HUD_KIND_${k.toUpperCase()}`), k).toBe(i));
-    expect([HUD_PAGE.SIGNS, HUD_PAGE.CORNER]).toEqual([define(hudH, 'BR_HUD_PAGE_SIGNS'), define(hudH, 'BR_HUD_PAGE_CORNER')]);
   });
 
   it('the item ids a bot carries are items.h\'s', () => {

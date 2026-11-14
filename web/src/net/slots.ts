@@ -882,11 +882,6 @@ const CODEC_BY_TYPE = new Map<number, Codec & { t: string }>(
   Object.entries(CODECS).map(([t, c]) => [c.type, { ...c, t }]),
 );
 
-/** True for a `Msg.t` that has a binary counterpart and crosses into the ROM. */
-export function crossesToRom(t: string): boolean {
-  return t in CODECS;
-}
-
 // ---- slot framing (the continuation scheme) --------------------------------
 
 const FIRST_HDR = 3; // totalLen: u16, seq: u8

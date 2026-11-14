@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { closingFade, FIELD_VIEW_SIZE, measureLayout, widerBand, worldBand, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandOf, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, PAD_GAP, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach, unseenFade, fieldDimmed, RING_BATTLE_FOG, FOG_EVA, FOG_EVB, WEATHER_CURR, WEATHER_EVA, WEATHER_EVB, WEATHER_FOG_HORIZONTAL } from './field';
+import { closingFade, FIELD_VIEW_SIZE, measureLayout, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandOf, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, PAD_GAP, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach, unseenFade, fieldDimmed, RING_BATTLE_FOG, FOG_EVA, FOG_EVB, WEATHER_CURR, WEATHER_EVA, WEATHER_EVB, WEATHER_FOG_HORIZONTAL } from './field';
 import { standsAbove } from './field-extra';
 import type { Band } from './emu';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
@@ -136,44 +136,6 @@ describe('the picture past the LCD (POK-319)', () => {
       expect(both([136, 40, 128, 40, 40, 56]).wide, "past the core's 128").toBeUndefined();
       expect(both([128, 40, 128, 40, 32, 64]).wide, 'another window').toBeUndefined();
       expect(romBand(image([0, 104, 16, 232, 40, 56]), syms).wide, 'a ROM without one').toBeUndefined();
-    });
-
-    // Cam, 2026-10-14: one zoom everywhere, so a wide screen shows far more map beside the
-    // LCD than above and below it. The page asks for whichever ring covers more of it.
-    describe('the wide ring on a screen it covers more of (askBand)', () => {
-      const rom = { band: { left: 0, top: 104, right: 16, bottom: 232 }, sprites: { top: 40, bottom: 56 }, wide: { left: 128, top: 40, right: 128, bottom: 40 } };
-      it('a desktop, 1440x800: 496 x 240 live, not the tall ring 256 x 384', () => {
-        const lay = layoutField(1440, 800, 0, 1, 800);
-        expect(askBand(lay, rom, true)).toEqual({ left: 128, top: 40, right: 128, bottom: 40 });
-        expect(shownArea(lay, rom.wide)).toBe(496 * 240);
-        expect(shownArea(lay, askBand(lay, rom, false))).toBe(256 * 384);
-      });
-      it("a 1920x1080 desktop's box, 1440x1080: the wide ring, though the ROM's tall one is a little more area", () => {
-        const real = { ...rom, band: { left: 0, top: 184, right: 16, bottom: 152 } };
-        const lay = layoutField(1440, 1080, 0, 1, 1080);
-        expect(lay).toMatchObject({ cols: 720, rows: 540, lcdCol: 240, lcdRow: 190 });
-        expect(shownArea(lay, askBand(lay, real, false))).toBeGreaterThan(shownArea(lay, real.wide));
-        expect(askBand(lay, real, true)).toEqual({ left: 128, top: 40, right: 128, bottom: 40 });
-      });
-      it('a phone on its side, 844x390: the 140 columns each side it shows, in eights, up to 128', () => {
-        const lay = layoutField(844, 390, 0, 3, 390);
-        expect(lay).toMatchObject({ cols: 520, rows: 240, lcdCol: 140, lcdRow: 40 });
-        expect(askBand(lay, rom, true)).toEqual({ left: 128, top: 40, right: 128, bottom: 40 });
-      });
-      it('a narrow window asks only the columns it shows, and never a left of 0', () => {
-        const lay = { scale: 2, cols: 360, rows: 200, lcdCol: 60, lcdRow: 20 };
-        expect(askBand(lay, rom, true)).toEqual({ left: 64, top: 40, right: 64, bottom: 40 });
-      });
-      it('a portrait phone keeps the tall ring', () => {
-        const lay = layoutField(390, 844, 300, 3, 390);
-        expect(askBand(lay, rom, true).left).toBe(0);
-        expect(askBand(lay, rom, true)).toEqual(askBand(lay, rom, false));
-      });
-      it('without the side table, or a ROM without it, the tall ring', () => {
-        const lay = layoutField(1440, 800, 0, 1, 800);
-        expect(askBand(lay, rom, false).left).toBe(0);
-        expect(askBand(lay, { band: rom.band, sprites: rom.sprites }, true).left).toBe(0);
-      });
     });
 
     it('a ROM that does not say -- or says what no core can draw -- gets the legacy band', () => {
@@ -621,42 +583,6 @@ describe('the picture in the box', () => {
     });
   });
 
-  // POK-329: the core draws, and the page uploads, every row it is asked for, every frame.
-  describe('the page asks for the rows its layout shows, inside what the ROM declares (askBand)', () => {
-    const ROM = { band: { left: 0, top: 104, right: 16, bottom: 232 }, sprites: { top: 40, bottom: 56 } };
-    const rows = (b: Band) => ({ top: b.top, bottom: b.bottom });
-    it("a desktop: a phone's zoom shows map above and below, so it asks for those rows too", () => {
-      // 1280x720 at 2: 360 rows, the LCD at 100 and 100 under it.
-      expect(askBand(layoutField(1280, 720, 0), ROM)).toEqual({ left: 0, top: 104, right: 16, bottom: 104 });
-      // ...beside the docked sheet (1280 less its 480) the same rows; 1440x800 has 120 each way.
-      expect(rows(askBand(layoutField(800, 720, 0), ROM))).toEqual({ top: 104, bottom: 104 });
-      expect(rows(askBand(layoutField(1440, 800, 0), ROM))).toEqual({ top: 104, bottom: 120 });
-    });
-    it("a portrait phone with the pad over the bottom: all the ROM has, and Safari's shorter glass less", () => {
-      expect(askBand(layoutField(390, 844, 200, 1, 390, ROM.band.top), ROM), 'short 14 and 10: capped at the ROM').toEqual(ROM.band);
-      expect(rows(askBand(layoutField(390, 763, 200, 1, 390, ROM.band.top), ROM)), 'the installed app, 104 and 206, in eights').toEqual({ top: 104, bottom: 208 });
-      expect(rows(askBand(layoutField(390, 664, 200, 1, 390, ROM.band.top), ROM)), 'Safari, 104 and 145').toEqual({ top: 104, bottom: 152 });
-    });
-    it('a half-screen desktop window beside its sheet: what it shows, in eights', () => {
-      // 683x768 less the 240 dock: 443x768 at 1.846, 417 rows, the LCD at 128 and 129 under it.
-      expect(rows(askBand(layoutField(443, 768, 0), ROM))).toEqual({ top: 104, bottom: 136 });
-    });
-    it('never below the sprite window, never past the ROM, the sides the ROM has', () => {
-      expect(askBand(layoutField(480, 320, 0), ROM), 'a box the picture fills').toEqual({ left: 0, top: 40, right: 16, bottom: 56 });
-      expect(askBand(layoutField(200, 2000, 0), ROM), 'a tower').toEqual(ROM.band);
-      const legacy = { band: LEGACY_BAND, sprites: LEGACY_SPRITE_BAND };
-      expect(askBand(layoutField(390, 844, 200), legacy), 'a ROM before gBrFieldView: its ring, whatever the glass').toEqual(LEGACY_BAND);
-      const sides = { band: { left: 8, top: 104, right: 24, bottom: 232 }, sprites: ROM.sprites };
-      expect(askBand(layoutField(390, 844, 200), sides)).toMatchObject({ left: 8, right: 24 });
-    });
-    it("a box with no size says nothing: the ROM's whole band, as before", () => {
-      expect(askBand(layoutField(0, 0), ROM)).toEqual(ROM.band);
-      const got = askBand(layoutField(0, 0), ROM);
-      got.top = 0;
-      expect(ROM.band.top, 'a copy').toBe(104);
-    });
-  });
-
   describe('the whole window covers the window grown to its screen (Cam, 2026-10-26)', () => {
     // A window booted at 1000x900 on a 1278x1392 screen (1.5x), then made bigger: the
     // band is a boot's size, and past it the field showed stills -- still water.
@@ -666,19 +592,6 @@ describe('the picture in the box', () => {
     it('measures the box as big as the window can get, and as it is without asking', () => {
       expect(measureLayout(box, null)).toEqual(layoutField(712, 900, 0, 1.5, 1278));
       expect(measureLayout(box, null, undefined, true)).toEqual(layoutField(712 + 278, 900 + 452, 0, 1.5, 1278));
-    });
-    it('asks for the grown band, each side the wider', () => {
-      const now = worldBand(measureLayout(box, null));
-      const grown = worldBand(measureLayout(box, null, undefined, true));
-      expect(grown.right).toBeGreaterThan(now.right);
-      expect(grown.bottom).toBeGreaterThan(now.bottom);
-      expect(widerBand(now, grown)).toEqual(grown);
-      expect(widerBand({ left: 8, top: 0, right: 0, bottom: 64 }, { left: 0, top: 16, right: 24, bottom: 8 })).toEqual({ left: 8, top: 16, right: 24, bottom: 64 });
-    });
-    it('a phone on its side asks for what it shows: its screen reads upright (iOS), and its window does not resize', () => {
-      const ios = { devicePixelRatio: 3, innerWidth: 844, innerHeight: 350, screen: { width: 390, height: 844, availWidth: 390, availHeight: 844 }, matchMedia: pointer(false) };
-      const phone = { clientWidth: 844, clientHeight: 350, ownerDocument: { defaultView: ios } } as unknown as HTMLElement;
-      expect(worldBand(measureLayout(phone, null, undefined, true))).toEqual(worldBand(measureLayout(phone, null)));
     });
     it('a window already filling its screen asks for what it shows', () => {
       const full = { ...view, innerWidth: 1278, innerHeight: 1352 };

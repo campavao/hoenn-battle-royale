@@ -27,9 +27,9 @@ export const MAX_ID = 64; // a generic short-string cap (species keys, item ids,
 export const MAX_VER = 16; // "0.0.0-dev" plus room for a suffix (Wire.cleanVersion)
 export const MAX_CELL = 1000; // overworld tile coordinate bound
 export const MAX_TEXT = 96; // a ticker/battle line
-export const MAX_PLAYERS = 32;
+const MAX_PLAYERS = 32;
 /** The most wins or matches a `card` may say (POK-339). */
-export const CARD_MAX = 999_999;
+const CARD_MAX = 999_999;
 
 /** Emerald's own facing constants (include/constants/global.h): 0 has no
  *  DIR_NONE case on this wire -- every place/step/face names a real facing. */

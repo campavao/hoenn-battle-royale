@@ -10255,12 +10255,6 @@ var HOWTO_ROW = {
   id: "lobby-howto",
   art: ART.howto
 };
-var DEBUG_ROW = {
-  label: "DEBUG",
-  action: { kind: "debug" },
-  id: "lobby-debug",
-  art: ART.debug
-};
 
 // web/src/bots/world.ts
 var NO_REACH = { cell: () => false, across: () => false };
@@ -15603,10 +15597,6 @@ function* zoneRun(side, species, opts) {
   return zoneFight(side, species, opts);
 }
 
-// web/src/match/lifecycle.ts
-init_roster();
-init_clock();
-
 // web/src/match/room.ts
 var MAX_STEPS = [2, 4, 6, 8, 12, 16, 20, 26, 30];
 function dealable(humans, bots) {
@@ -16423,4 +16413,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "192335f7677a";
+export const WORLD_HASH = "5a96d233f830";

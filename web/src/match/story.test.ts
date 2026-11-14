@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { Director, type DirectorWorld } from './director';
 import { EVENT_MAX, eventKey, SUPPLIES } from './events';
-import { STORIES, storyCells, storyDrop, storyLegend, storyOf, storySealed } from './story';
+import { STORIES, storyCells, storyDrop, storyOf } from './story';
 import { mulberry32 } from './clock';
 import { HOENN } from '../bots/hoenn';
 import { DOORSTEPS, HAND, LANDING, worldReady } from './landing';
 import { MAP_OFFSET } from '../net/cells';
-import type { EventMsg, Msg, PackedMon, RingMsg, SpillMsg } from '../net/wire';
-import { MOVE_CUT, MOVE_SURF } from '../bots/party';
+import type { EventMsg, Msg, RingMsg, SpillMsg } from '../net/wire';
 import regionmapData from '../data/regionmap.json';
 import mapsecJson from '../../../src/data/region_map/region_map_sections.json';
 
@@ -237,67 +236,4 @@ describe('story events', () => {
     }
   });
 
-  const withFieldMoves = (party: PackedMon[]): PackedMon[] =>
-    party.map((m, i) => (i ? m : { ...m, moves: [...m.moves.slice(0, 2), { id: MOVE_SURF, pp: 15, ppUps: 0 }, { id: MOVE_CUT, pp: 30, ppUps: 0 }] }));
-
-  // Bots go for events like players (Cam, 2026-10-13): from the door outside, to the
-  // story's first piece, however many floors in.
-  const OUTSIDE: Record<string, { mapId: string; x: number; y: number }> = {
-    'mirage-tower': { mapId: 'MAP_ROUTE111', x: 19, y: 59 },
-    'stevens-house': { mapId: 'MAP_MOSSDEEP_CITY', x: 19, y: 11 },
-    'new-mauville': { mapId: 'MAP_ROUTE110', x: 35, y: 25 },
-    'shoal-cave': { mapId: 'MAP_ROUTE125', x: 22, y: 20 },
-    'desert-ruins': { mapId: 'MAP_ROUTE111', x: 29, y: 88 },
-    'island-cave': { mapId: 'MAP_ROUTE105', x: 9, y: 21 },
-    'ancient-tomb': { mapId: 'MAP_ROUTE120', x: 7, y: 56 },
-    'granite-cave': { mapId: 'MAP_GRANITE_CAVE_1F', x: 5, y: 11 },
-    'lavaridge-egg': { mapId: 'MAP_LAVARIDGE_TOWN_POKEMON_CENTER_1F', x: 7, y: 7 },
-    'abandoned-ship': { mapId: 'MAP_SLATEPORT_CITY', x: 28, y: 13 },
-    'magma-hideout': { mapId: 'MAP_MAGMA_HIDEOUT_3F_3R', x: 16, y: 22 },
-    'route128-kyogre': { mapId: 'MAP_ROUTE127', x: 37, y: 38 },
-    'weather-institute': { mapId: 'MAP_ROUTE119_WEATHER_INSTITUTE_1F', x: 17, y: 2 },
-    'aqua-hideout': { mapId: 'MAP_AQUA_HIDEOUT_B1F', x: 12, y: 2 },
-    'mt-chimney': { mapId: 'MAP_MT_CHIMNEY_CABLE_CAR_STATION', x: 6, y: 10 },
-    'space-center': { mapId: 'MAP_MOSSDEEP_CITY_SPACE_CENTER_1F', x: 13, y: 2 },
-    // Under the door, and up all six clean floors (story-sky-pillar.txt walks the door).
-    'sky-pillar': { mapId: 'MAP_SKY_PILLAR_OUTSIDE', x: 14, y: 6 },
-  };
-
-  it("keeps a REGI behind its wall, and STERN's thanks, from a bot that could not get them", () => {
-    const at = (id: string, i = 0) => {
-      const s = STORIES.find((x) => x.id === id)!;
-      return { mapId: s.cells[i].map ?? s.map, x: s.cells[i].x, y: s.cells[i].y };
-    };
-    const bot = { flies: false, has: () => false, phase: 4, onGround: () => false };
-    // Event 1 drops on phase 4.
-    const key = eventKey(1, 0);
-    expect(storySealed({ key, ...at('desert-ruins') }, bot)).toBe(false);
-    expect(storySealed({ key, ...at('ancient-tomb') }, bot)).toBe(true);
-    expect(storySealed({ key, ...at('ancient-tomb') }, { ...bot, flies: true })).toBe(false);
-    expect(storySealed({ key, ...at('island-cave') }, bot)).toBe(true);
-    expect(storySealed({ key, ...at('island-cave') }, { ...bot, phase: 5 })).toBe(false);
-    // Outside the wall is anybody's.
-    expect(storySealed({ key: eventKey(1, 1), ...at('ancient-tomb', 1) }, bot)).toBe(false);
-    expect(storySealed({ key, ...at('abandoned-ship') }, bot)).toBe(true);
-    expect(storySealed({ key, ...at('abandoned-ship') }, { ...bot, has: (id) => id === 278 })).toBe(false);
-    expect(storySealed({ key: eventKey(1, 1), ...at('abandoned-ship', 1) }, bot)).toBe(false);
-    // A fallen trainer's ball on the same cell is not the story's.
-    expect(storySealed({ key: 0x1234, ...at('ancient-tomb') }, bot)).toBe(false);
-  });
-
-  it('calls a story with a legendary in it one, and the rest a rare find', () => {
-    const legend = (id: string) => storyLegend(STORIES.find((s) => s.id === id)!);
-    expect(['desert-ruins', 'magma-hideout', 'route128-kyogre'].map(legend)).toEqual([true, true, true]);
-    expect(['new-mauville', 'mirage-tower', 'aqua-hideout'].map(legend)).toEqual([false, false, false]);
-  });
-
-  it("holds a gate's other pieces for a bot until its boss's is gone", () => {
-    const s = STORIES.find((x) => x.id === 'mt-chimney')!;
-    const at = (i: number) => ({ mapId: s.map, x: s.cells[i].x, y: s.cells[i].y });
-    const bot = { flies: false, has: () => false, phase: 4 };
-    const standing = { ...bot, onGround: (k: number) => k === eventKey(1, 2) };
-    expect(storySealed({ key: eventKey(1, 0), ...at(0) }, standing)).toBe(true);
-    expect(storySealed({ key: eventKey(1, 2), ...at(2) }, standing)).toBe(false);
-    expect(storySealed({ key: eventKey(1, 0), ...at(0) }, { ...bot, onGround: () => false })).toBe(false);
-  });
 });

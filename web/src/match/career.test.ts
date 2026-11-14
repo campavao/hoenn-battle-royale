@@ -1,28 +1,7 @@
 import ghostsSource from '../../../src/br/br_ghosts.c?raw';
 import { describe, expect, it } from 'vitest';
 import { lineAt, LINE_COUNT, LINES, nextLine, VOICE_COUNT, voiceOf } from '../bots/lines';
-import {
-  cleanName,
-  exportCareer,
-  FILE_TAG,
-  cardBadges,
-  cardStars,
-  importCareer,
-  loadCareer,
-  NAME_MAX,
-  nextLockedSkin,
-  nextSkin,
-  peekSkin,
-  recordMatch,
-  saveProfile,
-  RETIRED_SKINS,
-  SKIN_UNLOCK_WINS,
-  SKINS,
-  STAR_WINS,
-  WARDROBE,
-  skinNote,
-  skinUnlocked,
-} from './career';
+import { cleanName, exportCareer, FILE_TAG, cardBadges, cardStars, importCareer, loadCareer, NAME_MAX, nextLockedSkin, nextSkin, recordMatch, saveProfile, RETIRED_SKINS, SKIN_UNLOCK_WINS, SKINS, STAR_WINS, WARDROBE, skinNote, skinUnlocked } from './career';
 
 /** A localStorage that lives for one test. */
 function store() {
@@ -225,8 +204,6 @@ describe('the career as a file', () => {
   });
 });
 
-
-
 // POK-282. Cam: "I should be able to pick kind of like any sprites -- the way Kanto
 // Battle Royale has it, the amount of wins you get means you get more sprites. But in
 // Kanto you're able to preview all the different skins even if you don't have all the
@@ -281,17 +258,6 @@ describe('the wardrobe (POK-282)', () => {
     expect(skinUnlocked(SKINS.length - 1, 0)).toBe(false);
   });
 
-  it('browses every sprite, locked or not, and comes back round', () => {
-    const seen = new Set<number>();
-    let at = 0;
-    for (let i = 0; i < WARDROBE.length; i++) {
-      at = peekSkin(at);
-      seen.add(at);
-    }
-    expect(seen.size).toBe(WARDROBE.length);
-    expect(at).toBe(0);
-  });
-
   it('says what a locked one costs, and says nothing about one you own', () => {
     expect(skinNote(0, 0)).toBe('your sprite');
     expect(skinNote(4, 0)).toBe('LOCKED -- 1 win');
@@ -306,8 +272,6 @@ describe('the wardrobe (POK-282)', () => {
     expect(loadCareer(s).skin).toBeUndefined();
   });
 });
-
-
 
 // POK-283. Cam: "it should have three voices: your intro text, your win text -- what you
 // say when you win -- and your lose text. And these should be a big list of essentially

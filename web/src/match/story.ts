@@ -16,7 +16,7 @@
 // ring's own section.
 import { pickIndex } from './clock';
 import { MAP_OFFSET } from '../net/cells';
-import { LEGENDS, RARES, draw, isEventKey, layEvent, type EventDrop } from './events';
+import { RARES, draw, layEvent, type EventDrop } from './events';
 import type { EventMsg, MapRef, Msg } from '../net/wire';
 
 // include/constants/species.h
@@ -45,9 +45,6 @@ const DEOXYS = 410;
 const MEW = 151;
 const LUGIA = 249;
 const HO_OH = 250;
-/** The legendaries no cluster drops and a story can (Cam: "all legendaries and pokemon in
- *  the game are valid"): the ticker calls them legendaries too. */
-const OTHER_LEGENDS: readonly number[] = [DEOXYS, MEW, LUGIA, HO_OH];
 
 /** The islands the Lilycove ferry sails to (br_story.c, sIslands): include/constants/
  *  region_map_sections.h's numbers. Three are not on Hoenn's MAP, so the event carries
@@ -394,70 +391,6 @@ export function storyOf(
     const map = refOf(at.map ?? s.map);
     return !!map && e.trader.map.group === map.group && e.trader.map.num === map.num && e.trader.x - MAP_OFFSET === at.x && e.trader.y - MAP_OFFSET === at.y;
   });
-}
-
-/** The phase event `n` dropped on, from one of its keys: event n drops on 2n + 2. */
-const phaseOf = (key: number) => ((key >> 4) & 0xf) * 2 + 2;
-
-/** Is this piece out of a bot's reach for now? A story's cells are walkable in the
- *  bots' grid, which knows nothing of a door or a person's terms, so the gate is asked
- *  here: behind a REGI's wall until the bot could open it, a person's until it has what
- *  he wants, and a gate's until its boss's piece is gone. `phase` is the ring's (the wire's, 1-based). */
-export function storySealed(
-  piece: { key: number; mapId: string; x: number; y: number },
-  bot: { flies: boolean; has: (item: number) => boolean; phase: number; onGround: (key: number) => boolean },
-): boolean {
-  if (!isEventKey(piece.key)) return false;
-  for (const story of STORIES) {
-    const cells = story.cells.map((c) => ({ ...c, map: c.map ?? story.map }));
-    const i = cells.findIndex((c) => c.map === piece.mapId && c.x === piece.x && c.y === piece.y);
-    if (i < 0) continue;
-    if (story.boat || story.noBots) return true; // a bot never takes the ferry, or dives
-    const wants = story.people?.find((p) => p.at === i)?.wants;
-    if (wants !== undefined && !bot.has(wants)) return true;
-    // A gate's boss's own piece is open: the bot fights him for it (storyGuard). The rest
-    // of his story waits on his piece, as it does in the ROM (GuardOf).
-    const boss = story.people?.find((p) => p.trainer !== undefined);
-    if (boss && boss.at !== i && bot.onGround((piece.key & 0xfff0) | boss.at)) return true;
-    if (story.door && piece.y < DOOR_Y) {
-      if (story.door === 'fly' && !bot.flies) return true;
-      if (story.door === 'wait' && bot.phase <= phaseOf(piece.key)) return true;
-    }
-    return false;
-  }
-  return false;
-}
-
-/** The team a gate's boss fights with when a bot steps up to his piece, as species, or
- *  undefined for any other piece. A player fights him in the ROM and a loss puts them out
- *  (src/overworld.c); a bot has no ROM, so bots/brain.ts settles it with duel(). */
-export function storyGuard(piece: { key: number; mapId: string; x: number; y: number }): readonly number[] | undefined {
-  if (!isEventKey(piece.key)) return undefined;
-  for (const story of STORIES) {
-    const boss = story.people?.find((p) => p.party !== undefined);
-    if (!boss) continue;
-    const cell = story.cells[boss.at];
-    if ((cell.map ?? story.map) === piece.mapId && cell.x === piece.x && cell.y === piece.y) return boss.party;
-  }
-  return undefined;
-}
-
-/** Does this piece stand as one of a story's people (STEVEN, STERN, a gate's boss)? The
- *  ROM's BrStory_Person: a person is solid, whatever he would say. */
-export function storyPerson(piece: { key: number; mapId: string; x: number; y: number }): boolean {
-  if (!isEventKey(piece.key)) return false;
-  return STORIES.some((story) =>
-    (story.people ?? []).some((p) => {
-      const cell = story.cells[p.at];
-      return (cell.map ?? story.map) === piece.mapId && cell.x === piece.x && cell.y === piece.y;
-    }),
-  );
-}
-
-/** Does the story give a legendary? What the ticker calls it. */
-export function storyLegend(story: Story): boolean {
-  const legends = new Set([...LEGENDS.flat(), ...OTHER_LEGENDS]);
-  return (story.mons ?? []).some((pick) => pick.some((sp) => legends.has(sp)));
 }
 
 /** The story's cells as an event's: a cell's own map named by its ref. */
