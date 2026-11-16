@@ -1,7 +1,167 @@
 {
- "readAt": "2026-11-16T18:42:56.779Z",
+ "readAt": "2026-11-16T19:58:56.499Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "R9C9DE",
+   "at": "2026-11-16T19:58:44.010Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [],
+   "live": true
+  },
+  {
+   "code": "SPKQU7",
+   "at": "2026-11-16T19:40:02.050Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-16T19:40:09.323Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "KDFB35",
+   "at": "2026-11-16T19:17:27.743Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 8,
+   "together": 8,
+   "spectators": 4,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-16T19:17:41.930Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-16T19:17:55.046Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-16T19:17:56.235Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-16T19:17:56.603Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-16T19:24:55.025Z",
+     "how": "spectate"
+    },
+    {
+     "t": "2026-11-16T19:24:57.525Z",
+     "how": "spectate"
+    },
+    {
+     "t": "2026-11-16T19:24:57.795Z",
+     "how": "spectate"
+    },
+    {
+     "t": "2026-11-16T19:24:58.261Z",
+     "how": "spectate"
+    },
+    {
+     "t": "2026-11-16T19:38:05.425Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-16T19:44:26.949Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-16T19:51:18.443Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-16T19:56:00.954Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-16T19:58:49.628Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-16T19:18:02.634Z",
+     "mode": "host",
+     "trainers": 4,
+     "watching": 0,
+     "secs": 985
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "HDQ2E2",
+   "at": "2026-11-16T18:57:54.803Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [
+    "world-5a96d233"
+   ],
+   "installs": [
+    "6144a717"
+   ],
+   "played": [],
+   "live": true
+  },
+  {
+   "code": "VKEQGG",
+   "at": "2026-11-16T18:45:37.533Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [],
+   "live": true
+  },
   {
    "code": "R7WCMU",
    "at": "2026-11-16T18:35:11.015Z",
@@ -29,7 +189,7 @@
    "humans": 4,
    "together": 4,
    "spectators": 2,
-   "matches": 1,
+   "matches": 2,
    "joins": [
     {
      "t": "2026-11-16T18:35:10.450Z",
@@ -50,6 +210,14 @@
     {
      "t": "2026-11-16T18:41:04.883Z",
      "how": "spectate"
+    },
+    {
+     "t": "2026-11-16T18:59:00.024Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-16T18:59:34.235Z",
+     "how": "code"
     }
    ],
    "versions": [],
@@ -60,7 +228,14 @@
      "mode": "host",
      "trainers": 4,
      "watching": 0,
-     "secs": null
+     "secs": 1390
+    },
+    {
+     "t": "2026-11-16T18:59:39.036Z",
+     "mode": "host",
+     "trainers": 4,
+     "watching": 0,
+     "secs": 1049
     }
    ],
    "live": true,
@@ -6249,7 +6424,7 @@
   {
    "id": "6144a717",
    "first": "2026-10-17T02:37:29.310Z",
-   "last": "2026-11-14T00:28:09.354Z",
+   "last": "2026-11-16T19:08:25.635Z",
    "since": "2026-10-15",
    "versions": [
     "2",
@@ -6265,11 +6440,12 @@
     "world-698c46e0",
     "world-59c8e92b",
     "world-2a99e809",
-    "world-ef69bfdd"
+    "world-ef69bfdd",
+    "world-5a96d233"
    ],
    "solo": 2,
-   "checkins": 47,
-   "v": "world-ef69bfdd"
+   "checkins": 50,
+   "v": "world-5a96d233"
   },
   {
    "id": "4d3cafd9",
@@ -6300,13 +6476,13 @@
   {
    "id": "03e7a47f",
    "first": "2026-11-16T16:17:15.458Z",
-   "last": "2026-11-16T17:48:10.125Z",
+   "last": "2026-11-16T19:12:47.598Z",
    "since": "2026-11-16",
    "versions": [
     "world-5a96d233"
    ],
    "solo": 2,
-   "checkins": 16,
+   "checkins": 17,
    "v": "world-5a96d233"
   }
  ],
@@ -6481,6 +6657,538 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-16T19:54:03.913Z",
+   "code": "9ZJNKW",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 7,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:52:56.916Z",
+   "code": "R9TCQ7",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 492,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:49:48.268Z",
+   "code": "KTZ2EK",
+   "v": "41bb8a3",
+   "watched": 5,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 125,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:48:57.809Z",
+   "code": "84BADE",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1080,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:47:37.728Z",
+   "code": "34BUM9",
+   "v": "41bb8a3",
+   "watched": 12,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 132,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:43:39.593Z",
+   "code": "CJQAVE",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 196,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:42:59.477Z",
+   "code": "8AUDBB",
+   "v": "41bb8a3",
+   "watched": 4,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 391,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:42:27.691Z",
+   "code": "84BADE",
+   "v": "41bb8a3",
+   "watched": 13,
+   "snaps": 3,
+   "cam": 0,
+   "lost": 2,
+   "stalls": 11,
+   "longest": 16,
+   "checks": 639,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:40:22.468Z",
+   "code": "CJQAVE",
+   "v": "41bb8a3",
+   "watched": 23,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 743,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:36:14.880Z",
+   "code": "84BADE",
+   "v": "41bb8a3",
+   "watched": 196,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 317,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:34:27.924Z",
+   "code": "KDFB35",
+   "v": "41bb8a3",
+   "watched": 40,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 40,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:29:27.900Z",
+   "code": "84BADE",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 1015,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:27:46.192Z",
+   "code": "UQAGTJ",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 2,
+   "checks": 704,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:26:25.292Z",
+   "code": "KDFB35",
+   "v": "41bb8a3",
+   "watched": 20,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 1,
+   "stalls": 1,
+   "longest": 67,
+   "checks": 19,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:25:24.255Z",
+   "code": "KDFB35",
+   "v": "41bb8a3",
+   "watched": 26,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 27,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:25:19.719Z",
+   "code": "KDFB35",
+   "v": "41bb8a3",
+   "watched": 21,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 21,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:20:10.670Z",
+   "code": "PZ7TA5",
+   "v": "41bb8a3",
+   "watched": 11,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 1,
+   "checks": 738,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:17:26.393Z",
+   "code": "MZFTTK",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 835,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:17:08.530Z",
+   "code": "88S46A",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 1049,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:17:08.522Z",
+   "code": "88S46A",
+   "v": "41bb8a3",
+   "watched": 418,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 1,
+   "checks": 1049,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:17:08.519Z",
+   "code": "88S46A",
+   "v": "41bb8a3",
+   "watched": 524,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1049,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:08:22.885Z",
+   "code": "SF9PHP",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 559,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:07:44.659Z",
+   "code": "PZ7TA5",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 764,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T19:03:26.313Z",
+   "code": "88S46A",
+   "v": "41bb8a3",
+   "watched": 104,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 227,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T18:58:59.265Z",
+   "code": "88S46A",
+   "v": "41bb8a3",
+   "watched": 1073,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 7,
+   "checks": 1074,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T18:58:59.264Z",
+   "code": "88S46A",
+   "v": "41bb8a3",
+   "watched": 1306,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 8,
+   "checks": 1306,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T18:58:59.258Z",
+   "code": "88S46A",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 7,
+   "longest": 8,
+   "checks": 1389,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T18:58:59.169Z",
+   "code": "88S46A",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 8,
+   "checks": 1389,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T18:56:46.123Z",
+   "code": "2R2XTD",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 92,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T18:55:55.561Z",
+   "code": "6Y84Z7",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 4,
+   "longest": 1,
+   "checks": 234,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T18:55:12.931Z",
+   "code": "2R2XTD",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1101,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T18:54:56.783Z",
+   "code": "T75MJY",
+   "v": "41bb8a3",
+   "watched": 19,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 788,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T18:54:12.350Z",
+   "code": "34MBQG",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 286,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T18:52:14.780Z",
+   "code": "T75MJY",
+   "v": "41bb8a3",
+   "watched": 303,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 1,
+   "stalls": 4,
+   "longest": 203,
+   "checks": 371,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T18:51:44.940Z",
+   "code": "VEUPCY",
+   "v": "41bb8a3",
+   "watched": 10,
+   "snaps": 2,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 24,
+   "longest": 4,
+   "checks": 542,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T18:49:24.622Z",
+   "code": "34MBQG",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 54,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T18:48:28.002Z",
+   "code": "34MBQG",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 28,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T18:47:57.576Z",
+   "code": "34MBQG",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 10,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 10,
+   "checks": 709,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
   {
    "t": "2026-11-16T18:42:38.153Z",
    "code": "T75MJY",
