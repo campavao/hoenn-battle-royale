@@ -1,7 +1,33 @@
 {
- "readAt": "2026-11-16T20:59:05.850Z",
+ "readAt": "2026-11-16T21:14:08.007Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "5XABD9",
+   "at": "2026-11-16T21:00:38.297Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-16T21:01:15.899Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "Y952KZ",
    "at": "2026-11-16T20:26:15.923Z",
@@ -6802,6 +6828,62 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-16T21:09:57.007Z",
+   "code": "DERVE9",
+   "v": "41bb8a3",
+   "watched": 3,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 1,
+   "checks": 309,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T21:04:59.386Z",
+   "code": "5GPMRW",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 94,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T21:04:21.060Z",
+   "code": "DERVE9",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1111,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T21:01:23.517Z",
+   "code": "DAFD4Q",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 998,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
   {
    "t": "2026-11-16T20:45:22.842Z",
    "code": "DERVE9",
