@@ -264,7 +264,7 @@ export const DEFAULT_LIMITS = Object.freeze({
 // a guess.  Egress is the line item that scales with players.
 const traffic = { bytesOut: 0, linesOut: 0, roomsOpened: 0, peakRooms: 0,
                   peakConns: 0, rejected: 0, statSolo: 0, statSeen: 0,
-                  matches: 0 };
+                  matches: 0, peakWorld: 0 };
 
 export function stats() { return { ...traffic }; }
 
@@ -1023,9 +1023,27 @@ export function createRelay(options = {}) {
     },
   };
 
-  // The HTTP side: just /health, for Railway's healthcheck (and anybody
-  // else's). Everything else on this port is the WebSocket upgrade below.
+  // The HTTP side: /health, for Railway's healthcheck (and anybody else's), and
+  // /live, which play.html reads on load so who is playing is never a scrape behind.
+  // Everything else on this port is the WebSocket upgrade below.
+  const startedAt = new Date().toISOString();
   const httpServer = http.createServer((req, res) => {
+    if (req.method === "GET" && req.url === "/live") {
+      // Counts only: no room code (an unlisted room's code is its door) and no names.
+      const players = world.service ? world.service.players : 0;
+      if (players > traffic.peakWorld) traffic.peakWorld = players;
+      const body = JSON.stringify({ at: new Date().toISOString(), up: startedAt,
+                                    players, peak: traffic.peakWorld,
+                                    rooms: world.service ? world.service.live() : [] });
+      res.writeHead(200, { "Content-Type": "application/json",
+                            "Content-Length": Buffer.byteLength(body),
+                            "Cache-Control": "no-store",
+                            // the site is cross-origin isolated (COEP require-corp)
+                            "Access-Control-Allow-Origin": "*",
+                            "Cross-Origin-Resource-Policy": "cross-origin" });
+      res.end(body);
+      return;
+    }
     if (req.method === "GET" && req.url === "/health") {
       // `locked`: matches running, which a relay deploy would end (docs/DEPLOY.md)
       let locked = 0;
@@ -1043,7 +1061,11 @@ export function createRelay(options = {}) {
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: limits.line });
   // Spike B's shared world (world.js): its own sockets, its own caps.
-  const world = createWorld({ log });
+  // Its matches count in the heartbeat's `matches` with the rooms' (play.html's tile).
+  const world = createWorld({ log: (line) => {
+    if (/^match \S+ started/.test(line)) traffic.matches += 1;
+    log(line);
+  } });
 
   httpServer.on("upgrade", (req, socket, head) => {
     const origin = req.headers.origin;
@@ -1093,6 +1115,8 @@ export function createRelay(options = {}) {
   const report = () => `rooms ${rooms.size}/${limits.rooms} conns ${conns.size}/${limits.conns}`
       + ` | sent ${human(traffic.bytesOut)} in ${traffic.linesOut} lines`
       + ` | peak ${traffic.peakRooms} rooms ${traffic.peakConns} conns`
+      // Spike B's trainers, who are not `conns`: the world has its own sockets.
+      + ` | world ${world.service ? world.service.players : 0} peak ${traffic.peakWorld}`
       + (traffic.matches ? ` | matches ${traffic.matches}` : "")
       + (traffic.statSeen
          ? ` | stats ${traffic.statSeen} (solo ${traffic.statSolo})` : "")
@@ -1111,6 +1135,8 @@ export function createRelay(options = {}) {
       }
     }
     for (const room of [...rooms.values()]) reap(room, now);
+    const players = world.service ? world.service.players : 0;
+    if (players > traffic.peakWorld) traffic.peakWorld = players;
   }, limits.sweepMs);
   sweeper.unref();
 

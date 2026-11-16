@@ -4,7 +4,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRelay } from "./server.js";
+import { createRelay, stats } from "./server.js";
 import { WORLD_HASH } from "./world/service.js";
 
 function phone(port) {
@@ -90,7 +90,32 @@ test("/world: two phones share one room at 60 Hz", async () => {
     // health counts the world's trainers
     const health = await (await fetch(`http://127.0.0.1:${port}/health`)).json();
     assert.equal(health.world, 2);
+    // ...and /live tells play.html what is happening, as counts: no code, no names
+    const res = await fetch(`http://127.0.0.1:${port}/live`);
+    assert.equal(res.headers.get("access-control-allow-origin"), "*");
+    const live = await res.json();
+    assert.equal(live.players, 2);
+    assert.equal(live.peak, 2);
+    assert.equal(live.rooms.length, 1);
+    assert.deepEqual({ ...live.rooms[0], secs: 0 }, { quick: false, trainers: 2, playing: true, secs: 0 });
+    assert.ok(!JSON.stringify(live).includes(ra.code) && !/ALICE|BOB/.test(JSON.stringify(live)));
+    // the heartbeat's `matches` counts the world's
+    assert.ok(stats().matches >= 1);
+    assert.ok(stats().peakWorld >= 2);
     a.ws.close(); b.ws.close();
+  } finally {
+    await relay.close();
+  }
+});
+
+test("/live answers before anyone has opened the world", async () => {
+  const relay = createRelay({});
+  const { port } = await relay.listen(0, "127.0.0.1");
+  try {
+    const live = await (await fetch(`http://127.0.0.1:${port}/live`)).json();
+    assert.equal(live.players, 0);
+    assert.deepEqual(live.rooms, []);
+    assert.ok(Date.parse(live.up) <= Date.parse(live.at));
   } finally {
     await relay.close();
   }

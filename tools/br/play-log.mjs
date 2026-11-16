@@ -35,7 +35,8 @@
 //   match CODE ended after Ns
 //   feedback CODE|- | {"v","where","name","text"}       a player's note (POK-428): never
 //                                                     an event, filed as a GitHub issue instead
-//   rooms R/RC conns C/CC | sent B in L lines | peak PR rooms PC conns [| matches M]
+//   rooms R/RC conns C/CC | sent B in L lines | peak PR rooms PC conns
+//         [| world W peak PW] [| matches M]
 //         [| stats S (solo SS)] [| refused X]
 //
 // The two `match` lines are the exact record and a room that has them is read from
@@ -436,6 +437,8 @@ export function parseHeartbeat(message) {
     ...one(/matches (\d+)/, "matches"),
     ...one(/stats (\d+) \(solo (\d+)\)/, "statSeen", "statSolo"),
     ...one(/refused (\d+)/, "refused"),
+    // spike B's trainers, on the world's own sockets (absent before 2026-11-16)
+    ...one(/world (\d+) peak (\d+)/, "world", "peakWorld"),
     sent: sent ? sent[1] : null,
     lines: sent ? Number(sent[2]) : null
   };
@@ -744,7 +747,7 @@ async function main() {
     const stats = { ...heartbeat, deployedAt: live.createdAt, deploymentId: live.id,
                     readAt: now.toISOString() };
     const moved = !["rooms", "conns", "peakRooms", "peakConns", "statSeen", "statSolo",
-                    "lines", "matches", "deploymentId"]
+                    "lines", "matches", "deploymentId", "world", "peakWorld"]
       .every(k => previous[k] === stats[k]);
     if (moved) {
       writeFileSync(STATS, JSON.stringify(stats, null, 2) + "\n");

@@ -233,6 +233,15 @@ test("the heartbeat is a snapshot, read whole", () => {
   const bare = parseHeartbeat("2026-09-18T01:29:12.000Z rooms 0/40 conns 0/200 | sent 0B in 0 lines | peak 0 rooms 0 conns");
   assert.equal(bare.matches, undefined);
   assert.equal(bare.lines, 0);
+  assert.equal(bare.world, undefined);
+});
+
+test("the heartbeat counts spike B's trainers, who are not conns", () => {
+  const hb = parseHeartbeat("2026-11-16T15:30:00.000Z rooms 0/40 conns 0/200 | sent 0B in 0 lines | peak 0 rooms 0 conns | world 8 peak 11 | matches 3");
+  assert.equal(hb.conns, 0);
+  assert.equal(hb.world, 8);
+  assert.equal(hb.peakWorld, 11);
+  assert.equal(hb.matches, 3);
 });
 
 test("a jank report is read whole, room or not (POK-376)", () => {
