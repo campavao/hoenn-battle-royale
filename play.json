@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-16T21:29:09.968Z",
+ "readAt": "2026-11-16T21:44:12.101Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -6599,7 +6599,7 @@
   {
    "id": "6144a717",
    "first": "2026-10-17T02:37:29.310Z",
-   "last": "2026-11-16T19:08:25.635Z",
+   "last": "2026-11-16T21:43:10.079Z",
    "since": "2026-10-15",
    "versions": [
     "2",
@@ -6616,11 +6616,12 @@
     "world-59c8e92b",
     "world-2a99e809",
     "world-ef69bfdd",
-    "world-5a96d233"
+    "world-5a96d233",
+    "world-aa461974"
    ],
    "solo": 2,
-   "checkins": 50,
-   "v": "world-5a96d233"
+   "checkins": 51,
+   "v": "world-aa461974"
   },
   {
    "id": "4d3cafd9",
@@ -6832,6 +6833,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-16T21:44:02.127Z",
+   "code": "HS9DPG",
+   "v": "41bb8a3",
+   "watched": 32,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 572,
+   "drifts": 0,
+   "deploy": "c51a00be"
+  },
   {
    "t": "2026-11-16T21:28:41.811Z",
    "code": "BN66ZD",
