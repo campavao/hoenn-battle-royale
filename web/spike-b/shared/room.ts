@@ -513,6 +513,8 @@ export const GROUND_PER_MAP = 6;
 /** How far apart they lie: on a sea route's little dock six at random were a heap of six
  *  (Cam, 2026-11-01, "why are there so many items right here"). */
 export const GROUND_APART = 6;
+/** How far shutsIn walks each way before it calls a piece harmless: past a gym's whole floor. */
+const SHUT_WALK = 400;
 /** Balls an area of the Zone gets past br_zone.c's one. */
 const ZONE_EXTRA = 2;
 /** A stream of its own for one cell's roll: xorshift off the seed, the map's name and the
@@ -970,7 +972,7 @@ export class Room {
   private leaderDrops(by: Actor, n: number, team?: { sp: number; lv: number }[]): void {
     const mons = (team ?? []).slice(0, 6).filter((r) => Number.isInteger(r.sp) && r.sp > 0 && r.sp < 412 && Number.isInteger(r.lv) && r.lv >= 1 && r.lv <= 100).map((r) => fallen({ species: r.sp, level: r.lv }));
     if (!mons.length) return;
-    const at = this.beside(by) ?? this.nearestBare(by.m.spot);
+    const at = this.beside(by) ?? this.nearestBare(by.m.spot, by);
     if (!at) return;
     const key = LEADER_SPILL | n;
     this.spills.set(key, { key, map: at.map, x: at.x, y: at.y, name: LEADERS[n].name, bag: { items: [], money: 0, mons } });
@@ -1309,12 +1311,38 @@ export class Room {
   }
 
   /** A free cell beside a trainer, facing first, then round: walkable for them, not a
-   *  door, a ledge, a ball or a bag, nor one of `used`. */
-  private beside(a: Actor, used = new Set<string>()): Spot | undefined {
+   *  door, a ledge, a ball or a bag, nor one of `used`. For a trainer who stays on the map
+   *  (`stays`), never the one a solid piece there would shut them in with (#379: a leader's bag
+   *  in the aisle behind its winner); a fallen trainer is off it, and their bag stays beside. */
+  private beside(a: Actor, used = new Set<string>(), stays = true): Spot | undefined {
     const step = this.stepFor(a);
     return [a.m.facing, 1, 2, 3, 4].map((d) => step(a.m.spot, d)).find((r) => r && !r.warp && !r.hop
       && !this.world.warpAt(r.to.map, r.to.x, r.to.y) && !used.has(`${r.to.map}:${r.to.x}:${r.to.y}`)
-      && !this.spillAt(r.to.map, r.to.x, r.to.y) && !this.groundAt(r.to.map, r.to.x, r.to.y))?.to;
+      && !this.spillAt(r.to.map, r.to.x, r.to.y) && !this.groundAt(r.to.map, r.to.x, r.to.y)
+      && !(stays && this.shutsIn(a, r.to, used)))?.to;
+  }
+
+  /** Whether a solid piece on `cell` (with `used` already taken) leaves `a` fewer cells to walk to
+   *  than the cell itself: a corridor, an aisle, a one-tile gap. Counted to SHUT_WALK cells each
+   *  way, past which there is room to spare either way. */
+  private shutsIn(a: Actor, cell: Spot, used: ReadonlySet<string> = new Set()): boolean {
+    const step = this.stepFor(a);
+    const at = (s: Spot) => `${s.map}:${s.x}:${s.y}`;
+    const count = (walls: ReadonlySet<string>) => {
+      const seen = new Set([at(a.m.spot)]), q = [a.m.spot];
+      for (let i = 0; i < q.length && seen.size < SHUT_WALK; i++) {
+        for (let d = 1; d <= 4; d++) {
+          const r = step(q[i], d);
+          if (!r || walls.has(at(r.to)) || seen.has(at(r.to))) continue;
+          seen.add(at(r.to));
+          q.push(r.to);
+        }
+      }
+      return seen.size;
+    };
+    const free = count(used);
+    const left = count(new Set([...used, at(cell)]));
+    return left < SHUT_WALK && left < free - 1;
   }
 
   /** Where a fallen trainer's bag lies: where they stood, but never on a doormat or a
@@ -1324,7 +1352,7 @@ export class Room {
     // Nor on a piece somebody has not taken yet, which it would hide (POK-388): a legendary out
     // being fought comes back to its cell.
     if (!this.world.warpAt(s.map, s.x, s.y) && !this.pieceOn(s)) return s;
-    return this.beside(a) ?? this.nearestBare(s) ?? s;
+    return this.beside(a, undefined, false) ?? this.nearestBare(s) ?? s;
   }
 
   /** The bag lying on a cell, if any. */
@@ -1337,11 +1365,13 @@ export class Room {
     return false;
   }
 
-  /** The nearest plain cell of the map with nothing on it, for a bag with nowhere beside it. */
-  private nearestBare(s: Spot): Spot | undefined {
+  /** The nearest plain cell of the map with nothing on it, for a bag with nowhere beside it; with
+   *  `by`, one that does not shut them in either. */
+  private nearestBare(s: Spot, by?: Actor): Spot | undefined {
     for (let d = 2; d <= 6; d++) for (let dx = -d; dx <= d; dx++) for (const dy of dx === -d || dx === d ? [0] : [d - Math.abs(dx), Math.abs(dx) - d]) {
       const t = { map: s.map, x: s.x + dx, y: s.y + dy };
-      if (this.world.cell(t.map, t.x, t.y) === 0 && !this.world.warpAt(t.map, t.x, t.y) && !this.pieceOn(t) && !this.actors.some((o) => sameSpot(o.m.spot, t))) return t;
+      if (this.world.cell(t.map, t.x, t.y) === 0 && !this.world.warpAt(t.map, t.x, t.y) && !this.pieceOn(t) && !this.actors.some((o) => sameSpot(o.m.spot, t))
+        && !(by && this.shutsIn(by, t))) return t;
     }
     return undefined;
   }
