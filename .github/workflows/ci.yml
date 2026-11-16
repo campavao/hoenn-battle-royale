@@ -826,7 +826,9 @@ jobs:
         if: inputs.ignore_match != true
         run: |
           want='.locked == 0'
-          if [ "$(bash tools/br/release-needs-empty.sh)" = yes ]; then want='.locked == 0 and .world == 0'; fi
+          # A relay that drains (`drains`) lets its matches finish when a deploy replaces it,
+          # so only an older relay needs its world empty first.
+          if [ "$(bash tools/br/release-needs-empty.sh)" = yes ]; then want='.locked == 0 and (.drains == true or .world == 0)'; fi
           for _ in $(seq 60); do
             health="$(curl -fsS --max-time 15 https://hoenn-relay-production.up.railway.app/health || true)"
             if printf '%s' "$health" | jq -e "$want" >/dev/null 2>&1; then exit 0; fi

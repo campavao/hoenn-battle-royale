@@ -4,7 +4,8 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRelay, stats } from "./server.js";
+import { createRelay, exitOnSignal, stats } from "./server.js";
+import { EventEmitter } from "node:events";
 import { WORLD_HASH } from "./world/service.js";
 
 function phone(port) {
@@ -106,6 +107,60 @@ test("/world: two phones share one room at 60 Hz", async () => {
   } finally {
     await relay.close();
   }
+});
+
+test("SIGTERM drains: the match under way plays on, a new phone is turned away, and the relay exits after", async () => {
+  const lines = [];
+  const relay = createRelay({ log: (l) => lines.push(l) });
+  const { port } = await relay.listen(0, "127.0.0.1");
+  const a = phone(port), b = phone(port);
+  await Promise.all([a.open(), b.open()]);
+  a.send({ t: "join", name: "alice", skin: 0, host: true });
+  const ra = await a.until((m) => m.t === "room");
+  b.send({ t: "join", name: "bob", skin: 1, code: ra.code });
+  await b.until((m) => m.t === "room");
+  a.send({ t: "start" });
+  await a.until((m) => m.t === "hello");
+
+  const proc = new EventEmitter();
+  const exited = new Promise((resolve) => { proc.exit = resolve; });
+  exitOnSignal(relay, proc, 3000, 1500);
+  proc.emit("SIGTERM");
+  // Draining, and saying so: a release reads `drains` and needs no empty world.
+  const health = await (await fetch(`http://127.0.0.1:${port}/health`)).json();
+  assert.equal(health.drains, true);
+  assert.equal(health.draining, true);
+  // The match goes on: frames keep coming.
+  const t0 = (await b.until((m) => m.t === "f")).f[0].tick;
+  const t1 = (await b.until((m) => m.t === "f" && m.f[0].tick > t0 + 30)).f[0].tick;
+  assert.ok(t1 > t0);
+  // A new phone is turned away: its socket closes, and its page's reconnect finds the new relay.
+  const n = phone(port);
+  await n.open();
+  const closed = new Promise((resolve) => n.ws.addEventListener("close", resolve, { once: true }));
+  n.send({ t: "join", name: "nia", skin: 0, host: true });
+  await closed;
+  assert.ok(!n.inbox.some((m) => m.t === "room"));
+  // At the drain's end (1.5 s here, 25 minutes live) it shuts down as before.
+  assert.equal(await exited, 0);
+  assert.ok(lines.some((l) => /^SIGTERM: draining, 1 match under way/.test(l)), lines.join("\n"));
+  assert.ok(lines.some((l) => /^SIGTERM: 1 match still on at the drain's end/.test(l)), lines.join("\n"));
+  assert.ok(lines.some((l) => /^SIGTERM: shutting down/.test(l)));
+  a.ws.close(); b.ws.close();
+});
+
+test("SIGTERM with nothing under way drains at once", async () => {
+  const lines = [];
+  const relay = createRelay({ log: (l) => lines.push(l) });
+  await relay.listen(0, "127.0.0.1");
+  const proc = new EventEmitter();
+  const exited = new Promise((resolve) => { proc.exit = resolve; });
+  const t = Date.now();
+  exitOnSignal(relay, proc, 3000, 60_000);
+  proc.emit("SIGTERM");
+  assert.equal(await exited, 0);
+  assert.ok(Date.now() - t < 2000, "no match to wait for");
+  assert.ok(lines.includes("SIGTERM: drained"), lines.join("\n"));
 });
 
 test("/live answers before anyone has opened the world", async () => {

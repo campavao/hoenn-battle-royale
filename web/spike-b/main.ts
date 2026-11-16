@@ -5438,7 +5438,9 @@ async function boot(): Promise<void> {
         }
         reconnecting = false;
         // In the room before a match: the same seat (the key takes it over), not a second.
-        return room ? { t: 'join', name: who.name, skin: who.skin, code: room.code, ...(room.key ? { again: { code: room.code, id: room.you, key: room.key } } : {}) } : undefined;
+        // `q` and `d`: what the room was, so a new relay (a deploy drained the old one) opens it
+        // again under its code rather than saying there is no such room.
+        return room ? { t: 'join', name: who.name, skin: who.skin, code: room.code, ...(room.key ? { again: { code: room.code, id: room.you, key: room.key, q: room.quick, d: room.set.door === 'open' ? 'open' as const : 'private' as const } } : {}) } : undefined;
       },
     });
     worldSock = sock;
