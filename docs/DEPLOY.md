@@ -163,7 +163,8 @@ and dispatches BR CI when all of these are true:
 - no release is running, and this commit has not failed twice already (a red run stays red
   for someone to read; the next commit starts again);
 - `/health` says `"locked":0`, and `"world":0` too if `relay/`, `web/spike-b/shared/` or the ROM
-  changed since the highest tag (`tools/br/release-needs-empty.sh`). `locked` is only the old
+  changed since the highest tag (`tools/br/release-needs-empty.sh`) and the live relay does not
+  drain (no `"drains":true`; see **The relay drains** below). `locked` is only the old
   rooms: a match of the game itself is on `/world`, whose connected trainers are `world`. A
   site deploy that changes none of those can't touch a running match, so it goes out with
   people on. No answer counts as no.
@@ -198,6 +199,19 @@ reused. So:
 A failed run is the only signal: nothing rolls the site back. `play-firefox` is outside the
 gate, so a red one can follow a good deploy.
 
+### The relay drains (2026-11-16)
+
+A relay deploy used to end every match: the world lives in the relay's memory. Now the old relay
+drains. Railway sends it SIGTERM once the new one is up and holds off SIGKILL for
+`drainingSeconds` (30 minutes, `relay/railway.json`). The new relay takes every new socket. The
+old one keeps playing the matches under way, closes every other room at once (its phones
+reconnect, land on the new relay, and their `again` opens the room there under the same code),
+moves each match's room the same way when it ends, and exits when the last one has, or after
+`BR_DRAIN_SECS` (1500). So a release needs no empty world, only no old-protocol `locked` room.
+A page whose world bundle changed is told to reload (`old`) when it moves, between matches.
+`/health` says `"drains":true` on a relay that does this, and `"draining":true` while it does.
+The first deploy of a relay that drains still replaces one that doesn't, so that one waited.
+
 ## By tag (CI does all of the above)
 
 ```bash
@@ -217,9 +231,10 @@ session ships, since it can't push tags but can dispatch a workflow (the GitHub 
 tags the commit it built and carries on as below. The tag it pushes starts no second run.
 If a deploy fails after the tag, dispatch the same version on the same commit again: a tag
 that already names the commit goes through, one naming any other commit stops the run.
-A dispatch is a release like any other: the release job waits for the relay to show no match
-and no players (`ignore_match` skips that), and a `relay/` change since the last release that
-finished restarts the relay, which drops every room.
+A dispatch is a release like any other: the release job waits for the relay to show no old-
+protocol match, and no players only if the live relay does not drain (`ignore_match` skips
+that). A `relay/` change since the last release that finished replaces the relay, which drains
+(above).
 
 `.github/workflows/ci.yml`'s `release` job builds the ROM with agbcc, diffs it against
 the baseline pret build into the BPS (no retail ROM needed), attaches the patch and its

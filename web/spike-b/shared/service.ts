@@ -230,6 +230,28 @@ export class WorldService {
 
   /** Trainers on this relay, in every room. */
   get players(): number { return this.where.size; }
+  /** Matches under way: what a draining relay waits out before it exits. */
+  get busy(): number { return [...this.rooms.values()].filter((r) => r.host).length; }
+  /** A deploy is replacing this relay (drain): no new phones, and every room with no match
+   *  under way moves to the new one. */
+  private draining = false;
+
+  /** A deploy's SIGTERM: the matches under way play out here, every other room goes now, and
+   *  each match's room goes as it ends. A room's phones reconnect, which lands them on the new
+   *  relay, and their `again` opens the room there again under its code. */
+  drain(): void {
+    if (this.draining) return;
+    this.draining = true;
+    this.opts.log(`world: draining, ${this.busy} match${this.busy === 1 ? '' : 'es'} to finish`);
+    for (const room of [...this.rooms.values()]) if (!room.host) this.move(room);
+  }
+
+  /** A room off this relay: closed here, its phones' sockets with it. */
+  private move(room: Lobby): void {
+    const links = [...room.members.values()].map((p) => p.link);
+    this.close(room, 'draining');
+    for (const l of links) l.close();
+  }
   /** Each room as the relay's /live tells play.html: no code and no names, so an unlisted
    *  room stays unlisted. `secs` is how long its match has run, 0 while it waits. */
   live(): { quick: boolean; trainers: number; playing: boolean; secs: number }[] {
@@ -250,6 +272,9 @@ export class WorldService {
         try { m = JSON.parse(text) as WorldUp; } catch { return; }
         if (!m || typeof m !== 'object') return;
         if (phone?.kicked) phone = null;
+        // A draining relay takes nobody new: the socket goes, and the page's reconnect finds
+        // the new relay.
+        if (this.draining && !phone) { link.close(); return; }
         if (phone) phone.heard = this.opts.now();
         if (m.t === 'here') return;
         if (m.t === 'list') { this.send(link, { t: 'rooms', rooms: this.listed() }); return; }
@@ -258,6 +283,9 @@ export class WorldService {
         if (m.t === 'join' && !phone && m.again && typeof m.again === 'object') {
           const back = this.back(m.again, link);
           if (back) { phone = back; return; }
+          // A room this relay never had, from a phone that was in it (a deploy drained the
+          // relay it was on): open it again here under its code, the first back its owner.
+          this.reopen(m.again, typeof m.r === 'string' ? m.r.slice(0, 16) : '');
         }
         if (m.t === 'join' && !phone) {
           if (this.where.size >= this.opts.cap) { this.send(link, { t: 'full' }); link.close(); return; }
@@ -555,12 +583,25 @@ export class WorldService {
     return best ?? this.make(true, rom);
   }
 
-  private make(quick: boolean, rom: string): Lobby {
-    let code = '';
-    do {
+  /** `again`'s room, opened under its code when this relay has none by it. A hosted room
+   *  comes back unlisted unless it was listed: a passcode is the host's alone, and nobody here
+   *  knows it. */
+  private reopen(again: Again, rom: string): void {
+    const code = typeof again.code === 'string' ? again.code.toUpperCase() : '';
+    // Only a page between matches says what its room was (`q`): one back from a match the old
+    // relay ended has no room to come back to, and is told so.
+    if (typeof again.q !== 'boolean') return;
+    if (code.length !== CODE_LENGTH || ![...code].every((c) => CODE_ALPHABET.includes(c)) || this.rooms.has(code)) return;
+    const room = this.make(again.q === true, rom, code);
+    if (!room.quick) room.set.door = again.d === 'open' ? 'open' : 'private';
+    this.opts.log(`world: room ${code} opened again, from another relay`);
+  }
+
+  private make(quick: boolean, rom: string, code = ''): Lobby {
+    while (!code || this.rooms.has(code)) {
       code = '';
       for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
-    } while (this.rooms.has(code));
+    }
     const fogSecs = this.opts.ringSecs ?? RING_PHASE / 60;
     // The live room's: MAX 8 with FILL on (BOT_FILL), a quick room's the same.
     const set: Settings = { bots: this.opts.bots > 0, fogSecs, safariSecs: this.opts.safariSecs ?? fogSecs, max: BOT_FILL, door: 'open', textSpeed: 5, animations: false };
@@ -619,6 +660,8 @@ export class WorldService {
     // A quick one waits for READY UP: the next match is the one nobody asked for yet.
     if (room.quick) { room.played = true; room.startsAt = null; }
     this.roster(room);
+    // Draining: the standings are out, and the room goes on to the new relay.
+    if (this.draining) this.move(room);
   }
 
   /** A quick room back from a match, waiting for READY UP: no match, no count. */
@@ -626,13 +669,13 @@ export class WorldService {
     return room.quick && !!room.played && !room.host && room.startsAt === null;
   }
 
-  private close(room: Lobby): void {
+  private close(room: Lobby, why = room.members.size ? 'stopped' : 'empty'): void {
     // Whoever is still in it (pump's catch closes a room with its phones in) is nowhere now.
     for (const id of room.members.keys()) if (this.where.get(id) === room) this.where.delete(id);
     this.rooms.delete(room.code);
     // The live relay's close line, so tools/br/play-log.mjs ends the room (it read every
     // world room as open until the relay restarted, and play.html called them LIVE).
-    this.opts.log(`room ${room.code} closed (${room.members.size ? 'stopped' : 'empty'}, no heir)`);
+    this.opts.log(`room ${room.code} closed (${why}, no heir)`);
     if (!this.rooms.size) this.stop();
   }
 

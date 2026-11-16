@@ -44,6 +44,10 @@ export function createWorld({ log = () => {}, now = () => performance.now() } = 
 
   return {
     get service() { return service; },
+    /** Matches under way (none before the first phone loaded the world). */
+    get busy() { return service ? service.busy : 0; },
+    /** A deploy's SIGTERM: matches play out, every other room moves to the new relay. */
+    drain() { service?.drain(); },
     handle(req, socket, head, ip) {
       const n = (perIp.get(ip) || 0) + 1;
       if (n > PER_IP) {

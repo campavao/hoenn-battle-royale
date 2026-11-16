@@ -96,7 +96,10 @@ export type WireFrame = Frame & { a?: number; h?: number };
 
 /** Back in after a reload (Cam, 2026-10-20: within a minute): the room, my trainer's id
  *  in its match, and the key the relay gave me with it. */
-export interface Again { code: string; id: number; key: string }
+/** Back into a seat after a drop. `q` and `d` say what the room was (quick play, and its
+ *  door), so a relay that never had it (a new one, after a deploy drained the old) can
+ *  open it again under the same code. */
+export interface Again { code: string; id: number; key: string; q?: boolean; d?: 'open' | 'private' }
 
 /** A trainer in a room, as the roster shows them. */
 export interface Member { id: number; name: string; skin: number; rec?: CardRecord }

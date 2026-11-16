@@ -1027,6 +1027,7 @@ export function createRelay(options = {}) {
   // /live, which play.html reads on load so who is playing is never a scrape behind.
   // Everything else on this port is the WebSocket upgrade below.
   const startedAt = new Date().toISOString();
+  let draining = false;
   const httpServer = http.createServer((req, res) => {
     if (req.method === "GET" && req.url === "/live") {
       // Counts only: no room code (an unlisted room's code is its door) and no names.
@@ -1048,8 +1049,11 @@ export function createRelay(options = {}) {
       // `locked`: matches running, which a relay deploy would end (docs/DEPLOY.md)
       let locked = 0;
       for (const room of rooms.values()) if (room.locked) locked += 1;
+      // `drains`: this relay lets a deploy's matches finish (drain), so a release needs no
+      // empty world; `draining`: it is doing so now, on its way out.
       const body = JSON.stringify({ status: "ok", rooms: rooms.size, conns: conns.size, locked,
-                                    world: world.service ? world.service.players : 0 });
+                                    world: world.service ? world.service.players : 0,
+                                    drains: true, ...(draining ? { draining: true } : {}) });
       res.writeHead(200, { "Content-Type": "application/json",
                             "Content-Length": Buffer.byteLength(body) });
       res.end(body);
@@ -1182,20 +1186,48 @@ export function createRelay(options = {}) {
       log(`${signal}: shutting down | ${report()}`);
       return close(1012);
     },
+    // A deploy's SIGTERM, when the relay may outlive it (Railway's drainingSeconds, in
+    // relay/railway.json): the new relay already takes every new socket, so the world's
+    // matches under way play out here, and every other room moves now. Resolves when the
+    // last match has ended, or at maxMs, whichever is first; then shutdown() as before.
+    drain(signal, maxMs) {
+      draining = true;
+      log(`${signal}: draining, ${world.busy} match${world.busy === 1 ? "" : "es"} under way | ${report()}`);
+      world.drain();
+      const end = Date.now() + maxMs;
+      return new Promise((resolve) => {
+        const check = () => {
+          if (world.busy === 0) { log(`${signal}: drained`); resolve(); return; }
+          if (Date.now() >= end) { log(`${signal}: ${world.busy} match${world.busy === 1 ? "" : "es"} still on at the drain's end`); resolve(); return; }
+          setTimeout(check, 1000).unref?.();
+        };
+        check();
+      });
+    },
   };
 }
 
 // The process's end of a deploy: SIGTERM shuts the relay down and exits once
 // every socket has closed, or after graceMs for a peer that never answers its
 // close frame.
-export function exitOnSignal(relay, proc = process, graceMs = 3000) {
+export function exitOnSignal(relay, proc = process, graceMs = 3000, drainMs = 0) {
   proc.once("SIGTERM", () => {
-    const force = setTimeout(() => proc.exit(0), graceMs);
-    relay.shutdown("SIGTERM").finally(() => {
-      clearTimeout(force);
-      proc.exit(0);
-    });
+    const force = setTimeout(() => proc.exit(0), drainMs + graceMs);
+    (drainMs > 0 ? relay.drain("SIGTERM", drainMs) : Promise.resolve())
+      .then(() => relay.shutdown("SIGTERM"))
+      .finally(() => {
+        clearTimeout(force);
+        proc.exit(0);
+      });
   });
+}
+
+/** How long a deploy's SIGTERM lets the world's matches play out (BR_DRAIN_SECS, default 25
+ *  minutes), under Railway's drainingSeconds in relay/railway.json (30), so the relay exits on
+ *  its own before Railway's SIGKILL. 0: shut down at once, as before. */
+export function drainMsFromEnv(env = process.env) {
+  const secs = env.BR_DRAIN_SECS === undefined ? 1500 : Number(env.BR_DRAIN_SECS);
+  return Number.isFinite(secs) && secs > 0 ? secs * 1000 : 0;
 }
 
 const isMain = process.argv[1] && import.meta.url === new URL(`file://${process.argv[1].replace(/\\/g, "/")}`).href
@@ -1208,7 +1240,7 @@ if (isMain) {
   const relay = createRelay({ limits: limitsFromEnv(process.env, log), log });
   process.on("uncaughtException", (err) => console.error("uncaught:", err));
   process.on("unhandledRejection", (err) => console.error("unhandled:", err));
-  exitOnSignal(relay);
+  exitOnSignal(relay, process, 3000, drainMsFromEnv());
   relay.listen(port, host).then((addr) => {
     console.log(`hoenn battle royale relay listening on ${addr.address}:${addr.port}`);
   });
