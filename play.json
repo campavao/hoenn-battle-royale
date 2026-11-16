@@ -1,7 +1,24 @@
 {
- "readAt": "2026-11-15T22:28:29.965Z",
+ "readAt": "2026-11-16T02:18:47.580Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "EE6YX8",
+   "at": "2026-11-16T01:51:40.136Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [],
+   "live": true
+  },
   {
    "code": "WTXYES",
    "at": "2026-11-15T20:52:28.991Z",
@@ -5356,9 +5373,27 @@
    "solo": 11,
    "checkins": 26,
    "v": "world-ef69bfdd"
+  },
+  {
+   "id": "52a8d7a3",
+   "first": "2026-11-15T22:42:04.101Z",
+   "last": "2026-11-15T22:42:04.101Z",
+   "since": "2026-11-15",
+   "versions": [
+    "world-5a96d233"
+   ],
+   "solo": 1,
+   "checkins": 1,
+   "v": "world-5a96d233"
   }
  ],
  "solo": [
+  {
+   "t": "2026-11-15T22:42:04.101Z",
+   "install": "52a8d7a3",
+   "n": 1,
+   "v": "world-5a96d233"
+  },
   {
    "t": "2026-11-12T22:20:49.960Z",
    "install": "4d3cafd9",
@@ -5511,6 +5546,132 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-16T02:09:11.219Z",
+   "code": "348JMH",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 1,
+   "checks": 971,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T02:09:11.126Z",
+   "code": "348JMH",
+   "v": "41bb8a3",
+   "watched": 551,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 971,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T02:04:05.525Z",
+   "code": "HSME9A",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 1119,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T01:52:01.404Z",
+   "code": "FVAS2V",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 210,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T01:51:27.688Z",
+   "code": "HSME9A",
+   "v": "41bb8a3",
+   "watched": 12,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 362,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T00:42:48.408Z",
+   "code": "M8A6PH",
+   "v": "41bb8a3",
+   "watched": 9,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 385,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-15T22:55:14.351Z",
+   "code": "CEFBEN",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 486,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-15T22:47:04.713Z",
+   "code": "TC2B9U",
+   "v": "41bb8a3",
+   "watched": 5,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 1,
+   "checks": 293,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-15T22:32:36.432Z",
+   "code": "NXSFZG",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 101,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
   {
    "t": "2026-11-15T21:26:38.016Z",
    "code": "75G79D",
