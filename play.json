@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-16T21:14:08.007Z",
+ "readAt": "2026-11-16T21:29:09.968Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -22,7 +22,7 @@
      "mode": "host",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1061
     }
    ],
    "live": true,
@@ -199,8 +199,8 @@
    "secs": null,
    "door": "open",
    "mode": "host",
-   "humans": 9,
-   "together": 9,
+   "humans": 10,
+   "together": 10,
    "spectators": 4,
    "matches": 1,
    "joins": [
@@ -278,6 +278,10 @@
     },
     {
      "t": "2026-11-16T20:58:36.712Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-16T21:26:55.511Z",
      "how": "code"
     }
    ],
@@ -6828,6 +6832,76 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-16T21:28:41.811Z",
+   "code": "BN66ZD",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 1113,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T21:26:50.452Z",
+   "code": "VGDS63",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 55,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T21:21:10.193Z",
+   "code": "5GPMRW",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 969,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T21:18:56.844Z",
+   "code": "5XABD9",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 4,
+   "longest": 1,
+   "checks": 1060,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
+  {
+   "t": "2026-11-16T21:17:07.104Z",
+   "code": "BN66ZD",
+   "v": "41bb8a3",
+   "watched": 3,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 418,
+   "drifts": 0,
+   "deploy": "d70bcd80"
+  },
   {
    "t": "2026-11-16T21:09:57.007Z",
    "code": "DERVE9",
