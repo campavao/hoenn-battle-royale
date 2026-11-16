@@ -1,7 +1,24 @@
 {
- "readAt": "2026-11-16T23:44:31.165Z",
+ "readAt": "2026-11-16T23:59:33.109Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "QDXKJ5",
+   "at": "2026-11-16T23:58:58.600Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [],
+   "live": true
+  },
   {
    "code": "V3X64E",
    "at": "2026-11-16T23:36:28.296Z",
@@ -22,7 +39,7 @@
      "mode": "host",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1005
     }
    ],
    "live": true,
@@ -6664,7 +6681,7 @@
   {
    "id": "a6f8be76",
    "first": "2026-10-14T22:34:17.163Z",
-   "last": "2026-11-14T18:22:49.668Z",
+   "last": "2026-11-16T23:58:26.569Z",
    "since": "2026-10-14",
    "versions": [
     "2",
@@ -6676,11 +6693,12 @@
     "world-3316fdae",
     "world-59c8e92b",
     "world-2a99e809",
-    "world-ef69bfdd"
+    "world-ef69bfdd",
+    "world-aa461974"
    ],
    "solo": 1,
-   "checkins": 61,
-   "v": "world-ef69bfdd"
+   "checkins": 62,
+   "v": "world-aa461974"
   },
   {
    "id": "6144a717",
@@ -6919,6 +6937,62 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-16T23:58:43.912Z",
+   "code": "VTDYPJ",
+   "v": "41bb8a3",
+   "watched": 89,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 89,
+   "drifts": 0,
+   "deploy": "c51a00be"
+  },
+  {
+   "t": "2026-11-16T23:58:22.413Z",
+   "code": "VTDYPJ",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 76,
+   "drifts": 0,
+   "deploy": "c51a00be"
+  },
+  {
+   "t": "2026-11-16T23:54:36.536Z",
+   "code": "V3X64E",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1004,
+   "drifts": 0,
+   "deploy": "c51a00be"
+  },
+  {
+   "t": "2026-11-16T23:53:56.867Z",
+   "code": "B69YAX",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 259,
+   "drifts": 0,
+   "deploy": "c51a00be"
+  },
   {
    "t": "2026-11-16T23:34:30.303Z",
    "code": "QA42FR",
