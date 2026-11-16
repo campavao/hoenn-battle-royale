@@ -236,6 +236,20 @@ test("the heartbeat is a snapshot, read whole", () => {
   assert.equal(bare.world, undefined);
 });
 
+test("a world room that empties is over, not live (11-16: every room of the day read LIVE)", () => {
+  const lines = [
+    "2026-11-16T20:00:00.000Z world: CAM#100 in room QX7TPA, 1 there",
+    "2026-11-16T20:00:00.001Z room QX7TPA hosted by CAM#100 (open)",
+    "2026-11-16T20:01:00.000Z match QX7TPA started (host) | 1 trainer | max 8",
+    "2026-11-16T20:09:00.000Z world: #100 out of room QX7TPA (0 there)",
+    "2026-11-16T20:09:00.001Z room QX7TPA closed (empty, no heir)"
+  ];
+  const s = derive(lines.map(l => parseLine(l, "x")).filter(Boolean)).sessions.find(r => r.code === "QX7TPA");
+  assert.ok(s);
+  assert.ok(!s.live);
+  assert.equal(s.matches, 1);
+});
+
 test("the heartbeat counts spike B's trainers, who are not conns", () => {
   const hb = parseHeartbeat("2026-11-16T15:30:00.000Z rooms 0/40 conns 0/200 | sent 0B in 0 lines | peak 0 rooms 0 conns | world 8 peak 11 | matches 3");
   assert.equal(hb.conns, 0);

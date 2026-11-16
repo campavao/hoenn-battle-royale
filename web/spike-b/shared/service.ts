@@ -630,6 +630,9 @@ export class WorldService {
     // Whoever is still in it (pump's catch closes a room with its phones in) is nowhere now.
     for (const id of room.members.keys()) if (this.where.get(id) === room) this.where.delete(id);
     this.rooms.delete(room.code);
+    // The live relay's close line, so tools/br/play-log.mjs ends the room (it read every
+    // world room as open until the relay restarted, and play.html called them LIVE).
+    this.opts.log(`room ${room.code} closed (${room.members.size ? 'stopped' : 'empty'}, no heir)`);
     if (!this.rooms.size) this.stop();
   }
 

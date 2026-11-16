@@ -16,6 +16,22 @@ function phone() {
 }
 
 describe('world rooms', () => {
+  it('a room that empties says so in the live relay words, so the play log ends it', () => {
+    const lines: string[] = [];
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: (l: string) => { lines.push(l); } });
+    try {
+      const a = phone();
+      const s = svc.open(a.link);
+      s.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+      const code = (a.got.at(-1) as unknown as { code: string }).code;
+      expect(lines.some((l) => l.startsWith(`room ${code} hosted by ALICE#`))).toBe(true);
+      s.onText(JSON.stringify({ t: 'leave' }));
+      expect(lines.at(-1)).toBe(`room ${code} closed (empty, no heir)`);
+    } finally {
+      svc.stop();
+    }
+  });
+
   it('a page of another world is told `old` and gets no room', () => {
     const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined, world: 'abc' });
     try {

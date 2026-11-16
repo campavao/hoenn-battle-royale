@@ -16237,6 +16237,7 @@ var WorldService = class {
   close(room) {
     for (const id2 of room.members.keys()) if (this.where.get(id2) === room) this.where.delete(id2);
     this.rooms.delete(room.code);
+    this.opts.log(`room ${room.code} closed (${room.members.size ? "stopped" : "empty"}, no heir)`);
     if (!this.rooms.size) this.stop();
   }
   /** One of a fighter's published battle's messages: kept, and on to everybody watching
@@ -16457,4 +16458,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "aa461974f299";
+export const WORLD_HASH = "d07dc85ee61a";
