@@ -115,7 +115,7 @@ describe('loadRelease', () => {
     const sw = runWorker(files);
     await sw.get(before.symbols);
     files['/patch/br-symbols.json'] = JSON.stringify({ ...SYMBOLS_RAW, gTextWindowFrame1_Gfx: '0x08470b0c' });
-    expect(JSON.parse(await sw.get(after.symbols))).toHaveProperty('gTextWindowFrame1_Gfx');
+    expect(JSON.parse((await sw.get(after.symbols)) ?? '{}')).toHaveProperty('gTextWindowFrame1_Gfx');
     expect(sw.cache.paths()).toEqual([after.symbols]); // the old table goes
   });
 });
