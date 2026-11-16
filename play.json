@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-16T22:14:18.233Z",
+ "readAt": "2026-11-16T22:29:20.155Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -22,7 +22,7 @@
      "mode": "host",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 739
     }
    ],
    "live": true,
@@ -6876,6 +6876,62 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-16T22:27:47.416Z",
+   "code": "ZDUKHZ",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1113,
+   "drifts": 0,
+   "deploy": "c51a00be"
+  },
+  {
+   "t": "2026-11-16T22:25:45.473Z",
+   "code": "VM2772",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 738,
+   "drifts": 0,
+   "deploy": "c51a00be"
+  },
+  {
+   "t": "2026-11-16T22:15:44.710Z",
+   "code": "7QMWJX",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 124,
+   "drifts": 0,
+   "deploy": "c51a00be"
+  },
+  {
+   "t": "2026-11-16T22:14:17.730Z",
+   "code": "5C777H",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 352,
+   "drifts": 0,
+   "deploy": "c51a00be"
+  },
   {
    "t": "2026-11-16T22:11:36.214Z",
    "code": "5C777H",
