@@ -56,44 +56,51 @@ jobs:
             echo "Written by .github/workflows/play-log.yml from the relay's logs; read by /play.html." >> play-log/README.md
           fi
 
-      - name: read the relay's log
+      # GitHub starts a `*/15` schedule every four to seven hours (2026-11-13..16: fifteen
+      # runs in three days), so each run that does start keeps the quarter hour itself: it
+      # reads, commits, sleeps and goes round again for five and a half hours, and the
+      # schedule's next run waits behind it in the concurrency group. A dispatch is one pass.
+      - name: read the relay's log every fifteen minutes
+        timeout-minutes: 345
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
           PLAY_LOG_DIR: play-log
+          PASSES: ${{ github.event_name == 'schedule' && '22' || '1' }}
         run: |
           if [ -z "$RAILWAY_TOKEN$RAILWAY_PROJECT_TOKEN" ]; then
             echo "::notice::no RAILWAY_PROJECT_TOKEN in this repo's secrets yet; nothing read"
             exit 0
           fi
-          node tools/br/play-log.mjs
-
-      # Vercel builds every pushed branch from the project's Root Directory, `web`, and
-      # this branch has no web/, so each data commit failed a preview build and mailed Cam.
-      # Vercel reads vercel.json from that Root Directory on the pushed commit, so a stub
-      # there turns deploys off for this branch only. Written every run so it heals.
-      - name: keep Vercel off this branch
-        run: |
-          mkdir -p play-log/web
-          echo '{ "git": { "deploymentEnabled": false } }' > play-log/web/vercel.json
-
-      - name: commit if it moved
-        run: |
-          cd play-log
-          git add -A
-          if git diff --cached --quiet; then
-            echo "nothing to commit"
-            exit 0
-          fi
-          summary=$(node -e "
-            let s = {}, p = {};
-            try { s = require('./stats.json'); } catch (e) {}
-            try { p = require('./play.json'); } catch (e) {}
-            process.stdout.write((s.conns ?? 0) + ' connected, ' + (s.rooms ?? 0) + ' rooms, ' +
-              (p.sessions ? p.sessions.length + ' rooms logged' : 'no play log'));
-          ")
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -q -m "relay: $summary"
-          git push origin play-log
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for pass in $(seq 1 "$PASSES"); do
+            echo "::group::pass $pass of $PASSES ($(date -u +%H:%MZ))"
+            # One bad read is not the end of the run: the next pass tries again.
+            node tools/br/play-log.mjs || echo "::warning::pass $pass: play-log.mjs failed"
+            # Vercel builds every pushed branch from the project's Root Directory, `web`, and
+            # this branch has no web/, so each data commit failed a preview build and mailed
+            # Cam. A stub vercel.json there turns deploys off for this branch only.
+            mkdir -p play-log/web
+            echo '{ "git": { "deploymentEnabled": false } }' > play-log/web/vercel.json
+            (
+              cd play-log
+              git add -A
+              if git diff --cached --quiet; then
+                echo "nothing to commit"
+              else
+                summary=$(node -e "
+                  let s = {}, p = {};
+                  try { s = require('./stats.json'); } catch (e) {}
+                  try { p = require('./play.json'); } catch (e) {}
+                  process.stdout.write(((s.conns ?? 0) + (s.world ?? 0)) + ' playing, ' + (s.rooms ?? 0) + ' rooms, ' +
+                    (p.sessions ? p.sessions.length + ' rooms logged' : 'no play log'));
+                ")
+                git commit -q -m "relay: $summary"
+                git push origin play-log || echo "::warning::pass $pass: push failed"
+              fi
+            )
+            echo "::endgroup::"
+            if [ "$pass" -lt "$PASSES" ]; then sleep 900; fi
+          done

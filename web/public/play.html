@@ -224,7 +224,7 @@
   <div class="eyebrow">Right now</div>
   <dl class="tiles" style="margin:0">
     <div class="tile now">
-      <dt>Connected</dt>
+      <dt>Playing</dt>
       <dd id="players" class="void">—</dd>
       <span class="sub" id="playersub">relay not reporting yet</span>
     </div>
@@ -337,7 +337,7 @@
   </section>
 
   <footer class="foot">
-    <span>Every number here is read off the relay's own log, fifteen minutes behind at most. Solo play never opens a socket and is only counted when that install next connects.</span>
+    <span>Who is playing right now is asked of the relay as this page opens, and every thirty seconds after. The rest is read off the relay's own log, fifteen minutes behind at most. Solo play never opens a socket and is only counted when that install next connects.</span>
     <span><a href="https://github.com/campavao/hoenn-battle-royale">repo</a> ·
           <a href="https://github.com/campavao/hoenn-battle-royale/tree/play-log">data</a></span>
   </footer>
@@ -369,16 +369,22 @@ async function relay() {
     if (!r.ok) return;
     const s = await r.json();
 
-    CONNS = s.conns || 0;
-    if (PLAY) drawPlay();
-    $("players").textContent = s.conns == null ? 0 : s.conns;
-    $("players").classList.toggle("void", !s.conns);
-    $("livedot").classList.toggle("live", !!s.conns);
-    $("playersub").textContent = s.conns
-      ? plural(s.rooms || 0, "room") + " open right now"
-      : "nobody on the relay right now";
-    $("peak").textContent = s.peakConns || 0;
-    $("peak").classList.toggle("void", !s.peakConns);
+    // Spike B's trainers are on the world's own sockets, not `conns` (`world`, 2026-11-16).
+    const on = (s.conns || 0) + (s.world || 0);
+    const peak = Math.max(s.peakConns || 0, s.peakWorld || 0);
+    PEAK = peak;
+    if (!LIVE) {
+      CONNS = on;
+      if (PLAY) drawPlay();
+      $("players").textContent = on;
+      $("players").classList.toggle("void", !on);
+      $("livedot").classList.toggle("live", !!on);
+      $("playersub").textContent = on
+        ? "as of " + clock(s.at) + ", the log's last count"
+        : "nobody on the relay as of " + clock(s.at);
+    }
+    $("peak").textContent = peak;
+    $("peak").classList.toggle("void", !peak);
     $("peaksub").textContent = "at once, across " + plural(s.peakRooms || 0, "room") + ", since " + day(s.deployedAt);
     $("deploym").textContent = s.matches || 0;
     $("deploym").classList.toggle("void", !s.matches);
@@ -387,7 +393,7 @@ async function relay() {
     // Peak resets with the process, so it is never all-time. Say which window it
     // covers rather than letting it read as a record.
     $("relaytext").textContent =
-      "Peak " + (s.peakConns || 0) + " connected across " + plural(s.peakRooms || 0, "room") +
+      "Peak " + peak + " connected across " + plural(s.peakRooms || 0, "room") +
       (s.matches != null ? ", " + plural(s.matches, "match", "matches") + " started," : "") +
       " since this deploy on " + day(s.deployedAt) + ".";
     const solo = s.statSolo == null ? null : s.statSolo;
@@ -396,6 +402,40 @@ async function relay() {
         ? "No solo telemetry in this deployment yet. "
         : plural(solo, "solo match", "solo matches") + " reported by " + plural(s.statSeen || 0, "check-in") + ". ") +
       "Last changed " + clock(s.at) + ", " + day(s.at) + " · " + (s.sent || "0B") + " out.";
+  } catch (e) {}
+}
+
+// ---- live ------------------------------------------------------------------
+//
+// The relay's /live: who is in the world this second, as counts (no room codes, no
+// names). A relay that does not answer it leaves the log's last count standing.
+const RELAY = "https://hoenn-relay-production.up.railway.app/live";
+let LIVE = null;
+let PEAK = 0;
+
+async function live() {
+  try {
+    const r = await fetch(RELAY, { cache: "no-store" });
+    if (!r.ok) return;
+    const l = await r.json();
+    LIVE = l;
+    CONNS = l.players;
+    if (PLAY) drawPlay();
+    const rooms = l.rooms || [];
+    const fighting = rooms.filter(x => x.playing);
+    const waiting = rooms.filter(x => !x.playing);
+    const inMatch = fighting.reduce((a, x) => a + x.trainers, 0);
+    $("players").textContent = l.players;
+    $("players").classList.toggle("void", !l.players);
+    $("livedot").classList.toggle("live", !!l.players);
+    $("playersub").textContent = !l.players ? "nobody in the world right now"
+      : [fighting.length ? plural(inMatch, "trainer") + " in " + plural(fighting.length, "match", "matches") +
+           (fighting.length === 1 ? ", " + mins(fighting[0].secs) + " in" : "") : "",
+         waiting.length ? plural(waiting.length, "room") + " waiting to start" : ""]
+        .filter(Boolean).join(" · ") + " · live";
+    const peak = Math.max(PEAK, l.peak || 0);
+    $("peak").textContent = peak;
+    $("peak").classList.toggle("void", !peak);
   } catch (e) {}
 }
 
@@ -677,8 +717,10 @@ $("daytoggle").addEventListener("click", () => {
   $("daytoggle").textContent = t.hidden ? "table" : "hide table";
 });
 
-relay();
+relay().then(live);
 play();
+setInterval(() => { if (!document.hidden) live(); }, 30e3);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) live(); });
 </script>
 </body>
 </html>

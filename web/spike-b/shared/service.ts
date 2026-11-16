@@ -230,6 +230,15 @@ export class WorldService {
 
   /** Trainers on this relay, in every room. */
   get players(): number { return this.where.size; }
+  /** Each room as the relay's /live tells play.html: no code and no names, so an unlisted
+   *  room stays unlisted. `secs` is how long its match has run, 0 while it waits. */
+  live(): { quick: boolean; trainers: number; playing: boolean; secs: number }[] {
+    const now = this.opts.now();
+    return [...this.rooms.values()].filter((r) => r.members.size > 0).map((r) => ({
+      quick: r.quick, trainers: r.members.size, playing: !!r.host,
+      secs: r.host ? Math.round((now - r.t0) / 1000) : 0,
+    }));
+  }
   /** The first running match's frame (a test's clock). */
   get tick(): number { return [...this.rooms.values()].find((r) => r.host)?.host!.room.tick ?? 0; }
 
