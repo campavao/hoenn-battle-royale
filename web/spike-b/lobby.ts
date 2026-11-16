@@ -267,11 +267,11 @@ export class Lobby {
     onBack: () => this.stage.pop(),
   }));
 
-  /** LOBBIES (the live game's, POK-320): the hosted rooms still waiting for START, one
-   *  row each. HOST makes one of my own. */
+  /** LOBBIES (the live game's, POK-320): the hosted rooms still waiting for START, then the
+   *  matches under way to watch, one row each. HOST makes one of my own. */
   private readonly lobbies: DrawnScreen = menuScreen(() => ({
     title: 'LOBBIES',
-    rows: roomRows(this.rooms.map((r) => ({ code: r.code, host: r.host, players: r.players, seats: r.seats, pass: r.pass, full: r.players >= r.seats })))
+    rows: roomRows(this.rooms.map((r) => ({ code: r.code, host: r.host, players: r.players, seats: r.seats, pass: r.pass, full: r.players >= r.seats, playing: r.playing })))
       .map((row, i): RowSpec => ({
         label: row.label,
         detail: row.detail?.replace(' · 🔒', '') ?? '',

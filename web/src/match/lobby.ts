@@ -228,6 +228,8 @@ export function roomRows(rooms: RoomListing[]): LobbyRow[] {
     bits.push(`${room.players}/${room.seats}`);
     if (room.pass) bits.push('🔒');
     if (full) bits.push('FULL');
+    // A match under way is watched from the moment you are in, and played from the next.
+    else if (room.playing) bits.push('WATCH');
     return {
       label: room.host || room.code,
       detail: bits.join(' · '),

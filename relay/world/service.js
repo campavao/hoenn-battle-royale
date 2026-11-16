@@ -16129,15 +16129,22 @@ var WorldService = class {
   /** LOBBIES: the live relay's list_rooms door. A hosted room a stranger could walk into
    *  now: not quick play's, not unlisted, not mid-match, not waiting on its host's reload;
    *  its count the trainers here of the host's MAX, fullest first. */
+  /** LOBBIES: the hosted rooms waiting for START, and every match under way to watch (Cam,
+   *  11-16: "show in-progress games as well so that folks can click in to spectate"), quick
+   *  play's too. Never an unlisted room: its code is its door. Waiting rooms first. */
   listed() {
     const out = [];
     for (const r of this.rooms.values()) {
+      if (r.set.door === "private") continue;
+      const here = [...r.members.values()].filter((p) => !p.away);
+      const playing = !!r.host;
       const owner = r.members.get(r.owner);
-      if (r.quick || r.host || !owner || owner.away || r.set.door === "private") continue;
-      const players = [...r.members.values()].filter((p) => !p.away).length;
-      out.push({ code: r.code, host: owner.name, skin: owner.skin, players, seats: r.set.max, playing: false, pass: r.set.door === "pass" });
+      if (!playing && (r.quick || !owner || owner.away)) continue;
+      const face2 = owner && !owner.away ? owner : here[0];
+      if (!face2) continue;
+      out.push({ code: r.code, host: face2.name, skin: face2.skin, players: here.length, seats: r.quick ? ROOM_MAX : r.set.max, playing, pass: r.set.door === "pass" });
     }
-    return out.sort((a, b2) => b2.players - a.players || (a.code < b2.code ? -1 : 1));
+    return out.sort((a, b2) => Number(a.playing) - Number(b2.playing) || b2.players - a.players || (a.code < b2.code ? -1 : 1));
   }
   /** The room a join goes to, or 'rom' for a room whose battles run on another patch. */
   pick(m) {
@@ -16450,4 +16457,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "4e09dcacedbf";
+export const WORLD_HASH = "aa461974f299";
