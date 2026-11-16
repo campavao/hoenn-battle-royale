@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-16T23:14:26.439Z",
+ "readAt": "2026-11-16T23:29:28.763Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -6893,6 +6893,62 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-16T23:27:26.680Z",
+   "code": "QD3PMG",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 177,
+   "drifts": 0,
+   "deploy": "c51a00be"
+  },
+  {
+   "t": "2026-11-16T23:22:20.183Z",
+   "code": "K5HHWN",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 3,
+   "longest": 1,
+   "checks": 971,
+   "drifts": 0,
+   "deploy": "c51a00be"
+  },
+  {
+   "t": "2026-11-16T23:18:42.650Z",
+   "code": "GUPNSG",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 727,
+   "drifts": 0,
+   "deploy": "c51a00be"
+  },
+  {
+   "t": "2026-11-16T23:18:13.484Z",
+   "code": "RJVYSE",
+   "v": "41bb8a3",
+   "watched": 9,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 130,
+   "drifts": 0,
+   "deploy": "c51a00be"
+  },
   {
    "t": "2026-11-16T23:11:22.507Z",
    "code": "EM5UDX",
