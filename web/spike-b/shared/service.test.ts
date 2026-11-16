@@ -162,12 +162,20 @@ describe('world rooms', () => {
       // And in by its code.
       s.onText(JSON.stringify({ t: 'join', name: 'carl', skin: 0, code }));
       expect(c.got.at(-1)).toMatchObject({ t: 'room', code, members: [{ name: 'ALICE' }, { name: 'CARL' }] });
-      // Started, it is off the list, as live's locked room is: nobody walks into it.
-      const listed = () => { const d = phone(); const sd = svc.open(d.link); sd.onText(JSON.stringify({ t: 'list' })); return (d.got.at(-1) as unknown as { rooms: { players: number }[] }).rooms; };
+      // Started, it stays on the list to watch (Cam, 11-16), after the rooms still waiting.
+      const listed = () => { const d = phone(); const sd = svc.open(d.link); sd.onText(JSON.stringify({ t: 'list' })); return (d.got.at(-1) as unknown as { rooms: { code: string; players: number; playing: boolean }[] }).rooms; };
       expect(listed()[0].players).toBe(2);
       sa.onText(JSON.stringify({ t: 'start' }));
       expect(a.got.some((m) => m.t === 'hello')).toBe(true);
-      expect(listed()).toEqual([]);
+      expect(listed()).toEqual([{ code, host: 'ALICE', skin: 3, players: 2, seats: 8, playing: true, pass: false }]);
+      const e = phone();
+      svc.open(e.link).onText(JSON.stringify({ t: 'join', name: 'erin', skin: 1, host: true }));
+      expect(listed().map((r) => r.playing)).toEqual([false, true]);
+      // And in by its code, to watch it: the match's state, and the room says it is on.
+      const w = phone();
+      svc.open(w.link).onText(JSON.stringify({ t: 'join', name: 'wes', skin: 0, code }));
+      expect(w.got.some((m) => m.t === 'hello')).toBe(true);
+      expect(w.got.filter((m) => m.t === 'room').at(-1)).toMatchObject({ code, playing: true });
     } finally {
       svc.stop();
     }

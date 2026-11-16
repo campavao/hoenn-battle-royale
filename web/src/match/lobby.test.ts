@@ -56,6 +56,14 @@ describe('the room rows', () => {
     expect(roomRows([room({ pass: true })])[0].detail).toContain('🔒');
   });
 
+  it('mark a match under way to WATCH, and let you in to it (Cam, 11-16)', () => {
+    const [row] = roomRows([room({ playing: true })]);
+    expect(row.detail).toBe('3/8 · WATCH');
+    expect(row.disabled).toBe(false);
+    expect(row.action).toEqual({ kind: 'join', code: 'ABC123', pass: false });
+    expect(roomRows([room({ playing: true, players: 8 })])[0].detail).toBe('8/8 · FULL');
+  });
+
   it('show a full room without letting you press it', () => {
     const [row] = roomRows([room({ players: 8 })]);
     expect(row.disabled).toBe(true);

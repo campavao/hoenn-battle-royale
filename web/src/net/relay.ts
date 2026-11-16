@@ -85,6 +85,8 @@ export interface RoomListing {
   full?: boolean;
   daily?: boolean;
   secs?: number;
+  /** A match under way: a join watches it, and plays the next. */
+  playing?: boolean;
 }
 
 /** The relay had nothing to seat you in: QUICK PLAY hosts instead. */
