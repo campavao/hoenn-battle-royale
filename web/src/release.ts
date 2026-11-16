@@ -8,6 +8,11 @@
 // (`?v=<romSha1>`), so a new build is a new URL. The service worker keeps those
 // forever and never revalidates them, and a cached copy can no longer be a stale game
 // under a fresh version number -- nor can one build's symbols meet another's patch.
+// The symbols are named by the commit too (`&c=<commit>`): the table names more than the
+// ROM's addresses -- symbols.py adds the ELF's statics the page cuts its pictures from --
+// so it can grow while the ROM stays byte for byte the same. v0.3.115 did exactly that
+// (rom 41bb8a3 unchanged, eleven new names), and every returning player's worker served
+// the table from before under the same URL: no frames, no icons, no HOW TO PLAY pictures.
 // What the patch builds is still checked against the sha1 (loadCheckedRelease): a URL
 // can only name the build, not promise it.
 
@@ -39,12 +44,14 @@ const SYMBOLS_URL = '/patch/br-symbols.json';
 
 const UNPUBLISHED_REASON = 'no patch published yet';
 
-/** Where a release's patch and symbols live: named by the ROM they build. The static
+/** Where a release's patch and symbols live: named by the ROM they build, and the
+ *  symbols by the commit that made them as well (see the top of this file). The static
  *  host ignores the query; the service worker and the HTTP cache key on it. */
-export function releaseUrls(info: Pick<ReleaseInfo, 'romSha1'>): { patch: string; symbols: string } {
+export function releaseUrls(info: Pick<ReleaseInfo, 'romSha1'> & Partial<Pick<ReleaseInfo, 'commit'>>): { patch: string; symbols: string } {
   if (!info.romSha1) return { patch: PATCH_URL, symbols: SYMBOLS_URL };
   const v = `?v=${encodeURIComponent(info.romSha1)}`;
-  return { patch: PATCH_URL + v, symbols: SYMBOLS_URL + v };
+  const c = info.commit ? `&c=${encodeURIComponent(info.commit)}` : '';
+  return { patch: PATCH_URL + v, symbols: SYMBOLS_URL + v + c };
 }
 
 // A dev server answers a missing file with index.html; that is "not there" too.

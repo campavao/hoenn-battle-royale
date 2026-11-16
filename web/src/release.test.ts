@@ -94,12 +94,29 @@ describe('loadRelease', () => {
     expect(asked).toEqual([
       ['/patch/br-version.json', 'no-cache'], // revalidated every time: the root of trust
       [`/patch/hoenn-br.bps?v=${INFO.romSha1}`, undefined],
-      [`/patch/br-symbols.json?v=${INFO.romSha1}`, undefined],
+      [`/patch/br-symbols.json?v=${INFO.romSha1}&c=${INFO.commit}`, undefined],
     ]);
     // The stamp is the table's build, not an address.
     expect(state.symbolsFor).toBe(INFO.romSha1);
     expect(state.symbols.has('romSha1')).toBe(false);
     expect(releaseUrls({ romSha1: '' })).toEqual({ patch: '/patch/hoenn-br.bps', symbols: '/patch/br-symbols.json' });
+  });
+
+  // v0.3.115: the ROM stayed 41bb8a3 and the table gained the names the page cuts its
+  // pictures by. Named by the ROM alone, a returning player's worker kept serving the table
+  // from before, and every frame, item icon and HOW TO PLAY picture went missing.
+  it('a release that leaves the ROM as it was still names a new symbol table', async () => {
+    const before = releaseUrls({ romSha1: INFO.romSha1, commit: '59c29ab2b' });
+    const after = releaseUrls({ romSha1: INFO.romSha1, commit: 'e40e51714' });
+    expect(after.patch).toBe(before.patch); // the same ROM: no new 10 MB download
+    expect(after.symbols).not.toBe(before.symbols);
+
+    const files = { '/patch/br-symbols.json': JSON.stringify(SYMBOLS_RAW) };
+    const sw = runWorker(files);
+    await sw.get(before.symbols);
+    files['/patch/br-symbols.json'] = JSON.stringify({ ...SYMBOLS_RAW, gTextWindowFrame1_Gfx: '0x08470b0c' });
+    expect(JSON.parse(await sw.get(after.symbols))).toHaveProperty('gTextWindowFrame1_Gfx');
+    expect(sw.cache.paths()).toEqual([after.symbols]); // the old table goes
   });
 });
 
