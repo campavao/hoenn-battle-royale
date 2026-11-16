@@ -358,16 +358,32 @@ const clock = iso => new Date(iso).toLocaleTimeString(undefined, { hour: "numeri
 const plural = (n, one, many) => n + " " + (n === 1 ? one : (many || one + "s"));
 // A wire protocol is a number (p3); a newer client reports its world bundle (world-2a99e809).
 const ver = v => (/^\d/.test(String(v)) ? "p" : "") + esc(v);
-// How many the relay last said were connected: a room the log never saw close is only
-// shown as live while someone is on the relay and it opened in the last six hours.
+// How many the relay last said were connected. A room the log never saw close (the world's
+// rooms wrote no close line before 2026-11-16) is only live if it opened since the relay
+// last started, in the last six hours, and among the newest as many as the relay says are
+// open now: a restart ends every room, and every one of today's lit up without that.
 let CONNS = 0;
-const isLive = s => s.live && CONNS > 0 && Date.now() - new Date(s.at) < 6 * 3600e3;
+let RELAY_UP = 0;
+let LIVE_SET = new Set();
+function markLive() {
+  LIVE_SET = new Set();
+  if (!PLAY || CONNS <= 0) return;
+  const since = LIVE ? Date.parse(LIVE.up) : RELAY_UP;
+  const max = LIVE ? (LIVE.rooms || []).length : Infinity;
+  PLAY.sessions
+    .filter(s => s.live && Date.parse(s.at) >= since && Date.now() - Date.parse(s.at) < 6 * 3600e3)
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+    .slice(0, max)
+    .forEach(s => LIVE_SET.add(s));
+}
+const isLive = s => LIVE_SET.has(s);
 
 async function relay() {
   try {
     const r = await fetch(DATA + "stats.json", { cache: "no-cache" });
     if (!r.ok) return;
     const s = await r.json();
+    RELAY_UP = s.deployedAt ? Date.parse(s.deployedAt) : 0;
 
     // Spike B's trainers are on the world's own sockets, not `conns` (`world`, 2026-11-16).
     const on = (s.conns || 0) + (s.world || 0);
@@ -495,6 +511,7 @@ function hoverable(btn, show) {
 
 function drawPlay() {
   if (!PLAY) return;
+  markLive();
   const from = rangeFrom();
   const sessions = PLAY.sessions.filter(s => inRange(s.at, from));
   const solo = PLAY.solo.filter(x => inRange(x.t, from));
