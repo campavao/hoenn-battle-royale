@@ -1,12 +1,38 @@
 {
- "readAt": "2026-11-17T05:32:15.744Z",
+ "readAt": "2026-11-17T05:47:17.828Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "T734MP",
-   "at": "2026-11-17T05:29:26.276Z",
+   "code": "BTEQHS",
+   "at": "2026-11-17T05:38:41.967Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-17T05:38:54.161Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "T734MP",
+   "at": "2026-11-17T05:29:26.276Z",
+   "end": "2026-11-17T05:38:33.721Z",
+   "secs": 547,
    "door": "open",
    "mode": "host",
    "humans": 1,
@@ -25,7 +51,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -7439,6 +7464,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-17T05:38:33.718Z",
+   "code": "T734MP",
+   "v": "90be997",
+   "watched": 9,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 532,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
   {
    "t": "2026-11-17T05:27:36.485Z",
    "code": "AGZXXB",
