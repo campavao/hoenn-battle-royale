@@ -1,29 +1,104 @@
 {
- "readAt": "2026-11-17T06:17:22.342Z",
+ "readAt": "2026-11-17T06:32:24.425Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "82RZ9P",
-   "at": "2026-11-17T06:16:40.262Z",
+   "code": "A4UWAD",
+   "at": "2026-11-17T06:20:44.493Z",
    "end": null,
    "secs": null,
    "door": "open",
    "mode": "host",
-   "humans": 1,
-   "together": 1,
+   "humans": 4,
+   "together": 4,
    "spectators": 0,
-   "matches": 0,
-   "joins": [],
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-17T06:20:58.505Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-17T06:21:07.903Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-17T06:21:08.870Z",
+     "how": "code"
+    }
+   ],
    "versions": [],
    "installs": [],
-   "played": [],
-   "live": true
+   "played": [
+    {
+     "t": "2026-11-17T06:21:17.960Z",
+     "mode": "host",
+     "trainers": 4,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "82RZ9P",
+   "at": "2026-11-17T06:16:40.262Z",
+   "end": "2026-11-17T06:20:45.865Z",
+   "secs": 246,
+   "door": "open",
+   "mode": "host",
+   "humans": 4,
+   "together": 4,
+   "spectators": 1,
+   "matches": 2,
+   "joins": [
+    {
+     "t": "2026-11-17T06:17:46.754Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-17T06:17:51.369Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-17T06:18:00.185Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-17T06:20:31.517Z",
+     "how": "spectate"
+    },
+    {
+     "t": "2026-11-17T06:20:42.304Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-17T06:18:25.305Z",
+     "mode": "host",
+     "trainers": 4,
+     "watching": 0,
+     "secs": 63
+    },
+    {
+     "t": "2026-11-17T06:19:54.150Z",
+     "mode": "host",
+     "trainers": 4,
+     "watching": 0,
+     "secs": 47
+    }
+   ],
+   "exact": true
   },
   {
    "code": "64J9G3",
    "at": "2026-11-17T06:07:21.281Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-17T06:17:42.375Z",
+   "secs": 621,
    "door": "open",
    "mode": "host",
    "humans": 4,
@@ -55,7 +130,6 @@
      "secs": 445
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -7519,6 +7593,146 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-17T06:28:30.903Z",
+   "code": "NCWSZB",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1246,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T06:20:41.304Z",
+   "code": "82RZ9P",
+   "v": "90be997",
+   "watched": 9,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 9,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T06:20:41.298Z",
+   "code": "82RZ9P",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 47,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T06:20:41.203Z",
+   "code": "82RZ9P",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 46,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T06:20:37.747Z",
+   "code": "82RZ9P",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 43,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T06:20:29.912Z",
+   "code": "82RZ9P",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 35,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T06:19:28.802Z",
+   "code": "82RZ9P",
+   "v": "90be997",
+   "watched": 2,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 63,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T06:19:28.799Z",
+   "code": "82RZ9P",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 63,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T06:19:28.792Z",
+   "code": "82RZ9P",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 63,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T06:19:28.784Z",
+   "code": "82RZ9P",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 63,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
   {
    "t": "2026-11-17T06:17:03.979Z",
    "code": "64J9G3",
