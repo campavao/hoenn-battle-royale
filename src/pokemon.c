@@ -5196,6 +5196,9 @@ bool8 PokemonUseItemEffects(struct Pokemon *mon, u16 item, u8 partyIndex, u8 mov
 
                             if (targetSpecies != SPECIES_NONE)
                             {
+#if BR
+                                if (BrItems_StoneEvolve(mon, targetSpecies)) return FALSE;
+#endif
                                 BeginEvolutionScene(mon, targetSpecies, FALSE, partyIndex);
                                 return FALSE;
                             }

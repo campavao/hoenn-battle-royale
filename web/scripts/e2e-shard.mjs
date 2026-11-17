@@ -27,6 +27,7 @@ export const FILE_SECONDS = {
   'recorder.spec.ts': 23,
   'results-scroll.spec.ts': 2,
   'spikeb-fieldfx.spec.ts': 640,
+  'spikeb-bag-tm-stone.spec.ts': 150,
   'spikeb-fog-menu.spec.ts': 170,
   'spikeb-doll.spec.ts': 90,
   'spikeb-menu.spec.ts': 209,
