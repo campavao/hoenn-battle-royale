@@ -1,12 +1,38 @@
 {
- "readAt": "2026-11-17T06:32:24.425Z",
+ "readAt": "2026-11-17T06:47:26.865Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "A4UWAD",
-   "at": "2026-11-17T06:20:44.493Z",
+   "code": "3FNRWK",
+   "at": "2026-11-17T06:33:46.823Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-17T06:33:57.495Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "A4UWAD",
+   "at": "2026-11-17T06:20:44.493Z",
+   "end": "2026-11-17T06:36:09.692Z",
+   "secs": 925,
    "door": "open",
    "mode": "host",
    "humans": 4,
@@ -35,10 +61,9 @@
      "mode": "host",
      "trainers": 4,
      "watching": 0,
-     "secs": null
+     "secs": 840
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -7593,6 +7618,90 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-17T06:47:21.925Z",
+   "code": "J4H4J9",
+   "v": "90be997",
+   "watched": 4,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 1,
+   "checks": 657,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T06:36:21.267Z",
+   "code": "EUR5Y4",
+   "v": "90be997",
+   "watched": 7,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 132,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T06:35:18.435Z",
+   "code": "A4UWAD",
+   "v": "90be997",
+   "watched": 340,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 840,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T06:35:18.426Z",
+   "code": "A4UWAD",
+   "v": "90be997",
+   "watched": 144,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 3,
+   "stalls": 4,
+   "longest": 102,
+   "checks": 445,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T06:35:18.425Z",
+   "code": "A4UWAD",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 840,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T06:35:18.421Z",
+   "code": "A4UWAD",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 840,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
   {
    "t": "2026-11-17T06:28:30.903Z",
    "code": "NCWSZB",
