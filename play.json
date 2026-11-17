@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-17T21:57:01.747Z",
+ "readAt": "2026-11-17T22:12:03.908Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "YE294X",
    "at": "2026-11-17T21:37:52.024Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-17T21:58:11.497Z",
+   "secs": 1219,
    "door": "open",
    "mode": "host",
    "humans": 1,
@@ -22,10 +22,9 @@
      "mode": "host",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1178
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -8057,6 +8056,48 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-17T21:59:58.336Z",
+   "code": "U58JV5",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 12,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-17T21:59:42.732Z",
+   "code": "P2EUWN",
+   "v": "90be997",
+   "watched": 20,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 1,
+   "checks": 2564,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-17T21:57:38.875Z",
+   "code": "YE294X",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 7,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 9,
+   "checks": 1177,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
   {
    "t": "2026-11-17T21:43:06.274Z",
    "code": "TV7ZR8",
