@@ -1,12 +1,38 @@
 {
- "readAt": "2026-11-17T21:26:56.999Z",
+ "readAt": "2026-11-17T21:41:59.337Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "MEGKET",
-   "at": "2026-11-17T21:25:09.935Z",
+   "code": "YE294X",
+   "at": "2026-11-17T21:37:52.024Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-17T21:38:01.083Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "MEGKET",
+   "at": "2026-11-17T21:25:09.935Z",
+   "end": "2026-11-17T21:37:50.186Z",
+   "secs": 760,
    "door": "open",
    "mode": "host",
    "humans": 1,
@@ -25,7 +51,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -8032,6 +8057,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-17T21:37:50.186Z",
+   "code": "MEGKET",
+   "v": "90be997",
+   "watched": 3,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 739,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-17T21:33:29.786Z",
+   "code": "8FZYC8",
+   "v": "90be997",
+   "watched": 8,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 445,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
   {
    "t": "2026-11-17T21:24:55.629Z",
    "code": "P2EUWN",
