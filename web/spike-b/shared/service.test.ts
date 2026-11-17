@@ -53,7 +53,7 @@ describe('world rooms', () => {
       const code = (a.got.at(-1) as unknown as { code: string }).code;
       // A link battle between two patches desyncs (CLAUDE.md): told why, not let in.
       svc.open(b.link).onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, code: code.toLowerCase(), r: 'bbbbbbb' }));
-      expect(b.got.at(-1)).toEqual({ t: 'no_room', code, rom: true });
+      expect(b.got.at(-1)).toEqual({ t: 'no_room', code, rom: 'aaaaaaa' });
       svc.open(c.link).onText(JSON.stringify({ t: 'join', name: 'cal', skin: 0, code, r: 'aaaaaaa' }));
       expect(c.got.at(-1)!.t).toBe('room');
       // QUICK PLAY: one room a patch.

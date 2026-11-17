@@ -144,8 +144,9 @@ export type WorldDown =
   /** The host took me out of the room: back to the menu, the socket still open. */
   | { t: 'kicked' }
   /** No way into the room by that code: none (no flag), every seat taken (`full`), its
-   *  passcode wrong (`pass`), or on another patch (`rom`). */
-  | { t: 'no_room'; code: string; pass?: boolean; rom?: boolean; full?: boolean; removed?: boolean }
+   *  passcode wrong (`pass`), or on another patch (`rom`: the room's, its seven characters, so
+   *  the page can say which of the two is behind the release; `true` from a room with none). */
+  | { t: 'no_room'; code: string; pass?: boolean; rom?: boolean | string; full?: boolean; removed?: boolean }
   /** A match: my trainer's id in it and the Room as it starts (or as it is, joining late). */
   | { t: 'hello'; id: number; state: RoomState; key?: string }
   | { t: 'state'; state: RoomState; a?: number }

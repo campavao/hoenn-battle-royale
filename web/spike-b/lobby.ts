@@ -144,6 +144,14 @@ export class Lobby {
     this.open();
   }
 
+  /** The menu's note `was`, still up, said again as `note` (what an answer that came later
+   *  makes of it); anything else on screen by then is left be. */
+  retell(was: string, note: string): void {
+    if (this.note !== was || this.stage.current !== this.main) return;
+    this.note = note;
+    this.stage.redraw();
+  }
+
   /** The room, as the relay says it is now. */
   roomIs(r: RoomInfo): void {
     const was = this.room;
