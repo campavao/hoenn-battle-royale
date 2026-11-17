@@ -15911,7 +15911,8 @@ var WorldService = class {
             return;
           }
           if (room2 === "rom") {
-            this.send(link, { t: "no_room", code: String(m.code ?? "").toUpperCase(), rom: true });
+            const code = String(m.code ?? "").toUpperCase();
+            this.send(link, { t: "no_room", code, rom: this.rooms.get(code)?.rom || true });
             return;
           }
           if (room2 === "full") {
@@ -16496,4 +16497,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "f1c1ffec1901";
+export const WORLD_HASH = "1e0304e5b8d2";

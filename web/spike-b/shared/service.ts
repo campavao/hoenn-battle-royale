@@ -291,7 +291,7 @@ export class WorldService {
           if (this.where.size >= this.opts.cap) { this.send(link, { t: 'full' }); link.close(); return; }
           const room = this.pick(m);
           if (!room) { this.send(link, { t: 'no_room', code: String(m.code ?? '') }); return; }
-          if (room === 'rom') { this.send(link, { t: 'no_room', code: String(m.code ?? '').toUpperCase(), rom: true }); return; }
+          if (room === 'rom') { const code = String(m.code ?? '').toUpperCase(); this.send(link, { t: 'no_room', code, rom: this.rooms.get(code)?.rom || true }); return; }
           if (room === 'full') { this.send(link, { t: 'no_room', code: String(m.code ?? '').toUpperCase(), full: true }); return; }
           if (link.ip && room.banned.has(link.ip)) { this.send(link, { t: 'no_room', code: room.code, removed: true }); return; }
           if (room.set.door === 'pass' && String(m.pass ?? '').toUpperCase() !== room.pass) { this.send(link, { t: 'no_room', code: room.code, pass: true }); return; }

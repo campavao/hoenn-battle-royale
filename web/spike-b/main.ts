@@ -37,6 +37,8 @@ import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
 import { over } from './shared/over';
 import { Lobby, me, seeThrough, type RoomInfo } from './lobby';
+import { versionNote } from './versionnote';
+import { latestRomSeven } from '../src/release';
 import { stageScale } from '../src/ui/stage';
 import { loadCareer, ordinal, recordMatch } from '../src/match/career';
 import type { MatchTally } from '../src/match/tally';
@@ -5423,7 +5425,15 @@ async function boot(): Promise<void> {
         const ended = !!code && code === reloadedFrom && !rom && !full && !removed;
         reloadedFrom = null;
         if (ended) { lobby!.menu('The page reloaded, and your match ended without you.'); return; }
-        lobby!.menu(removed ? `The host of room ${code} took you out of it.` : rom ? `Room ${code} is on another version of the game. Reload the page to update.` : full ? `Room ${code} is full.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.');
+        // Which of the two is behind the live release, so the one who needs to reload is told
+        // (Cam, 11-17: "how does 'Reload the page to update' work if I'm on the newer version?").
+        if (rom) {
+          const first = versionNote(code, romSeven, rom, null);
+          lobby!.menu(first);
+          void latestRomSeven().then((latest) => { if (latest) lobby!.retell(first, versionNote(code, romSeven, rom, latest)); });
+          return;
+        }
+        lobby!.menu(removed ? `The host of room ${code} took you out of it.` : full ? `Room ${code} is full.` : code ? `There is no room ${code}.` : 'Every place in the world is taken.');
       },
       onKicked: () => { room = null; forget(); unlink(); lobby!.menu('The host took you out of the room.'); },
       onOld: () => { room = null; matchOn = false; forget(); lobby!.old(); },

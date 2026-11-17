@@ -103,6 +103,13 @@ function parseSymbols(raw: Record<string, string>): { symbols: Map<string, numbe
 
 /** Dev only: the sidecars without a patch, for a ROM that is already patched (a local
  * build). tools/br/dev-patch.sh writes them into web/public/patch/. */
+/** The ROM the live release builds, its first seven characters, fetched fresh: which of two
+ *  pages on different patches is behind (versionnote.ts). Null when it can't be read. */
+export async function latestRomSeven(): Promise<string | null> {
+  const info = await fetchJson<Partial<ReleaseInfo>>(VERSION_URL, FRESH);
+  return typeof info?.romSha1 === 'string' && info.romSha1 ? info.romSha1.slice(0, 7) : null;
+}
+
 export async function loadSidecars(): Promise<{ info: ReleaseInfo; symbols: Map<string, number> } | null> {
   const [info, rawSymbols] = await Promise.all([
     fetchJson<ReleaseInfo>(VERSION_URL, FRESH),

@@ -456,7 +456,7 @@ export interface WorldHandlers {
   onRoom(r: Extract<WorldDown, { t: 'room' }>): void;
   /** No room by that code; `pass`: there is, and the passcode was wrong; `rom`: there is,
    *  and its battles run on another patch of the game; `removed`: its host took me out. */
-  onNoRoom(code: string, pass?: boolean, rom?: boolean, full?: boolean, removed?: boolean): void;
+  onNoRoom(code: string, pass?: boolean, rom?: boolean | string, full?: boolean, removed?: boolean): void;
   /** The host took me out of the room. */
   onKicked(): void;
   /** This page is an older (or newer) world than the relay's: it has to reload. */
