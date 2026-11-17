@@ -17,6 +17,9 @@
 #include "constants/hold_effects.h"
 #include "constants/pokemon.h"
 #include "constants/songs.h"
+#include "evolution_scene.h"
+#include "main.h"
+#include "pokedex.h"
 #include "br/br_hud.h"
 #include "br/br_balls.h"
 #include "br/br_items.h"
@@ -337,6 +340,27 @@ bool8 BrItems_HealParty(u8 taskId)
 // so the bag says so and keeps the ball and the turn, as the phone's bag does
 // (web/src/ui/battlemenu.ts).
 static const u8 sText_NotATrainersMon[] = _("You can't catch a\nTRAINER's POKéMON.{PAUSE_UNTIL_PRESS}");
+
+bool8 BrItems_StoneEvolve(struct Pokemon *mon, u16 target)
+{
+    u16 before = GetMonData(mon, MON_DATA_SPECIES, NULL);
+    u8 nickname[POKEMON_NAME_LENGTH + 1];
+
+    if (gMain.inBattle)
+        return FALSE;
+    GetMonData(mon, MON_DATA_NICKNAME, nickname);
+    SetMonData(mon, MON_DATA_SPECIES, &target);
+    CalculateMonStats(mon);
+    // One nobody renamed is called after its species, and the name goes with it.
+    if (StringCompare(nickname, gSpeciesNames[before]) == 0)
+        SetMonData(mon, MON_DATA_NICKNAME, gSpeciesNames[target]);
+    GetSetPokedexFlag(SpeciesToNationalPokedexNum(target), FLAG_SET_SEEN);
+    GetSetPokedexFlag(SpeciesToNationalPokedexNum(target), FLAG_SET_CAUGHT);
+    // Where the scene would have gone at its end (ItemUseCB_EvolutionStone set it): the bag, which
+    // starts over from its first state and resets the party screen's tasks.
+    SetMainCallback2(gCB2_AfterEvolution);
+    return TRUE;
+}
 
 bool8 BrItems_BallRefused(u8 taskId)
 {

@@ -773,7 +773,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
           forgetting = true;
           hurryOff();
           // The ROM's own forget screen closing, its lines after, are as unseen as the rest.
-          void romAsks.forget(emu.read(partyMenuAt + 9, 8), forget).then((row) => { script = row === null ? ['b'] : [...Array(row).fill('down'), 'a']; n = 0; hurryOn(); });
+          // No move given up is the new one's row, the fifth, and A: Gen 3's forget screen has no
+          // cancel. B there left its screen up, unseen and unanswered, under the page's (Cam, 11-16:
+          // a TM's forget cancelled hung the screen). Its "stop trying to teach?" is pressed past below.
+          void romAsks.forget(emu.read(partyMenuAt + 9, 8), forget).then((row) => { script = [...Array(row === null ? 4 : row).fill('down'), 'a']; n = 0; hurryOn(); });
         }
         if (forgetting) {
           if (script.length && n % 12 === 0 && !fade().active) { const k = script.shift()!; emu.press(k); pressedKey = k; n = 1; }

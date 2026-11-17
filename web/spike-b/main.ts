@@ -1448,10 +1448,14 @@ function askForget(slot: number, move: number): Promise<number | null> {
     battleEl.classList.remove('screen', 'see', 'fight');
     battleEl.classList.add('on', 'panel');
     const up = panelUp;
+    // The BAG or the party under it (a TM used from the BAG, say): back to it, hidden, for the
+    // ROM's walk to show again when it ends (panelWalk). Closed, it had nothing to come back to,
+    // and a cancelled forget left an empty overlay for good (Cam, 11-16).
+    const home = battleMenu.fieldOn;
     panelUp = true;
     dispatchEvent(new Event('resize'));
     battleMenu.openForget(slot, moveInfo(romTables, move)?.name ?? '', (row) => {
-      battleMenu!.closeField();
+      battleMenu!.forgotten(home);
       panelUp = up;
       battleEl.classList.remove('panel');
       if (!wasOn) battleEl.classList.remove('on');
@@ -3361,8 +3365,12 @@ function wireBattleMenu(files: Awaited<ReturnType<typeof loadRom>>): void {
           if (useKeyItem(item)) return;
           const count = () => readPocket(emu, sym, pocket).find((x) => x.item === item)?.n ?? 0;
           const was = count();
+          const before = slot === undefined ? undefined : readTeam()[slot];
           void panelWalk((r) => r.menu(2, panelShow, panelHide, { to: 'use', pocket, item, slot, move })).then(() => {
-            if (count() >= was && panelUp) say("It won't have any effect.");
+            if (count() >= was && panelUp) { say("It won't have any effect."); return; }
+            // A stone evolves it there and then (br_items.c BrItems_StoneEvolve): no scene says so.
+            const after = slot === undefined ? undefined : readTeam()[slot];
+            if (before && after && after.species !== before.species) say(`${before.name} evolved into ${speciesName(after.species)}!`);
           });
         },
       },

@@ -1065,6 +1065,22 @@ export class BattleMenu {
     this.setShown(false);
   }
 
+  /** The window the field's windows are on (the BAG or the party), null with none up. */
+  get fieldOn(): 'party' | 'bag' | null {
+    return this.fieldHome;
+  }
+
+  /** The forget question answered: back to `home`, hidden (the ROM's walk shows it again when it
+   *  ends), or every window closed when there was none under it. */
+  forgotten(home: 'party' | 'bag' | null): void {
+    if (!home) { this.closeField(); return; }
+    this.forgetting = null;
+    this.forgetHead.hidden = true;
+    this.useHead.hidden = true;
+    this.openField(home, true);
+    this.setShown(false);
+  }
+
   /** Back where they were, with what the ROM's screen changed. */
   reshowField(): void {
     this.using = null;

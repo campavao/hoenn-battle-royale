@@ -57,6 +57,10 @@ bool8 BrItems_HealParty(u8 taskId);
 // ItemUseInBattle_PokeBall: TRUE when this is a trainer's battle, and the bag said so and
 // kept the ball (Cam's 10-19 play-test, #16).
 bool8 BrItems_BallRefused(u8 taskId);
+// A stone used on one: evolved there and then, as the rung evolves (br_levels.c GrowUp), and back
+// where the stone was used from, with no evolution scene (Cam, 11-16: "it plays the whole evolution
+// animation instead of just evolving the Pokemon instantly"). TRUE when it did.
+bool8 BrItems_StoneEvolve(struct Pokemon *mon, u16 target);
 
 // The LINK CABLE (Cam, 2026-10-13: "so folks could evolve pokemon that can today only
 // evolve via trade"). One of pret's unused item ids, made a stone: same pocket, same
