@@ -149,6 +149,7 @@ describe('the fill and the real maps meet', () => {
     const sand = (id: number) => (id >= 0x118 && id <= 0x12d) || id === 0x13d || id === 0x13e || id === 0x145 || id === 0x146;
     for (const x of [20, 28]) {
       const beach = at('MAP_ROUTE118', x, -3);
+      if (painted.has(`${beach.x},${beach.y}`)) continue; // Cam painted over the river there, 11-16
       expect(sand(fill.metatile(beach.x, beach.y)?.id ?? -1), `${x}`).toBe(true);
     }
     // ROUTE 103's pond starts at its top row: over it, General's rock stands on its front-facing foot.
