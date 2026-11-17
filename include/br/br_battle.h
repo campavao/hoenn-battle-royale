@@ -104,6 +104,13 @@ u8 BrBattle_RunChance(void);
 // "Can't escape!"), from what the action carried, the same on both ROMs of a link
 // battle; FALSE leaves it to pret: a forfeit, a wild battle, the AI's side.
 bool8 BrBattle_HandleRun(void);
+// A POKe DOLL's getaway in a link battle ends as a link battle does (HandleEndTurn_RanFromBattle):
+// pret's own end for a RUN is the wild one's, which never told the other ROM, and both waited
+// for good (Cam's 11-16 match, the runner out with five standing). TRUE when it took the end.
+bool8 BrBattle_LinkGetaway(void);
+// LinkOpponentHandleEndLinkBattle: the other ROM's getaway stays one (pret turns a win to a
+// loss across the link, and a RAN to a CAUGHT).
+void BrBattle_KeepGetaway(u8 outcome);
 // The drawn shot clock: the seconds left, top-right of the battle screen. Draw each
 // frame a choice menu is open (it follows bg0's scroll so it stays top-right in both
 // the action and move menus); hide it when selection ends.

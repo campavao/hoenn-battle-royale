@@ -5162,6 +5162,9 @@ static void HandleEndTurn_BattleLost(void)
 static void HandleEndTurn_RanFromBattle(void)
 {
     gCurrentActionFuncId = 0;
+#if BR
+    if (BrBattle_LinkGetaway()) { gBattleMainFunc = HandleEndTurn_FinishBattle; return; }
+#endif
 
     if (gBattleTypeFlags & BATTLE_TYPE_FRONTIER && gBattleTypeFlags & BATTLE_TYPE_TRAINER)
     {
