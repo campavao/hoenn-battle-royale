@@ -160,10 +160,21 @@ export function paintButtons(c: EmeraldCanvas, y: number, buttons: ButtonSpec[])
  *  so white with the dark shadow, as the titles are. TEXT_GRAY is the window's faint ink
  *  -- light gray with a white shadow -- and on the dark page it read as white on white
  *  ("No open rooms", 10-20 play-test #17, HBR-50). */
-export function paintNote(c: EmeraldCanvas, text: string, y: number, color = TEXT_WHITE): Rect {
-  const r = { x: 0, y, w: W, h: ROW_H };
-  if (text) c.drawTextCentred(fitText(text, W - 8), W / 2, y, color);
-  return r;
+export function paintNote(c: EmeraldCanvas, text: string, y: number, color = TEXT_WHITE, most = 1): Rect {
+  const lines = noteLines(text, most);
+  lines.forEach((line, i) => c.drawTextCentred(line, W / 2, y + i * ROW_H, color));
+  return { x: 0, y, w: W, h: Math.max(1, lines.length) * ROW_H };
+}
+
+/** A note as it is drawn: one line, or up to `most` broken at the spaces, the last cut to fit.
+ *  The main menu's has two, so "Room 5773WK is on another version of the game. Reload the page
+ *  to update." is read whole rather than as "...of the g…" (Cam, 11-16). */
+export function noteLines(text: string, most = 1): string[] {
+  if (!text) return [];
+  if (most <= 1) return [fitText(text, W - 8)];
+  const all = wrapText(text, W - 8);
+  if (all.length <= most) return all;
+  return [...all.slice(0, most - 1), fitText(all.slice(most - 1).join(' '), W - 8)];
 }
 
 /** A person standing in a cell: the sprite centred at the top, the name under it. */
@@ -971,11 +982,13 @@ export function menuScreen(model: () => MenuModel): DrawnScreen {
         // Room around the card (Cam, 2026-10-20: "some padding around the trainer card").
         const strip = m.trainer ? paintTrainer(c, y + 4, 44, m.trainer) : null;
         y += strip ? 56 : 0;
-        const tiles = paintTiles(c, y, m.rows, h - y - (m.note ? 22 : 4), m.rowsId);
+        // The note under the tiles: room for its second line when it needs one.
+        const noteH = m.note ? 6 + noteLines(m.note, 2).length * ROW_H : 4;
+        const tiles = paintTiles(c, y, m.rows, h - y - noteH, m.rowsId);
         widgets.push(...tiles.widgets);
         if (strip) widgets.push(strip);
         y = tiles.bottom + 2;
-        widgets.push({ rect: paintNote(c, m.note, y), text: m.note, id: m.noteId, cursor: null });
+        widgets.push({ rect: paintNote(c, m.note, y, TEXT_WHITE, 2), text: m.note, id: m.noteId, cursor: null });
         return { widgets, containers };
       }
       const list = paintRows(c, y, m.rows, m.rowsId);
