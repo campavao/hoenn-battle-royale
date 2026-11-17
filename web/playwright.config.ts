@@ -38,6 +38,9 @@ export default defineConfig({
   reporter: process.env.CI ? [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]] : 'list',
   use: {
     baseURL: `http://localhost:${VITE_PORT}`,
+    // A first visit is dealt a random Emerald trainer's name (spike-b/lobby.ts me); the specs
+    // count rows by name, so every page here starts as CAM, the name they were written for.
+    storageState: { cookies: [], origins: [{ origin: `http://localhost:${VITE_PORT}`, localStorage: [{ name: 'hbr:career', value: JSON.stringify({ name: 'CAM' }) }] }] },
     trace: 'retain-on-failure',
     // The picture of a failed try, for CI's e2e-failed-tries artifact (ci.yml).
     screenshot: 'only-on-failure',

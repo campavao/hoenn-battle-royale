@@ -13,6 +13,7 @@ import { howToScreen } from '../src/ui/howto';
 import { howToRead, markHowToRead } from '../src/ui/howto-due';
 import { SKINS, cleanName, exportCareer, importCareer, loadCareer, saveProfile, skinUnlocked } from '../src/match/career';
 import { LINES } from '../src/bots/lines';
+import { NAMES } from '../src/bots/roster';
 import { lookScreen, seatScreen, statsScreen, trainerScreen } from '../src/ui/profile';
 import { resultsScreen, type ResultsModel } from '../src/ui/results';
 import type { TallyNames } from '../src/match/tally';
@@ -93,12 +94,18 @@ function loadCareerFile(then: (note: string) => void): void {
 }
 
 /** Who I am, as the live game keeps it (career.ts): the name and sprite on the trainer card.
- *  No name saved is the live game's fallback too (app.ts careerName), never TRAINER (HBR-107). */
+ *  A first visit with no name is dealt one of Emerald's trainers, as a bot is (roster.ts NAMES),
+ *  and keeps it until they pick their own (Cam, 11-16: every new player was CAM). Never TRAINER
+ *  (HBR-107). */
 export function me(): { name: string; skin: number } {
   const c = loadCareer();
   let old = '';
   try { old = localStorage.getItem('hbr:name') ?? ''; } catch { /* a blocked store: no old name */ }
-  return { name: c.name || cleanName(old) || 'CAM', skin: c.skin ?? 0 };
+  const name = c.name || cleanName(old);
+  if (name) return { name, skin: c.skin ?? 0 };
+  const dealt = NAMES[Math.floor(Math.random() * NAMES.length)];
+  saveProfile({ name: dealt });
+  return { name: dealt, skin: c.skin ?? 0 };
 }
 
 /** The main menu's backdrop (ui/menubg.ts), its own chunk; black until it lands. */
