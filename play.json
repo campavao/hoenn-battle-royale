@@ -1,7 +1,33 @@
 {
- "readAt": "2026-11-17T05:17:13.627Z",
+ "readAt": "2026-11-17T05:32:15.744Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "T734MP",
+   "at": "2026-11-17T05:29:26.276Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-17T05:29:41.559Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "S2QXUN",
    "at": "2026-11-17T04:14:46.796Z",
@@ -7413,6 +7439,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-17T05:27:36.485Z",
+   "code": "AGZXXB",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 2,
+   "checks": 325,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T05:22:56.936Z",
+   "code": "TFYBMQ",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 53,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
   {
    "t": "2026-11-17T04:49:14.101Z",
    "code": "WKZTDR",
