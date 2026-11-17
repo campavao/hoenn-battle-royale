@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-17T16:04:25.858Z",
+ "readAt": "2026-11-17T16:19:28.069Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "UM7W8G",
    "at": "2026-11-17T15:47:11.219Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-17T16:10:50.877Z",
+   "secs": 1420,
    "door": "open",
    "mode": "host",
    "humans": 1,
@@ -25,7 +25,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -7756,6 +7755,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-17T16:10:50.877Z",
+   "code": "UM7W8G",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 2,
+   "checks": 1394,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-17T16:09:44.181Z",
+   "code": "FHDH4C",
+   "v": "90be997",
+   "watched": 3,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 874,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
   {
    "t": "2026-11-17T15:54:59.942Z",
    "code": "FHDH4C",
