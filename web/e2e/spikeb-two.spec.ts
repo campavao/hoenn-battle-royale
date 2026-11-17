@@ -103,7 +103,7 @@ test('two players: my lines, my bag and my winning team reach the other page', a
   test.setTimeout(400_000);
   const [hc, gc] = [await browser.newContext(), await browser.newContext()];
   // The guest's MY VOICE picks (career.ts), as their MY LOOK would have saved them.
-  await gc.addInitScript(() => localStorage.setItem('hbr:career', JSON.stringify({ matches: 0, wins: 0, intro: 5, win: 6, lose: 7 })));
+  await gc.addInitScript(() => localStorage.setItem('hbr:career', JSON.stringify({ matches: 0, wins: 0, name: 'CAM', intro: 5, win: 6, lose: 7 })));
   try {
     const [host, guest] = [await hc.newPage(), await gc.newPage()];
     await host.goto(`/?rom=${romHashParam()}#host`);
