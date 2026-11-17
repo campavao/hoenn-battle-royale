@@ -3683,8 +3683,8 @@ function fogFrame(): void {
   rom?.setSafari(!!ring.safari && !!link.room.actor(link.me)?.m.spot.map.startsWith(SAFARI));
   safariFrame(ring);
   if (isOut || !rom) return;
-  // The BAG screen is a menu: the fog bites on the field and in battle (BrRing_Tick).
-  if (swapping) return;
+  // No menu or screen is a place out of the fog (Cam, 11-16): the BAG, a TM's party pick,
+  // a summary are bitten as the field is. A battle's bite is the ROM's, at each turn.
   if (battle) {
     // A ring that closes on a trainer mid-battle reaches the battle at its next turn.
     if (inFogNow()) rom.fogNow();
@@ -3697,7 +3697,13 @@ function fogFrame(): void {
   fogTimer = FOG_TICK;
   poisonAt = frame;
   rom.sound(SE_FIELD_POISON);
-  void rom.bleed().then((alive) => { if (!alive) goOut('Your team fainted in the fog.'); });
+  // Whatever is up (a party pick, the BAG, a TM's screen), the bite lands now, and a team
+  // that faints there leaves it at once.
+  void rom.bleed().then((alive) => {
+    if (alive) return;
+    if (swapping || romUp) leaveScreen();
+    goOut('Your team fainted in the fog.');
+  });
 }
 
 /** The fog over everything outside the ring, the inside left clear: the ROM's own

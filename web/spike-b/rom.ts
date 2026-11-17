@@ -852,8 +852,11 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
   let queue: Promise<unknown> = Promise.resolve();
   // FAST text and no battle scene, as br_boot.c parks the ROM.
   let paceBits = 2 | 0x400;
+  // Turns under way: started and not yet ended (bleed, below, needs to know).
+  let turning = 0;
   const inTurn = <T>(f: () => Promise<T>): Promise<T> => {
-    const run = queue.then(f, f);
+    const g = async () => { turning++; try { return await f(); } finally { turning--; } };
+    const run = queue.then(g, g);
     queue = run.catch(() => undefined);
     return run;
   };
@@ -1210,7 +1213,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
       return Number.isNaN(tallyAt) ? null : withFavourites(tallyOf((carried ?? kept()).tally), favourites);
     },
     bleed() {
-      return inTurn(async () => {
+      const bite = () => {
         if (broken) return 0;
         const n = emu.read(countAt, 8);
         let alive = 0;
@@ -1223,7 +1226,17 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
           if (hp) alive++;
           else emu.write(at + 80, 0, 32); // a fainted mon has no status (Bleed)
         }
-        carried = last = kept();
+        return alive;
+      };
+      // A turn is under way (the ROM's BAG or party screen is up): a bite queued behind it
+      // waited until it closed, so a trainer sitting in one never died in the fog (Cam, 11-16:
+      // "There should never be a menu or situation that prevents you from taking fog
+      // damage"). The bite goes on the party the screen is using now, and the turn keeps it
+      // when it ends (kept()). With no turn under way it is a turn of its own, at once.
+      if (turning) return Promise.resolve(bite());
+      return inTurn(async () => {
+        const alive = bite();
+        if (!broken) carried = last = kept();
         return alive;
       });
     },
