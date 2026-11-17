@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-17T03:46:54.089Z",
+ "readAt": "2026-11-17T04:01:56.265Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "CEXVEC",
    "at": "2026-11-17T03:15:53.572Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-17T03:50:36.076Z",
+   "secs": 2083,
    "door": "open",
    "mode": "host",
    "humans": 2,
@@ -27,10 +27,9 @@
      "mode": "host",
      "trainers": 2,
      "watching": 0,
-     "secs": null
+     "secs": 2022
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -7398,6 +7397,118 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-17T03:59:01.248Z",
+   "code": "6HEJAM",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 236,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T03:55:03.637Z",
+   "code": "6HEJAM",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 40,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T03:54:22.960Z",
+   "code": "6HEJAM",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 136,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T03:54:08.973Z",
+   "code": "7XYJMV",
+   "v": "41bb8a3",
+   "watched": 378,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 1,
+   "stalls": 1,
+   "longest": 9,
+   "checks": 391,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T03:52:06.253Z",
+   "code": "6HEJAM",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 332,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T03:50:06.726Z",
+   "code": "CEXVEC",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 669,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T03:50:06.587Z",
+   "code": "CEXVEC",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 508,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T03:49:06.817Z",
+   "code": "2269AX",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 370,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
   {
    "t": "2026-11-17T03:46:26.140Z",
    "code": "7XYJMV",
