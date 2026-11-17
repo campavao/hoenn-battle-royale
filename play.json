@@ -1,12 +1,43 @@
 {
- "readAt": "2026-11-17T00:44:40.525Z",
+ "readAt": "2026-11-17T00:59:42.586Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "M2Z463",
-   "at": "2026-11-17T00:41:52.157Z",
+   "code": "NGGQZ2",
+   "at": "2026-11-17T00:46:01.388Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-17T00:48:25.073Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-17T00:50:55.164Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "M2Z463",
+   "at": "2026-11-17T00:41:52.157Z",
+   "end": "2026-11-17T00:46:47.083Z",
+   "secs": 295,
    "door": "open",
    "mode": "host",
    "humans": 1,
@@ -25,7 +56,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -6796,7 +6826,7 @@
   {
    "id": "6144a717",
    "first": "2026-10-17T02:37:29.310Z",
-   "last": "2026-11-16T21:43:10.079Z",
+   "last": "2026-11-17T00:48:21.630Z",
    "since": "2026-10-15",
    "versions": [
     "2",
@@ -6814,11 +6844,12 @@
     "world-2a99e809",
     "world-ef69bfdd",
     "world-5a96d233",
-    "world-aa461974"
+    "world-aa461974",
+    "world-f1c1ffec"
    ],
    "solo": 2,
-   "checkins": 51,
-   "v": "world-aa461974"
+   "checkins": 52,
+   "v": "world-f1c1ffec"
   },
   {
    "id": "4d3cafd9",
@@ -7030,6 +7061,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-17T00:45:47.028Z",
+   "code": "M2Z463",
+   "v": "41bb8a3",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 2,
+   "checks": 218,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
   {
    "t": "2026-11-17T00:32:09.412Z",
    "code": "RWFBA9",
