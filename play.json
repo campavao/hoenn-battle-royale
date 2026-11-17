@@ -1,7 +1,23 @@
 {
- "readAt": "2026-11-17T08:02:35.268Z",
+ "readAt": "2026-11-17T11:18:44.169Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "E33FFY",
+   "at": "2026-11-17T10:22:05.095Z",
+   "end": "2026-11-17T10:22:09.410Z",
+   "secs": 4,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "N7E887",
    "at": "2026-11-17T06:55:36.892Z",
@@ -7459,9 +7475,27 @@
    "solo": 2,
    "checkins": 2,
    "v": "world-f1c1ffec"
+  },
+  {
+   "id": "d639c9bf",
+   "first": "2026-11-17T08:38:56.852Z",
+   "last": "2026-11-17T09:47:25.372Z",
+   "since": "2026-11-17",
+   "versions": [
+    "world-f1c1ffec"
+   ],
+   "solo": 3,
+   "checkins": 5,
+   "v": "world-f1c1ffec"
   }
  ],
  "solo": [
+  {
+   "t": "2026-11-17T08:38:56.852Z",
+   "install": "d639c9bf",
+   "n": 3,
+   "v": "world-f1c1ffec"
+  },
   {
    "t": "2026-11-17T02:28:50.803Z",
    "install": "77a3e623",
@@ -7638,6 +7672,76 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-17T10:21:28.960Z",
+   "code": "F2SFEK",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 905,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T10:06:19.844Z",
+   "code": "WQG8KQ",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 220,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T09:32:01.547Z",
+   "code": "973PD5",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 786,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T08:43:13.153Z",
+   "code": "B92XW6",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 240,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
+  {
+   "t": "2026-11-17T08:38:37.124Z",
+   "code": "B92XW6",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 21,
+   "longest": 2,
+   "checks": 1259,
+   "drifts": 0,
+   "deploy": "4e9d8c07"
+  },
   {
    "t": "2026-11-17T08:02:22.192Z",
    "code": "EM6UM4",
