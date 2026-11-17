@@ -49,6 +49,9 @@
 #include "br/br_field.h"
 #include "br/br_skin.h"
 
+// The battler who got away with a POKe DOLL in a link battle, for the end's line (BrBattle_LinkGetaway).
+static u8 sLinkRunner;
+
 EWRAM_DATA struct BrBattle gBrBattle = {0};
 EWRAM_DATA u8 gBrSeeThrough[2] = {0};
 struct BrSides gBrSides;
@@ -604,6 +607,14 @@ bool8 BrBattle_HandleRun(void)
         return TRUE;
     }
     gCurrentTurnActionNumber = gBattlersCount;
+    // A link battle's getaway is a link battle's end (BrBattle_LinkGetaway): the other ROM
+    // hears of it and ends too, each side's outcome a RAN, and nobody is out.
+    if (gBattleTypeFlags & BATTLE_TYPE_LINK)
+    {
+        sLinkRunner = gBattlerAttacker;
+        gBattleOutcome = B_OUTCOME_RAN | B_OUTCOME_LINK_BATTLE_RAN;
+        return TRUE;
+    }
     // A replay's runner is a trainer whichever side the screen has them on: "Wild <MON>
     // fled!" is a wild one's line, and the getaway says who left (BrBattle_BufferString).
     if (GetBattlerSide(gBattlerAttacker) == B_SIDE_PLAYER || (gBattleTypeFlags & BATTLE_TYPE_RECORDED_LINK))
@@ -618,6 +629,26 @@ bool8 BrBattle_HandleRun(void)
 // A replay of our link battle is a RECORDED_LINK one, and Emerald bans the bag in those
 // too: the ban wrote 0xFF over the replay's own read cursor, and the replay waited on it
 // for good the first time a fighter drank a potion.
+bool8 BrBattle_LinkGetaway(void)
+{
+    if (!(gBattleTypeFlags & BATTLE_TYPE_LINK) || !(gBattleOutcome & B_OUTCOME_LINK_BATTLE_RAN))
+        return FALSE;
+    // pret's link end (HandleEndTurn_BattleWon/Lost): the line, then ENDLINKBATTLE to both ROMs.
+    // The runner rides in the line's second byte, so each side says who left.
+    gBattleTextBuff1[0] = gBattleOutcome;
+    gBattleTextBuff1[1] = sLinkRunner;
+    gBattlerAttacker = GetBattlerAtPosition(B_POSITION_PLAYER_LEFT);
+    gBattlescriptCurrInstr = BattleScript_LinkBattleWonOrLost;
+    gBattleOutcome &= ~B_OUTCOME_LINK_BATTLE_RAN;
+    return TRUE;
+}
+
+void BrBattle_KeepGetaway(u8 outcome)
+{
+    if (outcome == B_OUTCOME_RAN)
+        gBattleOutcome = B_OUTCOME_RAN;
+}
+
 bool8 BrBattle_ItemsAllowed(void)
 {
     return gBrNetlink.active || RecordedBattle_IsSpectateLive();
@@ -843,6 +874,9 @@ static const u8 sText_ReplayLost[] = _("{B_LINK_OPPONENT1_NAME} defeated\n{B_LIN
 // A replay's RUN, by name: on a turned replay a bare "Got away safely!" read as if the
 // trainer we follow had left, whoever ran (HBR-53 review).
 static const u8 sText_ReplayRan[] = _("{B_LINK_SCR_TRAINER_NAME} got away safely!");
+// A POKe DOLL's getaway in a link battle, on each ROM: whoever ran, and nobody is out.
+static const u8 sText_DollGotAway[] = _("Got away safely!");
+static const u8 sText_DollFoeGotAway[] = _("The foe used a POKé DOLL\nand got away!");
 static const u8 sText_ReplayDrew[] = _("{B_LINK_PLAYER_NAME} and {B_LINK_OPPONENT1_NAME}\nbattled to a draw!");
 // A bot whose lines never arrived still says something when it slides back in: pret's
 // own speech for TRAINER_NONE is whatever the last trainerbattle script left behind.
@@ -952,6 +986,12 @@ bool8 BrBattle_BufferString(u16 stringId)
             line = stringId == STRINGID_TRAINER1WINTEXT ? sText_BotWon : sText_BotLost;
         // ...and holds it for A: the money line comes straight after.
         StringAppend(StringCopy(gDisplayedStringBattle, line), sText_NewPage);
+        return TRUE;
+    }
+    if (stringId == STRINGID_BATTLEEND && (gBattleTypeFlags & BATTLE_TYPE_LINK)
+        && gBattleTextBuff1[0] == (B_OUTCOME_RAN | B_OUTCOME_LINK_BATTLE_RAN))
+    {
+        BattleStringExpandPlaceholdersToDisplayedString(GetBattlerSide(gBattleTextBuff1[1]) == B_SIDE_PLAYER ? sText_DollGotAway : sText_DollFoeGotAway);
         return TRUE;
     }
     if (stringId == STRINGID_BATTLEEND && Spectating() && (gBattleTypeFlags & BATTLE_TYPE_RECORDED_LINK)

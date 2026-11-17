@@ -31,6 +31,9 @@
 #include "constants/songs.h"
 #include "constants/trainers.h"
 #include "recorded_battle.h"
+#if BR
+#include "br/br_battle.h"
+#endif
 
 static void LinkOpponentHandleGetMonData(void);
 static void LinkOpponentHandleGetRawMonData(void);
@@ -1847,6 +1850,9 @@ static void LinkOpponentHandleEndLinkBattle(void)
         gBattleOutcome = gBattleBufferA[gActiveBattler][1];
     else
         gBattleOutcome = gBattleBufferA[gActiveBattler][1] ^ B_OUTCOME_DREW;
+#if BR
+    BrBattle_KeepGetaway(gBattleBufferA[gActiveBattler][1]);
+#endif
 
     gSaveBlock2Ptr->frontier.disableRecordBattle = gBattleBufferA[gActiveBattler][2];
     FadeOutMapMusic(5);

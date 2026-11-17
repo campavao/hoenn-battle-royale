@@ -28,6 +28,7 @@ export const FILE_SECONDS = {
   'results-scroll.spec.ts': 2,
   'spikeb-fieldfx.spec.ts': 640,
   'spikeb-fog-menu.spec.ts': 170,
+  'spikeb-doll.spec.ts': 90,
   'spikeb-menu.spec.ts': 209,
   'spikeb-banners.spec.ts': 320,
   'spikeb-botbag.spec.ts': 90,
