@@ -1,7 +1,33 @@
 {
- "readAt": "2026-11-17T15:34:20.523Z",
+ "readAt": "2026-11-17T15:49:23.114Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "UM7W8G",
+   "at": "2026-11-17T15:47:11.219Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-17T15:47:35.621Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "BJQGCN",
    "at": "2026-11-17T15:32:19.173Z",
@@ -21,8 +47,8 @@
   {
    "code": "ZCW6SP",
    "at": "2026-11-17T15:27:38.212Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-17T15:46:20.929Z",
+   "secs": 1123,
    "door": "open",
    "mode": "host",
    "humans": 1,
@@ -41,7 +67,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -7731,6 +7756,76 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-17T15:46:41.542Z",
+   "code": "FHDH4C",
+   "v": "90be997",
+   "watched": 6,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 10,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-17T15:46:20.913Z",
+   "code": "ZCW6SP",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1057,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-17T15:44:18.951Z",
+   "code": "FHDH4C",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 792,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-17T15:35:47.370Z",
+   "code": "HKE7MU",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 44,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-17T15:34:45.072Z",
+   "code": "HKE7MU",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 20,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
   {
    "t": "2026-11-17T15:32:01.461Z",
    "code": "FHDH4C",
