@@ -1,12 +1,28 @@
 {
- "readAt": "2026-11-18T18:45:00.525Z",
+ "readAt": "2026-11-18T19:00:03.486Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
+   "code": "UV46GT",
+   "at": "2026-11-18T18:52:51.369Z",
+   "end": "2026-11-18T18:53:29.423Z",
+   "secs": 38,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
    "code": "AFJVJ3",
    "at": "2026-11-18T18:17:01.658Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-18T18:47:11.238Z",
+   "secs": 1810,
    "door": "open",
    "mode": "host",
    "humans": 1,
@@ -25,7 +41,6 @@
      "secs": 1027
     }
    ],
-   "live": true,
    "exact": true
   },
   {
