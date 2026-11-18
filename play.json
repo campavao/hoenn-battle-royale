@@ -1,7 +1,23 @@
 {
- "readAt": "2026-11-18T05:29:13.952Z",
+ "readAt": "2026-11-18T05:59:16.425Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "QADQQH",
+   "at": "2026-11-18T05:55:22.855Z",
+   "end": "2026-11-18T05:55:25.947Z",
+   "secs": 3,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "9PWU6C",
    "at": "2026-11-18T04:31:42.114Z",
