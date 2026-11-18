@@ -1186,8 +1186,8 @@ export function createRelay(options = {}) {
       log(`${signal}: shutting down | ${report()}`);
       return close(1012);
     },
-    // A deploy's SIGTERM, when the relay may outlive it (Railway's drainingSeconds, in
-    // relay/railway.json): the new relay already takes every new socket, so the world's
+    // A deploy's SIGTERM, when the relay may outlive it (Railway's drainingSeconds, set by
+    // relay/.railway/railway.ts): the new relay already takes every new socket, so the world's
     // matches under way play out here, and every other room moves now. Resolves when the
     // last match has ended, or at maxMs, whichever is first; then shutdown() as before.
     drain(signal, maxMs) {
@@ -1223,7 +1223,7 @@ export function exitOnSignal(relay, proc = process, graceMs = 3000, drainMs = 0)
 }
 
 /** How long a deploy's SIGTERM lets the world's matches play out (BR_DRAIN_SECS, default 25
- *  minutes), under Railway's drainingSeconds in relay/railway.json (30), so the relay exits on
+ *  minutes), under Railway's drainingSeconds (30, relay/.railway/railway.ts), so the relay exits on
  *  its own before Railway's SIGKILL. 0: shut down at once, as before. */
 export function drainMsFromEnv(env = process.env) {
   const secs = env.BR_DRAIN_SECS === undefined ? 1500 : Number(env.BR_DRAIN_SECS);
