@@ -226,7 +226,10 @@ nothing from it. Change a setting by editing the file and, from `relay/` with a 
 
 The file is the WHOLE project, `kanto-br-relay`, which also holds Kanto BR's relay (service
 `relay`). A service, variable or setting left out of it is one `apply` deletes or resets, so read
-the plan before applying. Two traps from the migration: `railway config migrate` dropped
+the plan before applying. **`apply` redeploys the service** (2026-11-18, deploy f2164d35), so
+check `/health` shows no live match first. The deploy records the value: `railway deployment list
+--json` has `meta.serviceManifest.deploy.drainingSeconds` (1800); `drains:true` in `/health` is
+hardcoded and proves nothing about it. Two traps from the migration: `railway config migrate` dropped
 `drainingSeconds` (its file had no deploy settings at all), and `railway config pull` writes
 Kanto's TCP proxy as `networking: { tcpProxies: ... }`, which the engine reads back as no
 networking; `tcp: [7790]` is the form that plans clean. On Windows in Git Bash, run the CLI as
