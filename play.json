@@ -1,7 +1,38 @@
 {
- "readAt": "2026-11-17T23:12:12.544Z",
+ "readAt": "2026-11-18T00:12:18.667Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "BFA7X3",
+   "at": "2026-11-18T00:04:51.132Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-18T00:05:00.450Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-18T00:05:09.220Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "YE294X",
    "at": "2026-11-17T21:37:52.024Z",
