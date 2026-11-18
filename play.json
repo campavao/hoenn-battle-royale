@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-18T18:29:55.964Z",
+ "readAt": "2026-11-18T18:45:00.525Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -22,7 +22,7 @@
      "mode": "host",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1027
     }
    ],
    "live": true,
@@ -8427,6 +8427,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-18T18:39:56.054Z",
+   "code": "FXUM9H",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 903,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
+  {
+   "t": "2026-11-18T18:34:13.334Z",
+   "code": "AFJVJ3",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 1,
+   "stalls": 2,
+   "longest": 98,
+   "checks": 792,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
   {
    "t": "2026-11-18T18:24:47.674Z",
    "code": "H6FEQ4",
