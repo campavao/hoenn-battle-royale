@@ -1,7 +1,23 @@
 {
- "readAt": "2026-11-18T21:45:32.958Z",
+ "readAt": "2026-11-18T22:15:35.967Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "Z4RF94",
+   "at": "2026-11-18T22:07:22.726Z",
+   "end": "2026-11-18T22:07:28.270Z",
+   "secs": 6,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "UV46GT",
    "at": "2026-11-18T18:52:51.369Z",
@@ -8442,6 +8458,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-18T22:09:38.515Z",
+   "code": "UQEC86",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 474,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
   {
    "t": "2026-11-18T21:40:07.002Z",
    "code": "X4ZBR7",
