@@ -1,17 +1,17 @@
 {
- "readAt": "2026-11-18T01:12:27.806Z",
+ "readAt": "2026-11-18T01:58:47.904Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "NHS5V2",
    "at": "2026-11-18T01:06:45.216Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-18T01:22:26.823Z",
+   "secs": 942,
    "door": "open",
    "mode": "host",
    "humans": 4,
    "together": 4,
-   "spectators": 0,
+   "spectators": 1,
    "matches": 1,
    "joins": [
     {
@@ -25,6 +25,10 @@
     {
      "t": "2026-11-18T01:07:30.896Z",
      "how": "code"
+    },
+    {
+     "t": "2026-11-18T01:17:24.941Z",
+     "how": "spectate"
     }
    ],
    "versions": [],
@@ -38,7 +42,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -8223,6 +8226,104 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-18T01:39:37.144Z",
+   "code": "W2CNQY",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 956,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-18T01:33:22.468Z",
+   "code": "3ZF38A",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 7,
+   "checks": 1146,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-18T01:26:09.500Z",
+   "code": "236M3X",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 1055,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-18T01:21:26.722Z",
+   "code": "NHS5V2",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 832,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-18T01:17:16.912Z",
+   "code": "NHS5V2",
+   "v": "90be997",
+   "watched": 224,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 581,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-18T01:14:41.933Z",
+   "code": "NHS5V2",
+   "v": "90be997",
+   "watched": 5,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 427,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-18T01:13:24.495Z",
+   "code": "AZ2YVS",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 753,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
   {
    "t": "2026-11-18T01:08:25.579Z",
    "code": "XQ9DBP",
