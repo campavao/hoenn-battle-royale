@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "description": "Only for `railway config plan/apply` on relay/.railway/railway.ts; the relay itself does not use it.",
+  "type": "module",
+  "devDependencies": {
+    "railway": "3.17.0"
+  }
+}

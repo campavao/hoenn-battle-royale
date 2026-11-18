@@ -203,7 +203,7 @@ gate, so a red one can follow a good deploy.
 
 A relay deploy used to end every match: the world lives in the relay's memory. Now the old relay
 drains. Railway sends it SIGTERM once the new one is up and holds off SIGKILL for
-`drainingSeconds` (30 minutes, `relay/railway.json`). The new relay takes every new socket. The
+`drainingSeconds` (30 minutes, set on the service from `relay/.railway/railway.ts`, below). The new relay takes every new socket. The
 old one keeps playing the matches under way, closes every other room at once (its phones
 reconnect, land on the new relay, and their `again` opens the room there under the same code),
 moves each match's room the same way when it ends, and exits when the last one has, or after
@@ -211,6 +211,28 @@ moves each match's room the same way when it ends, and exits when the last one h
 A page whose world bundle changed is told to reload (`old`) when it moves, between matches.
 `/health` says `"drains":true` on a relay that does this, and `"draining":true` while it does.
 The first deploy of a relay that drains still replaces one that doesn't, so that one waited.
+
+### The relay's Railway settings (2026-11-18)
+
+`relay/.railway/railway.ts` is the Railway project's settings as code (Railway's Infrastructure
+as Code; it replaced `relay/railway.json`, which Railway stops reading on 2026-12-01). Railway does
+not read it on a deploy: the settings live on the service, so the release's `railway up` needs
+nothing from it. Change a setting by editing the file and, from `relay/` with a local
+`railway login` and `railway link` to `hoenn-relay`, running
+
+    npm --prefix .railway ci
+    railway config plan      # must list only the change you meant
+    railway config apply --yes
+
+The file is the WHOLE project, `kanto-br-relay`, which also holds Kanto BR's relay (service
+`relay`). A service, variable or setting left out of it is one `apply` deletes or resets, so read
+the plan before applying. Two traps from the migration: `railway config migrate` dropped
+`drainingSeconds` (its file had no deploy settings at all), and `railway config pull` writes
+Kanto's TCP proxy as `networking: { tcpProxies: ... }`, which the engine reads back as no
+networking; `tcp: [7790]` is the form that plans clean. On Windows in Git Bash, run the CLI as
+`_="$EXE" "$EXE" config plan` with `EXE` the full path to `railway.exe`: the SDK checks the CLI's
+version by running `$_`, which Git Bash sets to npm's shell shim, and fails with "requires Railway
+CLI 5.42.1 or newer" otherwise.
 
 ## By tag (CI does all of the above)
 

@@ -193,8 +193,10 @@ every room without a roster or an heir, and closes each socket with 1012
 (service restart), which the page tells apart from its own network dropping. `/health` answers `{status, rooms, conns, locked}`, where
 `locked` is the matches running: deploy at `locked: 0`.
 
-Run from inside `relay/` -- the service is **`hoenn-relay`**, separate from
-the Kanto mod's relay (`kanto-br-relay`) and its own Railway project.
+Run from inside `relay/` -- the service is **`hoenn-relay`**, in the Railway project
+`kanto-br-relay` beside the Kanto mod's relay (service `relay`). Its settings (the deploy's
+30-minute drain among them) are code in `.railway/railway.ts`; docs/DEPLOY.md says how to change
+them without touching the Kanto service.
 Railway builds it with Railpack and runs `npm start`, so the start command -- and its
 192 MB heap cap, the ceiling the relay's own memory limits are sized against -- lives in
 `package.json`. (A `railway.json` used to carry it; the service never read it, so the
