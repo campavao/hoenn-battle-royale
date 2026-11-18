@@ -1,23 +1,31 @@
 {
- "readAt": "2026-11-18T06:44:22.943Z",
+ "readAt": "2026-11-18T06:59:24.938Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "U62QAE",
    "at": "2026-11-18T06:44:02.058Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-18T06:52:02.125Z",
+   "secs": 480,
    "door": "open",
    "mode": "host",
    "humans": 1,
    "together": 1,
    "spectators": 0,
-   "matches": 0,
+   "matches": 1,
    "joins": [],
    "versions": [],
    "installs": [],
-   "played": [],
-   "live": true
+   "played": [
+    {
+     "t": "2026-11-18T06:44:15.880Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
   },
   {
    "code": "YHZHJ8",
@@ -8342,6 +8350,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-18T06:52:55.669Z",
+   "code": "9NBD79",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 1,
+   "stalls": 1,
+   "longest": 13,
+   "checks": 1061,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-18T06:51:02.085Z",
+   "code": "U62QAE",
+   "v": "90be997",
+   "watched": 7,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 406,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
   {
    "t": "2026-11-18T06:43:51.840Z",
    "code": "QPGMQ3",
