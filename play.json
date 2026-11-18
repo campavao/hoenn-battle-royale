@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-18T01:58:47.904Z",
+ "readAt": "2026-11-18T02:28:50.363Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -8226,6 +8226,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-18T02:20:11.358Z",
+   "code": "FNPJ2C",
+   "v": "90be997",
+   "watched": 6,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 6,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-18T02:20:02.681Z",
+   "code": "TFV8AG",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 153,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
   {
    "t": "2026-11-18T01:39:37.144Z",
    "code": "W2CNQY",
