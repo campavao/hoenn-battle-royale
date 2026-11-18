@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-18T00:12:18.667Z",
+ "readAt": "2026-11-18T00:27:21.055Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -12,7 +12,7 @@
    "humans": 2,
    "together": 2,
    "spectators": 0,
-   "matches": 1,
+   "matches": 2,
    "joins": [
     {
      "t": "2026-11-18T00:05:00.450Z",
@@ -24,6 +24,13 @@
    "played": [
     {
      "t": "2026-11-18T00:05:09.220Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": 1102
+    },
+    {
+     "t": "2026-11-18T00:24:06.761Z",
      "mode": "host",
      "trainers": 2,
      "watching": 0,
@@ -8087,6 +8094,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-18T00:23:31.378Z",
+   "code": "BFA7X3",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1101,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-18T00:23:31.353Z",
+   "code": "BFA7X3",
+   "v": "90be997",
+   "watched": 515,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 1101,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
   {
    "t": "2026-11-17T23:10:20.209Z",
    "code": "AXMSYA",
