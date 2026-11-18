@@ -1,7 +1,23 @@
 {
- "readAt": "2026-11-18T02:43:52.763Z",
+ "readAt": "2026-11-18T02:58:54.781Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "9FQZSH",
+   "at": "2026-11-18T02:45:41.518Z",
+   "end": "2026-11-18T02:45:52.809Z",
+   "secs": 11,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "NHS5V2",
    "at": "2026-11-18T01:06:45.216Z",
@@ -8226,6 +8242,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-18T02:46:14.181Z",
+   "code": "P2EUWN",
+   "v": "90be997",
+   "watched": 14,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 15,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
+  {
+   "t": "2026-11-18T02:44:55.025Z",
+   "code": "F9KDPU",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 941,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
   {
    "t": "2026-11-18T02:40:41.692Z",
    "code": "Q4FDM6",
