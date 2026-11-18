@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-18T06:59:24.938Z",
+ "readAt": "2026-11-18T07:14:26.813Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -30,8 +30,8 @@
   {
    "code": "YHZHJ8",
    "at": "2026-11-18T06:37:19.646Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-18T07:01:06.110Z",
+   "secs": 1426,
    "door": "open",
    "mode": "host",
    "humans": 1,
@@ -47,10 +47,9 @@
      "mode": "host",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1372
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -8350,6 +8349,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-18T07:00:36.440Z",
+   "code": "YHZHJ8",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1372,
+   "drifts": 0,
+   "deploy": "b105c2ef"
+  },
   {
    "t": "2026-11-18T06:52:55.669Z",
    "code": "9NBD79",
