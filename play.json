@@ -1,7 +1,24 @@
 {
- "readAt": "2026-11-19T19:55:38.290Z",
+ "readAt": "2026-11-19T20:10:42.558Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "PGJRZW",
+   "at": "2026-11-19T20:04:34.602Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [],
+   "live": true
+  },
   {
    "code": "2QQKVD",
    "at": "2026-11-19T19:45:19.315Z",
@@ -8806,6 +8823,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-19T20:05:56.245Z",
+   "code": "EN8D23",
+   "v": "90be997",
+   "watched": 4,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 604,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
   {
    "t": "2026-11-19T19:55:00.726Z",
    "code": "BNPDM6",
