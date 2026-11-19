@@ -1,7 +1,32 @@
 {
- "readAt": "2026-11-19T18:25:26.012Z",
+ "readAt": "2026-11-19T18:40:28.470Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "C5BJ5Z",
+   "at": "2026-11-19T18:32:01.225Z",
+   "end": "2026-11-19T18:37:33.647Z",
+   "secs": 332,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-19T18:32:11.223Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
   {
    "code": "3DB8X3",
    "at": "2026-11-19T17:28:35.820Z",
@@ -8765,6 +8790,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-19T18:37:54.960Z",
+   "code": "PK3GT9",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1080,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
+  {
+   "t": "2026-11-19T18:37:33.563Z",
+   "code": "C5BJ5Z",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 322,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
   {
    "t": "2026-11-19T18:17:29.739Z",
    "code": "DBS6R8",
