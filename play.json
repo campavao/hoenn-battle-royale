@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-19T20:55:51.239Z",
+ "readAt": "2026-11-19T21:10:53.760Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "4E3XFG",
    "at": "2026-11-19T20:29:43.210Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-19T20:56:38.436Z",
+   "secs": 1615,
    "door": "open",
    "mode": "host",
    "humans": 2,
@@ -30,7 +30,6 @@
      "secs": 1332
     }
    ],
-   "live": true,
    "exact": true
   },
   {
