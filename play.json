@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-19T04:10:39.760Z",
+ "readAt": "2026-11-19T04:55:43.825Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -9,11 +9,16 @@
    "secs": null,
    "door": "open",
    "mode": "host",
-   "humans": 1,
-   "together": 1,
+   "humans": 2,
+   "together": 2,
    "spectators": 0,
    "matches": 0,
-   "joins": [],
+   "joins": [
+    {
+     "t": "2026-11-19T04:50:42.858Z",
+     "how": "code"
+    }
+   ],
    "versions": [],
    "installs": [],
    "played": [],
@@ -8639,6 +8644,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-19T04:55:07.356Z",
+   "code": "ZUSMF8",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 237,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
+  {
+   "t": "2026-11-19T04:52:46.465Z",
+   "code": "EV4D2W",
+   "v": "90be997",
+   "watched": 10,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 578,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
   {
    "t": "2026-11-19T03:29:06.412Z",
    "code": "3RKFQB",
