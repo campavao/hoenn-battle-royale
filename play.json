@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-19T10:25:21.865Z",
+ "readAt": "2026-11-19T11:10:26.586Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -67,8 +67,8 @@
   {
    "code": "XFAVF6",
    "at": "2026-11-19T03:37:03.059Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-19T10:59:15.707Z",
+   "secs": 26533,
    "door": "open",
    "mode": "host",
    "humans": 5,
@@ -95,8 +95,7 @@
    ],
    "versions": [],
    "installs": [],
-   "played": [],
-   "live": true
+   "played": []
   },
   {
    "code": "96ZYVC",
