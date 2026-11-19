@@ -1,7 +1,59 @@
 {
- "readAt": "2026-11-19T00:40:06.035Z",
+ "readAt": "2026-11-19T00:55:08.413Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "H5DJVY",
+   "at": "2026-11-19T00:43:38.290Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-19T00:43:55.329Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-19T00:43:59.901Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "9XCF93",
+   "at": "2026-11-19T00:42:31.699Z",
+   "end": "2026-11-19T00:43:44.964Z",
+   "secs": 73,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [
+    {
+     "t": "2026-11-19T00:43:26.764Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "Z4RF94",
    "at": "2026-11-18T22:07:22.726Z",
@@ -8458,6 +8510,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-19T00:54:04.649Z",
+   "code": "K7XVYZ",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 134,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
   {
    "t": "2026-11-19T00:31:55.432Z",
    "code": "X4JT9A",
