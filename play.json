@@ -1,7 +1,23 @@
 {
- "readAt": "2026-11-19T21:10:53.760Z",
+ "readAt": "2026-11-20T01:50:27.402Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "YY48N7",
+   "at": "2026-11-20T01:46:02.901Z",
+   "end": "2026-11-20T01:46:05.887Z",
+   "secs": 3,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "4E3XFG",
    "at": "2026-11-19T20:29:43.210Z",
@@ -8922,6 +8938,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-20T01:49:17.950Z",
+   "code": "4JPTV4",
+   "v": "90be997",
+   "watched": 6,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 127,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
+  {
+   "t": "2026-11-20T01:45:55.771Z",
+   "code": "7HQRHV",
+   "v": "90be997",
+   "watched": 10,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 11,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
   {
    "t": "2026-11-19T20:55:33.248Z",
    "code": "4E3XFG",
