@@ -1,12 +1,107 @@
 {
- "readAt": "2026-11-20T14:04:03.482Z",
+ "readAt": "2026-11-20T14:19:06.691Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "W5BDND",
-   "at": "2026-11-20T14:02:58.595Z",
+   "code": "VYJR9K",
+   "at": "2026-11-20T14:14:30.457Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-20T14:14:55.329Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-20T14:14:57.245Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "FVU4E9",
+   "at": "2026-11-20T14:09:42.201Z",
+   "end": "2026-11-20T14:14:27.170Z",
+   "secs": 285,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 1,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-20T14:10:45.540Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-20T14:13:47.959Z",
+     "how": "spectate"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-20T14:10:52.678Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "XDAZWB",
+   "at": "2026-11-20T14:05:55.491Z",
+   "end": "2026-11-20T14:09:36.651Z",
+   "secs": 221,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-20T14:06:29.770Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-20T14:06:34.806Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "W5BDND",
+   "at": "2026-11-20T14:02:58.595Z",
+   "end": "2026-11-20T14:06:09.126Z",
+   "secs": 191,
    "door": "open",
    "mode": "host",
    "humans": 2,
@@ -30,7 +125,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -9278,6 +9372,90 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-20T14:14:27.142Z",
+   "code": "FVU4E9",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 214,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
+  {
+   "t": "2026-11-20T14:14:07.971Z",
+   "code": "FVU4E9",
+   "v": "90be997",
+   "watched": 15,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 19,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
+  {
+   "t": "2026-11-20T14:09:36.650Z",
+   "code": "XDAZWB",
+   "v": "90be997",
+   "watched": 4,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 181,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
+  {
+   "t": "2026-11-20T14:08:25.652Z",
+   "code": "XDAZWB",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 110,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
+  {
+   "t": "2026-11-20T14:06:09.126Z",
+   "code": "W5BDND",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 148,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
+  {
+   "t": "2026-11-20T14:05:54.139Z",
+   "code": "W5BDND",
+   "v": "90be997",
+   "watched": 12,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 133,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
   {
    "t": "2026-11-20T14:01:54.740Z",
    "code": "WU5X2M",
