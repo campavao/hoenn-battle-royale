@@ -1,12 +1,59 @@
 {
- "readAt": "2026-11-20T13:49:00.534Z",
+ "readAt": "2026-11-20T14:04:03.482Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "WU5X2M",
-   "at": "2026-11-20T13:40:22.616Z",
+   "code": "W5BDND",
+   "at": "2026-11-20T14:02:58.595Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-20T14:03:35.573Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-20T14:03:40.177Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "QMCMYP",
+   "at": "2026-11-20T14:02:48.716Z",
+   "end": "2026-11-20T14:03:02.577Z",
+   "secs": 14,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "WU5X2M",
+   "at": "2026-11-20T13:40:22.616Z",
+   "end": "2026-11-20T14:02:23.850Z",
+   "secs": 1321,
    "door": "open",
    "mode": "host",
    "humans": 2,
@@ -27,10 +74,9 @@
      "mode": "host",
      "trainers": 2,
      "watching": 0,
-     "secs": null
+     "secs": 1252
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -9232,6 +9278,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-20T14:01:54.740Z",
+   "code": "WU5X2M",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1251,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
+  {
+   "t": "2026-11-20T14:01:54.699Z",
+   "code": "WU5X2M",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1251,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
   {
    "t": "2026-11-20T13:39:32.916Z",
    "code": "H8M4MT",
