@@ -1,7 +1,24 @@
 {
- "readAt": "2026-11-20T03:50:48.785Z",
+ "readAt": "2026-11-20T04:05:51.250Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "G3EXQ2",
+   "at": "2026-11-20T04:05:23.341Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [],
+   "live": true
+  },
   {
    "code": "VPXJXH",
    "at": "2026-11-20T03:41:12.094Z",
@@ -9068,6 +9085,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-20T03:50:50.077Z",
+   "code": "5D9PR8",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 228,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
   {
    "t": "2026-11-20T03:48:20.284Z",
    "code": "VPXJXH",
