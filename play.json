@@ -1,7 +1,54 @@
 {
- "readAt": "2026-11-20T13:18:54.930Z",
+ "readAt": "2026-11-20T13:33:57.776Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "H8M4MT",
+   "at": "2026-11-20T13:19:01.656Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-20T13:19:29.254Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-20T13:19:31.015Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "EGDKEM",
+   "at": "2026-11-20T13:18:55.368Z",
+   "end": "2026-11-20T13:18:57.609Z",
+   "secs": 2,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "GPY5TN",
    "at": "2026-11-20T13:18:45.254Z",
@@ -21,8 +68,8 @@
   {
    "code": "GJQAE2",
    "at": "2026-11-20T13:10:55.616Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-20T13:19:01.177Z",
+   "secs": 486,
    "door": "open",
    "mode": "host",
    "humans": 2,
@@ -46,7 +93,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -9156,6 +9202,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-20T13:19:01.176Z",
+   "code": "GJQAE2",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 4,
+   "checks": 36,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
   {
    "t": "2026-11-20T13:18:42.799Z",
    "code": "GJQAE2",
