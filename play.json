@@ -1,12 +1,43 @@
 {
- "readAt": "2026-11-20T13:33:57.776Z",
+ "readAt": "2026-11-20T13:49:00.534Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "H8M4MT",
-   "at": "2026-11-20T13:19:01.656Z",
+   "code": "WU5X2M",
+   "at": "2026-11-20T13:40:22.616Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-20T13:40:59.637Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-20T13:41:02.829Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "H8M4MT",
+   "at": "2026-11-20T13:19:01.656Z",
+   "end": "2026-11-20T13:40:15.034Z",
+   "secs": 1273,
    "door": "open",
    "mode": "host",
    "humans": 2,
@@ -27,10 +58,9 @@
      "mode": "host",
      "trainers": 2,
      "watching": 0,
-     "secs": null
+     "secs": 1202
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -9202,6 +9232,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-20T13:39:32.916Z",
+   "code": "H8M4MT",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 8,
+   "longest": 7,
+   "checks": 1201,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
+  {
+   "t": "2026-11-20T13:39:32.882Z",
+   "code": "H8M4MT",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 1201,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
   {
    "t": "2026-11-20T13:19:01.176Z",
    "code": "GJQAE2",
