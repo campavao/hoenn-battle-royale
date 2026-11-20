@@ -1,7 +1,23 @@
 {
- "readAt": "2026-11-20T06:06:21.897Z",
+ "readAt": "2026-11-20T07:36:28.525Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "PW72ZB",
+   "at": "2026-11-20T07:29:10.428Z",
+   "end": "2026-11-20T07:29:17.088Z",
+   "secs": 7,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "G3EXQ2",
    "at": "2026-11-20T04:05:23.341Z",
