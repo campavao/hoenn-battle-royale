@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-20T17:04:35.562Z",
+ "readAt": "2026-11-20T17:19:39.514Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "37NFQB",
    "at": "2026-11-20T17:03:21.795Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-20T17:16:15.969Z",
+   "secs": 774,
    "door": "open",
    "mode": "host",
    "humans": 1,
@@ -22,10 +22,9 @@
      "mode": "host",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 725
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -9437,6 +9436,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-20T17:15:53.484Z",
+   "code": "3DF44F",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1026,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
+  {
+   "t": "2026-11-20T17:15:44.314Z",
+   "code": "37NFQB",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 6,
+   "cam": 0,
+   "lost": 1,
+   "stalls": 10,
+   "longest": 13,
+   "checks": 711,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
   {
    "t": "2026-11-20T16:58:24.683Z",
    "code": "ATA4GJ",
