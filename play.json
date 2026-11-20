@@ -1,7 +1,54 @@
 {
- "readAt": "2026-11-20T12:48:50.680Z",
+ "readAt": "2026-11-20T13:18:54.930Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "GPY5TN",
+   "at": "2026-11-20T13:18:45.254Z",
+   "end": "2026-11-20T13:18:51.087Z",
+   "secs": 6,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "GJQAE2",
+   "at": "2026-11-20T13:10:55.616Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-20T13:11:18.141Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-20T13:11:28.971Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "PW72ZB",
    "at": "2026-11-20T07:29:10.428Z",
@@ -9109,6 +9156,48 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-20T13:18:42.799Z",
+   "code": "GJQAE2",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 16,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
+  {
+   "t": "2026-11-20T13:18:21.317Z",
+   "code": "GJQAE2",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 4,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 2,
+   "checks": 412,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
+  {
+   "t": "2026-11-20T13:18:06.331Z",
+   "code": "GJQAE2",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 397,
+   "drifts": 0,
+   "deploy": "ac957026"
+  },
   {
    "t": "2026-11-20T12:31:40.102Z",
    "code": "V53J65",
