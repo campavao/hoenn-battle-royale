@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-20T17:19:39.514Z",
+ "readAt": "2026-11-20T17:34:42.331Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -46,8 +46,8 @@
   {
    "code": "UFUQ2E",
    "at": "2026-11-20T14:41:07.901Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-20T17:30:00.974Z",
+   "secs": 10133,
    "door": "open",
    "mode": "host",
    "humans": 1,
@@ -57,8 +57,7 @@
    "joins": [],
    "versions": [],
    "installs": [],
-   "played": [],
-   "live": true
+   "played": []
   },
   {
    "code": "VYJR9K",
