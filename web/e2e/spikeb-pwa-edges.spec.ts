@@ -35,8 +35,9 @@ test('a home-screen app: the menu backdrop under the notch and the home bar, tap
   expect(edges.topRow, 'the backdrop under the notch').toBeGreaterThan(4);
   expect(edges.bottomRow, 'the backdrop under the home bar').toBeGreaterThan(4);
   // A tap on HOW TO PLAY still opens it: the hit is where the tile is drawn.
-  const tile = page.locator('#ui-hits [data-id], #ui-hits *').filter({ hasText: /HOW TO PLAY/ }).first();
-  await tile.click();
+  // The tile itself, not the first thing whose text holds it (that was the whole list, whose
+  // middle is a gap once LEADERBOARD joined the row).
+  await page.locator('#lobby-howto').click();
   await expect.poll(() => page.evaluate(() => (window as any).__spike.lobby.stage.current !== (window as any).__spike.lobby.main), { timeout: 5000 }).toBe(true);
   // An opaque status bar on iOS: under black-translucent the page ran up under the clock, where
   // iOS blurs, and came out short at the bottom (Cam's screenshot, 11-10).

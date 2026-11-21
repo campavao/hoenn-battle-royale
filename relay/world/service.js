@@ -10239,6 +10239,8 @@ var ART = {
   code: { item: 265 },
   daily: { item: 93 },
   howto: { item: 361 },
+  // KING'S ROCK: the crown.
+  leaderboard: { item: 187 },
   // The ITEMFINDER: it finds what is hidden.
   debug: { item: 261 },
   feedback: { item: 121 }
@@ -10248,6 +10250,12 @@ var FEEDBACK_ROW = {
   action: { kind: "feedback" },
   id: "lobby-feedback",
   art: ART.feedback
+};
+var LEADERBOARD_ROW = {
+  label: "LEADERBOARD",
+  action: { kind: "leaderboard" },
+  id: "lobby-leaderboard",
+  art: ART.leaderboard
 };
 var HOWTO_ROW = {
   label: "HOW TO PLAY",
@@ -15740,6 +15748,16 @@ function over(room) {
   if (r.winner) return true;
   return r.entrants.length > 0 && r.entrants.every(([id2]) => r.fallen.some((f) => f.id === id2));
 }
+function standings(r) {
+  const n = r.entrants.length;
+  const place = /* @__PURE__ */ new Map();
+  if (r.winner) place.set(r.winner, 1);
+  for (const [id2] of r.entrants) if (!r.winner && !r.fallen.some((f) => f.id === id2)) place.set(id2, 1);
+  r.fallen.forEach((f, i) => {
+    if (!place.has(f.id)) place.set(f.id, n - i);
+  });
+  return place;
+}
 
 // web/spike-b/shared/wire.ts
 var HASH_EVERY = 60;
@@ -15816,6 +15834,20 @@ var ROOM_AWAY_MS = 2e4;
 var JANK_APART_MS = 3e4;
 var NOWHERE = { send: () => void 0, close: () => void 0 };
 var FIRST_ID = 1e3;
+var PLAYER_KEY = /^[0-9a-f]{32}$/;
+function resultLine(code, res, ranked) {
+  const place = standings(res);
+  const best = /* @__PURE__ */ new Map();
+  for (const [id2] of res.entrants) {
+    const who2 = ranked.get(id2), at2 = place.get(id2);
+    if (!who2 || at2 === void 0) continue;
+    const was = best.get(who2.pid);
+    if (!was || at2 < was.place) best.set(who2.pid, { place: at2, name: who2.name, skin: who2.skin });
+  }
+  if (!best.size) return null;
+  const rows = [...best].sort((a, b2) => a[1].place - b2[1].place).map(([pid, b2]) => `${b2.place} ${pid} ${b2.skin} ${b2.name.replace(/\s+/g, "_") || "-"}`);
+  return `result ${code} | of ${res.entrants.length} | ${rows.join(" | ")}`;
+}
 function who(p) {
   return `${p.name.replace(/\s+/g, "_")}#${p.id}`;
 }
@@ -15935,7 +15967,7 @@ var WorldService = class {
           const name = String(m.name ?? "").toUpperCase().replace(/[^A-Z0-9 ]/g, "").trim().slice(0, 10);
           const skin = Number.isInteger(m.skin) && m.skin >= 0 && m.skin < 16 ? m.skin : 0;
           const id2 = this.nextId++;
-          phone = { id: id2, name: name || `TRAINER ${id2 - FIRST_ID + 1}`.slice(0, 10), skin, link, heard: this.opts.now(), synced: -Infinity, key: Math.random().toString(36).slice(2, 12), away: 0, watching: 0, ...recOf(m.rec) };
+          phone = { id: id2, name: name || `TRAINER ${id2 - FIRST_ID + 1}`.slice(0, 10), skin, link, heard: this.opts.now(), synced: -Infinity, key: Math.random().toString(36).slice(2, 12), away: 0, watching: 0, ...recOf(m.rec), ...this.pidOf(m.pk) };
           room2.members.set(id2, phone);
           this.where.set(id2, room2);
           const hosted = !room2.owner && !room2.quick;
@@ -15946,6 +15978,7 @@ var WorldService = class {
           this.roster(room2);
           if (room2.host) {
             room2.host.join(phone.name, phone.skin, void 0, id2);
+            this.rank(room2, phone);
             this.send(link, { t: "hello", id: id2, state: room2.host.room.state(), key: phone.key });
             this.teamsTo(room2, link);
           }
@@ -16239,8 +16272,10 @@ var WorldService = class {
     const host = new Host(r, bots, this.opts.maps, void 0, { onLog: (seat, log) => {
       this.publishLog(room.code, seat, log);
     } });
+    room.ranked = /* @__PURE__ */ new Map();
     for (const p of room.members.values()) {
       host.join(p.name, p.skin, void 0, p.id);
+      this.rank(room, p);
       p.heard = room.t0 = this.opts.now();
     }
     host.lock();
@@ -16262,6 +16297,9 @@ var WorldService = class {
     const res = room.host?.room.results;
     this.opts.log(`world: room ${room.code} over${res?.winner ? `, ${res.entrants.find(([id2]) => id2 === res.winner)?.[1]} wins` : ""}`);
     if (room.host) this.opts.log(`match ${room.code} ended after ${Math.round((this.opts.now() - room.t0) / 1e3)}s`);
+    const line2 = res && room.ranked ? resultLine(room.code, res, room.ranked) : null;
+    if (line2) this.opts.log(line2);
+    room.ranked = void 0;
     for (const id2 of [...room.logs.keys()]) this.closeLog(room, id2);
     room.host = null;
     room.streams.clear();
@@ -16273,6 +16311,14 @@ var WorldService = class {
     }
     this.roster(room);
     if (this.draining) this.move(room);
+  }
+  /** A LEADERBOARD id for a join's `pk`, or none. */
+  pidOf(pk) {
+    return this.opts.playerId && typeof pk === "string" && PLAYER_KEY.test(pk) ? { pid: this.opts.playerId(pk) } : {};
+  }
+  /** `p` is a trainer in the room's match: their place is logged at its end. */
+  rank(room, p) {
+    if (p.pid && room.ranked) room.ranked.set(p.id, { pid: p.pid, name: p.name, skin: p.skin });
   }
   /** A quick room back from a match, waiting for READY UP: no match, no count. */
   waiting(room) {
@@ -16502,4 +16548,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "8bf416d60de1";
+export const WORLD_HASH = "baa9757b8dc8";

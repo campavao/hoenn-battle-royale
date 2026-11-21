@@ -19,6 +19,7 @@ import { Host, play } from './shared/host';
 import { BOT_FILL } from '../src/match/room';
 import type { JankCounts } from './jank';
 import { recorder } from './recorder';
+import { playerKey } from '../src/match/career';
 import type { BattleEvent } from './shared/battlelog';
 import { LOG_STREAM_EVENTS, chunkEvents, cleanEvents } from './shared/logwire';
 import { keysOf, makeRoom, type Actor, type Bag, type Room, type RoomEvent } from './shared/room';
@@ -446,6 +447,10 @@ export interface WorldSocket {
 /** The world this page was built with (vite's define, world-hash.ts); unset under vitest. */
 declare const __WORLD_HASH__: string | undefined;
 const WORLD = typeof __WORLD_HASH__ === 'string' ? __WORLD_HASH__ : undefined;
+/** The LEADERBOARD key a join carries; none where there is no store to keep one (a test's page). */
+function leaderKey(): string | undefined {
+  try { return playerKey(); } catch { return undefined; }
+}
 /** The build's world, short: a `stat` line's version (the relay keeps 16 characters). */
 export const WORLD_HASH_SHORT = (WORLD ?? 'dev').slice(0, 8);
 /** The patched ROM this page battles on (rom.ts romSha), sent with every join. */
@@ -503,7 +508,9 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
       // Back after a drop: the page says how to come back in (the room, my id and key)
       // before anything queued while it was down.
       const again = back ? h.onReconnected?.() : undefined;
-      if (again) sock.send(JSON.stringify(again));
+      // A new relay (a deploy drained the old one) seats it afresh: with the key, so the
+      // match still counts for the LEADERBOARD.
+      if (again) sock.send(JSON.stringify(again.t === 'join' ? { ...again, pk: leaderKey() } : again));
       for (const m of queue.splice(0)) sock.send(JSON.stringify(m));
     });
     sock.addEventListener('close', () => {
@@ -539,7 +546,7 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
   };
   if (!open()) { setTimeout(() => h.onClosed(), 0); return { join: () => undefined, start: () => undefined, list: () => undefined, set: () => undefined, kick: () => undefined, makeHost: () => undefined, toBot: () => undefined, leave: () => undefined, close: () => undefined }; }
   return {
-    join: (name, skin, how) => send({ t: 'join', name, skin, ...how, ...(WORLD ? { w: WORLD } : {}), ...(ROM_SHA ? { r: ROM_SHA } : {}) }),
+    join: (name, skin, how) => send({ t: 'join', name, skin, ...how, ...(WORLD ? { w: WORLD } : {}), ...(ROM_SHA ? { r: ROM_SHA } : {}), pk: leaderKey() }),
     start: () => send({ t: 'start' }),
     list: () => send({ t: 'list' }),
     set: (set) => send({ t: 'set', set }),

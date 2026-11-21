@@ -13,6 +13,8 @@
 //   <dir>/stats.json    the newest heartbeat: who is on right now, peaks since deploy
 //   <dir>/feedback.json which deployments were read for players' notes (POK-428):
 //                       deployment ids only, never anything a note said
+//   <dir>/leaderboard.json the LEADERBOARD (#397's suggestion): every ranked player's rating
+//                       from the `result` lines, which the game's menu and /play.html draw
 //
 // <dir> is PLAY_LOG_DIR (default `play-log`). The workflow checks the `play-log`
 // branch out there, so the every-fifteen-minutes commits never touch the code
@@ -33,6 +35,9 @@
 //         | checks K drifts D                          one page's smoothness (POK-376)
 //   match CODE started (quick|host|daily) | N trainers [M watching] | max K
 //   match CODE ended after Ns
+//   result CODE | of N | P PID SKIN NAME | ...         a finished match's ranked trainers
+//                                                     (service.ts resultLine): place, id,
+//                                                     sprite, name
 //   feedback CODE|- | {"v","where","name","text"}       a player's note (POK-428): never
 //                                                     an event, filed as a GitHub issue instead
 //   rooms R/RC conns C/CC | sent B in L lines | peak PR rooms PC conns
@@ -51,7 +56,9 @@
 // Nothing personal lands in the files. A trainer name is only needed to pair a drop
 // line with the room that connection sat in, and a short hash of it does that just
 // as well; install ids are hashed the same way, so an install can be counted across
-// days without its wire id being on a public page.
+// days without its wire id being on a public page. The one exception is the point of
+// leaderboard.json: a ranked player's chosen trainer name, beside the id their browser's
+// key hashes to (relay/world.js playerId; the key itself is never logged).
 //
 // Env: RAILWAY_TOKEN (account scope) or RAILWAY_PROJECT_TOKEN (one environment,
 // least privilege). One or the other.
@@ -68,6 +75,7 @@ const DIR = process.env.PLAY_LOG_DIR || "play-log";
 const EVENTS = join(DIR, "events.json");
 const PLAY = join(DIR, "play.json");
 const STATS = join(DIR, "stats.json");
+const LEADERBOARD = join(DIR, "leaderboard.json");
 const FEEDBACK = join(DIR, "feedback.json");
 
 // Where a note becomes an issue: this repo's GitHub issues (Cam, 11-11: "writes to a GitHub
@@ -241,6 +249,16 @@ export function parseLine(message, fallbackAt) {
 
   if ((m = body.match(/^match ([A-Z0-9]+) ended after (\d+)s$/)))
     return { t, kind: "matchend", code: m[1], secs: Number(m[2]) };
+
+  if ((m = body.match(/^result ([A-Z0-9]+) \| of (\d+) \| (.+)$/))) {
+    const rows = [];
+    for (const part of m[3].split(" | ")) {
+      const r = part.match(/^(\d+) ([0-9a-f]{12}) (\d{1,2}) ([A-Z0-9_]{1,10}|-)$/);
+      if (!r) return null;
+      rows.push([Number(r[1]), r[2], r[4] === "-" ? "" : r[4].replace(/_/g, " "), Number(r[3])]);
+    }
+    return flag({ t, kind: "result", code: m[1], of: Number(m[2]), rows }, ...rows.map(r => r[2]));
+  }
 
   if ((m = body.match(/^room ([A-Z0-9]+) is now (open|private)$/)))
     return { t, kind: "door", code: m[1], door: m[2] };
@@ -445,6 +463,57 @@ export function parseHeartbeat(message) {
 }
 
 const key = ev => [ev.t, ev.kind, ev.code || "", ev.who || ev.install || "", ev.why || ev.how || ""].join("|");
+
+// --- the leaderboard (#397's suggestion) -------------------------------------
+//
+// Cam, 11-20: matches with two or more people only (a ranked id each; bots and pages
+// with no key are not in the line), ranked by a rating from the finishing order. Each
+// pair of ranked trainers in a match is one Elo game, the one placed higher winning it
+// (a draw for a shared place), and each trainer's share is K over the others in it, so a
+// big room moves a rating no more than a duel does. Played in order from every result
+// ever seen; a rating is only ever this file's sum of them.
+
+export const RATING_START = 1000;
+export const RATING_K = 32;
+
+export function leaderboard(events) {
+  const results = events.filter(e => e.kind === "result" && !e.test && e.rows.length >= 2)
+    .slice().sort((a, b) => a.t < b.t ? -1 : a.t > b.t ? 1 : 0);
+  const players = new Map();
+  const player = (id) => {
+    let p = players.get(id);
+    if (!p) players.set(id, p = { id, name: "", skin: 0, rating: RATING_START, played: 0, wins: 0, best: null, last: null });
+    return p;
+  };
+  for (const r of results) {
+    const seats = r.rows.map(([place, id, name, skin]) => ({ place, p: player(id), name, skin }));
+    const share = RATING_K / (seats.length - 1);
+    const moves = seats.map(a => seats.reduce((sum, b) => {
+      if (a === b) return sum;
+      const expected = 1 / (1 + 10 ** ((b.p.rating - a.p.rating) / 400));
+      const score = a.place < b.place ? 1 : a.place === b.place ? 0.5 : 0;
+      return sum + share * (score - expected);
+    }, 0));
+    seats.forEach((s, i) => {
+      s.p.rating += moves[i];
+      s.p.played += 1;
+      // Won the match: first of the room, not just first of the people in it.
+      if (s.place === 1) s.p.wins += 1;
+      if (s.p.best === null || s.place < s.p.best) s.p.best = s.place;
+      if (s.name) s.p.name = s.name;
+      // The sprite they last played in: the one the board draws them as.
+      if (Number.isInteger(s.skin)) s.p.skin = s.skin;
+      s.p.last = r.t;
+    });
+  }
+  return {
+    from: results.length ? results[0].t : null,
+    matches: results.length,
+    players: [...players.values()]
+      .map(p => ({ ...p, rating: Math.round(p.rating) }))
+      .sort((a, b) => b.rating - a.rating || b.wins - a.wins || (a.last < b.last ? 1 : -1))
+  };
+}
 
 // --- sessions --------------------------------------------------------------
 //
@@ -735,6 +804,14 @@ async function main() {
       store.events.map(e => "  " + JSON.stringify(e)).join("," + NL) +
       NL + " ]}" + NL);
     writeFileSync(PLAY, JSON.stringify({ readAt: now.toISOString(), ...out }, null, 1) + NL);
+  }
+
+  // The leaderboard, rewritten when a rating or a name moves.
+  const board = leaderboard(store.events);
+  const { readAt: _b, ...boardBefore } = readJson(LEADERBOARD, {});
+  if (JSON.stringify(boardBefore) !== JSON.stringify(board)) {
+    writeFileSync(LEADERBOARD, JSON.stringify({ readAt: now.toISOString(), ...board }, null, 1) + "\n");
+    console.log(`wrote ${LEADERBOARD}: ${board.players.length} players, ${board.matches} matches`);
   }
 
   // The heartbeat: compare the counters only. `at` moves every five minutes whether

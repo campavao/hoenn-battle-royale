@@ -8,10 +8,12 @@ import { Stage, type DrawnScreen } from '../src/ui/stage';
 import { loadStats, setStatsOff } from '../src/match/stats';
 import { menuScreen, noticeScreen, roomScreen, sheetScreen, type RoomModel, type RowSpec, type SheetModel } from '../src/ui/screens';
 import { CODE_ENTRY, NAME_ENTRY, PASS_ENTRY, entryScreen, newEntry } from '../src/ui/entry';
-import { FEEDBACK_ROW, HOWTO_ROW, rewatchRow, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction } from '../src/match/lobby';
+import { FEEDBACK_ROW, HOWTO_ROW, LEADERBOARD_ROW, rewatchRow, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction } from '../src/match/lobby';
 import { howToScreen } from '../src/ui/howto';
 import { howToRead, markHowToRead } from '../src/ui/howto-due';
-import { SKINS, cleanName, exportCareer, importCareer, loadCareer, saveProfile, skinUnlocked } from '../src/match/career';
+import { SKINS, cleanName, exportCareer, importCareer, loadCareer, playerId, playerKey, saveProfile, skinUnlocked } from '../src/match/career';
+import { boardView, fetchBoard, type Board } from '../src/match/leaderboard';
+import { leaderboardScreen } from '../src/ui/leaderboard';
 import { LINES } from '../src/bots/lines';
 import { NAMES } from '../src/bots/roster';
 import { lookScreen, seatScreen, statsScreen, trainerScreen } from '../src/ui/profile';
@@ -221,6 +223,7 @@ export class Lobby {
     else if (a.kind === 'code') this.stage.push(this.codeEntry());
     else if (a.kind === 'name') this.stage.push(this.nameEntry());
     else if (a.kind === 'howto') this.stage.push(this.howTo);
+    else if (a.kind === 'leaderboard') this.openBoard();
     else if (a.kind === 'lobbies') { this.hooks.list(); this.stage.push(this.lobbies); }
     else if (a.kind === 'join') {
       if (a.pass) this.stage.push(this.passEntry('PASSCODE', '', (pass) => this.hooks.join({ code: a.code, pass })));
@@ -408,6 +411,26 @@ export class Lobby {
     redraw: () => { if (this.stage.current === this.howTo) this.stage.redraw(); },
   }));
 
+  /** The LEADERBOARD as last read, and this browser's id on it. */
+  private board: Board | null | 'loading' = 'loading';
+  private boardMe: string | null = null;
+  private readonly leaderboard: DrawnScreen = leaderboardScreen(() => ({
+    view: boardView(this.board, this.boardMe),
+    onBack: () => this.stage.pop(),
+  }));
+
+  /** LEADERBOARD: up at once, filled in when the file comes (play-log.mjs writes it). */
+  private openBoard(): void {
+    this.board = 'loading';
+    this.stage.push(this.leaderboard);
+    const redraw = () => { if (this.stage.current === this.leaderboard) this.stage.redraw(); };
+    void (async () => {
+      try { this.boardMe = await playerId(playerKey()); } catch { this.boardMe = null; }
+      this.board = await fetchBoard();
+      redraw();
+    })();
+  }
+
   private panPending = false;
   private readonly main: DrawnScreen = menuScreen(() => ({
     title: 'HOENN BATTLE ROYALE',
@@ -415,7 +438,7 @@ export class Lobby {
     rows: playRows(this.link)
       .filter((r) => r.action.kind === 'quick' || r.action.kind === 'solo' || r.action.kind === 'host' || r.action.kind === 'lobbies' || r.action.kind === 'code')
       // The match a reload left too late to come back into (HBR-20): WATCH it.
-      .concat(this.rewatch ? [rewatchRow(this.rewatch)] : [], HOWTO_ROW, FEEDBACK_ROW)
+      .concat(this.rewatch ? [rewatchRow(this.rewatch)] : [], LEADERBOARD_ROW, HOWTO_ROW, FEEDBACK_ROW)
       .map((r): RowSpec => ({ label: r.label, id: r.id, art: r.art, onPress: () => this.press(r.action), ...(r.id === HOWTO_ROW.id && !howToRead(localStorage) ? { badge: true } : {}) })),
     rowsId: 'lobby-rows',
     tiles: true,

@@ -30,7 +30,7 @@ export const FILE_SECONDS = {
   'spikeb-bag-tm-stone.spec.ts': 150,
   'spikeb-fog-menu.spec.ts': 170,
   'spikeb-doll.spec.ts': 90,
-  'spikeb-menu.spec.ts': 209,
+  'spikeb-menu.spec.ts': 230,
   'spikeb-banners.spec.ts': 320,
   'spikeb-botbag.spec.ts': 90,
   'spikeb-leader-drop.spec.ts': 100,
