@@ -1066,7 +1066,8 @@ export function createRelay(options = {}) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: limits.line });
   // Spike B's shared world (world.js): its own sockets, its own caps.
   // Its matches count in the heartbeat's `matches` with the rooms' (play.html's tile).
-  const world = createWorld({ log: (line) => {
+  // `options.world`: a test's Discord webhook and its fetch (world.js, discord.js).
+  const world = createWorld({ ...options.world, log: (line) => {
     if (/^match \S+ started/.test(line)) traffic.matches += 1;
     log(line);
   } });
@@ -1168,6 +1169,7 @@ export function createRelay(options = {}) {
     rooms,
     conns,
     limits,
+    world,
     listen(port, host) {
       return new Promise((resolve, reject) => {
         httpServer.once("error", reject);

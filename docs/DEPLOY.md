@@ -237,6 +237,19 @@ networking; `tcp: [7790]` is the form that plans clean. On Windows in Git Bash, 
 version by running `$_`, which Git Bash sets to npm's shell shim, and fails with "requires Railway
 CLI 5.42.1 or newer" otherwise.
 
+### The Discord (2026-11-21)
+
+`tools/br/discord-setup.mjs` laid out the community server Cam made (channels, the Mod role,
+AutoMod, the welcome post, a permanent invite). It runs again safely, and needs a bot token
+(`~/.hbr-discord-token`) only while it runs. It writes its three webhook URLs to
+`~/.hbr-discord.json`. Each one is a secret, so none of them goes in the repo:
+
+- `rooms` is the relay's `DISCORD_ROOMS_WEBHOOK` (relay/discord.js). Set it with
+  `railway variable set DISCORD_ROOMS_WEBHOOK --stdin --service hoenn-relay --skip-deploys`
+  (the URL on stdin, not the command line), so it takes effect at the next release, not mid-match. `.railway/railway.ts` `preserve()`s it.
+- `releases` is the repo secret `DISCORD_RELEASES_WEBHOOK`, which the release job's last step posts
+  to. A release without it posts nothing and still passes.
+
 ## By tag (CI does all of the above)
 
 ```bash
