@@ -1,7 +1,33 @@
 {
- "readAt": "2026-11-21T03:22:09.374Z",
+ "readAt": "2026-11-21T11:57:21.351Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "NMCBBS",
+   "at": "2026-11-21T11:56:13.376Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-21T11:56:32.804Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "KV34NS",
    "at": "2026-11-21T01:21:12.708Z",
