@@ -22,9 +22,10 @@ const STEPS = [
   { at: 2, cx: 188, h: 18, color: '#d09058', edge: '#985830' },
 ] as const;
 /** Where the steps stand, from the frame's top: their names and ratings go under it. */
-const BASE = 82;
-/** A row past the podium: a whole sprite high. */
-const LIST_ROW_H = 34;
+const BASE = 74;
+/** A row past the podium: the person in a sprite, not its whole 32-pixel frame (Cam, 11-20:
+ *  "too much white space"). */
+const LIST_ROW_H = 26;
 /** A sprite's person stands on the bottom of its 32-pixel frame, a pixel up. */
 const FEET = 1;
 
@@ -68,10 +69,10 @@ function paintList(c: EmeraldCanvas, y: number, rows: number, rest: readonly Boa
     const ry = y + 6 + i * LIST_ROW_H;
     // The row before you, when rows are skipped to reach you: a line of dots says so.
     if (gap && i === shown.length - 1) c.fillRect({ x: 12, y: ry - 1, w: W - 24, h: 1 }, '#b8b8c0');
-    sprite(c, e.skin, 22, ry + LIST_ROW_H - 1);
     const color = e.mine ? TEXT_BLUE : TEXT_DARK;
-    // Level with the person, who fills the lower three quarters of the sprite.
-    const ty = ry + Math.floor((LIST_ROW_H - ROW_H) / 2) + 2;
+    const ty = ry + Math.floor((LIST_ROW_H - ROW_H) / 2);
+    // The person (the lower three quarters of the sprite's frame) centred on the words.
+    sprite(c, e.skin, 22, ty + 19);
     const place = `${e.place}.`;
     c.drawText(place, 38, ty, color);
     const rating = String(e.rating);
