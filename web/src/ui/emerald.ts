@@ -167,12 +167,20 @@ function plainText(ctx: CanvasRenderingContext2D, text: string, x: number, y: nu
   ctx.font = '11px system-ui, sans-serif';
   ctx.textBaseline = 'top';
   // As wide as the ROM's letters would be, never wider: whatever was laid out round them fits.
+  // The shadow a hair off, not a whole pixel: drawn sharp (EmeraldCanvas.res), a GBA
+  // pixel's offset read as the words twice.
   ctx.fillStyle = color.shadow;
-  ctx.fillText(text, x + 1, y + 2, w);
+  ctx.fillText(text, x + 0.5, y + 1.5, w);
   ctx.fillStyle = color.fg;
   ctx.fillText(text, x, y + 1, w);
   ctx.restore();
   return w;
+}
+
+/** Canvas pixels per GBA pixel before the ROM's font is here: the screen's own (capped, a
+ *  phone at 3x is already ~1200 px across), never under 1. */
+export function sharpRes(scale: number, dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1): number {
+  return Math.max(1, Math.min(scale * (dpr || 1), 6));
 }
 
 /** A window's plain edge, for before the ROM's frame is here. */
@@ -277,6 +285,10 @@ export class EmeraldCanvas {
   top = 0;
   bottom = 0;
   private bled = false;
+  /** Canvas pixels per GBA pixel: 1 once the ROM's font is here; before it, the screen's
+   *  own pixels, so the plain font is sharp instead of a small font blown up (the import
+   *  screen read blurred on a phone, Cam 11-21). */
+  private res = 1;
 
   constructor(public readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -286,6 +298,8 @@ export class EmeraldCanvas {
         this.mask = mask;
         this.frame = frame;
         this.box = box;
+        // Back to one canvas pixel per GBA pixel, now the letters are the ROM's own.
+        if (this.res !== 1) this.resize(this.width, this.height, this.scale, this.top, this.bottom);
         this.onLoad?.();
       },
     );
@@ -303,8 +317,9 @@ export class EmeraldCanvas {
     this.height = h;
     this.top = top;
     this.bottom = bottom;
-    this.canvas.width = w;
-    this.canvas.height = h + top + bottom;
+    this.res = this.mask ? 1 : sharpRes(scale);
+    this.canvas.width = Math.round(w * this.res);
+    this.canvas.height = Math.round((h + top + bottom) * this.res);
     this.canvas.style.width = `${w * scale}px`;
     this.canvas.style.height = `${(h + top + bottom) * scale}px`;
     // Only a bleed this canvas set is taken back: one placed with its own `top` (the
@@ -314,7 +329,7 @@ export class EmeraldCanvas {
       this.canvas.style.top = top ? `${-top * scale}px` : '';
       this.bled = top > 0;
     }
-    this.ctx.setTransform(1, 0, 0, 1, 0, top);
+    this.ctx.setTransform(this.res, 0, 0, this.res, 0, top * this.res);
     this.ctx.imageSmoothingEnabled = false;
   }
 

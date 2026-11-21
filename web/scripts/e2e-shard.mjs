@@ -56,6 +56,7 @@ export const FILE_SECONDS = {
   'spikeb-two.spec.ts': 102,
   'spikeb-lobbies-quick.spec.ts': 9,
   'spikeb-discord.spec.ts': 15,
+  'spikeb-rom-menu.spec.ts': 60,
   'spikeb-passcode.spec.ts': 9,
   'spikeb-world.spec.ts': 260,
   'watch-replay.spec.ts': 110,

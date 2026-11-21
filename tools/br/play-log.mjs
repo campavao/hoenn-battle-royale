@@ -33,6 +33,9 @@
 //   stat ID vVER | solo +N | since DATE
 //   jank CODE|- vVER | watched Ns | snaps S cam C lost L | stalls X longest Ys
 //         | checks K drifts D                          one page's smoothness (POK-376)
+//   seen STEP                                          a newcomer's step towards a first
+//                                                     match (web/spike-b/seen.ts): landing,
+//                                                     ask, rom, match, bad-<why>
 //   match CODE started (quick|host|daily) | N trainers [M watching] | max K
 //   match CODE ended after Ns
 //   result CODE | of N | P PID SKIN NAME | ...         a finished match's ranked trainers
@@ -242,6 +245,9 @@ export function parseLine(message, fallbackAt) {
     return { t, kind: "jank", code: m[1] === "-" ? null : m[1], v: safeVersion(m[2]), watched: Number(m[3]),
              snaps, cam, lost, stalls, longest, checks, drifts };
   }
+
+  if ((m = body.match(/^seen (landing|ask|rom|match|bad-(?:archive|size|game|changed))$/)))
+    return { t, kind: "seen", step: m[1] };
 
   if ((m = body.match(/^match ([A-Z0-9]+) started \((quick|host|daily)\) \| (\d+) trainers?(?: (\d+) watching)? \| max (\d+)$/)))
     return { t, kind: "match", code: m[1], mode: m[2], trainers: Number(m[3]),
@@ -553,6 +559,7 @@ export function derive(events) {
   const solo = [];
   const bounces = [];
   const jank = [];
+  const seen = [];                  // the way in (seen.ts): one per newcomer per step
   let lastSeat = null;              // the host/join just before a stat line
 
   const seat = (code, who) => { byWho.set(who, code); };
@@ -710,6 +717,9 @@ export function derive(events) {
         jank.push({ t, ...rest });
         break;
       }
+      case "seen":
+        seen.push({ t: ev.t, step: ev.step });
+        break;
       default: break;
     }
   }
@@ -729,7 +739,8 @@ export function derive(events) {
     installs: [...installs.values()].sort((a, b) => a.first < b.first ? -1 : 1),
     solo: solo.sort((a, b) => a.t < b.t ? 1 : -1),
     bounces: bounces.sort((a, b) => a.t < b.t ? 1 : -1),
-    jank: jank.sort((a, b) => a.t < b.t ? 1 : -1)
+    jank: jank.sort((a, b) => a.t < b.t ? 1 : -1),
+    seen: seen.sort((a, b) => a.t < b.t ? 1 : -1)
   };
 }
 
