@@ -19,12 +19,12 @@ export interface Panel {
 export const PANELS: readonly Panel[] = [
   {
     title: 'Start in Safari',
-    text: "Catch and collect what you can quickly in the Safari to start the game. You have a set amount of time to build up a party until the timer runs out. Nothing caught means you're out.",
+    text: "The game starts in the Safari Zone. Catch what you can before the timer runs out. Catch nothing and you're out.",
     art: 'safari',
   },
   {
     title: 'Where we flying?',
-    text: 'Pick where in Hoenn you want to drop into. You can find items and Pokémon in houses now.',
+    text: 'Pick where in Hoenn to drop in. Houses have items and Pokémon in them now.',
     art: 'hoenn',
   },
   {
@@ -44,7 +44,7 @@ export const PANELS: readonly Panel[] = [
   },
   {
     title: 'Leveling up',
-    text: 'Pokémon automatically level up as the Fog closes in. Additionally any Pokémon can learn any move.',
+    text: 'Your Pokémon level up on their own as the Fog closes in. Any Pokémon can learn any move.',
     art: 'evolve',
   },
   {
@@ -54,12 +54,12 @@ export const PANELS: readonly Panel[] = [
   },
   {
     title: 'Special events',
-    text: 'Occasionally events will occur in which you can catch Legendary Pokémon and items.',
+    text: 'Now and then an event starts, with a Legendary Pokémon to catch or rare items to grab.',
     art: 'event',
   },
   {
     title: 'How to win',
-    text: 'Be the last one standing! Keep an eye on the map, keep your party strong and healthy, and battle your way to victory.',
+    text: 'Be the last one standing! Watch the Map for where the Fog goes next, and heal up before a fight.',
     art: 'win',
   },
 ];
