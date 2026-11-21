@@ -23,10 +23,10 @@ export const posted = (r) => !r.playing && !r.pass && r.host !== "E2E";
 export function roomText(r, deadline, site = SITE) {
   const link = `<${site}/#join=${r.code}>`;
   if (r.quick) {
-    const when = deadline ? `, starts <t:${Math.round(deadline / 1000)}:R>` : "";
-    return `**QUICK PLAY** is filling: ${r.players}/${r.seats} trainers${when}\nJoin: ${link}`;
+    const when = deadline ? ` and starts <t:${Math.round(deadline / 1000)}:R>` : "";
+    return `**QUICK PLAY** has ${r.players}/${r.seats} trainers${when}.\nJoin: ${link}`;
   }
-  return `**${plain(r.host)}** is hosting: ${r.players}/${r.seats} trainers, waiting for START\nJoin: ${link}`;
+  return `**${plain(r.host)}** is hosting a room with ${r.players}/${r.seats} trainers. It starts when they press START.\nJoin: ${link}`;
 }
 
 export function startedText(r) {

@@ -291,7 +291,7 @@ export class Lobby {
    *  it to a file, LOAD takes one back. */
   private readonly careerAsk: DrawnScreen = noticeScreen(() => ({
     title: 'MY CAREER',
-    lines: [{ text: 'Your career lives in this browser. Save it to a file to keep it, or load one to carry it here.' }],
+    lines: [{ text: 'Your career is saved in this browser only. Save it to a file to keep it, or load a file to bring it here.' }],
     buttons: [
       { label: 'SAVE', id: 'career-save', onPress: () => { saveCareerFile(); this.trainerNote = 'Saved to a file.'; this.stage.pop(); } },
       { label: 'LOAD', id: 'career-load', onPress: () => { this.stage.pop(); loadCareerFile((said) => { this.trainerNote = said; this.stage.redraw(); }); } },

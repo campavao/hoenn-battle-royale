@@ -2,13 +2,15 @@
 
 Last trainer standing, in Hoenn, in the browser.
 
-**Play: https://hoenn-battle-royale.vercel.app** — on a phone or a computer, with your own
+**Play: https://hoenn-battle-royale.vercel.app** on a phone or a computer, with your own
 Pokémon Emerald (U) ROM. The site patches it in your browser and never uploads or serves
 it. Who is playing: https://hoenn-battle-royale.vercel.app/play.html
 
-A Pokémon Emerald ROM patch built from this fork of [pret/pokeemerald](https://github.com/pret/pokeemerald),
-running in mGBA compiled to WebAssembly, with a relay for rooms. The Gen 3 successor to
-[Kanto Battle Royale](https://github.com/campavao/kanto-battle-royale), and its rules are
+Community: https://discord.gg/zQdV6Nc5CR
+
+It is a Pokémon Emerald ROM patch built from this fork of [pret/pokeemerald](https://github.com/pret/pokeemerald).
+The ROM runs in mGBA compiled to WebAssembly, and a relay hosts the rooms. It follows
+[Kanto Battle Royale](https://github.com/campavao/kanto-battle-royale), whose rules are
 the spec: a Safari Zone opening, a drop, a ring that closes, a shot clock in every fight,
 one Pokémon dropped as a ball when a trainer goes down.
 
@@ -23,7 +25,7 @@ one Pokémon dropped as a ball when a trainer goes down.
    whoever gets there first.
 5. Last one standing gets the Hall of Fame. Everyone else watches.
 
-Solo vs bots, a hosted room with a passcode, quick play, and the daily game.
+You can play quick play, host a room (with a passcode if you like), or play solo against bots.
 
 | Where | What |
 |---|---|
@@ -38,8 +40,8 @@ Upstream pokeemerald's own README is [README.pokeemerald.md](README.pokeemerald.
 
 ## Releases
 
-**How to deploy, step by step: [docs/DEPLOY.md](docs/DEPLOY.md)** (the site, the relay,
-the tag flow, and what to check afterwards).
+[docs/DEPLOY.md](docs/DEPLOY.md) has the deploy steps for the site, the relay and the tag,
+and what to check afterwards.
 
 A tag is a release. `git tag -a v0.1.0 -m "what changed"` and push it: CI builds the ROM
 with agbcc (byte-matching, so the patch is our changes and nothing else), diffs it

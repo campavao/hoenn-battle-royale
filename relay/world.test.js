@@ -238,7 +238,7 @@ test("/world: a quick room waiting for players is posted to the Discord webhook,
     await relay.world.poster.tick();
     assert.equal(calls.length, 1);
     assert.equal(calls[0].method, "POST");
-    assert.ok(calls[0].content.startsWith("**QUICK PLAY** is filling: 1/30 trainers, starts <t:"), calls[0].content);
+    assert.ok(calls[0].content.startsWith("**QUICK PLAY** has 1/30 trainers and starts <t:"), calls[0].content);
     assert.ok(calls[0].content.endsWith(`Join: <https://hoenn-battle-royale.vercel.app/#join=${ra.code}>`), calls[0].content);
     a.ws.close();
     for (let i = 0; i < 50 && relay.world.rooms().length; i++) await new Promise((r) => setTimeout(r, 50));

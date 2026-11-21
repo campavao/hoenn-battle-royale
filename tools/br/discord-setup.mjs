@@ -144,16 +144,16 @@ const community = await category("COMMUNITY", ["PLAY"]);
 const hoennCat = await category("HOENN BATTLE ROYALE");
 const kantoCat = await category("KANTO BATTLE ROYALE");
 const voice = await category("VOICE");
-const welcome = await channel("welcome", { parent: info, readOnly: true, topic: "Start here: the two games, how to play them, and the rules." });
-const news = await channel("announcements", { parent: info, readOnly: true, topic: "New versions of the games, as they go live." });
+const welcome = await channel("welcome", { parent: info, readOnly: true, topic: "Read this first. It covers both games and the server's rules." });
+const news = await channel("announcements", { parent: info, readOnly: true, topic: "A post each time a new version goes live." });
 const modUpdates = await channel("mod-updates", { parent: info, hidden: true, topic: "Discord's notices for the server's mods." });
-const general = await channel("general", { parent: community, topic: "Anything Pokémon Battle Royale, either game." });
-const rooms = await channel("hoenn-open-rooms", { parent: hoennCat, readOnly: true, was: ["open-rooms"], topic: "Hoenn rooms waiting for trainers right now, posted by the game. Tap a link to join." });
-const hoennLfm = await channel("hoenn-find-a-match", { parent: hoennCat, slow: 10, was: ["looking-for-match"], topic: `Say when you're on for Hoenn. Play at ${SITE}. Quick play starts itself 60 s after the first trainer joins.` });
-const hoennFeedback = await channel("hoenn-feedback", { parent: hoennCat, was: ["feedback"], topic: "What should change in Hoenn Battle Royale? Cam reads these." });
+const general = await channel("general", { parent: community, topic: "Talk about either game here." });
+const rooms = await channel("hoenn-open-rooms", { parent: hoennCat, readOnly: true, was: ["open-rooms"], topic: "The game posts Hoenn rooms here while they wait for trainers. Tap a link to join." });
+const hoennLfm = await channel("hoenn-find-a-match", { parent: hoennCat, slow: 10, was: ["looking-for-match"], topic: `Say when you're on for Hoenn. Play at ${SITE}. Quick play starts 60 seconds after the first trainer joins.` });
+const hoennFeedback = await channel("hoenn-feedback", { parent: hoennCat, was: ["feedback"], topic: `Tell me what should change in Hoenn Battle Royale. I read every post. <@${owner}>` });
 const hoennBugs = await channel("hoenn-bugs", { parent: hoennCat, was: ["bugs"], topic: "Something broke? Say what you did, what you saw, and your phone or browser." });
-const kantoLfm = await channel("kanto-find-a-match", { parent: kantoCat, slow: 10, topic: `Say when you're on for Kanto. The mod: ${KANTO}` });
-const kantoFeedback = await channel("kanto-feedback", { parent: kantoCat, topic: "What should change in Kanto Battle Royale?" });
+const kantoLfm = await channel("kanto-find-a-match", { parent: kantoCat, slow: 10, topic: `Say when you're on for Kanto. Get the mod at ${KANTO}` });
+const kantoFeedback = await channel("kanto-feedback", { parent: kantoCat, topic: `Tell me what should change in Kanto Battle Royale. I read every post. <@${owner}>` });
 const kantoBugs = await channel("kanto-bugs", { parent: kantoCat, topic: "Something broke? Say what you did, what you saw, and your gen1recomp and mod versions." });
 // Whatever the server came with ("Create My Own" or a template's #clips-and-highlights,
 // Lobby, Gaming) moves in with the rest: text to COMMUNITY, voice to VOICE. Read afresh: the
@@ -204,7 +204,17 @@ if (news.type === 0) { await api("PATCH", `/channels/${news.id}`, { type: 5 }); 
 // ---- AutoMod: Discord's own, so it works with no bot online ---------------------------------
 const rules = await api("GET", `/guilds/${G}/auto-moderation/rules`);
 async function rule(name, body) {
-  if (rules.some((r) => r.name === name)) return;
+  const had = rules.find((r) => r.name === name);
+  if (had) {
+    // Kept, with what this file says now: its reply to a blocked message can change.
+    // Discord hands back an empty `metadata` on an action that had none.
+    const bare = (actions) => JSON.stringify(actions.map(({ type, metadata }) => (metadata && Object.keys(metadata).length ? { type, metadata } : { type })));
+    if (bare(had.actions) !== bare(body.actions)) {
+      await api("PATCH", `/guilds/${G}/auto-moderation/rules/${had.id}`, { actions: body.actions });
+      console.log(`updated AutoMod rule: ${name}`);
+    }
+    return;
+  }
   try {
     await api("POST", `/guilds/${G}/auto-moderation/rules`, { name, event_type: 1, enabled: true, ...body });
     console.log(`made AutoMod rule: ${name}`);
@@ -213,11 +223,11 @@ async function rule(name, body) {
     console.log(`AutoMod rule ${name} not made: ${err.message.slice(0, 160)}`);
   }
 }
-await rule("Slurs and sexual content", { trigger_type: 4, trigger_metadata: { presets: [2, 3] }, actions: [{ type: 1, metadata: { custom_message: "That message was blocked. Keep it friendly." } }] });
+await rule("Slurs and sexual content", { trigger_type: 4, trigger_metadata: { presets: [2, 3] }, actions: [{ type: 1, metadata: { custom_message: "AutoMod blocked that message. Keep it friendly." } }] });
 await rule("Mention spam", { trigger_type: 5, trigger_metadata: { mention_total_limit: 5, mention_raid_protection_enabled: true }, actions: [{ type: 1 }, { type: 3, metadata: { duration_seconds: 600 } }] });
 await rule("Spam", { trigger_type: 3, actions: [{ type: 1 }] });
 // ROM links: both games run the player's own copy, and the server never hands one out.
-await rule("No ROM links", { trigger_type: 1, trigger_metadata: { keyword_filter: ["rom download*", "download rom*", "*romsfun*", "*romspure*", "*vimm.net*", "*emulatorgames.net*"] }, actions: [{ type: 1, metadata: { custom_message: "No ROM links here: both games run your own copy." } }] });
+await rule("No ROM links", { trigger_type: 1, trigger_metadata: { keyword_filter: ["rom download*", "download rom*", "*romsfun*", "*romspure*", "*vimm.net*", "*emulatorgames.net*"] }, actions: [{ type: 1, metadata: { custom_message: "No ROM links here. Both games run on your own copy." } }] });
 
 // ---- Onboarding: what a player is asked as they join ---------------------------------------
 // One question, either game or both, and any answer makes you a Trainer. New prompts and
@@ -230,8 +240,8 @@ await api("PUT", `/guilds/${G}/onboarding`, {
   prompts: [{
     id: "1", type: 0, title: "Welcome, Trainer! Which do you play?", single_select: false, required: true, in_onboarding: true,
     options: [
-      { id: "2", title: "Hoenn Battle Royale", description: "Emerald, in the browser", emoji: { name: "🌋" }, role_ids: [trainer.id], channel_ids: [rooms.id, hoennLfm.id] },
-      { id: "3", title: "Kanto Battle Royale", description: "Red, Blue and Yellow, a gen1recomp mod", emoji: { name: "⚡" }, role_ids: [trainer.id], channel_ids: [kantoLfm.id] },
+      { id: "2", title: "Hoenn Battle Royale", description: "Pokémon Emerald in your browser", emoji: { name: "🌋" }, role_ids: [trainer.id], channel_ids: [rooms.id, hoennLfm.id] },
+      { id: "3", title: "Kanto Battle Royale", description: "A gen1recomp mod for Red, Blue and Yellow", emoji: { name: "⚡" }, role_ids: [trainer.id], channel_ids: [kantoLfm.id] },
     ],
   }],
 });
@@ -255,17 +265,19 @@ const out = {
 // ---- the welcome post: posted once, then edited to what this file says -------------------------
 const content = [
   "# Welcome to Pokémon Battle Royale",
-  "Up to 30 trainers drop into a region, catch and train a team, and fight until one is left. There are two games, and this server is for both.",
+  // In Cam's own voice (11-21: "it's a weird third person where in fact you are acting on my
+  // behalf"), with their name as a mention; allowed_mentions keeps it from pinging.
+  `I'm <@${owner}>, and I make two Pokémon battle royale games. In both, up to 30 trainers drop into a region, catch and train a team, and fight until one is left. This server is for both.`,
   "",
-  `## Hoenn Battle Royale\nPokémon Emerald, in your browser, on a phone or a computer. Play at ${SITE}\nRooms waiting for trainers show up live in <#${rooms.id}>: tap a link to join. Or say you're on in <#${hoennLfm.id}>. QUICK PLAY starts by itself 60 seconds after the first trainer joins, and fills the empty seats with bots.`,
+  `## Hoenn Battle Royale\nIt runs Pokémon Emerald in your browser, on a phone or a computer. Play at ${SITE}\nRooms waiting for trainers show up in <#${rooms.id}> as they open. Tap a link to join. Or say you're on in <#${hoennLfm.id}>. QUICK PLAY starts by itself 60 seconds after the first trainer joins, and fills the empty seats with bots.`,
   "",
-  `## Kanto Battle Royale\nThe original: a mod for gen1recomp on PC, with Red, Blue or Yellow. Download it, and how to install it: <${KANTO}>\nFind a match in <#${kantoLfm.id}>.`,
+  `## Kanto Battle Royale\nThe first game, a gen1recomp mod for PC that plays on Red, Blue or Yellow. Download and install steps: <${KANTO}>\nFind a match in <#${kantoLfm.id}>.`,
   "",
-  "**You bring the game.** Both run your own copy of the original game, which never leaves your device. Nobody here will share one, so please don't ask or post links.",
+  "**You bring the game.** Both run on your own copy of the original game, which never leaves your device. Nobody here will share one, so please don't ask for one or post links.",
   "",
-  "**Rules:** be kind, no spam or self-promotion, no ROMs. Gym Leaders may remove messages or time people out.",
+  "**Be kind.** No spam, self-promotion or ROMs. Gym Leaders may remove messages or time people out.",
   "",
-  `Ideas go in <#${hoennFeedback.id}> or <#${kantoFeedback.id}>, problems in <#${hoennBugs.id}> or <#${kantoBugs.id}>. Cam reads them all.`,
+  `Send me ideas in <#${hoennFeedback.id}> or <#${kantoFeedback.id}>, and problems in <#${hoennBugs.id}> or <#${kantoBugs.id}>. I read them all.`,
 ].join("\n");
 const body = JSON.stringify({ content, allowed_mentions: { parse: [] } });
 const headers = { "Content-Type": "application/json" };

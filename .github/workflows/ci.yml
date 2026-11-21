@@ -951,7 +951,7 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           if [ -z "$WEBHOOK" ]; then echo "no DISCORD_RELEASES_WEBHOOK; not announced"; exit 0; fi
-          jq -n --arg c "**Hoenn Battle Royale $TAG** is live: <$SITE>"$'\n'"What changed: <https://github.com/$REPO/releases/tag/$TAG>" \
+          jq -n --arg c "**Hoenn Battle Royale $TAG** is live at <$SITE>."$'\n'"What changed: <https://github.com/$REPO/releases/tag/$TAG>" \
             '{content: $c, allowed_mentions: {parse: []}}' \
             | curl -fsS --max-time 20 -H 'Content-Type: application/json' -d @- "$WEBHOOK" \
             || echo "::warning::the Discord announcement did not post"
