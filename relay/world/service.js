@@ -10243,7 +10243,9 @@ var ART = {
   leaderboard: { item: 187 },
   // The ITEMFINDER: it finds what is hidden.
   debug: { item: 261 },
-  feedback: { item: 121 }
+  feedback: { item: 121 },
+  // The Cable Club's receptionist: the one who links you up with other players.
+  discord: { gfx: [28] }
 };
 var FEEDBACK_ROW = {
   label: "SEND FEEDBACK",
@@ -10256,6 +10258,12 @@ var LEADERBOARD_ROW = {
   action: { kind: "leaderboard" },
   id: "lobby-leaderboard",
   art: ART.leaderboard
+};
+var DISCORD_ROW = {
+  label: "DISCORD",
+  action: { kind: "discord" },
+  id: "lobby-discord",
+  art: ART.discord
 };
 var HOWTO_ROW = {
   label: "HOW TO PLAY",
@@ -16553,4 +16561,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "e14548ded252";
+export const WORLD_HASH = "d11e20f34a8c";
