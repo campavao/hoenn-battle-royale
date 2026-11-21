@@ -36,6 +36,11 @@ export interface Career {
   /** Everything every match added up (POK-416): what the results say about one match,
    *  kept for the profile. Absent until a match has counted something. */
   totals?: CareerTotals;
+  /** This browser's secret for the LEADERBOARD (#397's suggestion): 32 hex digits, made the
+   *  first time a room is joined, sent with every join and never shown. The relay logs only a
+   *  hash of it (relay/world.js playerId), the public id a player is ranked by; a career file
+   *  carries it, so SAVE and LOAD take your place on the board with you. */
+  key?: string;
 }
 
 /** A career's lifetime stats: the room's counts (record.ts) and the ROM's own (tally.ts),
@@ -155,6 +160,32 @@ export function skinNote(skin: number, wins: number): string {
 
 const EMPTY: Career = { matches: 0, wins: 0 };
 
+/** A career's `key`, as the relay takes it (service.ts). */
+export const PLAYER_KEY = /^[0-9a-f]{32}$/;
+
+/** This browser's LEADERBOARD key, made and saved the first time it is asked for. A store
+ *  that will not keep it still answers one, for this tab's life. */
+export function playerKey(store: Pick<Storage, 'getItem' | 'setItem'> = localStorage): string {
+  const career = loadCareer(store);
+  if (career.key) return career.key;
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  career.key = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+  try {
+    store.setItem(KEY, JSON.stringify(career));
+  } catch {
+    // Not kept: a new place on the board next time, which is all a blocked store can have.
+  }
+  return career.key;
+}
+
+/** The public id the relay ranks `key` by (relay/world.js playerId, the same hash): how the
+ *  LEADERBOARD finds you on it. */
+export async function playerId(key: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`hbr-player:${key}`));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 12);
+}
+
 function emptyTotals(): CareerTotals {
   return { won: 0, caught: 0, steps: 0, items: 0, trainers: 0, duelsWon: 0, took: 0, mons: {}, moves: {} };
 }
@@ -217,6 +248,7 @@ function sane(value: unknown): Career {
   line('lose');
   const totals = saneTotals(raw.totals);
   if (totals) career.totals = totals;
+  if (typeof raw.key === 'string' && PLAYER_KEY.test(raw.key)) career.key = raw.key;
   // An old career picked one number for all three (POK-243). Keep what it was saying
   // rather than resetting somebody to the top of the list: the three lines it resolved
   // to are all in the new pool, because the pool starts with the pools it came from.
@@ -346,8 +378,8 @@ export function exportCareer(store: Pick<Storage, 'getItem' | 'setItem'> = local
  *  one of ours -- every field goes through the same `sane` a stored record does, so a
  *  hand-edited file cannot put a skin, a voice or a negative count into the app that
  *  the app would not have written itself. A claimed win total is taken at face value:
- *  this is one device's own record, there is no leaderboard to defend, and Kanto's
- *  keyfile is a text file anybody can edit too. */
+ *  this is one device's own record (the LEADERBOARD is the relay's results, not this),
+ *  and Kanto's keyfile is a text file anybody can edit too. */
 export function importCareer(
   text: string,
   store: Pick<Storage, 'getItem' | 'setItem'> = localStorage,

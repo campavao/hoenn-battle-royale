@@ -46,6 +46,8 @@ export type LobbyAction =
   | { kind: 'feedback' }
   // A match in six panels (POK-429).
   | { kind: 'howto' }
+  // Everybody's rating (#397's suggestion): leaderboard.ts.
+  | { kind: 'leaderboard' }
   // The test switches, off the hash (Cam, 2026-10-27), and the setting that shows them.
   | { kind: 'debug' }
   | { kind: 'debugmenu' }
@@ -145,6 +147,8 @@ const ART = {
   code: { item: 265 },
   daily: { item: 93 },
   howto: { item: 361 },
+  // KING'S ROCK: the crown.
+  leaderboard: { item: 187 },
   // The ITEMFINDER: it finds what is hidden.
   debug: { item: 261 },
   feedback: { item: 121 },
@@ -187,6 +191,14 @@ export const FEEDBACK_ROW: LobbyRow = {
   action: { kind: 'feedback' },
   id: 'lobby-feedback',
   art: ART.feedback,
+};
+
+/** After the ways into a match: everybody's rating (#397's suggestion, Cam 11-20). */
+export const LEADERBOARD_ROW: LobbyRow = {
+  label: 'LEADERBOARD',
+  action: { kind: 'leaderboard' },
+  id: 'lobby-leaderboard',
+  art: ART.leaderboard,
 };
 
 /** Over SEND FEEDBACK: how a match goes, in a few panels (POK-429). */

@@ -2,6 +2,7 @@
 // and the layout on a phone and a desktop. The live match's feedback, howto, chunk-reload and
 // phone specs went with its page; these are the same promises on /.
 import { devices, expect, test, type Page } from '@playwright/test';
+import { createHash } from 'node:crypto';
 import { key } from './spike';
 import { romExists, romHashParam, romPath } from './symbols';
 
@@ -51,6 +52,32 @@ test('HOW TO PLAY pages through its panels and back to the menu', async ({ brows
   const press = (id: string) => page.evaluate((id) => document.getElementById(id)?.click(), id);
   for (let i = 0; i < 20 && (await page.locator('#howto-next').count()); i++) { await press('howto-next'); await page.waitForTimeout(150); }
   await press('howto-done');
+  await expect(quickPlay(page)).toBeVisible();
+  await ctx.close();
+});
+
+test('LEADERBOARD: the board as play-log.mjs writes it, you in blue, where you stand (#397)', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const ctx = await browser.newContext(PHONE);
+  const page = await ctx.newPage();
+  // This browser's key, and the id the relay would log it under (relay/world.js playerId).
+  const key = '5e'.repeat(16);
+  const me = createHash('sha256').update(`hbr-player:${key}`).digest('hex').slice(0, 12);
+  await page.addInitScript((key) => { try { localStorage.setItem('hbr:career', JSON.stringify({ matches: 4, wins: 1, name: 'CAM', key })); } catch { /* none */ } }, key);
+  const row = (id: string, name: string, rating: number) => ({ id, name, rating, played: 5, wins: 2, best: 1, last: '2026-11-20T05:00:00.000Z' });
+  await page.route(/raw\.githubusercontent\.com\/.*\/play-log\/leaderboard\.json/, (r) => r.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({ matches: 9, players: [row('aaaaaaaaaaaa', 'MAY', 1046), row(me, 'CAM', 1012), row('bbbbbbbbbbbb', 'WALLY', 975)] }),
+  }));
+  await page.goto(`/?rom=${romHashParam()}`);
+  await expect(quickPlay(page)).toBeVisible({ timeout: 90_000 });
+  await page.screenshot({ path: test.info().outputPath('menu.png') });
+  await page.locator('#lobby-leaderboard').tap();
+  await expect(page.locator('#leaderboard-note')).toHaveText('You are 2nd of 3, rated 1012.', { timeout: 15_000 });
+  await expect(page.locator('#leaderboard-rows')).toContainText('1. MAY 1046');
+  await expect(page.locator('#leaderboard-rows')).toContainText('2. CAM 1012');
+  await page.screenshot({ path: test.info().outputPath('leaderboard.png') });
+  await page.locator('#leaderboard-back').tap();
   await expect(quickPlay(page)).toBeVisible();
   await ctx.close();
 });

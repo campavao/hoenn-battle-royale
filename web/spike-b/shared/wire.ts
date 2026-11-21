@@ -12,8 +12,9 @@ export type WorldUp =
    *  WORLD_HASH (tools/br/bundle-world.mjs), refused with `old` when it is not the relay's.
    *  `r`: the patched ROM the page battles on (its sha1, seven characters): a room plays
    *  one, as the first in it brought, because a link battle between two patches desyncs
-   *  (CLAUDE.md). Refused with `no_room` `rom` when it is another. */
-  | { t: 'join'; name: string; skin: number; code?: string; host?: boolean; again?: Again; pass?: string; rec?: CardRecord; w?: string; r?: string }
+   *  (CLAUDE.md). Refused with `no_room` `rom` when it is another. `pk`: the browser's
+   *  LEADERBOARD key (career.ts playerKey), which the relay logs only hashed. */
+  | { t: 'join'; name: string; skin: number; code?: string; host?: boolean; again?: Again; pass?: string; rec?: CardRecord; w?: string; r?: string; pk?: string }
   /** START (the room's host): the match begins for everybody in the room. */
   | { t: 'start' }
   /** The host's settings for the room's next match (the live room's options). */

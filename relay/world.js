@@ -5,6 +5,7 @@
 // Nothing of it loads until the first phone asks: the maps are half a megabyte, and
 // a relay that only runs matches never needs them.
 
+import { createHash } from "node:crypto";
 import { WebSocketServer } from "ws";
 
 export const WORLD_PATH = "/world";
@@ -19,6 +20,11 @@ const PER_IP = Number(process.env.BR_WORLD_PER_IP) || 8;
 const SEND_BUFFER = 1 << 20;
 // A socket that stops answering pings (a phone gone without a goodbye) goes.
 const PING_MS = 15_000;
+
+// A page's LEADERBOARD key (career.ts playerKey) as the public id its matches are logged
+// under: the key is the secret, so it is never logged, and the page makes the same hash to
+// find itself on the board (career.ts playerId).
+export const playerId = (key) => createHash("sha256").update(`hbr-player:${key}`).digest("hex").slice(0, 12);
 
 export function createWorld({ log = () => {}, now = () => performance.now() } = {}) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
@@ -36,7 +42,7 @@ export function createWorld({ log = () => {}, now = () => performance.now() } = 
   const load = () => {
     loading ??= import("./world/service.js").then((m) => {
       service = new m.WorldService({ maps: m.MAPS, patches: m.PATCHES, world: m.WORLD_HASH, bots: process.env.WORLD_BOTS !== undefined ? Number(process.env.WORLD_BOTS) : BOTS, cap: CAP, now, log, ringSecs: Number(process.env.WORLD_RING_SECS) || undefined, safariSecs: process.env.WORLD_SAFARI_SECS !== undefined ? Number(process.env.WORLD_SAFARI_SECS) : undefined,
-        autoStartMs: Number(process.env.WORLD_AUTOSTART_SECS) * 1000 || undefined, simBots: process.env.WORLD_SIM_BOTS !== '0' });
+        autoStartMs: Number(process.env.WORLD_AUTOSTART_SECS) * 1000 || undefined, simBots: process.env.WORLD_SIM_BOTS !== '0', playerId });
       return service;
     });
     return loading;

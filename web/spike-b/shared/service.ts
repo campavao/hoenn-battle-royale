@@ -15,12 +15,12 @@ import type { WorldMap } from '../../src/bots/world';
 import type { PatchTable } from '../../src/bots/patches';
 import { CODE_ALPHABET, CODE_LENGTH } from '../../src/match/lobby';
 import { Host } from './host';
-import { RING_PHASE, makeRoom } from './room';
+import { RING_PHASE, makeRoom, type Results } from './room';
 import { BOT_FILL, FOG_STEPS, MAX_STEPS, SAFARI_STEPS, dealable } from '../../src/match/room';
 import { cleanBag, cleanReleased } from './items';
 import type { BattleEvent } from './battlelog';
 import { LOG_MSG_CHARS, LOG_STREAM_CHARS, LOG_STREAM_EVENTS, cleanEvents } from './logwire';
-import { over } from './over';
+import { over, standings } from './over';
 import type { FameMon } from '../../src/ui/results';
 import { HASH_EVERY, fillFor, type Again, type CardRecord, type Listed, type Member, type PeekBag, type Settings, type SpMsg, type WireFrame, type WorldDown, type WorldUp } from './wire';
 
@@ -118,6 +118,9 @@ export interface ServiceOptions {
   autoStartMs?: number;
   /** Room.simBots: this relay simulates its bots' fights (relay/world.js: unless WORLD_SIM_BOTS=0). */
   simBots?: boolean;
+  /** A join's LEADERBOARD key (wire `pk`) as the public id its `result` line names: a hash, so
+   *  the key itself is never logged (relay/world.js; none in a test, and nobody is ranked). */
+  playerId?: (key: string) => string;
 }
 
 const FRAME_MS = 1000 / 60;
@@ -172,6 +175,8 @@ interface Phone {
   team?: FameMon[];
   /** Their bag as last told, for a watcher's START. */
   bag?: PeekBag;
+  /** Their LEADERBOARD id (ServiceOptions.playerId of their key), when their page sent one. */
+  pid?: string;
 }
 
 /** The battle a phone's ROM is publishing, as sent: for a watcher who comes in after it
@@ -212,6 +217,32 @@ interface Lobby {
   /** The addresses the host took out: kept out for the life of the room, as /classic/'s
    *  relay keeps them (server.js "kick"). Their way back (Again) went with their seat. */
   banned: Set<string>;
+  /** Everybody with a LEADERBOARD id who was a trainer in the match under way, by trainer id,
+   *  kept when they leave: the `result` line places a quitter too. */
+  ranked?: Map<number, { pid: string; name: string }>;
+}
+
+/** A join's `pk` as the relay takes it (career.ts PLAYER_KEY). */
+const PLAYER_KEY = /^[0-9a-f]{32}$/;
+
+/** The LEADERBOARD's line for a finished match (tools/br/play-log.mjs reads it): its size, and
+ *  each ranked trainer's place, id and name, best first. Bots and pages with no key are not in
+ *  it; a page in it twice (two tabs of one browser) is in it once, at its better place. Null
+ *  when nobody in it is ranked.
+ *
+ *    result CODE | of N | 1 PID NAME | 4 PID NAME */
+export function resultLine(code: string, res: Results, ranked: ReadonlyMap<number, { pid: string; name: string }>): string | null {
+  const place = standings(res);
+  const best = new Map<string, { place: number; name: string }>();
+  for (const [id] of res.entrants) {
+    const who = ranked.get(id), at = place.get(id);
+    if (!who || at === undefined) continue;
+    const was = best.get(who.pid);
+    if (!was || at < was.place) best.set(who.pid, { place: at, name: who.name });
+  }
+  if (!best.size) return null;
+  const rows = [...best].sort((a, b) => a[1].place - b[1].place).map(([pid, b]) => `${b.place} ${pid} ${b.name.replace(/\s+/g, '_') || '-'}`);
+  return `result ${code} | of ${res.entrants.length} | ${rows.join(' | ')}`;
 }
 
 /** A trainer as the live relay's log lines name one (play-log.mjs NAME: no spaces). */
@@ -298,7 +329,7 @@ export class WorldService {
           const name = String(m.name ?? '').toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim().slice(0, 10);
           const skin = Number.isInteger(m.skin) && m.skin >= 0 && m.skin < 16 ? m.skin : 0;
           const id = this.nextId++;
-          phone = { id, name: name || `TRAINER ${id - FIRST_ID + 1}`.slice(0, 10), skin, link, heard: this.opts.now(), synced: -Infinity, key: Math.random().toString(36).slice(2, 12), away: 0, watching: 0, ...recOf(m.rec) };
+          phone = { id, name: name || `TRAINER ${id - FIRST_ID + 1}`.slice(0, 10), skin, link, heard: this.opts.now(), synced: -Infinity, key: Math.random().toString(36).slice(2, 12), away: 0, watching: 0, ...recOf(m.rec), ...this.pidOf(m.pk) };
           room.members.set(id, phone);
           this.where.set(id, room);
           const hosted = !room.owner && !room.quick;
@@ -313,6 +344,7 @@ export class WorldService {
           // A match under way: in, to watch it until the next.
           if (room.host) {
             room.host.join(phone.name, phone.skin, undefined, id);
+            this.rank(room, phone);
             this.send(link, { t: 'hello', id, state: room.host.room.state(), key: phone.key });
             this.teamsTo(room, link);
           }
@@ -629,7 +661,8 @@ export class WorldService {
     r.opening = Math.round(room.set.safariSecs * 60);
     // A simulated fight's log, to whoever watches either of its bots (the whole of it at once).
     const host = new Host(r, bots, this.opts.maps, undefined, { onLog: (seat, log) => { this.publishLog(room.code, seat, log); } });
-    for (const p of room.members.values()) { host.join(p.name, p.skin, undefined, p.id); p.heard = room.t0 = this.opts.now(); }
+    room.ranked = new Map();
+    for (const p of room.members.values()) { host.join(p.name, p.skin, undefined, p.id); this.rank(room, p); p.heard = room.t0 = this.opts.now(); }
     host.lock();
     host.settle();
     room.host = host;
@@ -650,6 +683,9 @@ export class WorldService {
     const res = room.host?.room.results;
     this.opts.log(`world: room ${room.code} over${res?.winner ? `, ${res.entrants.find(([id]) => id === res.winner)?.[1]} wins` : ''}`);
     if (room.host) this.opts.log(`match ${room.code} ended after ${Math.round((this.opts.now() - room.t0) / 1000)}s`);
+    const line = res && room.ranked ? resultLine(room.code, res, room.ranked) : null;
+    if (line) this.opts.log(line);
+    room.ranked = undefined;
     // Whatever fight is still being read ends here for whoever watches it: the fighter's own end
     // (a page's, after its ROM has finished) now has no match to come to.
     for (const id of [...room.logs.keys()]) this.closeLog(room, id);
@@ -662,6 +698,16 @@ export class WorldService {
     this.roster(room);
     // Draining: the standings are out, and the room goes on to the new relay.
     if (this.draining) this.move(room);
+  }
+
+  /** A LEADERBOARD id for a join's `pk`, or none. */
+  private pidOf(pk: unknown): { pid?: string } {
+    return this.opts.playerId && typeof pk === 'string' && PLAYER_KEY.test(pk) ? { pid: this.opts.playerId(pk) } : {};
+  }
+
+  /** `p` is a trainer in the room's match: their place is logged at its end. */
+  private rank(room: Lobby, p: Phone): void {
+    if (p.pid && room.ranked) room.ranked.set(p.id, { pid: p.pid, name: p.name });
   }
 
   /** A quick room back from a match, waiting for READY UP: no match, no count. */

@@ -322,6 +322,15 @@
     </div>
   </div>
 
+  <section class="card" id="leaderboard">
+    <div class="card-h">
+      <h2>Leaderboard</h2>
+      <span class="legend" id="boardcount"></span>
+    </div>
+    <div id="board"></div>
+    <p class="note">Rated by finishing order in matches with two or more people; bots do not count. Each browser plays under its own id, kept in its career file.</p>
+  </section>
+
   <section class="card">
     <div class="card-h"><h2>Relay</h2></div>
     <div class="relay" id="relay">
@@ -734,8 +743,29 @@ $("daytoggle").addEventListener("click", () => {
   $("daytoggle").textContent = t.hidden ? "table" : "hide table";
 });
 
+// The LEADERBOARD (#397's suggestion): leaderboard.json, from the relay's result lines
+// (tools/br/play-log.mjs leaderboard). The game's menu reads the same file.
+async function board() {
+  try {
+    const r = await fetch(DATA + "leaderboard.json", { cache: "no-cache" });
+    if (!r.ok) throw new Error("no leaderboard yet");
+    const b = await r.json();
+    const players = (b.players || []).slice(0, 50);
+    $("boardcount").textContent = b.matches ? plural(b.matches, "rated match") : "";
+    $("board").innerHTML = players.length
+      ? "<div class=\"scroll\"><table><thead><tr><th class=\"num\">#</th><th>Trainer</th><th class=\"num\">Rating</th><th class=\"num\">Played</th><th class=\"num\">Wins</th></tr></thead><tbody>" +
+        players.map((p, i) => "<tr><td class=\"num\">" + (i + 1) + "</td><td>" + esc(p.name || "TRAINER") + "</td><td class=\"num\">" +
+          esc(Math.round(Number(p.rating) || 0)) + "</td><td class=\"num\">" + esc(Number(p.played) || 0) + "</td><td class=\"num\">" + esc(Number(p.wins) || 0) + "</td></tr>").join("") +
+        "</tbody></table></div>"
+      : '<p class="note">Nobody is on it yet: finish a match with another person to be first.</p>';
+  } catch (e) {
+    $("board").innerHTML = '<p class="note">Nobody is on it yet: finish a match with another person to be first.</p>';
+  }
+}
+
 relay().then(live);
 play();
+board();
 setInterval(() => { if (!document.hidden) live(); }, 30e3);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) live(); });
 </script>

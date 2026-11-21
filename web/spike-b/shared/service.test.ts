@@ -4,7 +4,7 @@ import type { WorldMap } from '../../src/bots/world';
 import type { PatchTable } from '../../src/bots/patches';
 import worldJson from '../data/world.json';
 import patchJson from '../../src/data/patches.json';
-import { WorldService } from './service';
+import { WorldService, resultLine } from './service';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -14,6 +14,43 @@ function phone() {
   const p = { got, closed: false, link: { send: (t: string) => got.push(JSON.parse(t)), close: () => { p.closed = true; } } };
   return p;
 }
+
+describe('the LEADERBOARD line (#397)', () => {
+  const K = (c: string) => c.repeat(32);
+  it('a finished match logs each keyed trainer\'s place, never the key, a browser in it twice once', () => {
+    let t = 0;
+    const lines: string[] = [];
+    const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => t, log: (l) => lines.push(l), playerId: (k) => `id${k.slice(0, 10)}` });
+    try {
+      const [a, b, c, d] = [phone(), phone(), phone(), phone()];
+      svc.open(a.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, pk: K('a') }));
+      svc.open(b.link).onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, pk: K('b') }));
+      // Bob's second tab: the same browser, so the same key.
+      svc.open(c.link).onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, pk: K('b') }));
+      // An old page, and a key that is not one: no place on the board.
+      svc.open(d.link).onText(JSON.stringify({ t: 'join', name: 'dee', skin: 0, pk: 'nope' }));
+      t += 60_001;
+      svc.pump();
+      const ids = [a, b, c, d].map((p) => (p.got.find((m) => m.t === 'hello') as unknown as { id: number }).id);
+      const inner = svc as unknown as { rooms: Map<string, { code: string; host: { room: { results: unknown } } }>; finish(r: unknown): void };
+      const room = [...inner.rooms.values()][0];
+      // Bob's second tab won; Alice went out last; Dee and Bob's first tab first.
+      room.host.room.results = { round: 1, entrants: ids.map((id, i) => [id, ['ALICE', 'BOB', 'BOB', 'DEE'][i]]), fallen: [{ id: ids[3], name: 'DEE', by: '' }, { id: ids[1], name: 'BOB', by: '' }, { id: ids[0], name: 'ALICE', by: '' }], winner: ids[2] };
+      inner.finish(room);
+      expect(lines.at(-1)).toBe(`result ${room.code} | of 4 | 1 id${K('b').slice(0, 10)} BOB | 2 id${K('a').slice(0, 10)} ALICE`);
+      expect(lines.join('\n')).not.toContain(K('a'));
+    } finally {
+      svc.stop();
+    }
+  });
+
+  it('places a draw first together, and is nothing with nobody keyed', () => {
+    const res = { round: 1, entrants: [[1, 'A'], [2, 'B C'], [3, 'BOT']] as [number, string][], fallen: [{ id: 3, name: 'BOT', by: '', bot: true }], winner: 0 };
+    const ranked = new Map([[1, { pid: 'aaaaaaaaaaaa', name: 'A' }], [2, { pid: 'bbbbbbbbbbbb', name: 'B C' }]]);
+    expect(resultLine('XY12AB', res, ranked)).toBe('result XY12AB | of 3 | 1 aaaaaaaaaaaa A | 1 bbbbbbbbbbbb B_C');
+    expect(resultLine('XY12AB', res, new Map())).toBeNull();
+  });
+});
 
 describe('world rooms', () => {
   it('a room that empties says so in the live relay words, so the play log ends it', () => {
