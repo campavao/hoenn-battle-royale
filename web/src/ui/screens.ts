@@ -858,9 +858,13 @@ export interface MenuModel {
   tiles?: boolean;
   /** Drawn first, under everything: the main menu's pan over Hoenn. */
   backdrop?: (c: EmeraldCanvas, h: number) => void;
+  /** Mirror containers of the page's own (the ROM-less menu's #dropzone). */
+  containers?: Container[];
 }
 
 const TILE_GAP = 4;
+/** A line of buttons under the tiles, its gap above included. */
+const BUTTON_LINE = 28;
 const WIDE_H = 44;
 const TILE_H = 62;
 /** Room between two people on a tile (Cam, 2026-10-20: "some padding between sprites"). */
@@ -896,7 +900,9 @@ function paintTiles(c: EmeraldCanvas, y: number, rows: RowSpec[], room: number, 
     const r = rects[i];
     const alpha = row.disabled ? 0.4 : 1;
     c.drawFrame(r);
-    const tall = r.h >= 52 && r.w < W;
+    // Tall only with a picture to stand over the words: without one (no ROM yet) the words
+    // sit in the middle.
+    const tall = r.h >= 52 && r.w < W && (row.art?.item !== undefined || (row.art?.gfx?.length ?? 0) > 0);
     const across = r.w === W;
     // A low half tile has room for one person beside its words.
     const gfx = (row.art?.gfx ?? []).slice(0, tall || across ? undefined : 1);
@@ -970,7 +976,7 @@ export function menuScreen(model: () => MenuModel): DrawnScreen {
     paint(c, h): Painted {
       const m = model();
       const widgets: Widget[] = [];
-      const containers: Painted['containers'] = [];
+      const containers: Painted['containers'] = [...(m.containers ?? [])];
       if (m.rowsId) containers.push({ id: m.rowsId, tag: 'ul', cls: 'lobby-rows' });
       m.backdrop?.(c, h);
       let y = 4;
@@ -984,11 +990,22 @@ export function menuScreen(model: () => MenuModel): DrawnScreen {
         y += strip ? 56 : 0;
         // The note under the tiles: room for its second line when it needs one.
         const noteH = m.note ? 6 + noteLines(m.note, 2).length * ROW_H : 4;
-        const tiles = paintTiles(c, y, m.rows, h - y - noteH, m.rowsId);
+        // Buttons under the note (the ROM-less menu's PICK YOUR ROM): a line of their own.
+        const buttonsH = m.buttons?.length ? BUTTON_LINE : 0;
+        const tiles = paintTiles(c, y, m.rows, h - y - noteH - buttonsH, m.rowsId);
         widgets.push(...tiles.widgets);
         if (strip) widgets.push(strip);
         y = tiles.bottom + 2;
-        widgets.push({ rect: paintNote(c, m.note, y, TEXT_WHITE, 2), text: m.note, id: m.noteId, cursor: null });
+        const note = paintNote(c, m.note, y, TEXT_WHITE, 2);
+        widgets.push({ rect: note, text: m.note, id: m.noteId, cursor: null });
+        if (m.buttons?.length === 1) {
+          // One button: across the screen like the tiles, its words in blue -- the way on.
+          const b = m.buttons[0];
+          const r = { x: 0, y: Math.min(y + noteH, h - BUTTON_LINE + 2), w: W, h: BUTTON_LINE - 4 };
+          c.drawFrame(r);
+          c.drawTextCentred(b.label, W / 2, r.y + 5, TEXT_BLUE);
+          widgets.push({ rect: r, text: b.label, id: b.id, cls: b.cls, onPress: b.onPress, cursor: { x: Math.round(W / 2 - measure(b.label) / 2) - 12, y: r.y + 7 } });
+        } else if (m.buttons?.length) widgets.push(...paintButtons(c, Math.min(y + noteH, h - BUTTON_LINE + 4), m.buttons));
         return { widgets, containers };
       }
       const list = paintRows(c, y, m.rows, m.rowsId);

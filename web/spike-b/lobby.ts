@@ -8,7 +8,7 @@ import { Stage, type DrawnScreen } from '../src/ui/stage';
 import { loadStats, setStatsOff } from '../src/match/stats';
 import { menuScreen, noticeScreen, roomScreen, sheetScreen, type RoomModel, type RowSpec, type SheetModel } from '../src/ui/screens';
 import { CODE_ENTRY, NAME_ENTRY, PASS_ENTRY, entryScreen, newEntry } from '../src/ui/entry';
-import { DISCORD_INVITE, DISCORD_ROW, FEEDBACK_ROW, HOWTO_ROW, LEADERBOARD_ROW, rewatchRow, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction } from '../src/match/lobby';
+import { DISCORD_INVITE, DISCORD_ROW, FEEDBACK_ROW, HOWTO_ROW, LEADERBOARD_ROW, rewatchRow, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction, type LobbyRow } from '../src/match/lobby';
 import { howToScreen } from '../src/ui/howto';
 import { howToRead, markHowToRead } from '../src/ui/howto-due';
 import { SKINS, cleanName, exportCareer, importCareer, loadCareer, playerId, playerKey, saveProfile, skinUnlocked } from '../src/match/career';
@@ -56,6 +56,16 @@ export interface LobbyHooks {
 let shared: Stage | null = null;
 /** The page's one Stage: the ROM import screen (import.ts) draws on it before the lobby
  *  takes it over, and two would both answer the same taps. */
+/** The main menu's tiles, in order: also what a newcomer sees before picking a ROM
+ *  (import.ts), so the two never drift apart. */
+export function mainMenuRows(link: Parameters<typeof playRows>[0], rewatch?: string | null): LobbyRow[] {
+  return playRows(link)
+    // The ways in the world has: no LOBBIES list or daily game here yet.
+    .filter((r) => r.action.kind === 'quick' || r.action.kind === 'solo' || r.action.kind === 'host' || r.action.kind === 'lobbies' || r.action.kind === 'code')
+    // The match a reload left too late to come back into (HBR-20): WATCH it.
+    .concat(rewatch ? [rewatchRow(rewatch)] : [], LEADERBOARD_ROW, HOWTO_ROW, FEEDBACK_ROW, DISCORD_ROW);
+}
+
 export function pageStage(): Stage {
   const $ = (id: string) => document.getElementById(id) as HTMLElement;
   return (shared ??= new Stage($('stage'), $('ui') as HTMLCanvasElement, $('ui-hits'), $('stage-fade')));
@@ -443,11 +453,7 @@ export class Lobby {
   private panPending = false;
   private readonly main: DrawnScreen = menuScreen(() => ({
     title: 'HOENN BATTLE ROYALE',
-    // The ways in the world has: no LOBBIES list or daily game here yet.
-    rows: playRows(this.link)
-      .filter((r) => r.action.kind === 'quick' || r.action.kind === 'solo' || r.action.kind === 'host' || r.action.kind === 'lobbies' || r.action.kind === 'code')
-      // The match a reload left too late to come back into (HBR-20): WATCH it.
-      .concat(this.rewatch ? [rewatchRow(this.rewatch)] : [], LEADERBOARD_ROW, HOWTO_ROW, FEEDBACK_ROW, DISCORD_ROW)
+    rows: mainMenuRows(this.link, this.rewatch)
       .map((r): RowSpec => ({ label: r.label, id: r.id, art: r.art, onPress: () => this.press(r.action), ...(r.id === HOWTO_ROW.id && !howToRead(localStorage) ? { badge: true } : {}) })),
     rowsId: 'lobby-rows',
     tiles: true,

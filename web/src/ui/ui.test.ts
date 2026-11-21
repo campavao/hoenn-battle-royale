@@ -21,6 +21,16 @@ describe("Emerald's font on the page (POK-320)", () => {
   });
 });
 
+describe('sharp words before the ROM (Cam, 11-21)', () => {
+  it("draws at the screen's own pixels, capped, never under one", async () => {
+    const { sharpRes } = await import('./emerald');
+    expect(sharpRes(1.625, 3), 'a 390-wide phone at 3x').toBeCloseTo(4.875);
+    expect(sharpRes(2, 1)).toBe(2);
+    expect(sharpRes(4, 3), 'capped').toBe(6);
+    expect(sharpRes(0.5, 1)).toBe(1);
+  });
+});
+
 describe('the window frame', () => {
   it('tiles a box from the 3x3 frame: corners once, edges along, the middle inside', () => {
     const tiles = frameTiles(32, 24);
@@ -119,6 +129,29 @@ describe('the drawn screens (POK-320)', () => {
       const low = fakeCanvas();
       menuScreen(() => ({ title: 'HOENN BATTLE ROYALE', rows: seven, note: 'The relay is down.', tiles: true, trainer: { name: 'CAM', skin: 0, onPress: () => undefined } })).paint(low.canvas, h);
       for (const r of seven) expect(low.texts.map((t) => t.text), `${r.label} uncut at ${h}`).toContain(r.label);
+    }
+  });
+
+  it('the menu before a ROM (Cam, 11-21): words in the middle of a tile with no picture, PICK YOUR ROM across under the note', async () => {
+    const { menuScreen } = await import('./screens');
+    const { fakeCanvas } = await import('./fakecanvas');
+    const { HOWTO_ROW, FEEDBACK_ROW, DISCORD_ROW, LEADERBOARD_ROW, playRows } = await import('../match/lobby');
+    const rows = [...playRows('up'), LEADERBOARD_ROW, HOWTO_ROW, FEEDBACK_ROW, DISCORD_ROW].map((r) => ({ label: r.label, id: r.id, onPress: () => undefined }));
+    for (const h of [300, 400]) {
+      const fake = fakeCanvas();
+      const painted = menuScreen(() => ({
+        title: 'HOENN BATTLE ROYALE', rows, tiles: true, note: 'Free, in your browser. Bring your own POKEMON EMERALD (U) ROM to play.',
+        buttons: [{ label: 'PICK YOUR ROM', id: 'pick-rom', onPress: () => undefined }],
+      })).paint(fake.canvas, h);
+      const pick = painted.widgets.find((w) => w.id === 'pick-rom')!;
+      expect(pick.rect.w, 'across the screen').toBe(240);
+      expect(pick.rect.y + pick.rect.h, `on the screen at ${h}`).toBeLessThanOrEqual(h);
+      for (const r of rows) {
+        const w = painted.widgets.find((x) => x.id === r.id)!;
+        expect(w.rect.y + w.rect.h, `${r.id} above PICK YOUR ROM at ${h}`).toBeLessThanOrEqual(pick.rect.y);
+        const t = fake.texts.find((x) => x.text === r.label)!;
+        expect(Math.abs(t.y + 6 - (w.rect.y + w.rect.h / 2)), `${r.label} in its tile's middle`).toBeLessThanOrEqual(4);
+      }
     }
   });
 

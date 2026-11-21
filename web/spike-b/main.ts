@@ -5328,9 +5328,9 @@ async function boot(): Promise<void> {
   try {
     // The ROM picker is the player's to answer: the loading screen steps aside for it.
     const pick = async (emu: Parameters<typeof importRom>[0]) => {
-      if (devRomParam()) return importRom(emu, ''); // a test's file, read without asking
+      if (devRomParam()) return importRom(emu); // a test's file, read without asking
       loading.hold(true);
-      try { await importRom(emu, ''); } finally { loading.hold(false); }
+      try { await importRom(emu); } finally { loading.hold(false); }
     };
     files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; loading.say(t); }, pick, devRomParam(), (bytes) => {
       try { loading.ride(introArt(bytes), me().skin % 2 === 1); } catch (e) { console.warn('[loading] no ride', e); }
