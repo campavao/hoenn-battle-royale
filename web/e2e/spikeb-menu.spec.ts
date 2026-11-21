@@ -64,19 +64,24 @@ test('LEADERBOARD: the board as play-log.mjs writes it, you in blue, where you s
   const key = '5e'.repeat(16);
   const me = createHash('sha256').update(`hbr-player:${key}`).digest('hex').slice(0, 12);
   await page.addInitScript((key) => { try { localStorage.setItem('hbr:career', JSON.stringify({ matches: 4, wins: 1, name: 'CAM', key })); } catch { /* none */ } }, key);
-  const row = (id: string, name: string, rating: number) => ({ id, name, rating, played: 5, wins: 2, best: 1, last: '2026-11-20T05:00:00.000Z' });
+  const row = (id: string, name: string, skin: number, rating: number) => ({ id, name, skin, rating, played: 5, wins: 2, best: 1, last: '2026-11-20T05:00:00.000Z' });
   await page.route(/raw\.githubusercontent\.com\/.*\/play-log\/leaderboard\.json/, (r) => r.fulfill({
     contentType: 'application/json',
-    body: JSON.stringify({ matches: 9, players: [row('aaaaaaaaaaaa', 'MAY', 1046), row(me, 'CAM', 1012), row('bbbbbbbbbbbb', 'WALLY', 975)] }),
+    body: JSON.stringify({ matches: 9, players: [row('aaaaaaaaaaaa', 'MAY', 1, 1046), row('cccccccccccc', 'STEVEN', 10, 1031), row('dddddddddddd', 'ROXANNE', 7, 1020),
+      row('eeeeeeeeeeee', 'BRAWLY', 6, 1015), row(me, 'CAM', 4, 1012), row('bbbbbbbbbbbb', 'WALLY', 14, 975), row('ffffffffffff', 'LISA', 13, 940)] }),
   }));
   await page.goto(`/?rom=${romHashParam()}`);
   await expect(quickPlay(page)).toBeVisible({ timeout: 90_000 });
   await page.screenshot({ path: test.info().outputPath('menu.png') });
   await page.locator('#lobby-leaderboard').tap();
-  await expect(page.locator('#leaderboard-note')).toHaveText('You are 2nd of 3, rated 1012.', { timeout: 15_000 });
+  await expect(page.locator('#leaderboard-note')).toHaveText('You are 5th of 7, rated 1012.', { timeout: 15_000 });
   await expect(page.locator('#leaderboard-rows')).toContainText('1. MAY 1046');
-  await expect(page.locator('#leaderboard-rows')).toContainText('2. CAM 1012');
+  await expect(page.locator('#leaderboard-rows')).toContainText('5. CAM 1012 (you)');
   await page.screenshot({ path: test.info().outputPath('leaderboard.png') });
+  // ...and on a desktop's wider, shorter screen.
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: test.info().outputPath('leaderboard-desktop.png') });
   await page.locator('#leaderboard-back').tap();
   await expect(quickPlay(page)).toBeVisible();
   await ctx.close();

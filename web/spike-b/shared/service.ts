@@ -219,29 +219,29 @@ interface Lobby {
   banned: Set<string>;
   /** Everybody with a LEADERBOARD id who was a trainer in the match under way, by trainer id,
    *  kept when they leave: the `result` line places a quitter too. */
-  ranked?: Map<number, { pid: string; name: string }>;
+  ranked?: Map<number, { pid: string; name: string; skin: number }>;
 }
 
 /** A join's `pk` as the relay takes it (career.ts PLAYER_KEY). */
 const PLAYER_KEY = /^[0-9a-f]{32}$/;
 
 /** The LEADERBOARD's line for a finished match (tools/br/play-log.mjs reads it): its size, and
- *  each ranked trainer's place, id and name, best first. Bots and pages with no key are not in
- *  it; a page in it twice (two tabs of one browser) is in it once, at its better place. Null
- *  when nobody in it is ranked.
+ *  each ranked trainer's place, id, sprite (career.ts SKINS) and name, best first. Bots and pages
+ *  with no key are not in it; a page in it twice (two tabs of one browser) is in it once, at its
+ *  better place. Null when nobody in it is ranked.
  *
- *    result CODE | of N | 1 PID NAME | 4 PID NAME */
-export function resultLine(code: string, res: Results, ranked: ReadonlyMap<number, { pid: string; name: string }>): string | null {
+ *    result CODE | of N | 1 PID SKIN NAME | 4 PID SKIN NAME */
+export function resultLine(code: string, res: Results, ranked: ReadonlyMap<number, { pid: string; name: string; skin: number }>): string | null {
   const place = standings(res);
-  const best = new Map<string, { place: number; name: string }>();
+  const best = new Map<string, { place: number; name: string; skin: number }>();
   for (const [id] of res.entrants) {
     const who = ranked.get(id), at = place.get(id);
     if (!who || at === undefined) continue;
     const was = best.get(who.pid);
-    if (!was || at < was.place) best.set(who.pid, { place: at, name: who.name });
+    if (!was || at < was.place) best.set(who.pid, { place: at, name: who.name, skin: who.skin });
   }
   if (!best.size) return null;
-  const rows = [...best].sort((a, b) => a[1].place - b[1].place).map(([pid, b]) => `${b.place} ${pid} ${b.name.replace(/\s+/g, '_') || '-'}`);
+  const rows = [...best].sort((a, b) => a[1].place - b[1].place).map(([pid, b]) => `${b.place} ${pid} ${b.skin} ${b.name.replace(/\s+/g, '_') || '-'}`);
   return `result ${code} | of ${res.entrants.length} | ${rows.join(' | ')}`;
 }
 
@@ -707,7 +707,7 @@ export class WorldService {
 
   /** `p` is a trainer in the room's match: their place is logged at its end. */
   private rank(room: Lobby, p: Phone): void {
-    if (p.pid && room.ranked) room.ranked.set(p.id, { pid: p.pid, name: p.name });
+    if (p.pid && room.ranked) room.ranked.set(p.id, { pid: p.pid, name: p.name, skin: p.skin });
   }
 
   /** A quick room back from a match, waiting for READY UP: no match, no count. */

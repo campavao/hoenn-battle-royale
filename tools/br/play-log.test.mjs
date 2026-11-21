@@ -450,24 +450,24 @@ test("a name coming back on a fresh connection after the match is one human, not
 });
 
 test("a result line is the leaderboard's: place, id and name per ranked trainer (#397)", () => {
-  const ev = parseLine("2026-11-20T05:00:00.000Z result AB12CD | of 8 | 1 0123456789ab ALICE | 3 ba9876543210 BIG_BOB", "x");
+  const ev = parseLine("2026-11-20T05:00:00.000Z result AB12CD | of 8 | 1 0123456789ab 5 ALICE | 3 ba9876543210 12 BIG_BOB", "x");
   assert.deepEqual(ev, { t: "2026-11-20T05:00:00.000Z", kind: "result", code: "AB12CD", of: 8,
-                         rows: [[1, "0123456789ab", "ALICE"], [3, "ba9876543210", "BIG BOB"]] });
+                         rows: [[1, "0123456789ab", "ALICE", 5], [3, "ba9876543210", "BIG BOB", 12]] });
   // Anything else in a row is not a result: a name with markup never reaches the page.
-  assert.equal(parseLine("2026-11-20T05:00:00.000Z result AB12CD | of 8 | 1 0123456789ab <b>", "x"), null);
-  assert.equal(parseLine("2026-11-20T05:00:00.000Z result AB12CD | of 8 | 1 0123456789ab E2E | 2 ba9876543210 BOB", "x").test, true);
+  assert.equal(parseLine("2026-11-20T05:00:00.000Z result AB12CD | of 8 | 1 0123456789ab 0 <b>", "x"), null);
+  assert.equal(parseLine("2026-11-20T05:00:00.000Z result AB12CD | of 8 | 1 0123456789ab 0 E2E | 2 ba9876543210 0 BOB", "x").test, true);
 });
 
 test("the leaderboard rates finishing order, only between two or more people", () => {
   const r = (t, ...rows) => parseLine(`2026-11-20T0${t}:00:00.000Z result AB12CD | of 8 | ` + rows.join(" | "), "x");
   const A = "aaaaaaaaaaaa", B = "bbbbbbbbbbbb", C = "cccccccccccc";
   const board = leaderboard([
-    r(1, `1 ${A} ALICE`, `2 ${B} BOB`),
-    r(2, `2 ${A} ALICE`, `5 ${B} BOB`, `1 ${C} CY`),
+    r(1, `1 ${A} 0 ALICE`, `2 ${B} 0 BOB`),
+    r(2, `2 ${A} 5 ALICE`, `5 ${B} 0 BOB`, `1 ${C} 1 CY`),
     // One person and bots: not rated, not played.
-    r(3, `1 ${B} BOB`),
+    r(3, `1 ${B} 0 BOB`),
     // The suite's: never.
-    r(4, `1 ${B} E2E`, `2 ${A} ALICE`),
+    r(4, `1 ${B} 0 E2E`, `2 ${A} 0 ALICE`),
   ].filter(Boolean));
   assert.equal(board.matches, 2);
   const by = Object.fromEntries(board.players.map(p => [p.id, p]));
@@ -476,10 +476,12 @@ test("the leaderboard rates finishing order, only between two or more people", (
   assert.equal(by[B].wins, 0);
   assert.equal(by[A].wins, 1);
   assert.equal(by[C].best, 1);
+  // Drawn as the sprite they last played in.
+  assert.equal(by[A].skin, 5);
   assert.equal(board.players[0].id, C);
   assert.equal(board.players.at(-1).id, B);
   // Zero-sum: what one gains the others lose.
   const sum = board.players.reduce((n, p) => n + p.rating, 0);
   assert.ok(Math.abs(sum - 3 * RATING_START) <= 2, `sum ${sum}`);
-  assert.equal(leaderboard([r(1, `1 ${A} ALICE`, `2 ${B} BOB`)]).players.map(p => p.rating).join(), "1016,984");
+  assert.equal(leaderboard([r(1, `1 ${A} 0 ALICE`, `2 ${B} 0 BOB`)]).players.map(p => p.rating).join(), "1016,984");
 });

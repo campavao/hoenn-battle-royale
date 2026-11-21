@@ -13,7 +13,7 @@ import { howToScreen } from '../src/ui/howto';
 import { howToRead, markHowToRead } from '../src/ui/howto-due';
 import { SKINS, cleanName, exportCareer, importCareer, loadCareer, playerId, playerKey, saveProfile, skinUnlocked } from '../src/match/career';
 import { boardView, fetchBoard, type Board } from '../src/match/leaderboard';
-import { TEXT_BLUE } from '../src/ui/emerald';
+import { leaderboardScreen } from '../src/ui/leaderboard';
 import { LINES } from '../src/bots/lines';
 import { NAMES } from '../src/bots/roster';
 import { lookScreen, seatScreen, statsScreen, trainerScreen } from '../src/ui/profile';
@@ -414,18 +414,10 @@ export class Lobby {
   /** The LEADERBOARD as last read, and this browser's id on it. */
   private board: Board | null | 'loading' = 'loading';
   private boardMe: string | null = null;
-  private readonly leaderboard: DrawnScreen = menuScreen(() => {
-    const v = boardView(this.board, this.boardMe);
-    return {
-      title: 'LEADERBOARD',
-      rows: v.rows.map((r): RowSpec => ({ label: r.label, detail: r.detail, ...(r.mine ? { color: TEXT_BLUE } : {}) })),
-      rowsId: 'leaderboard-rows',
-      note: v.note,
-      noteId: 'leaderboard-note',
-      buttons: [{ label: 'BACK', id: 'leaderboard-back', onPress: () => this.stage.pop() }],
-      onBack: () => this.stage.pop(),
-    };
-  });
+  private readonly leaderboard: DrawnScreen = leaderboardScreen(() => ({
+    view: boardView(this.board, this.boardMe),
+    onBack: () => this.stage.pop(),
+  }));
 
   /** LEADERBOARD: up at once, filled in when the file comes (play-log.mjs writes it). */
   private openBoard(): void {

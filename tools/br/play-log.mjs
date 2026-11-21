@@ -35,8 +35,9 @@
 //         | checks K drifts D                          one page's smoothness (POK-376)
 //   match CODE started (quick|host|daily) | N trainers [M watching] | max K
 //   match CODE ended after Ns
-//   result CODE | of N | P PID NAME | P PID NAME ...   a finished match's ranked trainers
-//                                                     (service.ts resultLine): place, id, name
+//   result CODE | of N | P PID SKIN NAME | ...         a finished match's ranked trainers
+//                                                     (service.ts resultLine): place, id,
+//                                                     sprite, name
 //   feedback CODE|- | {"v","where","name","text"}       a player's note (POK-428): never
 //                                                     an event, filed as a GitHub issue instead
 //   rooms R/RC conns C/CC | sent B in L lines | peak PR rooms PC conns
@@ -252,9 +253,9 @@ export function parseLine(message, fallbackAt) {
   if ((m = body.match(/^result ([A-Z0-9]+) \| of (\d+) \| (.+)$/))) {
     const rows = [];
     for (const part of m[3].split(" | ")) {
-      const r = part.match(/^(\d+) ([0-9a-f]{12}) ([A-Z0-9_]{1,10}|-)$/);
+      const r = part.match(/^(\d+) ([0-9a-f]{12}) (\d{1,2}) ([A-Z0-9_]{1,10}|-)$/);
       if (!r) return null;
-      rows.push([Number(r[1]), r[2], r[3] === "-" ? "" : r[3].replace(/_/g, " ")]);
+      rows.push([Number(r[1]), r[2], r[4] === "-" ? "" : r[4].replace(/_/g, " "), Number(r[3])]);
     }
     return flag({ t, kind: "result", code: m[1], of: Number(m[2]), rows }, ...rows.map(r => r[2]));
   }
@@ -481,11 +482,11 @@ export function leaderboard(events) {
   const players = new Map();
   const player = (id) => {
     let p = players.get(id);
-    if (!p) players.set(id, p = { id, name: "", rating: RATING_START, played: 0, wins: 0, best: null, last: null });
+    if (!p) players.set(id, p = { id, name: "", skin: 0, rating: RATING_START, played: 0, wins: 0, best: null, last: null });
     return p;
   };
   for (const r of results) {
-    const seats = r.rows.map(([place, id, name]) => ({ place, p: player(id), name }));
+    const seats = r.rows.map(([place, id, name, skin]) => ({ place, p: player(id), name, skin }));
     const share = RATING_K / (seats.length - 1);
     const moves = seats.map(a => seats.reduce((sum, b) => {
       if (a === b) return sum;
@@ -500,6 +501,8 @@ export function leaderboard(events) {
       if (s.place === 1) s.p.wins += 1;
       if (s.p.best === null || s.place < s.p.best) s.p.best = s.place;
       if (s.name) s.p.name = s.name;
+      // The sprite they last played in: the one the board draws them as.
+      if (Number.isInteger(s.skin)) s.p.skin = s.skin;
       s.p.last = r.t;
     });
   }

@@ -23,10 +23,10 @@ describe('the LEADERBOARD line (#397)', () => {
     const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => t, log: (l) => lines.push(l), playerId: (k) => `id${k.slice(0, 10)}` });
     try {
       const [a, b, c, d] = [phone(), phone(), phone(), phone()];
-      svc.open(a.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, pk: K('a') }));
+      svc.open(a.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 5, pk: K('a') }));
       svc.open(b.link).onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, pk: K('b') }));
       // Bob's second tab: the same browser, so the same key.
-      svc.open(c.link).onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, pk: K('b') }));
+      svc.open(c.link).onText(JSON.stringify({ t: 'join', name: 'bob', skin: 4, pk: K('b') }));
       // An old page, and a key that is not one: no place on the board.
       svc.open(d.link).onText(JSON.stringify({ t: 'join', name: 'dee', skin: 0, pk: 'nope' }));
       t += 60_001;
@@ -37,7 +37,7 @@ describe('the LEADERBOARD line (#397)', () => {
       // Bob's second tab won; Alice went out last; Dee and Bob's first tab first.
       room.host.room.results = { round: 1, entrants: ids.map((id, i) => [id, ['ALICE', 'BOB', 'BOB', 'DEE'][i]]), fallen: [{ id: ids[3], name: 'DEE', by: '' }, { id: ids[1], name: 'BOB', by: '' }, { id: ids[0], name: 'ALICE', by: '' }], winner: ids[2] };
       inner.finish(room);
-      expect(lines.at(-1)).toBe(`result ${room.code} | of 4 | 1 id${K('b').slice(0, 10)} BOB | 2 id${K('a').slice(0, 10)} ALICE`);
+      expect(lines.at(-1)).toBe(`result ${room.code} | of 4 | 1 id${K('b').slice(0, 10)} 4 BOB | 2 id${K('a').slice(0, 10)} 5 ALICE`);
       expect(lines.join('\n')).not.toContain(K('a'));
     } finally {
       svc.stop();
@@ -46,8 +46,8 @@ describe('the LEADERBOARD line (#397)', () => {
 
   it('places a draw first together, and is nothing with nobody keyed', () => {
     const res = { round: 1, entrants: [[1, 'A'], [2, 'B C'], [3, 'BOT']] as [number, string][], fallen: [{ id: 3, name: 'BOT', by: '', bot: true }], winner: 0 };
-    const ranked = new Map([[1, { pid: 'aaaaaaaaaaaa', name: 'A' }], [2, { pid: 'bbbbbbbbbbbb', name: 'B C' }]]);
-    expect(resultLine('XY12AB', res, ranked)).toBe('result XY12AB | of 3 | 1 aaaaaaaaaaaa A | 1 bbbbbbbbbbbb B_C');
+    const ranked = new Map([[1, { pid: 'aaaaaaaaaaaa', name: 'A', skin: 1 }], [2, { pid: 'bbbbbbbbbbbb', name: 'B C', skin: 0 }]]);
+    expect(resultLine('XY12AB', res, ranked)).toBe('result XY12AB | of 3 | 1 aaaaaaaaaaaa 1 A | 1 bbbbbbbbbbbb 0 B_C');
     expect(resultLine('XY12AB', res, new Map())).toBeNull();
   });
 });

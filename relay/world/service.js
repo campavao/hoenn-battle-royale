@@ -15842,10 +15842,10 @@ function resultLine(code, res, ranked) {
     const who2 = ranked.get(id2), at2 = place.get(id2);
     if (!who2 || at2 === void 0) continue;
     const was = best.get(who2.pid);
-    if (!was || at2 < was.place) best.set(who2.pid, { place: at2, name: who2.name });
+    if (!was || at2 < was.place) best.set(who2.pid, { place: at2, name: who2.name, skin: who2.skin });
   }
   if (!best.size) return null;
-  const rows = [...best].sort((a, b2) => a[1].place - b2[1].place).map(([pid, b2]) => `${b2.place} ${pid} ${b2.name.replace(/\s+/g, "_") || "-"}`);
+  const rows = [...best].sort((a, b2) => a[1].place - b2[1].place).map(([pid, b2]) => `${b2.place} ${pid} ${b2.skin} ${b2.name.replace(/\s+/g, "_") || "-"}`);
   return `result ${code} | of ${res.entrants.length} | ${rows.join(" | ")}`;
 }
 function who(p) {
@@ -16318,7 +16318,7 @@ var WorldService = class {
   }
   /** `p` is a trainer in the room's match: their place is logged at its end. */
   rank(room, p) {
-    if (p.pid && room.ranked) room.ranked.set(p.id, { pid: p.pid, name: p.name });
+    if (p.pid && room.ranked) room.ranked.set(p.id, { pid: p.pid, name: p.name, skin: p.skin });
   }
   /** A quick room back from a match, waiting for READY UP: no match, no count. */
   waiting(room) {
@@ -16548,4 +16548,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "b0149aa5fe4d";
+export const WORLD_HASH = "baa9757b8dc8";

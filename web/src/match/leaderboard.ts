@@ -3,7 +3,7 @@
 // finished match (spike-b/shared/service.ts resultLine), tools/br/play-log.mjs adds them up
 // into leaderboard.json on the `play-log` branch every fifteen minutes, and this reads it raw,
 // as /play.html reads play.json. Nothing here is authority: the page only shows the file.
-import { ordinal } from './career';
+import { SKINS, ordinal } from './career';
 
 export const LEADERBOARD_URL = 'https://raw.githubusercontent.com/campavao/hoenn-battle-royale/play-log/leaderboard.json';
 
@@ -11,6 +11,8 @@ export interface BoardPlayer {
   /** The public id (relay/world.js playerId): a hash of the browser's key. */
   id: string;
   name: string;
+  /** The sprite they last played in (career.ts SKINS). */
+  skin: number;
   rating: number;
   played: number;
   wins: number;
@@ -37,7 +39,8 @@ export function cleanBoard(raw: unknown): Board | null {
     if (typeof r.id !== 'string' || !ID.test(r.id) || typeof r.rating !== 'number' || !Number.isFinite(r.rating)) continue;
     const name = typeof r.name === 'string' && NAME.test(r.name) ? r.name : '';
     const best = count(r.best);
-    players.push({ id: r.id, name, rating: Math.round(r.rating), played: count(r.played), wins: count(r.wins), best: best > 0 ? best : null });
+    const skin = count(r.skin);
+    players.push({ id: r.id, name, skin: skin < SKINS.length ? skin : 0, rating: Math.round(r.rating), played: count(r.played), wins: count(r.wins), best: best > 0 ? best : null });
   }
   players.sort((a, b) => b.rating - a.rating);
   return { matches: count((raw as { matches?: unknown }).matches), players };
@@ -57,31 +60,49 @@ export async function fetchBoard(get: typeof fetch = fetch): Promise<Board | nul
   }
 }
 
-/** Rows a screen has room for. */
-export const BOARD_ROWS = 8;
+/** One player as the LEADERBOARD screen draws them. */
+export interface BoardEntry {
+  place: number;
+  name: string;
+  skin: number;
+  rating: number;
+  played: number;
+  wins: number;
+  /** This browser. */
+  mine: boolean;
+}
 
 export interface BoardView {
-  rows: { label: string; detail: string; mine: boolean }[];
+  /** Everybody, best first; equal ratings share a place. */
+  entries: BoardEntry[];
   note: string;
 }
 
-/** What the LEADERBOARD screen says: the top `top`, each place, name and rating, and a note
- *  with where `me` (this browser's public id) stands. */
-export function boardView(board: Board | null | 'loading', me: string | null, top = BOARD_ROWS): BoardView {
-  if (board === 'loading') return { rows: [], note: 'Reading the leaderboard...' };
-  if (!board) return { rows: [], note: 'The leaderboard could not be read. Try again in a while.' };
-  if (!board.players.length) return { rows: [], note: 'Nobody is on it yet. Finish a match with another person to be first.' };
-  // Equal ratings share a place.
-  const placeOf: number[] = [];
-  board.players.forEach((p, i) => { placeOf.push(i > 0 && p.rating === board.players[i - 1].rating ? placeOf[i - 1] : i + 1); });
-  const rows = board.players.slice(0, top).map((p, i) => ({
-    label: `${placeOf[i]}. ${p.name || 'TRAINER'}`,
-    detail: String(p.rating),
-    mine: p.id === me,
-  }));
-  const at = me ? board.players.findIndex((p) => p.id === me) : -1;
-  const note = at < 0
-    ? 'Finish a match with another person to get on the board.'
-    : `You are ${ordinal(placeOf[at])} of ${board.players.length}, rated ${board.players[at].rating}.`;
-  return { rows, note };
+/** What the LEADERBOARD screen says: everybody, and a note with where `me` (this browser's
+ *  public id) stands. ui/leaderboard.ts picks who fits. */
+export function boardView(board: Board | null | 'loading', me: string | null): BoardView {
+  if (board === 'loading') return { entries: [], note: 'Reading the leaderboard...' };
+  if (!board) return { entries: [], note: 'The leaderboard could not be read. Try again in a while.' };
+  if (!board.players.length) return { entries: [], note: 'Nobody is on it yet. Finish a match with another person to be first.' };
+  const entries: BoardEntry[] = [];
+  board.players.forEach((p, i) => {
+    const place = i > 0 && p.rating === board.players[i - 1].rating ? entries[i - 1].place : i + 1;
+    entries.push({ place, name: p.name || 'TRAINER', skin: p.skin, rating: p.rating, played: p.played, wins: p.wins, mine: p.id === me });
+  });
+  const mine = entries.find((e) => e.mine);
+  const note = mine
+    ? `You are ${ordinal(mine.place)} of ${entries.length}, rated ${mine.rating}.`
+    : 'Finish a match with another person to get on the board.';
+  return { entries, note };
+}
+
+/** Of `entries` past the podium, the ones a list of `rows` shows: the first, and this browser's
+ *  in the last row when it is further down (`gap`: a row or more is skipped before it). */
+export function listed(entries: readonly BoardEntry[], rows: number): { shown: BoardEntry[]; gap: boolean } {
+  if (rows <= 0) return { shown: [], gap: false };
+  if (entries.length <= rows) return { shown: [...entries], gap: false };
+  const head = entries.slice(0, rows);
+  const mine = entries.findIndex((e) => e.mine);
+  if (mine < rows) return { shown: head, gap: false };
+  return { shown: [...entries.slice(0, rows - 1), entries[mine]], gap: true };
 }
