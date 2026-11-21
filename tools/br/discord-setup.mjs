@@ -150,10 +150,10 @@ const modUpdates = await channel("mod-updates", { parent: info, hidden: true, to
 const general = await channel("general", { parent: community, topic: "Talk about either game here." });
 const rooms = await channel("hoenn-open-rooms", { parent: hoennCat, readOnly: true, was: ["open-rooms"], topic: "The game posts Hoenn rooms here while they wait for trainers. Tap a link to join." });
 const hoennLfm = await channel("hoenn-find-a-match", { parent: hoennCat, slow: 10, was: ["looking-for-match"], topic: `Say when you're on for Hoenn. Play at ${SITE}. Quick play starts 60 seconds after the first trainer joins.` });
-const hoennFeedback = await channel("hoenn-feedback", { parent: hoennCat, was: ["feedback"], topic: "What should change in Hoenn Battle Royale? Cam reads these." });
+const hoennFeedback = await channel("hoenn-feedback", { parent: hoennCat, was: ["feedback"], topic: `Tell me what should change in Hoenn Battle Royale. I read every post. <@${owner}>` });
 const hoennBugs = await channel("hoenn-bugs", { parent: hoennCat, was: ["bugs"], topic: "Something broke? Say what you did, what you saw, and your phone or browser." });
 const kantoLfm = await channel("kanto-find-a-match", { parent: kantoCat, slow: 10, topic: `Say when you're on for Kanto. Get the mod at ${KANTO}` });
-const kantoFeedback = await channel("kanto-feedback", { parent: kantoCat, topic: "What should change in Kanto Battle Royale?" });
+const kantoFeedback = await channel("kanto-feedback", { parent: kantoCat, topic: `Tell me what should change in Kanto Battle Royale. I read every post. <@${owner}>` });
 const kantoBugs = await channel("kanto-bugs", { parent: kantoCat, topic: "Something broke? Say what you did, what you saw, and your gen1recomp and mod versions." });
 // Whatever the server came with ("Create My Own" or a template's #clips-and-highlights,
 // Lobby, Gaming) moves in with the rest: text to COMMUNITY, voice to VOICE. Read afresh: the
@@ -207,7 +207,9 @@ async function rule(name, body) {
   const had = rules.find((r) => r.name === name);
   if (had) {
     // Kept, with what this file says now: its reply to a blocked message can change.
-    if (JSON.stringify(had.actions) !== JSON.stringify(body.actions)) {
+    // Discord hands back an empty `metadata` on an action that had none.
+    const bare = (actions) => JSON.stringify(actions.map(({ type, metadata }) => (metadata && Object.keys(metadata).length ? { type, metadata } : { type })));
+    if (bare(had.actions) !== bare(body.actions)) {
       await api("PATCH", `/guilds/${G}/auto-moderation/rules/${had.id}`, { actions: body.actions });
       console.log(`updated AutoMod rule: ${name}`);
     }
@@ -263,17 +265,19 @@ const out = {
 // ---- the welcome post: posted once, then edited to what this file says -------------------------
 const content = [
   "# Welcome to Pokémon Battle Royale",
-  "Up to 30 trainers drop into a region, catch and train a team, and fight until one is left. There are two games, and this server is for both.",
+  // In Cam's own voice (11-21: "it's a weird third person where in fact you are acting on my
+  // behalf"), with their name as a mention; allowed_mentions keeps it from pinging.
+  `I'm <@${owner}>, and I make two Pokémon battle royale games. In both, up to 30 trainers drop into a region, catch and train a team, and fight until one is left. This server is for both.`,
   "",
   `## Hoenn Battle Royale\nIt runs Pokémon Emerald in your browser, on a phone or a computer. Play at ${SITE}\nRooms waiting for trainers show up in <#${rooms.id}> as they open. Tap a link to join. Or say you're on in <#${hoennLfm.id}>. QUICK PLAY starts by itself 60 seconds after the first trainer joins, and fills the empty seats with bots.`,
   "",
   `## Kanto Battle Royale\nThe first game, a gen1recomp mod for PC that plays on Red, Blue or Yellow. Download and install steps: <${KANTO}>\nFind a match in <#${kantoLfm.id}>.`,
   "",
-  "**You bring the game.** Both run your own copy of the original game, which never leaves your device. Nobody here will share one, so please don't ask or post links.",
+  "**You bring the game.** Both run on your own copy of the original game, which never leaves your device. Nobody here will share one, so please don't ask for one or post links.",
   "",
   "**Be kind.** No spam, self-promotion or ROMs. Gym Leaders may remove messages or time people out.",
   "",
-  `Ideas go in <#${hoennFeedback.id}> or <#${kantoFeedback.id}>, problems in <#${hoennBugs.id}> or <#${kantoBugs.id}>. Cam reads them all.`,
+  `Send me ideas in <#${hoennFeedback.id}> or <#${kantoFeedback.id}>, and problems in <#${hoennBugs.id}> or <#${kantoBugs.id}>. I read them all.`,
 ].join("\n");
 const body = JSON.stringify({ content, allowed_mentions: { parse: [] } });
 const headers = { "Content-Type": "application/json" };
