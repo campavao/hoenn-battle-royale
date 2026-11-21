@@ -28,7 +28,7 @@ test("a quick room is posted, edited as it fills, and marked started", async () 
   assert.equal(hook.calls.length, 1);
   assert.equal(hook.calls[0].method, "POST");
   assert.equal(hook.calls[0].url, `${URL_}?wait=true`);
-  assert.match(hook.calls[0].body.content, /^\*\*QUICK PLAY\*\* is filling: 1\/30 trainers, starts <t:1060:R>\nJoin: <https:\/\/hoenn-battle-royale\.vercel\.app\/#join=QK1234>$/);
+  assert.match(hook.calls[0].body.content, /^\*\*QUICK PLAY\*\* has 1\/30 trainers and starts <t:1060:R>\.\nJoin: <https:\/\/hoenn-battle-royale\.vercel\.app\/#join=QK1234>$/);
   // Nobody is ever pinged by a trainer's name.
   assert.deepEqual(hook.calls[0].body.allowed_mentions, { parse: [] });
 
@@ -65,7 +65,7 @@ test("a room that empties is taken down; passcoded, playing and E2E rooms are ne
   ];
   const p = createRoomPoster({ url: URL_, rooms: () => list, fetch: hook.fetch });
   await p.tick();
-  assert.deepEqual(hook.calls.map((c) => c.body.content), ["**ALICE** is hosting: 1/8 trainers, waiting for START\nJoin: <https://hoenn-battle-royale.vercel.app/#join=AAA111>"]);
+  assert.deepEqual(hook.calls.map((c) => c.body.content), ["**ALICE** is hosting a room with 1/8 trainers. It starts when they press START.\nJoin: <https://hoenn-battle-royale.vercel.app/#join=AAA111>"]);
   list = [];
   await p.tick();
   assert.equal(hook.calls[1].method, "DELETE");
