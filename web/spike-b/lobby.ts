@@ -8,7 +8,7 @@ import { Stage, type DrawnScreen } from '../src/ui/stage';
 import { loadStats, setStatsOff } from '../src/match/stats';
 import { menuScreen, noticeScreen, roomScreen, sheetScreen, type RoomModel, type RowSpec, type SheetModel } from '../src/ui/screens';
 import { CODE_ENTRY, NAME_ENTRY, PASS_ENTRY, entryScreen, newEntry } from '../src/ui/entry';
-import { FEEDBACK_ROW, HOWTO_ROW, LEADERBOARD_ROW, rewatchRow, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction } from '../src/match/lobby';
+import { DISCORD_INVITE, DISCORD_ROW, FEEDBACK_ROW, HOWTO_ROW, LEADERBOARD_ROW, rewatchRow, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction } from '../src/match/lobby';
 import { howToScreen } from '../src/ui/howto';
 import { howToRead, markHowToRead } from '../src/ui/howto-due';
 import { SKINS, cleanName, exportCareer, importCareer, loadCareer, playerId, playerKey, saveProfile, skinUnlocked } from '../src/match/career';
@@ -227,6 +227,8 @@ export class Lobby {
     else if (a.kind === 'name') this.stage.push(this.nameEntry());
     else if (a.kind === 'howto') this.stage.push(this.howTo);
     else if (a.kind === 'leaderboard') this.openBoard();
+    // A tab of its own: the game stays on its menu behind it.
+    else if (a.kind === 'discord') window.open(DISCORD_INVITE, '_blank', 'noopener');
     else if (a.kind === 'lobbies') { this.hooks.list(); this.stage.push(this.lobbies); }
     else if (a.kind === 'join') {
       if (a.pass) this.stage.push(this.passEntry('PASSCODE', '', (pass) => this.hooks.join({ code: a.code, pass })));
@@ -445,7 +447,7 @@ export class Lobby {
     rows: playRows(this.link)
       .filter((r) => r.action.kind === 'quick' || r.action.kind === 'solo' || r.action.kind === 'host' || r.action.kind === 'lobbies' || r.action.kind === 'code')
       // The match a reload left too late to come back into (HBR-20): WATCH it.
-      .concat(this.rewatch ? [rewatchRow(this.rewatch)] : [], LEADERBOARD_ROW, HOWTO_ROW, FEEDBACK_ROW)
+      .concat(this.rewatch ? [rewatchRow(this.rewatch)] : [], LEADERBOARD_ROW, HOWTO_ROW, FEEDBACK_ROW, DISCORD_ROW)
       .map((r): RowSpec => ({ label: r.label, id: r.id, art: r.art, onPress: () => this.press(r.action), ...(r.id === HOWTO_ROW.id && !howToRead(localStorage) ? { badge: true } : {}) })),
     rowsId: 'lobby-rows',
     tiles: true,

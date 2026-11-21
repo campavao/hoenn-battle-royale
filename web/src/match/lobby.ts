@@ -48,6 +48,8 @@ export type LobbyAction =
   | { kind: 'howto' }
   // Everybody's rating (#397's suggestion): leaderboard.ts.
   | { kind: 'leaderboard' }
+  // The community's server, in a new tab (Cam, 11-21).
+  | { kind: 'discord' }
   // The test switches, off the hash (Cam, 2026-10-27), and the setting that shows them.
   | { kind: 'debug' }
   | { kind: 'debugmenu' }
@@ -152,6 +154,8 @@ const ART = {
   // The ITEMFINDER: it finds what is hidden.
   debug: { item: 261 },
   feedback: { item: 121 },
+  // The Cable Club's receptionist: the one who links you up with other players.
+  discord: { gfx: [28] },
 };
 
 /** The ways into a match; the daily gets a row of its own when the relay is offering one.
@@ -199,6 +203,19 @@ export const LEADERBOARD_ROW: LobbyRow = {
   action: { kind: 'leaderboard' },
   id: 'lobby-leaderboard',
   art: ART.leaderboard,
+};
+
+/** The community's Discord, Kanto's players and Hoenn's (tools/br/discord-setup.mjs made it):
+ *  an invite that never runs out. */
+export const DISCORD_INVITE = 'https://discord.gg/zQdV6Nc5CR';
+
+/** Under SEND FEEDBACK: the Discord, to find people to play with (Cam, 11-21: "so folks can
+ *  easily join from there"). */
+export const DISCORD_ROW: LobbyRow = {
+  label: 'DISCORD',
+  action: { kind: 'discord' },
+  id: 'lobby-discord',
+  art: ART.discord,
 };
 
 /** Over SEND FEEDBACK: how a match goes, in a few panels (POK-429). */
