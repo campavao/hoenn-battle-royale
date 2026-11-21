@@ -47,6 +47,8 @@ export interface Action {
   spin?: boolean;
   /** Which of the ACRO BIKE's wheelie anims it plays (acroFrame). */
   pose?: number;
+  /** A warp's landing walks the trainer on, this way, once the screen is back (StepFn's `walk`). */
+  walk?: number;
 }
 
 export interface Mover {
@@ -65,7 +67,8 @@ export interface Mover {
   run: boolean;
   /** Whole frames counted toward the walk anim (feet alternate per step). */
   strides: number;
-  /** Just through a door: the way to walk on, off the mat or the door (Cam 11-01). */
+  /** Just through a door: the way to walk on, off the mat or the door (Cam 11-01), the way
+   *  the landing turned them (StepFn's `face`). */
   walkOn?: number;
   /** On the MACH BIKE, and gPlayerAvatar's bikeSpeed and bikeFrameCounter for it. */
   bike: boolean;
@@ -87,8 +90,9 @@ export interface Mover {
 }
 
 /** Where a step toward `dir` lands, or null for a wall. 2 cells away is a ledge hop; `warp`
- *  is a door, stairs or a cave mouth, which lands on the other side's own cell. */
-export type StepFn = ((from: Spot, dir: number, ride?: number) => { to: Spot; hop: boolean; warp?: boolean; water?: boolean } | null) & {
+ *  is a door, stairs or a cave mouth, which lands on the other side's own cell, turned `face`
+ *  (none: the way they were going) and walked on a step that way if `walk` (export-warp-exits.py). */
+export type StepFn = ((from: Spot, dir: number, ride?: number) => { to: Spot; hop: boolean; warp?: boolean; water?: boolean; face?: number; walk?: boolean } | null) & {
   /** Whether a bike may be ridden on `s`'s map; none of it without. */
   cycling?: (s: Spot) => boolean;
   /** Whether the ACRO BIKE may be where no other bike is: the Safari Zone. */
@@ -122,6 +126,18 @@ export const CLASS_WATER = 2;
 
 /** Frames a door takes: the screen fades out and back in (the field's 16-frame fades). */
 export const WARP_FRAMES = 32;
+
+/** Through a warp, landed at once and turned the way the landing turns you (GetAdjustedInitialDirection),
+ *  to walk on off it if it is a door or a mat. Devon Corp 1F's stairs are a door you come down
+ *  facing north: walked on the way you came, it was into the dead end behind them (#397). */
+function throughWarp(m: Mover, to: NonNullable<ReturnType<StepFn>>, dir: number): void {
+  m.spot = to.to;
+  if (to.face) m.facing = m.moveDir = to.face;
+  const walk = to.walk ? to.face || m.moveDir : 0;
+  m.action = walk ? { kind: 'warp', t: 0, len: WARP_FRAMES, speed: 0, dir, walk } : { kind: 'warp', t: 0, len: WARP_FRAMES, speed: 0, dir };
+  m.px = 0;
+  m.py = 0;
+}
 
 export function newMover(spot: Spot, facing = DIR_SOUTH): Mover {
   return { spot, prev: spot, facing, moveDir: facing, runningState: NOT_MOVING, action: null, px: 0, py: 0, lift: 0, run: true, strides: 0, bike: false, bikeSpeed: 0, bikeCount: 0, sel: false, acro: false, acroState: 0, acroTurn: 0, keyDir: 0, dirT: 0, keyBtn: 0, btnT: 0, acroB: false };
@@ -171,7 +187,7 @@ export function tick(m: Mover, keys: Keys, step: StepFn): void {
     m.px = 0;
     m.py = 0;
     m.lift = 0;
-    if (a.kind === 'warp') m.walkOn = a.dir;
+    if (a.kind === 'warp') m.walkOn = a.walk ?? 0;
   }
 }
 
@@ -240,10 +256,7 @@ function begin(m: Mover, keys: Keys, step: StepFn): void {
   m.strides += 1;
   if (to.warp) {
     // Through a door: there at once, standing, while the screen fades over.
-    m.spot = to.to;
-    m.action = { kind: 'warp', t: 0, len: WARP_FRAMES, speed: 0, dir };
-    m.px = 0;
-    m.py = 0;
+    throughWarp(m, to, dir);
   } else if (to.hop) {
     m.spot = { map: to.to.map, x: to.to.x - DXY[dir][0], y: to.to.y - DXY[dir][1] };
     m.action = { kind: 'hop', t: 0, len: 32, speed: 1, dir, land: to.to };
@@ -294,9 +307,7 @@ function bikeGo(m: Mover, dir: number, step: StepFn, slow: boolean): void {
   m.prev = m.spot;
   m.strides += 1;
   if (to.warp) {
-    m.spot = to.to;
-    m.action = { kind: 'warp', t: 0, len: WARP_FRAMES, speed: 0, dir };
-    m.px = m.py = 0;
+    throughWarp(m, to, dir);
     // Into a building or a cave the bike is put away (no cycling there).
     if (!step.cycling?.(to.to)) m.bike = false;
     m.bikeSpeed = m.bikeCount = 0;
@@ -368,9 +379,7 @@ function rideTo(m: Mover, to: NonNullable<ReturnType<StepFn>>, dir: number, step
   m.prev = m.spot;
   m.strides += 1;
   if (to.warp) {
-    m.spot = to.to;
-    m.action = { kind: 'warp', t: 0, len: WARP_FRAMES, speed: 0, dir };
-    m.px = m.py = 0;
+    throughWarp(m, to, dir);
     if (!step.cycling?.(to.to) && !step.acroCycling?.(to.to)) m.bike = false;
     bikeClear(m);
     return;
@@ -604,6 +613,12 @@ export function acroFrame(m: Mover): number | null {
   return null;
 }
 
+const DIR_OF: Record<SeamDir, number> = { south: DIR_SOUTH, north: DIR_NORTH, west: DIR_WEST, east: DIR_EAST };
+/** A warp's landing as StepFn says it: the way it turns you, and whether it walks you on. */
+function landing(w: { face?: SeamDir; walk?: number }): { face?: number; walk?: boolean } {
+  return { ...(w.face ? { face: DIR_OF[w.face] } : {}), ...(w.walk ? { walk: true } : {}) };
+}
+
 /** A StepFn off the bots' World, corrected to the ROM: a ledge's collision bits are set,
  *  so its cell is a wall to anything but the hop it faces (World lets a trainer stand on
  *  one, which never mattered while export-world.py classed every ledge as a wall). */
@@ -612,7 +627,7 @@ export function stepFn(world: {
   cell(id: string, x: number, y: number): number;
   acroAt?(id: string, x: number, y: number): number;
   acroStep?(s: Spot, d: SeamDir): Spot | null;
-  warpAt(id: string, x: number, y: number): { to: string; toX: number; toY: number; kind: string } | undefined;
+  warpAt(id: string, x: number, y: number): { to: string; toX: number; toY: number; kind: string; face?: SeamDir; walk?: number } | undefined;
   map(id: string): { outdoor: boolean } | undefined;
 }, field: { surf: boolean; cut: number } = { surf: false, cut: 0 }): StepFn {
   const fn: StepFn = (from, dir, ride = 0) => {
@@ -626,11 +641,11 @@ export function stepFn(world: {
       // A building's doormat is an arrow: down on it goes out (MetatileBehavior's
       // south-arrow warp), though the step itself runs into the map's edge.
       const mat = dir === DIR_SOUTH && !world.map(from.map)?.outdoor ? world.warpAt(from.map, from.x, from.y) : undefined;
-      return mat && mat.kind === 'door' ? { to: { map: mat.to, x: mat.toX, y: mat.toY }, hop: false, warp: true } : null;
+      return mat && mat.kind === 'door' ? { to: { map: mat.to, x: mat.toX, y: mat.toY }, hop: false, warp: true, ...landing(mat) } : null;
     }
     const [dx, dy] = DXY[dir];
     const door = world.warpAt(from.map, from.x + dx, from.y + dy);
-    if (door && to.map === door.to && to.x === door.toX && to.y === door.toY) return { to, hop: false, warp: true };
+    if (door && to.map === door.to && to.x === door.toX && to.y === door.toY) return { to, hop: false, warp: true, ...landing(door) };
     const hop = to.map === from.map && Math.abs(to.x - from.x) + Math.abs(to.y - from.y) === 2;
     const cls = world.cell(to.map, to.x, to.y);
     if (!hop && cls >= 3 && cls <= 6) return null;

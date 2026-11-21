@@ -9,7 +9,7 @@ import type { PatchTable } from '../../src/bots/patches';
 import worldJson from '../data/world.json';
 import patchJson from '../../src/data/patches.json';
 import { makeRoom } from './room';
-import { stepFn } from '../sim';
+import { stepFn, newMover, tick, type Keys } from '../sim';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 
@@ -44,6 +44,51 @@ describe('the world has no one-way pockets', () => {
     }
     const stuck = new Set([...reached].filter((c) => !back.has(c)).map((c) => c.split(':')[0]));
     expect([...stuck].sort()).toEqual([]);
+  });
+
+  // Through a warp the ROM turns you by the landing and walks you off it only if it is a door
+  // (export-warp-exits.py); walked on the way they came, Devon Corp's stairs put a player
+  // coming down in the dead end behind them, whose only way out was back up (#397).
+  it('no warp walks you into a dead end', () => {
+    const world = (room as unknown as { world: Parameters<typeof stepFn>[0] & { warpAt(id: string, x: number, y: number): unknown } }).world;
+    const step = stepFn(world, { surf: true, cut: 3 });
+    const reached = new Set<string>(land), queue = [...land];
+    for (let i = 0; i < queue.length; i++) {
+      for (const d of [1, 2, 3, 4]) {
+        const r = step(un(queue[i]), d);
+        if (!r) continue;
+        const to = `${r.to.map}:${r.to.x}:${r.to.y}`;
+        if (!reached.has(to)) { reached.add(to); queue.push(to); }
+      }
+    }
+    const KEY: Record<number, keyof Keys> = { 1: 'down', 2: 'up', 3: 'left', 4: 'right' };
+    const stuck: string[] = [];
+    let walked = 0;
+    for (const at of reached) {
+      const from = un(at);
+      if (world.warpAt(from.map, from.x, from.y)) continue;
+      for (const d of [1, 2, 3, 4]) {
+        if (!step(from, d)?.warp) continue;
+        walked++;
+        const m = newMover(from, d);
+        for (let f = 0; f < 8; f++) tick(m, { [KEY[d]]: true }, step);
+        for (let f = 0; f < 120; f++) tick(m, {}, step);
+        if (![1, 2, 3, 4].some((e) => { const r = step(m.spot, e); return r && !r.warp; })) {
+          stuck.push(`${at} ${KEY[d]} -> ${m.spot.map}:${m.spot.x}:${m.spot.y}`);
+        }
+      }
+    }
+    expect(walked).toBeGreaterThan(1500);
+    expect(stuck).toEqual([]);
+  });
+
+  it("down Devon Corp's stairs lands on the floor below, facing south", () => {
+    const step = stepFn((room as unknown as { world: Parameters<typeof stepFn>[0] }).world);
+    const m = newMover({ map: 'MAP_RUSTBORO_CITY_DEVON_CORP_2F', x: 14, y: 2 }, 2);
+    for (let f = 0; f < 8; f++) tick(m, { up: true }, step);
+    for (let f = 0; f < 120; f++) tick(m, {}, step);
+    expect(m.spot).toEqual({ map: 'MAP_RUSTBORO_CITY_DEVON_CORP_1F', x: 14, y: 2 });
+    expect(m.facing).toBe(1);
   });
 
   it('a rock face is not a door', () => {
