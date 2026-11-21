@@ -1,7 +1,23 @@
 {
- "readAt": "2026-11-21T12:27:25.356Z",
+ "readAt": "2026-11-21T12:57:28.879Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "GDUN2F",
+   "at": "2026-11-21T12:51:46.046Z",
+   "end": "2026-11-21T12:51:57.495Z",
+   "secs": 11,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "NMCBBS",
    "at": "2026-11-21T11:56:13.376Z",
@@ -9483,13 +9499,13 @@
   {
    "id": "d644c79a",
    "first": "2026-11-21T12:26:53.188Z",
-   "last": "2026-11-21T12:26:53.188Z",
+   "last": "2026-11-21T12:55:11.922Z",
    "since": "2026-11-16",
    "versions": [
     "world-8bf416d6"
    ],
    "solo": 2,
-   "checkins": 1,
+   "checkins": 5,
    "v": "world-8bf416d6"
   }
  ],
