@@ -60,6 +60,10 @@ export interface Warp {
   toX: number;
   toY: number;
   kind: string;
+  /** How the landing turns you, and walks you a step off it (1), as the ROM lands you
+   *  through a door, a mat, stairs or a ladder (tools/br/export-warp-exits.py; sim.ts). */
+  face?: SeamDir;
+  walk?: number;
 }
 
 export type SeamDir = 'north' | 'south' | 'east' | 'west';
