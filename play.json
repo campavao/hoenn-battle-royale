@@ -1,7 +1,23 @@
 {
- "readAt": "2026-11-21T19:34:01.134Z",
+ "readAt": "2026-11-21T20:04:05.562Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "B4F3W6",
+   "at": "2026-11-21T20:01:01.912Z",
+   "end": "2026-11-21T20:01:07.502Z",
+   "secs": 6,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "F5YHKJ",
    "at": "2026-11-21T16:30:38.606Z",
@@ -9396,7 +9412,7 @@
   {
    "id": "6144a717",
    "first": "2026-10-17T02:37:29.310Z",
-   "last": "2026-11-21T17:21:40.481Z",
+   "last": "2026-11-21T20:00:16.719Z",
    "since": "2026-10-15",
    "versions": [
     "2",
@@ -9416,11 +9432,12 @@
     "world-5a96d233",
     "world-aa461974",
     "world-f1c1ffec",
-    "world-baa9757b"
+    "world-baa9757b",
+    "world-d11e20f3"
    ],
    "solo": 2,
-   "checkins": 56,
-   "v": "world-baa9757b"
+   "checkins": 59,
+   "v": "world-5a96d233"
   },
   {
    "id": "4d3cafd9",
