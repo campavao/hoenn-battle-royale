@@ -150,10 +150,10 @@ const modUpdates = await channel("mod-updates", { parent: info, hidden: true, to
 const general = await channel("general", { parent: community, topic: "Talk about either game here." });
 const rooms = await channel("hoenn-open-rooms", { parent: hoennCat, readOnly: true, was: ["open-rooms"], topic: "The game posts Hoenn rooms here while they wait for trainers. Tap a link to join." });
 const hoennLfm = await channel("hoenn-find-a-match", { parent: hoennCat, slow: 10, was: ["looking-for-match"], topic: `Say when you're on for Hoenn. Play at ${SITE}. Quick play starts 60 seconds after the first trainer joins.` });
-const hoennFeedback = await channel("hoenn-feedback", { parent: hoennCat, was: ["feedback"], topic: `Tell me what should change in Hoenn Battle Royale. I read every post. <@${owner}>` });
+const hoennFeedback = await channel("hoenn-feedback", { parent: hoennCat, was: ["feedback"], topic: "What should change in Hoenn Battle Royale? Post your ideas here." });
 const hoennBugs = await channel("hoenn-bugs", { parent: hoennCat, was: ["bugs"], topic: "Something broke? Say what you did, what you saw, and your phone or browser." });
 const kantoLfm = await channel("kanto-find-a-match", { parent: kantoCat, slow: 10, topic: `Say when you're on for Kanto. Get the mod at ${KANTO}` });
-const kantoFeedback = await channel("kanto-feedback", { parent: kantoCat, topic: `Tell me what should change in Kanto Battle Royale. I read every post. <@${owner}>` });
+const kantoFeedback = await channel("kanto-feedback", { parent: kantoCat, topic: "What should change in Kanto Battle Royale? Post your ideas here." });
 const kantoBugs = await channel("kanto-bugs", { parent: kantoCat, topic: "Something broke? Say what you did, what you saw, and your gen1recomp and mod versions." });
 // Whatever the server came with ("Create My Own" or a template's #clips-and-highlights,
 // Lobby, Gaming) moves in with the rest: text to COMMUNITY, voice to VOICE. Read afresh: the
@@ -265,9 +265,9 @@ const out = {
 // ---- the welcome post: posted once, then edited to what this file says -------------------------
 const content = [
   "# Welcome to Pokémon Battle Royale",
-  // In Cam's own voice (11-21: "it's a weird third person where in fact you are acting on my
-  // behalf"), with their name as a mention; allowed_mentions keeps it from pinging.
-  `I'm <@${owner}>, and I make two Pokémon battle royale games. In both, up to 30 trainers drop into a region, catch and train a team, and fight until one is left. This server is for both.`,
+  // About the games, never the person (Cam, 11-21: "just don't mention me or my name ... it
+  // already shows my role").
+  "There are two games, and this server is for both. In each, up to 30 trainers drop into a region, catch and train a team, and fight until one is left.",
   "",
   `## Hoenn Battle Royale\nIt runs Pokémon Emerald in your browser, on a phone or a computer. Play at ${SITE}\nRooms waiting for trainers show up in <#${rooms.id}> as they open. Tap a link to join. Or say you're on in <#${hoennLfm.id}>. QUICK PLAY starts by itself 60 seconds after the first trainer joins, and fills the empty seats with bots.`,
   "",
@@ -277,7 +277,7 @@ const content = [
   "",
   "**Be kind.** No spam, self-promotion or ROMs. Gym Leaders may remove messages or time people out.",
   "",
-  `Send me ideas in <#${hoennFeedback.id}> or <#${kantoFeedback.id}>, and problems in <#${hoennBugs.id}> or <#${kantoBugs.id}>. I read them all.`,
+  `Ideas go in <#${hoennFeedback.id}> or <#${kantoFeedback.id}>, and problems in <#${hoennBugs.id}> or <#${kantoBugs.id}>.`,
 ].join("\n");
 const body = JSON.stringify({ content, allowed_mentions: { parse: [] } });
 const headers = { "Content-Type": "application/json" };
