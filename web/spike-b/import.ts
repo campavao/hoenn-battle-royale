@@ -8,6 +8,7 @@
 
 import type { Emulator } from '../src/emu';
 import { checkEmerald, isPrePatched } from '../src/rom/emerald';
+import { explainRom, unpackRom } from '../src/rom/romfile';
 import { howToRead, markHowToDue } from '../src/ui/howto-due';
 import { TEXT_RED } from '../src/ui/emerald';
 import { menuScreen, noticeScreen } from '../src/ui/screens';
@@ -35,7 +36,7 @@ export async function importRom(emu: Emulator): Promise<void> {
     title: 'ONE STEP FIRST',
     lines: [
       { text: 'HOENN BATTLE ROYALE plays on your own POKEMON EMERALD (U) ROM, a 16 MiB .gba file.' },
-      { text: 'Pick it once. It stays in this browser on this device and is never uploaded.' },
+      { text: 'Pick it once. A .zip works too. It stays in this browser on this device and is never uploaded.' },
       { text: error, id: 'import-error', color: TEXT_RED },
     ],
     buttons: [
@@ -55,7 +56,7 @@ export async function importRom(emu: Emulator): Promise<void> {
     })),
     rowsId: 'landing-rows',
     tiles: true,
-    note: error || 'Free, in your browser. Bring your own POKEMON EMERALD (U) ROM to play.',
+    note: 'Free, in your browser. Bring your own POKEMON EMERALD (U) ROM to play.',
     noteId: 'import-note',
     buttons: [{ label: 'PICK YOUR ROM', id: 'pick-rom', onPress: pick }],
     containers: [{ id: 'dropzone', cls: 'dropzone' }],
@@ -67,11 +68,22 @@ export async function importRom(emu: Emulator): Promise<void> {
     const handle = async (file: File) => {
       error = '';
       stage.redraw();
-      const got = new Uint8Array(await file.arrayBuffer());
+      // The same file picked again after a no still fires `change`.
+      input.value = '';
+      const fail = (why: string) => {
+        error = why;
+        // Said in red on the ask, wherever the file came from.
+        if (stage.current !== ask) stage.push(ask);
+        else stage.redraw();
+      };
+      // Most copies are zipped (romfile.ts): the .gba inside is taken.
+      const unpacked = await unpackRom(new Uint8Array(await file.arrayBuffer()));
+      if (!unpacked.ok) { fail(unpacked.reason); return; }
+      const got = unpacked.bytes;
       // A local build: dev runs it without a patch (loadRom).
       if (import.meta.env.DEV && isPrePatched(got)) { resolve(got); return; }
       const result = await checkEmerald(got);
-      if (!result.ok) { error = result.reason ?? 'not a Pokemon Emerald (U) ROM, 16 MiB'; stage.redraw(); return; }
+      if (!result.ok) { fail(explainRom(got, result)); return; }
       resolve(got);
     };
     input.addEventListener('change', () => { const f = input.files?.[0]; if (f) void handle(f); });
