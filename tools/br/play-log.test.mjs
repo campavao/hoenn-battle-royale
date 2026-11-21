@@ -485,3 +485,18 @@ test("the leaderboard rates finishing order, only between two or more people", (
   assert.ok(Math.abs(sum - 3 * RATING_START) <= 2, `sum ${sum}`);
   assert.equal(leaderboard([r(1, `1 ${A} 0 ALICE`, `2 ${B} 0 BOB`)]).players.map(p => p.rating).join(), "1016,984");
 });
+
+test("the way in (seen.ts): each step a line, kept newest first, anything else not a step", () => {
+  const evs = [
+    "2026-11-22T10:00:00.000Z seen landing",
+    "2026-11-22T10:00:05.000Z seen ask",
+    "2026-11-22T10:01:00.000Z seen bad-game",
+    "2026-11-22T10:02:00.000Z seen rom",
+    "2026-11-22T10:09:00.000Z seen match",
+    "2026-11-22T10:10:00.000Z seen hacked",
+  ].map(l => parseLine(l, "x"));
+  assert.equal(evs[5], null, "not a step: dropped");
+  assert.deepEqual(evs[2], { t: "2026-11-22T10:01:00.000Z", kind: "seen", step: "bad-game" });
+  const out = derive(evs.filter(Boolean));
+  assert.deepEqual(out.seen.map(s => s.step), ["match", "rom", "bad-game", "ask", "landing"]);
+});

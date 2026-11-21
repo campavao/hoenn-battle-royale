@@ -56,6 +56,7 @@ import { Ticks } from './ticks';
 import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_CONTEST_CURTAIN_FALL, SE_CONTEST_CURTAIN_RISE, SE_DOOR, SE_EXIT, SE_FAILURE, SE_BIKE_HOP, SE_FIELD_POISON, SE_LEDGE, SE_M_FLY, SE_SELECT, SE_SHOP, SE_USE_ITEM, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { devRomParam, importRom } from './import';
+import { DEFAULT_RELAY_URL, seen } from './seen';
 import { LoadingScreen } from './loading';
 import { introArt } from './introart';
 import { askToKeepStorage, registerServiceWorker } from '../src/pwa';
@@ -2803,6 +2804,8 @@ function startMatch(l: WorldLink): void {
   if (resuming && matchOn && l.me === link.me) { resumeMatch(l); return; }
   resuming = reconnecting = false;
   sendJank();
+  // A newcomer's first match: the end of the way in (seen.ts).
+  seen('match');
   link = l;
   jank = new JankMeter();
   jankSent = false;
@@ -5264,7 +5267,7 @@ function unlink(): void {
   if (parseRoomHash(location.hash)) history.replaceState(null, '', `${location.pathname}${location.search}${withoutRoom(location.hash) ? `#${withoutRoom(location.hash)}` : ''}`);
 }
 
-const DEFAULT_RELAY_URL = 'wss://hoenn-relay-production.up.railway.app';
+
 
 /** A lazy chunk that will not load (a release took this page's hashed files off the
  *  site): the page offers a reload, never takes one itself mid-match (app.ts chunkFailed). */
@@ -5328,9 +5331,9 @@ async function boot(): Promise<void> {
   try {
     // The ROM picker is the player's to answer: the loading screen steps aside for it.
     const pick = async (emu: Parameters<typeof importRom>[0]) => {
-      if (devRomParam()) return importRom(emu, ''); // a test's file, read without asking
+      if (devRomParam()) return importRom(emu); // a test's file, read without asking
       loading.hold(true);
-      try { await importRom(emu, ''); } finally { loading.hold(false); }
+      try { await importRom(emu); } finally { loading.hold(false); }
     };
     files = await loadRom(gbaCanvas, (t) => { statsEl.textContent = t; loading.say(t); }, pick, devRomParam(), (bytes) => {
       try { loading.ride(introArt(bytes), me().skin % 2 === 1); } catch (e) { console.warn('[loading] no ride', e); }
