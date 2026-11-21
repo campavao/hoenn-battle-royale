@@ -241,6 +241,8 @@ export interface RomBattles {
   /** The first of the party still standing, "HP 26/40" (br_hud.c LeadHp); '' with
    *  nobody standing. */
   leadHp(): string;
+  /** The party's first, by species; 0 with none. */
+  leadSpecies(): number;
   /** The rod in the bag (gBrLevels.rod: the ladder's OLD, GOOD or SUPER ROD), 0 for none. */
   rod(): number;
   /** I won: Emerald's Hall of Fame with my team, the live winner's parade (br_match.c's
@@ -1337,6 +1339,10 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
         if (hp) return `HP ${hp}/${k.party[at + 88] | (k.party[at + 89] << 8)}`;
       }
       return '';
+    },
+    leadSpecies() {
+      const k = carried ?? start;
+      return k.count ? teamOf(k.party, 1)[0]?.species ?? 0 : 0;
     },
     rod() {
       const l = (carried ?? start).levels;

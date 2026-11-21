@@ -70,6 +70,8 @@ export interface BattleView {
    *  out starts on its first). */
   moveCursor: number;
   foe: { name: string; types: [number, number] };
+  /** My POKeMON out now, by species (gBattleMons' first field): PARTY's picture. */
+  own?: number;
   /** The BAG's battle pockets (ui/bag.ts), by pocket: what can be used in here. */
   bag: Map<number, Stack[]>;
 }
@@ -146,6 +148,7 @@ export function readBattleView(
     moves,
     moveCursor: cursor === undefined ? 0 : emu.read(cursor + local, 8) & 3,
     foe: { name: foeName, types: [emu.read(foe + MON_TYPES, 8), emu.read(foe + MON_TYPES + 1, 8)] },
+    own: emu.read(ours, 16),
     bag: withBag ? readBattleBag(emu, sym, rom) : NO_BAG,
   };
 }
@@ -658,6 +661,8 @@ export class BattleMenu {
         const [aw, ah] = this.actSize();
         iconButton(c, aw, ah, (cx, cy, box) => {
           if (word === 'BAG') { const bag = first?.bag(); if (bag) drawFitted(c, 'bag', bag, 0, 0, 64, 64, cx, cy, box); }
+          // PARTY is the one out, not a POKe BALL: BALL is the ball (Cam, 11-21).
+          else if (word === 'PARTY' && this.drawOwn(c, cx, cy, box)) return;
           else drawItemFitted(c, word === 'PARTY' ? ITEM_POKE_BALL : word === 'BALL' ? this.ballStack()?.item ?? ITEM_POKE_BALL : ITEM_ESCAPE_ROPE, cx, cy, box, redo);
         }, label, color);
         const key = word === 'PARTY' ? first?.keys?.party : word === 'BAG' ? first?.keys?.bag : undefined;
@@ -886,6 +891,16 @@ export class BattleMenu {
 
   /** The ball BALL throws: a wild fight's (not the Safari's, which has its own), off a battle's bag,
    *  the first that is not a MASTER BALL, which is kept for when it is chosen. */
+  /** PARTY's picture: the POKeMON out, its party icon fitted to `box`. False until there is
+   *  one to draw (no battle read yet, its icon not cut yet). */
+  private drawOwn(c: EmeraldCanvas, cx: number, cy: number, box: number): boolean {
+    const own = this.view?.own;
+    const icon = own ? this.deps.firstMoves?.icon(own) : null;
+    if (!own || !icon) return false;
+    drawFitted(c, `mon${own}`, icon, 0, 0, 32, 32, cx, cy, box);
+    return true;
+  }
+
   private ballStack(): { item: number } | undefined {
     const v = this.view;
     if (!v || v.trainer || v.menu === MENU_SAFARI || this.lastShown === MENU_SAFARI || this.fieldHome || !this.deps.useItem || !v.ball) return undefined;
@@ -1882,7 +1897,7 @@ export class BattleMenu {
       for (const w of this.actionWins) if (w.c.width !== aw || w.c.height !== ah) w.size(aw, ah, this.scale);
       this.actionWins[3].show(`${JSON.stringify(run ?? null)}|${aw}`);
       this.actionWins[2].show(`${ball?.item}|${aw}`);
-      this.actionWins[0].show(`p|${aw}`);
+      this.actionWins[0].show(`p|${aw}|${v?.own}`);
       this.actionWins[1].show(`b|${aw}`);
     }
     if (party) this.partyCells.forEach(({ b }, i) => { b.hidden = !this.team[i]; b.setAttribute('aria-label', this.team[i]?.name ?? ''); });

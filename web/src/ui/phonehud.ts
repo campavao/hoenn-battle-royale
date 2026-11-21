@@ -161,6 +161,8 @@ export interface HudView {
   ctx: Ctx;
   /** gPlayerPartyCount: the start menu has no POKeMON row before the first catch. */
   party: number;
+  /** The party's first, by species (0 for none): PARTY's picture. */
+  leadSpecies?: number;
   /** Field moves the party could use; none off the match proper or with an older patch. */
   moves: FieldMove[];
 }
@@ -439,6 +441,9 @@ export interface PhoneHudDeps {
    *  PARTY and BAG for the dock. /classic/ passes neither. */
   mini?: { draw(c: EmeraldCanvas, x: number, y: number, size: number): void; key(): string };
   bumpers?: { onBag(): void; bag(): CanvasImageSource | null; keys?: { party: string; bag: string; ctx?: string } };
+  /** A species' party icon (its first 32x32 frame), for PARTY to show the lead in place of a
+   *  POKe BALL; null until it is cut. */
+  monIcon?(species: number): CanvasImageSource | null;
 }
 
 /** The opaque part of a picture's cell, for fitting an icon by what is drawn. */
@@ -592,6 +597,8 @@ export class PhoneHud {
   private readonly fog: Win;
   private readonly moves: MovesWindow;
   private party: Win;
+  /** The species PARTY last drew (0: the POKe BALL). */
+  private leadDrawn = 0;
   private bag: Win | null = null;
   private readonly map: Win;
   private readonly start: Win;
@@ -704,7 +711,11 @@ export class PhoneHud {
       this.ctx.canvas.remove();
       this.party = new Win(this.buttons.party, DOCK_W, DOCK_H, (c, redo) => {
         c.drawFrame({ x: 0, y: 0, w: DOCK_W, h: DOCK_H });
-        drawItemFitted(c, ITEM_POKE_BALL, 20, DOCK_H / 2, 18, redo);
+        // The lead, not a POKe BALL (Cam, 11-21: "it should use a pokemon sprite in your party").
+        const sp = this.view?.leadSpecies ?? 0;
+        const mon = sp ? deps.monIcon?.(sp) : null;
+        if (mon) drawFitted(c, `mon${sp}`, mon, 0, 0, 32, 32, 20, DOCK_H / 2, 20);
+        else drawItemFitted(c, ITEM_POKE_BALL, 20, DOCK_H / 2, 18, redo);
         c.drawText('PARTY', 34, 13, this.buttons.party.getAttribute('aria-disabled') === 'true' ? TEXT_GRAY : TEXT_DARK);
         if (bump.keys) drawKeycap(c, hintFor('l', bump.keys.party), DOCK_W - 4, 4);
       });
@@ -775,6 +786,13 @@ export class PhoneHud {
     // The start menu has a POKeMON row once there is a party, and MAP once the ring is
     // up (start_menu.c): before that each is grey, not a START that opens and shuts.
     this.grey(this.buttons.party, this.party, v.party === 0);
+    // Its icon can be cut after the first look: redrawn then too.
+    const sp = v.leadSpecies ?? 0;
+    const lead = sp && this.deps.monIcon?.(sp) ? sp : 0;
+    if (this.deps.bumpers && lead !== this.leadDrawn) {
+      this.leadDrawn = lead;
+      this.party.redraw();
+    }
     this.grey(this.buttons.map, this.map, v.ring === null);
     const ctx = this.buttons.ctx;
     ctx.setAttribute('aria-disabled', String(!v.ctx.enabled));
