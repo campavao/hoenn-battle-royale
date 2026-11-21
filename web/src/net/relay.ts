@@ -87,6 +87,8 @@ export interface RoomListing {
   secs?: number;
   /** A match under way: a join watches it, and plays the next. */
   playing?: boolean;
+  /** QUICK PLAY's room, nobody's to host: `secs` is its count to the start, if running. */
+  quick?: boolean;
 }
 
 /** The relay had nothing to seat you in: QUICK PLAY hosts instead. */

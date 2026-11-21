@@ -64,6 +64,14 @@ describe('the room rows', () => {
     expect(roomRows([room({ playing: true, players: 8 })])[0].detail).toBe('8/8 · FULL');
   });
 
+  it('name quick play\'s room QUICK PLAY, with its count, and let you in (Cam, 11-21)', () => {
+    const [row] = roomRows([room({ quick: true, host: 'QUINN', skin: '2', secs: 42 })]);
+    expect(row.label).toBe('QUICK PLAY');
+    expect(row.detail).toBe('3/8 · 0:42');
+    expect(row.action).toEqual({ kind: 'join', code: 'ABC123', pass: false });
+    expect(roomRows([room({ quick: true, playing: true })])[0].detail).toBe('3/8 · WATCH');
+  });
+
   it('show a full room without letting you press it', () => {
     const [row] = roomRows([room({ players: 8 })]);
     expect(row.disabled).toBe(true);

@@ -124,6 +124,8 @@ export class Lobby {
   private ticker: ReturnType<typeof setInterval> | null = null;
   /** LOBBIES' rooms, as the relay last listed them. */
   private rooms: Listed[] = [];
+  /** When the relay said `rooms` (Date.now()): a quick room's count goes on from it. */
+  private roomsAt = 0;
 
   constructor(private readonly hooks: LobbyHooks) {
     this.stage = pageStage();
@@ -175,6 +177,7 @@ export class Lobby {
   /** The relay's list of hosted rooms (LOBBIES). */
   listed(rooms: Listed[]): void {
     this.rooms = rooms;
+    this.roomsAt = Date.now();
     if (this.stage.current === this.lobbies) this.stage.redraw();
   }
 
@@ -211,7 +214,7 @@ export class Lobby {
     // A quick room's count goes down a second at a time; LOBBIES asks again every three.
     let n = 0;
     this.ticker ??= setInterval(() => {
-      if (this.room?.startsIn !== undefined) this.stage.redraw();
+      if (this.room?.startsIn !== undefined || (this.stage.current === this.lobbies && this.rooms.some((r) => r.startsIn !== undefined))) this.stage.redraw();
       if (this.stage.current === this.lobbies && ++n % 3 === 0) this.hooks.list();
     }, 1000);
   }
@@ -289,7 +292,11 @@ export class Lobby {
    *  matches under way to watch, one row each. HOST makes one of my own. */
   private readonly lobbies: DrawnScreen = menuScreen(() => ({
     title: 'LOBBIES',
-    rows: roomRows(this.rooms.map((r) => ({ code: r.code, host: r.host, players: r.players, seats: r.seats, pass: r.pass, full: r.players >= r.seats, playing: r.playing })))
+    rows: roomRows(this.rooms.map((r) => ({
+      code: r.code, host: r.host, players: r.players, seats: r.seats, pass: r.pass, full: r.players >= r.seats, playing: r.playing, quick: r.quick,
+      // A quick room's count, run on from when the relay said it.
+      ...(r.startsIn !== undefined ? { secs: Math.max(0, r.startsIn - Math.floor((Date.now() - this.roomsAt) / 1000)) } : {}),
+    })))
       .map((row, i): RowSpec => ({
         label: row.label,
         detail: row.detail?.replace(' · 🔒', '') ?? '',

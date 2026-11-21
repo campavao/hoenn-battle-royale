@@ -578,21 +578,27 @@ export class WorldService {
   /** LOBBIES: the live relay's list_rooms door. A hosted room a stranger could walk into
    *  now: not quick play's, not unlisted, not mid-match, not waiting on its host's reload;
    *  its count the trainers here of the host's MAX, fullest first. */
-  /** LOBBIES: the hosted rooms waiting for START, and every match under way to watch (Cam,
-   *  11-16: "show in-progress games as well so that folks can click in to spectate"), quick
-   *  play's too. Never an unlisted room: its code is its door. Waiting rooms first. */
+  /** LOBBIES: the rooms waiting for a start, quick play's with their count (Cam, 11-21: "make
+   *  it so quick play lobbies show up on the lobby page"), and every match under way to watch
+   *  (Cam, 11-16: "show in-progress games as well so that folks can click in to spectate").
+   *  Never an unlisted room: its code is its door. Waiting rooms first. */
   private listed(): Listed[] {
     const out: Listed[] = [];
+    const now = this.opts.now();
     for (const r of this.rooms.values()) {
       if (r.set.door === 'private') continue;
       const here = [...r.members.values()].filter((p) => !p.away);
       const playing = !!r.host;
-      // A room still waiting shows while its host is there to START it.
-      const owner = r.members.get(r.owner);
-      if (!playing && (r.quick || !owner || owner.away)) continue;
+      // A hosted room still waiting shows while its host is there to START it; a quick one
+      // while anybody is in it.
+      const owner = r.quick ? undefined : r.members.get(r.owner);
+      if (!playing && !r.quick && (!owner || owner.away)) continue;
       const face = owner && !owner.away ? owner : here[0];
       if (!face) continue;
-      out.push({ code: r.code, host: face.name, skin: face.skin, players: here.length, seats: r.quick ? ROOM_MAX : r.set.max, playing, pass: r.set.door === 'pass' });
+      const row: Listed = { code: r.code, host: face.name, skin: face.skin, players: here.length, seats: r.quick ? ROOM_MAX : r.set.max, playing, pass: r.set.door === 'pass' };
+      if (r.quick) row.quick = true;
+      if (r.quick && !playing && r.startsAt !== null) row.startsIn = Math.max(0, Math.ceil((r.startsAt - now) / 1000));
+      out.push(row);
     }
     return out.sort((a, b) => Number(a.playing) - Number(b.playing) || b.players - a.players || (a.code < b.code ? -1 : 1));
   }
