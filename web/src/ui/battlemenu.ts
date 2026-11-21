@@ -313,6 +313,8 @@ export function powerText(m: MoveInfo): string {
  *  (br_items.h), the POKe BALL's slot first. */
 const ROYALE_BALLS = [4, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12];
 const ITEM_POKE_BALL = 4, ITEM_ESCAPE_ROPE = 85, ITEM_POKEBLOCK_CASE = 273, ITEM_TM_CASE = 364;
+/** A disc for MOVES (TM24 THUNDERBOLT's yellow), so it is not SUMMARY's TM CASE again. */
+const ITEM_TM24 = 312;
 const ICON_BOX = 15;
 const SLOT_MENU_PARTY = 2, SLOT_RUN = 3;
 const USE_HEAD_W = 100, USE_HEAD_H = 34;
@@ -850,12 +852,24 @@ export class BattleMenu {
     rowButton('SUMMARY', () => TEXT_DARK, (c, cx, cy, redo) => drawItemFitted(c, ITEM_TM_CASE, cx, cy, ICON_BOX, redo), () => {
       first?.showMon(this.team, this.memberAt);
     });
-    this.selectBtn = rowButton(() => (this.fieldHome ? 'SWITCH' : 'SELECT'), () => (this.canSelect() ? TEXT_BLUE : TEXT_GRAY), (c, cx, cy, redo) => drawItemFitted(c, ITEM_POKE_BALL, cx, cy, ICON_BOX, redo), () => {
+    this.selectBtn = rowButton(() => (this.fieldHome ? 'SWITCH' : 'SELECT'), () => (this.canSelect() ? TEXT_BLUE : TEXT_GRAY), (c, cx, cy, redo) => {
+      // The one it sends out (or moves), not a POKe BALL (Cam, 11-21: icons reused).
+      const m = this.team[this.memberAt];
+      const icon = m ? first?.icon(m.species) : null;
+      if (m && icon) drawFitted(c, `mon${m.species}`, icon, 0, 0, 32, 32, cx, cy, ICON_BOX);
+      else drawItemFitted(c, ITEM_POKE_BALL, cx, cy, ICON_BOX, redo);
+    }, () => {
       if (this.fieldHome) { this.swapFrom = this.memberAt; this.openParty(); return; }
       this.send(() => (this.forced ? first?.sendOut(this.memberAt) : first?.switchTo(this.memberAt)));
     });
     // Off a battle: what they hold, and the rung's free moves.
-    this.heldBtn = rowButton(() => (this.team[this.memberAt]?.item ? 'TAKE' : 'GIVE'), () => TEXT_DARK, (c, cx, cy, redo) => drawItemFitted(c, this.team[this.memberAt]?.item || ITEM_POKE_BALL, cx, cy, ICON_BOX, redo), () => {
+    this.heldBtn = rowButton(() => (this.team[this.memberAt]?.item ? 'TAKE' : 'GIVE'), () => TEXT_DARK, (c, cx, cy, redo) => {
+      // TAKE shows what they hold; GIVE, the BAG it comes out of.
+      const held = this.team[this.memberAt]?.item;
+      const bag = held ? null : first?.bag();
+      if (bag) drawFitted(c, 'bag', bag, 0, 0, 64, 64, cx, cy, ICON_BOX);
+      else drawItemFitted(c, held || ITEM_POKE_BALL, cx, cy, ICON_BOX, redo);
+    }, () => {
       const m = this.team[this.memberAt];
       if (!m) return;
       if (m.item) { void first?.field?.take(this.memberAt, m.item).then(() => this.refreshTeam()); return; }
@@ -865,7 +879,7 @@ export class BattleMenu {
       this.picked = 0;
       this.setMode('bag');
     });
-    this.movesBtn = rowButton('MOVES', () => TEXT_DARK, (c, cx, cy, redo) => drawItemFitted(c, ITEM_TM_CASE, cx, cy, ICON_BOX, redo), () => first?.field?.moves(this.memberAt));
+    this.movesBtn = rowButton('MOVES', () => TEXT_DARK, (c, cx, cy, redo) => drawItemFitted(c, ITEM_TM24, cx, cy, ICON_BOX, redo), () => first?.field?.moves(this.memberAt));
     this.setPartyHidden();
     if (first?.keys) onHintsChange(() => { this.actionWins[0]?.redraw(); this.actionWins[1]?.redraw(); });
     deps.root.addEventListener('pointerdown', () => {
