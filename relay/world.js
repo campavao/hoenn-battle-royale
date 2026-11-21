@@ -7,6 +7,7 @@
 
 import { createHash } from "node:crypto";
 import { WebSocketServer } from "ws";
+import { createRoomPoster } from "./discord.js";
 
 export const WORLD_PATH = "/world";
 // Trainers at most (Cam's cap: 30), and the bots a match may fill its seats with: the
@@ -26,7 +27,7 @@ const PING_MS = 15_000;
 // find itself on the board (career.ts playerId).
 export const playerId = (key) => createHash("sha256").update(`hbr-player:${key}`).digest("hex").slice(0, 12);
 
-export function createWorld({ log = () => {}, now = () => performance.now() } = {}) {
+export function createWorld({ log = () => {}, now = () => performance.now(), discord = process.env.DISCORD_ROOMS_WEBHOOK, fetch } = {}) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
   const perIp = new Map();
   const pinger = setInterval(() => {
@@ -39,6 +40,12 @@ export function createWorld({ log = () => {}, now = () => performance.now() } = 
   pinger.unref();
   let service = null;
   let loading = null;
+  // LOBBIES as the service sends it (`listed`, private to its TypeScript, a plain method in
+  // the bundle: calling it here leaves the world, and so WORLD_HASH, as it was).
+  const rooms = () => (service ? service.listed() : []);
+  // The open rooms in Discord (discord.js), when the relay has the channel's webhook.
+  const poster = discord ? createRoomPoster({ url: discord, rooms, log, ...(fetch ? { fetch } : {}) }) : null;
+  poster?.start();
   const load = () => {
     loading ??= import("./world/service.js").then((m) => {
       service = new m.WorldService({ maps: m.MAPS, patches: m.PATCHES, world: m.WORLD_HASH, bots: process.env.WORLD_BOTS !== undefined ? Number(process.env.WORLD_BOTS) : BOTS, cap: CAP, now, log, ringSecs: Number(process.env.WORLD_RING_SECS) || undefined, safariSecs: process.env.WORLD_SAFARI_SECS !== undefined ? Number(process.env.WORLD_SAFARI_SECS) : undefined,
@@ -52,8 +59,12 @@ export function createWorld({ log = () => {}, now = () => performance.now() } = 
     get service() { return service; },
     /** Matches under way (none before the first phone loaded the world). */
     get busy() { return service ? service.busy : 0; },
-    /** A deploy's SIGTERM: matches play out, every other room moves to the new relay. */
-    drain() { service?.drain(); },
+    /** LOBBIES' rows (wire.ts Listed), and the Discord poster that posts them. */
+    rooms,
+    poster,
+    /** A deploy's SIGTERM: matches play out, every other room moves to the new relay (whose
+     *  poster posts its rooms again: this one takes its messages down). */
+    drain() { service?.drain(); void poster?.drain(); },
     handle(req, socket, head, ip) {
       const n = (perIp.get(ip) || 0) + 1;
       if (n > PER_IP) {
@@ -113,6 +124,7 @@ export function createWorld({ log = () => {}, now = () => performance.now() } = 
     },
     close() {
       clearInterval(pinger);
+      void poster?.drain();
       service?.stop();
       for (const ws of wss.clients) ws.terminate();
     },

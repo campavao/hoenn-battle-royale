@@ -221,6 +221,34 @@ test("/world: the relay simulates its bots' fights, unless WORLD_SIM_BOTS=0", as
   }
 });
 
+test("/world: a quick room waiting for players is posted to the Discord webhook, and comes down with its trainer", async () => {
+  const calls = [];
+  const fetch = async (url, init) => {
+    calls.push({ method: init.method, url, content: init.body && JSON.parse(init.body).content });
+    return { ok: true, status: init.method === "DELETE" ? 204 : 200, json: async () => ({ id: "9" }) };
+  };
+  const relay = createRelay({ world: { discord: "https://discord.example/api/webhooks/1/tok", fetch } });
+  const { port } = await relay.listen(0, "127.0.0.1");
+  try {
+    const a = phone(port);
+    await a.open();
+    a.send({ t: "join", name: "quinn", skin: 0 });
+    const ra = await a.until((m) => m.t === "room");
+    // The real service's LOBBIES list, read by world.js (`listed`, a TypeScript private).
+    await relay.world.poster.tick();
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].method, "POST");
+    assert.ok(calls[0].content.startsWith("**QUICK PLAY** is filling: 1/30 trainers, starts <t:"), calls[0].content);
+    assert.ok(calls[0].content.endsWith(`Join: <https://hoenn-battle-royale.vercel.app/#join=${ra.code}>`), calls[0].content);
+    a.ws.close();
+    for (let i = 0; i < 50 && relay.world.rooms().length; i++) await new Promise((r) => setTimeout(r, 50));
+    await relay.world.poster.tick();
+    assert.deepEqual(calls.map((c) => c.method), ["POST", "DELETE"]);
+  } finally {
+    await relay.close();
+  }
+});
+
 test("/world: a code nobody has, and quick play's count", async () => {
   process.env.WORLD_AUTOSTART_SECS = "1";
   const relay = createRelay({});

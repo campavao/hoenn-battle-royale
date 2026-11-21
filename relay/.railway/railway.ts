@@ -23,6 +23,9 @@ export default defineRailway(() => {
     },
     env: {
       BR_TRUST_PROXY: preserve(),
+      // The community Discord's #open-rooms webhook (relay/discord.js). A secret: set with
+      // `railway variables`, never written here.
+      DISCORD_ROOMS_WEBHOOK: preserve(),
     },
   });
   const kantoRelay = service("relay", {

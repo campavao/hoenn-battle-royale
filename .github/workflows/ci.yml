@@ -941,3 +941,17 @@ jobs:
             railway link --project 34e1da0b-5125-40be-9954-d90fafa3e156 --environment production --service hoenn-relay
           fi
           railway up --service hoenn-relay --detach --ci
+
+      # The community's Discord (tools/br/discord-setup.mjs made the channel and its webhook):
+      # one line in #announcements once the site and the relay are up. The webhook URL is a
+      # secret, since anyone with it can post; no secret, no post. Never fails a release.
+      - name: Announce the release in Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_RELEASES_WEBHOOK }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then echo "no DISCORD_RELEASES_WEBHOOK; not announced"; exit 0; fi
+          jq -n --arg c "**Hoenn Battle Royale $TAG** is live: <$SITE>"$'\n'"What changed: <https://github.com/$REPO/releases/tag/$TAG>" \
+            '{content: $c, allowed_mentions: {parse: []}}' \
+            | curl -fsS --max-time 20 -H 'Content-Type: application/json' -d @- "$WEBHOOK" \
+            || echo "::warning::the Discord announcement did not post"
