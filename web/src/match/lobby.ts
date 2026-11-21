@@ -236,14 +236,17 @@ export function roomRows(rooms: RoomListing[]): LobbyRow[] {
     // index `careerSkin()` sends, so an unrecognised one is dropped rather than
     // shown as a stray digit -- SOLO's four sprites are the only ones there are.
     const skinName = room.skin !== undefined ? SKINS[Number(room.skin)] : undefined;
-    if (skinName) bits.push(skinName);
+    if (skinName && !room.quick) bits.push(skinName);
     bits.push(`${room.players}/${room.seats}`);
     if (room.pass) bits.push('🔒');
     if (full) bits.push('FULL');
     // A match under way is watched from the moment you are in, and played from the next.
     else if (room.playing) bits.push('WATCH');
+    // A quick room starts itself: how long until it does.
+    else if (room.quick && room.secs !== undefined) bits.push(countdown(room.secs));
     return {
-      label: room.host || room.code,
+      // Quick play's has nobody's name to go by: whoever came first is not its host.
+      label: room.quick ? 'QUICK PLAY' : room.host || room.code,
       detail: bits.join(' · '),
       action: { kind: 'join', code: room.code, pass: room.pass },
       disabled: full,

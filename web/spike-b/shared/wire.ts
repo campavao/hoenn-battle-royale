@@ -132,7 +132,13 @@ export interface Settings {
 }
 
 /** A room on LOBBIES' list. */
-export interface Listed { code: string; host: string; skin: number; players: number; seats: number; playing: boolean; pass: boolean }
+export interface Listed {
+  code: string; host: string; skin: number; players: number; seats: number; playing: boolean; pass: boolean;
+  /** QUICK PLAY's: nobody's to host, it starts itself. */
+  quick?: boolean;
+  /** A quick room still waiting: seconds to its start, when its count is running. */
+  startsIn?: number;
+}
 
 /** Relay to phone. */
 export type WorldDown =
