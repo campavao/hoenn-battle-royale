@@ -3028,6 +3028,7 @@ function wirePhoneHud(desk = false): void {
       bag: () => bagArtOf(),
       keys: desk ? { party: 'Q', bag: 'E', ctx: 'SHIFT' } : undefined,
     },
+    monIcon: (species) => monIconOf(species),
   });
   document.getElementById('hud-menu')!.addEventListener('click', () => openSheet());
   wireDialHold(hud.buttons.ctx);
@@ -3083,6 +3084,7 @@ function wirePhoneHud(desk = false): void {
         ? { label: 'FISH', item: rom!.rod(), enabled: true }
         : bikeNow(me),
       party: rom?.partyCount() ?? 0,
+      leadSpecies: rom?.leadSpecies() ?? 0,
       moves: mine && !mine.battling ? fieldChips(mine) : [],
     });
   };

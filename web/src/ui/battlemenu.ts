@@ -70,6 +70,8 @@ export interface BattleView {
    *  out starts on its first). */
   moveCursor: number;
   foe: { name: string; types: [number, number] };
+  /** My POKeMON out now, by species (gBattleMons' first field): PARTY's picture. */
+  own?: number;
   /** The BAG's battle pockets (ui/bag.ts), by pocket: what can be used in here. */
   bag: Map<number, Stack[]>;
 }
@@ -146,6 +148,7 @@ export function readBattleView(
     moves,
     moveCursor: cursor === undefined ? 0 : emu.read(cursor + local, 8) & 3,
     foe: { name: foeName, types: [emu.read(foe + MON_TYPES, 8), emu.read(foe + MON_TYPES + 1, 8)] },
+    own: emu.read(ours, 16),
     bag: withBag ? readBattleBag(emu, sym, rom) : NO_BAG,
   };
 }
@@ -310,6 +313,8 @@ export function powerText(m: MoveInfo): string {
  *  (br_items.h), the POKe BALL's slot first. */
 const ROYALE_BALLS = [4, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12];
 const ITEM_POKE_BALL = 4, ITEM_ESCAPE_ROPE = 85, ITEM_POKEBLOCK_CASE = 273, ITEM_TM_CASE = 364;
+/** A disc for MOVES (TM24 THUNDERBOLT's yellow), so it is not SUMMARY's TM CASE again. */
+const ITEM_TM24 = 312;
 const ICON_BOX = 15;
 const SLOT_MENU_PARTY = 2, SLOT_RUN = 3;
 const USE_HEAD_W = 100, USE_HEAD_H = 34;
@@ -658,6 +663,8 @@ export class BattleMenu {
         const [aw, ah] = this.actSize();
         iconButton(c, aw, ah, (cx, cy, box) => {
           if (word === 'BAG') { const bag = first?.bag(); if (bag) drawFitted(c, 'bag', bag, 0, 0, 64, 64, cx, cy, box); }
+          // PARTY is the one out, not a POKe BALL: BALL is the ball (Cam, 11-21).
+          else if (word === 'PARTY' && this.drawOwn(c, cx, cy, box)) return;
           else drawItemFitted(c, word === 'PARTY' ? ITEM_POKE_BALL : word === 'BALL' ? this.ballStack()?.item ?? ITEM_POKE_BALL : ITEM_ESCAPE_ROPE, cx, cy, box, redo);
         }, label, color);
         const key = word === 'PARTY' ? first?.keys?.party : word === 'BAG' ? first?.keys?.bag : undefined;
@@ -845,12 +852,24 @@ export class BattleMenu {
     rowButton('SUMMARY', () => TEXT_DARK, (c, cx, cy, redo) => drawItemFitted(c, ITEM_TM_CASE, cx, cy, ICON_BOX, redo), () => {
       first?.showMon(this.team, this.memberAt);
     });
-    this.selectBtn = rowButton(() => (this.fieldHome ? 'SWITCH' : 'SELECT'), () => (this.canSelect() ? TEXT_BLUE : TEXT_GRAY), (c, cx, cy, redo) => drawItemFitted(c, ITEM_POKE_BALL, cx, cy, ICON_BOX, redo), () => {
+    this.selectBtn = rowButton(() => (this.fieldHome ? 'SWITCH' : 'SELECT'), () => (this.canSelect() ? TEXT_BLUE : TEXT_GRAY), (c, cx, cy, redo) => {
+      // The one it sends out (or moves), not a POKe BALL (Cam, 11-21: icons reused).
+      const m = this.team[this.memberAt];
+      const icon = m ? first?.icon(m.species) : null;
+      if (m && icon) drawFitted(c, `mon${m.species}`, icon, 0, 0, 32, 32, cx, cy, ICON_BOX);
+      else drawItemFitted(c, ITEM_POKE_BALL, cx, cy, ICON_BOX, redo);
+    }, () => {
       if (this.fieldHome) { this.swapFrom = this.memberAt; this.openParty(); return; }
       this.send(() => (this.forced ? first?.sendOut(this.memberAt) : first?.switchTo(this.memberAt)));
     });
     // Off a battle: what they hold, and the rung's free moves.
-    this.heldBtn = rowButton(() => (this.team[this.memberAt]?.item ? 'TAKE' : 'GIVE'), () => TEXT_DARK, (c, cx, cy, redo) => drawItemFitted(c, this.team[this.memberAt]?.item || ITEM_POKE_BALL, cx, cy, ICON_BOX, redo), () => {
+    this.heldBtn = rowButton(() => (this.team[this.memberAt]?.item ? 'TAKE' : 'GIVE'), () => TEXT_DARK, (c, cx, cy, redo) => {
+      // TAKE shows what they hold; GIVE, the BAG it comes out of.
+      const held = this.team[this.memberAt]?.item;
+      const bag = held ? null : first?.bag();
+      if (bag) drawFitted(c, 'bag', bag, 0, 0, 64, 64, cx, cy, ICON_BOX);
+      else drawItemFitted(c, held || ITEM_POKE_BALL, cx, cy, ICON_BOX, redo);
+    }, () => {
       const m = this.team[this.memberAt];
       if (!m) return;
       if (m.item) { void first?.field?.take(this.memberAt, m.item).then(() => this.refreshTeam()); return; }
@@ -860,7 +879,7 @@ export class BattleMenu {
       this.picked = 0;
       this.setMode('bag');
     });
-    this.movesBtn = rowButton('MOVES', () => TEXT_DARK, (c, cx, cy, redo) => drawItemFitted(c, ITEM_TM_CASE, cx, cy, ICON_BOX, redo), () => first?.field?.moves(this.memberAt));
+    this.movesBtn = rowButton('MOVES', () => TEXT_DARK, (c, cx, cy, redo) => drawItemFitted(c, ITEM_TM24, cx, cy, ICON_BOX, redo), () => first?.field?.moves(this.memberAt));
     this.setPartyHidden();
     if (first?.keys) onHintsChange(() => { this.actionWins[0]?.redraw(); this.actionWins[1]?.redraw(); });
     deps.root.addEventListener('pointerdown', () => {
@@ -886,6 +905,16 @@ export class BattleMenu {
 
   /** The ball BALL throws: a wild fight's (not the Safari's, which has its own), off a battle's bag,
    *  the first that is not a MASTER BALL, which is kept for when it is chosen. */
+  /** PARTY's picture: the POKeMON out, its party icon fitted to `box`. False until there is
+   *  one to draw (no battle read yet, its icon not cut yet). */
+  private drawOwn(c: EmeraldCanvas, cx: number, cy: number, box: number): boolean {
+    const own = this.view?.own;
+    const icon = own ? this.deps.firstMoves?.icon(own) : null;
+    if (!own || !icon) return false;
+    drawFitted(c, `mon${own}`, icon, 0, 0, 32, 32, cx, cy, box);
+    return true;
+  }
+
   private ballStack(): { item: number } | undefined {
     const v = this.view;
     if (!v || v.trainer || v.menu === MENU_SAFARI || this.lastShown === MENU_SAFARI || this.fieldHome || !this.deps.useItem || !v.ball) return undefined;
@@ -1882,7 +1911,7 @@ export class BattleMenu {
       for (const w of this.actionWins) if (w.c.width !== aw || w.c.height !== ah) w.size(aw, ah, this.scale);
       this.actionWins[3].show(`${JSON.stringify(run ?? null)}|${aw}`);
       this.actionWins[2].show(`${ball?.item}|${aw}`);
-      this.actionWins[0].show(`p|${aw}`);
+      this.actionWins[0].show(`p|${aw}|${v?.own}`);
       this.actionWins[1].show(`b|${aw}`);
     }
     if (party) this.partyCells.forEach(({ b }, i) => { b.hidden = !this.team[i]; b.setAttribute('aria-label', this.team[i]?.name ?? ''); });
