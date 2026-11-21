@@ -278,6 +278,15 @@
 
     <section class="card">
       <div class="card-h">
+        <h2>Way in</h2>
+        <span class="legend" id="wayincount"></span>
+      </div>
+      <div class="versions" id="wayin"></div>
+      <p class="note" id="wayinnote"></p>
+    </section>
+
+    <section class="card">
+      <div class="card-h">
         <h2>Matches by day</h2>
         <div class="legend" id="legend">
           <span><i class="q"></i>Quick</span>
@@ -693,6 +702,29 @@ function drawPlay() {
     (lobbyOnly ? "<b>" + lobbyOnly + "</b> " + (lobbyOnly === 1 ? "room" : "rooms") + " opened and closed without a match. " : "") +
     (quickBounce ? "<b>" + quickBounce + "</b> quick-play " + (quickBounce === 1 ? "arrival" : "arrivals") + " found a match already running and left instead of watching. " : "") +
     (lengths.length ? "A room that reached a match stayed open " + mins(median(lengths)) + " at the median." : "");
+
+  // -- the way in (web/spike-b/seen.ts): a newcomer's steps, one each per browser, from
+  // the menu before a ROM to a first match. Counted from 2026-11-21 (v0.3.131); a player
+  // who had a ROM before that is never in it.
+  const steps = (PLAY.seen || []).filter(x => inRange(x.t, from));
+  const count = {};
+  steps.forEach(x => { count[x.step] = (count[x.step] || 0) + 1; });
+  const WAY = [["landing", "saw the menu"], ["ask", "pressed a tile"], ["rom", "ROM taken"], ["match", "first match"]];
+  const firsts = count.landing || 0;
+  const pct = n => firsts ? Math.round(n / firsts * 100) + "%" : "";
+  $("wayin").innerHTML = firsts
+    ? WAY.map(([k, name]) =>
+        '<span class="v">' + name + '</span><span class="bar"><i style="width:' + ((count[k] || 0) / firsts * 100) + '%"></i></span>' +
+        '<span class="n">' + (count[k] || 0) + (k === "landing" ? "" : " · " + pct(count[k] || 0)) + "</span>").join("")
+    : "";
+  $("wayincount").textContent = firsts ? pct(count.match || 0) + " to a first match" : "";
+  const BAD = { "bad-game": "another game", "bad-changed": "a changed Emerald", "bad-size": "the wrong size", "bad-archive": "an archive that won't open" };
+  const bad = Object.keys(BAD).filter(k => count[k]).map(k => "<b>" + count[k] + "</b> " + BAD[k]);
+  $("wayinnote").innerHTML = firsts
+    ? "Newcomers " + label + ", each counted once per browser. " +
+      (bad.length ? "Files turned away: " + bad.join(", ") + ". " : "No files turned away. ") +
+      "A player who had a ROM before 21 Nov is never counted."
+    : "No newcomers counted " + label + ". Counting started 21 Nov.";
 
   // -- installs: the protocol each was last seen on. The check-in carries the wire
   // protocol number rather than a version string, because that is the thing the

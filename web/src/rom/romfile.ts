@@ -86,6 +86,13 @@ const OTHER_GAMES: Record<string, string> = {
   BPED: 'the German Emerald', BPEF: 'the French Emerald', BPEI: 'the Italian Emerald', BPES: 'the Spanish Emerald', BPEJ: 'the Japanese Emerald',
 };
 
+/** Which way a failed check failed, for the count of the way in (spike-b/seen.ts). */
+export function romProblem(bytes: Uint8Array, check: EmeraldCheck): 'size' | 'game' | 'changed' | null {
+  if (check.ok) return null;
+  if (bytes.length !== GBA_SIZE) return 'size';
+  return String.fromCharCode(...bytes.subarray(0xac, 0xb0)) !== 'BPEE' ? 'game' : 'changed';
+}
+
 /** A failed check said so a player knows what to do next. */
 export function explainRom(bytes: Uint8Array, check: EmeraldCheck): string {
   if (check.ok) return '';

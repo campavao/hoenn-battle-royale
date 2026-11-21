@@ -14,7 +14,7 @@ import http from "node:http";
 import { readFileSync } from "node:fs";
 import { EventEmitter } from "node:events";
 import { WebSocket as WsClient } from "ws";
-import { createRelay, clientAddress, CODE_ALPHABET, CODE_LENGTH, exitOnSignal, limitsFromEnv, MAX_SEAT, stats } from "./server.js";
+import { createRelay, clientAddress, CODE_ALPHABET, CODE_LENGTH, exitOnSignal, limitsFromEnv, MAX_SEAT, SEEN_PER_HOUR, stats } from "./server.js";
 
 class Client {
   // headers: what a proxy in front of the relay would add (POK-330 #19)
@@ -1423,6 +1423,38 @@ test("GET /health answers 200 with room and connection counts", async () => {
 
     a.end();
   });
+});
+
+test("POST /seen logs a known step once per beacon and drops anything else", async () => {
+  const lines = [];
+  const relay = createRelay({ log: (l) => lines.push(l) });
+  const { port } = await relay.listen(0, "127.0.0.1");
+  try {
+    const post = (body, method = "POST") => new Promise((resolve, reject) => {
+      const req = http.request({ host: "127.0.0.1", port, path: "/seen", method,
+                                 headers: { "Content-Type": "text/plain" } }, (res) => {
+        res.resume();
+        res.on("end", () => resolve(res));
+      });
+      req.on("error", reject);
+      req.end(body);
+    });
+    const ok = await post("landing");
+    assert.equal(ok.statusCode, 204);
+    assert.equal(ok.headers["access-control-allow-origin"], "*");
+    await post("bad-game");
+    await post("rm -rf /");
+    await post("landing" + String.fromCharCode(10) + "seen match");
+    await post("x".repeat(500));
+    assert.equal((await post("", "GET")).statusCode, 405);
+    const seen = lines.filter((l) => l.startsWith("seen "));
+    assert.deepEqual(seen, ["seen landing", "seen bad-game"]);
+    // A ceiling per address an hour.
+    for (let i = 0; i < SEEN_PER_HOUR + 5; i++) await post("ask");
+    assert.equal(lines.filter((l) => l === "seen ask").length, SEEN_PER_HOUR - 2);
+  } finally {
+    await relay.close();
+  }
 });
 
 // A dropped socket gets its seat back (POK-284): the id IS the page's seat, so a

@@ -194,6 +194,22 @@ export function feedbackBucket(ip) {
   return groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":");
 }
 
+// The steps a page may report on POST /seen: anything else is dropped unlogged.
+export const SEEN_STEP = /^(landing|ask|rom|match|bad-(archive|size|game|changed))$/;
+// At most this many steps an hour from one address: a page sends each step once, so
+// this is room for a household and a few retries, and a ceiling on a script.
+export const SEEN_PER_HOUR = 30;
+const seenHits = new Map();
+let seenHour = 0;
+export function seenAllowed(bucket, now) {
+  const hour = Math.floor(now / 3_600_000);
+  if (hour !== seenHour) { seenHits.clear(); seenHour = hour; }
+  const n = seenHits.get(bucket) || 0;
+  if (n >= SEEN_PER_HOUR || seenHits.size > 50_000) return false;
+  seenHits.set(bucket, n + 1);
+  return true;
+}
+
 export const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 export const CODE_LENGTH = 6;
 
@@ -263,7 +279,7 @@ export const DEFAULT_LIMITS = Object.freeze({
 // Bytes actually written, so "what is this costing" has an answer that is not
 // a guess.  Egress is the line item that scales with players.
 const traffic = { bytesOut: 0, linesOut: 0, roomsOpened: 0, peakRooms: 0,
-                  peakConns: 0, rejected: 0, statSolo: 0, statSeen: 0,
+                  peakConns: 0, rejected: 0, statSolo: 0, statSeen: 0, seen: 0,
                   matches: 0, peakWorld: 0 };
 
 export function stats() { return { ...traffic }; }
@@ -1023,8 +1039,9 @@ export function createRelay(options = {}) {
     },
   };
 
-  // The HTTP side: /health, for Railway's healthcheck (and anybody else's), and
-  // /live, which play.html reads on load so who is playing is never a scrape behind.
+  // The HTTP side: /health, for Railway's healthcheck (and anybody else's),
+  // /live, which play.html reads on load so who is playing is never a scrape behind,
+  // and POST /seen, a newcomer's steps towards a first match (counted, never answered).
   // Everything else on this port is the WebSocket upgrade below.
   const startedAt = new Date().toISOString();
   let draining = false;
@@ -1043,6 +1060,39 @@ export function createRelay(options = {}) {
                             "Access-Control-Allow-Origin": "*",
                             "Cross-Origin-Resource-Policy": "cross-origin" });
       res.end(body);
+      return;
+    }
+    if (req.url === "/seen") {
+      // The way in, counted (Cam, 11-21: conversion): a page's step towards a first
+      // match -- the menu before a ROM, a tile pressed, a ROM taken or turned away and
+      // why, a first match. One word, no id, no name; each browser sends a step once
+      // (web/src/match/seen.ts). A beacon, so nothing is answered but 204. play-log.mjs
+      // counts the lines by day.
+      const cors = { "Access-Control-Allow-Origin": "*", "Cross-Origin-Resource-Policy": "cross-origin" };
+      if (req.method === "OPTIONS") {
+        res.writeHead(204, { ...cors, "Access-Control-Allow-Methods": "POST",
+                             "Access-Control-Allow-Headers": "Content-Type" });
+        res.end();
+        return;
+      }
+      if (req.method !== "POST") { res.writeHead(405, cors); res.end(); return; }
+      let body = "";
+      let over = false;
+      req.on("data", (chunk) => {
+        if (over) return;
+        body += chunk;
+        if (body.length > 64) over = true;
+      });
+      req.on("end", () => {
+        const step = body.trim();
+        const bucket = feedbackBucket(clientAddress(req, trustProxy));
+        if (!over && SEEN_STEP.test(step) && seenAllowed(bucket, Date.now())) {
+          traffic.seen += 1;
+          log(`seen ${step}`);
+        }
+        res.writeHead(204, cors);
+        res.end();
+      });
       return;
     }
     if (req.method === "GET" && req.url === "/health") {

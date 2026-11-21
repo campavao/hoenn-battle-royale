@@ -8,7 +8,8 @@
 
 import type { Emulator } from '../src/emu';
 import { checkEmerald, isPrePatched } from '../src/rom/emerald';
-import { explainRom, unpackRom } from '../src/rom/romfile';
+import { explainRom, romProblem, unpackRom } from '../src/rom/romfile';
+import { seen } from './seen';
 import { howToRead, markHowToDue } from '../src/ui/howto-due';
 import { TEXT_RED } from '../src/ui/emerald';
 import { menuScreen, noticeScreen } from '../src/ui/screens';
@@ -51,7 +52,7 @@ export async function importRom(emu: Emulator): Promise<void> {
     rows: mainMenuRows('up').map((r) => ({
       label: r.label,
       id: r.id?.replace(/^lobby-/, 'landing-'),
-      onPress: r.action.kind === 'discord' ? () => window.open(DISCORD_INVITE, '_blank', 'noopener') : () => stage.push(ask),
+      onPress: r.action.kind === 'discord' ? () => window.open(DISCORD_INVITE, '_blank', 'noopener') : () => { seen('ask'); stage.push(ask); },
       ...(r.action.kind === 'howto' && !howToRead(localStorage) ? { badge: true } : {}),
     })),
     rowsId: 'landing-rows',
@@ -62,6 +63,8 @@ export async function importRom(emu: Emulator): Promise<void> {
     containers: [{ id: 'dropzone', cls: 'dropzone' }],
   }));
   stage.show(landing);
+  // A test's `?rom=` is not a newcomer (seen.ts also keeps quiet under a test driver).
+  if (!devRom) seen('landing');
   const dragover = (e: DragEvent) => e.preventDefault();
   let drop: ((e: DragEvent) => void) | null = null;
   const bytes = await new Promise<Uint8Array>((resolve) => {
@@ -78,12 +81,13 @@ export async function importRom(emu: Emulator): Promise<void> {
       };
       // Most copies are zipped (romfile.ts): the .gba inside is taken.
       const unpacked = await unpackRom(new Uint8Array(await file.arrayBuffer()));
-      if (!unpacked.ok) { fail(unpacked.reason); return; }
+      if (!unpacked.ok) { seen('bad-archive'); fail(unpacked.reason); return; }
       const got = unpacked.bytes;
       // A local build: dev runs it without a patch (loadRom).
       if (import.meta.env.DEV && isPrePatched(got)) { resolve(got); return; }
       const result = await checkEmerald(got);
-      if (!result.ok) { fail(explainRom(got, result)); return; }
+      if (!result.ok) { seen(`bad-${romProblem(got, result) ?? 'changed'}`); fail(explainRom(got, result)); return; }
+      seen('rom');
       resolve(got);
     };
     input.addEventListener('change', () => { const f = input.files?.[0]; if (f) void handle(f); });
