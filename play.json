@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-21T11:57:21.351Z",
+ "readAt": "2026-11-21T12:12:23.320Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "NMCBBS",
    "at": "2026-11-21T11:56:13.376Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-21T12:08:44.297Z",
+   "secs": 751,
    "door": "open",
    "mode": "host",
    "humans": 1,
@@ -25,7 +25,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -9683,6 +9682,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-21T12:08:44.297Z",
+   "code": "NMCBBS",
+   "v": "90be997",
+   "watched": 18,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 731,
+   "drifts": 0,
+   "deploy": "26821d24"
+  },
+  {
+   "t": "2026-11-21T12:07:41.354Z",
+   "code": "BWQRW6",
+   "v": "90be997",
+   "watched": 7,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 779,
+   "drifts": 0,
+   "deploy": "26821d24"
+  },
   {
    "t": "2026-11-21T03:08:45.483Z",
    "code": "6NAH6C",
