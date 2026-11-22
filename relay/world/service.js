@@ -12867,6 +12867,28 @@ var BOT_BITE = 240;
 var FOG_BITE = 0.1;
 var ROOMS = rooms_default;
 var TABLE_BALLS = table_balls_default;
+var RARE_AT_THE_END = /* @__PURE__ */ new Set([
+  // buildings
+  "MAP_RUSTBORO_CITY_DEVON_CORP_3F",
+  "MAP_LILYCOVE_CITY_DEPARTMENT_STORE_ROOFTOP",
+  "MAP_MOSSDEEP_CITY_SPACE_CENTER_2F",
+  "MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F",
+  "MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F",
+  "MAP_ROUTE119_WEATHER_INSTITUTE_2F",
+  // towers and summits
+  "MAP_MT_PYRE_SUMMIT",
+  "MAP_MIRAGE_TOWER_4F",
+  "MAP_SKY_PILLAR_TOP",
+  // hideouts and deep caves (Seafloor Cavern's, Cave of Origin's, Marine and Terra Cave's ends and
+  // the Sealed Chamber deal no cache: their legendary's story has the room)
+  "MAP_MAGMA_HIDEOUT_4F",
+  "MAP_AQUA_HIDEOUT_B2F",
+  "MAP_VICTORY_ROAD_B2F",
+  "MAP_SHOAL_CAVE_LOW_TIDE_ICE_ROOM",
+  // the rooms you have to find
+  "MAP_GRANITE_CAVE_STEVENS_ROOM",
+  "MAP_METEOR_FALLS_STEVENS_CAVE"
+]);
 var SPILL_KEY = 1 << 20;
 var ZONE_CELLS = [
   { map: "MAP_SAFARI_ZONE_NORTHWEST", x: 8, y: 36 },
@@ -13342,7 +13364,7 @@ var Room = class {
       if (!this.maps.has(map) || this.places.has(map) || this.world.cell(map, x2, y) > 1 || out.has(`${map}:${x2}:${y}`)) continue;
       if (this.patchesOn(map).some((q2) => q2.x === x2 && q2.y === y)) continue;
       const r = this.world.cell(map, x2, y) === 0 ? rng : cellRng(this.seed ^ 502558, map, x2, y);
-      const gold = Math.floor(r() * (house ? 3 : 8)) === 0;
+      const gold = Math.floor(r() * (house ? 3 : 8)) === 0 || RARE_AT_THE_END.has(map);
       out.set(`${map}:${x2}:${y}`, { key: ++n, map, x: x2, y, item: gold ? GOLD[Math.floor(r() * GOLD.length)] : blueTm(r) });
     }
     for (const id3 of [...land.keys()].sort()) {
@@ -16731,4 +16753,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "527d2eb4795d";
+export const WORLD_HASH = "5bcdbba38c42";

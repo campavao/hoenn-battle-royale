@@ -471,6 +471,22 @@ const FOG_BITE = 0.1;
 const ROOMS = roomsJson as [string, number, number, boolean, boolean, number, number, boolean][];
 /** The rest of a notable building's balls, a table each (tools/br/spike-rooms.py, POK-438). */
 const TABLE_BALLS = tableBallsJson as [string, number, number][];
+/** The last floor of a notable place: its cache is always gold (Cam, 11-22: "the top floor of
+ *  Devon, as well as other, I think, like notable areas, should have a rare item at the end of
+ *  it ... Definitely a rare though"). The top of a building, a tower or a summit, the bottom of
+ *  a hideout or a deep cave, and the rooms you have to find. */
+export const RARE_AT_THE_END: ReadonlySet<string> = new Set([
+  // buildings
+  'MAP_RUSTBORO_CITY_DEVON_CORP_3F', 'MAP_LILYCOVE_CITY_DEPARTMENT_STORE_ROOFTOP', 'MAP_MOSSDEEP_CITY_SPACE_CENTER_2F',
+  'MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F', 'MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F', 'MAP_ROUTE119_WEATHER_INSTITUTE_2F',
+  // towers and summits
+  'MAP_MT_PYRE_SUMMIT', 'MAP_MIRAGE_TOWER_4F', 'MAP_SKY_PILLAR_TOP',
+  // hideouts and deep caves (Seafloor Cavern's, Cave of Origin's, Marine and Terra Cave's ends and
+  // the Sealed Chamber deal no cache: their legendary's story has the room)
+  'MAP_MAGMA_HIDEOUT_4F', 'MAP_AQUA_HIDEOUT_B2F', 'MAP_VICTORY_ROAD_B2F', 'MAP_SHOAL_CAVE_LOW_TIDE_ICE_ROOM',
+  // the rooms you have to find
+  'MAP_GRANITE_CAVE_STEVENS_ROOM', 'MAP_METEOR_FALLS_STEVENS_CAVE',
+]);
 
 /** Spill keys, clear of the dealt balls' 1..n. */
 export const SPILL_KEY = 1 << 20;
@@ -1118,7 +1134,8 @@ export class Room {
     }
     // A cache in every house and on every other floor that had nothing (br_balls.c's
     // sRooms, Cam 2026-10-18: "an item, trader, or both on every floor"): a machine, or
-    // gold one time in three in a house and one in eight on a floor.
+    // gold one time in three in a house and one in eight on a floor; always gold on the
+    // last floor of a notable place (RARE_AT_THE_END).
     for (const [map, x, y, house, cache] of ROOMS) {
       if (!cache) continue;
       // A building this world goes into (makeRoom's interiors), on its floor.
@@ -1131,7 +1148,9 @@ export class Room {
       // A table's own roll, so the floors' draws (and all the match deals after them) are
       // what they always were.
       const r = this.world.cell(map, x, y) === 0 ? rng : cellRng(this.seed ^ 0x7ab1e, map, x, y);
-      const gold = Math.floor(r() * (house ? 3 : 8)) === 0;
+      // The roll is drawn either way, and gold and a machine each draw once more: the deals
+      // after it are what they were.
+      const gold = Math.floor(r() * (house ? 3 : 8)) === 0 || RARE_AT_THE_END.has(map);
       out.set(`${map}:${x}:${y}`, { key: ++n, map, x, y, item: gold ? GOLD[Math.floor(r() * GOLD.length)] : blueTm(r) });
     }
     // A gift-giver in every town and city (gifts.ts, Cam 2026-10-13: "some gift giving
