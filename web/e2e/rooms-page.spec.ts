@@ -19,11 +19,10 @@ test('a room is two taps, a door takes neither, and it is still there after a re
     await page.touchscreen.tap(t.left + (x + 0.5) * t.size, t.top + (y + 0.5) * t.size);
   };
   await expect(page.locator('#copy')).toBeDisabled();
-  // It opens on a room whose person is in the way, and will not put one back there.
-  expect((await read()).at, 'opens on a blocked room').toBeGreaterThan(0);
-  expect(await page.evaluate(() => (window as unknown as { __rooms: Rooms }).__rooms.shut())).toBe(true);
-  await expect(page.locator('#say')).toContainText('blocks the way');
-  await expect(page.locator('#room option:checked')).toContainText('⚠');
+  // Nobody is in the way in today's table (Cam repainted the four that were, 11-22): it opens
+  // on the first room, with no warning in the list. A person that would block is refused below.
+  expect(await page.evaluate(() => (window as unknown as { __rooms: Rooms }).__rooms.shut())).toBe(false);
+  expect(await page.locator('#room option', { hasText: '⚠' }).count()).toBe(0);
   await page.locator('#room').selectOption('0');
   await expect.poll(async () => (await read()).at).toBe(0);
   await tap(2, 5);
@@ -43,6 +42,15 @@ test('a room is two taps, a door takes neither, and it is still there after a re
   expect(JSON.parse((await read()).file)).toEqual({ MAP_DEWFORD_TOWN_HOUSE1: { item: [2, 5], person: [6, 4] } });
   await page.locator('#room').selectOption('0');
   await expect.poll(async () => (await read()).at).toBe(0);
+  // A person in Magma Hideout 3F's one gap (15,10) would shut it: refused, and it stays where it is.
+  const magma = await page.evaluate(() => [...document.querySelectorAll('#room option')].findIndex((o) => o.textContent!.includes('MAGMA HIDEOUT 3F 1R')));
+  await page.locator('#room').selectOption(String(magma));
+  await page.locator('#person-mode').tap();
+  const was = (await read()).c.person;
+  await tap(15, 10);
+  await expect(page.locator('#say')).toContainText('would block the way');
+  expect((await read()).c.person).toEqual(was);
+  await page.locator('#room').selectOption('0');
   await page.locator('#next').tap();
   await expect.poll(async () => (await read()).at).toBe(1);
   await page.locator('#prev').tap();

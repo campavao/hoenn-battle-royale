@@ -22,11 +22,7 @@ def main():
     kept = json.loads(PAINT.read_text())
     kept.update(painted)
     rows = ['  %s: %s' % (json.dumps(k), json.dumps(kept[k])) for k in sorted(kept)]
-    PAINT.write_bytes(('{
-' + ',
-'.join(rows) + '
-}
-').encode())
+    PAINT.write_bytes(('{\n' + ',\n'.join(rows) + '\n}\n').encode())
     subprocess.run([sys.executable, str(HERE / 'floors.py'), '--write'], check=True)
     subprocess.run([sys.executable, str(HERE / 'spike-rooms.py')], check=True)
     print(f'{len(painted)} rooms written; now bundle-world.mjs and a ROM build')
