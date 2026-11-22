@@ -1,7 +1,82 @@
 {
- "readAt": "2026-11-22T05:08:37.833Z",
+ "readAt": "2026-11-22T09:00:16.249Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "T7WEW7",
+   "at": "2026-11-22T08:15:52.008Z",
+   "end": "2026-11-22T08:53:03.910Z",
+   "secs": 2232,
+   "door": "open",
+   "mode": "quick",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 2,
+   "joins": [
+    {
+     "t": "2026-11-22T08:15:52.008Z",
+     "how": "quick"
+    },
+    {
+     "t": "2026-11-22T08:15:52.046Z",
+     "how": "quick"
+    },
+    {
+     "t": "2026-11-22T08:36:20.611Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-22T08:16:05.671Z",
+     "mode": "quick",
+     "trainers": 2,
+     "watching": 0,
+     "secs": 1114
+    },
+    {
+     "t": "2026-11-22T08:37:20.789Z",
+     "mode": "quick",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "YVJMRW",
+   "at": "2026-11-22T05:24:15.734Z",
+   "end": "2026-11-22T05:43:27.405Z",
+   "secs": 1152,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-22T05:24:15.734Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-22T05:24:20.203Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": 1142
+    }
+   ],
+   "exact": true
+  },
   {
    "code": "RKPNUJ",
    "at": "2026-11-22T03:10:37.401Z",
@@ -29333,6 +29408,48 @@
  ],
  "jank": [
   {
+   "t": "2026-11-22T08:52:03.663Z",
+   "code": "T7WEW7",
+   "v": "e000b70",
+   "watched": 7,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 882,
+   "drifts": 0,
+   "deploy": "40ef43db"
+  },
+  {
+   "t": "2026-11-22T08:34:39.807Z",
+   "code": "T7WEW7",
+   "v": "e000b70",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 1,
+   "checks": 1113,
+   "drifts": 0,
+   "deploy": "40ef43db"
+  },
+  {
+   "t": "2026-11-22T05:43:22.390Z",
+   "code": "YVJMRW",
+   "v": "e000b70",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1142,
+   "drifts": 0,
+   "deploy": "40ef43db"
+  },
+  {
    "t": "2026-11-22T00:37:47.257Z",
    "code": "DMFETQ",
    "v": "90be997",
@@ -41052,6 +41169,62 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-22T08:16:06.040Z",
+   "step": "match"
+  },
+  {
+   "t": "2026-11-22T08:16:06.005Z",
+   "step": "match"
+  },
+  {
+   "t": "2026-11-22T08:15:37.240Z",
+   "step": "rom"
+  },
+  {
+   "t": "2026-11-22T08:13:24.878Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-22T08:13:08.440Z",
+   "step": "rom"
+  },
+  {
+   "t": "2026-11-22T08:11:54.301Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-22T08:11:48.521Z",
+   "step": "landing"
+  },
+  {
+   "t": "2026-11-22T08:10:36.066Z",
+   "step": "landing"
+  },
+  {
+   "t": "2026-11-22T06:06:42.993Z",
+   "step": "landing"
+  },
+  {
+   "t": "2026-11-22T05:34:54.480Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-22T05:34:48.610Z",
+   "step": "landing"
+  },
+  {
+   "t": "2026-11-22T05:12:42.970Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-22T05:12:40.000Z",
+   "step": "landing"
+  },
+  {
+   "t": "2026-11-22T05:11:54.457Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-22T04:14:13.418Z",
    "step": "ask"

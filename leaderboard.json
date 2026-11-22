@@ -1,7 +1,7 @@
 {
- "readAt": "2026-11-22T00:38:10.973Z",
+ "readAt": "2026-11-22T09:00:16.249Z",
  "from": "2026-11-22T00:06:55.860Z",
- "matches": 2,
+ "matches": 3,
  "players": [
   {
    "id": "71d3a7609b88",
@@ -14,6 +14,16 @@
    "last": "2026-11-22T00:37:47.161Z"
   },
   {
+   "id": "d498d270ddfc",
+   "name": "ROXANNE",
+   "skin": 0,
+   "rating": 1016,
+   "played": 1,
+   "wins": 0,
+   "best": 2,
+   "last": "2026-11-22T08:34:39.708Z"
+  },
+  {
    "id": "17bf2e441ee0",
    "name": "NOX",
    "skin": 0,
@@ -22,6 +32,16 @@
    "wins": 0,
    "best": 2,
    "last": "2026-11-22T00:37:47.161Z"
+  },
+  {
+   "id": "1bcd8d3e6caf",
+   "name": "SPIKE",
+   "skin": 0,
+   "rating": 984,
+   "played": 1,
+   "wins": 0,
+   "best": 3,
+   "last": "2026-11-22T08:34:39.708Z"
   },
   {
    "id": "e4ccab195416",
