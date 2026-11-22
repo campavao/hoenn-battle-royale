@@ -18,9 +18,9 @@ import { GOLD } from '../../src/match/events';
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
 const ROOMS = roomsJson as [string, number, number, boolean, boolean, number, number, boolean][];
-const TABLE = tableBallsJson as [string, number, number][];
+const TABLE = tableBallsJson as unknown as [string, number, number][];
 /** Cam's room painting (11-01): each room's first ball and its person, by hand. */
-const PAINT = paintJson as Record<string, { item: [number, number] | null; person: [number, number] }>;
+const PAINT = paintJson as unknown as Record<string, { item: [number, number] | null; person: [number, number] }>;
 const room = makeRoom(MAPS, PATCHES, 4242);
 const FACE_RIGHT = 4;
 
