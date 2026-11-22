@@ -1,12 +1,33 @@
 {
- "readAt": "2026-11-22T23:41:46.114Z",
+ "readAt": "2026-11-22T23:56:48.027Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
+   "code": "PT5SX7",
+   "at": "2026-11-22T23:49:28.132Z",
+   "end": "2026-11-22T23:49:56.636Z",
+   "secs": 29,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [
+    {
+     "t": "2026-11-22T23:49:28.132Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
    "code": "EB7VKG",
    "at": "2026-11-22T23:28:29.204Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-22T23:48:59.489Z",
+   "secs": 1230,
    "door": "open",
    "mode": "quick",
    "humans": 2,
@@ -31,10 +52,9 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1009
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -30205,7 +30225,7 @@
   {
    "id": "6144a717",
    "first": "2026-10-17T02:37:29.310Z",
-   "last": "2026-11-22T23:30:31.697Z",
+   "last": "2026-11-22T23:49:58.847Z",
    "since": "2026-10-15",
    "versions": [
     "2",
@@ -30234,7 +30254,7 @@
     "world-527d2eb4"
    ],
    "solo": 2,
-   "checkins": 100,
+   "checkins": 102,
    "v": "world-527d2eb4"
   },
   {
@@ -30576,6 +30596,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-22T23:45:20.594Z",
+   "code": "EB7VKG",
+   "v": "1d9a033",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1009,
+   "drifts": 0,
+   "deploy": "64fb7313"
+  },
+  {
+   "t": "2026-11-22T23:45:20.510Z",
+   "code": "EB7VKG",
+   "v": "1d9a033",
+   "watched": 868,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 886,
+   "drifts": 0,
+   "deploy": "64fb7313"
+  },
   {
    "t": "2026-11-22T23:28:25.213Z",
    "code": "AXV4YJ",
@@ -42898,6 +42946,14 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-22T23:56:27.717Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-22T23:56:23.110Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-22T23:17:42.237Z",
    "step": "match"
