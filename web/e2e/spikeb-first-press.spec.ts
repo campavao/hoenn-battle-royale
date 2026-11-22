@@ -24,6 +24,9 @@ const balls = (page: Page) => spike(page, (s) => {
   const room = s.link.room;
   const out: Ball[] = [];
   for (const q of room.ground().values()) {
+    // Not a berry with a hold effect: it asks who should hold it (spike-b/holdask.ts), and this
+    // spec is about the A that picks it up, not the question after.
+    if ((q.item >= 133 && q.item <= 147) || (q.item >= 168 && q.item <= 174)) continue;
     if (q.gift || room.world.cell(q.map, q.x - 1, q.y) !== 0 || room.patchesOn(q.map).some((p: any) => p.x === q.x - 1 && p.y === q.y)) continue;
     if (room.groundAt(q.map, q.x - 1, q.y) || room.spillAt(q.map, q.x - 1, q.y)) continue;
     out.push({ map: q.map, x: q.x, y: q.y, key: q.key });

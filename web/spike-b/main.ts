@@ -66,6 +66,7 @@ import { recordSolo, statFlushed, statMessage } from '../src/match/stats';
 import { WORLD_HASH_SHORT, battlesOn } from './net';
 import { ITEM_POKE_DOLL, groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
+import { asksToHold, givenLine, holdQuestion, switchQuestion, switchedLine } from './holdask';
 import { GOLD } from '../src/match/events';
 import { FLYING, STORIES } from '../src/match/story';
 import { RomArt, type MapAnim } from './romart';
@@ -922,8 +923,10 @@ function giveNext(): void {
     return;
   }
   const { key, item, gift, hidden } = next;
-  // A TM is taught and a held item given, there and then, on the ROM's own screens.
-  const screen = isTm(item) || GIFTS.includes(item);
+  // A TM is taught and a held item given, there and then, on the ROM's own screens. A berry
+  // asks first (holdask.ts, Cam 11-21): YES is the party, NO -- or B, or a fight -- the bag.
+  const hold = asksToHold(item);
+  const screen = isTm(item) || GIFTS.includes(item) || hold;
   // Somebody says so first, and it can be read before their screen comes up (Cam, 11-01:
   // "there should be a dialogue box when I talk to somebody").
   const line = `Here, take this ${name(item)}!`;
@@ -931,6 +934,7 @@ function giveNext(): void {
   const said = screen && gift ? new Promise((done) => setTimeout(done, GIFT_LINE_MS)) : Promise.resolve();
   const r = rom;
   let taught = false;
+  let heldLine = '';
   // Who gets it is the windows'; BACK keeps it in the bag.
   const who = () => askParty(name(item), isMachine(item) ? (m) => takesMachine(m, item) : undefined);
   // Into the bag first, and from there it is what the BAG's USE or GIVE does: the ROM's own
@@ -942,6 +946,10 @@ function giveNext(): void {
     ? Promise.all([bagged, said]).then(async ([got]) => {
       if (!got?.items.some((g) => g.id === item)) return got;
       remember(true);
+      if (hold) {
+        if (await ask(holdQuestion(name(item)), [['YES', 'y'], ['NO', '']]) !== 'y') return got;
+        await tapOver();
+      }
       const slot = await who();
       if (slot === null) return got;
       if (isMachine(item)) {
@@ -952,6 +960,19 @@ function giveNext(): void {
         return got;
       }
       const was = battleMenu?.heldBy(slot) ?? 0;
+      if (hold) {
+        // party_menu.c's GIVE: one already holding something asks to switch, and the old one
+        // goes in the bag first, so a full pocket keeps it on the mon rather than losing it.
+        const mon = battleMenu?.readTeam()[slot]?.name ?? 'It';
+        if (was && await ask(switchQuestion(mon, name(was)), [['YES', 'y'], ['NO', '']]) !== 'y') return got;
+        if (was && !await r.give(was, 1)) { heldLine = "The BAG is full. The POKéMON's item could not be removed."; return got; }
+        if (await r.take(item)) {
+          await r.setHeld(slot, item);
+          heldLine = was ? switchedLine(name(item), name(was)) : givenLine(mon, name(item));
+        }
+        remember(true);
+        return got;
+      }
       if (await r.take(item)) await r.setHeld(slot, item);
       if (was) await r.give(was, 1);
       return { ...got, items: readPocket(r.emu, romTables.sym, 0).some((x) => x.item === item) ? got.items : [] };
@@ -964,6 +985,9 @@ function giveNext(): void {
       say(`No room in the bag for ${name(item)}.`);
       if (hidden) dug.delete(hidden); // still buried
       else link.drop(key); // it stays where it lay
+    } else if (hold) {
+      rom?.sound(MUS_OBTAIN_ITEM);
+      say(heldLine || `${name(item)} went in the BAG.`);
     } else if (screen) {
       rom?.sound(MUS_OBTAIN_TMHM);
       const kept = isMachine(item) ? !taught : got.items.some((g) => g.id === item);
@@ -980,6 +1004,30 @@ function giveNext(): void {
     else if (got.money) say(`Sold ${name(item)} for ¥${got.money}.`);
     else say(`${name(item)}! Your team got stronger.`);
   }, (e) => console.warn('spike give failed', e)).finally(() => { giving = false; giveNext(); });
+}
+
+/** Fingers on the glass now. The askbox answers on a tap's pointerdown, so a window that opens on
+ *  the answer is under the same finger when it lifts: its click picked the lead of the party the
+ *  YES had just opened, with nobody choosing (the berry's first phone run, 11-21). */
+let pointersDown = 0;
+addEventListener('pointerdown', () => { pointersDown++; }, true);
+for (const t of ['pointerup', 'pointercancel']) addEventListener(t, () => { pointersDown = Math.max(0, pointersDown - 1); }, true);
+/** Once the tap that answered is over, its click swallowed; at once for a key or a pad. */
+function tapOver(): Promise<void> {
+  if (!pointersDown) return Promise.resolve();
+  return new Promise((done) => {
+    const eat = (e: Event) => { e.stopPropagation(); e.preventDefault(); };
+    addEventListener('click', eat, true);
+    const up = () => {
+      if (pointersDown) return;
+      removeEventListener('pointerup', up, true);
+      removeEventListener('pointercancel', up, true);
+      // The click comes straight after the lift; a beat later it is a new tap's.
+      setTimeout(() => { removeEventListener('click', eat, true); done(); }, 80);
+    };
+    addEventListener('pointerup', up, true);
+    addEventListener('pointercancel', up, true);
+  });
 }
 
 // A dropped bag asks what to take (HBR-82): POKéMON, its team on the ROM's BAG screen, or
@@ -5547,7 +5595,7 @@ async function boot(): Promise<void> {
   }
   loading.say(matchToken() ? 'Back to your match…' : 'Getting the game ready…');
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => { console.warn('spike ROM not booted', e); loading.hide(); });
-  (window as unknown as { __spike: unknown }).__spike = { watch, frameOf, get frame() { return frame; }, canvas, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, get movesBox() { return movesBox; }, pocket: (n: number) => (rom ? readPocket(rom.emu, romTables.sym, n) : []), radial, moveName: (id: number) => moveInfo(romTables, id)?.name ?? '' };
+  (window as unknown as { __spike: unknown }).__spike = { watch, frameOf, get frame() { return frame; }, canvas, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, askBox, get movesBox() { return movesBox; }, pocket: (n: number) => (rom ? readPocket(rom.emu, romTables.sym, n) : []), radial, moveName: (id: number) => moveInfo(romTables, id)?.name ?? '' };
 }
 
 void boot();
