@@ -1,6 +1,27 @@
 {
- "readAt": "2026-11-21T16:33:46.746Z",
- "from": null,
- "matches": 0,
- "players": []
+ "readAt": "2026-11-22T00:08:05.086Z",
+ "from": "2026-11-22T00:06:55.860Z",
+ "matches": 1,
+ "players": [
+  {
+   "id": "71d3a7609b88",
+   "name": "SINBAD",
+   "skin": 1,
+   "rating": 1016,
+   "played": 1,
+   "wins": 0,
+   "best": 3,
+   "last": "2026-11-22T00:06:55.860Z"
+  },
+  {
+   "id": "e4ccab195416",
+   "name": "CAM",
+   "skin": 12,
+   "rating": 984,
+   "played": 1,
+   "wins": 0,
+   "best": 8,
+   "last": "2026-11-22T00:06:55.860Z"
+  }
+ ]
 }
