@@ -1,7 +1,38 @@
 {
- "readAt": "2026-11-22T22:41:36.419Z",
+ "readAt": "2026-11-22T22:56:38.532Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "ES5ZB3",
+   "at": "2026-11-22T22:43:57.204Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-22T22:43:57.204Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-22T22:44:02.693Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "C78SXD",
    "at": "2026-11-22T22:37:36.122Z",
