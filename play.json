@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-22T20:51:15.996Z",
+ "readAt": "2026-11-22T21:21:18.788Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "ZBBM2Q",
    "at": "2026-11-22T20:20:11.274Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-22T21:15:08.303Z",
+   "secs": 3297,
    "door": "open",
    "mode": "quick",
    "humans": 3,
@@ -38,7 +38,6 @@
      "secs": 1008
     }
    ],
-   "live": true,
    "exact": true
   },
   {
