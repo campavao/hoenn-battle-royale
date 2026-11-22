@@ -12787,7 +12787,7 @@ var ZONE_CELLS = [
   { map: "MAP_SAFARI_ZONE_SOUTHEAST", x: 30, y: 20 }
 ];
 var ITEM_MASTER_BALL5 = 1;
-var ZONE_ITEMS = [4, 21, 19, 24, 20, 23, 75, 77, 68, 95, 97, 96, 98, 93, 94, 110, 69];
+var ZONE_ITEMS = [4, 21, 19, 24, 20, 23, 75, 77, 95, 97, 96, 98, 93, 94, 110, 69];
 var ZONE_TMS = [2, 6, 13, 14, 15, 19, 22, 24, 25, 26, 29, 30, 31, 35, 36, 38, 40, 50].map((n) => 288 + n);
 var ZONE_TM_IN = 2;
 var ZONE_MASTER_ODDS = 8;
@@ -16561,4 +16561,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "d11e20f34a8c";
+export const WORLD_HASH = "394308fd1ad0";

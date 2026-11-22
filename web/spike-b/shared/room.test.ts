@@ -2423,6 +2423,13 @@ describe('the Safari Zone loot (br_zone.c)', () => {
       }
     }
   });
+  it("no Rare Candy in a Zone ball: levels rise on the clock, so it would be a dead pickup (Cam, 2026-11-21)", () => {
+    const ITEM_RARE_CANDY = 68;
+    expect(ZONE_ITEMS).not.toContain(ITEM_RARE_CANDY);
+    const table = zoneC.slice(zoneC.indexOf('sBallItems'), zoneC.indexOf('};', zoneC.indexOf('sBallItems')));
+    expect(table).not.toContain('RARE_CANDY');
+    for (let seed = 1; seed <= 400; seed++) expect(zoneBalls(seed)).not.toContain(ITEM_RARE_CANDY);
+  });
   it("six balls, one an area on br_zone.c's own cells, and about one match in eight has the MASTER BALL", () => {
     // The C's sSafariItemCells, by area: the room's cells are the ROM's, not a copy.
     const names: Record<string, string> = { 0: 'NORTHWEST', 1: 'NORTH', 12: 'NORTHEAST', 2: 'SOUTHWEST', 3: 'SOUTH', 13: 'SOUTHEAST' };
