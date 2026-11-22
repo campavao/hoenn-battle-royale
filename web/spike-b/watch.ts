@@ -1,7 +1,7 @@
 // Spike B's WATCH: the match's spectate strip (web/src/ui/screens.ts) for this world.
 //
 // While spectating, a strip says who the camera is on -- WATCHING <NAME> -- with PREV and
-// NEXT round the trainers still in (cycleWatch) and STOP for a free camera; left and right
+// NEXT round the trainers still in (cycleWatch), a drag on the map for a free camera; left and right
 // step it too (watchStepKey: the D-pad's PREV and NEXT once there is somebody to step
 // from). The trainer watched carries their name over their head.
 //
@@ -122,6 +122,16 @@ export function fightKey(from: number, start: SpMsg): string {
   return `${from}:${start.battle}:${start.data.slice(0, 4).join()}`;
 }
 
+/** Whether a watched fight comes up under the curtain. In the final ring, or a fight come back to
+ *  (Cam, 11-02: "that banner slide down and then it shows. Okay we're back in the battle") -- but
+ *  never one that was already on when the camera came to this trainer: PREV, NEXT, a WATCH tag, a
+ *  tap, or the camera moving on from somebody out. That is a swap, and on a swap the curtain came
+ *  or not by whether that fight had been up before ("it's inconsistent and annoying", Cam, 11-21). */
+export function curtainOver(f: { began: number; since: number; lastRing: boolean; seenBefore: boolean }): boolean {
+  if (f.began < f.since) return false;
+  return f.lastRing || f.seenBefore;
+}
+
 /** A BSTART from a trainer's page waits this long for that page's log of the fight (it reads the
  *  ROM's battle once it is up: 2.8 s after a duel's BSTART, measured) before the ROM's replay of it
  *  starts. A bot's has no log coming. */
@@ -156,6 +166,8 @@ export class Watch {
   /** The link the relay's callbacks are on, and who it was last told I watch. */
   private wired: WorldLink | null = null;
   private told = 0;
+  /** When the camera came to the trainer told (performance.now): a fight begun before it was met on a swap. */
+  private since = 0;
   /** How many watch me, as the relay last said. */
   eyes = 0;
   /** What has come of the watched trainer's battles, not yet replayed. */
@@ -187,7 +199,6 @@ export class Watch {
     this.viewEl = document.getElementById('battleview-dim')!;
     document.getElementById('watch-prev')!.addEventListener('click', () => this.step(-1));
     document.getElementById('watch-next')!.addEventListener('click', () => this.step(1));
-    document.getElementById('watch-stop')!.addEventListener('click', () => this.host.setFollow(0));
   }
 
   /** Who can be watched, in a steady order: everybody on the map but me. */
@@ -237,7 +248,6 @@ export class Watch {
     this.tellPicked(on ? id : 0);
     const a = on && id ? this.host.trainers().find((t) => t.id === id) : undefined;
     this.who.textContent = a ? `WATCHING ${a.name}` : on ? 'Drag to look around' : '';
-    (document.getElementById('watch-stop') as HTMLButtonElement).hidden = !a;
     this.label.hidden = !a || this.viewing;
     if (!a) return;
     if (this.label.textContent !== a.name) this.label.textContent = a.name;
@@ -297,6 +307,7 @@ export class Watch {
     const t = this.target();
     if (link && t !== this.told) {
       this.told = t;
+      this.since = performance.now();
       this.queue = [];
       this.endFight();
       link.watch(t);
@@ -332,10 +343,12 @@ export class Watch {
     const now = performance.now();
     // Not over anything of my own: it comes up where the fight stands by then.
     if (!fight.view && this.host.idle() && !this.mirroring) {
-      // The curtain first, in the final ring and coming back to a fight (Cam, 11-02: "we can have
-      // that banner slide down and then it shows. Okay we're back in the battle").
+      // The curtain first, in the final ring and coming back to a fight; never on a swap (curtainOver).
       const k = `${fight.from}:${fight.f}`;
-      if (fight.cover === undefined) fight.cover = this.host.lastRing() || this.shown.has(k) ? this.host.cover(() => !!fight.view || this.fight !== fight) : null;
+      if (fight.cover === undefined) {
+        const over = curtainOver({ began: fight.began, since: this.since, lastRing: this.host.lastRing(), seenBefore: this.shown.has(k) });
+        fight.cover = over ? this.host.cover(() => !!fight.view || this.fight !== fight) : null;
+      }
       if (fight.cover && !fight.cover.isDown()) return;
       this.shown.add(k);
       // Shown first: the view sizes itself to the room it finds.

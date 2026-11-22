@@ -307,12 +307,15 @@ test('a watched bot fight, start to champion: drawn by the page, from one log, o
         if (!moved && on.ms > 4000) {
           step(`NEXT in fight ${on.from}:${on.f}`);
           const t = Date.now();
+          const was = await spike(host, (s) => s.watch.host.follow() as number);
           await host.locator('#watch-next').click({ timeout: 2000 });
           await host.waitForTimeout(250);
           const after = await spike(host, (s) => ({ who: document.getElementById('watch-who')!.textContent, dim: document.getElementById('battleview-dim')!.hidden, v: s.watch.showing ? `${s.watch.showing.from}:${s.watch.showing.f}` : null }));
           await host.locator('#watch-prev').click({ timeout: 2000 });
-          // Its own fight: NEXT can land on a trainer fighting too, whose view is still up a frame on.
-          await expect.poll(() => host.evaluate((key) => { const v = (window as any).__spike.watch.showing; return !!v && `${v.from}:${v.f}` === key; }, `${on.from}:${on.f}`), { timeout: 3000 }).toBe(true);
+          // Its own fight: NEXT can land on a trainer fighting too (the foe, in the same fight), whose view
+          // is still up a frame on, and with no curtain on a swap (Cam, 11-21) it is up at once: the watch
+          // has to be back on the one followed before.
+          await expect.poll(() => host.evaluate(([key, was]) => { const s = (window as any).__spike, v = s.watch.showing; return s.watch.told === was && !!v && `${v.from}:${v.f}` === key; }, [`${on.from}:${on.f}`, was] as const), { timeout: 3000 }).toBe(true);
           const back = await spike(host, (s) => { const v = s.watch.showing; return { key: `${v.from}:${v.f}`, ms: v.view.snapshot().ms, side: v.side }; });
           moved = { before: on, after, back, gone: Date.now() - t };
           step(`moved ${JSON.stringify(moved)}`);

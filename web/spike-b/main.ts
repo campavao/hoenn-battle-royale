@@ -2964,7 +2964,6 @@ function sheetModel(): Omit<SheetModel, 'onClose' | 'onFeedback'> {
     onCloseCard: () => {},
     onWatch: (dir) => { watch.step(dir); lobby?.stage.redraw(); },
     onWatchSeat: (seat) => { follow = seat; if (zoom < 1) zoom = playZoom(); lobby?.closeSheet(); },
-    onStopWatch: () => { follow = 0; lobby?.stage.redraw(); },
     onLeave: () => { sheetLeave = true; lobby?.stage.redraw(); },
     onStay: () => { sheetLeave = false; lobby?.stage.redraw(); },
     onLeaveSure: () => { sheetLeave = false; leaveMatch(); },
