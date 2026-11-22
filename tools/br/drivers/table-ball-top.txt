@@ -1,0 +1,39 @@
+# table-ball-top: a table ball sits on the table's top, not on its front row (Cam, 11-22: "now
+# they are slightly off table"). floors.py put sTableBalls on the cell with the floor south of it,
+# which on a table two or three rows deep is its front, drawn at the table's foot. Cam's painting
+# moved the room's own ball up that row (WEATHER INSTITUTE 1F: 11,6 to 11,5); the table balls go
+# up it too.
+#
+# WEATHER INSTITUTE 1F (map 32:0) is sRooms[140]: its cache, key 0x8D8C, painted at (11,5), and
+# sTableBalls[15], key 0xAC0F, on the right-hand table's top at (16,5), no longer its front at
+# (16,6) -- MAP_OFFSET in, (18,12) and (23,12). The boot puts us on the chair at (15,5), beside it.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 20 00 0F 00 05 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x1072
+wait 30
+expect u16 gBrLoot 0x8D8C
+expect u16 gBrLoot+2 18
+expect u16 gBrLoot+4 12
+expect u16 gBrLoot+20 0xAC0F
+expect u16 gBrLoot+22 23
+expect u16 gBrLoot+24 12
+expect u8 gBrLoot+31 3
+shot tables
+# A at it from the chair, facing the table: its PICKUP
+hold RIGHT 1
+wait 20
+tap A
+wait 120
+shot taking
+tap B
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+expectmsg 10 u16 1 0xAC0F
+expect u8 gBrLoot+31 0
+shot taken
+say table ball top ok

@@ -303,13 +303,22 @@ class Floor:
     def on_tables(self, count):
         """Up to `count` balls, one a table, each on the cell you reach from the floor
         south of it where there is one (you face up to it, as at a counter), and the
-        floor cell it is taken from. [(cell, beside)]."""
+        floor cell it is taken from. [(cell, beside)].
+        On a table two rows deep or more that cell is its front, drawn below the top, so the
+        ball goes on the row behind it where that row has a floor beside it too: Cam's
+        painting (11-01) moved 26 of the 27 first balls it kept on their own table up one
+        row (the WEATHER INSTITUTE's 11,6 to 11,5). A counter is its own top."""
         got = []
+        def counter(c):
+            return self.behavior[c[1] * self.w + c[0]] == "MB_COUNTER"
         for comp, beside in self.tables():
             def rank(c):
                 south = (c[0], c[1] + 1) in beside[c]
                 return (not south, abs(c[0] - self.w / 2) + abs(c[1] - self.h / 2), c)
             cell = min(beside, key=rank)
+            up = (cell[0], cell[1] - 1)
+            if up in beside and not counter(cell):
+                cell = up
             from_ = (cell[0], cell[1] + 1) if (cell[0], cell[1] + 1) in beside[cell] else beside[cell][0]
             got.append((cell, from_))
             if len(got) == count:
