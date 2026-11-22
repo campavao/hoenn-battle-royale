@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-22T00:08:05.086Z",
+ "readAt": "2026-11-22T00:23:08.624Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "F77ZQV",
    "at": "2026-11-22T00:06:27.746Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-22T00:16:36.112Z",
+   "secs": 608,
    "door": "open",
    "mode": "host",
    "humans": 1,
@@ -16,8 +16,7 @@
    "joins": [],
    "versions": [],
    "installs": [],
-   "played": [],
-   "live": true
+   "played": []
   },
   {
    "code": "ZFK6FH",
@@ -9477,7 +9476,7 @@
   {
    "id": "6144a717",
    "first": "2026-10-17T02:37:29.310Z",
-   "last": "2026-11-21T23:29:27.135Z",
+   "last": "2026-11-22T00:18:04.257Z",
    "since": "2026-10-15",
    "versions": [
     "2",
@@ -9501,7 +9500,7 @@
     "world-d11e20f3"
    ],
    "solo": 2,
-   "checkins": 90,
+   "checkins": 91,
    "v": "world-d11e20f3"
   },
   {
