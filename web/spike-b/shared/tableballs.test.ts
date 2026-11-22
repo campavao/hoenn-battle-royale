@@ -71,3 +71,30 @@ describe('balls in the rooms', () => {
     expect(r.groundAt(map, x, y)).toBeUndefined();
   });
 });
+
+// Cam, 11-22: "the top floor of Devon, as well as other ... notable areas, should have a rare item
+// at the end of it ... Definitely a rare though."
+describe('the last floor of a notable place', () => {
+  it('always holds a gold ball, on every seed, and a floor elsewhere still rolls', async () => {
+    const { RARE_AT_THE_END } = await import('./room');
+    expect(RARE_AT_THE_END.has('MAP_RUSTBORO_CITY_DEVON_CORP_3F')).toBe(true);
+    let elsewhere = 0, elsewhereGold = 0, dealt = 0;
+    for (const seed of [1, 7, 42, 99, 4242, 31337]) {
+      const g = [...makeRoom(MAPS, PATCHES, seed).ground().values()];
+      for (const map of RARE_AT_THE_END) {
+        // Gold whenever it is dealt; a match's event can take a floor for itself (makeRoom's places).
+        const ball = g.find((b) => b.map === map);
+        if (!ball) continue;
+        dealt++;
+        expect(GOLD, `${map} seed ${seed}`).toContain(ball.item);
+      }
+      expect(g.some((b) => b.map === 'MAP_RUSTBORO_CITY_DEVON_CORP_3F'), `Devon 3F seed ${seed}`).toBe(true);
+      for (const b of g) if (!RARE_AT_THE_END.has(b.map) && ROOMS.some((r) => r[0] === b.map && !r[3])) { elsewhere++; if (GOLD.includes(b.item)) elsewhereGold++; }
+    }
+    // Nearly every listed floor deals, every seed (none is listed that never does).
+    expect(dealt).toBeGreaterThanOrEqual(RARE_AT_THE_END.size * 6 - 6);
+    // The other floors' one in eight is untouched: some gold, mostly not.
+    expect(elsewhereGold).toBeGreaterThan(0);
+    expect(elsewhereGold / elsewhere).toBeLessThan(0.3);
+  });
+});
