@@ -601,7 +601,19 @@ export function derive(events) {
         break;
       }
       case "join": {
-        const s = rooms.get(ev.code);
+        let s = rooms.get(ev.code);
+        // Spike B's quick play opens its room on the first quick-join and logs no
+        // `hosted by` (service.ts: `hosted` is never a quick room), so that join opens
+        // the record. Without it every quick room since 11-14 was dropped: 605 quick
+        // matches logged, 7 on the page (Cam, 11-21: "the last games are from 10:30am").
+        if (!s && ev.how === "quick") {
+          s = { code: ev.code, at: ev.t, end: null, secs: null,
+                door: "open", mode: "quick",
+                humans: 0, together: 0, spectators: 0, matches: 0, locks: 0,
+                joins: [], versions: [], installs: [], members: new Map(),
+                opener: ev.who, played: [] };
+          rooms.set(ev.code, s);
+        }
         if (!s) break;
         const spectator = ev.how === "spectate";
         // A rejoin (POK-284) is the same seat coming back, not another human.
