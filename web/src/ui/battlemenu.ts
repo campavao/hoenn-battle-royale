@@ -357,7 +357,8 @@ export function drawHp(c: EmeraldCanvas, x: number, y: number, w: number, frac: 
 
 /** The held item's icon box in a party cell: its bottom-right corner (Cam, 11-21). */
 export const SLOT_ITEM_BOX = 16;
-const SLOT_ITEM_PAD = 3;
+/** Inside the window frame's edge (Emerald's frame is about 5 px), not over it. */
+const SLOT_ITEM_PAD = 6;
 
 /** One party cell: icon, name, HP bar; and, when the mon holds something, that item's icon
  *  in the bottom-right corner, the HP bar stopping short of it. `drawItem` is a seam for tests. */
