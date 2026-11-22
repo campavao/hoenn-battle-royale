@@ -19,7 +19,7 @@ import { WorldIndex } from '../src/bots/hoenn';
 import type { PeekBag } from './shared/wire';
 import { lineAt, voiceFor } from '../src/bots/lines';
 import type { PackedMon } from '../src/net/wire';
-import { FIELD_CUT, FIELD_STRENGTH, isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
+import { FIELD_CUT, FIELD_SMASH, FIELD_STRENGTH, isTallGrass, isWater, type WorldMap, type Spot } from '../src/bots/world';
 import { battleOrder, leadIndex } from './battleorder';
 import { battleText } from './battlereader';
 import { arrived, routeTo } from './tapwalk';
@@ -138,7 +138,7 @@ const BIKE_GFX = [1, 90]; // OBJ_EVENT_GFX_BRENDAN_MACH_BIKE, _MAY_MACH_BIKE
 const ACRO_GFX = [63, 91]; // OBJ_EVENT_GFX_BRENDAN_ACRO_BIKE, _MAY_ACRO_BIKE
 const OBJ_EVENT_GFX_CUTTABLE_TREE = 82, OBJ_EVENT_GFX_BREAKABLE_ROCK = 86, OBJ_EVENT_GFX_PUSHABLE_BOULDER = 87;
 // export-world.py's classes for them.
-const CLASS_WATER = 2, CLASS_CUT = 9, CLASS_BOULDER = 10;
+const CLASS_WATER = 2, CLASS_CUT = 9, CLASS_BOULDER = 10, CLASS_SMASH = 11;
 const OBJ_EVENT_GFX_BIRCHS_BAG = 97;
 const SHEETS = spritesData as Record<string, { name: string; w: number; h: number; frames: number }>;
 
@@ -3152,7 +3152,7 @@ function wirePhoneHud(desk = false): void {
 }
 
 /** gBrHmView's bits (include/br/br_hm.h): HM n+1's move at bit n. */
-const HM_CUT = 1 << 0, HM_FLY = 1 << 1, HM_SURF = 1 << 2, HM_STRENGTH = 1 << 3, HM_DIVE = 1 << 7;
+const HM_CUT = 1 << 0, HM_FLY = 1 << 1, HM_SURF = 1 << 2, HM_STRENGTH = 1 << 3, HM_ROCK_SMASH = 1 << 5, HM_DIVE = 1 << 7;
 
 /** The phone HUD's field moves (HBR-78) as the page knows them: the team's CUT, SURF and
  *  STRENGTH (the actor's field bits, rom.field()), each lit when the cell ahead is what
@@ -3172,13 +3172,13 @@ function fieldChips(a: Actor): FieldMove[] {
   // flying icon to the minimap HUD when you are able to fly").
   const team = link.teams.get(a.id);
   const fly = team && couldFly(team) && !link.room.ring().safari ? HM_FLY : 0;
-  const can = (bits & FIELD_CUT ? HM_CUT : 0) | fly | (bits & FIELD_SURF ? HM_SURF : 0) | (bits & FIELD_STRENGTH ? HM_STRENGTH : 0) | (bits & FIELD_DIVE ? HM_DIVE : 0);
+  const can = (bits & FIELD_CUT ? HM_CUT : 0) | fly | (bits & FIELD_SURF ? HM_SURF : 0) | (bits & FIELD_STRENGTH ? HM_STRENGTH : 0) | (bits & FIELD_SMASH ? HM_ROCK_SMASH : 0) | (bits & FIELD_DIVE ? HM_DIVE : 0);
   if (!can) return [];
   const ahead = classAt(aheadOf(a));
   const surfing = classAt(a.m.spot) === CLASS_WATER;
   // DIVE lights over a dive spot (down) and anywhere below it may come up (br_hm.c).
   const dive = diveTo(link.room.maps, link.room.world, a.m.spot, bits) ? HM_DIVE : 0;
-  const ready = (ahead === CLASS_CUT ? HM_CUT : 0) | fly | (ahead === CLASS_WATER && !surfing ? HM_SURF : 0) | (ahead === CLASS_BOULDER ? HM_STRENGTH : 0) | dive;
+  const ready = (ahead === CLASS_CUT ? HM_CUT : 0) | fly | (ahead === CLASS_WATER && !surfing ? HM_SURF : 0) | (ahead === CLASS_BOULDER ? HM_STRENGTH : 0) | (ahead === CLASS_SMASH ? HM_ROCK_SMASH : 0) | dive;
   return fieldMoves(can, ready & can);
 }
 
@@ -4496,13 +4496,13 @@ function drawProps(visible: Placed[], all: Actor[]): void {
   for (const p of visible) {
     if (!p.props) {
       p.props = [];
-      // A CUT cell is a tree or a Rock Smash rock (export-world.py marks both): the map's
-      // own object there says which (the Safari's are rocks, not trees).
+      // A CUT cell is a tree, a ROCK SMASH cell a rock (export-world.py).
       const objs = art.objects(p.m.group, p.m.num);
       for (let i = 0; i < p.classes.length; i++) {
         const c = p.classes[i], x = i % p.m.w, y = Math.floor(i / p.m.w);
         const own = objs.find((o) => o[0] === x && o[1] === y)?.[2];
-        if (c === CLASS_CUT) p.props.push([x, y, own === OBJ_EVENT_GFX_BREAKABLE_ROCK ? own : OBJ_EVENT_GFX_CUTTABLE_TREE]);
+        if (c === CLASS_CUT) p.props.push([x, y, OBJ_EVENT_GFX_CUTTABLE_TREE]);
+        else if (c === CLASS_SMASH) p.props.push([x, y, OBJ_EVENT_GFX_BREAKABLE_ROCK]);
         else if (c === CLASS_BOULDER) p.props.push([x, y, OBJ_EVENT_GFX_PUSHABLE_BOULDER]);
       }
     }

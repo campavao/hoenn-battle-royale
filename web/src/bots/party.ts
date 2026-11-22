@@ -60,6 +60,7 @@ export const MOVE_SURF = 57;
 export const MOVE_CUT = 15;
 export const MOVE_FLY = 19;
 export const MOVE_STRENGTH = 70;
+export const MOVE_ROCK_SMASH = 249;
 /** The rung a water mon has learned SURF by. Hoenn is half ocean and the drop is
  *  happy to put a trainer on Route 125 or Southern Island, which nothing without it
  *  ever leaves -- so this is a way off an island, not a convenience. */
@@ -100,9 +101,9 @@ function couldDo(team: readonly PackedMon[], hm: keyof typeof HMS, move: number)
 }
 
 /** What a dealt team could do on the field, in the room's bits (room.ts FIELD_*: CUT 1, STRENGTH 2,
- *  SURF 4), as a trainer's page tells the room of theirs (carry.ts fieldOf). */
+ *  SURF 4, ROCK SMASH 16), as a trainer's page tells the room of theirs (carry.ts fieldOf). */
 export function teamField(team: readonly PackedMon[]): number {
-  return (couldDo(team, 'cut', MOVE_CUT) ? 1 : 0) | (couldDo(team, 'strength', MOVE_STRENGTH) ? 2 : 0) | (couldDo(team, 'surf', MOVE_SURF) ? 4 : 0);
+  return (couldDo(team, 'cut', MOVE_CUT) ? 1 : 0) | (couldDo(team, 'strength', MOVE_STRENGTH) ? 2 : 0) | (couldDo(team, 'surf', MOVE_SURF) ? 4 : 0) | (couldDo(team, 'rock_smash', MOVE_ROCK_SMASH) ? 16 : 0);
 }
 
 /** And whether it could FLY (carry.ts couldFly's rule for a trainer's team). */

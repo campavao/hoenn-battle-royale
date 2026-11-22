@@ -11,7 +11,8 @@ import worldJson from '../data/world.json';
 import patchJson from '../../src/data/patches.json';
 import { botKeys, type Brain } from './bots';
 import { Host, play } from './host';
-import { ATTENDANT, BOATS, FIELD_SURF, KEY_A, KEY_B, KEY_DOWN, PORTS, makeRoom, type Room } from './room';
+import { ATTENDANT, BOATS, FIELD_SURF, KEY_A, KEY_B, KEY_DOWN, KEY_RIGHT, PORTS, makeRoom, type Room } from './room';
+import { FIELD_CUT, FIELD_SMASH } from '../../src/bots/world';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -51,6 +52,20 @@ describe('a bot follows a trainer\'s rule', () => {
       expect(((room.actor(id)!.field ?? 0) & FIELD_SURF) !== 0).toBe(can);
       const to = walkDown(room, id, 12);
       expect(to.y !== shore.y, `surf ${can}`).toBe(moved);
+    }
+  });
+
+  it("a trainer walks through Rusturf Tunnel's rocks with ROCK SMASH, and not with CUT (11-22)", () => {
+    // The rocks at (24,4) and (24,5) shut the tunnel's east-west way (data/maps/RusturfTunnel).
+    for (const [bits, through] of [[FIELD_CUT, false], [FIELD_SMASH, true]] as const) {
+      const room = makeRoom(MAPS, PATCHES, SEED);
+      room.opening = 0;
+      room.apply({ c: 'join', id: 1000, bot: false, name: 'P', skin: 0, spot: { map: 'MAP_RUSTURF_TUNNEL', x: 22, y: 4 }, facing: 4 });
+      room.apply({ c: 'field', id: 1000, bits });
+      expect(room.actor(1000)!.field).toBe(bits);
+      const a = room.actor(1000)!;
+      for (let i = 0; i < 120; i++) room.step(new Map([[1000, [KEY_RIGHT]]]));
+      expect(a.m.spot.x > 24, `field ${bits} at ${JSON.stringify(a.m.spot)}`).toBe(through);
     }
   });
 
@@ -156,8 +171,9 @@ describe('Hoenn with the trees and boulders back', () => {
   it('every tree, rock and boulder vanilla has is on the grid (none lost, none extra)', () => {
     const all = import.meta.glob('../../../data/maps/*/map.json', { eager: true }) as Record<string, { id: string; object_events?: { graphics_id: string; x: number; y: number }[] }>;
     expect(Object.keys(all).length).toBeGreaterThan(400);
-    const want: Record<string, number> = { OBJ_EVENT_GFX_CUTTABLE_TREE: 9, OBJ_EVENT_GFX_BREAKABLE_ROCK: 9, OBJ_EVENT_GFX_PUSHABLE_BOULDER: 10 };
-    const count: Record<number, number> = { 9: 0, 10: 0 };
+    // A rock is ROCK SMASH's own class 11 since 11-22 (export-rocks.py), no longer a tree's 9.
+    const want: Record<string, number> = { OBJ_EVENT_GFX_CUTTABLE_TREE: 9, OBJ_EVENT_GFX_BREAKABLE_ROCK: 11, OBJ_EVENT_GFX_PUSHABLE_BOULDER: 10 };
+    const count: Record<number, number> = { 9: 0, 10: 0, 11: 0 };
     for (const json of Object.values(all)) {
       const m = MAPS.find((x) => x.id === json.id);
       for (const o of json.object_events ?? []) {
@@ -167,9 +183,9 @@ describe('Hoenn with the trees and boulders back', () => {
         expect(decodeGrid(m.grid, m.w * m.h)[o.y * m.w + o.x], `${json.id} ${o.x},${o.y}`).toBe(c);
       }
     }
-    expect(count).toEqual({ 9: 77, 10: 59 });
-    const onGrid = { 9: 0, 10: 0 } as Record<number, number>;
-    for (const m of MAPS) for (const c of decodeGrid(m.grid, m.w * m.h)) if (c === 9 || c === 10) onGrid[c]++;
+    expect(count).toEqual({ 9: 33, 10: 59, 11: 44 });
+    const onGrid = { 9: 0, 10: 0, 11: 0 } as Record<number, number>;
+    for (const m of MAPS) for (const c of decodeGrid(m.grid, m.w * m.h)) if (c === 9 || c === 10 || c === 11) onGrid[c]++;
     expect(onGrid).toEqual(count);
   });
 
@@ -179,9 +195,11 @@ describe('Hoenn with the trees and boulders back', () => {
   });
 
   it('what each HM opens from Littleroot, boats counted', () => {
+    // 11-22: the 35 maps CUT used to open were behind Rock Smash rocks (Rusturf Tunnel's and
+    // the rest); ROCK SMASH opens them now, and CUT alone opens nothing more than no HM does.
     const n = (surf: boolean, cut: number) => mapsFrom(LITTLEROOT, surf, cut).size;
-    expect({ none: n(false, 0), cut: n(false, 1), strength: n(false, 2), surf: n(true, 0), all: n(true, 3) }).toEqual({ none: 148, cut: 183, strength: 148, surf: 255, all: 267 });
-    const surf = mapsFrom(LITTLEROOT, true, 0), all = mapsFrom(LITTLEROOT, true, 3);
+    expect({ none: n(false, 0), cut: n(false, 1), strength: n(false, 2), smash: n(false, 16), surf: n(true, 0), all: n(true, 19) }).toEqual({ none: 148, cut: 148, strength: 148, smash: 183, surf: 255, all: 267 });
+    const surf = mapsFrom(LITTLEROOT, true, 0), all = mapsFrom(LITTLEROOT, true, 19);
     // Past SURF, only these are shut behind a tree or a boulder, and none is a town.
     expect([...all].filter((m) => !surf.has(m)).sort()).toEqual([
       'MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F', 'MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_2F', 'MAP_MAGMA_HIDEOUT_2F_1R', 'MAP_MAGMA_HIDEOUT_2F_2R', 'MAP_MAGMA_HIDEOUT_2F_3R',

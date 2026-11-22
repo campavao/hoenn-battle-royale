@@ -5,7 +5,7 @@
 // The facing and the shut way are the Room's (Room.move), so every copy of the room
 // agrees; the host only picks when and where, and everybody else just gets its keys.
 
-import { decodeGrid, sameSpot, type SeamDir, type Spot, type WorldMap } from '../../src/bots/world';
+import { FIELD_CUT, FIELD_SMASH, FIELD_STRENGTH, decodeGrid, sameSpot, type SeamDir, type Spot, type WorldMap } from '../../src/bots/world';
 import { findPath, findPathToAny, type Path } from '../../src/bots/path';
 import { NAMES } from '../../src/bots/roster';
 import { teamFlies } from '../../src/bots/party';
@@ -295,7 +295,7 @@ function aboard(room: Room, a: Actor, b: Brain): number | undefined {
 /** What this bot's team could cross, as the world's searches ask it (POK-437): a bot goes where a
  *  trainer with that team could, no further. */
 const surfs = (a: Actor) => ((a.field ?? 0) & FIELD_SURF) !== 0;
-const cuts = (a: Actor) => (a.field ?? 0) & 3;
+const cuts = (a: Actor) => (a.field ?? 0) & (FIELD_CUT | FIELD_STRENGTH | FIELD_SMASH);
 
 /** brain.ts FLY_COOLDOWN_MS and FLY_CLEAR: a flight at most this often, and never onto somebody's
  *  screen. */

@@ -1,5 +1,6 @@
 // The field moves' symbols (HBR-78): our own 16x16 pixel art, one per move's effect --
-// a wave for SURF, a wing for FLY, scissors for CUT, a boulder for STRENGTH, an arrow up
+// a wave for SURF, a wing for FLY, scissors for CUT, a boulder for STRENGTH, a split rock
+// with its chips flying for ROCK SMASH, an arrow up
 // the falls for WATERFALL and one down into the sea for DIVE. Cam, 10-27: "symbols ...
 // with icons only that symbolize their effect, not spell out the name". Drawn by the page,
 // not cut from the ROM, so nothing here is the cartridge's art.
@@ -79,6 +80,24 @@ export const FIELD_ICONS: Readonly<Record<string, readonly string[]>> = {
     '.krk..rkkr..krk.',
     '..krrrrkkrrrrk..',
     '...kkkk..kkkk...',
+  ],
+  'ROCK SMASH': [
+    '................',
+    '..k..........k..',
+    '.kyk........kyk.',
+    '..k...kkkk...k..',
+    '.....kyyyyk.....',
+    '...kkyyyk.ykk...',
+    '..kyyyyk..kyyk..',
+    '.kyywyk..kyyYYk.',
+    '.kywyyyk.kyyYYk.',
+    '.kyyyyyk.kyYYYk.',
+    '.kyyyyYk.kYYYYk.',
+    '..kyyYYk.kYYYk..',
+    '..kkYYYk.kYYkk..',
+    'kkkkkkkkkkkkkkkk',
+    'kYYyyyyyyyyyyYYk',
+    'kkkkkkkkkkkkkkkk',
   ],
   STRENGTH: [
     '................',

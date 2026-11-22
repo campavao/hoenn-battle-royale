@@ -38,6 +38,11 @@ import {
   CLOCK_RED_S,
   MINI_MAP,
   MINI_W,
+  movesCols,
+  movesHeight,
+  MOVE_CHIP,
+  MOVE_GAP,
+  movesSize,
 } from './phonehud';
 import { measure, TEXT_RED } from './emerald';
 import { FIELD_ICONS, ICON_COLORS, ICON_SIZE } from './fieldicons';
@@ -247,8 +252,15 @@ describe('the HUD read off the ROM', () => {
     expect(readHudView(emu, (n) => (n === 'gBrHmView' ? undefined : SYM[n]), world)!.moves, 'an older patch').toEqual([]);
   });
 
-  it('never lists FLASH or ROCK SMASH, and every move has a whole 16x16 symbol in known colours', () => {
-    expect(fieldMoves(0xff, 0).map((m) => m.name)).toEqual(['CUT', 'FLY', 'SURF', 'STRENGTH', 'WATERFALL', 'DIVE']);
+  it('on its side, more than three moves go two abreast; upright, one under the other (11-22)', () => {
+    expect([1, 3, 4, 5].map((n) => movesCols(n, true))).toEqual([1, 1, 2, 2]);
+    expect(movesCols(5, false)).toBe(1);
+    expect(movesSize(4, 2)).toEqual({ w: 2 * MOVE_CHIP + MOVE_GAP, h: 2 * MOVE_CHIP + MOVE_GAP });
+    expect(movesSize(3, 1)).toEqual({ w: MOVE_CHIP, h: movesHeight(3) });
+  });
+
+  it('never lists FLASH, and every move has a whole 16x16 symbol in known colours', () => {
+    expect(fieldMoves(0xff, 0).map((m) => m.name)).toEqual(['CUT', 'FLY', 'SURF', 'STRENGTH', 'ROCK SMASH', 'WATERFALL', 'DIVE']);
     for (const m of fieldMoves(0xff, 0)) {
       const rows = FIELD_ICONS[m.name];
       expect(rows, m.name).toHaveLength(ICON_SIZE);

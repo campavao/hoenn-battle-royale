@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_CUT, FIELD_STRENGTH, World, type WorldMap } from './world';
+import { FIELD_CUT, FIELD_SMASH, FIELD_STRENGTH, World, type WorldMap } from './world';
 import { findPath } from './path';
 import { dealParty } from './party';
 
@@ -63,4 +63,31 @@ describe('a boulder is in the way until somebody could push it (#7)', () => {
     expect(findPath(world, from, to, 500, false, true).found).toBe(true);
   });
 
+});
+
+// 11-22: a Rock Smash rock was a cut tree's class 9, so CUT broke rocks and ROCK SMASH did
+// not. It is class 11 now (export-rocks.py), crossed with ROCK SMASH alone.
+describe('a Rock Smash rock is in the way until somebody could smash it (11-22)', () => {
+  const world = new World([
+    { ...maps[0], id: 'SMASH', grid: '5x0;2x1;1x11;2x1;5x0' } as unknown as WorldMap,
+  ]);
+
+  it('blocks a team with CUT or STRENGTH, and lets one with ROCK SMASH by', () => {
+    expect(world.standable('SMASH', 2, 1, false, FIELD_CUT)).toBe(false);
+    expect(world.standable('SMASH', 2, 1, false, FIELD_STRENGTH)).toBe(false);
+    expect(world.standable('SMASH', 2, 1, false, FIELD_SMASH)).toBe(true);
+    expect(world.standable('SMASH', 2, 1, false, true)).toBe(true);
+    expect(findPath(world, { map: 'SMASH', x: 2, y: 0 }, { map: 'SMASH', x: 2, y: 2 }, 500, false, FIELD_SMASH).found).toBe(true);
+  });
+
+  it('a tree is not smashed', () => {
+    expect(new World(maps).standable('TEST', 2, 1, false, FIELD_SMASH)).toBe(false);
+  });
+
+  it('the world has its rocks as ROCK SMASH, and none left as trees', async () => {
+    const real = new World(((await import('../../spike-b/data/world.json')).default as { maps: WorldMap[] }).maps);
+    // Rusturf Tunnel's rocks (data/maps/RusturfTunnel/map.json, OBJ_EVENT_GFX_BREAKABLE_ROCK).
+    expect(real.standable('MAP_RUSTURF_TUNNEL', 24, 4, false, FIELD_CUT)).toBe(false);
+    expect(real.standable('MAP_RUSTURF_TUNNEL', 24, 4, false, FIELD_SMASH)).toBe(true);
+  });
 });

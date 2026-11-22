@@ -95,13 +95,15 @@ export function bagHolds(emu: HudRead, sym: (name: string) => number | undefined
   return out;
 }
 
-/** The moves the symbols show, in the HMs' order; FLASH (HM05) and ROCK SMASH (HM06) the
- *  ROM never sets (br_hm.h). Each one's symbol is FIELD_ICONS[name]. */
+/** The moves the symbols show, in the HMs' order; FLASH (HM05) the ROM never sets
+ *  (br_hm.h). ROCK SMASH (HM06) the page sets for its own world's rocks (main.ts
+ *  fieldChips, 11-22). Each one's symbol is FIELD_ICONS[name]. */
 const FIELD_MOVES: readonly { hm: number; name: string }[] = [
   { hm: 0, name: 'CUT' },
   { hm: 1, name: 'FLY' },
   { hm: 2, name: 'SURF' },
   { hm: 3, name: 'STRENGTH' },
+  { hm: 5, name: 'ROCK SMASH' },
   { hm: 6, name: 'WATERFALL' },
   { hm: 7, name: 'DIVE' },
 ];
@@ -339,6 +341,20 @@ export function movesHeight(n: number): number {
   return Math.max(1, n * MOVE_CHIP + (n - 1) * MOVE_GAP);
 }
 
+/** How many columns the moves take: one, or two on a phone on its side once there are more
+ *  than three (ROCK SMASH, 11-22, made four reach down onto A and B there). */
+export function movesCols(n: number, sideways: boolean): number {
+  return sideways && n > 3 ? 2 : 1;
+}
+
+/** The field moves' window, `n` chips in `cols` columns: its width and height. */
+export function movesSize(n: number, cols: number): { w: number; h: number } {
+  return { w: cols * MOVE_CHIP + (cols - 1) * MOVE_GAP, h: movesHeight(Math.ceil(n / cols)) };
+}
+
+/** A phone on its side, as index.html's sideways HUD rule has it. */
+const SIDEWAYS = '(orientation: landscape) and (pointer: coarse) and (max-height: 480px)';
+
 /** One chip: rounded by a pixel at each corner, light behind a move that works on what we
  *  face, dark and see-through behind one that does not, whose symbol is faded too. */
 export const MOVE_READY_RING = '#3870e0';
@@ -353,20 +369,20 @@ function drawMoveIcon(c: EmeraldCanvas, name: string, x: number, y: number): voi
   });
 }
 
-function drawChip(c: EmeraldCanvas, name: string, ready: boolean, y: number): void {
+function drawChip(c: EmeraldCanvas, name: string, ready: boolean, x: number, y: number): void {
   const n = MOVE_CHIP;
   // Ready: a white chip in a blue ring (HBR-78: the one that works is blue). Else dark.
   const fill = ready ? MOVE_READY_RING : '#202838';
   const alpha = ready ? 1 : 0.65;
-  c.fillRect({ x: 1, y, w: n - 2, h: n }, fill, alpha);
-  c.fillRect({ x: 0, y: y + 1, w: 1, h: n - 2 }, fill, alpha);
-  c.fillRect({ x: n - 1, y: y + 1, w: 1, h: n - 2 }, fill, alpha);
-  if (ready) c.fillRect({ x: 2, y: y + 2, w: n - 4, h: n - 4 }, '#f8f8f8', 1);
+  c.fillRect({ x: x + 1, y, w: n - 2, h: n }, fill, alpha);
+  c.fillRect({ x, y: y + 1, w: 1, h: n - 2 }, fill, alpha);
+  c.fillRect({ x: x + n - 1, y: y + 1, w: 1, h: n - 2 }, fill, alpha);
+  if (ready) c.fillRect({ x: x + 2, y: y + 2, w: n - 4, h: n - 4 }, '#f8f8f8', 1);
   const rows = FIELD_ICONS[name] ?? [];
   rows.forEach((row, py) => {
     for (let px = 0; px < row.length; px++) {
       const color = ICON_COLORS[row[px]];
-      if (color) c.fillRect({ x: 3 + px, y: y + 3 + py, w: 1, h: 1 }, color, ready ? 1 : 0.7);
+      if (color) c.fillRect({ x: x + 3 + px, y: y + 3 + py, w: 1, h: 1 }, color, ready ? 1 : 0.7);
     }
   });
 }
@@ -630,24 +646,29 @@ export class OffField {
 class MovesWindow {
   private moves: FieldMove[] = [];
   private scale = 1;
+  private cols = 1;
   private readonly win: Win;
 
   constructor(readonly el: HTMLElement) {
     this.win = new Win(el, MOVE_CHIP, movesHeight(1), (c) => {
-      this.moves.forEach((m, i) => drawChip(c, m.name, m.ready, i * (MOVE_CHIP + MOVE_GAP)));
+      const step = MOVE_CHIP + MOVE_GAP;
+      this.moves.forEach((m, i) => drawChip(c, m.name, m.ready, (i % this.cols) * step, Math.floor(i / this.cols) * step));
     });
   }
 
   setScale(scale: number): void {
     if (!(scale > 0) || scale === this.scale) return;
     this.scale = scale;
-    this.win.size(MOVE_CHIP, this.win.c.height, scale);
+    this.win.size(this.win.c.width, this.win.c.height, scale);
   }
 
   update(moves: FieldMove[]): void {
     this.moves = moves;
-    const h = movesHeight(moves.length);
-    if (moves.length && this.win.c.height !== h) this.win.size(MOVE_CHIP, h, this.scale);
+    const doc = this.el.ownerDocument;
+    const sideways = !doc.body.classList.contains('desk-hud') && !!doc.defaultView?.matchMedia?.(SIDEWAYS).matches;
+    this.cols = movesCols(moves.length, sideways);
+    const { w, h } = movesSize(moves.length, this.cols);
+    if (moves.length && (this.win.c.height !== h || this.win.c.width !== w)) this.win.size(w, h, this.scale);
     this.el.classList.toggle('gone', !moves.length);
     this.win.show(moves.map((m) => `${m.name}${m.ready ? '!' : ''}`).join(' '));
   }

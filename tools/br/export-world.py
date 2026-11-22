@@ -402,12 +402,13 @@ def export():
                 cracks.append((i % w, i // w))
 
         # overlay: cuttable trees / smashable rocks aren't metatile behaviors in
-        # Emerald (they're object events) -> approximate as class 9 at their cell.
+        # Emerald (they're object events) -> class 9 (a tree, CUT) or 11 (a rock, ROCK
+        # SMASH) at their cell. One class for both let CUT break rocks (11-22).
         for oe in mj.get("object_events") or []:
             if oe.get("graphics_id") in (CUT_TREE_GFX, ROCK_SMASH_GFX):
                 ox, oy = oe["x"], oe["y"]
                 if 0 <= ox < w and 0 <= oy < h:
-                    classes[oy * w + ox] = 9
+                    classes[oy * w + ox] = 11 if oe.get("graphics_id") == ROCK_SMASH_GFX else 9
             # Strength boulders are back on the maps (#7): class 10 at the cell they start
             # on, which a bot crosses only with somebody who could push it (world.ts).
             elif oe.get("graphics_id") == BOULDER_GFX:

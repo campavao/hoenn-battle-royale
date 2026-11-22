@@ -506,7 +506,11 @@ describe("the BR structs the page reads at an offset", () => {
     const hm = layout(hmH, 'BrHmView').at;
     expect([phone.HM_CAN, phone.HM_READY]).toEqual([hm.can, hm.ready]);
     const hmBit = (n: string) => Number(new RegExp(`#define\\s+BR_HM_${n}\\s+\\(1 << (\\d+)\\)`).exec(hmH)![1]);
-    expect(phone.fieldMoves(0xff, 0).map((m) => m.hm)).toEqual(['CUT', 'FLY', 'SURF', 'STRENGTH', 'WATERFALL', 'DIVE'].map(hmBit));
+    // ROCK SMASH (HM06, bit 5) is the page's own (main.ts fieldChips, 11-22): the ROM's gBrHmView
+    // never sets it, and it is in the bit no BR_HM_ define has.
+    const romBits = ['CUT', 'FLY', 'SURF', 'STRENGTH', 'WATERFALL', 'DIVE'].map(hmBit);
+    expect(romBits).not.toContain(5);
+    expect(phone.fieldMoves(0xff, 0).map((m) => m.hm)).toEqual([...romBits, 5].sort((x, y) => x - y));
     const list = /enum\s*\{([\s\S]*?)\};/.exec(itemsH)![1].replace(/\/\/.*$/gm, '');
     const ids = list.split(',').map((x) => x.trim()).filter(Boolean);
     expect([phone.ITEM_MACH_BIKE, phone.ITEM_ACRO_BIKE, phone.ITEM_POKE_BALL, phone.ITEM_TOWN_MAP]).toEqual(
