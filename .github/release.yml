@@ -1,0 +1,15 @@
+# GitHub's generated release notes, grouped by each PR's label (Cam, 11-22: "break them up into
+# sections like UI, Gameplay, Bug fix"). tools/br/release-post.mjs posts each group under its
+# heading in Discord's #announcements, and leaves "Behind the scenes" out of the post.
+changelog:
+  categories:
+    - title: Gameplay
+      labels: [gameplay]
+    - title: UI
+      labels: [ui]
+    - title: Bug fixes
+      labels: [bug]
+    - title: Behind the scenes
+      labels: [internal, documentation, dependencies]
+    - title: Other changes
+      labels: ["*"]
