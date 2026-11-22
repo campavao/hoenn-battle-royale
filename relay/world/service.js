@@ -13627,6 +13627,7 @@ var Room = class {
     };
     lay(f);
     const pieces = species.length + bags.length;
+    const farOpen = () => laid.every((p) => p === f || d(p) <= 8 || this.reaches(p, [p]));
     if (n !== EVENT_MAX - 1) {
       const zone = all.filter((s) => s.map === f.map && d(s) >= SPREAD_NEAR && d(s) <= SPREAD_FAR && !this.inFog(s, ring));
       for (let i = zone.length - 1; i > 0; i--) {
@@ -13637,8 +13638,12 @@ var Room = class {
         for (const c of zone) {
           if (laid.length >= pieces) break;
           if (laid.some((p) => Math.abs(p.x - c.x) + Math.abs(p.y - c.y) < gap)) continue;
-          if (!this.reaches(c, [c])) continue;
+          const at2 = laid.length;
           lay(c);
+          if (laid.length > at2 && !farOpen()) {
+            this.spills.delete(eventPiece(n, at2));
+            laid.pop();
+          }
         }
       }
     }
@@ -13654,7 +13659,7 @@ var Room = class {
       const pick = offers[Math.min(offers.length - 1, Math.floor(rng() * offers.length))];
       for (const c of spare.slice(0, 6)) {
         e.trader = { x: c.x, y: c.y, species: pick, busy: 0 };
-        if (this.reaches(f, [...laid, c])) break;
+        if (this.reaches(f, [...laid, c]) && farOpen()) break;
         delete e.trader;
       }
     }
@@ -16596,4 +16601,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "90213d033736";
+export const WORLD_HASH = "05f2d27d7901";

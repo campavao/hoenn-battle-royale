@@ -1305,7 +1305,8 @@ describe('the fog', () => {
     expect(same.ring(3 * RING_PHASE)).toEqual(room.ring(3 * RING_PHASE));
     expect(room.centre(1).cx !== room.centre(0).cx || room.centre(1).cy !== room.centre(0).cy).toBe(true); // a new round, a new centre
     // the centre is a cell a trainer can stand on, and is never in the fog before the end
-    const centre = room.reachable().find((s) => !room.inFog(s, at(5)))!;
+    // (anywhere on Hoenn's land, landed(): not only Littleroot's walk, reachable())
+    const centre = room.landed().find((s) => !room.inFog(s, at(5)))!;
     expect(centre).toBeTruthy();
     const start = { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 };
     expect(room.inFog(start, at(0))).toBe(false);

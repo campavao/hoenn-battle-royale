@@ -1535,18 +1535,26 @@ export class Room {
     };
     lay(f);
     const pieces = species.length + bags.length;
+    // Every piece out past the legendary's eight has a way in of its own (reaches() from the
+    // legendary sees no further than its eight).
+    const farOpen = () => laid.every((p) => p === f || d(p) <= 8 || this.reaches(p, [p]));
     if (n !== EVENT_MAX - 1) {
       // Over the legendary's map, inside the ring, never within SPREAD_NEAR of it: each the
       // draw's next cell at least `gap` from every piece laid, the gap narrowing on a small map.
-      // A far piece walls nothing near the legendary, so it only has to be reachable itself.
       const zone = all.filter((s) => s.map === f.map && d(s) >= SPREAD_NEAR && d(s) <= SPREAD_FAR && !this.inFog(s, ring));
       for (let i = zone.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [zone[i], zone[j]] = [zone[j], zone[i]]; }
       for (const gap of SPREAD_GAPS) {
         for (const c of zone) {
           if (laid.length >= pieces) break;
           if (laid.some((p) => Math.abs(p.x - c.x) + Math.abs(p.y - c.y) < gap)) continue;
-          if (!this.reaches(c, [c])) continue;
+          const at = laid.length;
           lay(c);
+          // Laid, it has to be reachable itself (a corner where two ways meet is no place: the
+          // piece walls one from the other), and shut in no piece laid out here before it.
+          if (laid.length > at && !farOpen()) {
+            this.spills.delete(eventPiece(n, at));
+            laid.pop();
+          }
         }
       }
     }
@@ -1561,7 +1569,7 @@ export class Room {
       const pick = offers[Math.min(offers.length - 1, Math.floor(rng() * offers.length))];
       for (const c of spare.slice(0, 6)) {
         e.trader = { x: c.x, y: c.y, species: pick, busy: 0 };
-        if (this.reaches(f, [...laid, c])) break;
+        if (this.reaches(f, [...laid, c]) && farOpen()) break;
         delete e.trader;
       }
     }
