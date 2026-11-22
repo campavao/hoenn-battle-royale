@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-22T20:36:14.091Z",
+ "readAt": "2026-11-22T20:51:15.996Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -35,7 +35,7 @@
      "mode": "quick",
      "trainers": 2,
      "watching": 0,
-     "secs": null
+     "secs": 1008
     }
    ],
    "live": true,
@@ -30280,6 +30280,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-22T20:37:59.230Z",
+   "code": "ZBBM2Q",
+   "v": "37ece06",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1007,
+   "drifts": 0,
+   "deploy": "7ef35514"
+  },
+  {
+   "t": "2026-11-22T20:37:59.206Z",
+   "code": "ZBBM2Q",
+   "v": "37ece06",
+   "watched": 72,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 2,
+   "stalls": 2,
+   "longest": 44,
+   "checks": 84,
+   "drifts": 0,
+   "deploy": "7ef35514"
+  },
   {
    "t": "2026-11-22T20:21:26.990Z",
    "code": "ZBBM2Q",

@@ -1,7 +1,7 @@
 {
- "readAt": "2026-11-22T16:36:32.235Z",
+ "readAt": "2026-11-22T20:51:15.996Z",
  "from": "2026-11-22T00:06:55.860Z",
- "matches": 6,
+ "matches": 7,
  "players": [
   {
    "id": "71d3a7609b88",
@@ -24,22 +24,22 @@
    "last": "2026-11-22T08:34:39.708Z"
   },
   {
+   "id": "0fe1486c840e",
+   "name": "DONUT",
+   "skin": 0,
+   "rating": 1014,
+   "played": 4,
+   "wins": 2,
+   "best": 1,
+   "last": "2026-11-22T20:37:59.127Z"
+  },
+  {
    "id": "e4ccab195416",
    "name": "CAM",
    "skin": 12,
    "rating": 1002,
    "played": 4,
    "wins": 2,
-   "best": 1,
-   "last": "2026-11-22T15:22:38.720Z"
-  },
-  {
-   "id": "0fe1486c840e",
-   "name": "DONUT",
-   "skin": 0,
-   "rating": 998,
-   "played": 3,
-   "wins": 1,
    "best": 1,
    "last": "2026-11-22T15:22:38.720Z"
   },
@@ -52,6 +52,16 @@
    "wins": 0,
    "best": 2,
    "last": "2026-11-22T00:37:47.161Z"
+  },
+  {
+   "id": "b821c142935e",
+   "name": "WOLFIE",
+   "skin": 0,
+   "rating": 984,
+   "played": 1,
+   "wins": 0,
+   "best": 8,
+   "last": "2026-11-22T20:37:59.127Z"
   },
   {
    "id": "ab59f97c6e53",
