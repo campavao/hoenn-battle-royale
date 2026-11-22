@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-22T20:21:11.735Z",
+ "readAt": "2026-11-22T20:36:14.091Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -9,10 +9,10 @@
    "secs": null,
    "door": "open",
    "mode": "quick",
-   "humans": 2,
-   "together": 2,
+   "humans": 3,
+   "together": 3,
    "spectators": 0,
-   "matches": 0,
+   "matches": 1,
    "joins": [
     {
      "t": "2026-11-22T20:20:11.274Z",
@@ -21,12 +21,25 @@
     {
      "t": "2026-11-22T20:21:09.712Z",
      "how": "quick"
+    },
+    {
+     "t": "2026-11-22T20:35:33.481Z",
+     "how": "quick"
     }
    ],
    "versions": [],
    "installs": [],
-   "played": [],
-   "live": true
+   "played": [
+    {
+     "t": "2026-11-22T20:21:11.490Z",
+     "mode": "quick",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
   },
   {
    "code": "RS5VJF",
@@ -30268,6 +30281,20 @@
  ],
  "jank": [
   {
+   "t": "2026-11-22T20:21:26.990Z",
+   "code": "ZBBM2Q",
+   "v": "37ece06",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 4,
+   "drifts": 0,
+   "deploy": "7ef35514"
+  },
+  {
    "t": "2026-11-22T19:49:14.607Z",
    "code": "KB4KD6",
    "v": "37ece06",
@@ -42435,6 +42462,14 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-22T20:25:21.075Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-22T20:25:17.459Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-22T20:08:54.666Z",
    "step": "match"
