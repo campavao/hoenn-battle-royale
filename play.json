@@ -1,12 +1,63 @@
 {
- "readAt": "2026-11-22T14:00:39.400Z",
+ "readAt": "2026-11-22T14:15:41.599Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
+   "code": "G87DK4",
+   "at": "2026-11-22T14:11:42.418Z",
+   "end": "2026-11-22T14:15:34.408Z",
+   "secs": 232,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-22T14:11:42.418Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-22T14:11:44.566Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "MPWB7K",
+   "at": "2026-11-22T14:10:35.780Z",
+   "end": "2026-11-22T14:10:38.477Z",
+   "secs": 3,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [
+    {
+     "t": "2026-11-22T14:10:35.780Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
    "code": "PHK9Y9",
    "at": "2026-11-22T13:59:22.135Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-22T14:02:53.583Z",
+   "secs": 211,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -30,7 +81,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -40,23 +90,46 @@
    "secs": null,
    "door": "open",
    "mode": "quick",
-   "humans": 1,
-   "together": 1,
+   "humans": 3,
+   "together": 3,
    "spectators": 0,
-   "matches": 1,
+   "matches": 2,
    "joins": [
     {
      "t": "2026-11-22T13:53:53.542Z",
      "how": "quick"
+    },
+    {
+     "t": "2026-11-22T14:01:40.426Z",
+     "how": "quick"
+    },
+    {
+     "t": "2026-11-22T14:14:27.791Z",
+     "how": "quick"
+    },
+    {
+     "t": "2026-11-22T14:14:39.587Z",
+     "how": "quick"
     }
    ],
-   "versions": [],
-   "installs": [],
+   "versions": [
+    "world-77c9a81a"
+   ],
+   "installs": [
+    "bca304b1"
+   ],
    "played": [
     {
      "t": "2026-11-22T13:53:56.574Z",
      "mode": "quick",
      "trainers": 1,
+     "watching": 0,
+     "secs": 1203
+    },
+    {
+     "t": "2026-11-22T14:15:28.011Z",
+     "mode": "quick",
+     "trainers": 3,
      "watching": 0,
      "secs": null
     }
@@ -29134,7 +29207,7 @@
   {
    "id": "6144a717",
    "first": "2026-10-17T02:37:29.310Z",
-   "last": "2026-11-22T00:18:04.257Z",
+   "last": "2026-11-22T14:01:36.366Z",
    "since": "2026-10-15",
    "versions": [
     "2",
@@ -29155,11 +29228,12 @@
     "world-aa461974",
     "world-f1c1ffec",
     "world-baa9757b",
-    "world-d11e20f3"
+    "world-d11e20f3",
+    "world-77c9a81a"
    ],
    "solo": 2,
-   "checkins": 91,
-   "v": "world-d11e20f3"
+   "checkins": 92,
+   "v": "world-77c9a81a"
   },
   {
    "id": "4d3cafd9",
@@ -29252,14 +29326,15 @@
   {
    "id": "bca304b1",
    "first": "2026-11-20T22:05:00.471Z",
-   "last": "2026-11-20T22:05:00.471Z",
+   "last": "2026-11-22T14:14:40.091Z",
    "since": "2026-11-20",
    "versions": [
-    "world-1e0304e5"
+    "world-1e0304e5",
+    "world-77c9a81a"
    ],
    "solo": 4,
-   "checkins": 1,
-   "v": "world-1e0304e5"
+   "checkins": 4,
+   "v": "world-77c9a81a"
   },
   {
    "id": "d644c79a",
@@ -29499,6 +29574,48 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-22T14:13:59.441Z",
+   "code": "2KMMXG",
+   "v": "e000b70",
+   "watched": 0,
+   "snaps": 1,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 2,
+   "checks": 1202,
+   "drifts": 0,
+   "deploy": "40ef43db"
+  },
+  {
+   "t": "2026-11-22T14:13:59.409Z",
+   "code": "2KMMXG",
+   "v": "e000b70",
+   "watched": 494,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 4,
+   "stalls": 4,
+   "longest": 144,
+   "checks": 495,
+   "drifts": 0,
+   "deploy": "40ef43db"
+  },
+  {
+   "t": "2026-11-22T14:02:53.442Z",
+   "code": "PHK9Y9",
+   "v": "e000b70",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 207,
+   "drifts": 0,
+   "deploy": "40ef43db"
+  },
   {
    "t": "2026-11-22T13:50:45.665Z",
    "code": "D3AS52",
