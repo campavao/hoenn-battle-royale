@@ -13372,7 +13372,7 @@ var Room = class {
   landedOn(map) {
     return (this.landedMaps ??= new Map(this.landByMap().map((l) => [l[0].map, l]))).get(map) ?? [];
   }
-  /** A round's centre: a cell of Hoenn's outdoors a trainer can land on, each map as likely
+  /** A round's centre: a cell of Hoenn's outdoors a trainer can land on, each cell as likely
    *  (landByMap), from the seed, or one round in four a final story's place (story.ts's
    *  FINAL_CHANCE: SKY PILLAR), which then holds that story for the last event; and how far
    *  the farthest of those cells is from it. */
@@ -13385,8 +13385,7 @@ var Room = class {
     h ^= h >>> 15;
     h = Math.imul(h, 739982445);
     h ^= h >>> 12;
-    const on = byMap[(h >>> 0) % byMap.length];
-    const c = on[(Math.imul(h, 668265261) >>> 0) % on.length];
+    const c = cells[(Math.imul(h, 668265261) >>> 0) % cells.length];
     const p = this.places.get(c.map);
     let cx = p.gx + c.x + 0.5, cy = p.gy + c.y + 0.5;
     const near = (x2, y) => cells.some((s) => {
@@ -16597,4 +16596,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "1aa101227309";
+export const WORLD_HASH = "90213d033736";

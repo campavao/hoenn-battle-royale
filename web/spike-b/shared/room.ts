@@ -1259,7 +1259,7 @@ export class Room {
     return (this.landedMaps ??= new Map(this.landByMap().map((l) => [l[0].map, l]))).get(map) ?? [];
   }
 
-  /** A round's centre: a cell of Hoenn's outdoors a trainer can land on, each map as likely
+  /** A round's centre: a cell of Hoenn's outdoors a trainer can land on, each cell as likely
    *  (landByMap), from the seed, or one round in four a final story's place (story.ts's
    *  FINAL_CHANCE: SKY PILLAR), which then holds that story for the last event; and how far
    *  the farthest of those cells is from it. */
@@ -1270,8 +1270,10 @@ export class Room {
     const cells = byMap.flat();
     let h = Math.imul((this.seed ^ 0x51ed270b) >>> 0, 0x9e3779b1) ^ Math.imul(round + 1, 0x85ebca6b);
     h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12;
-    const on = byMap[(h >>> 0) % byMap.length];
-    const c = on[(Math.imul(h, 0x27d4eb2d) >>> 0) % on.length];
+    // Each cell as likely, not each map: the first towns and routes are many small maps, and
+    // each map as likely put 43% of rings there, 29% on the late ones (Cam, 11-22: "it still
+    // feels like the ring only closes on early game routes"). By land it is a third each.
+    const c = cells[(Math.imul(h, 0x27d4eb2d) >>> 0) % cells.length];
     const p = this.places.get(c.map)!;
     let cx = p.gx + c.x + 0.5, cy = p.gy + c.y + 0.5;
     // Only a final story with land near it: a ring shut on open sea (SKY PILLAR's on its
