@@ -10241,6 +10241,8 @@ var ART = {
   howto: { item: 361 },
   // KING'S ROCK: the crown.
   leaderboard: { item: 187 },
+  // A POKé BALL: the champion's team, as the Hall of Fame's machine holds it.
+  lastMatch: { item: 4 },
   // The ITEMFINDER: it finds what is hidden.
   debug: { item: 261 },
   feedback: { item: 121 },
@@ -10270,6 +10272,12 @@ var HOWTO_ROW = {
   action: { kind: "howto" },
   id: "lobby-howto",
   art: ART.howto
+};
+var LAST_MATCH_ROW = {
+  label: "LAST MATCH",
+  action: { kind: "lastmatch" },
+  id: "lobby-last-match",
+  art: ART.lastMatch
 };
 
 // web/src/bots/world.ts
@@ -16561,4 +16569,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "394308fd1ad0";
+export const WORLD_HASH = "77c9a81af9f5";

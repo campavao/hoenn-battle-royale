@@ -56,7 +56,9 @@ export type LobbyAction =
   | { kind: 'join'; code: string; pass: boolean }
   | { kind: 'watch'; code: string }
   // Back into the match a reload left, to watch it (HBR-20).
-  | { kind: 'rewatch'; code: string };
+  | { kind: 'rewatch'; code: string }
+  /** The results the last match ended on, again (the champion's team, everybody's place). */
+  | { kind: 'lastmatch' };
 
 export interface LobbyRow {
   /** What the row says on the left. */
@@ -151,6 +153,8 @@ const ART = {
   howto: { item: 361 },
   // KING'S ROCK: the crown.
   leaderboard: { item: 187 },
+  // A POKé BALL: the champion's team, as the Hall of Fame's machine holds it.
+  lastMatch: { item: 4 },
   // The ITEMFINDER: it finds what is hidden.
   debug: { item: 261 },
   feedback: { item: 121 },
@@ -224,6 +228,16 @@ export const HOWTO_ROW: LobbyRow = {
   action: { kind: 'howto' },
   id: 'lobby-howto',
   art: ART.howto,
+};
+
+/** After the ways in, once a match has ended on this page: its results again, the
+ *  champion's team and everybody's place (Cam, 11-21: a watcher wants to see them from the
+ *  menu, not only on the screen the match ended on). */
+export const LAST_MATCH_ROW: LobbyRow = {
+  label: 'LAST MATCH',
+  action: { kind: 'lastmatch' },
+  id: 'lobby-last-match',
+  art: ART.lastMatch,
 };
 
 /** First on the menu after a reload that could not go back into its match (HBR-20,

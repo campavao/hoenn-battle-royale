@@ -36,6 +36,7 @@ type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
 import { over } from './shared/over';
+import { endsOn, matchEnd } from './ending';
 import { Lobby, me, seeThrough, type RoomInfo } from './lobby';
 import { versionNote } from './versionnote';
 import { latestRomSeven } from '../src/release';
@@ -2572,34 +2573,30 @@ function results(res: Results, waited = 0): void {
     return;
   }
   const n = res.entrants.length;
-  const place = new Map<number, number>();
-  if (res.winner) place.set(res.winner, 1);
-  // Still standing with nobody crowned (a draw): first, together.
-  for (const [id] of res.entrants) if (!res.winner && !res.fallen.some((f) => f.id === id)) place.set(id, 1);
-  res.fallen.forEach((f, i) => place.set(f.id, n - i));
+  // A watcher who never played (came in after the match locked) has no place, time or
+  // record of their own on it: the standings and the champion are the whole of it.
+  const end = matchEnd(res, link.me, link.room.tick, link.room.epoch);
   const nameOf = (id: number) => res.entrants.find(([e]) => e === id)?.[1] ?? 'TRAINER';
-  const mine = res.fallen.find((f) => f.id === link.me);
-  const end = mine?.at ?? res.wonAt ?? link.room.tick;
-  const survived = Math.max(0, Math.round((end - link.room.epoch) / 60));
-  const placed = [...place].map(([seat, placement]) => ({ seat, placement })).sort((p, q) => p.placement - q.placement);
-  const t = lastRound;
+  const t = end.played ? lastRound : null;
   const beaten = (id: number) => res.fallen.filter((f) => f.by && f.by === nameOf(id)).length;
   lobby!.results({
-    view: resultsView({ placement: place.get(link.me), survived, winner: res.winner || undefined, ended: true }, n, link.me, nameOf),
+    view: resultsView({ placement: end.placement, survived: end.survived, winner: res.winner || undefined, ended: true }, n, link.me, nameOf),
     fame: fameOf(res.winner || undefined, link.me, res.winner ? fameTeamOf(res.winner) : undefined, nameOf, speciesName, (id) => moveInfo(romTables, id)?.name),
-    standings: standingsOf(placed, link.me, nameOf),
-    record: [
+    standings: standingsOf(end.placed, link.me, nameOf),
+    record: end.played ? [
       { label: 'BEATEN', value: String(beaten(link.me)) },
       ...(t ? tallyLines({ won: t.won, caught: t.caught, steps: t.steps, items: t.items, mon: favourite(t.mons), move: favourite(t.moves) }, { species: speciesName, move: (id) => moveInfo(romTables, id)?.name }) : []),
-    ],
+    ] : [],
     // The CHAMPION page, a bot's too, as live (HBR-96).
     champion: res.winner && res.winner !== link.me ? { name: nameOf(res.winner), lines: [{ label: 'BEATEN', value: String(beaten(res.winner)) }] } : undefined,
   }, () => { worldSock?.leave(); room = null; unlink(); lobby!.menu(); });
 }
 
 function standings(done: boolean, res = link.room.results, bots = botIds()): void {
-  // A room's match is over: the live game's results, over the world.
-  if (done && lobby && res.entrants.some(([id]) => id === link.me)) { results(res); return; }
+  // A room's match is over: the live game's results, over the world, for a watcher too
+  // (ending.ts). Only an entrant got them, and a watcher was left on the field under the
+  // small panel once the Hall of Fame was over (Cam, 11-21).
+  if (done && endsOn(!!lobby) === 'results') { results(res); return; }
   const name = res.entrants.find(([id]) => id === res.winner)?.[1] ?? 'TRAINER';
   document.getElementById('win-title')!.textContent = !res.winner ? 'MATCH OVER' : res.winner === link.me ? 'YOU WIN!' : `${name} WINS`;
   const list = document.getElementById('win-list')!;
