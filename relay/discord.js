@@ -29,8 +29,11 @@ export function roomText(r, deadline, site = SITE) {
   return `**${plain(r.host)}** is hosting a room with ${r.players}/${r.seats} trainers. It starts when they press START.\nJoin: ${link}`;
 }
 
-export function startedText(r) {
-  return `${r.quick ? "**QUICK PLAY**" : `**${plain(r.host)}**'s room`} started with ${r.players} trainer${r.players === 1 ? "" : "s"}.`;
+/** A room whose match is on: anyone can still come in to watch it (service.ts: a join to a
+ *  playing room spectates), so the post keeps its link, worded JOIN (Cam, 11-21: "Join might convince folks to
+ *  click more"). */
+export function startedText(r, site = SITE) {
+  return `${r.quick ? "**QUICK PLAY**" : `**${plain(r.host)}**'s room`} started with ${r.players} trainer${r.players === 1 ? "" : "s"}.\nJoin: <${site}/#join=${r.code}>`;
 }
 
 /**
@@ -40,7 +43,7 @@ export function startedText(r) {
  */
 export function createRoomPoster({ url, rooms, log = () => {}, fetch = globalThis.fetch, now = Date.now, site = SITE, everyMs = EVERY_MS, editMs = EDIT_MS }) {
   const base = url.replace(/\?.*$/, "");
-  /** code -> { id, players, deadline, at } */
+  /** code -> { id, players, deadline, at, playing } */
   const open = new Map();
   let busy = false;
   let quietUntil = 0;
@@ -90,8 +93,17 @@ export function createRoomPoster({ url, rooms, log = () => {}, fetch = globalThi
       for (const [code, had] of open) {
         const r = byCode.get(code);
         if (r && posted(r)) continue;
-        if (r?.playing) await call("PATCH", `/messages/${had.id}`, { content: startedText(r) });
-        else await call("DELETE", `/messages/${had.id}`);
+        // Started: said once, with its watch link, and kept until the match is over. A quick
+        // room waits a minute, so this is the post most people see.
+        if (r?.playing && !r.pass && r.host !== "E2E") {
+          if (!had.playing) {
+            await call("PATCH", `/messages/${had.id}`, { content: startedText(r, site) });
+            had.playing = true;
+          }
+          continue;
+        }
+        // Over, emptied or gone: the channel lists rooms you can get into, so it comes down.
+        await call("DELETE", `/messages/${had.id}`);
         open.delete(code);
       }
       if (failing) log("discord: posting again");
