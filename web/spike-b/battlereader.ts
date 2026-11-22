@@ -69,6 +69,10 @@ export interface ReaderSyms {
   /** gBrBattle.menu: not 0 while a choice menu is up, and the strings the menu's windows print
    *  (the move's PP and type, "What will X do?") are the menu's, not the story's. */
   menu?: number;
+  /** gSaveBlock2Ptr: the save's player name (its first 8 bytes), which the ROM's lines say for the
+   *  page's own trainer. A wild fight's is the boot's "YOU" (rom.ts bootRom); a duel's is the
+   *  trainer's own (rom.ts writes it for the link). */
+  save2?: number;
 }
 
 /** Who is fighting and where, as the page knows it (the reader cannot): side 0 is the page's own
@@ -116,6 +120,17 @@ const PROMPT = /^What will\b.*\bdo\?$/;
  *  only one of these. */
 const UI_LINE = /^(PP|-|\d+\/\d+|(NORMAL|FIGHT|FLYING|POISON|GROUND|ROCK|BUG|GHOST|STEEL|\?\?\?|FIRE|WATER|GRASS|ELECTR|PSYCHC|ICE|DRAGON|DARK)\b[ ./\d]*)$/;
 const M_NICKNAME = 0x30;
+/** PLAYER_NAME_LENGTH + 1 (include/constants/global.h). */
+const PLAYER_NAME_READ = 8;
+
+/** `line` with the ROM's name for the page's own trainer (`rom`) said as the trainer is called
+ *  (`name`): "YOU used ROYALé BALL!" is "SINBAD used ROYALé BALL!" to whoever watches SINBAD. A
+ *  name in a longer word is left alone. */
+export function asNamed(line: string, rom: string, name: string): string {
+  if (!rom || !name || rom === name) return line;
+  const esc = rom.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return line.replace(new RegExp(`(^|[^A-Za-z0-9é])${esc}(?![A-Za-z0-9é])`, 'g'), (_m, before: string) => `${before}${name}`);
+}
 
 // ---- a mon ---------------------------------------------------------------------------------
 
@@ -200,6 +215,8 @@ export class BattleReader {
   private pending: BattleEvent[] = [];
   private sinceFlush = 0;
   private local = 0;
+  /** The ROM's name for the page's own trainer, as its lines say it (ReaderSyms.save2). */
+  private romName = '';
   private readonly scratch = new Line();
 
   constructor(
@@ -313,6 +330,7 @@ export class BattleReader {
     if (present(s.mainFunc) && this.mem.read(s.mainFunc, 32) === 0) return;
     if (present(s.count) && this.mem.read(s.count, 8) < 2) return;
     this.local = this.localBattler();
+    this.romName = this.readRomName();
     const [mine, foe] = this.readFields();
     if (!foe) { this.foeSeenAt = -1; return; }
     if (this.foeSeenAt < 0) this.foeSeenAt = this.frames;
@@ -352,8 +370,20 @@ export class BattleReader {
       // What a menu's windows print into the same buffer is not a line of the box.
       if (present(this.sym.menu) && this.mem.read(this.sym.menu, 8) !== 0) return;
       const line = battleText(now.b.subarray(0, now.n));
-      if (line && !PROMPT.test(line) && !UI_LINE.test(line) && !this.isName(line)) this.say({ e: 'text', text: line });
+      if (line && !PROMPT.test(line) && !UI_LINE.test(line) && !this.isName(line)) this.say({ e: 'text', text: asNamed(line, this.romName, this.ctx.me.name) });
     }
+  }
+
+  /** The save's player name, the one the ROM's lines use for this page's trainer; '' unknown. */
+  private readRomName(): string {
+    const at = this.sym.save2;
+    if (!present(at)) return '';
+    const ptr = this.mem.read(at, 32);
+    if (!ptr) return '';
+    const raw = this.mem.bytes(ptr, PLAYER_NAME_READ);
+    let n = 0;
+    while (n < raw.length && raw[n] !== TERMINATOR) n++;
+    return battleText(raw.subarray(0, n));
   }
 
   /** What a watcher believes of `side`'s mon, which is `f` in the ROM now. */

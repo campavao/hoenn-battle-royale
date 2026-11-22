@@ -637,7 +637,7 @@ export async function bootRom({ emu, rom, sym }: RomFiles, seed: number, skinOf:
   };
   const readerSyms = () => {
     const s = { mons: sym('gBattleMons'), partyIdx: sym('gBattlerPartyIndexes'), text: sym('gDisplayedStringBattle'), player: partyAt, enemy: sym('gEnemyParty'),
-      count: sym('gBattlersCount'), mainFunc, flags: sym('gBattleTypeFlags'), positions: sym('gBattlerPositions'), move: sym('gCurrentMove'), menu: sym('gBrBattle') + BATTLE_MENU_AT };
+      count: sym('gBattlersCount'), mainFunc, flags: sym('gBattleTypeFlags'), positions: sym('gBattlerPositions'), move: sym('gCurrentMove'), menu: sym('gBrBattle') + BATTLE_MENU_AT, save2 };
     return [s.mons, s.partyIdx, s.text, s.player, s.enemy].every((a) => a !== undefined && !Number.isNaN(a)) ? s : null;
   };
   // ...and a duel's link blocks, to the trainer it is with: whichever drain hears them.

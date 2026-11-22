@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { eventMs, logMs, stateAt, type BattleEvent } from './shared/battlelog';
-import { CANNED_LOG, WILD_LOG } from './fixtures/battlelog-canned';
-import { BLINK_MS, CHAR_MS, advance, boxLines, boxUp, envFor, fitScale, introLine, namesShown, readsFor, revealed, sceneAt, sideOf, slotOf } from './battlescene';
+import { CANNED_LOG, CATCH_LOG, CATCH_THROWN, WILD_LOG } from './fixtures/battlelog-canned';
+import { BLINK_MS, CHAR_MS, advance, boxLines, boxUp, envFor, fitScale, introLine, namesShown, readsFor, revealed, sceneAt, SHAKE_MS, shakeAt, sideOf, slotOf, THROW_LINE, WAIT_LINE_MS, waitLine } from './battlescene';
 import { barColour, barPixels, statusKind, trainerPicFor } from './battleview';
 
 /** The ms at which event `i` of the canned log starts. */
@@ -374,5 +374,82 @@ describe('a line of a log, for a watcher following side 1', () => {
   it('a name with a stop or a quote in it is taken as it stands', () => {
     expect(readsFor('MR. MIME used BARRIER!', trainers, [['MR. MIME'], ['GLOOM']])).toBe('Foe MR. MIME used BARRIER!');
     expect(readsFor("FARFETCH'D used CUT!", trainers, [["FARFETCH'D"], ['GLOOM']])).toBe("Foe FARFETCH'D used CUT!");
+  });
+});
+
+describe('a ball thrown at a wild mon (Cam, 11-21: "the ball-throw animation does not play")', () => {
+  const at = (i: number) => CATCH_LOG.slice(0, i).reduce((t, e) => t + eventMs(e), 0);
+  const during = (i: number, p: number) => at(i) + eventMs(CATCH_LOG[i]) * p;
+  it('flies from the near corner to the mon, takes it in, and drops to the ground', () => {
+    expect(sceneAt(CATCH_LOG, during(4, 0.5)).ball).toBeNull();
+    const leaving = sceneAt(CATCH_LOG, during(5, 0.05));
+    expect(leaving.ball).toMatchObject({ drop: 0, open: false, master: false });
+    expect(leaving.ball!.fly).toBeGreaterThan(0);
+    expect(leaving.ball!.fly).toBeLessThan(0.5);
+    expect(leaving.far.inBall).toBe(0);
+    const taking = sceneAt(CATCH_LOG, during(5, 0.45));
+    expect(taking.ball).toMatchObject({ fly: 1, drop: 0, open: true });
+    expect(taking.far.inBall).toBeGreaterThan(0);
+    expect(taking.far.inBall).toBeLessThan(1);
+    const down = sceneAt(CATCH_LOG, during(5, 0.99));
+    expect(down.ball).toMatchObject({ fly: 1, drop: 1, open: false });
+    expect(down.far.inBall).toBe(1);
+    // Still the far side's mon, for its health box, as the ROM keeps it up.
+    expect(down.far.mon?.species).toBe(377);
+    expect(boxUp(down.far)).toBe(true);
+  });
+  it('lets it out again when it breaks free, and keeps it once caught', () => {
+    const opening = sceneAt(CATCH_LOG, during(6, 0.1));
+    expect(opening.ball?.open).toBe(true);
+    expect(opening.far.inBall).toBeGreaterThan(0);
+    const out = sceneAt(CATCH_LOG, during(6, 0.6));
+    expect(out.ball).toBeNull();
+    expect(out.far.inBall).toBe(0);
+    for (const s of [sceneAt(CATCH_LOG, during(8, 0.5)), sceneAt(CATCH_LOG, logMs(CATCH_LOG), 0, 3000)]) {
+      expect(s.ball).toMatchObject({ fly: 1, drop: 1, tilt: 0, open: false });
+      expect(s.far.inBall).toBe(1);
+    }
+  });
+  it('shakes while the live fight is waited on, and the box keeps its line meanwhile', () => {
+    const live = CATCH_LOG.slice(0, CATCH_THROWN);
+    const end = logMs(live);
+    const shake = sceneAt(live, end, 0, 150);
+    expect(shake.waiting).toBe(true);
+    expect(Math.abs(shake.ball!.tilt)).toBeGreaterThan(0.2);
+    expect(sceneAt(live, end, 0, 700).ball!.tilt).toBe(0);
+    // The shakes are the wait's own show: no "is choosing" over them.
+    expect(sceneAt(live, end, 0, 9000).text).toBe('SINBAD used ROYALé BALL!');
+    expect(shakeAt(0)).toBe(0);
+    expect(shakeAt(SHAKE_MS + 100)).toBeCloseTo(shakeAt(100));
+  });
+  it('the MASTER BALL is its own, and a trainer fight has no ball', () => {
+    const master = CATCH_LOG.map((e) => (e.e === 'text' ? { ...e, text: e.text.replace('ROYALé BALL', 'MASTER BALL') } : e));
+    expect(sceneAt(master, during(5, 0.2)).ball?.master).toBe(true);
+    expect(THROW_LINE.test('SINBAD used ROYALE BALL!')).toBe(true);
+    expect(THROW_LINE.test('Foe ROXANNE used FULL RESTORE!')).toBe(false);
+    for (let t = 0; t < logMs(CANNED_LOG); t += 250) expect(sceneAt(CANNED_LOG, t).ball).toBeNull();
+  });
+});
+
+describe('a live fight waited on (Cam, 11-21: "nothing shows, so it looks frozen")', () => {
+  // Up to BRENDAN's SHARPEDO out: the menu is up on their ROM.
+  const live = CANNED_LOG.slice(0, 5);
+  const end = logMs(live);
+  it('says who it waits on once the wait is longer than a pause, its dots running', () => {
+    expect(sceneAt(live, end, 0, 0).text).toBe('Go! SHARPEDO!');
+    expect(sceneAt(live, end, 0, WAIT_LINE_MS - 1).text).toBe('Go! SHARPEDO!');
+    const s = sceneAt(live, end, 0, WAIT_LINE_MS);
+    expect(s.waiting).toBe(true);
+    expect(s.text).toMatch(/^BRENDAN is choosing\.{1,3}$/);
+    expect(s.chars).toBe(Infinity);
+    const dots = [0, 400, 800, 1200].map((d) => waitLine('BRENDAN', WAIT_LINE_MS + d));
+    expect(new Set(dots).size).toBe(3);
+    // Followed from the other seat, it is that trainer the screen waits on.
+    expect(sceneAt(live, end, 1, 2000).text).toMatch(/^LASS ROSE is choosing/);
+  });
+  it('says nothing of a wait once the fight is over, or while the log still plays', () => {
+    expect(sceneAt(CANNED_LOG, logMs(CANNED_LOG), 0, 9000).text).not.toMatch(/choosing/);
+    expect(sceneAt(live, end - 100, 0, 9000).text).not.toMatch(/choosing/);
+    expect(waitLine('', 0)).toBe('Waiting.');
   });
 });

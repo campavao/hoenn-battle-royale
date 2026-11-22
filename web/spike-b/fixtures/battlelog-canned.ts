@@ -26,6 +26,29 @@ export const WILD_LOG: BattleEvent[] = [
   { e: 'end', winner: 1 },
 ];
 
+/** A wild one caught, the lines as a trainer's page reads them off its ROM (battlereader.ts): a
+ *  ball that it breaks out of, then one that holds (Cam, 11-21, watching SINBAD catch a SHUPPET). */
+const SHUPPET = 377;
+export const CATCH_LOG: BattleEvent[] = [
+  {
+    e: 'start',
+    a: { seat: 1, name: 'SINBAD', skin: 3, team: [mon(SHARPEDO, 5, 23, 1)] },
+    b: { seat: 0, name: '', skin: 0, team: [mon(SHUPPET, 4, 17, 0)], wild: true },
+    map: 'MAP_ROUTE121',
+  },
+  { e: 'send', side: 0, slot: 0 },
+  { e: 'send', side: 1, slot: 0 },
+  { e: 'text', text: 'Wild SHUPPET appeared!' },
+  { e: 'text', text: 'Go! SHARPEDO!' },
+  { e: 'text', text: 'SINBAD used ROYALé BALL!' },
+  { e: 'text', text: 'Oh, no! The POKéMON broke free!' },
+  { e: 'text', text: 'SINBAD used ROYALé BALL!' },
+  { e: 'text', text: 'Gotcha! SHUPPET was caught!' },
+  { e: 'end', winner: 1 },
+];
+/** Where the second ball is thrown: a live fight's log up to here waits on the ROM's shakes. */
+export const CATCH_THROWN = 8;
+
 export const CANNED_LOG: BattleEvent[] = [
   {
     e: 'start',

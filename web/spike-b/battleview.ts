@@ -7,19 +7,21 @@
 //
 // The log says what happened and for how long (eventMs); battlescene.ts works out where
 // everything stands at a moment of it; this draws that. Nothing is simulated here and no move has
-// an animation: a hit is a blink, a faint a sinking, a send-out a mon growing out of white.
+// an animation: a hit is a blink, a faint a sinking, a send-out a mon growing out of white, a ball
+// thrown at a wild mon the ROM's ball flying to it, taking it in and shaking (battlescene.ts ballAt).
 //
-// Between turns of a live fight the screen waits; joined late (`play(log, ms)`) it is dropped in
+// Between turns of a live fight the screen waits, and says so once the wait is longer than a pause
+// ("SINBAD is choosing...", battlescene.ts waitLine); joined late (`play(log, ms)`) it is dropped in
 // where the fight stands, with no catching up.
 
 import { EmeraldCanvas, glyphIds, type TextColor } from '../src/ui/emerald';
 import type { BattleEvent, LogMon, Side } from './shared/battlelog';
 import { HB, type BattleEnv, type HealthboxArt, type RomArt, type RomFont } from './romart';
-import { H, W, advance, boxUp, envFor, fitScale, namesShown, readsFor, revealed, sceneAt, slotOf, type Scene, type SideScene, type Slot } from './battlescene';
+import { H, W, advance, boxUp, envFor, fitScale, namesShown, readsFor, revealed, sceneAt, slotOf, type BallScene, type Scene, type SideScene, type Slot } from './battlescene';
 import { logMs } from './shared/battlelog';
 
 /** What the view needs from the ROM's art: RomArt, or a stand-in in a test. */
-export type BattleArt = Pick<RomArt, 'monPic' | 'monCoords' | 'trainerPic' | 'trainerSize' | 'battleGround' | 'battleTextbox' | 'healthbox' | 'font' | 'speciesName'>;
+export type BattleArt = Pick<RomArt, 'monPic' | 'monCoords' | 'trainerPic' | 'trainerSize' | 'battleGround' | 'battleTextbox' | 'healthbox' | 'font' | 'speciesName' | 'battleBall'>;
 
 export interface ViewDeps {
   art: BattleArt;
@@ -52,6 +54,13 @@ const NEAR_TRAINER = { x: 80, y: 80 };
  *  for a 64 x 32 sprite is 32 and 16 off. */
 const FAR_BOX = { x: 12, y: 14 };
 const NEAR_BOX = { x: 126, y: 73 };
+/** A thrown ball's way (the ROM's comes in from the bottom left): where it leaves from, how high
+ *  over the line between it rises, where its middle rests on the far platform, how far a shake
+ *  leans it (radians). */
+const BALL_FROM = { x: 24, y: 100 };
+const BALL_ARC = 40;
+const BALL_GROUND = 62;
+const BALL_LEAN = 0.35;
 const MSG_Y = 112;
 /** The message box's window: x 16, y 120. A line is 16 px of the font's cell on a 16 px step. */
 const MSG_X = 16;
@@ -111,6 +120,8 @@ export interface ViewSnapshot {
   chars: number;
   scale: number;
   follow: Side;
+  /** A ball thrown at the wild mon, as it is on the screen; null for none. */
+  ball: BallScene | null;
 }
 
 export class BattleView {
@@ -131,6 +142,10 @@ export class BattleView {
   private observer: ResizeObserver | null = null;
   private boxes = new Map<string, HTMLCanvasElement>();
   private label = '';
+  /** How long the playhead has stood at the end of a live log, and the tenth of a second of it last
+   *  drawn: the wait's dots and a ball's shakes move with no playhead to move them. */
+  private waited = 0;
+  private waitTick = -1;
   private recent: number[] = [];
   private draws = 0;
   private drawMs = 0;
@@ -166,6 +181,7 @@ export class BattleView {
     this.log = [...log];
     this.t = Math.max(0, Math.min(ms, logMs(this.log)));
     this.last = 0;
+    this.waited = 0;
     this.dirty = true;
   }
 
@@ -180,6 +196,13 @@ export class BattleView {
   seek(ms: number): void {
     this.auto = false;
     this.t = Math.max(0, Math.min(ms, logMs(this.log)));
+    this.waited = 0;
+    this.dirty = true;
+  }
+
+  /** As if the screen had waited `ms` at the end of the log (a spec's, to look at the wait). */
+  wait(ms: number): void {
+    this.waited = Math.max(0, ms);
     this.dirty = true;
   }
 
@@ -208,7 +231,7 @@ export class BattleView {
   }
 
   scene(): Scene {
-    const s = sceneAt(this.log, this.t, this.following);
+    const s = sceneAt(this.log, this.t, this.following, this.waited);
     s.text = this.worded(s.text);
     return s;
   }
@@ -230,7 +253,7 @@ export class BattleView {
   snapshot(): ViewSnapshot {
     const s = this.scene();
     const side = (v: SideScene) => (v.mon ? { species: v.mon.species, hp: v.hp, maxHp: v.mon.maxHp, status: v.status } : null);
-    return { ms: this.t, next: s.next, waiting: s.waiting, ended: s.ended, near: side(s.near), far: side(s.far), text: s.text, chars: Math.min(s.chars, s.text.length), scale: this.scale, follow: this.following };
+    return { ms: this.t, next: s.next, waiting: s.waiting, ended: s.ended, near: side(s.near), far: side(s.far), text: s.text, chars: Math.min(s.chars, s.text.length), scale: this.scale, follow: this.following, ball: s.ball };
   }
 
   /** How the drawing is doing: draws made, the ms one took on average, at the 95th percentile of the last 300, and the worst. */
@@ -249,8 +272,14 @@ export class BattleView {
       this.last = now;
       const total = logMs(this.log);
       const next = advance(this.t, dt, total);
-      // Time standing still (the end of a log, a live fight between turns) draws nothing new.
-      if (next !== this.t) { this.t = next; this.dirty = true; }
+      // Time standing still (the end of a log, a live fight between turns) draws nothing new but
+      // the wait's own show, ten times a second; a fight that is over has none.
+      if (next !== this.t) { this.t = next; this.waited = 0; this.dirty = true; }
+      else if (this.log.length && this.log[this.log.length - 1].e !== 'end') {
+        this.waited += dt;
+        const tick = Math.floor(this.waited / 100);
+        if (tick !== this.waitTick) { this.waitTick = tick; this.dirty = true; }
+      }
     }
     if (!this.dirty) return;
     this.dirty = false;
@@ -290,6 +319,7 @@ export class BattleView {
       this.drawGround(sc);
       this.drawSide(art, sc.far, 'far');
       this.drawSide(art, sc.near, 'near');
+      if (sc.ball) this.drawBall(art, sc.ball, sc.far);
       if (boxUp(sc.far)) this.drawBox(art, sc.far, 'far');
       if (boxUp(sc.near)) this.drawBox(art, sc.near, 'near');
       this.drawMessage(art, sc);
@@ -350,8 +380,15 @@ export class BattleView {
     const base = slot === 'near' ? NEAR_MON : FAR_MON;
     const cx = base.x + v.monDx, cy = base.y + (c ? c.y - (slot === 'far' ? c.lift : 0) : 0);
     const x = cx - 32, y = cy - 32;
+    if (v.inBall >= 1) return;
     if (!pic) {
       this.standIn(cx - 24, cy - 24, 48, 48, '#c0c0c0');
+      return;
+    }
+    if (v.inBall > 0) {
+      // Into a ball, or out of it: white, and small to nothing at the ball's place, its middle.
+      const size = Math.max(1, Math.round(64 * (1 - v.inBall)));
+      ctx.drawImage(this.silhouette(pic), cx - size / 2, cy - size / 2, size, size);
       return;
     }
     if (v.leave === 'faint') {
@@ -373,6 +410,47 @@ export class BattleView {
       ctx.drawImage(this.silhouette(pic), left, top, size, size);
     } else if (grow < 1) ctx.drawImage(pic, left, top, size, size);
     else ctx.drawImage(pic, x, y);
+  }
+
+  /** The ball thrown at the far (wild) mon: up from the near corner in an arc to the mon's middle,
+   *  then down to the ground under it, leaning as it shakes. The ROM's own ball (romart.ts
+   *  battleBall: its shut frame, and its open one), or a drawn one where the patch does not say
+   *  where the ROM keeps it. */
+  private drawBall(art: BattleArt, b: BallScene, far: SideScene): void {
+    const ctx = this.ctx;
+    const c = far.mon ? art.monCoords(far.mon.species, false) : null;
+    const middle = FAR_MON.y + (c ? c.y - c.lift : 0);
+    let x: number, y: number;
+    if (b.fly < 1) {
+      x = BALL_FROM.x + (FAR_MON.x - BALL_FROM.x) * b.fly;
+      y = BALL_FROM.y + (middle - BALL_FROM.y) * b.fly - Math.sin(Math.PI * b.fly) * BALL_ARC;
+    } else {
+      x = FAR_MON.x;
+      y = middle + (BALL_GROUND - middle) * b.drop;
+    }
+    const sheet = art.battleBall(b.master);
+    ctx.save();
+    // Turned about its foot, as a shake is.
+    ctx.translate(Math.round(x), Math.round(y) + 8);
+    if (b.tilt) ctx.rotate(b.tilt * BALL_LEAN);
+    if (sheet) ctx.drawImage(sheet, 0, (b.open ? 1 : 0) * 16, 16, 16, -8, -16, 16, 16);
+    else {
+      ctx.fillStyle = '#383838';
+      ctx.beginPath();
+      ctx.arc(0, -8, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = b.master ? '#8050c0' : '#e03028';
+      ctx.beginPath();
+      ctx.arc(0, -8, 5, Math.PI, 0);
+      ctx.fill();
+      ctx.fillStyle = '#f8f8f8';
+      ctx.beginPath();
+      ctx.arc(0, -8, 5, 0, Math.PI);
+      ctx.fill();
+      ctx.fillStyle = '#383838';
+      ctx.fillRect(-5, -9, 10, 1);
+    }
+    ctx.restore();
   }
 
   private white = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();

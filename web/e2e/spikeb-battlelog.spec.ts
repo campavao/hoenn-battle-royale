@@ -92,9 +92,17 @@ async function lateJoiner(code: string, target: number, hash: string) {
 /** What the fighter's ROM really did, sampled every frame with none of the reader's care. */
 async function installOracle(page: Page): Promise<void> {
   await page.evaluate(async () => {
-    const { battleText } = await import('/spike-b/battlereader.ts' as string);
+    const { asNamed, battleText } = await import('/spike-b/battlereader.ts' as string);
     const s = (window as any).__spike, emu = s.rom.emu, sym = s.art.sym;
     const mons = sym('gBattleMons'), txt = sym('gDisplayedStringBattle'), idx = sym('gBattlerPartyIndexes'), pos = sym('gBattlerPositions'), menu = sym('gBrBattle') + 8;
+    // The ROM says its save's name for the fighter ("YOU" off a duel); the log, the trainer's own.
+    const me = s.link.mine()?.name ?? '';
+    const romName = () => {
+      const at = emu.read(sym('gSaveBlock2Ptr'), 32), raw = emu.bytes(at, 8) as Uint8Array;
+      let n = 0;
+      while (n < 8 && raw[n] !== 0xff) n++;
+      return battleText(raw.subarray(0, n));
+    };
     const o: any = { lines: [], last: '', hp: [{}, {}], field: [[], []], off: null };
     o.off = emu.onFrame(() => {
       const raw = emu.bytes(txt, 128) as Uint8Array;
@@ -104,7 +112,7 @@ async function installOracle(page: Page): Promise<void> {
       if (key !== o.last) {
         o.last = key;
         const line = n && emu.read(menu, 8) === 0 ? battleText(raw.subarray(0, n)) : '';
-        if (line && !/^What will\b.*\bdo\?$/.test(line)) o.lines.push(line);
+        if (line && !/^What will\b.*\bdo\?$/.test(line)) o.lines.push(asNamed(line, romName(), me));
       }
       let local = 0;
       for (let i = 0; i < 4; i++) if (emu.read(pos + i, 8) === 0) { local = i; break; }
@@ -496,8 +504,10 @@ test("a trainer's real fight on a second page: its view, no ROM replay, and it e
     expect(view.side, 'the trainer I watch').toBe(0);
     expect(view.lastNext, 'played to its end').toBeGreaterThanOrEqual(view.events - 1);
     expectViewEndsOnRom(view, oracle, 0, 'real fight');
-    // Every line the fighter saw, in order, as the watcher's own screen read it.
-    expect(view.texts.filter((t: string) => !/would like to battle/.test(t))).toEqual(oracle.lines.filter((l: string) => !/would like to battle/.test(l)).filter((l: string, i: number, a: string[]) => a[i - 1] !== l));
+    // Every line the fighter saw, in order, as the watcher's own screen read it: but the screen's own
+    // word while it waited on the fighter ("CAM is choosing..."), and the line it stood on before that.
+    const seen = view.texts.filter((t: string) => !/would like to battle|^\S.* is choosing\.*$|^Waiting\.*$/.test(t));
+    expect(seen.filter((t: string, i: number, a: string[]) => a[i - 1] !== t)).toEqual(oracle.lines.filter((l: string) => !/would like to battle/.test(l)).filter((l: string, i: number, a: string[]) => a[i - 1] !== l));
   } finally {
     await room0.close();
   }
