@@ -24,6 +24,7 @@ import { dirname, resolve } from 'node:path';
 export const FILE_SECONDS = {
   'patch.spec.ts': 9,
   'pwa.spec.ts': 4,
+  'rooms-page.spec.ts': 2,
   'recorder.spec.ts': 23,
   'results-scroll.spec.ts': 2,
   'spikeb-fieldfx.spec.ts': 640,

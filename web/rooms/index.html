@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Room painter</title>
+    <style>
+      :root { color-scheme: dark; --bg: #14181c; --panel: #1e252b; --line: #39444d; --ink: #e8eef2; --dim: #9fb3c0; --item: #ff5a4f; --person: #4fb3ff; }
+      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 16px system-ui, sans-serif; }
+      body { display: flex; flex-direction: column; height: 100dvh; padding: env(safe-area-inset-top) 12px env(safe-area-inset-bottom); gap: 8px; }
+      button, select { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; min-height: 48px; padding: 0 10px; touch-action: manipulation; }
+      button:disabled { opacity: .4; }
+      #top { display: flex; gap: 8px; padding-top: 8px; }
+      #top button { width: 48px; flex: none; font-size: 22px; }
+      #room { flex: 1; min-width: 0; }
+      #say { min-height: 20px; color: var(--dim); font-size: 14px; }
+      #say.bad { color: #ff8a80; }
+      #stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+      #grid { display: none; image-rendering: pixelated; touch-action: manipulation; max-width: 100%; max-height: 100%; }
+      .row { display: flex; gap: 8px; }
+      .row > * { flex: 1; min-width: 0; }
+      #item-mode[aria-pressed="true"] { border-color: var(--item); background: #3a2422; }
+      #person-mode[aria-pressed="true"] { border-color: var(--person); background: #1f3140; }
+      #send { padding-bottom: 8px; }
+      #rom-input { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="top">
+      <button id="prev" type="button" aria-label="Previous room">‹</button>
+      <select id="room" aria-label="Room"></select>
+      <button id="next" type="button" aria-label="Next room">›</button>
+    </div>
+    <div id="say" role="status">Reading your ROM…</div>
+    <div id="stage"><canvas id="grid"></canvas></div>
+    <div class="row">
+      <button id="item-mode" type="button" aria-pressed="true">Item</button>
+      <button id="person-mode" type="button" aria-pressed="false">Person</button>
+    </div>
+    <div class="row">
+      <button id="no-item" type="button">No item</button>
+      <button id="reset" type="button">Reset room</button>
+    </div>
+    <div class="row" id="send">
+      <button id="copy" type="button">Copy</button>
+      <button id="share" type="button">Share</button>
+    </div>
+    <canvas id="emu" width="240" height="160" hidden></canvas>
+    <input id="rom-input" type="file" accept=".gba,.bin" />
+    <script type="module" src="/spike-b/rooms-page.ts"></script>
+  </body>
+</html>

@@ -142,6 +142,8 @@ export default defineConfig({
         // sends /classic/ home).
         main: resolve(__dirname, "index.html"),
         spike: resolve(__dirname, "spike/index.html"),
+        // The room painter (spike-b/rooms-page.ts): a phone's way to place a room's ball and person.
+        rooms: resolve(__dirname, "rooms/index.html"),
         // The map painter (spike-b/map-page.ts): Cam's, not linked from the game.
         map: resolve(__dirname, "map/index.html"),
       },
