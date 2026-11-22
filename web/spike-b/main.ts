@@ -31,7 +31,7 @@ import { acroFrame, acroNear, DIR_EAST } from './sim';
 import { FACE, footPose } from './poses';
 import { ballTakes, catchRateOf, patchBalls, wildMon, zoneBalls, zoneFight } from './shared/wild';
 import { logMs } from './shared/battlelog';
-import { ATTENDANT, BOATS, CLOSED_DOORS, isLooseSeam, DOCKS, MOORINGS, TIDAL_MAPS, TIDAL_SAILOR, islandMaps, type Cruise, HOME_N, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, FIELD_DIVE, diveTo, emptyBag, interiors, makeRoom, botParty, legendMon, LEGEND_CATCH, LEGEND_FOE, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
+import { ATTENDANT, BOATS, CLOSED_DOORS, isLooseSeam, DOCKS, MOORINGS, TIDAL_MAPS, TIDAL_SAILOR, islandMaps, type Cruise, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, FIELD_DIVE, diveTo, emptyBag, interiors, makeRoom, botParty, legendMon, LEGEND_CATCH, LEGEND_FOE, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
@@ -2143,9 +2143,10 @@ async function trade(n: number, species: number): Promise<void> {
     if (swapping) leaveScreen();
     asking?.done('');
     const name = speciesName(species);
-    // Somebody at home's goes through a trade's evolution on the way over (br_loot.c's
-    // BrLoot_HomeTrade); an event's trader's does not (br_event.c's Swap).
-    const got = n >= HOME_N ? tradedInto(species) : species;
+    // Any trader's goes through a trade's evolution on the way over, at home (br_loot.c's
+    // BrLoot_HomeTrade) or at an event (Cam's tips, 11-22: "if an NPC wants to trade you a
+    // Haunter, it will automatically become a Gengar"; br_event.c's Swap never did).
+    const got = tradedInto(species);
     const c = await askLooking(`I'll trade you my ${name} for one of yours. Which one?`, 'CHOOSE', species, () => joinsAs(got, 0, null));
     if (c !== 'y' || !rom || isOut) return;
     const slot = await askParty(`For ${name}`);
