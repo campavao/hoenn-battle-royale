@@ -2,14 +2,14 @@
 // BattlePokemon the battle keeps, and the line the box holds.
 import { describe, expect, it } from 'vitest';
 import { encodeGen3 } from '../src/text/gen3';
-import { BattleReader, battleText, statusKind, statusOf, type Mem, type ReaderSyms } from './battlereader';
+import { BattleReader, asNamed, battleText, statusKind, statusOf, type Mem, type ReaderSyms } from './battlereader';
 import type { ReaderCtx } from './battlereader';
 import { applyEvent, emptyState, type BattleEvent } from './shared/battlelog';
 
 const BASE = 0x02000000;
 const SYM: Required<ReaderSyms> = {
   mons: BASE + 0x1000, partyIdx: BASE + 0x1200, text: BASE + 0x1400, player: BASE + 0x2000, enemy: BASE + 0x3000,
-  count: BASE + 0x1210, mainFunc: BASE + 0x1220, flags: BASE + 0x1230, positions: BASE + 0x1240, move: BASE + 0x1250, menu: BASE + 0x1260,
+  count: BASE + 0x1210, mainFunc: BASE + 0x1220, flags: BASE + 0x1230, positions: BASE + 0x1240, move: BASE + 0x1250, menu: BASE + 0x1260, save2: BASE + 0x1270,
 };
 
 class Fake implements Mem {
@@ -326,6 +326,34 @@ describe('BattleReader', () => {
     expect(s.active).toEqual([0, 1]);
     expect(s.text).toBe('Turn 20');
     expect(s.winner).toBe(1001);
+  });
+
+  it("says a wild fight's lines with the trainer's name, not the ROM's \"YOU\" (Cam, 11-21, watching SINBAD)", () => {
+    const { f, run, all } = rig({ ...CTX, me: { seat: 1001, name: 'SINBAD', skin: 3 }, foe: { seat: 0, name: '', skin: 0, wild: true } });
+    // The save's name, as bootRom gave it: gSaveBlock2Ptr -> "YOU".
+    const save = BASE + 0x1280;
+    f.w(SYM.save2, save, 32);
+    f.ram.set([...encodeGen3('YOU'), 0xff], save - BASE);
+    f.w(SYM.mainFunc, 1, 32);
+    putMon(f, 0, mine[0], 0);
+    putMon(f, 1, theirs[0], 0);
+    run(4);
+    const n = all().length;
+    // "YOU used ROYALé BALL!": the é is 0x1B.
+    f.ram.fill(0xff, SYM.text - BASE, SYM.text - BASE + 300);
+    f.ram.set([...encodeGen3('YOU used ROYAL'), 0x1b, ...encodeGen3(' BALL!'), 0xff], SYM.text - BASE);
+    run(3);
+    say(f, 'YOU is out of usable POKeMON!');
+    run(3);
+    expect(all().slice(n)).toEqual([{ e: 'text', text: 'SINBAD used ROYALé BALL!' }, { e: 'text', text: 'SINBAD is out of usable POKeMON!' }]);
+  });
+
+  it('names only the whole name, and leaves a line whose name is already the trainer\'s', () => {
+    expect(asNamed('YOU used ROYALé BALL!', 'YOU', 'SINBAD')).toBe('SINBAD used ROYALé BALL!');
+    expect(asNamed('Foe YOUNGSTER used TACKLE!', 'YOU', 'SINBAD')).toBe('Foe YOUNGSTER used TACKLE!');
+    expect(asNamed('CAM used POTION!', 'CAM', 'CAM')).toBe('CAM used POTION!');
+    expect(asNamed('YOU used POTION!', '', 'SINBAD')).toBe('YOU used POTION!');
+    expect(asNamed('A.B used POTION!', 'A.B', 'MAY')).toBe('MAY used POTION!');
   });
 
   it('batches: the start at once, the rest a third of a second at a time, the end at once', () => {

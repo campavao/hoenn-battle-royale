@@ -1201,6 +1201,20 @@ export class RomArt {
     return this.tiles(this.rom, this.sym('sGoldPic') - ROM, 2, 2, pal);
   }
 
+  /** A battle's thrown ball (pokeball.c gBallSpriteSheets / gBallSpritePalettes, 8 bytes an entry):
+   *  its three 16 x 16 frames one under the other (tiles 0, 4 and 8): shut, open, and a third that the
+   *  match's ball (graphics/balls/safari.png) leaves empty. The
+   *  ROYALé BALL is the POKé BALL's (br_items.h), the MASTER BALL its own. */
+  battleBall(master: boolean): HTMLCanvasElement | null {
+    if (!this.have('gBallSpriteSheets', 'gBallSpritePalettes')) return null;
+    const ball = master ? 4 : 0; // BALL_MASTER, BALL_POKE (include/pokeball.h)
+    return this.once(`ball:${ball}`, () => {
+      const gfx = this.u32(this.sym('gBallSpriteSheets') + ball * 8), pal = this.u32(this.sym('gBallSpritePalettes') + ball * 8);
+      if (gfx < ROM || pal < ROM) return null;
+      return this.tiles(this.lz(gfx), 0, 2, 6, this.words(this.lz(pal), 16));
+    });
+  }
+
   /** Trainer front pictures side by side, 64 x 64 each (ui/trainer-pics.png: a skin's portrait). */
   trainerStrip(pics: readonly number[]): HTMLCanvasElement | null {
     const cuts = pics.map((p) => this.trainerPic(p, false));

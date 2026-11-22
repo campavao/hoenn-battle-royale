@@ -35,6 +35,8 @@ ENGINE_SYMBOLS = [
     # The windows over the field and the battle: party icons, the bag, a team member's
     # ability, which of them is out (web/spike-b/romart.ts, web/src/ui/battlemenu.ts).
     "gMonIconTable", "gMonIconPaletteIndices", "gMonIconPaletteTable", "gBagMaleTiles", "gBagPalette", "gSpeciesInfo", "gAbilityNames", "gBattlerPartyIndexes", "gBattlePartyCurrentOrder", "gTasks",
+    # The ball a watched trainer throws (web/spike-b/romart.ts battleBall, battleview.ts).
+    "gBallSpriteSheets", "gBallSpritePalettes",
     # What the page's SUMMARY and MOVES windows say of a species (web/src/ui/monfacts.ts).
     "gAbilityDescriptionPointers", "gNatureNamePointers", "gLevelUpLearnsets",
     "gEvolutionTable", "gNatureStatTable", "gExperienceTables", "gLocalTime",

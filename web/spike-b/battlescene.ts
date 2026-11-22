@@ -139,6 +139,61 @@ export interface SideScene {
   leave: 'back' | 'faint' | null;
   /** The mon is hidden this frame: a hit's blink. */
   blink: boolean;
+  /** 0..1: how far a wild mon has gone into a ball thrown at it (1: in it, not drawn). */
+  inBall: number;
+}
+
+/** A ball thrown at the wild mon, while it is on the screen (Cam, 11-21: "the ball-throw animation
+ *  does not play"). The view puts it in its place: along the throw's arc, at the mon, on the ground
+ *  under it. */
+export interface BallScene {
+  /** 0..1 along the arc from the near side's corner to the far mon (1: there). */
+  fly: number;
+  /** 0..1 from the mon's middle down to the ground under it, once the mon is in. */
+  drop: number;
+  /** A shake's lean, -1 (left) .. 1 (right); 0 standing. */
+  tilt: number;
+  /** The ball is open: the mon going in, or out again. */
+  open: boolean;
+  /** Which ball: the MASTER BALL's or the ROYALé BALL's (every other ball is one, br_items.c). */
+  master: boolean;
+}
+
+/** The line said as a ball is thrown ("SINBAD used ROYALé BALL!", the simulator's "used ROYALE
+ *  BALL!", "used SAFARI BALL!"): STRINGID_PLAYERUSEDITEM with a ball for the item. */
+export const THROW_LINE = /\bused\b.*\bBALL!$/;
+/** What comes after: caught (sText_GotchaPkmnCaughtPlayer), or out again (the four lines of
+ *  sBallCaughtStrings' shakes, and a ball turned away). */
+const CAUGHT_LINE = /^Gotcha!/;
+const FREE_LINE = /^(Oh, no!|Aww!|Aargh!|Shoot!)|blocked the BALL|dodged the thrown BALL/;
+/** How much of the throw's line the ball takes to fly, the mon to go in, the ball to drop. */
+const FLY = 0.35;
+const TAKE = 0.25;
+const DROP = 0.2;
+/** How much of the line that frees it the mon takes to come back out. */
+const FREE = 0.4;
+/** A shake while the fight is waited on (the ROM is shaking it): one lean and back a second. */
+export const SHAKE_MS = 1000;
+const SHAKE_FOR = 0.4;
+
+/** A ball's lean `ms` into the shakes: a lean left, right and back in the first part of each
+ *  second, then still. */
+export function shakeAt(ms: number): number {
+  const p = (ms % SHAKE_MS) / SHAKE_MS;
+  // (+ 0: never a -0 to stand still on.)
+  return p < SHAKE_FOR ? -Math.sin((p / SHAKE_FOR) * Math.PI * 2) + 0 : 0;
+}
+
+/** The screen has waited this long on a live fight before it says so. */
+export const WAIT_LINE_MS = 1500;
+/** The dots of the line come one by one, one every this many ms. */
+const DOT_MS = 400;
+
+/** What the message box says while a live fight is waited on ("SINBAD is choosing..."): its
+ *  dots run, so the screen is seen not to have stopped. `name` is the trainer watched. */
+export function waitLine(name: string, waited: number): string {
+  const dots = '.'.repeat(1 + (Math.floor(waited / DOT_MS) % 3));
+  return name ? `${name} is choosing${dots}` : `Waiting${dots}`;
 }
 
 export interface Scene {
@@ -161,6 +216,8 @@ export interface Scene {
    *  live fight between turns: the screen waits). */
   ended: boolean;
   waiting: boolean;
+  /** A ball thrown at the wild mon, on the screen now; null for none. */
+  ball: BallScene | null;
 }
 
 /** The intro line, said by the far trainer: "<name> would like to battle!". */
@@ -185,8 +242,10 @@ export function readsFor(text: string, trainers: readonly [string, string], name
   return team.replace(pick, (_m, before: string, foe: string | undefined, name: string) => `${before}${!foe && theirs.has(name) ? 'Foe ' : ''}${name}`).replace(/\bFoe (?=\S)(?!(?:'|[a-z]))/g, (m, at: number, s: string) => (all.some((n) => s.startsWith(n, at + 4)) ? m : ''));
 }
 
-/** The scene `ms` into `log` for a watcher following side `follow`. */
-export function sceneAt(log: readonly BattleEvent[], ms: number, follow: Side = 0): Scene {
+/** The scene `ms` into `log` for a watcher following side `follow`. `waited` is how long the
+ *  screen has stood at the end of a live log (the playhead does not move then): what the wait
+ *  shows runs on it. */
+export function sceneAt(log: readonly BattleEvent[], ms: number, follow: Side = 0, waited = 0): Scene {
   const { state, next } = stateAt(log, ms);
   let at = 0;
   for (let i = 0; i < next; i++) at += eventMs(log[i]);
@@ -230,9 +289,12 @@ export function sceneAt(log: readonly BattleEvent[], ms: number, follow: Side = 
     if (mon && mine?.e === 'hp') hp = Math.round(mon.hp + (Math.max(0, Math.min(mon.maxHp, mine.hp)) - mon.hp) * clamp01(p / DRAIN));
     if (mon && mine?.e === 'status') status = mine.status;
     if (mon && mine?.e === 'faint') hp = 0;
-    return { side, name: ls?.name ?? '', skin: ls?.skin ?? 0, trainerDx, wild, monDx, mon, slot: mon ? slot : -1, hp, status, appear, vanish, leave, blink };
+    return { side, name: ls?.name ?? '', skin: ls?.skin ?? 0, trainerDx, wild, monDx, mon, slot: mon ? slot : -1, hp, status, appear, vanish, leave, blink, inBall: 0 };
   };
   const sa = sideScene(0), sb = sideScene(1);
+  const wildSide: Side | null = sides.b?.wild ? 1 : sides.a?.wild ? 0 : null;
+  const { ball, inBall, shaking } = ballAt(log, next, ev, p, waited, wildSide !== null && slotOf(wildSide, follow) === 'far');
+  if (wildSide !== null) (wildSide === 1 ? sb : sa).inBall = inBall;
   const near = follow === 0 ? sa : sb, far = follow === 0 ? sb : sa;
   let text = state.text, chars = Infinity;
   if (ev?.e === 'text') {
@@ -246,7 +308,47 @@ export function sceneAt(log: readonly BattleEvent[], ms: number, follow: Side = 
     text = introLine(far.name);
   }
   const ended = next >= log.length && state.winner !== null;
-  return { ms, next, ev, elapsed, p, state, near, far, map: ev?.e === 'start' ? ev.map : state.map, text, chars, ended, waiting: next >= log.length && !ended };
+  const waiting = next >= log.length && !ended;
+  // A live fight waited on, for longer than its own pauses (Cam, 11-21: "it looks frozen"): the box
+  // says who it waits on, its dots running. Not over a ball's shakes, which are the wait's own show.
+  if (waiting && state.a && waited >= WAIT_LINE_MS && !shaking) {
+    text = waitLine(near.name, waited);
+    chars = Infinity;
+  }
+  return { ms, next, ev, elapsed, p, state, near, far, map: ev?.e === 'start' ? ev.map : state.map, text, chars, ended, waiting, ball };
+}
+
+/** The ball thrown at the wild mon `next` events into `log`, with `ev` playing `p` of the way
+ *  through: the throw that has played and not been answered yet (caught, or out again), and what
+ *  plays now. `far`: the wild mon is the far one, where a ball can be drawn going to it. */
+function ballAt(log: readonly BattleEvent[], next: number, ev: BattleEvent | null, p: number, waited: number, far: boolean): { ball: BallScene | null; inBall: number; shaking: boolean } {
+  const none = { ball: null, inBall: 0, shaking: false };
+  if (!far) return none;
+  let thrown = false, caught = false, master = false;
+  for (let i = 0; i < next; i++) {
+    const e = log[i];
+    if (e.e === 'start') thrown = caught = false;
+    if (e.e !== 'text') continue;
+    if (THROW_LINE.test(e.text)) { thrown = true; caught = false; master = /\bMASTER BALL!$/.test(e.text); }
+    else if (thrown && CAUGHT_LINE.test(e.text)) caught = true;
+    else if (thrown && !caught && FREE_LINE.test(e.text)) thrown = false;
+  }
+  const line = ev?.e === 'text' ? ev.text : '';
+  // Thrown now: to the mon, open, the mon in, shut, down to the ground.
+  if (THROW_LINE.test(line)) {
+    const fly = clamp01(p / FLY), take = clamp01((p - FLY) / TAKE), drop = easeIn(clamp01((p - FLY - TAKE) / DROP));
+    return { ball: { fly, drop, tilt: 0, open: take > 0 && take < 1, master: /\bMASTER BALL!$/.test(line) }, inBall: take, shaking: false };
+  }
+  if (!thrown) return none;
+  // Out again: the ball opens and the mon comes back out of it.
+  if (!caught && FREE_LINE.test(line)) {
+    const out = clamp01(p / FREE);
+    return { ball: out < 1 ? { fly: 1, drop: 1, tilt: 0, open: true, master } : null, inBall: 1 - out, shaking: false };
+  }
+  // On the ground with the mon in it: shaking while the fight is waited on (the ROM is shaking it
+  // meanwhile), still once it is caught.
+  const shaking = !caught && !CAUGHT_LINE.test(line) && next >= log.length;
+  return { ball: { fly: 1, drop: 1, tilt: shaking ? shakeAt(waited) : 0, open: false, master }, inBall: 1, shaking };
 }
 
 /** A health box is up from this far through its mon's coming out. */

@@ -124,6 +124,63 @@ test.describe('the page-drawn battle', () => {
     expect(open.text).toBe('');
   });
 
+  test('a ball thrown at a wild mon flies to it, takes it in and shakes; a wait says who it waits on', async ({ browser }) => {
+    // Cam, 11-21, watching SINBAD: "YOU used ROYALé BALL!", no throw, and a screen that looked frozen.
+    const ctx = await browser.newContext({ viewport: { width: 960, height: 640 } });
+    let page = await ctx.newPage();
+    // A page each: a hash that changes is not a load, and the view is made once a load.
+    const fresh = async (hash: string) => { await page.close(); page = await ctx.newPage(); await openView(page, hash); };
+    const shot = async (name: string) => {
+      await page.waitForTimeout(300);
+      if (SHOTS) await page.locator('#battleview-host canvas').screenshot({ path: join(SHOTS, `${name}.png`) });
+    };
+    const view = (f: string, ...a: number[]) => page.evaluate(([f, a]) => (window as any).__battleview[f as string](...(a as number[])), [f, a] as const);
+    // The second throw (event 7) of the catch: the start, two sends, three lines and the broke-free one before it.
+    const throwAt = 2000 + 1200 * 2 + 1400 * 3 + 1430;
+    await openView(page, '&catch&hold');
+    await view('seek', throwAt + 300);
+    await shot('ball-flying');
+    let s = await snap(page);
+    expect(s.text.startsWith('SINBAD used ROYAL')).toBe(true);
+    expect(s.ball.fly).toBeGreaterThan(0);
+    expect(s.ball.fly).toBeLessThan(1);
+    await view('seek', throwAt + 750);
+    await shot('ball-taking');
+    expect((await snap(page)).ball.open).toBe(true);
+    // A live fight up to that throw: the ball on the ground, shaking, until the next line comes.
+    await fresh('&catch&live=8&hold');
+    await view('seek', 1e9);
+    await view('wait', 150);
+    await shot('ball-shaking');
+    s = await snap(page);
+    expect(s.waiting).toBe(true);
+    expect(Math.abs(s.ball.tilt)).toBeGreaterThan(0.2);
+    expect(s.text.startsWith('SINBAD used ROYAL')).toBe(true);
+    await fresh('&catch&hold');
+    await view('seek', 1e9);
+    await shot('ball-caught');
+    s = await snap(page);
+    expect(s.text).toBe('Gotcha! SHUPPET was caught!');
+    expect(s.ball).toMatchObject({ fly: 1, drop: 1, open: false });
+    // Waited on at a menu: "BRENDAN is choosing..." once it is longer than a pause.
+    await fresh('&live=5&hold');
+    await view('seek', 1e9);
+    await shot('wait-before-line');
+    expect((await snap(page)).text).toBe('Go! SHARPEDO!');
+    await view('wait', 2000);
+    await shot('wait-choosing');
+    expect((await snap(page)).text).toMatch(/^BRENDAN is choosing\.{1,3}$/);
+    // Running by itself, the line comes and its dots move on.
+    await fresh('&live=5');
+    await page.waitForTimeout(12_000);
+    const a = (await snap(page)).text;
+    await page.waitForTimeout(450);
+    const b = (await snap(page)).text;
+    expect(a).toMatch(/^BRENDAN is choosing/);
+    expect(b).toMatch(/^BRENDAN is choosing/);
+    expect(a).not.toBe(b);
+  });
+
   test('flips for a watcher who follows side 1: that trainer is near, back to the camera', async ({ browser }) => {
     const page = await (await browser.newContext({ viewport: { width: 960, height: 640 } })).newPage();
     await openView(page, '&hold&at=7100');

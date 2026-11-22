@@ -60,7 +60,7 @@ export const FILE_SECONDS = {
   'spikeb-passcode.spec.ts': 9,
   'spikeb-world.spec.ts': 260,
   'watch-replay.spec.ts': 110,
-  'battleview.spec.ts': 70,
+  'battleview.spec.ts': 100,
   'map-page.spec.ts': 90,
   'spikeb-battlelog.spec.ts': 540,
   'spikeb-party-order.spec.ts': 300,
