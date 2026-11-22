@@ -30,7 +30,8 @@
 // Spike B's rod, cast facing water and bitten (web/spike-b/fish.ts runs Emerald's minigame
 // on the page): species is the rod, OLD_ROD..SUPER_ROD, with BR_WILD_FISH_SAFARI in the
 // Safari opening. The map's fishing table at that rod's odds (ChooseWildMonIndex_Fishing),
-// then as ASKED (or ASKED_SAFARI). A map with none answers DONE.
+// then as ASKED -- or, in the opening, any WATER first stage (BrZone_PickWater). A map
+// with no fishing table answers DONE.
 #define BR_WILD_ASKED_FISH 7
 #define BR_WILD_FISH_SAFARI 0x80
 

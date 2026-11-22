@@ -50,6 +50,11 @@ void BrZone_Ensure(void);
 u16 BrZone_Pick(void);
 // ...whatever the phase: spike B's page says when its Safari is open (br_wild.h).
 u16 BrZone_PickAny(void);
+// ...a WATER one, for a rod or a surf in the opening (Cam, 11-22: "go to any body of
+// water, including in the Safari, to try and catch one").
+u16 BrZone_PickWater(void);
+// Whether `species` is WATER, for a fishing or surfing roll's stand-in (br_wild.c).
+bool8 BrZone_IsWater(u16 species);
 // Outside the opening: the species a map's own table chose, or this match's stand-in for
 // it from the national dex (2026-10-05 play-test). Seeded by the match, map and species.
 u16 BrZone_National(u16 native);

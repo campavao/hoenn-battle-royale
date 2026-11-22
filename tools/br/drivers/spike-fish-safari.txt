@@ -1,0 +1,266 @@
+# spike-fish-safari: a rod in the Safari opening hooks a WATER Pokemon (Cam, the launch
+# video: "go to any body of water, including in the Safari, to try and catch one").
+# BR_WILD_ASKED_FISH with BR_WILD_FISH_SAFARI used to roll the opening's any-first-stage,
+# so a Safari cast hooked SHUPPET or CHARMANDER (rom d4658e4, four casts). Five casts on
+# ROUTE 102's pond (0:17, which has a fishing table) as the Safari's, each one's enemy
+# battler dumped (gBattleMons[1], 0x24 bytes: species +0, types +0x21) and run from;
+# then the same five as a plain SUPER ROD, which keep their own table's water mon.
+# checked-by: tools/br/fish-water.py
+wait 30
+pokebytes gBrMailbox+0x2018 91 00 00 09 05 00 08 00 D3 C9 CF FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 4
+poke u8 gNumSafariBalls 30
+wait 2
+pokebytes gBrWildAsk+1 00 11 10
+poke u16 gBrWildAsk+4 0x82
+poke u8 gBrWildAsk 7
+wait 10
+expect u8 gBrWildAsk 2
+wait 600
+say cast safari 0
+dump gBattleMons+0x58 36
+tap B
+wait 300
+tap B
+wait 300
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 300
+waitfor u8 gBrWildAsk 3 600
+pokebytes gBrWildAsk+1 00 11 10
+poke u16 gBrWildAsk+4 0x82
+poke u8 gBrWildAsk 7
+wait 10
+expect u8 gBrWildAsk 2
+wait 600
+say cast safari 1
+dump gBattleMons+0x58 36
+tap B
+wait 300
+tap B
+wait 300
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 300
+waitfor u8 gBrWildAsk 3 600
+pokebytes gBrWildAsk+1 00 11 10
+poke u16 gBrWildAsk+4 0x82
+poke u8 gBrWildAsk 7
+wait 10
+expect u8 gBrWildAsk 2
+wait 600
+say cast safari 2
+dump gBattleMons+0x58 36
+tap B
+wait 300
+tap B
+wait 300
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 300
+waitfor u8 gBrWildAsk 3 600
+pokebytes gBrWildAsk+1 00 11 10
+poke u16 gBrWildAsk+4 0x82
+poke u8 gBrWildAsk 7
+wait 10
+expect u8 gBrWildAsk 2
+wait 600
+say cast safari 3
+dump gBattleMons+0x58 36
+tap B
+wait 300
+tap B
+wait 300
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 300
+waitfor u8 gBrWildAsk 3 600
+pokebytes gBrWildAsk+1 00 11 10
+poke u16 gBrWildAsk+4 0x82
+poke u8 gBrWildAsk 7
+wait 10
+expect u8 gBrWildAsk 2
+wait 600
+say cast safari 4
+dump gBattleMons+0x58 36
+tap B
+wait 300
+tap B
+wait 300
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 300
+waitfor u8 gBrWildAsk 3 600
+pokebytes gBrWildAsk+1 00 11 10
+poke u16 gBrWildAsk+4 0x02
+poke u8 gBrWildAsk 7
+wait 10
+expect u8 gBrWildAsk 2
+wait 600
+say cast plain 0
+dump gBattleMons+0x58 36
+tap B
+wait 60
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 240
+tap B
+wait 60
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 240
+waitfor u8 gBrWildAsk 3 600
+pokebytes gBrWildAsk+1 00 11 10
+poke u16 gBrWildAsk+4 0x02
+poke u8 gBrWildAsk 7
+wait 10
+expect u8 gBrWildAsk 2
+wait 600
+say cast plain 1
+dump gBattleMons+0x58 36
+tap B
+wait 60
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 240
+tap B
+wait 60
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 240
+waitfor u8 gBrWildAsk 3 600
+pokebytes gBrWildAsk+1 00 11 10
+poke u16 gBrWildAsk+4 0x02
+poke u8 gBrWildAsk 7
+wait 10
+expect u8 gBrWildAsk 2
+wait 600
+say cast plain 2
+dump gBattleMons+0x58 36
+tap B
+wait 60
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 240
+tap B
+wait 60
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 240
+waitfor u8 gBrWildAsk 3 600
+pokebytes gBrWildAsk+1 00 11 10
+poke u16 gBrWildAsk+4 0x02
+poke u8 gBrWildAsk 7
+wait 10
+expect u8 gBrWildAsk 2
+wait 600
+say cast plain 3
+dump gBattleMons+0x58 36
+tap B
+wait 60
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 240
+tap B
+wait 60
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 240
+waitfor u8 gBrWildAsk 3 600
+pokebytes gBrWildAsk+1 00 11 10
+poke u16 gBrWildAsk+4 0x02
+poke u8 gBrWildAsk 7
+wait 10
+expect u8 gBrWildAsk 2
+wait 600
+say cast plain 4
+dump gBattleMons+0x58 36
+tap B
+wait 60
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 240
+tap B
+wait 60
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 240
+tap A
+wait 240
+waitfor u8 gBrWildAsk 3 600
+say spike fish safari done
