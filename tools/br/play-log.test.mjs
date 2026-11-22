@@ -250,6 +250,32 @@ test("a world room that empties is over, not live (11-16: every room of the day 
   assert.equal(s.matches, 1);
 });
 
+test("a spike B quick room, which logs no `hosted by`, is a room (11-21: the page stopped at 10:30am)", () => {
+  // DMFETQ, 11-21, as the relay logged it: three matches, the last two with two people.
+  const lines = [
+    "2026-11-21T23:34:57.598Z room DMFETQ: SINBAD#1003 quick-joined",
+    "2026-11-21T23:35:04.888Z match DMFETQ started (quick) | 1 trainer | max 30",
+    "2026-11-21T23:38:24.469Z room DMFETQ: CAM#1004 quick-joined",
+    "2026-11-21T23:53:21.842Z match DMFETQ ended after 1097s",
+    "2026-11-21T23:54:05.192Z match DMFETQ started (quick) | 2 trainers | max 30",
+    "2026-11-22T00:06:55.859Z match DMFETQ ended after 771s",
+    "2026-11-22T00:17:40.826Z match DMFETQ started (quick) | 2 trainers | max 30",
+    "2026-11-22T00:37:47.161Z match DMFETQ ended after 1206s",
+    "2026-11-22T01:10:18.843Z room DMFETQ closed (empty, no heir)"
+  ];
+  const evs = lines.map(l => parseLine(l, "x")).filter(Boolean);
+  assert.equal(evs.length, lines.length);
+  const s = derive(evs).sessions.find(r => r.code === "DMFETQ");
+  assert.ok(s, "the room is on the page");
+  assert.equal(s.mode, "quick");
+  assert.equal(s.matches, 3);
+  assert.equal(s.humans, 2);
+  assert.equal(s.together, 2);
+  assert.equal(s.at, "2026-11-21T23:34:57.598Z");
+  // A plain join to a room never opened is still nobody's room.
+  assert.equal(derive([parseLine("2026-11-21T23:00:00.000Z room ZZZZZZ: CAM#1 joined", "x")]).sessions.length, 0);
+});
+
 test("the heartbeat counts spike B's trainers, who are not conns", () => {
   const hb = parseHeartbeat("2026-11-16T15:30:00.000Z rooms 0/40 conns 0/200 | sent 0B in 0 lines | peak 0 rooms 0 conns | world 8 peak 11 | matches 3");
   assert.equal(hb.conns, 0);
