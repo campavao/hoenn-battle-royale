@@ -1,7 +1,30 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fightKey, nextAfter, pickedBy, Watch } from './watch';
+import { fightKey, nextAfter, pickedBy, watchable, Watch } from './watch';
 
 afterEach(() => { vi.unstubAllGlobals(); });
+
+describe('the WATCH tag is over a battle, never a trade (Cam 11-21: WATCH over an old man who gives things)', () => {
+  const quiet = { events: [], homes: [] };
+  // Trainer 5 is with a floor trader (homes) or an event's trader; nobody else is.
+  const atHome = { events: [], homes: [{ busy: 5 }, { gone: true, busy: 6 }] };
+  const atEvent = { events: [{}, { trader: { busy: 5 } }], homes: [] };
+  it('a trainer with an NPC who trades or gives is busy, not in a battle', () => {
+    expect(watchable({ id: 5, battling: true, foe: 0 }, atHome)).toBe(false);
+    expect(watchable({ id: 5, battling: true, foe: 0 }, atEvent)).toBe(false);
+  });
+  it("a wild patch, a rod's catch, a gym leader or a gate (no foe seat) is still a battle the mirror replays", () => {
+    expect(watchable({ id: 5, battling: true, foe: 0 }, quiet)).toBe(true);
+    expect(watchable({ id: 6, battling: true, foe: 0 }, atHome), "a gone home's old trade is not this one").toBe(true);
+  });
+  it('a duel, or a bot at a legendary (foe -2), can be watched', () => {
+    expect(watchable({ id: 5, battling: true, foe: 8 }, quiet)).toBe(true);
+    expect(watchable({ id: 5, battling: true, foe: -2 }, quiet)).toBe(true);
+  });
+  it('a trainer in no scene is not watched, whatever foe is left over', () => {
+    expect(watchable({ id: 5, battling: false, foe: 8 }, quiet)).toBe(false);
+    expect(watchable({ id: 5, battling: false, foe: 0 }, quiet)).toBe(false);
+  });
+});
 
 describe('one fight, whatever the two seats did before it', () => {
   const start = (seed: number[]) => ({ t: 'bstart' as const, battle: 2050, data: [...seed, 14, 0, 0, 0] });

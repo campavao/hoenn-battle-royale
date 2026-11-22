@@ -75,7 +75,7 @@ import { ANIM_COUNTER_MAX } from '../src/tile-anims';
 import { JankMeter } from './jank';
 import { RingMap } from './ringmap';
 import { SeamGlide, seamOff } from './seamglide';
-import { Watch } from './watch';
+import { Watch, watchable } from './watch';
 import { BattleView } from './battleview';
 import { coverScreen, curtainBehind, curtainLines, raiseCurtain, type Cover } from './curtain';
 import { frameOf as fxFrame, grassUnderAsh, isFloor, MB_ASHGRASS, SHEETS as FX_SHEETS, stepEffects, type Effect, type FxKind } from './fieldfx';
@@ -876,7 +876,7 @@ function fightOffer(): { id: number; x: number; y: number } | null {
   let best: Actor | null = null;
   let bestD = Infinity;
   for (const a of actors()) {
-    if (!a.battling) continue;
+    if (!watchable(a, link.room)) continue;
     const p = pixelOf(a);
     const d = Math.min(mouse ? Math.hypot(p.x + TILE / 2 - mouse.x, p.y - mouse.y) * WATCH_NEAR / (24 / Math.min(1, zoom)) : Infinity, Math.hypot(p.x + TILE / 2 - cam.x, p.y - cam.y));
     if (d < bestD && d <= WATCH_NEAR) { best = a; bestD = d; }
