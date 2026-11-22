@@ -8,7 +8,7 @@ import { Stage, type DrawnScreen } from '../src/ui/stage';
 import { loadStats, setStatsOff } from '../src/match/stats';
 import { menuScreen, noticeScreen, roomScreen, sheetScreen, type RoomModel, type RowSpec, type SheetModel } from '../src/ui/screens';
 import { CODE_ENTRY, NAME_ENTRY, PASS_ENTRY, entryScreen, newEntry } from '../src/ui/entry';
-import { DISCORD_INVITE, DISCORD_ROW, FEEDBACK_ROW, HOWTO_ROW, LEADERBOARD_ROW, rewatchRow, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction, type LobbyRow } from '../src/match/lobby';
+import { DISCORD_INVITE, DISCORD_ROW, FEEDBACK_ROW, HOWTO_ROW, LAST_MATCH_ROW, LEADERBOARD_ROW, rewatchRow, emptyNote, isRoomCode, playRows, roomRows, type LobbyAction, type LobbyRow } from '../src/match/lobby';
 import { howToScreen } from '../src/ui/howto';
 import { howToRead, markHowToRead } from '../src/ui/howto-due';
 import { SKINS, cleanName, exportCareer, importCareer, loadCareer, playerId, playerKey, saveProfile, skinUnlocked } from '../src/match/career';
@@ -58,12 +58,13 @@ let shared: Stage | null = null;
  *  takes it over, and two would both answer the same taps. */
 /** The main menu's tiles, in order: also what a newcomer sees before picking a ROM
  *  (import.ts), so the two never drift apart. */
-export function mainMenuRows(link: Parameters<typeof playRows>[0], rewatch?: string | null): LobbyRow[] {
+export function mainMenuRows(link: Parameters<typeof playRows>[0], rewatch?: string | null, last = false): LobbyRow[] {
   return playRows(link)
     // The ways in the world has: no LOBBIES list or daily game here yet.
     .filter((r) => r.action.kind === 'quick' || r.action.kind === 'solo' || r.action.kind === 'host' || r.action.kind === 'lobbies' || r.action.kind === 'code')
     // The match a reload left too late to come back into (HBR-20): WATCH it.
-    .concat(rewatch ? [rewatchRow(rewatch)] : [], LEADERBOARD_ROW, HOWTO_ROW, FEEDBACK_ROW, DISCORD_ROW);
+    // The match this page last saw end: its results again (LAST MATCH).
+    .concat(rewatch ? [rewatchRow(rewatch)] : [], last ? [LAST_MATCH_ROW] : [], LEADERBOARD_ROW, HOWTO_ROW, FEEDBACK_ROW, DISCORD_ROW);
 }
 
 export function pageStage(): Stage {
@@ -171,6 +172,9 @@ export class Lobby {
     const was = this.room;
     this.room = r;
     this.heardAt = performance.now();
+    // The results stay up until PLAY AGAIN (or MAIN MENU) takes them down: somebody leaving
+    // the room as it ended took them away to the room.
+    if (this.resultsShown && this.stage.current === this.resultsShown) return;
     if (!was || (this.stage.current !== this.roomShown && this.stage.current !== this.seatShown)) this.stage.show(this.roomShown);
     else this.stage.redraw();
     this.open();
@@ -180,8 +184,23 @@ export class Lobby {
    *  leaves it. */
   results(model: Omit<ResultsModel, 'again' | 'menu'>, menu: () => void): void {
     this.inSheet = false;
+    this.last = model;
     const full: ResultsModel = { ...model, again: { label: 'PLAY AGAIN', id: 'results-again', onPress: () => this.backToRoom() }, menu };
-    this.stage.show(resultsScreen(() => full));
+    this.resultsShown = resultsScreen(() => full);
+    this.stage.show(this.resultsShown);
+  }
+
+  /** The results a match ended on, until the page goes: the menu's LAST MATCH opens them
+   *  again, the champion's team and everybody's place (Cam, 11-21). */
+  private last: Omit<ResultsModel, 'again' | 'menu'> | null = null;
+  /** The results screen a match ended on, while it is the one up. */
+  private resultsShown: DrawnScreen | null = null;
+
+  /** LAST MATCH: the same screen, with MAIN MENU the way back to the menu. */
+  private openLast(): void {
+    const last = this.last;
+    if (!last) return;
+    this.stage.push(resultsScreen(() => ({ ...last, again: null, menu: () => this.stage.pop() })));
   }
 
   /** The relay's list of hosted rooms (LOBBIES). */
@@ -248,6 +267,7 @@ export class Lobby {
     else if (a.kind === 'skin' || a.kind === 'look') { this.browsed = null; this.stage.push(this.look); }
     else if (a.kind === 'mystats') this.stage.push(this.myStats);
     else if (a.kind === 'rewatch') { this.rewatch = null; this.hooks.join({ code: a.code }); }
+    else if (a.kind === 'lastmatch') this.openLast();
   }
 
   /** The room of a match a reload left too late to come back in as its trainer: the main
@@ -453,7 +473,7 @@ export class Lobby {
   private panPending = false;
   private readonly main: DrawnScreen = menuScreen(() => ({
     title: 'HOENN BATTLE ROYALE',
-    rows: mainMenuRows(this.link, this.rewatch)
+    rows: mainMenuRows(this.link, this.rewatch, !!this.last)
       .map((r): RowSpec => ({ label: r.label, id: r.id, art: r.art, onPress: () => this.press(r.action), ...(r.id === HOWTO_ROW.id && !howToRead(localStorage) ? { badge: true } : {}) })),
     rowsId: 'lobby-rows',
     tiles: true,
