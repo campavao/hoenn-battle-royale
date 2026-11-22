@@ -427,7 +427,7 @@ export class Online implements WorldLink {
  *  in them. `onMatch` hands over the match's link each time one starts for me (or I come
  *  into one under way, to watch). */
 export interface WorldSocket {
-  join(name: string, skin: number, how: { code?: string; host?: boolean; again?: Again; pass?: string; rec?: CardRecord }): void;
+  join(name: string, skin: number, how: { code?: string; host?: boolean; again?: Again; pass?: string; rec?: CardRecord; fresh?: boolean }): void;
   start(): void;
   /** LEAVE: out of the room and its match; the socket stays for the menu. */
   leave(): void;
@@ -467,6 +467,8 @@ export interface WorldHandlers {
   /** This page is an older (or newer) world than the relay's: it has to reload. */
   onOld(): void;
   onRooms(rooms: Listed[]): void;
+  /** QUICK PLAY found no lobby waiting but match `code` under way: WATCH it or PLAY NOW. */
+  onRunning(code: string, players: number): void;
   onMatch(link: WorldLink): void;
   /** The socket closed (or never opened) for good. */
   onClosed(): void;
@@ -534,6 +536,7 @@ export function connectWorld(url: string, make: (seed: number) => Room, h: World
       else if (m.t === 'kicked') h.onKicked();
       else if (m.t === 'old') h.onOld();
       else if (m.t === 'rooms') h.onRooms(m.rooms);
+      else if (m.t === 'running') h.onRunning(m.code, m.players);
       else if (m.t === 'full') h.onNoRoom('');
       else if (m.t === 'hello') {
         const next = new Online(sock, make);

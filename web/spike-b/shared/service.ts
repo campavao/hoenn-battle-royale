@@ -320,8 +320,9 @@ export class WorldService {
         }
         if (m.t === 'join' && !phone) {
           if (this.where.size >= this.opts.cap) { this.send(link, { t: 'full' }); link.close(); return; }
-          const room = this.pick(m);
+          const room = this.pick(m, link.ip);
           if (!room) { this.send(link, { t: 'no_room', code: String(m.code ?? '') }); return; }
+          if (typeof room === 'object' && 'watch' in room) { this.send(link, { t: 'running', code: room.watch.code, players: [...room.watch.members.values()].filter((p) => !p.away).length }); return; }
           if (room === 'rom') { const code = String(m.code ?? '').toUpperCase(); this.send(link, { t: 'no_room', code, rom: this.rooms.get(code)?.rom || true }); return; }
           if (room === 'full') { this.send(link, { t: 'no_room', code: String(m.code ?? '').toUpperCase(), full: true }); return; }
           if (link.ip && room.banned.has(link.ip)) { this.send(link, { t: 'no_room', code: room.code, removed: true }); return; }
@@ -338,7 +339,10 @@ export class WorldService {
           // The live relay's lines too, so tools/br/play-log.mjs counts these rooms (who).
           // Somebody new, who came for a game now: the count is theirs too (classic's first
           // lobby for a page that never played here).
-          if (this.waiting(room)) room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS);
+          // A quick room's count already running starts over too (Cam, 11-22: "when someone new
+          // joins the quick play lobby, reset the timer back to 60s"), so nobody walks in on a
+          // match about to deal.
+          if (this.waiting(room) || (room.quick && !room.host && room.startsAt !== null)) room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS);
           this.opts.log(hosted ? `room ${room.code} hosted by ${who(phone)}${room.set.door === 'open' ? ' (open)' : ''}` : `room ${room.code}: ${who(phone)} ${room.quick ? 'quick-joined' : room.host ? 'spectates' : 'joined'}`);
           this.roster(room);
           // A match under way: in, to watch it until the next.
@@ -603,8 +607,21 @@ export class WorldService {
     return out.sort((a, b) => Number(a.playing) - Number(b.playing) || b.players - a.players || (a.code < b.code ? -1 : 1));
   }
 
-  /** The room a join goes to, or 'rom' for a room whose battles run on another patch. */
-  private pick(m: Extract<WorldUp, { t: 'join' }>): Lobby | 'rom' | 'full' | null {
+  /** A lobby QUICK PLAY may seat a stranger in now: waiting for its start, on this patch, with
+   *  a seat. A quick room's; or a hosted room open to anybody whose host is there to START it
+   *  (Cam, 11-22: "make it so quick play joins an open lobby"), never an unlisted or a
+   *  passcoded one, nor one that removed this page. */
+  private seats(r: Lobby, rom: string, ip?: string): boolean {
+    if (r.host || r.rom !== rom || (ip && r.banned.has(ip))) return false;
+    if (r.quick) return r.members.size < ROOM_MAX;
+    const owner = r.members.get(r.owner);
+    return r.set.door === 'open' && r.members.size < r.set.max && !!owner && !owner.away;
+  }
+
+  /** The room a join goes to, or 'rom' for a room whose battles run on another patch. QUICK
+   *  PLAY with no lobby waiting and a match under way gets that match (`watch`), to ask the
+   *  player first: WATCH it, or PLAY NOW (`fresh`) in a quick lobby of their own. */
+  private pick(m: Extract<WorldUp, { t: 'join' }>, ip?: string): Lobby | { watch: Lobby } | 'rom' | 'full' | null {
     const rom = typeof m.r === 'string' ? m.r.slice(0, 16) : '';
     if (typeof m.code === 'string' && m.code) {
       const r = this.rooms.get(m.code.toUpperCase());
@@ -613,12 +630,26 @@ export class WorldService {
       return r ?? null;
     }
     if (m.host === true) return this.make(false, rom);
-    // The fullest quick room on this patch still waiting for its start; or a new one.
+    // The fullest lobby on this patch still waiting for its start, a host's before a quick
+    // room's of as many (somebody is there to START it).
     let best: Lobby | null = null;
     for (const r of this.rooms.values()) {
-      if (r.quick && !r.host && r.rom === rom && r.members.size < ROOM_MAX && (!best || r.members.size > best.members.size)) best = r;
+      if (!this.seats(r, rom, ip)) continue;
+      if (!best || r.members.size > best.members.size || (r.members.size === best.members.size && best.quick && !r.quick)) best = r;
     }
-    return best ?? this.make(true, rom);
+    if (best) return best;
+    // None: the fullest match under way that anybody may watch, unless they said PLAY NOW --
+    // one somebody is still in, not one held for its trainers' reloads.
+    if (m.fresh !== true) {
+      let on: Lobby | null = null, most = 0;
+      for (const r of this.rooms.values()) {
+        if (!r.host || r.rom !== rom || r.set.door !== 'open' || (ip && r.banned.has(ip))) continue;
+        const here = [...r.members.values()].filter((p) => !p.away).length;
+        if (here > most) { on = r; most = here; }
+      }
+      if (on) return { watch: on };
+    }
+    return this.make(true, rom);
   }
 
   /** `again`'s room, opened under its code when this relay has none by it. A hosted room

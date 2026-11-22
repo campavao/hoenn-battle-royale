@@ -13,8 +13,9 @@ export type WorldUp =
    *  `r`: the patched ROM the page battles on (its sha1, seven characters): a room plays
    *  one, as the first in it brought, because a link battle between two patches desyncs
    *  (CLAUDE.md). Refused with `no_room` `rom` when it is another. `pk`: the browser's
-   *  LEADERBOARD key (career.ts playerKey), which the relay logs only hashed. */
-  | { t: 'join'; name: string; skin: number; code?: string; host?: boolean; again?: Again; pass?: string; rec?: CardRecord; w?: string; r?: string; pk?: string }
+   *  LEADERBOARD key (career.ts playerKey), which the relay logs only hashed.
+   *  `fresh`: QUICK PLAY's PLAY NOW, after a `running` answer: a quick lobby, never the match. */
+  | { t: 'join'; name: string; skin: number; code?: string; host?: boolean; again?: Again; pass?: string; rec?: CardRecord; w?: string; r?: string; pk?: string; fresh?: boolean }
   /** START (the room's host): the match begins for everybody in the room. */
   | { t: 'start' }
   /** The host's settings for the room's next match (the live room's options). */
@@ -154,6 +155,9 @@ export type WorldDown =
    *  passcode wrong (`pass`), or on another patch (`rom`: the room's, its seven characters, so
    *  the page can say which of the two is behind the release; `true` from a room with none). */
   | { t: 'no_room'; code: string; pass?: boolean; rom?: boolean | string; full?: boolean; removed?: boolean }
+  /** QUICK PLAY found no lobby waiting but a match under way (Cam, 11-22): the page asks WATCH
+   *  (join `code`) or PLAY NOW (join again with `fresh`). `players`: the trainers in it. */
+  | { t: 'running'; code: string; players: number }
   /** A match: my trainer's id in it and the Room as it starts (or as it is, joining late). */
   | { t: 'hello'; id: number; state: RoomState; key?: string }
   | { t: 'state'; state: RoomState; a?: number }

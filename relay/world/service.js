@@ -16090,9 +16090,13 @@ var WorldService = class {
             link.close();
             return;
           }
-          const room2 = this.pick(m);
+          const room2 = this.pick(m, link.ip);
           if (!room2) {
             this.send(link, { t: "no_room", code: String(m.code ?? "") });
+            return;
+          }
+          if (typeof room2 === "object" && "watch" in room2) {
+            this.send(link, { t: "running", code: room2.watch.code, players: [...room2.watch.members.values()].filter((p) => !p.away).length });
             return;
           }
           if (room2 === "rom") {
@@ -16121,7 +16125,7 @@ var WorldService = class {
           const hosted = !room2.owner && !room2.quick;
           if (!room2.owner) room2.owner = id2;
           this.opts.log(`world: ${phone.name}#${id2} in room ${room2.code}${room2.quick ? " (quick)" : ""}, ${room2.members.size} there`);
-          if (this.waiting(room2)) room2.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS);
+          if (this.waiting(room2) || room2.quick && !room2.host && room2.startsAt !== null) room2.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS);
           this.opts.log(hosted ? `room ${room2.code} hosted by ${who(phone)}${room2.set.door === "open" ? " (open)" : ""}` : `room ${room2.code}: ${who(phone)} ${room2.quick ? "quick-joined" : room2.host ? "spectates" : "joined"}`);
           this.roster(room2);
           if (room2.host) {
@@ -16365,8 +16369,20 @@ var WorldService = class {
     }
     return out.sort((a, b2) => Number(a.playing) - Number(b2.playing) || b2.players - a.players || (a.code < b2.code ? -1 : 1));
   }
-  /** The room a join goes to, or 'rom' for a room whose battles run on another patch. */
-  pick(m) {
+  /** A lobby QUICK PLAY may seat a stranger in now: waiting for its start, on this patch, with
+   *  a seat. A quick room's; or a hosted room open to anybody whose host is there to START it
+   *  (Cam, 11-22: "make it so quick play joins an open lobby"), never an unlisted or a
+   *  passcoded one, nor one that removed this page. */
+  seats(r, rom, ip) {
+    if (r.host || r.rom !== rom || ip && r.banned.has(ip)) return false;
+    if (r.quick) return r.members.size < ROOM_MAX;
+    const owner = r.members.get(r.owner);
+    return r.set.door === "open" && r.members.size < r.set.max && !!owner && !owner.away;
+  }
+  /** The room a join goes to, or 'rom' for a room whose battles run on another patch. QUICK
+   *  PLAY with no lobby waiting and a match under way gets that match (`watch`), to ask the
+   *  player first: WATCH it, or PLAY NOW (`fresh`) in a quick lobby of their own. */
+  pick(m, ip) {
     const rom = typeof m.r === "string" ? m.r.slice(0, 16) : "";
     if (typeof m.code === "string" && m.code) {
       const r = this.rooms.get(m.code.toUpperCase());
@@ -16377,9 +16393,23 @@ var WorldService = class {
     if (m.host === true) return this.make(false, rom);
     let best = null;
     for (const r of this.rooms.values()) {
-      if (r.quick && !r.host && r.rom === rom && r.members.size < ROOM_MAX && (!best || r.members.size > best.members.size)) best = r;
+      if (!this.seats(r, rom, ip)) continue;
+      if (!best || r.members.size > best.members.size || r.members.size === best.members.size && best.quick && !r.quick) best = r;
     }
-    return best ?? this.make(true, rom);
+    if (best) return best;
+    if (m.fresh !== true) {
+      let on = null, most = 0;
+      for (const r of this.rooms.values()) {
+        if (!r.host || r.rom !== rom || r.set.door !== "open" || ip && r.banned.has(ip)) continue;
+        const here = [...r.members.values()].filter((p) => !p.away).length;
+        if (here > most) {
+          on = r;
+          most = here;
+        }
+      }
+      if (on) return { watch: on };
+    }
+    return this.make(true, rom);
   }
   /** `again`'s room, opened under its code when this relay has none by it. A hosted room
    *  comes back unlisted unless it was listed: a passcode is the host's alone, and nobody here
@@ -16701,4 +16731,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "7c6f8689012e";
+export const WORLD_HASH = "e6249411221e";
