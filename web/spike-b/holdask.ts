@@ -1,7 +1,8 @@
 // Cam, 2026-11-21: "Picking up a berry should prompt you to give to a pokemon to hold."
-// A berry off the ground asks first, YES or NO, before the party: the GIFTS (the held items
-// a person hands over) and TMs go straight to the party as before, and everything else
-// straight to the bag.
+// A berry off the ground opens the party to give it to, as the GIFTS (the held items a person
+// hands over) and TMs do; BACK keeps it in the bag. It asked YES or NO first until Cam, 11-22:
+// "berry pick up does not need additional dialog to give item". Everything else goes straight
+// to the bag.
 
 /** include/constants/items.h. */
 const ITEM_CHERI_BERRY = 133, ITEM_IAPAPA_BERRY = 147, ITEM_LIECHI_BERRY = 168, ITEM_STARF_BERRY = 174;
@@ -14,8 +15,6 @@ export function asksToHold(item: number): boolean {
   return (item >= ITEM_CHERI_BERRY && item <= ITEM_IAPAPA_BERRY) || (item >= ITEM_LIECHI_BERRY && item <= ITEM_STARF_BERRY);
 }
 
-/** The question, as party_menu.c would put it. */
-export const holdQuestion = (item: string): string => `Give the ${item} to a POKéMON to hold?`;
 /** party_menu.c's gText_PkmnAlreadyHoldingItemSwitch, cut to the askbox's two lines: its own
  *  "Would you like to switch..." is a second page there, and the box has one. */
 export const switchQuestion = (mon: string, held: string): string => `${mon} is already holding one ${held}. Switch the two items?`;

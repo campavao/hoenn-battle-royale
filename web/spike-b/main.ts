@@ -66,7 +66,7 @@ import { recordSolo, statFlushed, statMessage } from '../src/match/stats';
 import { WORLD_HASH_SHORT, battlesOn } from './net';
 import { ITEM_POKE_DOLL, groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
-import { asksToHold, givenLine, holdQuestion, switchQuestion, switchedLine } from './holdask';
+import { asksToHold, givenLine, switchQuestion, switchedLine } from './holdask';
 import { GOLD } from '../src/match/events';
 import { FLYING, STORIES } from '../src/match/story';
 import { RomArt, type MapAnim } from './romart';
@@ -924,7 +924,8 @@ function giveNext(): void {
   }
   const { key, item, gift, hidden } = next;
   // A TM is taught and a held item given, there and then, on the ROM's own screens. A berry
-  // asks first (holdask.ts, Cam 11-21): YES is the party, NO -- or B, or a fight -- the bag.
+  // goes straight to the party to be held (holdask.ts; Cam 11-22, no YES/NO first): BACK -- or
+  // B, or a fight -- keeps it in the bag.
   const hold = asksToHold(item);
   const screen = isTm(item) || GIFTS.includes(item) || hold;
   // Somebody says so first, and it can be read before their screen comes up (Cam, 11-01:
@@ -946,10 +947,8 @@ function giveNext(): void {
     ? Promise.all([bagged, said]).then(async ([got]) => {
       if (!got?.items.some((g) => g.id === item)) return got;
       remember(true);
-      if (hold) {
-        if (await ask(holdQuestion(name(item)), [['YES', 'y'], ['NO', '']]) !== 'y') return got;
-        await tapOver();
-      }
+      // A pickup by a tap has the finger still down when the party opens under it.
+      await tapOver();
       const slot = await who();
       if (slot === null) return got;
       if (isMachine(item)) {
@@ -1006,9 +1005,9 @@ function giveNext(): void {
   }, (e) => console.warn('spike give failed', e)).finally(() => { giving = false; giveNext(); });
 }
 
-/** Fingers on the glass now. The askbox answers on a tap's pointerdown, so a window that opens on
- *  the answer is under the same finger when it lifts: its click picked the lead of the party the
- *  YES had just opened, with nobody choosing (the berry's first phone run, 11-21). */
+/** Fingers on the glass now. A window that opens on a tap is under the same finger when it
+ *  lifts: its click picked the lead of the party a berry's YES had just opened, with nobody
+ *  choosing (the berry's first phone run, 11-21). */
 let pointersDown = 0;
 addEventListener('pointerdown', () => { pointersDown++; }, true);
 for (const t of ['pointerup', 'pointercancel']) addEventListener(t, () => { pointersDown = Math.max(0, pointersDown - 1); }, true);
