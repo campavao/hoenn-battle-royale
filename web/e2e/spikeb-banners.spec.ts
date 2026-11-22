@@ -132,7 +132,7 @@ test("a battle's intro runs at the game's speed from the moment it can be seen",
   expect(log.hurriedAfterShown).toBeLessThanOrEqual(1);
 });
 
-test('in the final ring a watched fight comes up under the curtain', async ({ page }) => {
+test('in the final ring a watched fight comes up under the curtain, and a swap onto one does not', async ({ page }) => {
   test.setTimeout(420_000);
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto(`/?rom=${romHashParam()}#solo&simbots&safari=0&fog=30&seed=11`);
@@ -153,17 +153,20 @@ test('in the final ring a watched fight comes up under the curtain', async ({ pa
     };
     look();
   });
-  // Two bots side by side in the fog: the room's own rule has them fight. Then on to one of them.
+  // Two bots side by side in the fog: the room's own rule has them fight. The camera is on one of
+  // them before it starts: a fight met by moving the camera onto it is a swap, and never curtained.
   const until = Date.now() + 240_000;
   let id = 0;
   while (Date.now() < until && !id) {
     id = await page.evaluate(() => {
       const s = (window as any).__spike, r = s.link.room;
-      const fighting = r.actors.find((a: any) => a.bot && a.battling && a.foe);
-      if (fighting) return fighting.id as number;
+      const on = r.actor(s.watch.host.follow());
+      if (on?.bot && on.battling && on.foe) return on.id as number;
       const free = r.actors.filter((a: any) => a.bot && !a.battling && !a.m.action && r.inFog(a.m.spot));
       if (free.length < 2) return 0;
-      const [a, b] = free;
+      const a = free.find((x: any) => x.id === on?.id) ?? free[0];
+      const b = free.find((x: any) => x !== a);
+      if (s.watch.host.follow() !== a.id) s.watch.host.setFollow(a.id);
       const [dx, dy, fa, fb] = ([[1, 0, 4, 3], [-1, 0, 3, 4], [0, 1, 1, 2], [0, -1, 2, 1]] as const)[Math.floor(performance.now() / 300) % 4];
       b.m = { ...b.m, spot: { map: a.m.spot.map, x: a.m.spot.x + dx, y: a.m.spot.y + dy }, facing: fb, moveDir: fb };
       a.m = { ...a.m, facing: fa, moveDir: fa };
@@ -173,7 +176,6 @@ test('in the final ring a watched fight comes up under the curtain', async ({ pa
     if (!id) await page.waitForTimeout(300);
   }
   expect(id, 'a fight').toBeGreaterThan(0);
-  await page.evaluate((id) => (window as any).__spike.watch.host.setFollow(id), id);
   await expect.poll(() => page.evaluate(() => !!document.getElementById('curtain')), { timeout: 30_000 }).toBe(true);
   await shot(page, 'final-curtain');
   await expect.poll(() => spike(page, (s) => !!s.watch.showing), { timeout: 15_000 }).toBe(true);
@@ -187,6 +189,16 @@ test('in the final ring a watched fight comes up under the curtain', async ({ pa
   expect(down, 'the curtain comes down').toBeGreaterThanOrEqual(0);
   expect(seen[first].curtain, 'all the way down as the fight appears').toBe(0);
   expect(seen.slice(first).some((f) => typeof f.curtain === 'number' && f.curtain < -16), 'and it rises off it').toBe(true);
+  // Off it and back onto the same fight, as PREV and NEXT do: straight up, no curtain (Cam, 11-21).
+  await spike(page, (s) => s.watch.host.setFollow(0));
+  await expect.poll(() => spike(page, (s) => !!s.watch.showing), { timeout: 5000 }).toBe(false);
+  expect(await page.evaluate((id) => !!(window as any).__spike.link.room.actor(id)?.battling, id), 'the fight still on').toBe(true);
+  await page.evaluate((id) => { (window as any).__cut.length = 0; (window as any).__spike.watch.host.setFollow(id); }, id);
+  await expect.poll(() => spike(page, (s) => !!s.watch.showing), { timeout: 15_000 }).toBe(true);
+  await shot(page, 'final-swap');
+  const swap: any[] = await page.evaluate(() => (window as any).__cut);
+  expect(swap.length, 'frames seen').toBeGreaterThan(0);
+  expect(swap.every((f) => f.curtain === null), 'no curtain on a swap').toBe(true);
 });
 
 test('the Hall of Fame: a window in the middle with a mouse, the curtain down behind it, and quick', async ({ page }) => {

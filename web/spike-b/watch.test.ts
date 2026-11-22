@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fightKey, nextAfter, pickedBy, watchable, Watch } from './watch';
+import { curtainOver, fightKey, nextAfter, pickedBy, watchable, Watch } from './watch';
 
 afterEach(() => { vi.unstubAllGlobals(); });
 
@@ -32,6 +32,20 @@ describe('one fight, whatever the two seats did before it', () => {
     expect(fightKey(2, start([1, 2, 3, 4]))).toBe(fightKey(2, start([1, 2, 3, 4])));
     expect(fightKey(2, start([1, 2, 3, 4]))).not.toBe(fightKey(2, start([9, 2, 3, 4])));
     expect(fightKey(2, start([1, 2, 3, 4]))).not.toBe(fightKey(8, start([1, 2, 3, 4])));
+  });
+});
+
+describe('the curtain over a watched fight (Cam, 11-21: never on a swap)', () => {
+  const at = (began: number, lastRing: boolean, seenBefore: boolean) => curtainOver({ began, since: 1000, lastRing, seenBefore });
+  it('a fight already on when the camera came to the trainer never comes up under it', () => {
+    expect(at(400, true, false), 'the final ring').toBe(false);
+    expect(at(400, false, true), 'one had up before').toBe(false);
+    expect(at(400, true, true)).toBe(false);
+  });
+  it('one the trainer watched goes into while I watch: under it in the final ring, or come back to', () => {
+    expect(at(1500, true, false)).toBe(true);
+    expect(at(1500, false, true)).toBe(true);
+    expect(at(1500, false, false), 'nothing else').toBe(false);
   });
 });
 
@@ -195,6 +209,7 @@ describe('a fight with a log is drawn by the page', () => {
     const views: { follow: number; played?: [unknown[], number]; added: unknown[]; closed: boolean; at: { next: number; ended: boolean; waiting: boolean } }[] = [];
     let lastRing = false;
     let curtain: { isDown(): boolean } | null = null;
+    let covers = 0;
     const watch = new Watch({
       trainers: () => [{ id: 2, name: 'BRENDAN' }, { id: 3, name: 'MAY' }] as never,
       me: () => 1003,
@@ -207,7 +222,7 @@ describe('a fight with a log is drawn by the page', () => {
       idle: () => idle,
       describe: () => null,
       tell: () => undefined,
-      cover: () => curtain,
+      cover: () => { covers++; return curtain; },
       lastRing: () => lastRing,
       view: (side) => {
         const v: (typeof views)[number] = { follow: side, added: [], closed: false, at: { next: cameInAt, ended: false, waiting: false } };
@@ -215,7 +230,7 @@ describe('a fight with a log is drawn by the page', () => {
         return { play: (log, ms) => { v.played = [[...log], ms]; }, add: (ev) => { v.added.push(...ev); }, snapshot: () => v.at, redraw: () => undefined, close: () => { v.closed = true; } };
       },
     });
-    return { setLastRing: (on: boolean) => { lastRing = on; }, setCurtain: (c: { isDown(): boolean } | null) => { curtain = c; }, comeInAt: (n: number) => { cameInAt = n; }, watch, link, asked, mirrors, songs, sounds, views, dim: () => els.get('battleview-dim')!, setFollow: (id: number) => { follow = id; }, setIdle: (on: boolean) => { idle = on; }, fightOver: () => { battling = false; }, otherFoe: () => { foe = 9; }, crowned: () => { results.winner = 7; } };
+    return { setLastRing: (on: boolean) => { lastRing = on; }, setCurtain: (c: { isDown(): boolean } | null) => { curtain = c; }, covers: () => covers, comeInAt: (n: number) => { cameInAt = n; }, watch, link, asked, mirrors, songs, sounds, views, dim: () => els.get('battleview-dim')!, setFollow: (id: number) => { follow = id; }, setIdle: (on: boolean) => { idle = on; }, fightOver: () => { battling = false; }, otherFoe: () => { foe = 9; }, crowned: () => { results.winner = 7; } };
   }
 
   it('in the battle screen\'s place, from where the fight stands, its back to us on the side followed', () => {
@@ -249,21 +264,59 @@ describe('a fight with a log is drawn by the page', () => {
     expect(r.views).toHaveLength(1);
   });
 
-  it('a fight first seen before the final ring comes straight up; one I come back to, under the curtain', () => {
+  it('a fight first seen before the final ring comes straight up; one come back to with no swap, under the curtain', () => {
     const r = rig();
     r.setCurtain({ isDown: () => false });
     r.watch.frame();
     r.link.onBattleLog(2, 7, [start()], 0);
     r.watch.frame();
     expect(r.views, 'straight up').toHaveLength(1);
-    // Away, and back to the same fight.
-    r.setFollow(0);
+    expect(r.covers()).toBe(0);
+    // It went off the screen (its log ran out), and the relay sends it again: the same trainer, no swap.
+    r.views[0].at.ended = true;
+    r.watch.frame();
+    r.link.onBattleLog(2, 7, [start()], 0);
+    r.watch.frame();
+    expect(r.covers(), 'the curtain').toBe(1);
+    expect(r.views, 'behind it').toHaveLength(1);
+  });
+
+  it('away and back to the same fight (PREV, NEXT): straight up, no curtain (Cam, 11-21)', () => {
+    const r = rig();
+    r.setCurtain({ isDown: () => false });
+    r.watch.frame();
+    r.link.onBattleLog(2, 7, [start()], 0);
+    r.watch.frame();
+    expect(r.views).toHaveLength(1);
+    r.setFollow(3);
     r.watch.frame();
     r.setFollow(2);
     r.watch.frame();
     r.link.onBattleLog(2, 7, [start()], 3000);
     r.watch.frame();
-    expect(r.views, 'behind the curtain').toHaveLength(1);
+    expect(r.covers(), 'no curtain').toBe(0);
+    expect(r.views, 'straight up').toHaveLength(2);
+  });
+
+  it('in the final ring, the camera moved onto a trainer mid-fight: straight up, no curtain', () => {
+    const r = rig();
+    r.setLastRing(true);
+    r.setCurtain({ isDown: () => false });
+    r.setFollow(0);
+    r.watch.frame();
+    r.setFollow(2);
+    r.watch.frame();
+    r.link.onBattleLog(2, 7, [start()], 4000);
+    r.watch.frame();
+    expect(r.covers(), 'no curtain').toBe(0);
+    expect(r.views, 'straight up').toHaveLength(1);
+    // And the trainer's next fight, begun while I watch them, comes in under it.
+    r.views[0].at.ended = true;
+    r.watch.frame();
+    r.link.onBattleLog(2, 8, [start()], 0);
+    r.watch.frame();
+    expect(r.covers()).toBe(1);
+    expect(r.views, 'behind it').toHaveLength(1);
   });
 
   it('never starts the ROM\'s replay of a fight with a log; a stream that comes along is dropped', () => {
@@ -321,7 +374,7 @@ describe('a fight with a log is drawn by the page', () => {
     expect(r.views).toEqual([]);
   });
 
-  it('NEXT or STOP in a fight closes it, gives the field back and tells the relay', () => {
+  it('NEXT, or a drag off the trainer, in a fight closes it, gives the field back and tells the relay', () => {
     const r = rig();
     r.watch.frame();
     r.link.onBattleLog(2, 7, [start()], 0);

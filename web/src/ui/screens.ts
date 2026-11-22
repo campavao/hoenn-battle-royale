@@ -582,7 +582,6 @@ export interface SheetModel {
   onWatch(dir: 1 | -1): void;
   /** SPECTATE on a card: follow that seat. */
   onWatchSeat?(seat: number): void;
-  onStopWatch(): void;
   onLeave(): void;
   /** After LEAVE, the sheet asks "Leave the match?" with STAY and LEAVE (POK-382). */
   leaveAsk?: boolean;
@@ -799,7 +798,6 @@ export function sheetScreen(model: () => SheetModel): DrawnScreen {
           { label: 'PREV', id: 'spectate-prev', parent: 'spectate-strip', onPress: () => m.onWatch(-1) },
           { label: 'NEXT', id: 'spectate-next', parent: 'spectate-strip', onPress: () => m.onWatch(1) },
         ];
-        if (m.watch.name !== null) buttons.push({ label: 'STOP', id: 'spectate-stop', parent: 'spectate-strip', onPress: m.onStopWatch });
         widgets.push(...paintButtons(c, y, buttons));
         y += 28;
       }

@@ -33,7 +33,6 @@ function model(over: Partial<SheetModel> = {}): SheetModel {
     onKick: vi.fn(),
     onCloseCard: vi.fn(),
     onWatch: vi.fn(),
-    onStopWatch: vi.fn(),
     onLeave: vi.fn(),
     onClose: vi.fn(),
     onMute: vi.fn(),
@@ -196,17 +195,16 @@ describe('the sheet', () => {
     expect(paint(model({ card, onWatchSeat })).painted.widgets.find((w) => w.cls === 'card-watch')).toBeUndefined();
   });
 
-  it('once you are out, says who you watch, with PREV, NEXT and STOP', () => {
+  it('once you are out, says who you watch, with PREV and NEXT and no STOP', () => {
     const m = model({ watch: { name: 'MAY' } });
     const { byId } = paint(m);
     expect(byId('spectate-name')?.text).toBe('WATCHING MAY');
     byId('spectate-next')!.onPress!();
     byId('spectate-prev')!.onPress!();
-    byId('spectate-stop')!.onPress!();
     expect(m.onWatch).toHaveBeenNthCalledWith(1, 1);
     expect(m.onWatch).toHaveBeenNthCalledWith(2, -1);
-    expect(m.onStopWatch).toHaveBeenCalled();
-    expect(paint(model({ watch: { name: null } })).byId('spectate-stop'), 'nobody to stop watching').toBeUndefined();
+    // A drag on the map is the free camera (Cam, 11-21: "I'm not sure it does anything for us anymore").
+    expect(byId('spectate-stop'), 'no STOP').toBeUndefined();
   });
 
   it('says what the remap wizard wants, and what MUTE would do', () => {
