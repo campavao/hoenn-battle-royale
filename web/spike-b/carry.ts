@@ -338,11 +338,19 @@ export function spentLine(e: { by: number; busy?: string; beaten?: string }, me:
 /** Who in a team could FLY: knows it, or could learn HM02 (br_hm.c BrHm_Slot, Cam's 10-19
  *  play-test: "only fly if you have ... a Pokemon that could learn Fly"). */
 export function couldFly(team: readonly { species: number; moves?: readonly { id: number }[] }[]): boolean {
+  return flyerOf(team) >= 0;
+}
+
+/** include/constants/species.h: an egg's species, who can't FLY whatever it would hatch into. */
+const SPECIES_EGG = 412;
+/** Which of a team would FLY, as br_hm.c BrHm_Slot picks it: the first, in party order, that is
+ *  a POKeMON (no empty slot, no egg) and knows FLY or could learn HM02; -1 for nobody. */
+export function flyerOf(team: readonly { species: number; moves?: readonly { id: number }[] }[]): number {
   const has = (species: number) => {
     const byte = parseInt(HMS.fly.substr((species >> 3) * 2, 2), 16);
     return !Number.isNaN(byte) && ((byte >> (species & 7)) & 1) === 1;
   };
-  return team.some((m) => m.moves?.some((x) => x.id === MOVE_FLY) || has(m.species));
+  return team.findIndex((m) => m.species > 0 && m.species !== SPECIES_EGG && (m.moves?.some((x) => x.id === MOVE_FLY) || has(m.species)));
 }
 
 /** Every mon's encrypted block adds up to its checksum (pokemon.c's CalculateBoxMonChecksum):

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import regionMap from '../../src/region_map.c?raw';
 import healJson from '../../src/data/heal_locations.json';
 import { FLY_SPOTS } from './flyspots';
-import { couldFly } from './carry';
+import { couldFly, flyerOf } from './carry';
 import { makeRoom } from './shared/room';
 import { MAPS, PATCHES } from './shared/relay-entry';
 
@@ -40,5 +40,14 @@ describe('who could FLY', () => {
     expect(couldFly([{ species: WEEDLE, moves: [] }])).toBe(false);
     expect(couldFly([{ species: WEEDLE, moves: [{ id: 19 }] }])).toBe(true);
     expect(couldFly([{ species: WEEDLE, moves: [] }, { species: PIDGEOT, moves: [] }])).toBe(true);
+  });
+  it("is the first that could, as br_hm.c BrHm_Slot picks the flyer: the MAP's FLY shows that one (Cam, 11-21)", () => {
+    const PIDGEOT = 18, WEEDLE = 13, SWELLOW = 305, EGG = 412;
+    expect(flyerOf([])).toBe(-1);
+    expect(flyerOf([{ species: WEEDLE, moves: [] }])).toBe(-1);
+    expect(flyerOf([{ species: WEEDLE, moves: [] }, { species: PIDGEOT, moves: [] }, { species: SWELLOW, moves: [] }]), 'the first of two').toBe(1);
+    expect(flyerOf([{ species: PIDGEOT, moves: [] }, { species: WEEDLE, moves: [{ id: 19 }] }]), 'party order, not who knows it').toBe(0);
+    expect(flyerOf([{ species: WEEDLE, moves: [] }, { species: WEEDLE, moves: [{ id: 19 }] }]), 'knowing it is enough').toBe(1);
+    expect(flyerOf([{ species: 0, moves: [{ id: 19 }] }, { species: EGG, moves: [{ id: 19 }] }, { species: SWELLOW }]), 'no empty slot, no egg').toBe(2);
   });
 });

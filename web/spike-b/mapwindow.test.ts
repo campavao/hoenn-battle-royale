@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapFit, snapCell } from './mapwindow';
+import { mapFit, snapCell, verbOff } from './mapwindow';
 import { CELL, GRID_X, GRID_Y } from './ringmap';
 
 const px = (cx: number, cy: number) => ({ x: GRID_X + cx * CELL + CELL / 2, y: GRID_Y + cy * CELL + CELL / 2 });
@@ -45,5 +45,15 @@ describe("the MAP's cursor under a mouse", () => {
 
   it('off the grid is nothing', () => {
     expect(snapCell(-5, -5, none, () => true)).toBeNull();
+  });
+});
+
+describe("the verb's button (Cam, 11-21: \"the fly button always looks disabled\")", () => {
+  const town = { id: 1, name: 'OLDALE TOWN' }, route = { id: 16, name: 'ROUTE 101' };
+  const can = (p: { id: number }) => p.id === town.id;
+  it('is lit on a place it would fly to, and grey only where the press would do nothing', () => {
+    expect(verbOff(town, can)).toBe(false);
+    expect(verbOff(route, can), 'a route has no town to land in').toBe(true);
+    expect(verbOff(null, can), 'open sea').toBe(true);
   });
 });

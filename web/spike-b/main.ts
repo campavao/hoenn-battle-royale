@@ -42,7 +42,7 @@ import { latestRomSeven } from '../src/release';
 import { stageScale } from '../src/ui/stage';
 import { loadCareer, ordinal, recordMatch } from '../src/match/career';
 import type { MatchTally } from '../src/match/tally';
-import { beatenBy, couldFly, tallySince, teamMembers, PARTY_LEN, spentLine, spillShows } from './carry';
+import { beatenBy, couldFly, flyerOf, tallySince, teamMembers, PARTY_LEN, spentLine, spillShows } from './carry';
 import { BagPanel } from './bagpanel';
 import { Tag } from './tag';
 import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, startStickLearn, stickKeys, stickLearnStep, type AxisSense, type StickMap } from '../src/pad';
@@ -74,6 +74,7 @@ import { AskBox } from './askbox';
 import { ANIM_COUNTER_MAX } from '../src/tile-anims';
 import { JankMeter } from './jank';
 import { RingMap } from './ringmap';
+import { farBadge, farOrder, headRows, liveLegends, trimmed } from './marks';
 import { SeamGlide, seamOff } from './seamglide';
 import { Watch } from './watch';
 import { BattleView } from './battleview';
@@ -325,7 +326,10 @@ function miniFrame(a: Actor | undefined): string {
   if (!regionPixels) return miniKey;
   const ring = link.room.ring();
   const at = ringMap.pixelOf(a.m.spot);
-  const key = `${at.x}|${at.y}|${a.skin}|${ring.last}|${ring.r.toFixed(1)}|${ring.cx.toFixed(0)}|${ring.cy.toFixed(0)}`;
+  // The legendaries on the map now, at their marks on the MAP's picture (ringmap.ts plots).
+  const live = new Set(liveLegends(link.room.events, link.room.spills, link.room.picked).map((e) => e.species));
+  const legends = live.size ? ringMap.plots(null).events.filter((e) => !e.taken && live.has(e.species)) : [];
+  const key = `${at.x}|${at.y}|${a.skin}|${ring.last}|${ring.r.toFixed(1)}|${ring.cx.toFixed(0)}|${ring.cy.toFixed(0)}|${legends.map((e) => `${e.species}@${e.x},${e.y}`).join(';')}`;
   if (key === miniKey) return key;
   miniKey = key;
   const n = MINI_MAP;
@@ -344,15 +348,23 @@ function miniFrame(a: Actor | undefined): string {
     }
   }
   c.putImageData(img, 0, 0);
+  c.imageSmoothingEnabled = false;
+  // A legendary in view stands as its own icon, under the trainer (Cam, 11-21: it was the ball).
+  for (const e of legends) {
+    const icon = monIconOf(e.species);
+    if (!icon) continue;
+    const t = trimmed(icon);
+    c.drawImage(t, Math.round(e.x - sx - t.width / 2), Math.round(e.y - sy - t.height / 2));
+  }
   // The trainer's head, on their cell.
   const gfx = SKIN_GFX[a.skin] ?? SKIN_GFX[0];
   const s = sheet(gfx);
   if (s) {
-    c.imageSmoothingEnabled = false;
     const { w, h } = SHEETS[String(gfx)];
     // The head, rows 9-24 of a 32-row frame (hair from row 10, chin at 22, the 11-04 crop stopped at 21 and cut the chin), kept whole inside the picture at its edges.
-    const dx = Math.max(0, Math.min(n - w, Math.round(at.x - sx - w / 2))), dy = Math.max(0, Math.min(n - 16, Math.round(at.y - sy - 8)));
-    c.drawImage(s, 0, Math.max(0, h - 23), w, 16, dx, dy, w, 16);
+    const { sy: hy, sh } = headRows(h);
+    const dx = Math.max(0, Math.min(n - w, Math.round(at.x - sx - w / 2))), dy = Math.max(0, Math.min(n - sh, Math.round(at.y - sy - 8)));
+    c.drawImage(s, 0, hy, w, sh, dx, dy, w, sh);
   }
   return key;
 }
@@ -1040,7 +1052,7 @@ function ask(title: string, rows: [string, string][], start = false, more: { pic
 
 /** The page's MAP (mapwindow.ts): the answer is the place chosen, null for BACK or a fight. */
 let mapWindow: MapWindow | null = null;
-function openMapWindow(o: { verb: string | null; can(p: MapPlace): boolean; prompt(): string; back: boolean; until?: number }): Promise<MapPlace | null> {
+function openMapWindow(o: { verb: string | null; verbIcon?: HTMLCanvasElement | null; can(p: MapPlace): boolean; prompt(): string; back: boolean; until?: number }): Promise<MapPlace | null> {
   return new Promise((resolve) => {
     const me = link.room.actor(link.me);
     if (!ringMap || !art || !me) { resolve(null); return; }
@@ -1087,7 +1099,12 @@ function openMapWindow(o: { verb: string | null; can(p: MapPlace): boolean; prom
         const s = sheet(gfx);
         return s ? { img: s, w: SHEETS[String(gfx)].w, h: SHEETS[String(gfx)].h } : null;
       },
+      monIcon: (species) => {
+        const icon = monIconOf(species);
+        return icon ? trimmed(icon) : null;
+      },
       verb: o.verb,
+      verbIcon: o.verbIcon,
       can: o.can,
       prompt: o.prompt,
       back: o.back ? () => asking?.done('') : null,
@@ -1113,11 +1130,14 @@ async function lookAtMap(): Promise<void> {
   const team = await r.fameTeam();
   if (rom !== r || asking || battle || swapping || isOut) return;
   // Not out of the Zone before the drop: its gate is shut both ways (room.ts `fly`).
-  const fly = couldFly(team) && !link.room.ring().safari;
+  const flyer = flyerOf(team);
+  const fly = flyer >= 0 && !link.room.ring().safari;
+  const flyerIcon = fly ? monIconOf(team[flyer].species) : null;
   const spotOf = (p: MapPlace) => map.mapsIn(p.id).find((m) => FLY_SPOTS[m]);
   const safe = () => { const s = map.place(); return s ? `Safe: ${s}` : ''; };
   const place = await openMapWindow({
     verb: fly ? 'FLY' : null,
+    verbIcon: flyerIcon ? trimmed(flyerIcon) : null,
     can: (p) => !!spotOf(p),
     prompt: safe,
     back: true,
@@ -3082,6 +3102,7 @@ function wirePhoneHud(desk = false): void {
       fogEverywhere: !!ring.last,
       safe: way ? `Safe ${way}` : null,
       lead: mine && fogged ? rom?.leadHp() || null : null,
+      legend: !ring.safari && liveLegends(link.room.events, link.room.spills, link.room.picked).length > 0,
       // Facing water on foot (or surfing), the rod: SELECT casts it there (room.ts).
       ctx: !me.m.bike && classAt(aheadOf(me)) === CLASS_WATER && rodOf(rom?.rod() ?? 0) >= 0
         ? { label: 'FISH', item: rom!.rod(), enabled: true }
@@ -4967,17 +4988,31 @@ function draw(): void {
     ctx.fillStyle = `rgba(0, 0, 0, ${flightFade(frame - flight.start)})`;
     ctx.fillRect(0, 0, W, H);
   }
-  // Zoomed far out, the sprites are specks: mark every trainer with a dot.
+  // Zoomed far out, the sprites are specks: mark every trainer with their head, the minimap's
+  // (Cam, 11-21: they were "small white or blue boxes"), on a badge for mine and for one in a
+  // battle (marks.ts farBadge). In canvas pixels, whole ones, so the heads stay sharp.
   if (z < 0.6) {
-    // in canvas pixels, whole ones, so the squares stay sharp
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    // mine last, on top
-    for (const a of [...all.filter((o) => o.id !== link.me), ...all.filter((o) => o.id === link.me)]) {
+    ctx.imageSmoothingEnabled = false;
+    for (const a of farOrder(all, link.me)) {
       const p = pixelOf(a);
-      const mine = a.id === link.me;
-      ctx.fillStyle = mine ? '#ff3b3b' : a.battling ? '#ffd34d' : a.bot ? '#ffffff' : '#5ec8ff';
-      const r = mine ? 5 : a.bot ? 3 : 4;
-      ctx.fillRect(Math.round(ox + (p.x + 8) * z) - r, Math.round(oy + (p.y + 8) * z) - r, r * 2, r * 2);
+      const cx = Math.round(ox + (p.x + 8) * z), cy = Math.round(oy + (p.y + 8) * z);
+      const badge = farBadge(a, link.me);
+      const gfx = SKIN_GFX[a.skin] ?? SKIN_GFX[0];
+      const s = sheet(gfx);
+      if (!s) {
+        ctx.fillStyle = badge ?? '#ffffff';
+        ctx.fillRect(cx - 4, cy - 4, 8, 8);
+        continue;
+      }
+      const { w, h } = SHEETS[String(gfx)];
+      const { sy, sh } = headRows(h);
+      const x = cx - Math.round(w / 2), y = cy - sh / 2;
+      if (badge) {
+        ctx.fillStyle = badge;
+        ctx.fillRect(x - 2, y - 2, w + 4, sh + 4);
+      }
+      ctx.drawImage(s, 0, sy, w, sh, x, y, w, sh);
     }
   }
 }
