@@ -1,12 +1,47 @@
 {
- "readAt": "2026-11-22T23:26:42.769Z",
+ "readAt": "2026-11-22T23:41:46.114Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "AXV4YJ",
-   "at": "2026-11-22T23:21:28.798Z",
+   "code": "EB7VKG",
+   "at": "2026-11-22T23:28:29.204Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-22T23:28:29.204Z",
+     "how": "quick"
+    },
+    {
+     "t": "2026-11-22T23:30:34.634Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-22T23:28:31.121Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "AXV4YJ",
+   "at": "2026-11-22T23:21:28.798Z",
+   "end": "2026-11-22T23:29:25.231Z",
+   "secs": 476,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -30,7 +65,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -70,8 +104,8 @@
   {
    "code": "H7V7XP",
    "at": "2026-11-22T23:13:43.974Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-22T23:26:50.455Z",
+   "secs": 786,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -95,7 +129,6 @@
      "secs": 760
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -30172,7 +30205,7 @@
   {
    "id": "6144a717",
    "first": "2026-10-17T02:37:29.310Z",
-   "last": "2026-11-22T22:59:03.195Z",
+   "last": "2026-11-22T23:30:31.697Z",
    "since": "2026-10-15",
    "versions": [
     "2",
@@ -30197,11 +30230,12 @@
     "world-d11e20f3",
     "world-77c9a81a",
     "world-7c6f8689",
-    "world-e6249411"
+    "world-e6249411",
+    "world-527d2eb4"
    ],
    "solo": 2,
-   "checkins": 99,
-   "v": "world-e6249411"
+   "checkins": 100,
+   "v": "world-527d2eb4"
   },
   {
    "id": "4d3cafd9",
@@ -30542,6 +30576,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-22T23:28:25.213Z",
+   "code": "AXV4YJ",
+   "v": "1d9a033",
+   "watched": 7,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 413,
+   "drifts": 0,
+   "deploy": "64fb7313"
+  },
   {
    "t": "2026-11-22T23:26:27.208Z",
    "code": "H7V7XP",
