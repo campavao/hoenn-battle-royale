@@ -1,12 +1,43 @@
 {
- "readAt": "2026-11-22T17:05:45.803Z",
+ "readAt": "2026-11-22T17:20:48.637Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "KS55PJ",
-   "at": "2026-11-22T17:01:31.214Z",
+   "code": "D8CMM3",
+   "at": "2026-11-22T17:17:04.721Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-22T17:17:04.721Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-22T17:17:07.324Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "KS55PJ",
+   "at": "2026-11-22T17:01:31.214Z",
+   "end": "2026-11-22T17:16:43.853Z",
+   "secs": 913,
    "door": "open",
    "mode": "host",
    "humans": 1,
@@ -25,7 +56,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -29982,6 +30012,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-22T17:16:43.478Z",
+   "code": "KS55PJ",
+   "v": "e000b70",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 2,
+   "checks": 868,
+   "drifts": 0,
+   "deploy": "05ac9fb5"
+  },
   {
    "t": "2026-11-22T16:49:18.367Z",
    "code": "J3DP2S",
