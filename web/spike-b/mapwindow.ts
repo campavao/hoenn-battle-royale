@@ -3,8 +3,9 @@
 // world's fog a pixel at a time (ringmap.ts), the marks, and a cursor by the keys, a pad, a mouse
 // or a thumb. Nothing of it goes through the hidden ROM.
 import { Win, drawItemFitted } from '../src/ui/phonehud';
-import { TEXT_BLUE, TEXT_DARK, TEXT_GRAY, fitText, wrapText, type EmeraldCanvas, type TextColor } from '../src/ui/emerald';
+import { TEXT_BLUE, TEXT_DARK, TEXT_GRAY, fitText, measure, wrapText, type EmeraldCanvas, type TextColor } from '../src/ui/emerald';
 import { CELL, GRID_H, GRID_W, GRID_X, GRID_Y, type MapPlots, type MapPlace } from './ringmap';
+import { markIcon } from './marks';
 
 const W = 240, H = 160, FOOT_H = 36, BTN_H = 32, GAP = 4, BTN_W = (W - GAP) / 2;
 /** A phone on its side: the words and the buttons in a column by the picture, this narrow at least,
@@ -50,8 +51,14 @@ export interface MapWindowDeps {
   plots(): MapPlots;
   /** A person's standing sprite, with its frame's size. */
   head(gfx: number): { img: HTMLCanvasElement; w: number; h: number } | null;
+  /** A species' party icon cut to the POKeMON (marks.ts trimmed), for an event's legendary;
+   *  null while it can't be cut, and the ball marks it. */
+  monIcon?(species: number): HTMLCanvasElement | null;
   /** The buttons' word, null for none: a MAP with nobody to FLY only looks. */
   verb: string | null;
+  /** Who does the verb, by the button: FLY's flyer as its party icon cut to the POKeMON
+   *  (carry.ts flyerOf, marks.ts trimmed); none for the drop. */
+  verbIcon?: HTMLCanvasElement | null;
   /** Whether the verb can be pressed on this place. */
   can(place: MapPlace): boolean;
   /** The second line of the footer. */
@@ -95,7 +102,7 @@ function head(c: EmeraldCanvas, deps: MapWindowDeps, gfx: number, x: number, y: 
 /** How near, in the picture's pixels, a mark has to be to take the cursor; and in cells, a place. */
 const SNAP_MARK = 8, SNAP_PLACE = 3;
 
-/** The cell a pointer at (x, y) of the picture means: a mark it is on (a legendary's ball, a leader),
+/** The cell a pointer at (x, y) of the picture means: a mark it is on (a legendary, a leader),
  *  or the place under it, or the nearest place when it is over open sea. Null off the grid, or with
  *  nothing near. */
 export function snapCell(x: number, y: number, plots: Pick<MapPlots, 'events' | 'gyms'>, placeAt: (cx: number, cy: number) => unknown): { x: number; y: number } | null {
@@ -117,6 +124,15 @@ export function snapCell(x: number, y: number, plots: Pick<MapPlots, 'events' | 
   }
   return best;
 }
+
+/** Whether the verb's button is greyed: the cursor on no place, or on one it can't be done to
+ *  (a FLY to a place with no town in it). It is a press that would do nothing, and only that. */
+export function verbOff(place: MapPlace | null, can: (p: MapPlace) => boolean): boolean {
+  return !place || !can(place);
+}
+
+/** The tallest a button's icon is drawn at its own pixels: the frame's inside. */
+const ICON_MAX = BTN_H - 4;
 
 export class MapWindow {
   private map: Win;
@@ -169,7 +185,7 @@ export class MapWindow {
     if (deps.back) this.button(row, 'BACK', deps.back);
     if (deps.verb) {
       this.verbBtn = this.button(row, deps.verb, () => this.press());
-      this.verbWin = this.verbBtn.firstElementChild ? null : null;
+      this.verbBtn.setAttribute('aria-disabled', String(verbOff(this.place(), deps.can)));
     }
     this.fit();
     addEventListener('resize', this.refit);
@@ -187,11 +203,18 @@ export class MapWindow {
     b.className = 'bm-btn map-btn';
     b.setAttribute('aria-label', label);
     parent.appendChild(b);
+    const icon = label === this.deps.verb ? this.deps.verbIcon ?? null : null;
     const win = new Win(b, BTN_W, BTN_H, (c) => {
       const w = c.width;
       c.drawFrame({ x: 0, y: 0, w, h: BTN_H });
       const off = b.getAttribute('aria-disabled') === 'true';
-      c.drawTextCentred(label, w / 2, 8, off ? TEXT_GRAY : TEXT_DARK);
+      if (!icon) { c.drawTextCentred(label, w / 2, 8, off ? TEXT_GRAY : TEXT_DARK); return; }
+      // The flyer beside the word (Cam, 11-21: "add your flying type pokemon sprite next to the
+      // option"), the two centred together; grey with it when the press would do nothing.
+      const k = Math.min(1, ICON_MAX / icon.height), iw = Math.round(icon.width * k), ih = Math.round(icon.height * k);
+      const gap = 4, text = measure(label), x0 = Math.round((w - iw - gap - text) / 2);
+      c.drawImageTo(off ? greyOf(icon) : icon, 0, 0, icon.width, icon.height, x0, Math.round((BTN_H - ih) / 2), iw, ih);
+      c.drawText(label, x0 + iw + gap, 8, off ? TEXT_GRAY : TEXT_DARK);
     });
     this.buttons.push({ win });
     if (label === this.deps.verb) this.verbWin = win;
@@ -283,7 +306,7 @@ export class MapWindow {
     this.map.show(`${this.cx}|${this.cy}|${key}|${next}|${Math.floor(performance.now() / 400) % 2}|${JSON.stringify(this.deps.plots())}`);
     this.foot.show(`${p?.name ?? ''}|${this.deps.prompt()}`);
     if (this.verbBtn) {
-      const off = !p || !this.deps.can(p);
+      const off = verbOff(p, this.deps.can);
       if ((this.verbBtn.getAttribute('aria-disabled') === 'true') !== off) {
         this.verbBtn.setAttribute('aria-disabled', String(off));
         this.verbWin?.redraw();
@@ -318,12 +341,20 @@ export class MapWindow {
   private paintMap(c: EmeraldCanvas, redo: () => void): void {
     c.drawImageTo(this.fogPicture(), 0, 0, W, H, 0, 0, W, H);
     const plots = this.deps.plots();
+    for (const g of plots.gyms) head(c, this.deps, g.gfx, g.x, g.y, g.beaten);
+    // An event is its legendary's own icon (Cam, 11-21: it was "a Royale Ball icon"), over the
+    // leaders' faces; greyed once it is taken, as the ball was.
     for (const e of plots.events) {
+      const sp = markIcon(e), icon = sp !== null ? this.deps.monIcon?.(sp) : null;
+      if (icon) {
+        const img = e.taken ? greyOf(icon) : icon;
+        c.drawImageTo(img, 0, 0, img.width, img.height, Math.round(e.x - img.width / 2), Math.round(e.y - img.height / 2), img.width, img.height);
+        continue;
+      }
       if (e.taken) c.setFilter('grayscale(1)');
       drawItemFitted(c, ITEM_POKE_BALL, e.x, e.y, 10, redo);
       c.setFilter('none');
     }
-    for (const g of plots.gyms) head(c, this.deps, g.gfx, g.x, g.y, g.beaten);
     if (plots.me) head(c, this.deps, plots.me.gfx, plots.me.x, plots.me.y);
     // The cursor over all of it, region_map.c's red box, breathing.
     const x = GRID_X + this.cx * CELL, y = GRID_Y + this.cy * CELL, n = CELL;

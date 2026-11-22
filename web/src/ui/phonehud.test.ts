@@ -31,6 +31,8 @@ import {
   OFF_FIELD_GRACE,
   leadFit,
   miniLines,
+  miniGlow,
+  CLOCK_RED_S,
   MINI_MAP,
   MINI_W,
 } from './phonehud';
@@ -311,5 +313,29 @@ describe("the fog window's lead line", () => {
     const v = { left: 6, clock: 100, flash: 0, safe: 'Safe ◆', lead: 'HP 184/243' } as unknown as HudView;
     // Both numbers, with or without the word (the 72-pixel window has room for it).
     expect(miniLines(v).some((l) => l.left?.text.endsWith('184/243'))).toBe(true);
+  });
+});
+
+describe("the minimap's glow (Cam, 11-21)", () => {
+  const v = (o: Partial<Pick<HudView, 'clock' | 'ring' | 'fogEverywhere' | 'legend'>>) => ({ clock: 90, ring: 'ROUTE 110', fogEverywhere: false, legend: false, ...o });
+  it('is gold while a legendary is on the map, and off once it is gone', () => {
+    expect(miniGlow(v({ legend: true }))).toBe('legend');
+    expect(miniGlow(v({ legend: false }))).toBe(null);
+  });
+  it('is purple from the second the clock goes red to the end of the phase', () => {
+    expect(miniGlow(v({ clock: CLOCK_RED_S + 1 }))).toBe(null);
+    expect(miniGlow(v({ clock: CLOCK_RED_S }))).toBe('fog');
+    expect(miniGlow(v({ clock: 1 }))).toBe('fog');
+    const red = (clock: number) => miniLines({ left: 6, clock, flash: 0, safe: null } as unknown as HudView)[0].right?.color === TEXT_RED;
+    for (const clock of [1, 29, 30, 31, 60]) expect(miniGlow(v({ clock })) === 'fog', `${clock} s`).toBe(red(clock));
+  });
+  it('puts the fog over the legendary when both are up', () => {
+    expect(miniGlow(v({ clock: 10, legend: true }))).toBe('fog');
+  });
+  it('has no fog glow in the Safari, nor with the fog everywhere', () => {
+    expect(miniGlow(v({ ring: null, clock: 5 }))).toBe(null);
+    expect(miniGlow(v({ ring: null, clock: 5, legend: true })), 'a legendary still shows').toBe('legend');
+    expect(miniGlow(v({ ring: 'Fog everywhere', fogEverywhere: true, clock: 0 }))).toBe(null);
+    expect(miniGlow(v({ fogEverywhere: true, clock: 0, legend: true }))).toBe('legend');
   });
 });

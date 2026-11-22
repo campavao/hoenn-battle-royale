@@ -158,6 +158,8 @@ export interface HudView {
   /** In the fog, the lead's HP as the corner says it ("HP 26/40", br_hud.c LeadHp), for
    *  a page with no ROM corner to say it; null otherwise. */
   lead?: string | null;
+  /** A legendary is on the map (marks.ts liveLegends): the minimap glows gold for it. */
+  legend?: boolean;
   ctx: Ctx;
   /** gPlayerPartyCount: the start menu has no POKeMON row before the first catch. */
   party: number;
@@ -507,14 +509,28 @@ export function drawKeycap(c: EmeraldCanvas, key: string, right: number, y: numb
  *  "the minimap need to be bigger": the third of four mocks, more of the map round you). */
 export const MINI_MAP = 72;
 export const MINI_W = MINI_MAP + 16;
+/** Seconds left when the clock goes red: the ring's last stretch, which is also when the fog
+ *  moves in (room.ts RING_CLOSE, 30 s). */
+export const CLOCK_RED_S = 30;
 export function miniLines(v: HudView): Line[] {
   const inner = MINI_W - 16;
   const clock: Line['right'] =
-    v.flash === 2 ? { text: 'Fog!', color: TEXT_RED } : v.flash === 1 ? undefined : { text: clockText(v.clock), color: v.clock <= 30 ? TEXT_RED : TEXT_DARK };
+    v.flash === 2 ? { text: 'Fog!', color: TEXT_RED } : v.flash === 1 ? undefined : { text: clockText(v.clock), color: v.clock <= CLOCK_RED_S ? TEXT_RED : TEXT_DARK };
   const lines: Line[] = [{ left: { text: String(v.left), color: TEXT_BLUE }, right: clock }];
   if (v.safe) lines.push({ left: { text: fitText(v.safe, inner), color: TEXT_RED } });
   if (v.lead) lines.push({ left: { text: leadFit(v.lead, inner), color: TEXT_RED } });
   return lines;
+}
+
+/** The minimap's border glow (Cam, 11-21): purple, the fog's colour, over the ring's last
+ *  stretch (the red clock's CLOCK_RED_S, while the fog moves in), and gold while a legendary
+ *  is on the map, so it is noticed and tapped. The fog wins when both are up: it is a
+ *  half-minute that can cost the trainer the match, and the gold is back once it is over.
+ *  None in the Safari (no ring), nor with the fog everywhere (nothing left to warn of). */
+export type MiniGlow = 'fog' | 'legend' | null;
+export function miniGlow(v: Pick<HudView, 'clock' | 'ring' | 'fogEverywhere' | 'legend'>): MiniGlow {
+  if (v.ring !== null && !v.fogEverywhere && v.clock <= CLOCK_RED_S) return 'fog';
+  return v.legend ? 'legend' : null;
 }
 
 /** The lead's HP in the window's width: "HP 184/243" came out "HP 184/…" there, the half
@@ -781,6 +797,11 @@ export class PhoneHud {
     const lines = mini ? miniLines(v) : fogLines(v);
     const h = mini ? miniHeight(lines.length) : fogHeight(lines.length);
     if (this.fog.c.height !== h) this.fog.size(mini ? MINI_W : FOG_W, h, this.scale);
+    if (mini) {
+      const glow = miniGlow(v);
+      this.fog.el.classList.toggle('hud-glow-fog', glow === 'fog');
+      this.fog.el.classList.toggle('hud-glow-legend', glow === 'legend');
+    }
     this.fog.show((mini?.key() ?? '') + JSON.stringify(lines.map((l) => [l.left?.text, l.left?.color.fg, l.right?.text, l.right?.color.fg])));
     this.moves.update(v.moves);
     // The start menu has a POKeMON row once there is a party, and MAP once the ring is

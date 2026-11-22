@@ -24,7 +24,8 @@ export interface MapPlace { id: number; name: string }
 /** What the page's MAP marks, in the picture's pixels. */
 export interface MapPlots {
   gyms: { x: number; y: number; gfx: number; beaten: boolean }[];
-  events: { x: number; y: number; taken: boolean }[];
+  /** Each with its legendary (0 for a story with none), whose icon marks it (marks.ts markIcon). */
+  events: { x: number; y: number; taken: boolean; species: number }[];
   me: { x: number; y: number; gfx: number } | null;
 }
 
@@ -187,7 +188,7 @@ export class RingMap {
     const events = room.events.flatMap((e) => {
       const at = this.outdoors({ map: e.map, x: e.x, y: e.y });
       const s = at && this.sections.get(at.map);
-      return s ? [{ ...middle(s), taken: !!e.species && (!room.spills.has(e.key) || room.picked.has(e.key)) }] : [];
+      return s ? [{ ...middle(s), taken: !!e.species && (!room.spills.has(e.key) || room.picked.has(e.key)), species: e.species }] : [];
     });
     return { gyms, events, me: me ? { ...this.pixelOf(me.spot), gfx: me.gfx } : null };
   }
