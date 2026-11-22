@@ -1,7 +1,7 @@
 {
- "readAt": "2026-11-22T09:00:16.249Z",
+ "readAt": "2026-11-22T16:36:32.235Z",
  "from": "2026-11-22T00:06:55.860Z",
- "matches": 3,
+ "matches": 6,
  "players": [
   {
    "id": "71d3a7609b88",
@@ -24,6 +24,26 @@
    "last": "2026-11-22T08:34:39.708Z"
   },
   {
+   "id": "e4ccab195416",
+   "name": "CAM",
+   "skin": 12,
+   "rating": 1002,
+   "played": 4,
+   "wins": 2,
+   "best": 1,
+   "last": "2026-11-22T15:22:38.720Z"
+  },
+  {
+   "id": "0fe1486c840e",
+   "name": "DONUT",
+   "skin": 0,
+   "rating": 998,
+   "played": 3,
+   "wins": 1,
+   "best": 1,
+   "last": "2026-11-22T15:22:38.720Z"
+  },
+  {
    "id": "17bf2e441ee0",
    "name": "NOX",
    "skin": 0,
@@ -34,6 +54,16 @@
    "last": "2026-11-22T00:37:47.161Z"
   },
   {
+   "id": "ab59f97c6e53",
+   "name": "SKEEGUL",
+   "skin": 4,
+   "rating": 984,
+   "played": 1,
+   "wins": 0,
+   "best": 6,
+   "last": "2026-11-22T14:29:42.097Z"
+  },
+  {
    "id": "1bcd8d3e6caf",
    "name": "SPIKE",
    "skin": 0,
@@ -42,16 +72,6 @@
    "wins": 0,
    "best": 3,
    "last": "2026-11-22T08:34:39.708Z"
-  },
-  {
-   "id": "e4ccab195416",
-   "name": "CAM",
-   "skin": 12,
-   "rating": 984,
-   "played": 1,
-   "wins": 0,
-   "best": 8,
-   "last": "2026-11-22T00:06:55.860Z"
   }
  ]
 }
