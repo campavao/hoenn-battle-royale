@@ -187,6 +187,13 @@ test('sideways on an iPhone 13 mini: the corner, the bike, the moves and the thu
   const mini2 = (await boxOf(page, '.hud-fog'))!, moves2 = (await boxOf(page, '.hud-moves:not(.gone)'))!;
   expect(moves2.y).toBeGreaterThanOrEqual(mini2.y + mini2.height);
   if (process.env.HBR_SHOTS) await page.screenshot({ path: `${process.env.HBR_SHOTS}/upright-fly.png` });
+  // ROCK SMASH (MOVE_ROCK_SMASH 249), facing Rusturf Tunnel's rock at (24,4): its own chip lights,
+  // not CUT's (11-22: a rock lit CUT, and only CUT broke it).
+  await page.evaluate(() => (window as any).__spike.rom.setMove(0, 1, 249, 15));
+  await page.evaluate(() => { const s = (window as any).__spike, a = s.link.room.actor(s.link.me), spot = { map: 'MAP_RUSTURF_TUNNEL', x: 23, y: 4 }; a.m = { ...a.m, spot, prev: spot, facing: 4, moveDir: 4, action: null, px: 0, py: 0, bike: false }; });
+  await expect.poll(() => page.evaluate(chips), { timeout: 15_000 }).toContain('ROCK SMASH+');
+  expect(await page.evaluate(chips)).not.toContain('CUT+');
+  if (process.env.HBR_SHOTS) await page.screenshot({ path: `${process.env.HBR_SHOTS}/upright-rock-smash.png` });
   await ctx.close();
 });
 

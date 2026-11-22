@@ -224,12 +224,15 @@ describe('healed', () => {
     const can = (hm: keyof typeof HMS) => ((parseInt(HMS[hm].substr((25 >> 3) * 2, 2), 16) >> (25 & 7)) & 1) === 1;
     const party = new Uint8Array(600);
     party.set(mon(0x12345678, 0x0badf00d, [33, 45, 98, 0], [1, 1, 1, 0], 0), 0);
-    const base = (can('cut') ? 1 : 0) | (can('strength') ? 2 : 0) | (can('surf') ? 4 : 0) | (can('dive') ? 8 : 0);
+    const smash = can('rock_smash') ? 16 : 0;
+    const base = (can('cut') ? 1 : 0) | (can('strength') ? 2 : 0) | (can('surf') ? 4 : 0) | (can('dive') ? 8 : 0) | smash;
     expect(fieldOf(party, 1)).toBe(base);
     party.set(mon(0x12345678, 0x0badf00d, [33, 57, 15, 70], [1, 1, 1, 1], 0), 0); // SURF, CUT, STRENGTH
-    expect(fieldOf(party, 1)).toBe(7 | (can('dive') ? 8 : 0));
+    expect(fieldOf(party, 1)).toBe(7 | (can('dive') ? 8 : 0) | smash);
     party.set(mon(0x12345678, 0x0badf00d, [291, 57, 15, 70], [1, 1, 1, 1], 0), 0); // DIVE (HM08) too
-    expect(fieldOf(party, 1)).toBe(15);
+    expect(fieldOf(party, 1)).toBe(15 | smash);
+    party.set(mon(0x12345678, 0x0badf00d, [249, 57, 15, 70], [1, 1, 1, 1], 0), 0); // ROCK SMASH (HM06), 11-22
+    expect(fieldOf(party, 1) & 16).toBe(16);
     expect(fieldOf(party, 0)).toBe(0);
   });
 

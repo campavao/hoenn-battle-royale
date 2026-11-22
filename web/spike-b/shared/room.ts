@@ -35,7 +35,7 @@ import { dealParty, rungForPhase, teamField, teamFlies, tradedMon } from '../../
 import { gradeOf } from '../../src/bots/roster';
 import type { PackedMon } from '../../src/net/wire';
 import { add, carried, hasBall, purse, quaff, spend, type Stack } from '../../src/bots/bag';
-import { World, decodeGrid, type Spot, type WorldMap, sameSpot } from '../../src/bots/world';
+import { FIELD_CUT, FIELD_SMASH, FIELD_STRENGTH, World, decodeGrid, type Spot, type WorldMap, sameSpot } from '../../src/bots/world';
 import { dealPatches, type Patch, type PatchTable } from '../../src/bots/patches';
 import { blueTm, scatterItem } from '../../src/match/scatter';
 import roomsJson from '../data/rooms.json';
@@ -782,7 +782,7 @@ export class Room {
   apply(cmd: Command): void {
     if (cmd.c === 'field') {
       const a = this.actor(cmd.id);
-      if (a && !a.bot) a.field = cmd.bits & 15;
+      if (a && !a.bot) a.field = cmd.bits & 31;
     } else if (cmd.c === 'ride') {
       const a = this.actor(cmd.id);
       if (!a || a.bot) return;
@@ -2574,7 +2574,7 @@ export class Room {
       // A bot goes where its team could, as a trainer does (POK-437; a wanderer keeps to land and
       // off ledges all the same, Room.move).
       const bits = a.field ?? 0;
-      const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & 3 }))(from, dir, ride) : this.base(from, dir, ride);
+      const r = bits ? (this.fields[bits] ??= stepFn(this.world, { surf: (bits & FIELD_SURF) !== 0, cut: bits & (FIELD_CUT | FIELD_STRENGTH | FIELD_SMASH) }))(from, dir, ride) : this.base(from, dir, ride);
       if (!r || !this.maps.has(r.to.map)) return null;
       // A townsperson stays out in the street, or in the Zone's (live's bots wander the
       // Safari's pool through the opening, brain.ts setTargets): no Zone map is a place

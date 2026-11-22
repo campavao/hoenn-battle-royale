@@ -125,22 +125,34 @@ interface Regions {
 const CLASS_WALL = 1;
 const CLASS_WATER = 2;
 const CLASS_GRASS = 7;
-/** A cuttable tree or a smashable rock: the exporter overlays these at their object
- *  event's cell, because in Emerald they are objects rather than metatile behaviours.
- *  Nothing checked for them until POK-267, so bots walked through trees. */
+/** A cuttable tree: the exporter overlays it at its object event's cell, because in
+ *  Emerald it is an object rather than a metatile behaviour. Nothing checked for them
+ *  until POK-267, so bots walked through trees. */
 const CLASS_CUT = 9;
+/** A Rock Smash rock, overlaid the same way. It was CLASS_CUT until 11-22, so CUT broke
+ *  rocks and ROCK SMASH did not. */
+const CLASS_SMASH = 11;
 /** A Strength boulder (#7), overlaid the same way. A bot never pushes one; it walks
  *  through it only with somebody who could push it, as a player's ROM would let them. */
 const CLASS_BOULDER = 10;
 
-/** The field moves a team has for a tree or a boulder: FIELD_CUT, FIELD_STRENGTH, or
- *  both. `true` is every one of them and `false` none, so the many callers that only
- *  ask "with HMs or without" keep asking it that way. */
+/** The field moves a team has for a tree, a boulder or a rock: FIELD_CUT, FIELD_STRENGTH,
+ *  FIELD_SMASH, any of them. `true` is every one of them and `false` none, so the many
+ *  callers that only ask "with HMs or without" keep asking it that way. */
 export type Field = boolean | number;
 export const FIELD_CUT = 1;
 export const FIELD_STRENGTH = 2;
+/** ROCK SMASH: room.ts's field bit after SURF (4) and DIVE (8), carry.ts fieldOf's 16. */
+export const FIELD_SMASH = 16;
+/** One number for what a search may cross: SURF in the low bit, the field bits above it.
+ *  (surf * 4 + field bits, as it was, ran into ROCK SMASH's 16: two kits shared a key.) */
+export function kitOf(surf: boolean, field: Field): number {
+  return (fieldBits(field) << 1) | (surf ? 1 : 0);
+}
+/** Kits there can be: every field bit and SURF (kitOf's largest + 1). */
+const KITS = 64;
 export function fieldBits(field: Field): number {
-  if (field === true) return FIELD_CUT | FIELD_STRENGTH;
+  if (field === true) return FIELD_CUT | FIELD_STRENGTH | FIELD_SMASH;
   return field === false ? 0 : field;
 }
 const LEDGE_MIN = 3;
@@ -184,6 +196,7 @@ const DEAD_WARP = -1;
 function canStand(cls: number, surf: boolean, cut: Field): boolean {
   if (cls === CLASS_WALL || (cls >= LEDGE_MIN && cls <= LEDGE_MAX)) return false;
   if (cls === CLASS_CUT) return (fieldBits(cut) & FIELD_CUT) !== 0;
+  if (cls === CLASS_SMASH) return (fieldBits(cut) & FIELD_SMASH) !== 0;
   if (cls === CLASS_BOULDER) return (fieldBits(cut) & FIELD_STRENGTH) !== 0;
   return cls !== CLASS_WATER || surf;
 }
@@ -771,7 +784,7 @@ export class World {
   // there logged 5,941 stuck steps and 52 fog outs over five replays. 38 of the 903
   // edges are not there on foot, and 12 are not there at all.
 
-  /** Per kit (surf * 4 + field bits): map -> the maps a step off it lands on. */
+  /** Per kit (kitOf): map -> the maps a step off it lands on. */
   private readonly mapGraphs = new Map<number, Map<string, Set<string>>>();
   /** goal map and kit -> hops from every map that can reach it. One table per goal,
    *  shared by the whole roster: the ring moves a handful of times a match, the bots
@@ -779,7 +792,7 @@ export class World {
   private readonly hopCache = new Map<string, Map<string, number>>();
 
   private graph(surf: boolean, cut: Field): Map<string, Set<string>> {
-    const kit = (surf ? 4 : 0) + fieldBits(cut);
+    const kit = kitOf(surf, cut);
     const built = this.mapGraphs.get(kit);
     if (built) return built;
     const g = new Map<string, Set<string>>();
@@ -946,7 +959,7 @@ export class World {
   // is flooded once. Only a ledge or a door makes a step one way. On foot Hoenn has about
   // 3,950 regions, 490 of them bigger than fifty cells.
 
-  /** Per map number and kit (n * 8 + surf * 4 + field bits): its nodes' regions so far. */
+  /** Per map number and kit (n * KITS + kitOf): its nodes' regions so far. */
   private readonly regionMaps = new Map<number, Regions>();
   /** Every region found, any map, any kit: a region's number is its place here. */
   private readonly regionList: Region[] = [];
@@ -955,7 +968,7 @@ export class World {
   private regionOf(key: number, surf: boolean, cut: Field): number {
     const n = this.mapOf(key);
     const base = this.bases[n];
-    const slot = n * 8 + (surf ? 4 : 0) + fieldBits(cut);
+    const slot = n * KITS + kitOf(surf, cut);
     let found = this.regionMaps.get(slot);
     if (!found) {
       found = { cell: new Int32Array(this.widths[n] * this.heights[n]), level: new Map() };
