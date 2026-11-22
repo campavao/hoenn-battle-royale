@@ -1,6 +1,6 @@
 // Who stands for whom drawn small (Cam, 11-21): heads far out, a legendary as itself.
 import { describe, expect, it } from 'vitest';
-import { FAR_BATTLING, FAR_MINE, HEAD_H, farBadge, farOrder, headRows, liveLegends, markIcon, opaqueBox } from './marks';
+import { FAR_BATTLING, FAR_MINE, HEAD_H, farBadge, farOrder, headRows, liveLegends, liveMarks, markIcon, opaqueBox } from './marks';
 
 describe('far out', () => {
   it("is the minimap's head: 16 rows from 23 above the frame's foot", () => {
@@ -24,6 +24,13 @@ describe("an event's mark", () => {
   it("is its legendary's icon, and the ball only for a story with none", () => {
     expect(markIcon({ species: 401 })).toBe(401);
     expect(markIcon({ species: 0 })).toBe(null);
+  });
+  it("is a story's POKeMON when it is no event legendary: MEW, DEOXYS, BELDUM (Cam, 11-22: still a ball)", () => {
+    expect(markIcon({ species: 0, mon: 151 })).toBe(151);
+    expect(markIcon({ species: 401, mon: 151 }), 'a legendary first').toBe(401);
+    const events = [{ key: 10, species: 0, mon: 151 }, { key: 11, species: 0 }, { key: 12, species: 401 }];
+    expect(liveMarks(events, new Set([10, 11, 12]), new Set<number>()).map((e) => e.key)).toEqual([10, 12]);
+    expect(liveLegends(events, new Set([10, 11, 12]), new Set<number>()).map((e) => e.key), 'the glow is for event legendaries').toEqual([12]);
   });
   it('is live while its legendary stands: dropped, not caught, not gone', () => {
     const events = [{ key: 10, species: 401 }, { key: 11, species: 0 }, { key: 12, species: 402 }, { key: 13, species: 403 }];

@@ -23,10 +23,16 @@ export function farOrder<T extends { id: number }>(all: readonly T[], me: number
   return [...all.filter((a) => a.id !== me), ...all.filter((a) => a.id === me)];
 }
 
-/** An event's mark on the MAP: its legendary's own icon (gMonIconTable), or for a story with
- *  none (species 0, a rare find) the ball it always had. */
-export function markIcon(e: { species: number }): number | null {
-  return e.species > 0 ? e.species : null;
+/** An event's mark on the MAP: its legendary's own icon (gMonIconTable), a story's POKeMON's
+ *  (`mon`: MEW, DEOXYS, BELDUM...), or for a story of items only the ball it always had. */
+export function markIcon(e: { species: number; mon?: number }): number | null {
+  return e.species > 0 ? e.species : e.mon && e.mon > 0 ? e.mon : null;
+}
+
+/** The events whose mark is a POKeMON still on the map: a legendary or a story's POKeMON,
+ *  not caught or taken (the minimap draws these). */
+export function liveMarks<E extends { key: number; species: number; mon?: number }>(events: readonly E[], spills: { has(key: number): boolean }, picked: { has(key: number): boolean }): E[] {
+  return events.filter((e) => markIcon(e) !== null && spills.has(e.key) && !picked.has(e.key));
 }
 
 /** The events whose legendary is on the map now: dropped, not caught, not gone with the

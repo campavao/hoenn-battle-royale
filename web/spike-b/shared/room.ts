@@ -392,6 +392,10 @@ export interface EventMark {
   n: number; key: number; map: string; x: number; y: number;
   /** Its legendary, or 0 for a story with none (a rare find). */
   species: number; trader?: Trader;
+  /** A story's POKeMON that is no event legendary (DEOXYS, MEW, HO-OH, LUGIA, BELDUM, the
+   *  fossils): its mark on the MAP, as a legendary's is (Cam, 11-22: "Map still shows Royale
+   *  ball instead of legendary sprite"). */
+  mon?: number;
   /** A story event's id (story.ts) and the place the ticker names. */
   story?: string; place?: string;
   /** A REGI chamber's story: the phase it dropped on, and whether its wall is open. */
@@ -1646,7 +1650,7 @@ export class Room {
     const legend = species.some((sp) => LEGENDS.flat().includes(sp));
     // A legendary a gate's boss holds is his to hand over, not a battle of its own.
     if (legend) { const b = this.spills.get(eventPiece(n, 0)); if (b && !b.person) b.legend = true; }
-    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: legend ? species[0] : 0, story: story.id, place: story.name, ...(trader ? { trader } : {}), ...(story.door ? { phase: ring.phase, opened: false } : {}) });
+    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: legend ? species[0] : 0, ...(!legend && species[0] ? { mon: species[0] } : {}), story: story.id, place: story.name, ...(trader ? { trader } : {}), ...(story.door ? { phase: ring.phase, opened: false } : {}) });
   }
 
   /** Out of a walk-up whose battle never started: walking again after the grace. */

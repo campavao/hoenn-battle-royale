@@ -768,6 +768,18 @@ describe('item balls', () => {
     expect(room.stepFor(a)(at, 2)?.to).toEqual({ map: 'MAP_DESERT_RUINS', x: 8, y: 11 });
   });
 
+  it("a story's POKeMON that is no event legendary is its MAP mark; a legendary's story keeps its species (Cam, 11-22)", () => {
+    const tell = (id: string) => {
+      const room = makeRoom(MAPS, PATCHES, 4242);
+      (room as unknown as { tellStory(n: number, ring: unknown, s: unknown, rng: () => number): void }).tellStory(0, { ...room.ring(), r: Infinity, phase: 2 }, STORIES.find((s) => s.id === id), () => 0.5);
+      return room.events[0];
+    };
+    expect(tell('stevens-house')).toMatchObject({ species: 0, mon: 398 }); // BELDUM
+    const regi = tell('desert-ruins');
+    expect(regi.species).toBe(401); // REGIROCK
+    expect(regi.mon).toBeUndefined();
+  });
+
   it("a gate's boss guards his story's pieces, and A at him is his own fight", () => {
     const room = makeRoom(MAPS, PATCHES, 4242);
     const r = room as unknown as { tellStory(n: number, ring: unknown, s: unknown, rng: () => number): void };

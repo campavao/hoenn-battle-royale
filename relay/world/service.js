@@ -13739,7 +13739,7 @@ var Room = class {
       const b2 = this.spills.get(eventPiece(n, 0));
       if (b2 && !b2.person) b2.legend = true;
     }
-    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: legend ? species[0] : 0, story: story.id, place: story.name, ...trader ? { trader } : {}, ...story.door ? { phase: ring.phase, opened: false } : {} });
+    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: legend ? species[0] : 0, ...!legend && species[0] ? { mon: species[0] } : {}, story: story.id, place: story.name, ...trader ? { trader } : {}, ...story.door ? { phase: ring.phase, opened: false } : {} });
   }
   /** Out of a walk-up whose battle never started: walking again after the grace. */
   unmeet(a) {
@@ -16601,4 +16601,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "05f2d27d7901";
+export const WORLD_HASH = "7344b0a5372f";

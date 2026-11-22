@@ -76,7 +76,7 @@ import { AskBox } from './askbox';
 import { ANIM_COUNTER_MAX } from '../src/tile-anims';
 import { JankMeter } from './jank';
 import { RingMap } from './ringmap';
-import { farBadge, farOrder, headRows, liveLegends, trimmed } from './marks';
+import { farBadge, farOrder, headRows, liveLegends, liveMarks, markIcon, trimmed } from './marks';
 import { SeamGlide, seamOff } from './seamglide';
 import { Watch, watchable } from './watch';
 import { BattleView } from './battleview';
@@ -329,9 +329,9 @@ function miniFrame(a: Actor | undefined): string {
   const ring = link.room.ring();
   const at = ringMap.pixelOf(a.m.spot);
   // The legendaries on the map now, at their marks on the MAP's picture (ringmap.ts plots).
-  const live = new Set(liveLegends(link.room.events, link.room.spills, link.room.picked).map((e) => e.species));
-  const legends = live.size ? ringMap.plots(null).events.filter((e) => !e.taken && live.has(e.species)) : [];
-  const key = `${at.x}|${at.y}|${a.skin}|${ring.last}|${ring.r.toFixed(1)}|${ring.cx.toFixed(0)}|${ring.cy.toFixed(0)}|${legends.map((e) => `${e.species}@${e.x},${e.y}`).join(';')}`;
+  const live = new Set(liveMarks(link.room.events, link.room.spills, link.room.picked).map((e) => markIcon(e)));
+  const legends = live.size ? ringMap.plots(null).events.filter((e) => !e.taken && live.has(markIcon(e))) : [];
+  const key = `${at.x}|${at.y}|${a.skin}|${ring.last}|${ring.r.toFixed(1)}|${ring.cx.toFixed(0)}|${ring.cy.toFixed(0)}|${legends.map((e) => `${markIcon(e)}@${e.x},${e.y}`).join(';')}`;
   if (key === miniKey) return key;
   miniKey = key;
   const n = MINI_MAP;
@@ -353,7 +353,7 @@ function miniFrame(a: Actor | undefined): string {
   c.imageSmoothingEnabled = false;
   // A legendary in view stands as its own icon, under the trainer (Cam, 11-21: it was the ball).
   for (const e of legends) {
-    const icon = monIconOf(e.species);
+    const icon = monIconOf(markIcon(e) ?? 0);
     if (!icon) continue;
     const t = trimmed(icon);
     c.drawImage(t, Math.round(e.x - sx - t.width / 2), Math.round(e.y - sy - t.height / 2));
