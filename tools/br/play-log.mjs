@@ -534,6 +534,35 @@ function modeOf(sent, door) {
   return door === "daily" ? "daily" : "host";
 }
 
+/** Where a read of deployment `d` starts, or null to skip it. A dead process is read once in
+ *  full, and the live one from just before the last thing seen. A process that was LIVE when it
+ *  was last read and has died since is read once more, from just before that read: its last
+ *  stretch (up to the redeploy) is otherwise never read. 11-22: Cam's PvP win at ~15:30Z sat in
+ *  the old relay's tail when a release at 15:40Z replaced it, and the board never had it. */
+export function readFrom(d, { live, swept, lastT, cutoff }) {
+  const isLive = !!live && d.id === live.id;
+  // the live process is read however long it has been up
+  const was = swept[d.id];
+  // read while live (`live`; a read before that field was kept says SUCCESS, the live status)
+  const wasLive = !!was && (was.live ?? was.status === "SUCCESS");
+  if (new Date(d.createdAt) < cutoff && !isLive && !wasLive) return null;
+  let start = new Date(d.createdAt);
+  if (isLive) {
+    if (lastT && was) {
+      const from = new Date(new Date(lastT).getTime() - OVERLAP_MS);
+      if (from > start) start = from;
+    }
+    return start;
+  }
+  if (!was) return start;
+  // read while it was live: once more now that it is dead, from just before that read
+  if (wasLive) {
+    const from = new Date(new Date(was.at).getTime() - OVERLAP_MS);
+    return from > start ? from : start;
+  }
+  return null;
+}
+
 export function derive(events) {
   const sorted = events.slice().sort((a, b) => a.t < b.t ? -1 : a.t > b.t ? 1 : 0);
   // The suite's rooms (TEST_NAMES): a room is the suite's from the moment an E2E opens
@@ -775,16 +804,8 @@ async function main() {
 
   for (const d of deps) {
     const isLive = live && d.id === live.id;
-    // the live process is read however long it has been up
-    if (new Date(d.createdAt) < cutoff && !isLive) continue;
-    // a dead process is read once, in full; the live one from just before the last
-    // thing seen
-    if (!isLive && store.swept[d.id]) continue;
-    let start = new Date(d.createdAt);
-    if (isLive && lastT && store.swept[d.id]) {
-      const from = new Date(new Date(lastT).getTime() - OVERLAP_MS);
-      if (from > start) start = from;
-    }
+    const start = readFrom(d, { live, swept: store.swept, lastT, cutoff });
+    if (!start) continue;
     const got = await lines(d.id, start, now);
     let fresh = 0;
     for (const l of got) {
@@ -803,7 +824,7 @@ async function main() {
       fresh += 1;
     }
     added += fresh;
-    store.swept[d.id] = { at: now.toISOString(), status: d.status };
+    store.swept[d.id] = { at: now.toISOString(), status: d.status, ...(isLive ? { live: true } : {}) };
     console.log(`${d.id.slice(0, 8)} ${d.status.padEnd(7)} ${got.length} lines, ${fresh} new`);
   }
 

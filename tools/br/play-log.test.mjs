@@ -7,7 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseLine, parseHeartbeat, derive, leaderboard, RATING_START } from "./play-log.mjs";
+import { parseLine, parseHeartbeat, derive, leaderboard, readFrom, RATING_START } from "./play-log.mjs";
 
 const LINES = [
   // the live relay, 2026-09-18: a quick play that found nobody and hosted its own
@@ -525,4 +525,23 @@ test("the way in (seen.ts): each step a line, kept newest first, anything else n
   assert.deepEqual(evs[2], { t: "2026-11-22T10:01:00.000Z", kind: "seen", step: "bad-game" });
   const out = derive(evs.filter(Boolean));
   assert.deepEqual(out.seen.map(s => s.step), ["match", "rom", "bad-game", "ask", "landing"]);
+});
+
+test("a relay read while live is read once more after it dies: its tail up to the redeploy (11-22: Cam's PvP win was in it)", () => {
+  const cutoff = new Date("2026-10-08T00:00:00Z");
+  const old = { id: "40ef43db-old", status: "REMOVED", createdAt: "2026-11-22T00:30:00Z" };
+  const fresh = { id: "9a1b2c3d-new", status: "SUCCESS", createdAt: "2026-11-22T15:40:00Z" };
+  const swept = { [old.id]: { at: "2026-11-22T14:15:42Z", status: "SUCCESS" } };
+  const lastT = "2026-11-22T14:13:59Z";
+  // The old one, last read while it was live at 14:15: read again from two hours before that.
+  assert.equal(readFrom(old, { live: fresh, swept, lastT, cutoff })?.toISOString(), "2026-11-22T12:15:42.000Z");
+  // The new live one, never read: from its start.
+  assert.equal(readFrom(fresh, { live: fresh, swept, lastT, cutoff })?.toISOString(), "2026-11-22T15:40:00.000Z");
+  // Read since it died (no `live`): not again.
+  assert.equal(readFrom(old, { live: fresh, swept: { [old.id]: { at: "2026-11-22T16:00:00Z", status: "REMOVED" } }, lastT, cutoff }), null);
+  // A dead one never read: in full; one older than the sweep: skipped.
+  assert.equal(readFrom({ ...old, id: "x" }, { live: fresh, swept: {}, lastT, cutoff })?.toISOString(), "2026-11-22T00:30:00.000Z");
+  assert.equal(readFrom({ ...old, id: "y", createdAt: "2026-09-01T00:00:00Z" }, { live: fresh, swept: {}, lastT, cutoff }), null);
+  // The live one already read: from two hours before the newest thing seen.
+  assert.equal(readFrom(fresh, { live: fresh, swept: { [fresh.id]: { at: "2026-11-22T16:00:00Z", status: "SUCCESS", live: true } }, lastT: "2026-11-22T18:30:00Z", cutoff })?.toISOString(), "2026-11-22T16:30:00.000Z");
 });
