@@ -51,6 +51,15 @@ export interface WorldMap {
    *  horizontal rail. All class 1 in `grid`, walls to anybody who walks; `elev` keeps their
    *  real height. Only sim.ts's rider goes on one. */
   acro?: [number, number][];
+  /** The MACH BIKE's floors (tools/br/export-bike-floors.py). `cracks` (y * w + x): cracked
+   *  floor, which drops anybody slower than the MACH BIKE's top speed onto the same cell of
+   *  `hole`, the map below (sim.ts). `slopes`: muddy slope, which slides anybody but that
+   *  rider heading north back south, so to a walker it is one-way, downhill. `bike`: ridden
+   *  here though it is not outdoors (Emerald's allow_cycling, on the maps these matter on). */
+  cracks?: number[];
+  hole?: string;
+  slopes?: number[];
+  bike?: boolean;
 }
 
 export interface Warp {
@@ -234,6 +243,7 @@ export class World {
   private readonly maps = new Map<string, WorldMap>();
   private readonly grids = new Map<string, Uint8Array>();
   private readonly acros = new Map<string, Map<number, number>>();
+  private readonly crackCells = new Map<string, Set<number>>();
   private readonly warps = new Map<string, Warp>();
 
   // ---- the cell graph (POK-330 #49) ----------------------------------------------
@@ -270,6 +280,8 @@ export class World {
   private readonly warpTo: Int32Array;
   /** Per cell: 1 on a waterfall (WorldMap.falls). */
   private readonly falls: Uint8Array;
+  /** Per cell: 1 on a muddy slope (WorldMap.slopes). */
+  private readonly slopes: Uint8Array;
   /** Per map number and direction (m * 4 + d): the seams off that edge, in world.json's
    *  order, with the far map by number. A seam to a map the world lacks is left out,
    *  which is what `landAcross` does with it. */
@@ -297,10 +309,12 @@ export class World {
     this.cellMap = new Uint16Array(total);
     this.warpTo = new Int32Array(total).fill(NO_WARP);
     this.falls = new Uint8Array(total);
+    this.slopes = new Uint8Array(total);
     maps.forEach((m, n) => {
       const base = this.bases[n];
       const cells = m.w * m.h;
       for (const i of m.falls ?? []) if (i < cells) this.falls[base + i] = 1;
+      for (const i of m.slopes ?? []) if (i < cells) this.slopes[base + i] = 1;
       this.classes.set(decodeGrid(m.grid, cells), base);
       this.elev.set(decodeGrid(m.elev ?? '', cells), base);
       this.grids.set(m.id, this.classes.subarray(base, base + cells));
@@ -448,10 +462,13 @@ export class World {
     const ny = y + DY[d];
     const sideways = d >= 2;
     if (sideways && this.falls[cell]) return -1;
+    // A muddy slope: off one only downhill, onto one never uphill (`step`'s `upSlope`).
+    if (this.slopes[cell] && d !== 1) return -1;
     if (nx >= 0 && ny >= 0 && nx < w && ny < h) {
       const next = base + ny * w + nx;
       const cls = this.classes[next];
       if (sideways && this.falls[next]) return -1;
+      if (d === 0 && this.slopes[next]) return -1;
       if (LEDGE_DIRN[cls] === d) {
         const jx = nx + DX[d];
         const jy = ny + DY[d];
@@ -573,6 +590,22 @@ export class World {
     return kinds.get(y * m.w + x) ?? 0;
   }
 
+  /** A muddy slope's cell (WorldMap.slopes). */
+  slopeAt(id: string, x: number, y: number): boolean {
+    const k = this.key({ map: id, x, y });
+    return k >= 0 && this.slopes[this.cellOf(k)] === 1;
+  }
+
+  /** Where a cracked floor here drops you (WorldMap.cracks): the same cell of the map
+   *  below, or undefined for no crack. */
+  crackAt(id: string, x: number, y: number): Spot | undefined {
+    const m = this.maps.get(id);
+    if (!m?.cracks || !m.hole || x < 0 || y < 0 || x >= m.w || y >= m.h) return undefined;
+    let cells = this.crackCells.get(id);
+    if (!cells) this.crackCells.set(id, cells = new Set(m.cracks));
+    return cells.has(y * m.w + x) ? { map: m.hole, x, y } : undefined;
+  }
+
   /** Where the ACRO BIKE's step off `spot` lands, on its own map, whatever the cell's class:
    *  sim.ts has asked whether it may. Only the heights are left to say no. */
   acroStep(spot: Spot, dir: SeamDir): Spot | null {
@@ -622,8 +655,10 @@ export class World {
 
   /** Where one step in `dir` from `spot` lands -- the next cell, the map across a
    *  seam, or null when it is a wall, the void, a ledge facing the wrong way, or a cliff
-   *  face: a cell at another height (POK-331 #2). */
-  step(spot: Spot, dir: SeamDir, surf = false, cut: Field = false): Spot | null {
+   *  face: a cell at another height (POK-331 #2). A muddy slope is downhill only, off it
+   *  and onto it, to anybody who walks (ForcedMovement_MuddySlope slides them back south):
+   *  `upSlope` is sim.ts asking for the MACH BIKE, which settles the slope itself. */
+  step(spot: Spot, dir: SeamDir, surf = false, cut: Field = false, upSlope = false): Spot | null {
     const m = this.maps.get(spot.map);
     if (!m) return null;
     const move = STEP_OF[dir];
@@ -632,10 +667,12 @@ export class World {
     const from = here < 0 ? H_TRANSITION : this.carried(here);
     const sideways = move.dx !== 0;
     if (sideways && here >= 0 && this.falls[this.cellOf(here)]) return null;
+    if (!upSlope && dir !== 'south' && here >= 0 && this.slopes[this.cellOf(here)]) return null;
     const nx = spot.x + move.dx;
     const ny = spot.y + move.dy;
     if (nx >= 0 && ny >= 0 && nx < m.w && ny < m.h) {
       if (sideways && this.falls[this.cellOf(this.key({ map: spot.map, x: nx, y: ny }))]) return null;
+      if (!upSlope && dir === 'north' && this.slopeAt(spot.map, nx, ny)) return null;
       const cls = this.cell(spot.map, nx, ny);
       if (cls >= LEDGE_MIN && cls <= LEDGE_MAX && LEDGE_DIR[cls] === dir) {
         // A ledge taken the way it faces: the jump lands two cells on.

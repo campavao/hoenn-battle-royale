@@ -2574,13 +2574,27 @@ export class Room {
       if (this.leaderStanding(t.map, t.x, t.y)) return null;
       if (this.spentAt(t.map, t.x, t.y)) return null;
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return null;
-      return r;
+      return a.bot ? r : this.cracked(a, from, dir, r);
     };
     fn.cycling = !a.bot && !this.ring().safari ? this.base.cycling : undefined;
     fn.acroCycling = a.bot ? undefined : this.base.acroCycling;
     fn.acroAt = this.base.acroAt;
+    fn.slopeAt = this.base.slopeAt;
     fn.likeAcro = a.bot ? false : a.likeAcro;
     return fn;
+  }
+
+  /** A trainer's step onto a cracked floor (WorldMap.cracks): onto the floor itself, with the
+   *  cell below it that sim.ts drops them to unless the MACH BIKE is at speed. SKY PILLAR 4F's
+   *  are the hole warps the bots, who never ride, fall through; a trainer comes onto them as
+   *  the rest. Not while somebody stands where the fall lands, as at a door's landing. */
+  private cracked(a: Actor, from: Spot, dir: number, r: NonNullable<ReturnType<StepFn>>): ReturnType<StepFn> {
+    const x = from.x + (dir === 3 ? -1 : dir === 4 ? 1 : 0), y = from.y + (dir === 1 ? 1 : dir === 2 ? -1 : 0);
+    const below = r.hop ? undefined : this.world.crackAt(from.map, x, y);
+    if (!below) return r;
+    const on = (s: Spot) => this.actors.some((o) => o.id !== a.id && o.m.spot.map === s.map && o.m.spot.x === s.x && o.m.spot.y === s.y);
+    const to = { map: from.map, x, y };
+    return on(to) || on(below) || !this.maps.has(below.map) ? null : { to, hop: false, crack: below };
   }
 
   /** A short fingerprint of the room: two machines that disagree find out within a second. */
@@ -2595,6 +2609,8 @@ export class Room {
       mix((m.acro ? 1 : 0) | (m.acroB ? 2 : 0) | (a.likeAcro ? 4 : 0) | (m.acroState << 3) | (m.acroTurn << 6) | (m.keyDir << 9) | (m.keyBtn << 12)); mix(m.dirT | (m.btnT << 8));
       mix(m.px + 1024); mix(m.py + 1024); mix(m.lift + 1024);
       mix(m.action ? m.action.t + 64 * m.action.len + 4096 * m.action.dir : 0xffff);
+      if (m.fall) { str(m.fall.map); mix(m.fall.x); mix(m.fall.y); }
+      if (m.holes) { str(m.holes.map); for (const c of m.holes.cells) mix(c); }
       mix((a.battling ? 1 : 0) | (a.arriving ? 4 : 0) | ((a.field ?? 0) << 3)); mix(a.held ?? 0); mix(a.foe); mix(a.calm); mix(a.shun); mix(a.shunUntil); mix(a.keys); mix(a.last); mix(a.judge ?? 0); mix(a.since ?? 0); mix(a.bleedAt ?? 0); for (const w of a.wear ?? []) mix(Math.round(w * 1000)); str(a.dealt ?? ''); mix(a.boss ?? 0); mix(a.away ? 1 : 0); mix(a.pickBy ?? 0); mix(a.cruise ? (a.cruise.to === 'lilycove' ? 8 : 16) + LEGS.indexOf(a.cruise.leg) : 0); mix(a.cruise?.steps ?? 0); mix(a.loot?.money ?? 0); for (const sp of a.caught ?? []) mix(sp); mix(a.legendKey ?? 0); for (const st of a.loot?.items ?? []) { mix(st.id); mix(st.n); }
       if (a.meet) { mix(a.meet.foe); mix(a.meet.since); mix((a.meet.walk ? 1 : 0) | (a.meet.duel ? 2 : 0) | (a.meet.bots ? 4 : 0)); }
     }

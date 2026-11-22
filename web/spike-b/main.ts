@@ -54,7 +54,7 @@ import { OUT_BATCH_MS, event, felled, opening, outs, won } from '../src/match/ti
 import { MessageBox } from './msgbox';
 import { Fishing, fishPose, rodOf, type Rod } from './fish';
 import { Ticks } from './ticks';
-import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_CONTEST_CURTAIN_FALL, SE_CONTEST_CURTAIN_RISE, SE_DOOR, SE_EXIT, SE_FAILURE, SE_BIKE_HOP, SE_FIELD_POISON, SE_LEDGE, SE_M_FLY, SE_SELECT, SE_SHOP, SE_USE_ITEM, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
+import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_CONTEST_CURTAIN_FALL, SE_CONTEST_CURTAIN_RISE, SE_DOOR, SE_EXIT, SE_FAILURE, SE_FALL, SE_BIKE_HOP, SE_FIELD_POISON, SE_LEDGE, SE_M_FLY, SE_SELECT, SE_SHOP, SE_USE_ITEM, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { devRomParam, importRom } from './import';
 import { DEFAULT_RELAY_URL, seen } from './seen';
@@ -3564,7 +3564,7 @@ function soundFrame(): void {
   rom?.music(cue.next(muted || !matchOn ? null : whereFollowed()));
   // The followed trainer's steps, as field_player_avatar.c and field_screen_effect.c sound
   // them: a wall's thud at each bump, a ledge's hop, a door (SE_DOOR, from outside) or a
-  // mat or stairs (SE_EXIT, DoWarp) at each warp.
+  // mat or stairs (SE_EXIT, DoWarp) at each warp, and a cracked floor's SE_FALL.
   const a = follow ? link.room.actor(follow) : undefined;
   const act = a?.m.action;
   // Its one line, the first time on it: nothing on the bike says what B does now.
@@ -3575,7 +3575,7 @@ function soundFrame(): void {
   if (act && act !== heardAction) {
     if (act.kind === 'bump') rom?.sound(SE_WALL_HIT);
     else if (act.kind === 'hop') rom?.sound(act.arc === undefined ? SE_LEDGE : SE_BIKE_HOP);
-    else if (act.kind === 'warp') rom?.sound(placed.get(a!.m.spot.map)?.m.outdoor ? SE_DOOR : SE_EXIT);
+    else if (act.kind === 'warp') rom?.sound(act.fall ? SE_FALL : placed.get(a!.m.spot.map)?.m.outdoor ? SE_DOOR : SE_EXIT);
   }
   heardAction = act;
 }
