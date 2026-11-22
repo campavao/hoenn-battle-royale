@@ -13739,7 +13739,7 @@ var Room = class {
       const b2 = this.spills.get(eventPiece(n, 0));
       if (b2 && !b2.person) b2.legend = true;
     }
-    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: legend ? species[0] : 0, ...!legend && species[0] ? { mon: species[0] } : {}, story: story.id, place: story.name, ...trader ? { trader } : {}, ...story.door ? { phase: ring.phase, opened: false } : {} });
+    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: legend ? species[0] : 0, ...!legend && species[0] ? { mon: species[0] } : {}, story: story.id, place: story.name, ...trader ? { trader } : {}, ...story.door ? { phase: ring.phase, opened: true } : {} });
   }
   /** Out of a walk-up whose battle never started: walking again after the grace. */
   unmeet(a) {
@@ -14617,7 +14617,6 @@ var Room = class {
       if (!r || !this.maps.has(r.to.map)) return null;
       if (a.bot && !onWay && this.places.has(from.map) && !this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) return null;
       const t7 = r.to;
-      if (r.warp && DOOR_MAPS.has(from.map) && from.y === DOOR_Y + 1 && t7.y < DOOR_Y && !this.events.some((e) => e.map === from.map && e.opened)) return null;
       if (this.spillAt(t7.map, t7.x, t7.y)) return null;
       if (this.groundAt(t7.map, t7.x, t7.y) || clerkAt(t7.map, t7.x, t7.y) || this.traderAt(t7.map, t7.x, t7.y) || ferryAt(t7.map, t7.x, t7.y)) return null;
       if (from.map.startsWith(SAFARI) !== t7.map.startsWith(SAFARI) && this.ring().safari) return null;
@@ -16601,4 +16600,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "7344b0a5372f";
+export const WORLD_HASH = "9b896eeb0017";

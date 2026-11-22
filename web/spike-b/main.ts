@@ -155,8 +155,6 @@ interface Placed {
   anims?: MapAnim[];
   borderTint?: string;
   mips?: HTMLCanvasElement[]; // 1/4, 1/8, 1/16, each averaged from the one before
-  /** Painted with its REGI wall open (br_story.c's Open). */
-  open?: boolean;
   /** The frame its full-size ground was last drawn on: unpaintFar lets the oldest go. */
   usedAt?: number;
   classes: Uint8Array;
@@ -373,8 +371,6 @@ function miniFrame(a: Actor | undefined): string {
 
 /** METATILE_Cave_SealedChamberEntrance_* (metatile_labels.h), where Open lays them. */
 const SEALED_CHAMBER: [number, number, number][] = [[7, 19, 0x22a], [8, 19, 0x22b], [9, 19, 0x22c], [7, 20, 0x232], [8, 20, 0x233], [9, 20, 0x234]];
-/** METATILE_Cave_EntranceCover over SealedChamberBraille_Mid: the wall before it opens. */
-const HIDDEN_CHAMBER: [number, number, number][] = [[7, 19, 0x229], [8, 19, 0x229], [9, 19, 0x229], [7, 20, 0x235], [8, 20, 0x235], [9, 20, 0x235]];
 /** The beams across MAUVILLE's gym that shut Wattson's room, off (METATILE_MauvilleGym_*BeamH{3,4}_On
  *  to _Off, as MauvilleGymDeactivatePuzzle lays them): the grid has them open, so the picture does. */
 const MAUVILLE_BEAMS_OFF: Record<number, number> = {
@@ -382,24 +378,15 @@ const MAUVILLE_BEAMS_OFF: Record<number, number> = {
   0x240: 0x242, 0x241: 0x243, 0x248: 0x21a, 0x249: 0x21a, 0x250: 0x251,
 };
 const DOOR_MAPS = new Set(STORIES.filter((s) => s.door).map((s) => s.map));
-/** A wall opened since its map was painted: painted again. */
-function doorsFrame(): void {
-  for (const e of link.room.events) {
-    const p = e.opened ? placed.get(e.map) : undefined;
-    if (p && !p.open) { p.open = true; p.ground = p.cover = p.mips = undefined; }
-  }
-  // A new round's walls are shut again.
-  for (const p of placed.values()) if (p.open && !link.room.events.some((e) => e.opened && e.map === p.m.id)) { p.open = false; p.ground = p.cover = p.mips = undefined; }
-}
 let ringMap: RingMap | null = null;
 /** A map's pictures, cut from the ROM the first time it is seen (~20 ms a map); the rest
  *  are cut in the background after boot so a zoom-out never waits on them. */
 function paint(p: Placed): boolean {
   if (p.ground) return true;
   if (!art) return false;
-  // A REGI wall: shut as the map's OnLoad hides it (HideRegiEntrance), or open, the
-  // sealed chamber's entrance on its six cells (br_story.c's Open).
-  const wall = !DOOR_MAPS.has(p.m.id) ? undefined : p.open ? SEALED_CHAMBER : HIDDEN_CHAMBER;
+  // A REGI chamber's entrance, open on its six cells as br_story.c's Open leaves it: the
+  // puzzle as good as solved (Cam, 11-22), never the wall the map's OnLoad hides it behind.
+  const wall = DOOR_MAPS.has(p.m.id) ? SEALED_CHAMBER : undefined;
   const over = wall ? new Map(wall.map(([x, y, block]) => [y * p.m.w + x, block])) : new Map<number, number>();
   // MAUVILLE's gym with its puzzle off, as it is walked (tools/br/open-gym-puzzles.py).
   if (p.m.id === 'MAP_MAUVILLE_CITY_GYM') {
@@ -5286,7 +5273,6 @@ function loop(now: number): void {
     seeFrame();
     soundFrame();
     stepsFrame();
-    doorsFrame();
     if (frame % 60 === 0) unpaintFar();
     fogFrame();
     foeFrame();
