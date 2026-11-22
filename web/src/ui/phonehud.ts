@@ -343,16 +343,12 @@ export function movesHeight(n: number): number {
  *  face, dark and see-through behind one that does not, whose symbol is faded too. */
 export const MOVE_READY_RING = '#3870e0';
 
-/** A field move's symbol on a white plate with a blue edge, BADGE square, at (x, y). */
-const BADGE = ICON_SIZE + 4;
-function drawBadge(c: EmeraldCanvas, name: string, x: number, y: number): void {
-  c.fillRect({ x: x + 1, y, w: BADGE - 2, h: BADGE }, MOVE_READY_RING, 1);
-  c.fillRect({ x, y: y + 1, w: BADGE, h: BADGE - 2 }, MOVE_READY_RING, 1);
-  c.fillRect({ x: x + 1, y: y + 1, w: BADGE - 2, h: BADGE - 2 }, '#f8f8f8', 1);
+/** A field move's symbol, ICON_SIZE square, its top left at (x, y). */
+function drawMoveIcon(c: EmeraldCanvas, name: string, x: number, y: number): void {
   (FIELD_ICONS[name] ?? []).forEach((row, py) => {
     for (let px = 0; px < row.length; px++) {
       const color = ICON_COLORS[row[px]];
-      if (color) c.fillRect({ x: x + 2 + px, y: y + 2 + py, w: 1, h: 1 }, color, 1);
+      if (color) c.fillRect({ x: x + px, y: y + py, w: 1, h: 1 }, color, 1);
     }
   });
 }
@@ -590,7 +586,7 @@ function miniHeight(lines: number): number {
   return MINI_MAP + 16 + lines * LINE + 2;
 }
 
-/** The minimap wears FLY's wing in its corner while FLY would work (Cam, 11-22: "a small flying
+/** The minimap wears FLY's wing beside its countdown while FLY would work (Cam, 11-22: "a small flying
  *  icon to the minimap HUD when you are able to fly"): a tap on the minimap is the MAP, where
  *  FLY is. */
 export function miniFlies(v: Pick<HudView, 'moves'>): boolean {
@@ -717,12 +713,13 @@ export class PhoneHud {
         const rows = miniLines(v);
         c.drawFrame({ x: 0, y: 0, w: MINI_W, h: miniHeight(rows.length) });
         mini.draw(c, 8, 8, MINI_MAP);
-        if (miniFlies(v)) drawBadge(c, 'FLY', 8 + 1, 8 + MINI_MAP - BADGE - 1);
         rows.forEach((l, i) => {
           const y = 8 + MINI_MAP + 1 + i * LINE;
           if (l.left) c.drawText(l.left.text, 8, y, l.left.color);
           if (l.right) c.drawText(l.right.text, MINI_W - 8 - measure(l.right.text), y, l.right.color);
         });
+        // FLY's wing beside the countdown (Cam, 11-22: "next to the timer countdown not on the map").
+        if (miniFlies(v)) drawMoveIcon(c, 'FLY', MINI_W - 8 - measure(rows[0].right?.text ?? '') - 2 - ICON_SIZE, 8 + MINI_MAP);
         return;
       }
       const lines = fogLines(v);
