@@ -1650,7 +1650,7 @@ export class Room {
     const legend = species.some((sp) => LEGENDS.flat().includes(sp));
     // A legendary a gate's boss holds is his to hand over, not a battle of its own.
     if (legend) { const b = this.spills.get(eventPiece(n, 0)); if (b && !b.person) b.legend = true; }
-    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: legend ? species[0] : 0, ...(!legend && species[0] ? { mon: species[0] } : {}), story: story.id, place: story.name, ...(trader ? { trader } : {}), ...(story.door ? { phase: ring.phase, opened: false } : {}) });
+    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: legend ? species[0] : 0, ...(!legend && species[0] ? { mon: species[0] } : {}), story: story.id, place: story.name, ...(trader ? { trader } : {}), ...(story.door ? { phase: ring.phase, opened: true } : {}) });
   }
 
   /** Out of a walk-up whose battle never started: walking again after the grace. */
@@ -2565,8 +2565,8 @@ export class Room {
       // in the wood is not "on its way", and every step of it would be shut.
       if (a.bot && !onWay && this.places.has(from.map) && !this.places.has(r.to.map) && !r.to.map.startsWith(SAFARI)) return null;
       const t = r.to;
-      // A REGI chamber's wall: shut until its story opened it (and in a match without one).
-      if (r.warp && DOOR_MAPS.has(from.map) && from.y === DOOR_Y + 1 && t.y < DOOR_Y && !this.events.some((e) => e.map === from.map && e.opened)) return null;
+      // A REGI chamber's way in is open, its puzzle as good as solved (Cam, 11-22: "Just show
+      // open door here as if puzzle was already beaten"), story or none.
       if (this.spillAt(t.map, t.x, t.y)) return null;
       if (this.groundAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y) || ferryAt(t.map, t.x, t.y)) return null;
       // The Zone's gate is shut until the drop, both ways.

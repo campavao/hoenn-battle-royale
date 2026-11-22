@@ -748,24 +748,29 @@ describe('item balls', () => {
     expect(steven.trader).toMatchObject({ x: 5, y: 2 });
   });
 
-  it("a REGI chamber's wall is shut until its story opens it: DESERT RUINS' with A", () => {
+  it("a REGI chamber's way in is open, story or none, as if its puzzle were solved (Cam, 11-22)", () => {
     const room = makeRoom(MAPS, PATCHES, 4242);
     const r = room as unknown as { tellStory(n: number, ring: unknown, s: unknown, rng: () => number): void };
-    const at = { map: 'MAP_DESERT_RUINS', x: 8, y: 21 };
-    room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: at, facing: 2 });
-    room.step();
-    const a = room.actor(1000)!;
-    a.calm = 0;
-    // No story: the chamber is shut, as the match's is.
-    expect(room.stepFor(a)(at, 2)).toBeNull();
+    for (const map of ['MAP_DESERT_RUINS', 'MAP_ISLAND_CAVE', 'MAP_ANCIENT_TOMB']) {
+      const at = { map, x: 8, y: 21 };
+      room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: at, facing: 2 });
+      room.step();
+      const a = room.actor(1000)!;
+      a.calm = 0;
+      expect(room.stepFor(a)(at, 2)?.to, `${map}: in, with no story`).toEqual({ map, x: 8, y: 11 });
+      room.apply({ c: 'leave', id: 1000 });
+      room.step();
+    }
     r.tellStory(0, { ...room.ring(), r: Infinity, phase: 2 }, STORIES.find((s) => s.id === 'desert-ruins'), () => 0.5);
-    expect(room.stepFor(a)(at, 2)).toBeNull();
-    // Its REGIROCK stands inside as an event's legendary does.
+    expect(room.events[0].opened).toBe(true);
+    // Its REGIROCK stands inside as an event's legendary does, and A at the wall is nothing.
     expect(room.spillAt('MAP_DESERT_RUINS', 8, 7)?.legend).toBe(true);
     expect(room.events[0].species).toBe(401);
-    const evs = room.step(new Map([[1000, [KEY_A]]]));
-    expect(evs).toContainEqual(expect.objectContaining({ type: 'door', id: 1000, how: 'smash', opened: true }));
-    expect(room.stepFor(a)(at, 2)?.to).toEqual({ map: 'MAP_DESERT_RUINS', x: 8, y: 11 });
+    const at = { map: 'MAP_DESERT_RUINS', x: 8, y: 21 };
+    room.apply({ c: 'join', id: 1001, bot: false, name: 'B', skin: 0, spot: at, facing: 2 });
+    room.step();
+    room.actor(1001)!.calm = 0;
+    expect(room.step(new Map([[1001, [KEY_A]]])).filter((e) => e.type === 'door')).toEqual([]);
   });
 
   it("a story's POKeMON that is no event legendary is its MAP mark; a legendary's story keeps its species (Cam, 11-22)", () => {
@@ -1117,23 +1122,13 @@ describe('item balls', () => {
     expect(room.stepFor(room.actor(1000)!)({ map: 'MAP_ROUTE112_CABLE_CAR_STATION', x: 6, y: 7 }, 2)).toBeNull();
   });
 
-  it("ISLAND CAVE's wall opens by itself a phase on; ANCIENT TOMB's for the page that saw a flier", () => {
+  it("ISLAND CAVE's and ANCIENT TOMB's stories start open too: no wait, no flier", () => {
     const room = makeRoom(MAPS, PATCHES, 4242);
     const r = room as unknown as { tellStory(n: number, ring: unknown, s: unknown, rng: () => number): void };
     const ring = room.ring();
     r.tellStory(0, { ...ring, r: Infinity }, STORIES.find((s) => s.id === 'island-cave'), () => 0.5);
     r.tellStory(1, { ...ring, r: Infinity }, STORIES.find((s) => s.id === 'ancient-tomb'), () => 0.5);
-    const tomb = { map: 'MAP_ANCIENT_TOMB', x: 8, y: 21 };
-    room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: tomb, facing: 2 });
-    room.step();
-    room.actor(1000)!.calm = 0;
-    expect(room.step(new Map([[1000, [KEY_A]]]))).toContainEqual(expect.objectContaining({ type: 'door', how: 'fly' }));
-    expect(room.events[1].opened).toBe(false);
-    room.apply({ c: 'open', id: 1000, n: 1 });
-    expect(room.events[1].opened).toBe(true);
-    expect(room.events[0].opened).toBe(false);
-    while (room.ring().phase === ring.phase) room.step();
-    expect(room.events[0].opened).toBe(true);
+    expect(room.events.map((e) => e.opened)).toEqual([true, true]);
   });
 
   it('the ground has the odd LINK CABLE and POKe DOLL, as the map balls do (BrBalls_Deal)', () => {
