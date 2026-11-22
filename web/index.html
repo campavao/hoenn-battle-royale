@@ -96,7 +96,8 @@
       .hud-sign { position: absolute; left: calc(var(--s, 1.5) * 4px); top: calc(env(safe-area-inset-top) + var(--s, 1.5) * 4px); transition: opacity 300ms, visibility 300ms; }
       .hud-sign.gone { opacity: 0; visibility: hidden; }
       .hud-fog { position: absolute; right: calc(var(--s, 1.5) * 4px); top: calc(env(safe-area-inset-top) + var(--s, 1.5) * 4px); }
-      .hud-moves { position: absolute; right: calc(var(--s, 1.5) * 4px); top: calc(var(--s, 1.5) * 80px); }
+      /* Under the fog window or minimap, whose height (GBA pixels) phonehud.ts sets as --hud-box-h. */
+      .hud-moves { position: absolute; right: calc(var(--s, 1.5) * 4px); top: calc(env(safe-area-inset-top) + var(--s, 1.5) * (var(--hud-box-h, 100) * 1px + 8px)); }
       .hud-moves.gone { display: none; }
       #pdock:not([hidden]) { grid-column: 1 / -1; display: grid; grid-template-columns: auto auto auto; grid-template-rows: auto auto; justify-content: center; gap: calc(var(--s, 1.5) * 4px); padding: calc(var(--s, 1.5) * 4px) 0; pointer-events: auto; }
       #pdock.off-field > .hud-btn { visibility: hidden; }
@@ -210,7 +211,6 @@
         to { box-shadow: 0 0 calc(var(--s, 1.5) * 12px) calc(var(--s, 1.5) * 3px) var(--glow); }
       }
       @media (prefers-reduced-motion: reduce) { .hud-mini.hud-glow-legend canvas, .hud-mini.hud-glow-fog canvas { animation: none; } }
-      .hud-moves { top: calc(var(--s, 1.5) * 108px); }
       #item-tag { position: fixed; left: 0; top: 0; z-index: 2; pointer-events: none; image-rendering: pixelated; }
       #item-tag[hidden] { display: none; }
       #dial-tip { position: fixed; left: 0; top: 0; z-index: 2; pointer-events: none; image-rendering: pixelated; }

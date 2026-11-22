@@ -1,7 +1,7 @@
 // Cam, 2026-11-21: "Picking up a berry should prompt you to give to a pokemon to hold." A berry off
-// the ground asks YES or NO in Emerald's own box; YES is the party, a POKeMON picked holds it (one
-// holding something already asks to switch, party_menu.c's rule, the old one to the bag), and NO
-// keeps it in the bag as before. On a phone: the YES tapped, the mon tapped.
+// the ground opens the party (11-22: "does not need additional dialog to give item", no YES/NO
+// first); a POKeMON picked holds it (one holding something already asks to switch, party_menu.c's
+// rule, the old one to the bag), and BACK keeps it in the bag as before. On a phone: the mon tapped.
 import { expect, test, type Page } from '@playwright/test';
 import { key } from './spike';
 import { romExists, romHashParam, romPath } from './symbols';
@@ -51,20 +51,7 @@ const pickUp = (page: Page, item: number, key: number) => page.evaluate(([item, 
 const msg = (page: Page) => page.locator('#msg');
 const asked = (page: Page) => spike(page, (s) => s.askingRows) as Promise<{ rows: string[]; pick: number } | null>;
 
-/** A tap on the YES of the YES/NO: the middle of the points askbox.ts's own rowFor says are row 0. */
-async function tapYes(page: Page): Promise<void> {
-  const at = await page.evaluate(() => {
-    const box = (window as any).__spike.askBox, r = document.getElementById('askbox')!.getBoundingClientRect();
-    const hits: { x: number; y: number }[] = [];
-    for (let y = r.top; y < r.bottom; y += 2) for (let x = r.left; x < r.right; x += 2) if (box.rowFor(x, y) === 0) hits.push({ x, y });
-    if (!hits.length) return null;
-    return { x: hits.reduce((n, p) => n + p.x, 0) / hits.length, y: hits.reduce((n, p) => n + p.y, 0) / hits.length };
-  });
-  expect(at, 'a YES row on the askbox').not.toBeNull();
-  await page.touchscreen.tap(at!.x, at!.y);
-}
-
-test('a berry off the ground asks to be held: YES and a mon holds it, NO keeps it, a held one switches', async ({ browser }) => {
+test('a berry off the ground opens the party: a mon tapped holds it, BACK keeps it, a held one switches', async ({ browser }) => {
   test.setTimeout(300_000);
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const page = await ctx.newPage();
@@ -73,18 +60,13 @@ test('a berry off the ground asks to be held: YES and a mon holds it, NO keeps i
   expect(was.length).toBe(6);
   expect(was[0], 'the lead holds nothing to start').toBe(0);
 
-  // YES, by a tap, then the lead, by a tap: it holds the ORAN BERRY, and the bag has none.
+  // Straight to the party, no question first; the lead, by a tap: it holds the ORAN BERRY, and the
+  // bag has none.
   await pickUp(page, ITEM_ORAN_BERRY, 0x7f2001);
-  await expect.poll(() => asked(page), { timeout: 20_000 }).toEqual({ rows: ['y', ''], pick: 0 });
-  await expect(page.locator('#askbox')).toBeVisible();
-  await page.waitForTimeout(300);
-  await shot(page, 'phone-berry-ask');
-  await tapYes(page);
   await expect(page.locator('.bm-slot').first()).toBeVisible({ timeout: 15_000 });
-  // The tap that said YES is not also a pick: the party waits for one (its first phone run gave
-  // the lead the berry off the YES alone).
+  expect(await asked(page), 'no YES/NO before the party').toBeNull();
   await page.waitForTimeout(600);
-  expect(await spike(page, (s) => s.swapping), 'the party still asking').toBe(true);
+  expect(await spike(page, (s) => s.swapping), 'the party waits for a pick').toBe(true);
   expect((await held(page))[0]).toBe(0);
   await shot(page, 'phone-berry-party');
   await page.locator('.bm-slot').first().tap();
@@ -95,15 +77,16 @@ test('a berry off the ground asks to be held: YES and a mon holds it, NO keeps i
   await page.waitForTimeout(1200); // the line typed out
   await shot(page, 'phone-berry-given');
 
-  // NO, by the keys: in the bag, and nobody's held item changed.
+  // BACK, by the keys: in the bag, and nobody's held item changed.
   await expect(msg(page)).not.toHaveAttribute('data-text', /./, { timeout: 10_000 });
   await pickUp(page, ITEM_SITRUS_BERRY, 0x7f2002);
-  await expect.poll(() => asked(page), { timeout: 20_000 }).not.toBeNull();
+  await expect(page.locator('.bm-slot').first()).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(300);
   await page.keyboard.press('x');
   await expect(msg(page)).toHaveAttribute('data-text', /SITRUS BERRY went in the BAG/, { timeout: 20_000 });
   expect(await inBag(page, POCKET_BERRIES, ITEM_SITRUS_BERRY)).toBe(1);
   expect((await held(page))[0]).toBe(ITEM_ORAN_BERRY);
-  await shot(page, 'phone-berry-no');
+  await shot(page, 'phone-berry-back');
 
   // The second mon holds LEFTOVERS (a gift's own screen), then a SITRUS BERRY for it: the switch is
   // asked, YES, and the LEFTOVERS go in the bag.
@@ -115,8 +98,6 @@ test('a berry off the ground asks to be held: YES and a mon holds it, NO keeps i
   await expect.poll(() => spike(page, (s) => s.swapping || !!s.asking), { timeout: 10_000 }).toBe(false);
   await expect(msg(page)).not.toHaveAttribute('data-text', /./, { timeout: 10_000 });
   await pickUp(page, ITEM_SITRUS_BERRY, 0x7f2003);
-  await expect.poll(() => asked(page), { timeout: 20_000 }).not.toBeNull();
-  await page.keyboard.press('z');
   await expect(page.locator('.bm-slot').nth(1)).toBeVisible({ timeout: 15_000 });
   await page.locator('.bm-slot').nth(1).tap();
   await expect.poll(() => asked(page), { timeout: 15_000 }).toEqual({ rows: ['y', ''], pick: 0 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asksToHold, givenLine, holdQuestion, switchQuestion, switchedLine } from './holdask';
+import { asksToHold, givenLine, switchQuestion, switchedLine } from './holdask';
 import { wrapText } from '../src/ui/emerald';
 import { GIFTS } from '../src/match/gifts';
 
@@ -22,7 +22,6 @@ describe('which pickups ask to hold', () => {
     for (const id of GIFTS) expect(asksToHold(id), String(id)).toBe(false);
   });
   it("says it in party_menu.c's words", () => {
-    expect(holdQuestion('ORAN BERRY')).toBe('Give the ORAN BERRY to a POKéMON to hold?');
     expect(givenLine('MUDKIP', 'ORAN BERRY')).toBe('MUDKIP was given the ORAN BERRY to hold.');
     expect(switchedLine('ORAN BERRY', 'LEFTOVERS')).toBe('The LEFTOVERS was taken and replaced with the ORAN BERRY.');
   });
@@ -33,7 +32,6 @@ describe('which pickups ask to hold', () => {
     const lines = (t: string) => t.split('\n').flatMap((p) => wrapText(p, inside)).length;
     const mons = ['FERALIGATR', 'CHARMELEON', 'MMMMMMMMMM'];
     const items = ['BRIGHTPOWDER', 'BLACKGLASSES', 'SITRUS BERRY', 'PETAYA BERRY'];
-    for (const h of items) expect(lines(holdQuestion(h)), h).toBeLessThanOrEqual(2);
     for (const m of mons) for (const h of items) expect(lines(switchQuestion(m, h)), `${m} ${h}`).toBeLessThanOrEqual(2);
   });
 });

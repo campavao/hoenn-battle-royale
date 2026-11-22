@@ -34,6 +34,7 @@ import {
   miniGlow,
   GlowCue,
   GLOW_MS,
+  miniFlies,
   CLOCK_RED_S,
   MINI_MAP,
   MINI_W,
@@ -315,6 +316,15 @@ describe("the fog window's lead line", () => {
     const v = { left: 6, clock: 100, flash: 0, safe: 'Safe ◆', lead: 'HP 184/243' } as unknown as HudView;
     // Both numbers, with or without the word (the 72-pixel window has room for it).
     expect(miniLines(v).some((l) => l.left?.text.endsWith('184/243'))).toBe(true);
+  });
+});
+
+describe("the minimap's FLY badge (Cam, 11-22)", () => {
+  it('shows while FLY would work, not while it is only known', () => {
+    expect(miniFlies({ moves: [{ name: 'FLY', hm: 1, ready: true }] })).toBe(true);
+    expect(miniFlies({ moves: [{ name: 'FLY', hm: 1, ready: false }] }), 'indoors, say').toBe(false);
+    expect(miniFlies({ moves: [{ name: 'SURF', hm: 2, ready: true }] })).toBe(false);
+    expect(miniFlies({ moves: [] })).toBe(false);
   });
 });
 

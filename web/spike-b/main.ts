@@ -66,7 +66,7 @@ import { recordSolo, statFlushed, statMessage } from '../src/match/stats';
 import { WORLD_HASH_SHORT, battlesOn } from './net';
 import { ITEM_POKE_DOLL, groundCount, isTm, tradedInto } from './shared/items';
 import { GIFTS } from '../src/match/gifts';
-import { asksToHold, givenLine, holdQuestion, switchQuestion, switchedLine } from './holdask';
+import { asksToHold, givenLine, switchQuestion, switchedLine } from './holdask';
 import { GOLD } from '../src/match/events';
 import { FLYING, STORIES } from '../src/match/story';
 import { RomArt, type MapAnim } from './romart';
@@ -911,7 +911,8 @@ function giveNext(): void {
   }
   const { key, item, gift, hidden } = next;
   // A TM is taught and a held item given, there and then, on the ROM's own screens. A berry
-  // asks first (holdask.ts, Cam 11-21): YES is the party, NO -- or B, or a fight -- the bag.
+  // goes straight to the party to be held (holdask.ts; Cam 11-22, no YES/NO first): BACK -- or
+  // B, or a fight -- keeps it in the bag.
   const hold = asksToHold(item);
   const screen = isTm(item) || GIFTS.includes(item) || hold;
   // Somebody says so first, and it can be read before their screen comes up (Cam, 11-01:
@@ -933,10 +934,8 @@ function giveNext(): void {
     ? Promise.all([bagged, said]).then(async ([got]) => {
       if (!got?.items.some((g) => g.id === item)) return got;
       remember(true);
-      if (hold) {
-        if (await ask(holdQuestion(name(item)), [['YES', 'y'], ['NO', '']]) !== 'y') return got;
-        await tapOver();
-      }
+      // A pickup by a tap has the finger still down when the party opens under it.
+      await tapOver();
       const slot = await who();
       if (slot === null) return got;
       if (isMachine(item)) {
@@ -993,9 +992,9 @@ function giveNext(): void {
   }, (e) => console.warn('spike give failed', e)).finally(() => { giving = false; giveNext(); });
 }
 
-/** Fingers on the glass now. The askbox answers on a tap's pointerdown, so a window that opens on
- *  the answer is under the same finger when it lifts: its click picked the lead of the party the
- *  YES had just opened, with nobody choosing (the berry's first phone run, 11-21). */
+/** Fingers on the glass now. A window that opens on a tap is under the same finger when it
+ *  lifts: its click picked the lead of the party a berry's YES had just opened, with nobody
+ *  choosing (the berry's first phone run, 11-21). */
 let pointersDown = 0;
 addEventListener('pointerdown', () => { pointersDown++; }, true);
 for (const t of ['pointerup', 'pointercancel']) addEventListener(t, () => { pointersDown = Math.max(0, pointersDown - 1); }, true);
@@ -3062,6 +3061,8 @@ function wireDialHold(b: HTMLElement): void {
 /** `desk`: a computer's, as /classic/ shows it in the picture (br_hud.c): the place's
  *  sign and the fog window in Emerald's own frames in place of the plain corner, the
  *  buttons kept, and no dock (the keyboard has PARTY, MAP and START). */
+/** The phone HUD, for a spec to read what it shows (`__spike.hud`). */
+let hudRef: PhoneHud | null = null;
 function wirePhoneHud(desk = false): void {
   const top = document.getElementById('phud')!;
   const dock = document.getElementById('pdock')!;
@@ -3084,6 +3085,7 @@ function wirePhoneHud(desk = false): void {
     },
     monIcon: (species) => monIconOf(species),
   });
+  hudRef = hud;
   document.getElementById('hud-menu')!.addEventListener('click', () => openSheet());
   wireDialHold(hud.buttons.ctx);
   if (desk) hud.buttons.ctx.title = 'Hold for the key items';
@@ -3147,7 +3149,7 @@ function wirePhoneHud(desk = false): void {
 }
 
 /** gBrHmView's bits (include/br/br_hm.h): HM n+1's move at bit n. */
-const HM_CUT = 1 << 0, HM_SURF = 1 << 2, HM_STRENGTH = 1 << 3, HM_DIVE = 1 << 7;
+const HM_CUT = 1 << 0, HM_FLY = 1 << 1, HM_SURF = 1 << 2, HM_STRENGTH = 1 << 3, HM_DIVE = 1 << 7;
 
 /** The phone HUD's field moves (HBR-78) as the page knows them: the team's CUT, SURF and
  *  STRENGTH (the actor's field bits, rom.field()), each lit when the cell ahead is what
@@ -3162,13 +3164,18 @@ function aheadOf(a: Actor): Spot {
 
 function fieldChips(a: Actor): FieldMove[] {
   const bits = a.field ?? 0;
-  const can = (bits & FIELD_CUT ? HM_CUT : 0) | (bits & FIELD_SURF ? HM_SURF : 0) | (bits & FIELD_STRENGTH ? HM_STRENGTH : 0) | (bits & FIELD_DIVE ? HM_DIVE : 0);
+  // FLY as the MAP has it (lookAtMap): somebody in the team who would, and the Safari over. Lit
+  // whenever it is there: it works off the MAP, which the minimap opens (Cam, 11-22: "a small
+  // flying icon to the minimap HUD when you are able to fly").
+  const team = link.teams.get(a.id);
+  const fly = team && couldFly(team) && !link.room.ring().safari ? HM_FLY : 0;
+  const can = (bits & FIELD_CUT ? HM_CUT : 0) | fly | (bits & FIELD_SURF ? HM_SURF : 0) | (bits & FIELD_STRENGTH ? HM_STRENGTH : 0) | (bits & FIELD_DIVE ? HM_DIVE : 0);
   if (!can) return [];
   const ahead = classAt(aheadOf(a));
   const surfing = classAt(a.m.spot) === CLASS_WATER;
   // DIVE lights over a dive spot (down) and anywhere below it may come up (br_hm.c).
   const dive = diveTo(link.room.maps, link.room.world, a.m.spot, bits) ? HM_DIVE : 0;
-  const ready = (ahead === CLASS_CUT ? HM_CUT : 0) | (ahead === CLASS_WATER && !surfing ? HM_SURF : 0) | (ahead === CLASS_BOULDER ? HM_STRENGTH : 0) | dive;
+  const ready = (ahead === CLASS_CUT ? HM_CUT : 0) | fly | (ahead === CLASS_WATER && !surfing ? HM_SURF : 0) | (ahead === CLASS_BOULDER ? HM_STRENGTH : 0) | dive;
   return fieldMoves(can, ready & can);
 }
 
@@ -5581,7 +5588,7 @@ async function boot(): Promise<void> {
   }
   loading.say(matchToken() ? 'Back to your match…' : 'Getting the game ready…');
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => { console.warn('spike ROM not booted', e); loading.hide(); });
-  (window as unknown as { __spike: unknown }).__spike = { watch, frameOf, get frame() { return frame; }, canvas, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, askBox, get movesBox() { return movesBox; }, pocket: (n: number) => (rom ? readPocket(rom.emu, romTables.sym, n) : []), radial, moveName: (id: number) => moveInfo(romTables, id)?.name ?? '' };
+  (window as unknown as { __spike: unknown }).__spike = { watch, frameOf, get frame() { return frame; }, canvas, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, askBox, get movesBox() { return movesBox; }, get hud() { return hudRef; }, pocket: (n: number) => (rom ? readPocket(rom.emu, romTables.sym, n) : []), radial, moveName: (id: number) => moveInfo(romTables, id)?.name ?? '' };
 }
 
 void boot();

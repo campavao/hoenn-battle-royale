@@ -343,6 +343,16 @@ export function movesHeight(n: number): number {
  *  face, dark and see-through behind one that does not, whose symbol is faded too. */
 export const MOVE_READY_RING = '#3870e0';
 
+/** A field move's symbol, ICON_SIZE square, its top left at (x, y). */
+function drawMoveIcon(c: EmeraldCanvas, name: string, x: number, y: number): void {
+  (FIELD_ICONS[name] ?? []).forEach((row, py) => {
+    for (let px = 0; px < row.length; px++) {
+      const color = ICON_COLORS[row[px]];
+      if (color) c.fillRect({ x: x + px, y: y + py, w: 1, h: 1 }, color, 1);
+    }
+  });
+}
+
 function drawChip(c: EmeraldCanvas, name: string, ready: boolean, y: number): void {
   const n = MOVE_CHIP;
   // Ready: a white chip in a blue ring (HBR-78: the one that works is blue). Else dark.
@@ -576,6 +586,13 @@ function miniHeight(lines: number): number {
   return MINI_MAP + 16 + lines * LINE + 2;
 }
 
+/** The minimap wears FLY's wing beside its countdown while FLY would work (Cam, 11-22: "a small flying
+ *  icon to the minimap HUD when you are able to fly"): a tap on the minimap is the MAP, where
+ *  FLY is. */
+export function miniFlies(v: Pick<HudView, 'moves'>): boolean {
+  return v.moves.some((m) => m.name === 'FLY' && m.ready);
+}
+
 /** When the sign comes up: on a section it was not last showing. Forgotten when the HUD
  *  goes off the glass, so the next match brings it up even in the section the last one
  *  ended in. */
@@ -701,6 +718,8 @@ export class PhoneHud {
           if (l.left) c.drawText(l.left.text, 8, y, l.left.color);
           if (l.right) c.drawText(l.right.text, MINI_W - 8 - measure(l.right.text), y, l.right.color);
         });
+        // FLY's wing beside the countdown (Cam, 11-22: "next to the timer countdown not on the map").
+        if (miniFlies(v)) drawMoveIcon(c, 'FLY', MINI_W - 8 - measure(rows[0].right?.text ?? '') - 2 - ICON_SIZE, 8 + MINI_MAP);
         return;
       }
       const lines = fogLines(v);
@@ -831,12 +850,15 @@ export class PhoneHud {
     const lines = mini ? miniLines(v) : fogLines(v);
     const h = mini ? miniHeight(lines.length) : fogHeight(lines.length);
     if (this.fog.c.height !== h) this.fog.size(mini ? MINI_W : FOG_W, h, this.scale);
+    // The moves go under the window, however many lines tall it is now (index.html .hud-moves):
+    // a fixed top left them over a taller minimap, and over any minimap under a phone's notch.
+    this.moves.el.style.setProperty('--hud-box-h', String(h));
     if (mini) {
       const glow = this.glowCue.step(v, performance.now());
       this.fog.el.classList.toggle('hud-glow-fog', glow === 'fog');
       this.fog.el.classList.toggle('hud-glow-legend', glow === 'legend');
     }
-    this.fog.show((mini?.key() ?? '') + JSON.stringify(lines.map((l) => [l.left?.text, l.left?.color.fg, l.right?.text, l.right?.color.fg])));
+    this.fog.show((mini?.key() ?? '') + (mini && miniFlies(v) ? '|fly' : '') + JSON.stringify(lines.map((l) => [l.left?.text, l.left?.color.fg, l.right?.text, l.right?.color.fg])));
     this.moves.update(v.moves);
     // The start menu has a POKeMON row once there is a party, and MAP once the ring is
     // up (start_menu.c): before that each is grey, not a START that opens and shuts.

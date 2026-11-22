@@ -167,6 +167,26 @@ test('sideways on an iPhone 13 mini: the corner, the bike, the moves and the thu
     if (size.height === 327) await page.screenshot({ path: test.info().outputPath('sideways.png') });
     expect(clash, `${size.width}x${size.height}`).toEqual([]);
   }
+  // Upright, out on a route: the moves hang under the minimap however tall it is (Cam, 11-22:
+  // "the icons today appear over the minimap on my phone"), and FLY's wing is in its corner
+  // when FLY would work.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => { const s = (window as any).__spike, a = s.link.room.actor(s.link.me), spot = { map: 'MAP_ROUTE117', x: 30, y: 8 }; a.m = { ...a.m, spot, prev: spot, facing: 2, moveDir: 2, action: null, px: 0, py: 0, bike: false }; });
+  await page.waitForTimeout(1500);
+  const mini = (await boxOf(page, '.hud-fog'))!, moves = (await boxOf(page, '.hud-moves:not(.gone)'))!;
+  expect(moves.y, 'the moves under the minimap').toBeGreaterThanOrEqual(mini.y + mini.height);
+  if (process.env.HBR_SHOTS) await page.screenshot({ path: `${process.env.HBR_SHOTS}/upright-hud.png` });
+  // The lead learns FLY (MOVE_FLY 19): told to the room with the team, the wing comes up on the
+  // minimap and in the moves, lit, and the moves still clear it.
+  const chips = () => (window as any).__spike.hud?.view?.moves?.map((m: any) => `${m.name}${m.ready ? '+' : ''}`) ?? [];
+  // Out of the Safari (its gate holds FLY shut, as on the MAP): the opening skipped.
+  await page.evaluate(() => { (window as any).__spike.link.room.opening = 0; });
+  await page.evaluate(() => (window as any).__spike.rom.setMove(0, 0, 19, 15));
+  await expect.poll(() => page.evaluate(chips), { timeout: 15_000 }).toContain('FLY+');
+  await page.waitForTimeout(500);
+  const mini2 = (await boxOf(page, '.hud-fog'))!, moves2 = (await boxOf(page, '.hud-moves:not(.gone)'))!;
+  expect(moves2.y).toBeGreaterThanOrEqual(mini2.y + mini2.height);
+  if (process.env.HBR_SHOTS) await page.screenshot({ path: `${process.env.HBR_SHOTS}/upright-fly.png` });
   await ctx.close();
 });
 
