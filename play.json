@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-22T17:20:48.637Z",
+ "readAt": "2026-11-22T17:35:50.631Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -27,7 +27,7 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1085
     }
    ],
    "live": true,
@@ -30012,6 +30012,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-22T17:35:12.275Z",
+   "code": "D8CMM3",
+   "v": "e000b70",
+   "watched": 31,
+   "snaps": 4,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 9,
+   "checks": 1084,
+   "drifts": 0,
+   "deploy": "05ac9fb5"
+  },
   {
    "t": "2026-11-22T17:16:43.478Z",
    "code": "KS55PJ",
