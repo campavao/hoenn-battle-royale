@@ -222,7 +222,8 @@ test.describe('the page-drawn battle', () => {
   });
 
   test("a gym leader is drawn as themself, not as a skin (Cam 11-22: a watched NORMAN was BRENDAN)", async ({ browser }) => {
-    const page = await (await browser.newContext({ viewport: { width: 960, height: 640 } })).newPage();
+    const ctx = await browser.newContext({ viewport: { width: 960, height: 640 } });
+    let page = await ctx.newPage();
     const cut = () => page.evaluate(() => {
       const c = document.querySelector('#battleview-host canvas') as HTMLCanvasElement;
       // The far trainer's picture: x 144..208, y 8..72 in GBA pixels.
@@ -234,6 +235,8 @@ test.describe('the page-drawn battle', () => {
     await openView(page, '&hold&at=1500&nolv&foe=NORMAN&skin=0');
     const asSkin = await cut();
     if (SHOTS) await page.locator('#battleview-host canvas').screenshot({ path: join(SHOTS, 'leader-before.png') });
+    // A page of its own: a new hash on the same page is no new load.
+    page = await ctx.newPage();
     await openView(page, '&hold&at=1500&nolv&foe=NORMAN&skin=0&pic=44');
     expect((await snap(page)).text).toContain('NORMAN');
     expect(await cut(), "NORMAN's picture, not BRENDAN's").not.toBe(asSkin);
