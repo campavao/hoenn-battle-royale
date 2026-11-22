@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-22T19:36:04.893Z",
+ "readAt": "2026-11-22T19:51:06.911Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "KB4KD6",
    "at": "2026-11-22T19:33:16.933Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-22T19:49:14.631Z",
+   "secs": 958,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -30,7 +30,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -30212,6 +30211,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-22T19:49:14.607Z",
+   "code": "KB4KD6",
+   "v": "37ece06",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 946,
+   "drifts": 0,
+   "deploy": "7ef35514"
+  },
   {
    "t": "2026-11-22T19:27:14.002Z",
    "code": "5Q2DB5",
