@@ -1,12 +1,11 @@
-# table-balls: a notable building's tables, desks and counters carry up to three balls
-# (Cam's 2026-10-19 play-test, #8): the floor's cache and up to two more (br_balls.c,
-# sTableBalls, written by tools/br/floors.py). Each sits on a table top and is taken by
-# pressing A at it from the floor beside it.
+# table-balls: a painted room holds Cam's ball and nothing on its tables. The tables of a notable
+# building carried up to two more (Cam's 2026-10-19 play-test, #8, sTableBalls); Cam painted every
+# room's ball by hand (11-01, room-paint.json) and, 11-22: "Yeah just use item spots that I had
+# painted by hand". Every notable building is painted, so sTableBalls is empty.
 #
-# DEVON CORP. 2F (map 11:1) is sRooms[143]: its cache, key 0x8D8F, painted at (5,4),
-# and sTableBalls[18] and [19], keys 0xAC12 and 0xAC13, on the desks at (7,4) and (10,7)
-# -- MAP_OFFSET in, (12,11), (14,11) and (17,14). The boot puts us at (7,3), above the
-# first desk, facing down at it.
+# DEVON CORP. 2F (map 11:1) is sRooms[143]: its cache, key 0x8D8F, painted at (5,4) -- (12,11)
+# MAP_OFFSET in -- and nothing else: the desks at (7,4) and (10,7) that held 0xAC12 and 0xAC13
+# are bare. The boot puts us at (7,3), above the first desk.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 0B 01 07 00 03 00 BD BB C7 FF
 wait 400
@@ -16,37 +15,31 @@ wait 30
 expect u16 gBrLoot 0x8D8F
 expect u16 gBrLoot+2 12
 expect u16 gBrLoot+4 11
-expect u16 gBrLoot+20 0xAC12
-expect u16 gBrLoot+22 14
-expect u16 gBrLoot+24 11
-expect u8 gBrLoot+31 3
-expect u16 gBrLoot+40 0xAC13
-expect u16 gBrLoot+42 17
-expect u16 gBrLoot+44 14
-expect u8 gBrLoot+51 3
+expect u8 gBrLoot+11 3
+# no row a table ball's key (0xACxx)
+expectne u8 gBrLoot+21 0xAC
+expectne u8 gBrLoot+41 0xAC
+expectne u8 gBrLoot+61 0xAC
+expectne u8 gBrLoot+81 0xAC
+expectne u8 gBrLoot+101 0xAC
+expectne u8 gBrLoot+121 0xAC
+expectne u8 gBrLoot+141 0xAC
 shot desks
-# A at the desk takes its ball: under seed 0x1072 it is TM16 LIGHT SCREEN (304), so the
-# teach screen, B to keep it, and the PICKUP of its key
-expect u16 gBrLoot+26 304
+# A at the desk below: nothing there to take
 hold DOWN 1
 wait 20
 tap A
 wait 120
-shot teach
-tap B
-wait 60
-tap A
-wait 60
-expectmsg 10 u16 1 0xAC12
-expect u8 gBrLoot+31 0
-expect u8 gBrLoot+51 3
-shot taken
-# Somebody else takes the third -- seat 1, PICKUP of key 0xAC13 -- and it goes from here
-pokebytes gBrMailbox+0x1018 0A 0B 08 00 00 01 13 AC 00 00 00 00 00 00
-poke u16 gBrMailbox+0x0C 1
-wait 20
-expect u8 gBrLoot+51 0
-# ...and up the stairs and back down them: the cache comes back, the two taken ones do not
+# no row a table ball's key (0xACxx)
+expectne u8 gBrLoot+21 0xAC
+expectne u8 gBrLoot+41 0xAC
+expectne u8 gBrLoot+61 0xAC
+expectne u8 gBrLoot+81 0xAC
+expectne u8 gBrLoot+101 0xAC
+expectne u8 gBrLoot+121 0xAC
+expectne u8 gBrLoot+141 0xAC
+expect u8 gBrLoot+11 3
+# ...and up the stairs and back down them: the cache comes back, alone
 hold LEFT 80
 wait 20
 expect u16 *gSaveBlock1Ptr 2
@@ -59,7 +52,13 @@ wait 200
 expect u8 *gSaveBlock1Ptr+5 1
 expect u16 gBrLoot 0x8D8F
 expect u8 gBrLoot+11 3
-expect u8 gBrLoot+31 0
-expect u8 gBrLoot+51 0
+# no row a table ball's key (0xACxx)
+expectne u8 gBrLoot+21 0xAC
+expectne u8 gBrLoot+41 0xAC
+expectne u8 gBrLoot+61 0xAC
+expectne u8 gBrLoot+81 0xAC
+expectne u8 gBrLoot+101 0xAC
+expectne u8 gBrLoot+121 0xAC
+expectne u8 gBrLoot+141 0xAC
 shot back
 say table balls ok

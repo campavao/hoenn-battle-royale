@@ -372,7 +372,9 @@ def rooms(floors):
     """(map, cache, trader, cells, more) for every room: houses first, in their order, then
     the rest by name. cells is the cache's cell, then whoever stands there; more is the
     rest of a building's table balls. A house always gets two cells, for whoever may be
-    home."""
+    home. A room Cam painted has his ball and nothing more: "just use item spots that I had
+    painted by hand" (11-22), so none on its tables."""
+    painted = json.load(open(PAINT, encoding="utf-8"))
     out = []
     for map_id in HOUSES:
         f = floors[map_id][1]
@@ -396,7 +398,8 @@ def rooms(floors):
             cells = [table[0][0]]
             if trader:
                 cells += [c for c in f.pick(2 + len(froms)) if c not in froms][:1]
-            out.append((map_id, cache, trader, cells, [ball for ball, _ in table[1:]]))
+            more = [] if map_id in painted else [ball for ball, _ in table[1:]]
+            out.append((map_id, cache, trader, cells, more))
         else:
             out.append((map_id, cache, trader, f.pick(2 if trader else 1), []))
     return out
@@ -451,6 +454,9 @@ def c_more(table):
              "static const struct BrTableBall sTableBalls[] =", "{"]
     for i, (x, y) in rows:
         lines.append("    { %d, %d, %d }, // %s" % (i, x, y, table[i][0]))
+    if not rows:
+        # C has no empty table: a row nobody reads, past BR_TABLE_BALLS.
+        lines.append("    { 0xFF, 0, 0 }, // none: every notable building is painted")
     lines.append("};")
     return "\n".join(lines)
 

@@ -1,0 +1,42 @@
+# table-ball-top: Cam's ball on a table is the room's only ball, and A from the chair beside the
+# table takes it (Cam, 11-22, WEATHER INSTITUTE 1F: "items inside are no longer where I had
+# placed them (aka now they are slightly off table)" -- a table ball at the right-hand table's
+# foot, (16,6), beside his; then "Yeah just use item spots that I had painted by hand").
+#
+# WEATHER INSTITUTE 1F (map 32:0) is sRooms[140]: its cache, key 0x8D8C, painted on the left
+# table's top at (11,5) -- (18,12) MAP_OFFSET in. The boot puts us on the chair at (10,5).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 20 00 0A 00 05 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x1072
+wait 30
+expect u16 gBrLoot 0x8D8C
+expect u16 gBrLoot+2 18
+expect u16 gBrLoot+4 12
+expect u8 gBrLoot+11 3
+# no row a table ball's key (0xACxx)
+expectne u8 gBrLoot+21 0xAC
+expectne u8 gBrLoot+41 0xAC
+expectne u8 gBrLoot+61 0xAC
+expectne u8 gBrLoot+81 0xAC
+expectne u8 gBrLoot+101 0xAC
+expectne u8 gBrLoot+121 0xAC
+expectne u8 gBrLoot+141 0xAC
+shot tables
+# A at it from the chair, facing the table: its PICKUP
+hold RIGHT 1
+wait 20
+tap A
+wait 120
+shot taking
+tap B
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+expectmsg 10 u16 1 0x8D8C
+expect u8 gBrLoot+11 0
+shot taken
+say table ball top ok

@@ -7,9 +7,9 @@ home); `trader` a floor with somebody who trades. room.test.ts checks it still m
 
 And web/spike-b/data/table-balls.json, [map, x, y]: the rest of a notable building's balls, each
 on a table of its own (Cam's 10-19 play-test, POK-438: "Instead of on the ground, this could sit
-on the desk. This place can have three, because it's more notable"). br_balls.c's sTableBalls, and
-where Cam's painting moved a room's first ball off the table floors.py had it on, that table too:
-the BIKE SHOP's counter. Three balls at most, the cache's counted; houses stay at one."""
+on the desk. This place can have three, because it's more notable"). br_balls.c's sTableBalls, as
+floors.py puts them: none in a room Cam painted (11-22: "Yeah just use item spots that I had
+painted by hand"), which today is every notable building, so it is empty."""
 import json, re, sys
 from pathlib import Path
 
@@ -28,29 +28,11 @@ def rooms():
 
 
 def table_balls():
-    import floors as F
-
     table = rooms()
     src = (ROOT / 'src/br/br_balls.c').read_text()
     body = src[src.index('static const struct BrTableBall sTableBalls[] ='):]
     body = body[:body.index('};')]
-    balls = {}
-    for r, x, y in re.findall(r'\{ (\d+), (\d+), (\d+) \}', body):
-        balls.setdefault(table[int(r)][0], []).append((int(x), int(y)))
-    floors = F.census()
-    for m, cx, cy, house, cache, *_ in table:
-        if house or not cache or m not in floors or not floors[m][1].furnished:
-            continue
-        got = balls.setdefault(m, [])
-        for comp, _ in floors[m][1].tables():
-            if len(got) + 1 >= F.NOTABLE_BALLS:
-                break
-            if not any(c in comp for c in [(cx, cy), *got]):
-                ball = floors[m][1].on_tables(99)
-                cell = next((c for c, _ in ball if c in comp), None)
-                if cell:
-                    got.append(cell)
-    return [[m, x, y] for m in sorted(balls) for x, y in balls[m]]
+    return [[table[int(r)][0], int(x), int(y)] for r, x, y in re.findall(r'\{ (\d+), (\d+), (\d+) \}', body)]
 
 
 def write(out, value):
