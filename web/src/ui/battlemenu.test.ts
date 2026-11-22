@@ -11,12 +11,15 @@ import {
   MON_PP_BONUSES,
   MON_SIZE,
   MON_TYPES,
+  CELL_W,
   actionLabels,
+  drawPartySlot,
   battleWantsNoPad,
   ppWithBonus,
   readBattleView,
   type BattleView,
 } from './battlemenu';
+import { fakeCanvas } from './fakecanvas';
 import { POCKET_CAPACITY, SLOT_SIZE } from './phonehud';
 import { BATTLE_MENU, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU_SAFARI, MENU_TARGET } from '../touch';
 import { encodeGen3 } from '../text/gen3';
@@ -181,5 +184,34 @@ describe('the D-pad and A/B in a battle', () => {
     const { emu, rom } = setup();
     expect(battleWantsNoPad(emu, (n) => (n === 'BattleMainCB2' ? undefined : at[n]), rom)).toBe(false);
     expect(battleWantsNoPad(emu, (n) => at[n], null)).toBe(false);
+  });
+});
+
+describe('a party cell and the item its mon holds', () => {
+  const mon = (item: number) => ({
+    species: 1, name: 'MUDKIP', level: 5, hp: 20, maxHp: 20, status: 0, item, itemName: '', ability: '', moves: [], active: false,
+  });
+  const draw = (item: number) => {
+    const f = fakeCanvas();
+    const calls: { item: number; cx: number; cy: number; box: number }[] = [];
+    drawPartySlot(f.canvas, mon(item), null, false, () => {}, (_c, it, cx, cy, box) => calls.push({ item: it, cx, cy, box }));
+    return { f, calls };
+  };
+  it('draws the held item in the bottom-right corner, clear of the HP bar', () => {
+    const { f, calls } = draw(44);
+    expect(calls).toHaveLength(1);
+    const { item, cx, cy, box } = calls[0];
+    expect(item).toBe(44);
+    expect(cx + box / 2).toBeLessThanOrEqual(CELL_W);
+    expect(cy + box / 2).toBeLessThanOrEqual(44);
+    expect(cx).toBeGreaterThan(CELL_W / 2);
+    expect(cy).toBeGreaterThan(22);
+    const bar = f.fills[0].r;
+    expect(bar.x + bar.w).toBeLessThanOrEqual(cx - box / 2);
+  });
+  it('draws nothing for a mon holding none, and leaves the bar its full width', () => {
+    const { f, calls } = draw(0);
+    expect(calls).toHaveLength(0);
+    expect(f.fills[0].r.w).toBe(CELL_W - 50);
   });
 });

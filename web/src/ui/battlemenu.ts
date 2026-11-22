@@ -355,6 +355,28 @@ export function drawHp(c: EmeraldCanvas, x: number, y: number, w: number, frac: 
   if (frac > 0) c.fillRect({ x: x + 1, y: y + 1, w: Math.max(1, Math.round((w - 2) * frac)), h: 2 }, hpColor(frac));
 }
 
+/** The held item's icon box in a party cell: its bottom-right corner (Cam, 11-21). */
+export const SLOT_ITEM_BOX = 16;
+const SLOT_ITEM_PAD = 3;
+
+/** One party cell: icon, name, HP bar; and, when the mon holds something, that item's icon
+ *  in the bottom-right corner, the HP bar stopping short of it. `drawItem` is a seam for tests. */
+export function drawPartySlot(
+  c: EmeraldCanvas,
+  m: PartyMember,
+  icon: CanvasImageSource | null,
+  dim: boolean,
+  redo: () => void,
+  drawItem: (c: EmeraldCanvas, item: number, cx: number, cy: number, box: number, redo: () => void) => void = drawItemFitted,
+): void {
+  c.drawFrame({ x: 0, y: 0, w: CELL_W, h: PARTY_H });
+  if (icon) c.drawImageTo(icon, 0, 0, 32, 32, 5, 6, 32, 32);
+  c.drawText(fitText(m.name, CELL_W - 48), 40, 9, dim ? TEXT_GRAY : m.active ? TEXT_BLUE : TEXT_DARK);
+  const held = m.item > 0;
+  drawHp(c, 40, 28, CELL_W - 50 - (held ? SLOT_ITEM_BOX + 2 : 0), m.maxHp ? m.hp / m.maxHp : 0);
+  if (held) drawItem(c, m.item, CELL_W - SLOT_ITEM_PAD - SLOT_ITEM_BOX / 2, PARTY_H - SLOT_ITEM_PAD - SLOT_ITEM_BOX / 2, SLOT_ITEM_BOX, redo);
+}
+
 export interface BattleMenuDeps {
   /** Where the windows go: under the picture, over the pad. */
   root: HTMLElement;
@@ -714,7 +736,7 @@ export class BattleMenu {
     this.catchCard.addEventListener('click', () => this.summaryOf(-1));
     for (let i = 0; i < 6; i++) {
       const b = button('bm-slot', this.partyBox);
-      const w = new Win(b, CELL_W, PARTY_H, (c) => this.paintSlot(c, i));
+      const w = new Win(b, CELL_W, PARTY_H, (c, redo) => this.paintSlot(c, i, redo));
       const hold = doc.createElement('span');
       hold.className = 'bm-hold';
       b.appendChild(hold);
@@ -1184,15 +1206,11 @@ export class BattleMenu {
     return !!m && !m.active && m.hp > 0;
   }
 
-  private paintSlot(c: EmeraldCanvas, i: number): void {
+  private paintSlot(c: EmeraldCanvas, i: number, redo: () => void): void {
     const m = this.team[i];
     if (!m) return;
-    c.drawFrame({ x: 0, y: 0, w: CELL_W, h: PARTY_H });
-    const icon = this.deps.firstMoves?.icon(m.species);
-    if (icon) c.drawImageTo(icon, 0, 0, 32, 32, 5, 6, 32, 32);
     const dim = this.dropCan ? !this.dropCan(m) : this.using ? !this.slotHelps(i) : m.hp === 0;
-    c.drawText(fitText(m.name, CELL_W - 48), 40, 9, dim ? TEXT_GRAY : m.active ? TEXT_BLUE : TEXT_DARK);
-    drawHp(c, 40, 28, CELL_W - 50, m.maxHp ? m.hp / m.maxHp : 0);
+    drawPartySlot(c, m, this.deps.firstMoves?.icon(m.species) ?? null, dim, redo);
   }
 
   private paintCard(c: EmeraldCanvas): void {
