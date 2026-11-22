@@ -28,7 +28,7 @@
 
 import { clerkAt, type Clerk } from './marts';
 import { rollWild, rollZone, wildDice } from './wild';
-import { LEADERS, leaderAt } from './gyms';
+import { LEADERS, leaderAt, type Leader } from './gyms';
 import { EVENT_GOLD, EVENT_MAX, EVENT_RARES, GOLD, LEGENDS, RARES, SUPPLIES, clashWeather, draw, eventForRing, legendOf } from '../../src/match/events';
 import { DOOR_Y, FINAL_CHANCE, STORIES, STORY_CHANCE, type Story, type StoryDoor } from '../../src/match/story';
 import { dealParty, rungForPhase, teamField, teamFlies, tradedMon } from '../../src/bots/party';
@@ -248,8 +248,8 @@ export type RoomEvent =
   /** A at a piece a gate's boss still guards. */
   | { type: 'guarded'; tick: number; id: number; name: string }
   /** A at somebody who has given away what they held (Room.spentAt): `by` took it. A fight
-   *  still on for it has `busy`, its fighter's name; a beaten leader `beaten`, who beat them. */
-  | { type: 'spent'; tick: number; id: number; by: number; busy?: string; beaten?: string }
+   *  still on for it has `busy`, its fighter's name. */
+  | { type: 'spent'; tick: number; id: number; by: number; busy?: string }
   /** A at the ferry's attendant (the live islands' stories, none: not sailing) or at a
    *  dock's sailor (`home`: back to Lilycove), or at a CABLE CAR's attendant (`cable`). */
   | { type: 'ferry'; tick: number; id: number; to: { id: string; name: string }[]; home?: boolean; briney?: boolean; cable?: 'up' | 'down' }
@@ -392,6 +392,10 @@ export interface EventMark {
   n: number; key: number; map: string; x: number; y: number;
   /** Its legendary, or 0 for a story with none (a rare find). */
   species: number; trader?: Trader;
+  /** A story's POKeMON that is no event legendary (DEOXYS, MEW, HO-OH, LUGIA, BELDUM, the
+   *  fossils): its mark on the MAP, as a legendary's is (Cam, 11-22: "Map still shows Royale
+   *  ball instead of legendary sprite"). */
+  mon?: number;
   /** A story event's id (story.ts) and the place the ticker names. */
   story?: string; place?: string;
   /** A REGI chamber's story: the phase it dropped on, and whether its wall is open. */
@@ -411,6 +415,13 @@ export interface Home extends Trader { n: number; map: string; gives?: boolean; 
 export const HOME_N = 1000;
 /** br_balls.c's sHomeMons: what Hoenn's own people give and trade. */
 const HOME_MONS = [277, 280, 283, 1, 4, 7, 64, 67, 75, 93, 385, 143];
+
+/** An event's pieces over its map (dropEvent): at least SPREAD_NEAR from the legendary and at
+ *  most SPREAD_FAR (a long route's other end is another place), each SPREAD_GAPS[k] from the
+ *  rest, the widest gap the map has room for first. */
+const SPREAD_NEAR = 5;
+const SPREAD_FAR = 30;
+const SPREAD_GAPS = [10, 7, 4];
 
 /** Event pieces' keys: clear of the dealt balls' and the trainers' (SPILL_KEY + id). */
 export const EVENT_SPILL = 2 << 20;
@@ -983,6 +994,14 @@ export class Room {
     return this.gyms.some(([m]) => m === n);
   }
 
+  /** The leader standing on a cell: none once beaten. A beaten leader leaves the gym (Cam, 11-22:
+   *  "after beating, Norman sprite still was on map"), so their cell is floor, where their team's
+   *  bag can lie, and A there is nothing. */
+  leaderStanding(map: string, x: number, y: number): Leader | undefined {
+    const l = leaderAt(map, x, y);
+    return l && !this.bossDown(l.n) ? l : undefined;
+  }
+
   /** Every CENTER's doorstep on the match's own outdoor maps: the cell below a door into a
    *  map with a nurse (world.ts centre), where its trainers walk out. Found once. */
   centreSteps(): Spot[] {
@@ -1244,7 +1263,7 @@ export class Room {
     return (this.landedMaps ??= new Map(this.landByMap().map((l) => [l[0].map, l]))).get(map) ?? [];
   }
 
-  /** A round's centre: a cell of Hoenn's outdoors a trainer can land on, each map as likely
+  /** A round's centre: a cell of Hoenn's outdoors a trainer can land on, each cell as likely
    *  (landByMap), from the seed, or one round in four a final story's place (story.ts's
    *  FINAL_CHANCE: SKY PILLAR), which then holds that story for the last event; and how far
    *  the farthest of those cells is from it. */
@@ -1255,8 +1274,10 @@ export class Room {
     const cells = byMap.flat();
     let h = Math.imul((this.seed ^ 0x51ed270b) >>> 0, 0x9e3779b1) ^ Math.imul(round + 1, 0x85ebca6b);
     h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12;
-    const on = byMap[(h >>> 0) % byMap.length];
-    const c = on[(Math.imul(h, 0x27d4eb2d) >>> 0) % on.length];
+    // Each cell as likely, not each map: the first towns and routes are many small maps, and
+    // each map as likely put 43% of rings there, 29% on the late ones (Cam, 11-22: "it still
+    // feels like the ring only closes on early game routes"). By land it is a third each.
+    const c = cells[(Math.imul(h, 0x27d4eb2d) >>> 0) % cells.length];
     const p = this.places.get(c.map)!;
     let cx = p.gx + c.x + 0.5, cy = p.gy + c.y + 0.5;
     // Only a final story with land near it: a ring shut on open sea (SKY PILLAR's on its
@@ -1296,18 +1317,18 @@ export class Room {
   }
 
   /** Somebody standing on a cell who has given away what they held: a gift-giver, somebody at
-   *  home, a story's person, a beaten leader. They stay (Cam, 11-02: "I don't think we should
-   *  ever disappear a person"), still in the way, and say so when talked to. Whoever took it
-   *  did it through the room, so every page has them standing the same. */
-  spentAt(map: string, x: number, y: number): { by: number; gate?: boolean; beaten?: string } | undefined {
+   *  home, a story's person. They stay (Cam, 11-02: "I don't think we should ever disappear a
+   *  person"), still in the way, and say so when talked to. Whoever took it did it through the
+   *  room, so every page has them standing the same. A beaten gym leader is the one who goes
+   *  (leaderStanding). */
+  spentAt(map: string, x: number, y: number): { by: number; gate?: boolean } | undefined {
     const g = this.ground().get(`${map}:${x}:${y}`);
     if (g?.gift && this.picked.has(g.key)) return { by: this.picked.get(g.key)! };
     for (const h of this.homes) if (h.gone && h.map === map && h.x === x && h.y === y) return { by: h.by ?? 0 };
     for (const b of this.spills.values()) {
       if (b.person && b.map === map && b.x === x && b.y === y && this.picked.has(b.key)) return { by: this.picked.get(b.key)!, ...(b.person.gate !== undefined ? { gate: true } : {}) };
     }
-    const boss = leaderAt(map, x, y);
-    return boss && this.bossDown(boss.n) ? { by: 0, beaten: this.gyms.find(([n]) => n === boss.n)?.[1] ?? '' } : undefined;
+    return undefined;
   }
 
   /** A free cell beside a trainer, facing first, then round: walkable for them, not a
@@ -1466,10 +1487,12 @@ export class Room {
     return events;
   }
 
-  /** Event `n` (every other ring from the first shrink, DESIGN §Events): its legendary,
-   *  two rares at the phase's rung, three gold balls and a bag of supplies, on the free
-   *  cells nearest a spot inside the ring -- the last one at the ring's centre, the one
-   *  place its final ring still holds. Whoever gets there takes it. */
+  /** Event `n` (every other ring from the first shrink, DESIGN §Events): its legendary on a
+   *  spot inside the ring, and two rares at the phase's rung, three gold balls and a bag of
+   *  supplies spread over its map, apart from it and from each other (Cam, 11-22: "it should
+   *  just be in the area/zone the legendary is in"). The last event's are at the ring's
+   *  centre, the one place its final ring still holds, so they stay round it there. Whoever
+   *  gets there takes it. */
   private dropEvent(n: number, ring: Ring): void {
     let state = (this.seed ^ Math.imul(ring.round + 1, 0x9e3779b1) ^ Math.imul(n + 1, 0x85ebca6b)) >>> 0 || 1;
     const rng = () => { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return (state >>> 0) / 4294967296; };
@@ -1515,7 +1538,32 @@ export class Room {
       else this.spills.delete(key);
     };
     lay(f);
-    for (const c of near) { if (laid.length >= species.length + bags.length) break; lay(c); }
+    const pieces = species.length + bags.length;
+    // Every piece out past the legendary's eight has a way in of its own (reaches() from the
+    // legendary sees no further than its eight).
+    const farOpen = () => laid.every((p) => p === f || d(p) <= 8 || this.reaches(p, [p]));
+    if (n !== EVENT_MAX - 1) {
+      // Over the legendary's map, inside the ring, never within SPREAD_NEAR of it: each the
+      // draw's next cell at least `gap` from every piece laid, the gap narrowing on a small map.
+      const zone = all.filter((s) => s.map === f.map && d(s) >= SPREAD_NEAR && d(s) <= SPREAD_FAR && !this.inFog(s, ring));
+      for (let i = zone.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [zone[i], zone[j]] = [zone[j], zone[i]]; }
+      for (const gap of SPREAD_GAPS) {
+        for (const c of zone) {
+          if (laid.length >= pieces) break;
+          if (laid.some((p) => Math.abs(p.x - c.x) + Math.abs(p.y - c.y) < gap)) continue;
+          const at = laid.length;
+          lay(c);
+          // Laid, it has to be reachable itself (a corner where two ways meet is no place: the
+          // piece walls one from the other), and shut in no piece laid out here before it.
+          if (laid.length > at && !farOpen()) {
+            this.spills.delete(eventPiece(n, at));
+            laid.pop();
+          }
+        }
+      }
+    }
+    // What is still to lay (the last event's, or a map with no room apart): round the legendary.
+    for (const c of near) { if (laid.length >= pieces) break; lay(c); }
     const e: EventMark = { n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0] };
     this.events.push(e);
     // The cell past the pieces is the trader's, with a rare the event did not drop.
@@ -1525,7 +1573,7 @@ export class Room {
       const pick = offers[Math.min(offers.length - 1, Math.floor(rng() * offers.length))];
       for (const c of spare.slice(0, 6)) {
         e.trader = { x: c.x, y: c.y, species: pick, busy: 0 };
-        if (this.reaches(f, [...laid, c])) break;
+        if (this.reaches(f, [...laid, c]) && farOpen()) break;
         delete e.trader;
       }
     }
@@ -1537,7 +1585,7 @@ export class Room {
    *  ledges and doors as they are. */
   private reaches(f: Spot, targets: Spot[]): boolean {
     const R = 10, key = (x: number, y: number) => `${x},${y}`;
-    const wall = (map: string, x: number, y: number) => !!(this.groundAt(map, x, y) || this.spillAt(map, x, y) || this.traderAt(map, x, y) || clerkAt(map, x, y) || ferryAt(map, x, y) || leaderAt(map, x, y) || this.spentAt(map, x, y));
+    const wall = (map: string, x: number, y: number) => !!(this.groundAt(map, x, y) || this.spillAt(map, x, y) || this.traderAt(map, x, y) || clerkAt(map, x, y) || ferryAt(map, x, y) || this.leaderStanding(map, x, y) || this.spentAt(map, x, y));
     const walk = (x: number, y: number) => this.world.cell(f.map, x, y) === 0 && !wall(f.map, x, y);
     // Who can step to a cell, over the box round `f`.
     const rev = new Map<string, [number, number][]>();
@@ -1602,7 +1650,7 @@ export class Room {
     const legend = species.some((sp) => LEGENDS.flat().includes(sp));
     // A legendary a gate's boss holds is his to hand over, not a battle of its own.
     if (legend) { const b = this.spills.get(eventPiece(n, 0)); if (b && !b.person) b.legend = true; }
-    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: legend ? species[0] : 0, story: story.id, place: story.name, ...(trader ? { trader } : {}), ...(story.door ? { phase: ring.phase, opened: false } : {}) });
+    this.events.push({ n, key: eventPiece(n, 0), map: cells[0].map, x: cells[0].x, y: cells[0].y, species: legend ? species[0] : 0, ...(!legend && species[0] ? { mon: species[0] } : {}), story: story.id, place: story.name, ...(trader ? { trader } : {}), ...(story.door ? { phase: ring.phase, opened: false } : {}) });
   }
 
   /** Out of a walk-up whose battle never started: walking again after the grace. */
@@ -2385,11 +2433,11 @@ export class Room {
         const b = g ? undefined : this.spillAt(a.m.spot.map, x, y);
         const foe = g || b ? undefined : this.facing(a);
         const tr = foe ? undefined : this.traderAt(a.m.spot.map, x, y);
-        const boss = foe || tr ? undefined : leaderAt(a.m.spot.map, x, y);
+        const boss = foe || tr ? undefined : this.leaderStanding(a.m.spot.map, x, y);
         const spent = g || b || foe || tr ? undefined : this.spentAt(a.m.spot.map, x, y);
         // Last of A's (ProcessPlayerFieldInput asks the dive after everything ahead).
         const dive = g || b || foe || tr || boss ? undefined : diveTo(this.maps, this.world, a.m.spot, a.field ?? 0);
-        if (boss && !this.bossDown(boss.n)) {
+        if (boss) {
           a.battling = true;
           a.boss = boss.n + 1;
           events.push({ type: 'boss', tick: this.tick, id: a.id, n: boss.n });
@@ -2402,7 +2450,7 @@ export class Room {
         } else if (spent) {
           // A gate's boss in a fight for his piece may yet win it back: that fight isn't over.
           const busy = spent.gate ? this.actor(spent.by) : undefined;
-          events.push({ type: 'spent', tick: this.tick, id: a.id, by: spent.by, ...(busy?.battling ? { busy: busy.name } : {}), ...(spent.beaten !== undefined ? { beaten: spent.beaten === a.name ? '' : spent.beaten } : {}) });
+          events.push({ type: 'spent', tick: this.tick, id: a.id, by: spent.by, ...(busy?.battling ? { busy: busy.name } : {}) });
         } else if (g) {
           this.picked.set(g.key, a.id);
           events.push({ type: 'item', tick: this.tick, id: a.id, key: g.key, item: g.item, ...(g.gift ? { gift: true } : {}) });
@@ -2523,8 +2571,7 @@ export class Room {
       if (this.groundAt(t.map, t.x, t.y) || clerkAt(t.map, t.x, t.y) || this.traderAt(t.map, t.x, t.y) || ferryAt(t.map, t.x, t.y)) return null;
       // The Zone's gate is shut until the drop, both ways.
       if (from.map.startsWith(SAFARI) !== t.map.startsWith(SAFARI) && this.ring().safari) return null;
-      const boss = leaderAt(t.map, t.x, t.y);
-      if (boss) return null; // beaten or not, a leader stands where they stand
+      if (this.leaderStanding(t.map, t.x, t.y)) return null;
       if (this.spentAt(t.map, t.x, t.y)) return null;
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return null;
       return r;

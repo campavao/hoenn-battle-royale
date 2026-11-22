@@ -76,7 +76,7 @@ import { AskBox } from './askbox';
 import { ANIM_COUNTER_MAX } from '../src/tile-anims';
 import { JankMeter } from './jank';
 import { RingMap } from './ringmap';
-import { farBadge, farOrder, headRows, liveLegends, trimmed } from './marks';
+import { farBadge, farOrder, headRows, liveLegends, liveMarks, markIcon, trimmed } from './marks';
 import { SeamGlide, seamOff } from './seamglide';
 import { Watch, watchable } from './watch';
 import { BattleView } from './battleview';
@@ -112,7 +112,7 @@ import { noticeScreen, type RoomSeat, type SheetModel } from '../src/ui/screens'
 import { seatScreen } from '../src/ui/profile';
 import { makeJudge, type Judge } from './judge';
 import { nameBstart } from '../src/match/spectate';
-import { LEADERS } from './shared/gyms';
+import { GATE_PICS, LEADERS } from './shared/gyms';
 import uiData from '../src/data/ui.json';
 import { CLERKS, priceOf, shelf } from './shared/marts';
 import { KEY_BIT, type GbaKey } from '../src/emu';
@@ -329,9 +329,9 @@ function miniFrame(a: Actor | undefined): string {
   const ring = link.room.ring();
   const at = ringMap.pixelOf(a.m.spot);
   // The legendaries on the map now, at their marks on the MAP's picture (ringmap.ts plots).
-  const live = new Set(liveLegends(link.room.events, link.room.spills, link.room.picked).map((e) => e.species));
-  const legends = live.size ? ringMap.plots(null).events.filter((e) => !e.taken && live.has(e.species)) : [];
-  const key = `${at.x}|${at.y}|${a.skin}|${ring.last}|${ring.r.toFixed(1)}|${ring.cx.toFixed(0)}|${ring.cy.toFixed(0)}|${legends.map((e) => `${e.species}@${e.x},${e.y}`).join(';')}`;
+  const live = new Set(liveMarks(link.room.events, link.room.spills, link.room.picked).map((e) => markIcon(e)));
+  const legends = live.size ? ringMap.plots(null).events.filter((e) => !e.taken && live.has(markIcon(e))) : [];
+  const key = `${at.x}|${at.y}|${a.skin}|${ring.last}|${ring.r.toFixed(1)}|${ring.cx.toFixed(0)}|${ring.cy.toFixed(0)}|${legends.map((e) => `${markIcon(e)}@${e.x},${e.y}`).join(';')}`;
   if (key === miniKey) return key;
   miniKey = key;
   const n = MINI_MAP;
@@ -353,7 +353,7 @@ function miniFrame(a: Actor | undefined): string {
   c.imageSmoothingEnabled = false;
   // A legendary in view stands as its own icon, under the trainer (Cam, 11-21: it was the ball).
   for (const e of legends) {
-    const icon = monIconOf(e.species);
+    const icon = monIconOf(markIcon(e) ?? 0);
     if (!icon) continue;
     const t = trimmed(icon);
     c.drawImage(t, Math.round(e.x - sx - t.width / 2), Math.round(e.y - sy - t.height / 2));
@@ -685,7 +685,7 @@ const handoff: number[] = []; // ms from the trigger to the ROM's first battle f
 /** A battle the ROM fights, the page showing it from its first frame and taking the
  *  screen back when it is over. */
 let logFight = 0;
-function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>, opts: { log?: boolean; weather?: number; label?: { name: string; skin: number }; wild?: boolean } = {}): void {
+function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) => Promise<Fought>, opts: { log?: boolean; weather?: number; label?: { name: string; skin: number; pic?: number }; wild?: boolean } = {}): void {
   // One battle at a time: one still running from the match before (its ROM is busy with
   // it) turns this one down, or its end would be credited to this foe.
   if (battle) { link.end(); return; }
@@ -708,7 +708,7 @@ function handOff(foe: Actor | null, run: (r: RomBattles, onStart: () => void) =>
   if (link.online && me && opts.log !== false) {
     const l = link, f = ++logFight & 0xffff;
     rom.logTo({
-      ctx: { me: { seat: l.me, name: me.name, skin: me.skin }, foe: { seat: foe?.id ?? 0, name: foe?.name ?? opts.label?.name ?? '', skin: foe?.skin ?? opts.label?.skin ?? 0, ...(opts.wild ? { wild: true } : {}) }, map: me.m.spot.map },
+      ctx: { me: { seat: l.me, name: me.name, skin: me.skin }, foe: { seat: foe?.id ?? 0, name: foe?.name ?? opts.label?.name ?? '', skin: foe?.skin ?? opts.label?.skin ?? 0, ...(!foe && opts.label?.pic !== undefined ? { pic: opts.label.pic } : {}), ...(opts.wild ? { wild: true } : {}) }, map: me.m.spot.map },
       emit: (events) => l.bl(f, events),
     });
   }
@@ -1796,7 +1796,7 @@ function startFor(e: RoomEvent): void {
         giveNext();
       } else l.drop(key);
       return f;
-    }, (err) => { l.drop(key); throw err; }), { label: { name: e.name, skin: 0 } });
+    }, (err) => { l.drop(key); throw err; }), { label: { name: e.name, skin: 0, pic: GATE_PICS[e.gate] } });
     return;
   }
   if (e.type === 'legend') {
@@ -1820,7 +1820,7 @@ function startFor(e: RoomEvent): void {
     handOff(null, (r, onStart) => r.boss(e.n, onStart, fog).then((f) => {
       if (!f.ok && !f.stalled && f.outcome === 0) say(`${leader.name}: Come back with two POKéMON that can battle!`);
       return f;
-    }), { label: { name: leader.name, skin: 0 } });
+    }), { label: { name: leader.name, skin: 0, pic: leader.pic } });
     battle!.boss = e.n;
     return;
   }
@@ -4575,9 +4575,9 @@ function drawClerks(visible: Placed[]): void {
     if (p && img) ctx.drawImage(img, (p.gx + h.x) * TILE + (TILE - img.width) / 2, (p.gy + h.y) * TILE + TILE - img.height);
   }
   for (const p of visible) {
-    // The gym leaders, beaten or not, facing down.
+    // The gym leaders nobody has beaten, facing down (a beaten one has left: Room.leaderStanding).
     for (const l of LEADERS) {
-      if (l.map !== p.m.id) continue;
+      if (l.map !== p.m.id || link.room.bossDown(l.n)) continue;
       l.cells.forEach(([cx, cy], i) => {
         const gfx = l.gfx[i];
         let img = clerkArt.get(gfx);

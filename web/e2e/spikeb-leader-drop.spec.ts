@@ -1,5 +1,5 @@
 // A gym leader's team is loot (Cam, 2026-11-10: "the gym leader gives good loot (good pokemon...)"):
-// beaten, ROXANNE's GEODUDE, GEODUDE and NOSEPASS lie in a bag beside the winner, at the rung they were
+// beaten, ROXANNE's GEODUDE, GEODUDE and NOSEPASS lie in a bag where she stood (she leaves, 11-22), at the rung they were
 // fought at, and A on it offers them to take, as a fallen trainer's team is (Kanto's npcDefeated).
 // The prize TM is in the bag too (br_gym.c sBosses: BRICK BREAK, TM31).
 import { expect, test } from '@playwright/test';
@@ -75,6 +75,11 @@ test("ROXANNE beaten: her team lies beside the winner to take, and her TM is in 
   }, LEADER_SPILL | 0);
   expect(drop.down).toBe(true);
   expect(drop.at?.map).toBe('MAP_RUSTBORO_CITY_GYM');
+  // She has left the gym (Cam, 11-22: "after beating, Norman sprite still was on map"): her team's
+  // bag lies where she stood, in front of me.
+  expect(await page.evaluate(() => !!(window as any).__spike.link.room.leaderStanding('MAP_RUSTBORO_CITY_GYM', 5, 2))).toBe(false);
+  expect(drop.at).toEqual({ map: 'MAP_RUSTBORO_CITY_GYM', x: 5, y: 2 });
+  if (process.env.HBR_SHOTS) { await page.waitForTimeout(1500); await page.screenshot({ path: `${process.env.HBR_SHOTS}/leader-gone.png` }); }
   expect(drop.bag.mons.map((m: any) => m.species)).toEqual([GEODUDE, GEODUDE, NOSEPASS]);
   expect(new Set(drop.bag.mons.map((m: any) => m.level)).size, 'all at the rung').toBe(1);
 

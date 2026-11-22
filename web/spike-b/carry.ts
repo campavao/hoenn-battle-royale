@@ -329,8 +329,7 @@ export function spillShows(s: { legend?: boolean; person?: unknown }, pickedBy: 
 
 /** What somebody who has given away what they held says (Room.spentAt). Cam, 11-02: "come talk
  *  to them later to say like, sorry, like, somebody took it". */
-export function spentLine(e: { by: number; busy?: string; beaten?: string }, me: number): string {
-  if (e.beaten !== undefined) return e.beaten ? `${e.beaten} already beat me.` : 'You already beat me.';
+export function spentLine(e: { by: number; busy?: string }, me: number): string {
   if (e.busy) return `${e.busy} is fighting me for it.`;
   return e.by === me ? "That's all I had. Take care of it!" : 'Sorry, somebody took it.';
 }

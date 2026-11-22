@@ -79,7 +79,7 @@ export interface ReaderSyms {
  *  trainer. A wild POKeMON has seat 0 and no name. */
 export interface ReaderCtx {
   me: { seat: number; name: string; skin: number };
-  foe: { seat: number; name: string; skin: number; wild?: boolean };
+  foe: { seat: number; name: string; skin: number; pic?: number; wild?: boolean };
   map: string;
   /** A mon's gender from its species and personality (0 male, 1 female, 2 neither), out of the
    *  ROM's gSpeciesInfo, which the reader's memory does not hold. None: not said. */
@@ -116,9 +116,11 @@ export function battleText(raw: ArrayLike<number>): string {
 /** The menu asking what to do is not a thing that happened. */
 const PROMPT = /^What will\b.*\bdo\?$/;
 /** What the move menu's windows leave in the buffer after it closes (gBrBattle.menu is already 0):
- *  the PP label and count, and the move's type with its numbers. A line of the story is never
- *  only one of these. */
-const UI_LINE = /^(PP|-|\d+\/\d+|(NORMAL|FIGHT|FLYING|POISON|GROUND|ROCK|BUG|GHOST|STEEL|\?\?\?|FIRE|WATER|GRASS|ELECTR|PSYCHC|ICE|DRAGON|DARK)\b[ ./\d]*)$/;
+ *  the PP label and count, and the move's type with its numbers, "TYPE/" before it
+ *  (gText_MoveInterfaceType: a watcher read "TYPE/GHOST", Cam 11-22). A line of the story is
+ *  never only one of these. */
+const TYPES = 'NORMAL|FIGHT|FLYING|POISON|GROUND|ROCK|BUG|GHOST|STEEL|\\?\\?\\?|FIRE|WATER|GRASS|ELECTR|PSYCHC|ICE|DRAGON|DARK';
+export const UI_LINE = new RegExp(`^(PP( ?TYPE/)?|TYPE/ ?((${TYPES})\\b[ ./\\d]*)?|-|\\d+/\\d+|(${TYPES})\\b[ ./\\d]*)$`);
 const M_NICKNAME = 0x30;
 /** PLAYER_NAME_LENGTH + 1 (include/constants/global.h). */
 const PLAYER_NAME_READ = 8;
@@ -347,7 +349,7 @@ export class BattleReader {
     if ((!me || !fo) && ++this.waitedForParty < WAIT_FOR_PARTY) return;
     this.teams = [logTeam(me ?? this.party.me!, this.ctx.genderOf), logTeam(fo ?? this.party.foe!, this.ctx.genderOf)];
     // What a watcher believes of a mon on the field starts as its team entry.
-    const side = (x: ReaderCtx['foe'], team: LogMon[]): LogSide => ({ seat: x.seat, name: x.name, skin: x.skin, team, ...(x.wild ? { wild: true } : {}) });
+    const side = (x: ReaderCtx['foe'], team: LogMon[]): LogSide => ({ seat: x.seat, name: x.name, skin: x.skin, ...(x.pic !== undefined ? { pic: x.pic } : {}), team, ...(x.wild ? { wild: true } : {}) });
     this.started = true;
     this.say({ e: 'start', a: side(this.ctx.me, structuredClone(this.teams[0])), b: side(this.ctx.foe, structuredClone(this.teams[1])), map: this.ctx.map });
     this.poll();

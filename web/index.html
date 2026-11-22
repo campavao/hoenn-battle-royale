@@ -200,14 +200,14 @@
          the fog's own, over the ring's last stretch. It breathes, unless motion is turned down. */
       .hud-mini.hud-glow-legend canvas { --glow: #ffd030; }
       .hud-mini.hud-glow-fog canvas { --glow: #b45cff; }
-      /* A solid ring round the frame, so it reads on any ground, and a halo that breathes. */
+      /* A halo that breathes, and no ring round the frame (Cam, 11-22: "just do a glow no border"). */
       .hud-mini.hud-glow-legend canvas, .hud-mini.hud-glow-fog canvas {
-        box-shadow: 0 0 0 calc(var(--s, 1.5) * 1.5px) var(--glow), 0 0 calc(var(--s, 1.5) * 8px) calc(var(--s, 1.5) * 2px) var(--glow);
+        box-shadow: 0 0 calc(var(--s, 1.5) * 8px) calc(var(--s, 1.5) * 2px) var(--glow);
         animation: mini-glow 1.1s ease-in-out infinite alternate;
       }
       @keyframes mini-glow {
-        from { box-shadow: 0 0 0 calc(var(--s, 1.5) * 1.5px) var(--glow), 0 0 calc(var(--s, 1.5) * 3px) 0 var(--glow); }
-        to { box-shadow: 0 0 0 calc(var(--s, 1.5) * 1.5px) var(--glow), 0 0 calc(var(--s, 1.5) * 10px) calc(var(--s, 1.5) * 3px) var(--glow); }
+        from { box-shadow: 0 0 calc(var(--s, 1.5) * 4px) 0 var(--glow); }
+        to { box-shadow: 0 0 calc(var(--s, 1.5) * 12px) calc(var(--s, 1.5) * 3px) var(--glow); }
       }
       @media (prefers-reduced-motion: reduce) { .hud-mini.hud-glow-legend canvas, .hud-mini.hud-glow-fog canvas { animation: none; } }
       .hud-moves { top: calc(var(--s, 1.5) * 108px); }

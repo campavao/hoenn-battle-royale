@@ -32,6 +32,8 @@ import {
   leadFit,
   miniLines,
   miniGlow,
+  GlowCue,
+  GLOW_MS,
   CLOCK_RED_S,
   MINI_MAP,
   MINI_W,
@@ -331,6 +333,30 @@ describe("the minimap's glow (Cam, 11-21)", () => {
   });
   it('puts the fog over the legendary when both are up', () => {
     expect(miniGlow(v({ clock: 10, legend: true }))).toBe('fog');
+  });
+  it("lights for a while when it comes up, then goes out though it is still up (Cam, 11-22: \"shouldn't persist\")", () => {
+    const cue = new GlowCue();
+    expect(cue.step(v({}), 0)).toBe(null);
+    expect(cue.step(v({ legend: true }), 1000)).toBe('legend');
+    expect(cue.step(v({ legend: true }), 1000 + GLOW_MS - 1)).toBe('legend');
+    expect(cue.step(v({ legend: true }), 1000 + GLOW_MS)).toBe(null);
+    expect(cue.step(v({ legend: true }), 60_000), 'still standing, still out').toBe(null);
+    // The fog's stretch lights it purple, for as long, and the standing legendary stays out after.
+    expect(cue.step(v({ legend: true, clock: CLOCK_RED_S }), 61_000)).toBe('fog');
+    expect(cue.step(v({ legend: true, clock: 1 }), 61_000 + GLOW_MS)).toBe(null);
+    expect(cue.step(v({ legend: true, clock: 90 }), 62_000 + GLOW_MS)).toBe(null);
+    // Gone, then a new one: gold again.
+    expect(cue.step(v({}), 70_000)).toBe(null);
+    expect(cue.step(v({ legend: true }), 71_000)).toBe('legend');
+    // Off as soon as what it was for is gone.
+    expect(cue.step(v({}), 72_000)).toBe(null);
+  });
+  it('lights again on a new match once the HUD has been off the glass', () => {
+    const cue = new GlowCue();
+    cue.step(v({ legend: true }), 0);
+    expect(cue.step(v({ legend: true }), GLOW_MS)).toBe(null);
+    cue.reset();
+    expect(cue.step(v({ legend: true }), GLOW_MS + 1)).toBe('legend');
   });
   it('has no fog glow in the Safari, nor with the fog everywhere', () => {
     expect(miniGlow(v({ ring: null, clock: 5 }))).toBe(null);

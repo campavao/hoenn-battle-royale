@@ -99,8 +99,10 @@ export function barColour(px: number): 'green' | 'yellow' | 'red' {
 }
 
 /** The skin's picture: the near trainer has a back picture when Brendan or May wears it (the
- *  ROM's own), and a front picture turned to face the foe for any other look. */
-export function trainerPicFor(skin: number, slot: Slot): { pic: number; back: boolean; flip: boolean } {
+ *  ROM's own), and a front picture turned to face the foe for any other look. `own` is a
+ *  trainer picture of the ROM's that no skin has (a gym leader's, LogSide `pic`), over it. */
+export function trainerPicFor(skin: number, slot: Slot, own?: number): { pic: number; back: boolean; flip: boolean } {
+  if (own !== undefined) return { pic: own, back: false, flip: slot === 'near' };
   const front = SKIN_PICS[skin] ?? SKIN_PICS[0];
   if (slot === 'near' && skin < BRENDAN_MAY) return { pic: skin % 2, back: true, flip: false };
   return { pic: front, back: false, flip: slot === 'near' };
@@ -359,7 +361,7 @@ export class BattleView {
     const ctx = this.ctx;
     // The trainer's picture, until their first mon is out.
     if (v.trainerDx !== null) {
-      const { pic, back, flip } = trainerPicFor(v.skin, slot);
+      const { pic, back, flip } = trainerPicFor(v.skin, slot, v.pic);
       const cv = art.trainerPic(pic, back);
       const base = slot === 'near' ? NEAR_TRAINER : FAR_TRAINER;
       const cx = base.x + v.trainerDx, cy = (8 - art.trainerSize(pic, back)) * 4 + base.y;

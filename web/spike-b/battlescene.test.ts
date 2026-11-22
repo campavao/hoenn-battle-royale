@@ -295,6 +295,17 @@ describe('the trainers pictures', () => {
     expect(trainerPicFor(0, 'far')).toEqual({ pic: 71, back: false, flip: false });
     expect(trainerPicFor(99, 'far').pic).toBe(71);
   });
+
+  it("is a gym leader's or a gate boss's own picture, which no skin is (Cam 11-22: a watched NORMAN was BRENDAN)", () => {
+    expect(trainerPicFor(0, 'far', 44)).toEqual({ pic: 44, back: false, flip: false });
+    expect(trainerPicFor(0, 'near', 44)).toEqual({ pic: 44, back: false, flip: true });
+    const log: BattleEvent[] = structuredClone(CANNED_LOG);
+    const start = log[0];
+    if (start.e !== 'start') throw new Error('the canned log starts');
+    start.b = { ...start.b, seat: 0, name: 'NORMAN', skin: 0, pic: 44 };
+    expect(sceneAt(log, 100, 0).far).toMatchObject({ name: 'NORMAN', pic: 44 });
+    expect(sceneAt(CANNED_LOG, 100, 0).far.pic).toBeUndefined();
+  });
 });
 
 describe("the trainers' names", () => {
