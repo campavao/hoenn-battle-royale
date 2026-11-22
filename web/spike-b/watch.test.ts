@@ -1,7 +1,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fightKey, nextAfter, pickedBy, Watch } from './watch';
+import { fightKey, nextAfter, pickedBy, watchable, Watch } from './watch';
 
 afterEach(() => { vi.unstubAllGlobals(); });
+
+describe('the WATCH tag is only over a fight with a seat across (Cam 11-21)', () => {
+  it('a trainer in a trade, a gate, a wild patch or a cast is busy, not fighting', () => {
+    expect(watchable({ battling: true, foe: 0 })).toBe(false);
+    expect(watchable({ battling: false, foe: 0 })).toBe(false);
+  });
+  it('a duel, or a bot at a legendary (foe -2), can be watched', () => {
+    expect(watchable({ battling: true, foe: 8 })).toBe(true);
+    expect(watchable({ battling: true, foe: -2 })).toBe(true);
+  });
+  it('a stale foe on a trainer who is no longer in a scene is not a fight', () => {
+    expect(watchable({ battling: false, foe: 8 })).toBe(false);
+  });
+});
 
 describe('one fight, whatever the two seats did before it', () => {
   const start = (seed: number[]) => ({ t: 'bstart' as const, battle: 2050, data: [...seed, 14, 0, 0, 0] });

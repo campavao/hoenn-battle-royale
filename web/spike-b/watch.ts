@@ -77,6 +77,14 @@ export interface WatchHost {
   view(follow: Side): LogView | null;
 }
 
+/** A trainer whose fight can be watched (Cam, 11-21: a WATCH tag over a plain NPC). `battling` is
+ *  the room's "busy in a ROM scene" flag too -- a trade, a gate, a boss, a wild patch, a rod's
+ *  cast, a legendary met by a trainer all set it with no `foe` -- and only a fight with a seat
+ *  across (a trainer, or LEGEND_FOE for a bot at a legendary) has a log or a replay to go into. */
+export function watchable(a: { battling: boolean; foe: number }): boolean {
+  return a.battling && a.foe !== 0;
+}
+
 /** The loot `picked` (room.ts: key, and who took it) gained since the last look that
  *  `who` took. Every key is looked at once: `seen` keeps them, so what was taken before
  *  the watch began is never told. */
