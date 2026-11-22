@@ -49,6 +49,8 @@ export interface Action {
   pose?: number;
   /** A warp's landing walks the trainer on, this way, once the screen is back (StepFn's `walk`). */
   walk?: number;
+  /** A warp that is a fall through a cracked floor (EventScript_FallDownHole): SE_FALL. */
+  fall?: boolean;
 }
 
 export interface Mover {
@@ -87,12 +89,21 @@ export interface Mover {
   keyBtn: number;
   btnT: number;
   acroB: boolean;
+  /** The floor below, to fall to once this step onto a cracked floor is over (crackStep). */
+  fall?: Spot;
+  /** The cracked floors ridden over on this map, holes now (SetCrackedFloorHoleMetatile):
+   *  y * 4096 + x. The map comes back whole once you have left it, as Emerald's reloads. */
+  holes?: { map: string; below: string; cells: number[] };
 }
 
 /** Where a step toward `dir` lands, or null for a wall. 2 cells away is a ledge hop; `warp`
  *  is a door, stairs or a cave mouth, which lands on the other side's own cell, turned `face`
- *  (none: the way they were going) and walked on a step that way if `walk` (export-warp-exits.py). */
-export type StepFn = ((from: Spot, dir: number, ride?: number) => { to: Spot; hop: boolean; warp?: boolean; water?: boolean; face?: number; walk?: boolean } | null) & {
+ *  (none: the way they were going) and walked on a step that way if `walk` (export-warp-exits.py).
+ *  `crack` is a cracked floor's: the spot below it that a rider slower than the MACH BIKE's top
+ *  speed falls to (crackStep). */
+export type StepFn = ((from: Spot, dir: number, ride?: number) => { to: Spot; hop: boolean; warp?: boolean; water?: boolean; face?: number; walk?: boolean; crack?: Spot } | null) & {
+  /** A muddy slope's cell (WorldMap.slopes): standing on one, you slide south (slopeSlide). */
+  slopeAt?: (s: Spot) => boolean;
   /** Whether a bike may be ridden on `s`'s map; none of it without. */
   cycling?: (s: Spot) => boolean;
   /** Whether the ACRO BIKE may be where no other bike is: the Safari Zone. */
@@ -161,7 +172,14 @@ export function tick(m: Mover, keys: Keys, step: StepFn): void {
     const dir = dirOf(keys);
     if (dir && (dir !== m.moveDir || step(m.spot, dir, m.bike && m.acro ? RIDE_ALONG : 0))) m.action = null;
   }
-  if (!m.action) begin(m, keys, step);
+  if (!m.action) {
+    const hole = onHole(m) ? m.spot : null;
+    begin(m, keys, step);
+    if (hole && m.spot === hole) {
+      m.fall = { map: m.holes!.below, x: hole.x, y: hole.y };
+      fallThrough(m);
+    }
+  }
   const a = m.action;
   if (!a) return;
   if (a.kind === 'step' || a.kind === 'hop') {
@@ -188,7 +206,64 @@ export function tick(m: Mover, keys: Keys, step: StepFn): void {
     m.py = 0;
     m.lift = 0;
     if (a.kind === 'warp') m.walkOn = a.walk ?? 0;
+    if (m.fall) fallThrough(m);
   }
+}
+
+/** Frames a fall takes: EventScript_FallDownHole's delay 20 and delay 60, the fade folded in. */
+export const FALL_FRAMES = 80;
+/** The MACH BIKE at its top speed: GetPlayerSpeed's PLAYER_SPEED_FASTEST, machSpeeds[bikeFrameCounter]
+ *  with the counter as the last step left it. */
+const atTopSpeed = (m: Mover) => m.bike && !m.acro && m.bikeCount === 2;
+
+/** A step onto a cracked floor has begun (CrackedFloorPerStepCallback). The floor gives way three
+ *  frames after a step onto it starts (tFloor1Delay), and anybody whose step there started below the
+ *  MACH BIKE's top speed, or who is still on it once it has, falls (VAR_ICE_STEP_COUNT to 0, then
+ *  CaveHole_CheckFallDownHole's EventScript_FallDownHole). So only the bike's 4-frame step is off it
+ *  in time: then it breaks behind you, and onto that hole again is a fall at any speed. */
+function crackStep(m: Mover, to: NonNullable<ReturnType<StepFn>>): void {
+  if (!to.crack) return;
+  const cell = to.to.y * 4096 + to.to.x;
+  const holes = m.holes?.map === to.to.map ? m.holes.cells : [];
+  const fast = m.bike && !m.acro && m.action?.kind === 'step' && m.action.speed === 4;
+  if (fast && !holes.includes(cell)) m.holes = { map: to.to.map, below: to.crack.map, cells: [...holes, cell] };
+  else m.fall = to.crack;
+}
+
+/** Still on a cracked floor ridden onto at speed once the next action is chosen (stopped, turned,
+ *  bumped, off the bike): it has given way under you. */
+function onHole(m: Mover): boolean {
+  return !!m.holes && m.holes.map === m.spot.map && m.holes.cells.includes(m.spot.y * 4096 + m.spot.x);
+}
+
+/** Down the hole (warphole): onto the same cell of the floor below, on foot (ResetInitialPlayerAvatarState). */
+function fallThrough(m: Mover): void {
+  const below = m.fall!;
+  m.fall = undefined;
+  m.prev = m.spot;
+  m.spot = below;
+  m.bike = false;
+  bikeClear(m);
+  m.action = { kind: 'warp', t: 0, len: FALL_FRAMES, speed: 0, dir: m.moveDir, fall: true };
+}
+
+/** ForcedMovement_MuddySlope: on a muddy slope anybody but the MACH BIKE heading north at its top
+ *  speed slides back down, a step south at PlayerWalkFast's pace, still facing the way they were
+ *  (facingDirectionLocked), the bike's speed gone (Bike_UpdateBikeCounterSpeed(0)). */
+function slopeSlide(m: Mover, step: StepFn): boolean {
+  if (!step.slopeAt?.(m.spot) || (atTopSpeed(m) && m.moveDir === DIR_NORTH)) return false;
+  const to = step(m.spot, DIR_SOUTH);
+  if (!to || to.warp || to.hop || to.water) return false;
+  m.bikeSpeed = m.bikeCount = 0;
+  m.runningState = MOVING;
+  m.moveDir = DIR_SOUTH;
+  m.prev = m.spot;
+  m.strides += 1;
+  m.spot = to.to;
+  m.action = { kind: 'step', t: 0, len: 8, speed: 2, dir: DIR_SOUTH };
+  m.px = 0;
+  m.py = -16;
+  return true;
 }
 
 /** bike.c's sMachBikeSpeedCallbacks: PlayerWalkNormal, PlayerWalkFast, PlayerWalkFaster. */
@@ -225,6 +300,8 @@ function begin(m: Mover, keys: Keys, step: StepFn): void {
     m.acroB = !!keys.b;
     return;
   }
+  if (m.holes && m.holes.map !== m.spot.map) m.holes = undefined;
+  if (slopeSlide(m, step)) return;
   const on = m.walkOn ?? 0;
   m.walkOn = 0;
   const walking = on ? step(m.spot, on) : null;
@@ -269,6 +346,7 @@ function begin(m: Mover, keys: Keys, step: StepFn): void {
     m.action = { kind: 'step', t: 0, len: 16 / speed, speed, dir };
     m.px = -DXY[dir][0] * 16;
     m.py = -DXY[dir][1] * 16;
+    crackStep(m, to);
   }
 }
 
@@ -334,6 +412,7 @@ function bikeGo(m: Mover, dir: number, step: StepFn, slow: boolean): void {
   m.action = { kind: 'step', t: 0, len: 16 / speed, speed, dir };
   m.px = -DXY[dir][0] * 16;
   m.py = -DXY[dir][1] * 16;
+  crackStep(m, to);
 }
 
 /** BikeClearState and the runningState that goes with it. */
@@ -400,6 +479,7 @@ function rideTo(m: Mover, to: NonNullable<ReturnType<StepFn>>, dir: number, step
     return;
   }
   m.action = { kind: 'step', ...go, t: 0, dir };
+  crackStep(m, to);
 }
 
 /** AcroBikeTransition_Moving: MOVE_SPEED_FAST_2, walls and all. */
@@ -623,12 +703,13 @@ function landing(w: { face?: SeamDir; walk?: number }): { face?: number; walk?: 
  *  so its cell is a wall to anything but the hop it faces (World lets a trainer stand on
  *  one, which never mattered while export-world.py classed every ledge as a wall). */
 export function stepFn(world: {
-  step(s: Spot, d: SeamDir, surf?: boolean, cut?: number): Spot | null;
+  step(s: Spot, d: SeamDir, surf?: boolean, cut?: number, upSlope?: boolean): Spot | null;
   cell(id: string, x: number, y: number): number;
   acroAt?(id: string, x: number, y: number): number;
   acroStep?(s: Spot, d: SeamDir): Spot | null;
+  slopeAt?(id: string, x: number, y: number): boolean;
   warpAt(id: string, x: number, y: number): { to: string; toX: number; toY: number; kind: string; face?: SeamDir; walk?: number } | undefined;
-  map(id: string): { outdoor: boolean } | undefined;
+  map(id: string): { outdoor: boolean; bike?: boolean } | undefined;
 }, field: { surf: boolean; cut: number } = { surf: false, cut: 0 }): StepFn {
   const fn: StepFn = (from, dir, ride = 0) => {
     const kind = world.acroAt?.(from.map, from.x + DXY[dir][0], from.y + DXY[dir][1]);
@@ -636,7 +717,8 @@ export function stepFn(world: {
       const onto = rideOnto(kind, dir, ride) ? world.acroStep?.(from, SEAM_OF[dir]) : null;
       return onto ? { to: onto, hop: false } : null;
     }
-    const to = world.step(from, SEAM_OF[dir], field.surf, field.cut);
+    // Up a muddy slope too: what it does to you is slopeSlide's, frame by frame.
+    const to = world.step(from, SEAM_OF[dir], field.surf, field.cut, true);
     if (!to) {
       // A building's doormat is an arrow: down on it goes out (MetatileBehavior's
       // south-arrow warp), though the step itself runs into the map's edge.
@@ -651,8 +733,10 @@ export function stepFn(world: {
     if (!hop && cls >= 3 && cls <= 6) return null;
     return cls === CLASS_WATER ? { to, hop, water: true } : { to, hop };
   };
-  // Where the live dock's BIKE is lit (ui/phonehud.ts contextFor): outdoors, not the Safari.
-  fn.cycling = (s) => !!world.map(s.map)?.outdoor && !s.map.startsWith('MAP_SAFARI_ZONE') && world.cell(s.map, s.x, s.y) !== CLASS_WATER;
+  // Where the live dock's BIKE is lit (ui/phonehud.ts contextFor): outdoors, not the Safari; and
+  // the floors with a crack or a slope the MACH BIKE is for (WorldMap.bike).
+  fn.cycling = (s) => { const m = world.map(s.map); return !!(m?.outdoor || m?.bike) && !s.map.startsWith('MAP_SAFARI_ZONE') && world.cell(s.map, s.x, s.y) !== CLASS_WATER; };
+  fn.slopeAt = (s) => world.slopeAt?.(s.map, s.x, s.y) ?? false;
   // The Zone's rails want riding (Cam, 11-03); the MACH BIKE stays out of it, as it was.
   fn.acroCycling = (s) => s.map.startsWith('MAP_SAFARI_ZONE') && world.cell(s.map, s.x, s.y) !== CLASS_WATER;
   fn.acroAt = (s) => world.acroAt?.(s.map, s.x, s.y) ?? 0;
