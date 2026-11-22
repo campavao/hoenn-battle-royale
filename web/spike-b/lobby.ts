@@ -29,7 +29,7 @@ export interface RoomInfo { code: string; quick: boolean; you: number; key?: str
 
 export interface LobbyHooks {
   /** Into a room: by code, a new one of my own, or quick play's. */
-  join(how: { code?: string; host?: boolean; pass?: string }): void;
+  join(how: { code?: string; host?: boolean; pass?: string; fresh?: boolean }): void;
   start(): void;
   /** The host changed a setting for the room's next match. */
   set(set: Partial<Settings> & { pass?: string }): void;
@@ -165,6 +165,23 @@ export class Lobby {
     if (this.note !== was || this.stage.current !== this.main) return;
     this.note = note;
     this.stage.redraw();
+  }
+
+  /** QUICK PLAY found no lobby waiting, but a match under way (Cam, 11-22: "give the player an
+   *  option to WATCH or PLAY NOW"): WATCH goes into that match to look on until the next, PLAY
+   *  NOW into a quick lobby of my own. B is the menu again. */
+  running(code: string, players: number): void {
+    const done = () => { if (this.stage.current === ask) this.stage.pop(); };
+    const ask: DrawnScreen = noticeScreen(() => ({
+      title: 'QUICK PLAY',
+      lines: [{ text: `A match is on with ${players} trainer${players === 1 ? '' : 's'}. Watch it, or start a new lobby now?` }],
+      buttons: [
+        { label: 'WATCH', id: 'running-watch', onPress: () => { done(); this.hooks.join({ code }); } },
+        { label: 'PLAY NOW', id: 'running-play', onPress: () => { done(); this.hooks.join({ fresh: true }); } },
+      ],
+      onBack: done,
+    }));
+    this.stage.push(ask);
   }
 
   /** The room, as the relay says it is now. */

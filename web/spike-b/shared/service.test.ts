@@ -186,6 +186,96 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
+  describe('QUICK PLAY (Cam, 11-22)', () => {
+    type Got = { got: { t: string }[] };
+    const roomOf = (p: Got) => p.got.filter((m) => m.t === 'room').at(-1) as unknown as { code: string; quick: boolean; startsIn?: number; members: { name: string }[] } | undefined;
+    const make = (t: { now: number }, bots = 0) => new WorldService({ maps: MAPS, patches: PATCHES, bots, cap: 30, now: () => t.now, autoStartMs: 60_000, log: () => undefined });
+
+    it('joins an open hosted lobby waiting for its START, the fullest first, before a quick room as full', () => {
+      const t = { now: 0 };
+      const svc = make(t);
+      try {
+        const [a, q, k] = [phone(), phone(), phone()];
+        svc.open(a.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+        const hosted = roomOf(a)!.code;
+        svc.open(q.link).onText(JSON.stringify({ t: 'join', name: 'quinn', skin: 0 }));
+        expect(roomOf(q)).toMatchObject({ code: hosted, quick: false, members: [{ name: 'ALICE' }, { name: 'QUINN' }] });
+        svc.open(k.link).onText(JSON.stringify({ t: 'join', name: 'kim', skin: 0 }));
+        expect(roomOf(k)!.code).toBe(hosted);
+      } finally {
+        svc.stop();
+      }
+    });
+
+    it('never into an unlisted or passcoded lobby, nor one whose host is gone', () => {
+      const t = { now: 0 };
+      const svc = make(t);
+      try {
+        const [a, b, q] = [phone(), phone(), phone()];
+        const sa = svc.open(a.link), sb = svc.open(b.link);
+        sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+        sa.onText(JSON.stringify({ t: 'set', set: { door: 'private' } }));
+        sb.onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0, host: true }));
+        sb.onText(JSON.stringify({ t: 'set', set: { door: 'pass', pass: 'ABCD' } }));
+        svc.open(q.link).onText(JSON.stringify({ t: 'join', name: 'quinn', skin: 0 }));
+        expect(roomOf(q)).toMatchObject({ quick: true, members: [{ name: 'QUINN' }] });
+        expect([roomOf(a)!.code, roomOf(b)!.code]).not.toContain(roomOf(q)!.code);
+      } finally {
+        svc.stop();
+      }
+    });
+
+    it('with a match on and no lobby waiting, asks first: WATCH is its code, PLAY NOW (fresh) a quick lobby', () => {
+      const t = { now: 0 };
+      const svc = make(t, 3);
+      try {
+        const [a, q] = [phone(), phone()];
+        const sa = svc.open(a.link);
+        sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0, host: true }));
+        const code = roomOf(a)!.code;
+        sa.onText(JSON.stringify({ t: 'start' }));
+        expect(a.got.some((m) => m.t === 'hello')).toBe(true);
+        const sq = svc.open(q.link);
+        sq.onText(JSON.stringify({ t: 'join', name: 'quinn', skin: 0 }));
+        expect(q.got.at(-1)).toEqual({ t: 'running', code, players: 1 });
+        // The page asked; PLAY NOW joins again, fresh: a quick lobby of its own, not the match.
+        sq.onText(JSON.stringify({ t: 'join', name: 'quinn', skin: 0, fresh: true }));
+        expect(roomOf(q)).toMatchObject({ quick: true, members: [{ name: 'QUINN' }] });
+        expect(q.got.some((m) => m.t === 'hello')).toBe(false);
+        // WATCH: in by the code, into the match to look on.
+        const w = phone();
+        svc.open(w.link).onText(JSON.stringify({ t: 'join', name: 'will', skin: 0, code }));
+        expect(w.got.some((m) => m.t === 'hello')).toBe(true);
+      } finally {
+        svc.stop();
+      }
+    });
+
+    it('somebody new in a quick lobby sets its count back to 60 seconds', () => {
+      const t = { now: 0 };
+      const svc = make(t);
+      try {
+        const [a, b, c] = [phone(), phone(), phone()];
+        svc.open(a.link).onText(JSON.stringify({ t: 'join', name: 'alice', skin: 0 }));
+        expect(roomOf(a)!.startsIn).toBe(60_000);
+        t.now += 45_000;
+        svc.open(b.link).onText(JSON.stringify({ t: 'join', name: 'bob', skin: 0 }));
+        expect(roomOf(a)!.startsIn).toBe(60_000);
+        // 50 s later, 10 s left: still no match, and Cy's arrival starts it over.
+        t.now += 50_000;
+        svc.pump();
+        expect(a.got.some((m) => m.t === 'hello')).toBe(false);
+        svc.open(c.link).onText(JSON.stringify({ t: 'join', name: 'cy', skin: 0 }));
+        expect(roomOf(b)!.startsIn).toBe(60_000);
+        t.now += 60_001;
+        svc.pump();
+        expect(c.got.some((m) => m.t === 'hello')).toBe(true);
+      } finally {
+        svc.stop();
+      }
+    });
+  });
+
   it("MY VOICE rides with a trainer's card, for whoever fights them, sane or not at all", () => {
     const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => 0, log: () => undefined });
     try {
@@ -205,8 +295,9 @@ describe('world rooms', () => {
     try {
       const a = phone(), q = phone(), c = phone();
       const sa = svc.open(a.link);
-      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 3, host: true }));
+      // QUICK PLAY before the hosted room is open (after, it would seat Quinn there).
       svc.open(q.link).onText(JSON.stringify({ t: 'join', name: 'quinn', skin: 0 }));
+      sa.onText(JSON.stringify({ t: 'join', name: 'alice', skin: 3, host: true }));
       const code = (a.got.at(-1) as unknown as { code: string }).code;
       const s = svc.open(c.link);
       s.onText(JSON.stringify({ t: 'list' }));

@@ -5518,6 +5518,7 @@ async function boot(): Promise<void> {
       onKicked: () => { room = null; forget(); unlink(); lobby!.menu('The host took you out of the room.'); },
       onOld: () => { room = null; matchOn = false; forget(); lobby!.old(); },
       onRooms: (rooms) => lobby?.listed(rooms),
+      onRunning: (code, players) => lobby?.running(code, players),
       onMatch: (l) => { reloadedFrom = null; startMatch(l); },
       onOpen: () => { lobby?.linkIs('up'); sendStat(url.replace(/\/world$/, '')); },
       onClosed: () => {
@@ -5549,7 +5550,7 @@ async function boot(): Promise<void> {
     });
     worldSock = sock;
     sheetBtn.hidden = watchLeave.hidden = false;
-    const joinAs = (how: { code?: string; host?: boolean; pass?: string }) => {
+    const joinAs = (how: { code?: string; host?: boolean; pass?: string; fresh?: boolean }) => {
       knockedWithPass = !!how.pass;
       const c = loadCareer();
       // MY VOICE goes with the card: whoever fights me hears my lines (MY LOOK's picks).
