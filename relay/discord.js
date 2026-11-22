@@ -30,10 +30,10 @@ export function roomText(r, deadline, site = SITE) {
 }
 
 /** A room whose match is on: anyone can still come in to watch it (service.ts: a join to a
- *  playing room spectates), so the post keeps its link (Cam, 11-21: "the quickplay game
- *  announcement should also include a link to join like a hosted game"). */
+ *  playing room spectates), so the post keeps its link, worded JOIN (Cam, 11-21: "Join might convince folks to
+ *  click more"). */
 export function startedText(r, site = SITE) {
-  return `${r.quick ? "**QUICK PLAY**" : `**${plain(r.host)}**'s room`} started with ${r.players} trainer${r.players === 1 ? "" : "s"}.\nWatch: <${site}/#join=${r.code}>`;
+  return `${r.quick ? "**QUICK PLAY**" : `**${plain(r.host)}**'s room`} started with ${r.players} trainer${r.players === 1 ? "" : "s"}.\nJoin: <${site}/#join=${r.code}>`;
 }
 
 /**

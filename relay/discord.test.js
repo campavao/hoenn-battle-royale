@@ -51,7 +51,7 @@ test("a quick room is posted, edited as it fills, and marked started", async () 
   t += 40_000; list = [quick(2, 0, true)];
   await p.tick();
   assert.equal(hook.calls[2].method, "PATCH");
-  assert.equal(hook.calls[2].body.content, "**QUICK PLAY** started with 2 trainers.\nWatch: <https://hoenn-battle-royale.vercel.app/#join=QK1234>");
+  assert.equal(hook.calls[2].body.content, "**QUICK PLAY** started with 2 trainers.\nJoin: <https://hoenn-battle-royale.vercel.app/#join=QK1234>");
   assert.equal(p.open, 1, "kept while the match is on");
 
   // Said once: the match running on changes nothing.
