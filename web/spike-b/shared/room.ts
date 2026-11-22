@@ -479,8 +479,8 @@ export const ZONE_CELLS: readonly Spot[] = [
 ];
 export const ITEM_MASTER_BALL = 1;
 /** What a Zone ball holds (br_zone.c's sBallItems): POKe BALL, HYPER and MAX POTION, FULL
- *  RESTORE, REVIVE, FULL HEAL, X ATTACK and SPEED, RARE CANDY, the six stones, NUGGET, PP UP. */
-export const ZONE_ITEMS: readonly number[] = [4, 21, 19, 24, 20, 23, 75, 77, 68, 95, 97, 96, 98, 93, 94, 110, 69];
+ *  RESTORE, REVIVE, FULL HEAL, X ATTACK and SPEED, the six stones, NUGGET, PP UP. */
+export const ZONE_ITEMS: readonly number[] = [4, 21, 19, 24, 20, 23, 75, 77, 95, 97, 96, 98, 93, 94, 110, 69];
 /** Or, one ball in BR_ZONE_TM_IN, a machine (sBallTMs): DRAGON CLAW to OVERHEAT. */
 export const ZONE_TMS: readonly number[] = [2, 6, 13, 14, 15, 19, 22, 24, 25, 26, 29, 30, 31, 35, 36, 38, 40, 50].map((n) => 288 + n);
 const ZONE_TM_IN = 2;
