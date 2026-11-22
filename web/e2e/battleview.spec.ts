@@ -221,6 +221,25 @@ test.describe('the page-drawn battle', () => {
     expect(s.far?.species).toBe(286);
   });
 
+  test("a gym leader is drawn as themself, not as a skin (Cam 11-22: a watched NORMAN was BRENDAN)", async ({ browser }) => {
+    const page = await (await browser.newContext({ viewport: { width: 960, height: 640 } })).newPage();
+    const cut = () => page.evaluate(() => {
+      const c = document.querySelector('#battleview-host canvas') as HTMLCanvasElement;
+      // The far trainer's picture: x 144..208, y 8..72 in GBA pixels.
+      const k = c.width / 240, d = c.getContext('2d')!.getImageData(144 * k, 8 * k, 64 * k, 64 * k).data;
+      let h = 0;
+      for (let i = 0; i < d.length; i += 4) h = (Math.imul(h, 31) + d[i] + (d[i + 1] << 8) + (d[i + 2] << 16)) | 0;
+      return h;
+    });
+    await openView(page, '&hold&at=1500&nolv&foe=NORMAN&skin=0');
+    const asSkin = await cut();
+    if (SHOTS) await page.locator('#battleview-host canvas').screenshot({ path: join(SHOTS, 'leader-before.png') });
+    await openView(page, '&hold&at=1500&nolv&foe=NORMAN&skin=0&pic=44');
+    expect((await snap(page)).text).toContain('NORMAN');
+    expect(await cut(), "NORMAN's picture, not BRENDAN's").not.toBe(asSkin);
+    if (SHOTS) await page.locator('#battleview-host canvas').screenshot({ path: join(SHOTS, 'leader-after.png') });
+  });
+
   test('fits a phone, 1280x720 and 1920x1080, at a whole number of device pixels, and draws in a few ms', async ({ browser }) => {
     const frames: Record<string, unknown> = {};
     for (const [name, w, h, dpr] of [['phone 375x667 @3x', 375, 667, 3], ['1280x720', 1280, 720, 1], ['1920x1080', 1920, 1080, 1]] as const) {

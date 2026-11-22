@@ -2,7 +2,8 @@
 // needs no match (as `#solo` is for the match). `#battleview&follow=1&at=<ms>&hold` follows side 1,
 // starts <ms> in, and holds there (nolv leaves the level out, as the ROM's battle does in a match;
 // wild plays the fight with a wild POKeMON, catch the one where a wild SHUPPET is caught, and live=<n>
-// only the log's first n events, as a live fight waited on);
+// only the log's first n events, as a live fight waited on; foe/skin/pic make the far trainer
+// somebody else, pic a picture of the ROM's own such as a gym leader's);
 // the view is on `window.__battleview`.
 import { BattleView } from './battleview';
 import { CANNED_LOG, CATCH_LOG, WILD_LOG } from './fixtures/battlelog-canned';
@@ -25,7 +26,14 @@ export function openDevBattleView(art: RomArt, hash: string): BattleView {
   for (let i = 0; i < 240; i += 16) g.fillRect(i, 0, 8, 160);
   const view = new BattleView(host, { art, ...(q.has('behind') ? { behind: () => field } : {}) }, { follow: q.get('follow') === '1' ? 1 : 0, autoplay: !q.has('hold'), levels: !q.has('nolv') });
   const at = Number(q.get('at')) || 0;
-  const log = q.has('catch') ? CATCH_LOG : q.has('wild') ? WILD_LOG : CANNED_LOG;
+  let log = q.has('catch') ? CATCH_LOG : q.has('wild') ? WILD_LOG : CANNED_LOG;
+  // &foe=<name>&skin=<n>&pic=<TRAINER_PIC_*>: the far trainer as somebody else, a gym leader's own picture.
+  const start = log[0];
+  if (start?.e === 'start' && (q.has('foe') || q.has('skin') || q.has('pic'))) {
+    const b = { ...start.b, name: q.get('foe') ?? start.b.name, skin: Number(q.get('skin') ?? start.b.skin) };
+    if (q.has('pic')) b.pic = Number(q.get('pic'));
+    log = [{ ...start, b }, ...log.slice(1)];
+  }
   view.play(q.has('live') ? log.slice(0, Number(q.get('live'))) : log, at);
   if (q.has('hold')) view.seek(at);
   (window as unknown as { __battleview: BattleView }).__battleview = view;

@@ -9,7 +9,7 @@ import worldJson from '../data/world.json';
 import patchJson from '../../src/data/patches.json';
 import { stepFn } from '../sim';
 import { EVENT_MAX } from '../../src/match/events';
-import { RING_PHASE, makeRoom, type Room } from './room';
+import { RING_PHASE, eventPiece, makeRoom, type Room } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -20,7 +20,8 @@ const NEIGH: [number, number][] = [[0, 1], [0, -1], [1, 0], [-1, 0]];
 const R = 14;
 
 /** Pieces whose cell is not reachable from outside the cluster (d > 8 of the legendary), every
- *  other piece, the trader and every ball being a wall. */
+ *  other piece, the trader and every ball being a wall. A piece out on its own over the map
+ *  (dropEvent spreads them) has to be reachable from more than eight off itself. */
 function cutOff(room: Room): string[] {
   const out: string[] = [];
   for (const e of room.events) {
@@ -40,6 +41,10 @@ function cutOff(room: Room): string[] {
       }
     }
     const pieces = [...room.spills.values()].filter((b) => b.map === e.map && Math.abs(b.x - e.x) + Math.abs(b.y - e.y) <= 9 && !(b.person));
+    for (const b of room.spills.values()) {
+      if (b.map !== e.map || b.person || Math.abs(b.x - e.x) + Math.abs(b.y - e.y) <= 9) continue;
+      if (!(room as unknown as { reaches(f: { map: string; x: number; y: number }, t: { map: string; x: number; y: number }[]): boolean }).reaches(b, [b])) out.push(`far piece ${b.key} at ${b.map} ${b.x},${b.y} is shut in`);
+    }
     const targets = [...pieces.map((b) => ({ what: b.legend ? 'legendary' : `piece ${b.key}`, x: b.x, y: b.y })), ...(e.trader ? [{ what: 'trader', x: e.trader.x, y: e.trader.y }] : [])];
     for (const t of targets) {
       const seen = new Set<string>();
@@ -83,4 +88,45 @@ describe('event pieces', () => {
     expect(drops).toBeGreaterThan(20);
     expect(bad).toEqual([]);
   }, 300_000);
+
+  it("spread over the legendary's map, apart from it and from each other (Cam, 11-22: everything crowds round the legendary)", () => {
+    let drops = 0, spread = 0;
+    const crowded: string[] = [];
+    for (const seed of [1, 7, 42, 99, 123, 777, 2024, 31337, 5, 64]) {
+      const room = makeRoom(MAPS, PATCHES, seed);
+      (room as unknown as { storyFor(): undefined }).storyFor = () => undefined;
+      for (let n = 0; n < EVENT_MAX - 1; n++) {
+        room.epoch = room.tick - 3 * RING_PHASE - 5;
+        const ring = room.ring();
+        room.spills.clear();
+        room.events.length = 0;
+        (room as unknown as Priv).dropEvent(n, ring);
+        const e = room.events[0];
+        if (!e || e.story) continue;
+        drops++;
+        const pieces = [...room.spills.values()].filter((b) => b.key !== e.key);
+        expect(pieces, `seed ${seed} event ${n}: six pieces`).toHaveLength(6);
+        expect(pieces.every((b) => b.map === e.map), 'on its map').toBe(true);
+        const d = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+        const apart = pieces.every((b) => d(b, e) >= 5) && pieces.every((b) => pieces.every((c) => c === b || d(b, c) >= 4));
+        if (apart) spread++;
+        else crowded.push(`seed ${seed} event ${n} on ${e.map}: ${pieces.map((b) => `${d(b, e)}`).join(' ')}`);
+      }
+    }
+    expect(drops).toBeGreaterThan(20);
+    // A cramped map (a town's square, a cave's corridor) may have no room apart: round it there.
+    expect(spread / drops, crowded.join('\n')).toBeGreaterThan(0.8);
+  }, 300_000);
+
+  it('the last event, at the ring\'s centre, keeps its pieces round the legendary', () => {
+    const room = makeRoom(MAPS, PATCHES, 42);
+    (room as unknown as { storyFor(): undefined }).storyFor = () => undefined;
+    room.epoch = room.tick - 5 * RING_PHASE - 5;
+    (room as unknown as Priv).dropEvent(EVENT_MAX - 1, room.ring());
+    const e = room.events.find((q) => !q.story);
+    if (!e) return; // the final ring's story took its place
+    const mine = [...room.spills.values()].filter((b) => b.key >= eventPiece(EVENT_MAX - 1, 0) && b.key < eventPiece(EVENT_MAX, 0));
+    expect(mine.length).toBeGreaterThan(1);
+    for (const b of mine) expect(Math.abs(b.x - e.x) + Math.abs(b.y - e.y)).toBeLessThanOrEqual(8);
+  });
 });

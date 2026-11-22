@@ -393,8 +393,6 @@ describe('somebody who has given it away', () => {
     expect(spentLine({ by: 0 }, 1)).toBe('Sorry, somebody took it.');
     expect(spentLine({ by: 1 }, 1)).toBe("That's all I had. Take care of it!");
     expect(spentLine({ by: 2, busy: 'WALLY' }, 1)).toBe('WALLY is fighting me for it.');
-    expect(spentLine({ by: 0, beaten: 'WALLY' }, 1)).toBe('WALLY already beat me.');
-    expect(spentLine({ by: 0, beaten: '' }, 1)).toBe('You already beat me.');
   });
 });
 

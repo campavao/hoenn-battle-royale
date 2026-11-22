@@ -118,6 +118,8 @@ export interface SideScene {
   /** The trainer's name and look. */
   name: string;
   skin: number;
+  /** The ROM's trainer picture over the skin's (LogSide `pic`). */
+  pic?: number;
   /** Their picture's place: how far it is from where it stands, in pixels, away from the middle
    *  (negative for the near trainer, who slides from the left); null when it is not on the screen
    *  (before the start, or once their first mon is out). */
@@ -289,7 +291,7 @@ export function sceneAt(log: readonly BattleEvent[], ms: number, follow: Side = 
     if (mon && mine?.e === 'hp') hp = Math.round(mon.hp + (Math.max(0, Math.min(mon.maxHp, mine.hp)) - mon.hp) * clamp01(p / DRAIN));
     if (mon && mine?.e === 'status') status = mine.status;
     if (mon && mine?.e === 'faint') hp = 0;
-    return { side, name: ls?.name ?? '', skin: ls?.skin ?? 0, trainerDx, wild, monDx, mon, slot: mon ? slot : -1, hp, status, appear, vanish, leave, blink, inBall: 0 };
+    return { side, name: ls?.name ?? '', skin: ls?.skin ?? 0, ...(ls?.pic !== undefined ? { pic: ls.pic } : {}), trainerDx, wild, monDx, mon, slot: mon ? slot : -1, hp, status, appear, vanish, leave, blink, inBall: 0 };
   };
   const sa = sideScene(0), sb = sideScene(1);
   const wildSide: Side | null = sides.b?.wild ? 1 : sides.a?.wild ? 0 : null;

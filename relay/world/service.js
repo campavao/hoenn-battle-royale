@@ -11477,14 +11477,14 @@ init_wild();
 
 // web/spike-b/shared/gyms.ts
 var LEADERS = [
-  { n: 0, name: "ROXANNE", map: "MAP_RUSTBORO_CITY_GYM", cells: [[5, 2]], gfx: [125] },
-  { n: 1, name: "BRAWLY", map: "MAP_DEWFORD_TOWN_GYM", cells: [[4, 3]], gfx: [126] },
-  { n: 2, name: "WATTSON", map: "MAP_MAUVILLE_CITY_GYM", cells: [[5, 2]], gfx: [127] },
-  { n: 3, name: "FLANNERY", map: "MAP_LAVARIDGE_TOWN_GYM_1F", cells: [[13, 9]], gfx: [128] },
-  { n: 4, name: "NORMAN", map: "MAP_PETALBURG_CITY_GYM", cells: [[4, 2]], gfx: [129] },
-  { n: 5, name: "WINONA", map: "MAP_FORTREE_CITY_GYM", cells: [[15, 2]], gfx: [130] },
-  { n: 6, name: "TATE&LIZA", map: "MAP_MOSSDEEP_CITY_GYM", cells: [[23, 7], [24, 7]], gfx: [132, 131] },
-  { n: 7, name: "JUAN", map: "MAP_SOOTOPOLIS_CITY_GYM_1F", cells: [[8, 2]], gfx: [218] }
+  { n: 0, name: "ROXANNE", map: "MAP_RUSTBORO_CITY_GYM", cells: [[5, 2]], gfx: [125], pic: 40 },
+  { n: 1, name: "BRAWLY", map: "MAP_DEWFORD_TOWN_GYM", cells: [[4, 3]], gfx: [126], pic: 41 },
+  { n: 2, name: "WATTSON", map: "MAP_MAUVILLE_CITY_GYM", cells: [[5, 2]], gfx: [127], pic: 42 },
+  { n: 3, name: "FLANNERY", map: "MAP_LAVARIDGE_TOWN_GYM_1F", cells: [[13, 9]], gfx: [128], pic: 43 },
+  { n: 4, name: "NORMAN", map: "MAP_PETALBURG_CITY_GYM", cells: [[4, 2]], gfx: [129], pic: 44 },
+  { n: 5, name: "WINONA", map: "MAP_FORTREE_CITY_GYM", cells: [[15, 2]], gfx: [130], pic: 45 },
+  { n: 6, name: "TATE&LIZA", map: "MAP_MOSSDEEP_CITY_GYM", cells: [[23, 7], [24, 7]], gfx: [132, 131], pic: 46 },
+  { n: 7, name: "JUAN", map: "MAP_SOOTOPOLIS_CITY_GYM_1F", cells: [[8, 2]], gfx: [218], pic: 47 }
 ];
 var AT2 = new Map(LEADERS.flatMap((l) => l.cells.map(([x2, y]) => [`${l.map}:${x2}:${y}`, l])));
 function leaderAt(map, x2, y) {
@@ -12766,6 +12766,9 @@ var PERSON_GFX = {
 var GATES = ["TRAINER_MAXIE_MAGMA_HIDEOUT", "TRAINER_ARCHIE", "TRAINER_SHELLY_WEATHER_INSTITUTE", "TRAINER_MATT", "TRAINER_MAXIE_MT_CHIMNEY", "TRAINER_MAXIE_MOSSDEEP"];
 var HOME_N = 1e3;
 var HOME_MONS = [277, 280, 283, 1, 4, 7, 64, 67, 75, 93, 385, 143];
+var SPREAD_NEAR = 5;
+var SPREAD_FAR = 30;
+var SPREAD_GAPS = [10, 7, 4];
 var EVENT_SPILL = 2 << 20;
 var eventPiece = (n, i) => EVENT_SPILL | n << 4 | i;
 var RELEASED_SPILL = 3 << 20;
@@ -13147,6 +13150,13 @@ var Room = class {
   bossDown(n) {
     return this.gyms.some(([m]) => m === n);
   }
+  /** The leader standing on a cell: none once beaten. A beaten leader leaves the gym (Cam, 11-22:
+   *  "after beating, Norman sprite still was on map"), so their cell is floor, where their team's
+   *  bag can lie, and A there is nothing. */
+  leaderStanding(map, x2, y) {
+    const l = leaderAt(map, x2, y);
+    return l && !this.bossDown(l.n) ? l : void 0;
+  }
   /** Every CENTER's doorstep on the match's own outdoor maps: the cell below a door into a
    *  map with a nurse (world.ts centre), where its trainers walk out. Found once. */
   centreSteps() {
@@ -13419,9 +13429,10 @@ var Room = class {
     return g && !this.picked.has(g.key) ? g : void 0;
   }
   /** Somebody standing on a cell who has given away what they held: a gift-giver, somebody at
-   *  home, a story's person, a beaten leader. They stay (Cam, 11-02: "I don't think we should
-   *  ever disappear a person"), still in the way, and say so when talked to. Whoever took it
-   *  did it through the room, so every page has them standing the same. */
+   *  home, a story's person. They stay (Cam, 11-02: "I don't think we should ever disappear a
+   *  person"), still in the way, and say so when talked to. Whoever took it did it through the
+   *  room, so every page has them standing the same. A beaten gym leader is the one who goes
+   *  (leaderStanding). */
   spentAt(map, x2, y) {
     const g = this.ground().get(`${map}:${x2}:${y}`);
     if (g?.gift && this.picked.has(g.key)) return { by: this.picked.get(g.key) };
@@ -13429,8 +13440,7 @@ var Room = class {
     for (const b2 of this.spills.values()) {
       if (b2.person && b2.map === map && b2.x === x2 && b2.y === y && this.picked.has(b2.key)) return { by: this.picked.get(b2.key), ...b2.person.gate !== void 0 ? { gate: true } : {} };
     }
-    const boss = leaderAt(map, x2, y);
-    return boss && this.bossDown(boss.n) ? { by: 0, beaten: this.gyms.find(([n]) => n === boss.n)?.[1] ?? "" } : void 0;
+    return void 0;
   }
   /** A free cell beside a trainer, facing first, then round: walkable for them, not a
    *  door, a ledge, a ball or a bag, nor one of `used`. For a trainer who stays on the map
@@ -13565,10 +13575,12 @@ var Room = class {
     this.engageBots(events);
     return events;
   }
-  /** Event `n` (every other ring from the first shrink, DESIGN §Events): its legendary,
-   *  two rares at the phase's rung, three gold balls and a bag of supplies, on the free
-   *  cells nearest a spot inside the ring -- the last one at the ring's centre, the one
-   *  place its final ring still holds. Whoever gets there takes it. */
+  /** Event `n` (every other ring from the first shrink, DESIGN §Events): its legendary on a
+   *  spot inside the ring, and two rares at the phase's rung, three gold balls and a bag of
+   *  supplies spread over its map, apart from it and from each other (Cam, 11-22: "it should
+   *  just be in the area/zone the legendary is in"). The last event's are at the ring's
+   *  centre, the one place its final ring still holds, so they stay round it there. Whoever
+   *  gets there takes it. */
   dropEvent(n, ring) {
     let state = (this.seed ^ Math.imul(ring.round + 1, 2654435761) ^ Math.imul(n + 1, 2246822507)) >>> 0 || 1;
     const rng = () => {
@@ -13615,8 +13627,24 @@ var Room = class {
       else this.spills.delete(key);
     };
     lay(f);
+    const pieces = species.length + bags.length;
+    if (n !== EVENT_MAX - 1) {
+      const zone = all.filter((s) => s.map === f.map && d(s) >= SPREAD_NEAR && d(s) <= SPREAD_FAR && !this.inFog(s, ring));
+      for (let i = zone.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [zone[i], zone[j]] = [zone[j], zone[i]];
+      }
+      for (const gap of SPREAD_GAPS) {
+        for (const c of zone) {
+          if (laid.length >= pieces) break;
+          if (laid.some((p) => Math.abs(p.x - c.x) + Math.abs(p.y - c.y) < gap)) continue;
+          if (!this.reaches(c, [c])) continue;
+          lay(c);
+        }
+      }
+    }
     for (const c of near) {
-      if (laid.length >= species.length + bags.length) break;
+      if (laid.length >= pieces) break;
       lay(c);
     }
     const e = { n, key: eventPiece(n, 0), map: f.map, x: f.x, y: f.y, species: species[0] };
@@ -13638,7 +13666,7 @@ var Room = class {
    *  ledges and doors as they are. */
   reaches(f, targets) {
     const R2 = 10, key = (x2, y) => `${x2},${y}`;
-    const wall = (map, x2, y) => !!(this.groundAt(map, x2, y) || this.spillAt(map, x2, y) || this.traderAt(map, x2, y) || clerkAt(map, x2, y) || ferryAt(map, x2, y) || leaderAt(map, x2, y) || this.spentAt(map, x2, y));
+    const wall = (map, x2, y) => !!(this.groundAt(map, x2, y) || this.spillAt(map, x2, y) || this.traderAt(map, x2, y) || clerkAt(map, x2, y) || ferryAt(map, x2, y) || this.leaderStanding(map, x2, y) || this.spentAt(map, x2, y));
     const walk = (x2, y) => this.world.cell(f.map, x2, y) === 0 && !wall(f.map, x2, y);
     const rev = /* @__PURE__ */ new Map();
     for (let y = f.y - R2; y <= f.y + R2; y++) for (let x2 = f.x - R2; x2 <= f.x + R2; x2++) {
@@ -14476,10 +14504,10 @@ var Room = class {
         const b2 = g ? void 0 : this.spillAt(a.m.spot.map, x2, y);
         const foe = g || b2 ? void 0 : this.facing(a);
         const tr = foe ? void 0 : this.traderAt(a.m.spot.map, x2, y);
-        const boss = foe || tr ? void 0 : leaderAt(a.m.spot.map, x2, y);
+        const boss = foe || tr ? void 0 : this.leaderStanding(a.m.spot.map, x2, y);
         const spent2 = g || b2 || foe || tr ? void 0 : this.spentAt(a.m.spot.map, x2, y);
         const dive = g || b2 || foe || tr || boss ? void 0 : diveTo(this.maps, this.world, a.m.spot, a.field ?? 0);
-        if (boss && !this.bossDown(boss.n)) {
+        if (boss) {
           a.battling = true;
           a.boss = boss.n + 1;
           events.push({ type: "boss", tick: this.tick, id: a.id, n: boss.n });
@@ -14490,7 +14518,7 @@ var Room = class {
         } else if (tr) {
         } else if (spent2) {
           const busy = spent2.gate ? this.actor(spent2.by) : void 0;
-          events.push({ type: "spent", tick: this.tick, id: a.id, by: spent2.by, ...busy?.battling ? { busy: busy.name } : {}, ...spent2.beaten !== void 0 ? { beaten: spent2.beaten === a.name ? "" : spent2.beaten } : {} });
+          events.push({ type: "spent", tick: this.tick, id: a.id, by: spent2.by, ...busy?.battling ? { busy: busy.name } : {} });
         } else if (g) {
           this.picked.set(g.key, a.id);
           events.push({ type: "item", tick: this.tick, id: a.id, key: g.key, item: g.item, ...g.gift ? { gift: true } : {} });
@@ -14589,8 +14617,7 @@ var Room = class {
       if (this.spillAt(t7.map, t7.x, t7.y)) return null;
       if (this.groundAt(t7.map, t7.x, t7.y) || clerkAt(t7.map, t7.x, t7.y) || this.traderAt(t7.map, t7.x, t7.y) || ferryAt(t7.map, t7.x, t7.y)) return null;
       if (from.map.startsWith(SAFARI) !== t7.map.startsWith(SAFARI) && this.ring().safari) return null;
-      const boss = leaderAt(t7.map, t7.x, t7.y);
-      if (boss) return null;
+      if (this.leaderStanding(t7.map, t7.x, t7.y)) return null;
       if (this.spentAt(t7.map, t7.x, t7.y)) return null;
       if (this.actors.some((o) => o.id !== a.id && o.m.spot.map === t7.map && o.m.spot.x === t7.x && o.m.spot.y === t7.y)) return null;
       return r;
@@ -15702,7 +15729,8 @@ function sideTeam(s) {
     if (!mon2) return void 0;
     team.push(mon2);
   }
-  return { seat, name, skin, team, ...o.wild === true ? { wild: true } : {} };
+  const pic = int(o.pic, 0, 255);
+  return { seat, name, skin, ...pic !== void 0 ? { pic } : {}, team, ...o.wild === true ? { wild: true } : {} };
 }
 function cleanEvent(raw) {
   if (!raw || typeof raw !== "object") return void 0;
@@ -16569,4 +16597,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "77c9a81af9f5";
+export const WORLD_HASH = "1aa101227309";

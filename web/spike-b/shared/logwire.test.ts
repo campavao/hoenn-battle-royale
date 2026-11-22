@@ -25,6 +25,14 @@ describe('cleanEvents', () => {
     expect(cleanEvents(JSON.parse(JSON.stringify(log)))).toEqual(log);
   });
 
+  it("keeps a gym leader's picture, and drops one that is not a picture (Cam 11-22)", () => {
+    const leader = { ...side, seat: 0, name: 'NORMAN', skin: 0, pic: 44 };
+    const log = [{ e: 'start', a: side, b: leader, map: 'MAP_PETALBURG_CITY_GYM' }];
+    expect(cleanEvents(JSON.parse(JSON.stringify(log)))).toEqual(log);
+    const odd = cleanEvents([{ e: 'start', a: side, b: { ...leader, pic: 'NORMAN' }, map: 'MAP_PETALBURG_CITY_GYM' }]);
+    expect(odd).toEqual([{ e: 'start', a: side, b: { seat: 0, name: 'NORMAN', skin: 0, team: [mon] }, map: 'MAP_PETALBURG_CITY_GYM' }]);
+  });
+
   it('drops what is not an event, whatever it is, without throwing', () => {
     const bad: unknown[] = [null, undefined, 7, 'x', [], {}, { e: 'nope' }, { e: 'send', side: 2, slot: 0 }, { e: 'send', side: 0, slot: 9 },
       { e: 'send', side: 0, slot: 1.5 }, { e: 'hp', side: 0, hp: -1 }, { e: 'hp', side: 0, hp: 'lots' }, { e: 'text', text: 5 }, { e: 'text', text: '' },

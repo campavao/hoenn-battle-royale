@@ -133,6 +133,8 @@ test('a legendary on the minimap and the MAP is itself; the minimap glows gold f
   await shotMini(page, 'mini-fog');
   await expect(page.locator('.hud-mini'), 'purple over the gold').toHaveClass(/hud-glow-fog/);
   await expect(page.locator('.hud-mini')).not.toHaveClass(/hud-glow-legend/);
+  // And out after a while, though the fog is still coming (Cam, 11-22: "Shouldn't persist").
+  await expect(page.locator('.hud-mini'), 'out after GLOW_MS').not.toHaveClass(/hud-glow-/, { timeout: 12_000 });
   await ctx.close();
 });
 

@@ -533,6 +533,38 @@ export function miniGlow(v: Pick<HudView, 'clock' | 'ring' | 'fogEverywhere' | '
   return v.legend ? 'legend' : null;
 }
 
+/** How long the minimap glows once something comes up (Cam, 11-22: "minimap glow should go
+ *  away after a little. Shouldn't persist"). */
+export const GLOW_MS = 8000;
+
+/** The minimap's glow over time: each of miniGlow's two lights for GLOW_MS from the moment it
+ *  comes up, then out while it stays up. A legendary that is still standing when the fog's
+ *  stretch ends does not light again; a new one (the last caught or gone first) does. */
+export class GlowCue {
+  private up = { fog: false, legend: false };
+  private lit: MiniGlow = null;
+  private until = 0;
+
+  step(v: Pick<HudView, 'clock' | 'ring' | 'fogEverywhere' | 'legend'>, now: number): MiniGlow {
+    const fog = miniGlow({ ...v, legend: false }) === 'fog', legend = !!v.legend;
+    if (fog && !this.up.fog) this.light('fog', now);
+    else if (legend && !this.up.legend) this.light('legend', now);
+    this.up = { fog, legend };
+    if (this.lit && (now >= this.until || !(this.lit === 'fog' ? fog : legend))) this.lit = null;
+    return this.lit;
+  }
+
+  reset(): void {
+    this.up = { fog: false, legend: false };
+    this.lit = null;
+  }
+
+  private light(kind: MiniGlow, now: number): void {
+    this.lit = kind;
+    this.until = now + GLOW_MS;
+  }
+}
+
 /** The lead's HP in the window's width: "HP 184/243" came out "HP 184/…" there, the half
  *  that says how hurt it is cut off (Cam's 11-11 recording). The word goes, not the numbers. */
 export function leadFit(text: string, maxW: number): string {
@@ -609,6 +641,7 @@ export class PhoneHud {
   private readonly offField = new OffField();
   private scale = 1;
   private readonly signCue = new SignCue();
+  private readonly glowCue = new GlowCue();
   private readonly sign: Win;
   private readonly fog: Win;
   private readonly moves: MovesWindow;
@@ -777,6 +810,7 @@ export class PhoneHud {
   /** Off the glass (a match over, the phone turned): the next update shows the sign. */
   hide(): void {
     this.signCue.reset();
+    this.glowCue.reset();
     this.sign.el.classList.add('gone');
   }
 
@@ -798,7 +832,7 @@ export class PhoneHud {
     const h = mini ? miniHeight(lines.length) : fogHeight(lines.length);
     if (this.fog.c.height !== h) this.fog.size(mini ? MINI_W : FOG_W, h, this.scale);
     if (mini) {
-      const glow = miniGlow(v);
+      const glow = this.glowCue.step(v, performance.now());
       this.fog.el.classList.toggle('hud-glow-fog', glow === 'fog');
       this.fog.el.classList.toggle('hud-glow-legend', glow === 'legend');
     }

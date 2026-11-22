@@ -1223,17 +1223,20 @@ describe('item balls', () => {
       expect(press(room, 1000)).toContainEqual(expect.objectContaining({ type: 'spent', by: 1000 }));
     });
 
-    it('a beaten leader stands where they stood, and says who beat them', () => {
+    it('a beaten leader leaves the gym: their cell is floor and A there is nothing (Cam, 11-22)', () => {
       const room = makeRoom(MAPS, PATCHES, 4242);
       const l = LEADERS[0];
       const [x, y] = l.cells[0];
       room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: { map: l.map, x, y: y + 1 }, facing: 2 });
       room.step();
       room.actor(1000)!.calm = 0;
-      room.gyms.push([l.n, 'WALLY']);
       const a = room.actor(1000)!;
-      expect(room.stepFor(a)(a.m.spot, 2)).toBeNull();
-      expect(press(room, 1000)).toContainEqual(expect.objectContaining({ type: 'spent', beaten: 'WALLY' }));
+      expect(room.stepFor(a)(a.m.spot, 2), 'unbeaten, they are in the way').toBeNull();
+      expect(room.leaderStanding(l.map, x, y)).toBe(l);
+      room.gyms.push([l.n, 'WALLY']);
+      expect(room.leaderStanding(l.map, x, y)).toBeUndefined();
+      expect(press(room, 1000).filter((e) => e.type === 'boss' || e.type === 'spent')).toEqual([]);
+      expect(room.stepFor(a)(a.m.spot, 2)?.to).toEqual({ map: l.map, x, y });
     });
 
     it("a story's person stays after handing it over; a gate boss mid-fight is somebody's", () => {
@@ -2171,7 +2174,7 @@ describe('the drop after the Safari (Cam 2026-10-29)', () => {
 });
 
 describe('gym leaders', () => {
-  it('A at a leader is their battle; the first to beat them closes the gym, and they stay and say so', () => {
+  it('A at a leader is their battle; the first to beat them closes the gym, and they leave it', () => {
     const room = makeRoom(MAPS, PATCHES, 7);
     const G = 'MAP_RUSTBORO_CITY_GYM';
     room.apply({ c: 'join', id: 2, bot: false, name: 'A', skin: 0, spot: { map: G, x: 5, y: 3 }, facing: 2 });
@@ -2184,11 +2187,11 @@ describe('gym leaders', () => {
     expect(room.gyms).toEqual([[0, 'A']]);
     expect(room.bossDown(0)).toBe(true);
     expect(room.actor(2)!.battling).toBe(false);
-    // Still there (Cam, 11-02: "I don't think we should ever disappear a person"): no second
-    // battle, a word, and the cell stays shut. Who beat them hears it as theirs.
+    // Gone (Cam, 11-22: "after beating, Norman sprite still was on map"): no second battle,
+    // nothing to say, and their cell is floor.
     room.step(new Map([[3, [0]], [2, [0]]]));
-    expect(room.step(new Map([[3, [KEY_A]], [2, [KEY_A]]]))).toMatchObject([{ type: 'spent', id: 2, beaten: '' }, { type: 'spent', id: 3, beaten: 'A' }]);
-    expect(room.stepFor(room.actor(2)!)({ map: G, x: 5, y: 3 }, 2)).toBeNull();
+    expect(room.step(new Map([[3, [KEY_A]], [2, [KEY_A]]])).filter((e) => e.type === 'boss' || e.type === 'spent')).toEqual([]);
+    expect(room.stepFor(room.actor(2)!)({ map: G, x: 5, y: 3 }, 2)?.to).toEqual({ map: G, x: 5, y: 2 });
     expect(makeRoom(MAPS, PATCHES, 7).hash()).not.toBe(room.hash());
     const copy = makeRoom(MAPS, PATCHES, 7);
     copy.load(room.state());
@@ -2205,13 +2208,12 @@ describe("a beaten leader's team", () => {
     room.apply({ c: 'end', id: 2, won: true, ...(team ? { team } : {}) });
     return room;
   };
-  it('lies in a bag beside whoever won, for anybody to take (Kanto: a leader falls, their team drops)', () => {
+  it('lies in a bag where the leader stood, for anybody to take (Kanto: a leader falls, their team drops)', () => {
     const room = fought([{ sp: 74, lv: 15 }, { sp: 74, lv: 15 }, { sp: 299, lv: 15 }]);
     const bag = [...room.spills.values()].filter((b) => b.map === G);
     expect(bag).toMatchObject([{ name: 'ROXANNE', bag: { items: [], money: 0, mons: [{ species: 74, level: 15 }, { species: 74, level: 15 }, { species: 299, level: 15 }] } }]);
-    // Not on the leader, nor on the one who beat them: both stand where they stood.
-    expect([bag[0].x, bag[0].y]).not.toEqual([5, 2]);
-    expect([bag[0].x, bag[0].y]).not.toEqual([5, 3]);
+    // On the cell the leader left, in front of whoever beat them; the bag is solid.
+    expect([bag[0].x, bag[0].y]).toEqual([5, 2]);
     expect(room.stepFor(room.actor(2)!)({ map: G, x: 5, y: 3 }, 2)).toBeNull();
     // Taken, it is gone; the same on a copy.
     const copy = makeRoom(MAPS, PATCHES, 7);

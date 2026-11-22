@@ -31,6 +31,9 @@ export interface LogSide {
   name: string;
   /** Their look (room.ts `skin`), for the trainer picture. */
   skin: number;
+  /** The ROM's own trainer picture (TRAINER_PIC_*), over `skin`: a gym leader or a gate's boss,
+   *  who is nobody's skin (Cam, 11-22: a watched NORMAN was drawn as BRENDAN). */
+  pic?: number;
   team: LogMon[];
   /** A wild POKeMON, with no trainer to draw or to speak for it. */
   wild?: boolean;
