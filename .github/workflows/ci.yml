@@ -726,7 +726,7 @@ jobs:
       # The play log reads this relay's lines (POK-248), so its parser is pinned here,
       # next to the thing that writes them. No dependencies: node alone.
       - name: Test the play log's parser
-        run: node --test tools/br/play-log.test.mjs
+        run: node --test tools/br/play-log.test.mjs tools/br/release-post.test.mjs
 
   # A release only (a tag or a dispatch): `make BR=0` is retail Emerald, byte for byte (docs/C-STYLE.md). Every
   # hook compiles away without BR, so a mismatch is BR code that got out of its guard
@@ -943,15 +943,18 @@ jobs:
           railway up --service hoenn-relay --detach --ci
 
       # The community's Discord (tools/br/discord-setup.mjs made the channel and its webhook):
-      # one line in #announcements once the site and the relay are up. The webhook URL is a
-      # secret, since anyone with it can post; no secret, no post. Never fails a release.
+      # the version and what changed, inline (tools/br/release-post.mjs; Cam, 11-22: no play
+      # link, it is the same every time), once the site and the relay are up. The webhook URL
+      # is a secret, since anyone with it can post; no secret, no post. Never fails a release.
       - name: Announce the release in Discord
         env:
           WEBHOOK: ${{ secrets.DISCORD_RELEASES_WEBHOOK }}
-          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ -z "$WEBHOOK" ]; then echo "no DISCORD_RELEASES_WEBHOOK; not announced"; exit 0; fi
-          jq -n --arg c "**Hoenn Battle Royale $TAG** is live at <$SITE>."$'\n'"What changed: <https://github.com/$REPO/releases/tag/$TAG>" \
+          text="$(gh release view "$TAG" --json body --jq .body 2>/dev/null | node tools/br/release-post.mjs "$TAG")"
+          [ -n "$text" ] || text="**Hoenn Battle Royale $TAG** is live."
+          jq -n --arg c "$text" \
             '{content: $c, allowed_mentions: {parse: []}}' \
             | curl -fsS --max-time 20 -H 'Content-Type: application/json' -d @- "$WEBHOOK" \
             || echo "::warning::the Discord announcement did not post"
