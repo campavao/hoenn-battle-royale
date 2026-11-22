@@ -2471,8 +2471,11 @@ function roundFrame(): void {
   // left, with nobody to say so but the room itself. Out, I watch the rest, as live (HBR-96).
   if (lobby && !link.online && matchOn && !endingAt && over(link.room)) matchOver();
   // The relay said the match is over: once the frames that ended it have played here (or
-  // a moment has passed), the standings and PLAY AGAIN.
-  const held = romUp || watch.replaying;
+  // a moment has passed), the standings and PLAY AGAIN. Not while a fight of mine is still on
+  // screen: the relay ends the match the moment the last one falls, and a duel that took them
+  // is still saying so here, with my Hall of Fame to come after it. Its results came up then,
+  // over the parade (Cam, 11-22: "no hall of fame showed ... kicking to the match over screen").
+  const held = romUp || watch.replaying || !!battle;
   if (endingAt && (held ? performance.now() - endingAt > SCREEN_WAIT_MS : over(link.room) || performance.now() - endingAt > 1500)) {
     endingAt = 0;
     record(res.round);
@@ -5588,7 +5591,7 @@ async function boot(): Promise<void> {
   }
   loading.say(matchToken() ? 'Back to your match…' : 'Getting the game ready…');
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => { console.warn('spike ROM not booted', e); loading.hide(); });
-  (window as unknown as { __spike: unknown }).__spike = { watch, frameOf, get frame() { return frame; }, canvas, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, askBox, get movesBox() { return movesBox; }, get hud() { return hudRef; }, pocket: (n: number) => (rom ? readPocket(rom.emu, romTables.sym, n) : []), radial, moveName: (id: number) => moveInfo(romTables, id)?.name ?? '' };
+  (window as unknown as { __spike: unknown }).__spike = { watch, frameOf, get frame() { return frame; }, canvas, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get ending() { return { romUp, endingAt, endingShown, matchOn, shownWin }; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, askBox, get movesBox() { return movesBox; }, get hud() { return hudRef; }, pocket: (n: number) => (rom ? readPocket(rom.emu, romTables.sym, n) : []), radial, moveName: (id: number) => moveInfo(romTables, id)?.name ?? '' };
 }
 
 void boot();

@@ -76,6 +76,7 @@ export const FILE_SECONDS = {
   'spikeb-first-press.spec.ts': 95,
   'spikeb-switch.spec.ts': 210,
   'spikeb-duel-switch.spec.ts': 300,
+  'spikeb-pvp-final-fame.spec.ts': 90,
   // Skipped in CI: these need the deployed site, or HBR_SOAK.
   'live-room.spec.ts': 0,
   'live.spec.ts': 0,
