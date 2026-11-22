@@ -1,17 +1,27 @@
 {
- "readAt": "2026-11-22T00:08:05.086Z",
+ "readAt": "2026-11-22T00:38:10.973Z",
  "from": "2026-11-22T00:06:55.860Z",
- "matches": 1,
+ "matches": 2,
  "players": [
   {
    "id": "71d3a7609b88",
    "name": "SINBAD",
    "skin": 1,
-   "rating": 1016,
+   "rating": 1031,
+   "played": 2,
+   "wins": 1,
+   "best": 1,
+   "last": "2026-11-22T00:37:47.161Z"
+  },
+  {
+   "id": "17bf2e441ee0",
+   "name": "NOX",
+   "skin": 0,
+   "rating": 985,
    "played": 1,
    "wins": 0,
-   "best": 3,
-   "last": "2026-11-22T00:06:55.860Z"
+   "best": 2,
+   "last": "2026-11-22T00:37:47.161Z"
   },
   {
    "id": "e4ccab195416",

@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-22T00:23:08.624Z",
+ "readAt": "2026-11-22T00:38:10.973Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -9841,6 +9841,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-22T00:37:47.257Z",
+   "code": "DMFETQ",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 0,
+   "drifts": 0,
+   "deploy": "e125ede3"
+  },
+  {
+   "t": "2026-11-22T00:37:47.251Z",
+   "code": "DMFETQ",
+   "v": "90be997",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1206,
+   "drifts": 0,
+   "deploy": "e125ede3"
+  },
   {
    "t": "2026-11-22T00:06:55.957Z",
    "code": "DMFETQ",
