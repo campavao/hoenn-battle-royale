@@ -1,12 +1,74 @@
 {
- "readAt": "2026-11-22T13:45:37.069Z",
+ "readAt": "2026-11-22T14:00:39.400Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "D3AS52",
-   "at": "2026-11-22T13:38:22.431Z",
+   "code": "PHK9Y9",
+   "at": "2026-11-22T13:59:22.135Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-22T13:59:22.135Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-22T13:59:25.233Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "2KMMXG",
+   "at": "2026-11-22T13:53:53.542Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-22T13:53:53.542Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-22T13:53:56.574Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "D3AS52",
+   "at": "2026-11-22T13:38:22.431Z",
+   "end": "2026-11-22T13:50:56.615Z",
+   "secs": 754,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -27,10 +89,9 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 738
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -29439,6 +29500,20 @@
  ],
  "jank": [
   {
+   "t": "2026-11-22T13:50:45.665Z",
+   "code": "D3AS52",
+   "v": "e000b70",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 738,
+   "drifts": 0,
+   "deploy": "40ef43db"
+  },
+  {
    "t": "2026-11-22T08:52:03.663Z",
    "code": "T7WEW7",
    "v": "e000b70",
@@ -41200,6 +41275,22 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-22T13:59:25.630Z",
+   "step": "match"
+  },
+  {
+   "t": "2026-11-22T13:57:29.484Z",
+   "step": "rom"
+  },
+  {
+   "t": "2026-11-22T13:56:30.663Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-22T13:56:23.808Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-22T13:38:27.523Z",
    "step": "match"
