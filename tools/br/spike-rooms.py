@@ -8,9 +8,8 @@ home); `trader` a floor with somebody who trades. room.test.ts checks it still m
 And web/spike-b/data/table-balls.json, [map, x, y]: the rest of a notable building's balls, each
 on a table of its own (Cam's 10-19 play-test, POK-438: "Instead of on the ground, this could sit
 on the desk. This place can have three, because it's more notable"). br_balls.c's sTableBalls, as
-floors.py puts them. Never a ball back on a table Cam's painting (11-01) moved a room's first ball
-off: 28 of them went there on 11-03, each on the very cell he had moved it from, and read to him as
-his ball "no longer where I had placed" it (11-22)."""
+floors.py puts them: none in a room Cam painted (11-22: "Yeah just use item spots that I had
+painted by hand"), which today is every notable building, so it is empty."""
 import json, re, sys
 from pathlib import Path
 

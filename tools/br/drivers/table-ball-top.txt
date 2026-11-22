@@ -1,14 +1,12 @@
-# table-ball-top: a table ball sits on the table's top, not on its front row (Cam, 11-22: "now
-# they are slightly off table"). floors.py put sTableBalls on the cell with the floor south of it,
-# which on a table two or three rows deep is its front, drawn at the table's foot. Cam's painting
-# moved the room's own ball up that row (WEATHER INSTITUTE 1F: 11,6 to 11,5); the table balls go
-# up it too.
+# table-ball-top: Cam's ball on a table is the room's only ball, and A from the chair beside the
+# table takes it (Cam, 11-22, WEATHER INSTITUTE 1F: "items inside are no longer where I had
+# placed them (aka now they are slightly off table)" -- a table ball at the right-hand table's
+# foot, (16,6), beside his; then "Yeah just use item spots that I had painted by hand").
 #
-# WEATHER INSTITUTE 1F (map 32:0) is sRooms[140]: its cache, key 0x8D8C, painted at (11,5), and
-# sTableBalls[15], key 0xAC0F, on the right-hand table's top at (16,5), no longer its front at
-# (16,6) -- MAP_OFFSET in, (18,12) and (23,12). The boot puts us on the chair at (15,5), beside it.
+# WEATHER INSTITUTE 1F (map 32:0) is sRooms[140]: its cache, key 0x8D8C, painted on the left
+# table's top at (11,5) -- (18,12) MAP_OFFSET in. The boot puts us on the chair at (10,5).
 wait 30
-pokebytes gBrMailbox+0x2018 81 00 20 00 0F 00 05 00 BD BB C7 FF
+pokebytes gBrMailbox+0x2018 81 00 20 00 0A 00 05 00 BD BB C7 FF
 wait 400
 poke u8 gBrMatch 2
 poke u32 gBrMatch+8 0x1072
@@ -16,10 +14,15 @@ wait 30
 expect u16 gBrLoot 0x8D8C
 expect u16 gBrLoot+2 18
 expect u16 gBrLoot+4 12
-expect u16 gBrLoot+20 0xAC0F
-expect u16 gBrLoot+22 23
-expect u16 gBrLoot+24 12
-expect u8 gBrLoot+31 3
+expect u8 gBrLoot+11 3
+# no row a table ball's key (0xACxx)
+expectne u8 gBrLoot+21 0xAC
+expectne u8 gBrLoot+41 0xAC
+expectne u8 gBrLoot+61 0xAC
+expectne u8 gBrLoot+81 0xAC
+expectne u8 gBrLoot+101 0xAC
+expectne u8 gBrLoot+121 0xAC
+expectne u8 gBrLoot+141 0xAC
 shot tables
 # A at it from the chair, facing the table: its PICKUP
 hold RIGHT 1
@@ -33,7 +36,7 @@ tap A
 wait 60
 tap A
 wait 60
-expectmsg 10 u16 1 0xAC0F
-expect u8 gBrLoot+31 0
+expectmsg 10 u16 1 0x8D8C
+expect u8 gBrLoot+11 0
 shot taken
 say table ball top ok

@@ -303,22 +303,13 @@ class Floor:
     def on_tables(self, count):
         """Up to `count` balls, one a table, each on the cell you reach from the floor
         south of it where there is one (you face up to it, as at a counter), and the
-        floor cell it is taken from. [(cell, beside)].
-        On a table two rows deep or more that cell is its front, drawn below the top, so the
-        ball goes on the row behind it where that row has a floor beside it too: Cam's
-        painting (11-01) moved 26 of the 27 first balls it kept on their own table up one
-        row (the WEATHER INSTITUTE's 11,6 to 11,5). A counter is its own top."""
+        floor cell it is taken from. [(cell, beside)]."""
         got = []
-        def counter(c):
-            return self.behavior[c[1] * self.w + c[0]] == "MB_COUNTER"
         for comp, beside in self.tables():
             def rank(c):
                 south = (c[0], c[1] + 1) in beside[c]
                 return (not south, abs(c[0] - self.w / 2) + abs(c[1] - self.h / 2), c)
             cell = min(beside, key=rank)
-            up = (cell[0], cell[1] - 1)
-            if up in beside and not counter(cell):
-                cell = up
             from_ = (cell[0], cell[1] + 1) if (cell[0], cell[1] + 1) in beside[cell] else beside[cell][0]
             got.append((cell, from_))
             if len(got) == count:
@@ -381,7 +372,9 @@ def rooms(floors):
     """(map, cache, trader, cells, more) for every room: houses first, in their order, then
     the rest by name. cells is the cache's cell, then whoever stands there; more is the
     rest of a building's table balls. A house always gets two cells, for whoever may be
-    home."""
+    home. A room Cam painted has his ball and nothing more: "just use item spots that I had
+    painted by hand" (11-22), so none on its tables."""
+    painted = json.load(open(PAINT, encoding="utf-8"))
     out = []
     for map_id in HOUSES:
         f = floors[map_id][1]
@@ -405,7 +398,8 @@ def rooms(floors):
             cells = [table[0][0]]
             if trader:
                 cells += [c for c in f.pick(2 + len(froms)) if c not in froms][:1]
-            out.append((map_id, cache, trader, cells, [ball for ball, _ in table[1:]]))
+            more = [] if map_id in painted else [ball for ball, _ in table[1:]]
+            out.append((map_id, cache, trader, cells, more))
         else:
             out.append((map_id, cache, trader, f.pick(2 if trader else 1), []))
     return out
@@ -460,6 +454,9 @@ def c_more(table):
              "static const struct BrTableBall sTableBalls[] =", "{"]
     for i, (x, y) in rows:
         lines.append("    { %d, %d, %d }, // %s" % (i, x, y, table[i][0]))
+    if not rows:
+        # C has no empty table: a row nobody reads, past BR_TABLE_BALLS.
+        lines.append("    { 0xFF, 0, 0 }, // none: every notable building is painted")
     lines.append("};")
     return "\n".join(lines)
 

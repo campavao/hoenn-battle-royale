@@ -449,39 +449,18 @@ static const struct BrRoom sRooms[] =
 // More balls on the tables of a notable building (Cam's 2026-10-19 play-test, #8: "items
 // on desks, tables and counters, up to 3 in a notable building"): the room's cache is
 // the first, these are the rest. Each stands on a table top and is picked up facing it.
+// None in a room Cam painted (11-22), so today only floors.py's placeholder row, room 0xFF,
+// which no room is: the loops run over the array, as agbcc refuses an always-false i < 0.
 struct BrTableBall
 {
     u8 room; // its row in sRooms
     u8 x, y; // without MAP_OFFSET
 };
 
-#define BR_TABLE_BALLS 24
+#define BR_TABLE_BALLS 0
 static const struct BrTableBall sTableBalls[] =
 {
-    { 79, 3, 3 }, // MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F
-    { 91, 3, 4 }, // MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_1F
-    { 92, 3, 3 }, // MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_2F
-    { 92, 8, 6 }, // MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_2F
-    { 97, 14, 5 }, // MAP_LILYCOVE_CITY_DEPARTMENT_STORE_5F
-    { 98, 6, 5 }, // MAP_LILYCOVE_CITY_DEPARTMENT_STORE_ROOFTOP
-    { 101, 13, 9 }, // MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F
-    { 101, 8, 9 }, // MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F
-    { 102, 6, 3 }, // MAP_LILYCOVE_CITY_POKEMON_TRAINER_FAN_CLUB
-    { 121, 7, 6 }, // MAP_MOSSDEEP_CITY_GAME_CORNER_1F
-    { 121, 3, 6 }, // MAP_MOSSDEEP_CITY_GAME_CORNER_1F
-    { 123, 13, 5 }, // MAP_MOSSDEEP_CITY_SPACE_CENTER_1F
-    { 124, 6, 7 }, // MAP_MOSSDEEP_CITY_SPACE_CENTER_2F
-    { 124, 12, 7 }, // MAP_MOSSDEEP_CITY_SPACE_CENTER_2F
-    { 132, 1, 4 }, // MAP_ROUTE104_PRETTY_PETAL_FLOWER_SHOP
-    { 140, 16, 5 }, // MAP_ROUTE119_WEATHER_INSTITUTE_1F
-    { 141, 13, 8 }, // MAP_ROUTE119_WEATHER_INSTITUTE_2F
-    { 141, 1, 4 }, // MAP_ROUTE119_WEATHER_INSTITUTE_2F
-    { 143, 7, 4 }, // MAP_RUSTBORO_CITY_DEVON_CORP_2F
-    { 143, 10, 7 }, // MAP_RUSTBORO_CITY_DEVON_CORP_2F
-    { 145, 2, 4 }, // MAP_RUSTBORO_CITY_FLAT1_1F
-    { 177, 7, 6 }, // MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_1F
-    { 178, 5, 3 }, // MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F
-    { 178, 15, 4 }, // MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F
+    { 0xFF, 0, 0 }, // none: every notable building is painted
 };
 
 // A cache's key is its room's index, in the key space's nobody half beside the Zone's
@@ -495,7 +474,7 @@ STATIC_ASSERT(BR_TABLE_BALLS <= BR_LOOT_TABLE_BALLS, BrTableBallsFitTheirKeys)
 // floor, and these are a few bits a room, read when we walk in.
 static u8 sCacheTaken[(ARRAY_COUNT(sRooms) + 7) / 8];
 static u8 sTraderTaken[BR_TRADERS / 8];
-static u8 sTableTaken[(BR_TABLE_BALLS + 7) / 8];
+static u8 sTableTaken[BR_TABLE_BALLS / 8 + 1];
 // What each trader holds now, SPECIES_NONE for the one the seed gave him: the last
 // Pokemon a trainer gave him (Cam's 2026-10-19 play-test, #9). A floor's by his index, a
 // house's by the house's eighth, as sHomeTaken is.
@@ -606,7 +585,7 @@ void BrBalls_NoteTaken(u16 key)
     if ((key & 0xFF00) == BR_LOOT_KEY_CACHE(0) && i < ARRAY_COUNT(sRooms))
         sCacheTaken[i / 8] |= 1 << (i % 8);
     i = key - BR_LOOT_KEY_TABLE(0);
-    if (BR_LOOT_IS_TABLE(key) && i < BR_TABLE_BALLS)
+    if (BR_LOOT_IS_TABLE(key) && i < ARRAY_COUNT(sTableBalls))
         sTableTaken[i / 8] |= 1 << (i % 8);
     if (!BR_LOOT_IS_HOME(key))
         return;
@@ -632,7 +611,7 @@ bool8 BrBalls_Spot(s16 x, s16 y)
     room = &sRooms[sRoom];
     x -= MAP_OFFSET;
     y -= MAP_OFFSET;
-    for (i = 0; i < BR_TABLE_BALLS; i++)
+    for (i = 0; i < ARRAY_COUNT(sTableBalls); i++)
     {
         if (sTableBalls[i].room == sRoom && x == sTableBalls[i].x && y == sTableBalls[i].y)
             return TRUE;
@@ -647,7 +626,7 @@ static void DropRoom(s16 i)
 
     if (i < 0)
         return;
-    for (j = 0; j < BR_TABLE_BALLS; j++)
+    for (j = 0; j < ARRAY_COUNT(sTableBalls); j++)
     {
         if (sTableBalls[j].room == i)
             BrLoot_DropKey(BR_LOOT_KEY_TABLE(j));
@@ -732,7 +711,7 @@ void BrBalls_Tick(void)
     if (room->cache && !Flag(sCacheTaken, sRoom))
         BrLoot_AddItem(BR_LOOT_KEY_CACHE(sRoom), group, num,
                        room->cacheX + MAP_OFFSET, room->cacheY + MAP_OFFSET, CacheItem(sRoom));
-    for (i = 0; i < BR_TABLE_BALLS; i++)
+    for (i = 0; i < ARRAY_COUNT(sTableBalls); i++)
     {
         if (sTableBalls[i].room == sRoom && !Flag(sTableTaken, i))
             BrLoot_AddItem(BR_LOOT_KEY_TABLE(i), group, num,
