@@ -416,3 +416,25 @@ u16 BrZone_NationalOn(u16 native, u8 mapGroup, u8 mapNum)
     return native;
 }
 
+
+u16 BrZone_PickWater(void)
+{
+    u8 evolved[BR_EVOLVED_BYTES];
+    u16 species;
+
+    BrZone_Ensure();
+    if (gBrZone.dealtFor == 0)
+        return SPECIES_NONE;
+    // Any wild first stage that is WATER: a cast in the opening used to roll the land's
+    // any-first-stage, so the Safari's ponds hooked SHUPPET and CHARMANDER (11-22).
+    MarkEvolved(evolved);
+    do
+        species = AnyWild(FALSE, evolved);
+    while (!HasType(species, TYPE_WATER));
+    return species;
+}
+
+bool8 BrZone_IsWater(u16 species)
+{
+    return species != SPECIES_NONE && species < NUM_SPECIES && HasType(species, TYPE_WATER);
+}

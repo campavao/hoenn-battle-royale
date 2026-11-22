@@ -148,7 +148,12 @@ static void Start(void)
     }
     species = info->wildPokemon[rodPlus1 ? FishingSlot(rodPlus1 - 1) : water ? WaterSlot() : LandSlot()].species;
     // The opening's any-first-stage, or the route's national stand-in: CreateWildMon's.
-    gBrWildAsk.species = sSafari ? BrZone_PickAny() : BrZone_Pick();
+    // A rod or a surf in the opening hooks a WATER one (11-22): the Safari's ponds are
+    // where a team short of one goes to find it.
+    if (sSafari)
+        gBrWildAsk.species = (rodPlus1 || water) ? BrZone_PickWater() : BrZone_PickAny();
+    else
+        gBrWildAsk.species = BrZone_Pick();
     // The opening's battle is the Zone's own: BALL / POKeBLOCK / GO NEAR / RUN, thrown
     // from gNumSafariBalls, which the page sets (spike B). A plain ask is a plain battle.
     if (sSafari)
@@ -157,7 +162,13 @@ static void Start(void)
         FlagClear(FLAG_SYS_SAFARI_MODE);
     sSafari = FALSE;
     if (gBrWildAsk.species == SPECIES_NONE)
+    {
         gBrWildAsk.species = BrZone_NationalOn(species, gBrWildAsk.mapGroup, gBrWildAsk.mapNum);
+        // The stand-in shares one of the native's types, so a pond's TENTACOOL could come
+        // out a POISON-only one; off a rod or the water it stays the table's own.
+        if ((rodPlus1 || water) && BrZone_IsWater(species) && !BrZone_IsWater(gBrWildAsk.species))
+            gBrWildAsk.species = species;
+    }
     gBrWildAsk.level = BrLevels_WildLevel();
     CreateScriptedWildMon(gBrWildAsk.species, gBrWildAsk.level, ITEM_NONE);
     gBrWildAsk.state = BR_WILD_FIGHTING;
