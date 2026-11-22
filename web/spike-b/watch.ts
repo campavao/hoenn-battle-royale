@@ -77,12 +77,24 @@ export interface WatchHost {
   view(follow: Side): LogView | null;
 }
 
-/** A trainer whose fight can be watched (Cam, 11-21: a WATCH tag over a plain NPC). `battling` is
- *  the room's "busy in a ROM scene" flag too -- a trade, a gate, a boss, a wild patch, a rod's
- *  cast, a legendary met by a trainer all set it with no `foe` -- and only a fight with a seat
- *  across (a trainer, or LEGEND_FOE for a bot at a legendary) has a log or a replay to go into. */
-export function watchable(a: { battling: boolean; foe: number }): boolean {
-  return a.battling && a.foe !== 0;
+/** The traders a room has: its events' and its homes' (room.ts traderAt). */
+export interface TraderRoom {
+  events: readonly { trader?: { busy: number } }[];
+  homes: readonly { gone?: boolean; busy: number }[];
+}
+
+/** Whether `id` is with an NPC who trades or gives (room.ts sets `busy` to who is). */
+export function trading(room: TraderRoom, id: number): boolean {
+  return room.events.some((e) => e.trader?.busy === id) || room.homes.some((h) => !h.gone && h.busy === id);
+}
+
+/** A trainer in a battle worth watching (Cam, 11-21: a WATCH tag over a plain NPC). `battling` is
+ *  the room's "busy in a ROM scene" flag: a duel and a legendary (a `foe` seat), and a wild patch,
+ *  a rod's catch, a gym leader or a gate's fight (no `foe`, but the watched ROM's own battle, which
+ *  the mirror replays: Cam watched a SHUPPET caught that way). A trade or a gift sets it too, and
+ *  has no battle at all: that was the tag over the old man. */
+export function watchable(a: { id: number; battling: boolean; foe: number }, room: TraderRoom): boolean {
+  return a.battling && (a.foe !== 0 || !trading(room, a.id));
 }
 
 /** The loot `picked` (room.ts: key, and who took it) gained since the last look that

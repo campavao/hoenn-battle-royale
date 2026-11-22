@@ -3,17 +3,26 @@ import { fightKey, nextAfter, pickedBy, watchable, Watch } from './watch';
 
 afterEach(() => { vi.unstubAllGlobals(); });
 
-describe('the WATCH tag is only over a fight with a seat across (Cam 11-21)', () => {
-  it('a trainer in a trade, a gate, a wild patch or a cast is busy, not fighting', () => {
-    expect(watchable({ battling: true, foe: 0 })).toBe(false);
-    expect(watchable({ battling: false, foe: 0 })).toBe(false);
+describe('the WATCH tag is over a battle, never a trade (Cam 11-21: WATCH over an old man who gives things)', () => {
+  const quiet = { events: [], homes: [] };
+  // Trainer 5 is with a floor trader (homes) or an event's trader; nobody else is.
+  const atHome = { events: [], homes: [{ busy: 5 }, { gone: true, busy: 6 }] };
+  const atEvent = { events: [{}, { trader: { busy: 5 } }], homes: [] };
+  it('a trainer with an NPC who trades or gives is busy, not in a battle', () => {
+    expect(watchable({ id: 5, battling: true, foe: 0 }, atHome)).toBe(false);
+    expect(watchable({ id: 5, battling: true, foe: 0 }, atEvent)).toBe(false);
+  });
+  it("a wild patch, a rod's catch, a gym leader or a gate (no foe seat) is still a battle the mirror replays", () => {
+    expect(watchable({ id: 5, battling: true, foe: 0 }, quiet)).toBe(true);
+    expect(watchable({ id: 6, battling: true, foe: 0 }, atHome), "a gone home's old trade is not this one").toBe(true);
   });
   it('a duel, or a bot at a legendary (foe -2), can be watched', () => {
-    expect(watchable({ battling: true, foe: 8 })).toBe(true);
-    expect(watchable({ battling: true, foe: -2 })).toBe(true);
+    expect(watchable({ id: 5, battling: true, foe: 8 }, quiet)).toBe(true);
+    expect(watchable({ id: 5, battling: true, foe: -2 }, quiet)).toBe(true);
   });
-  it('a stale foe on a trainer who is no longer in a scene is not a fight', () => {
-    expect(watchable({ battling: false, foe: 8 })).toBe(false);
+  it('a trainer in no scene is not watched, whatever foe is left over', () => {
+    expect(watchable({ id: 5, battling: false, foe: 8 }, quiet)).toBe(false);
+    expect(watchable({ id: 5, battling: false, foe: 0 }, quiet)).toBe(false);
   });
 });
 
