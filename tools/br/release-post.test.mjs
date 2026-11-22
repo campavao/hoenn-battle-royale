@@ -41,7 +41,9 @@ test("a long list is cut to fit Discord, saying how many more", () => {
   assert.match(text, /…and \d+ more$/);
 });
 
-const GROUPED = `## What's Changed
+const GROUPED = `<!-- Release notes generated using configuration in .github/release.yml at hoenn-battle-royale -->
+
+## What's Changed
 ### Gameplay
 * Cracked floors give way by @campavao in https://github.com/campavao/hoenn-battle-royale/pull/423
 ### UI

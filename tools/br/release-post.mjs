@@ -30,6 +30,8 @@ function clean(raw) {
   let line = raw.trim();
   if (!line || /^#+\s/.test(line) || /^\*\*Full Changelog\*\*/i.test(line) || /^\*\*New Contributors\*\*/i.test(line)) return "";
   if (/made their first contribution/i.test(line)) return "";
+  // "<!-- Release notes generated using configuration in .github/release.yml at ... -->"
+  if (/^<!--.*-->$/.test(line)) return "";
   // GitHub's generated "* title by @who in https://.../pull/N".
   line = line.replace(/\s+by @[\w-]+ in https?:\/\/\S+$/, "");
   line = line.replace(/^[-*•]\s+/, "");
