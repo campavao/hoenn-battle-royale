@@ -184,7 +184,7 @@ describe('BattleReader', () => {
     f.ram.set([...encodeGen3('RALTS'), 0xff], SYM.mons - BASE + 0x30);
     run(4);
     const n = all().length;
-    for (const t of ['ZIGZAGOON', 'RALTS', 'PP', '-', '12/25', 'NORMAL', 'Foe ZIGZAGOON used TACKLE!']) { say(f, t); run(3); }
+    for (const t of ['ZIGZAGOON', 'RALTS', 'PP', '-', '12/25', 'NORMAL', 'TYPE/GHOST', 'TYPE/', 'Foe ZIGZAGOON used TACKLE!']) { say(f, t); run(3); }
     expect(all().slice(n)).toEqual([{ e: 'text', text: 'Foe ZIGZAGOON used TACKLE!' }]);
   });
 

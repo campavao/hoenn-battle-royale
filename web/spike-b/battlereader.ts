@@ -116,9 +116,11 @@ export function battleText(raw: ArrayLike<number>): string {
 /** The menu asking what to do is not a thing that happened. */
 const PROMPT = /^What will\b.*\bdo\?$/;
 /** What the move menu's windows leave in the buffer after it closes (gBrBattle.menu is already 0):
- *  the PP label and count, and the move's type with its numbers. A line of the story is never
- *  only one of these. */
-const UI_LINE = /^(PP|-|\d+\/\d+|(NORMAL|FIGHT|FLYING|POISON|GROUND|ROCK|BUG|GHOST|STEEL|\?\?\?|FIRE|WATER|GRASS|ELECTR|PSYCHC|ICE|DRAGON|DARK)\b[ ./\d]*)$/;
+ *  the PP label and count, and the move's type with its numbers, "TYPE/" before it
+ *  (gText_MoveInterfaceType: a watcher read "TYPE/GHOST", Cam 11-22). A line of the story is
+ *  never only one of these. */
+const TYPES = 'NORMAL|FIGHT|FLYING|POISON|GROUND|ROCK|BUG|GHOST|STEEL|\\?\\?\\?|FIRE|WATER|GRASS|ELECTR|PSYCHC|ICE|DRAGON|DARK';
+export const UI_LINE = new RegExp(`^(PP( ?TYPE/)?|TYPE/ ?((${TYPES})\\b[ ./\\d]*)?|-|\\d+/\\d+|(${TYPES})\\b[ ./\\d]*)$`);
 const M_NICKNAME = 0x30;
 /** PLAYER_NAME_LENGTH + 1 (include/constants/global.h). */
 const PLAYER_NAME_READ = 8;
