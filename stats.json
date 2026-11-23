@@ -1,12 +1,12 @@
 {
-  "at": "2026-11-23T16:49:16.347Z",
+  "at": "2026-11-23T22:54:16.495Z",
   "rooms": 0,
   "roomCap": 40,
   "conns": 0,
   "connCap": 200,
   "peakRooms": 0,
   "peakConns": 1,
-  "matches": 16,
+  "matches": 20,
   "statSeen": 6,
   "statSolo": 0,
   "world": 0,
@@ -15,5 +15,5 @@
   "lines": 6,
   "deployedAt": "2026-11-23T03:48:30.113Z",
   "deploymentId": "23252356-a822-42da-a9f7-4cccac7532d1",
-  "readAt": "2026-11-23T16:51:17.660Z"
+  "readAt": "2026-11-23T22:54:44.697Z"
 }

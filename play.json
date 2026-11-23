@@ -1,7 +1,112 @@
 {
- "readAt": "2026-11-23T16:51:17.660Z",
+ "readAt": "2026-11-23T22:54:44.697Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "GYJR62",
+   "at": "2026-11-23T21:53:02.175Z",
+   "end": "2026-11-23T22:14:03.862Z",
+   "secs": 1262,
+   "door": "open",
+   "mode": "quick",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 2,
+   "joins": [
+    {
+     "t": "2026-11-23T21:53:02.175Z",
+     "how": "quick"
+    },
+    {
+     "t": "2026-11-23T22:11:01.762Z",
+     "how": "quick"
+    },
+    {
+     "t": "2026-11-23T22:12:10.487Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-23T21:53:04.563Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": 1096
+    },
+    {
+     "t": "2026-11-23T22:13:10.773Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "TH46XR",
+   "at": "2026-11-23T21:40:22.119Z",
+   "end": "2026-11-23T21:53:00.490Z",
+   "secs": 758,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-23T21:40:22.119Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-23T21:41:20.329Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "293NGJ",
+   "at": "2026-11-23T17:21:36.446Z",
+   "end": "2026-11-23T17:23:24.676Z",
+   "secs": 108,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-23T17:21:36.446Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-23T17:21:39.705Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
   {
    "code": "RYSHVT",
    "at": "2026-11-23T16:26:51.044Z",
@@ -31385,6 +31490,76 @@
  ],
  "jank": [
   {
+   "t": "2026-11-23T22:14:03.831Z",
+   "code": "GYJR62",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 52,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
+  {
+   "t": "2026-11-23T22:11:20.744Z",
+   "code": "GYJR62",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 1095,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
+  {
+   "t": "2026-11-23T22:11:20.691Z",
+   "code": "GYJR62",
+   "v": "b49b064",
+   "watched": 11,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 18,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
+  {
+   "t": "2026-11-23T21:53:00.489Z",
+   "code": "TH46XR",
+   "v": "b49b064",
+   "watched": 4,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 699,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
+  {
+   "t": "2026-11-23T17:23:24.676Z",
+   "code": "293NGJ",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 104,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
+  {
    "t": "2026-11-23T16:45:30.748Z",
    "code": "RYSHVT",
    "v": "b49b064",
@@ -43930,6 +44105,62 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-23T22:24:58.948Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-23T22:24:53.833Z",
+   "step": "landing"
+  },
+  {
+   "t": "2026-11-23T22:11:02.301Z",
+   "step": "match"
+  },
+  {
+   "t": "2026-11-23T22:10:51.643Z",
+   "step": "rom"
+  },
+  {
+   "t": "2026-11-23T22:10:36.129Z",
+   "step": "bad-size"
+  },
+  {
+   "t": "2026-11-23T22:09:51.669Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-23T22:09:47.451Z",
+   "step": "landing"
+  },
+  {
+   "t": "2026-11-23T19:34:45.095Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-23T19:34:42.205Z",
+   "step": "landing"
+  },
+  {
+   "t": "2026-11-23T18:03:54.196Z",
+   "step": "landing"
+  },
+  {
+   "t": "2026-11-23T17:21:40.030Z",
+   "step": "match"
+  },
+  {
+   "t": "2026-11-23T17:21:12.838Z",
+   "step": "rom"
+  },
+  {
+   "t": "2026-11-23T17:20:31.370Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-23T17:20:24.377Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-23T16:19:33.958Z",
    "step": "match"
