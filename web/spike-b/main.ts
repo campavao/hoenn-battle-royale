@@ -31,7 +31,7 @@ import { acroFrame, acroNear, DIR_EAST } from './sim';
 import { FACE, footPose } from './poses';
 import { ballTakes, catchRateOf, patchBalls, wildMon, zoneBalls, zoneFight } from './shared/wild';
 import { logMs } from './shared/battlelog';
-import { ATTENDANT, BOATS, CLOSED_DOORS, isLooseSeam, DOCKS, MOORINGS, TIDAL_MAPS, TIDAL_SAILOR, islandMaps, type Cruise, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, FIELD_DIVE, diveTo, emptyBag, interiors, makeRoom, botParty, legendMon, LEGEND_CATCH, LEGEND_FOE, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
+import { ATTENDANT, BOATS, CLOSED_DOORS, FLY_ONLY, isLooseSeam, DOCKS, MOORINGS, TIDAL_MAPS, TIDAL_SAILOR, islandMaps, type Cruise, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, SAFARI, WALKUP_BANG, FIELD_SURF, FIELD_DIVE, diveTo, emptyBag, interiors, makeRoom, botParty, legendMon, LEGEND_CATCH, LEGEND_FOE, wornParty, type Actor, type Bag, type RoomEvent, type Results, type Ring, type Spill } from './shared/room';
 type Person = NonNullable<Spill['person']>;
 import { SKIN_GFX } from './shared/bots';
 import { connectWorld, soloLink, type WorldLink, type WorldSocket } from './net';
@@ -211,6 +211,21 @@ function layout(maps: WorldMap[]): Map<string, Placed> {
     placed.set(m.id, { m, gx: x, gy: y, classes: decode(m.grid, m.w * m.h) });
     x += m.w + GAP;
     rowH = Math.max(rowH, m.h);
+  }
+  // The towns only FLY reaches (room.ts FLY_ONLY), SOOTOPOLIS: on its own in the same row, its
+  // buildings past it. With no place here it was drawn over ROUTE 109's beach (11-22).
+  for (const id of FLY_ONLY) {
+    const town = byId.get(id);
+    if (!town || placed.has(id)) continue;
+    placed.set(id, { m: town, gx: x, gy: y, classes: decode(town.grid, town.w * town.h) });
+    x += town.w + GAP;
+    rowH = Math.max(rowH, town.h);
+    for (const [inner, { m }] of interiors(maps, new Map([[id, { gx: 0, gy: 0 }]]))) {
+      if (placed.has(inner)) continue;
+      placed.set(inner, { m, gx: x, gy: y, classes: decode(m.grid, m.w * m.h) });
+      x += m.w + GAP;
+      rowH = Math.max(rowH, m.h);
+    }
   }
   // ...and the SS TIDAL's decks (room.ts TIDAL_MAPS), which only its harbours board.
   for (const m of maps.filter((q) => TIDAL_MAPS.includes(q.id))) {

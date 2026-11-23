@@ -155,3 +155,34 @@ test('far out, every trainer is their head, not a box (Cam, 11-21)', async ({ br
   await shot(page, 'far-heads');
   await ctx.close();
 });
+
+test('FLY reaches SOOTOPOLIS off the MAP, as in Emerald (Cam, 11-22)', async ({ browser }) => {
+  // Its cells on the MAP were ROUTE 126's, FLY grey on them, and the city was out of the match.
+  test.setTimeout(300_000);
+  const ctx = await browser.newContext(PHONE);
+  const page = await ctx.newPage();
+  await withTeam(page, 60);
+  await spike(page, (s) => s.give(340));
+  await expect(page.locator('.bm-use-head')).toBeVisible({ timeout: 15_000 });
+  await page.locator('.bm-slot').first().click();
+  await expect(page.locator('.bm-pick-move').nth(1)).toBeVisible({ timeout: 20_000 });
+  await page.locator('.bm-pick-move').nth(1).click();
+  await expect.poll(() => spike(page, (s) => s.swapping || s.battleMenu.isShown), { timeout: 20_000 }).toBe(false);
+  await page.waitForTimeout(800);
+  await spike(page, (s) => s.runMenu('13'));
+  const fly = page.locator('#map-window [aria-label="FLY"]');
+  await expect(fly).toBeVisible({ timeout: 5_000 });
+  await page.waitForTimeout(800);
+  const city = await spike(page, (s) => s.ringMap.cellOf({ map: 'MAP_SOOTOPOLIS_CITY', x: 43, y: 32 })) as { x: number; y: number };
+  expect(await page.evaluate(({ x, y }) => (window as any).__spike.ringMap.placeAt(x, y)?.name, city)).toBe('SOOTOPOLIS CITY');
+  const at = (await page.locator('#map-window .map-picture').boundingBox())!;
+  await page.mouse.click(at.x + ((8 * city.x + 12) * at.width) / 240, at.y + ((8 * city.y + 20) * at.height) / 160);
+  await expect.poll(() => spike(page, (s) => s.mapWindow.cursor)).toEqual(city);
+  await expect(fly).toHaveAttribute('aria-disabled', 'false');
+  await shot(page, 'map-fly-sootopolis');
+  await fly.click();
+  await expect.poll(() => spike(page, (s) => s.link.room.actor(s.link.me).m.spot), { timeout: 20_000 }).toEqual({ map: 'MAP_SOOTOPOLIS_CITY', x: 43, y: 32 });
+  await page.waitForTimeout(2500);
+  await shot(page, 'field-sootopolis');
+  await ctx.close();
+});

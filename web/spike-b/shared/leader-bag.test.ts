@@ -43,7 +43,8 @@ function faces(l: (typeof LEADERS)[number]): { at: Spot; dir: number }[] {
 const IN_MATCH = LEADERS.filter((l) => (makeRoom(MAPS, PATCHES, 1) as unknown as { maps: Map<string, unknown> }).maps.has(l.map));
 
 describe("a beaten leader's bag never shuts its winner in (#379)", () => {
-  it('covers seven gyms', () => expect(IN_MATCH.length).toBe(7));
+  // Eight since 11-22: FLY reaches SOOTOPOLIS, and JUAN's gym with it.
+  it('covers all eight gyms', () => expect(IN_MATCH.length).toBe(8));
   it.each(IN_MATCH.map((l) => [l.name, l] as const))('%s', (_name, l) => {
     const family = l.map.replace(/_(1F|B1F)$/, '');
     const shut: string[] = [];

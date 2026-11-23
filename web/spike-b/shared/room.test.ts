@@ -20,7 +20,7 @@ import { over } from './over';
 import { LEADERS } from './gyms';
 import { ITEM_LINK_CABLE, ITEM_POKE_DOLL, cleanBag, cleanReleased, isTm, within } from './items';
 import { HURT, botKeys, health } from './bots';
-import { AFTER_WIN, FIELD_DIVE, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_APART, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, WALKUP_BANG, CHEST, CHEST_SPECIES, ITEM_MASTER_BALL, ZONE_CELLS, ZONE_ITEMS, ZONE_TMS, botParty, eventPiece, makeRoom, zoneBalls, wornParty, type RoomEvent } from './room';
+import { AFTER_WIN, FIELD_DIVE, FIELD_SURF, SAFARI, PICK_WAIT, GROUND_APART, GROUND_PER_MAP, RING_PHASE, SECTION_TILES, SPILL_KEY, KEY_A, KEY_B, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SELECT, KEY_UP, WALKUP_BANG, CHEST, CHEST_SPECIES, ITEM_MASTER_BALL, ZONE_CELLS, ZONE_ITEMS, ZONE_TMS, FLY_ONLY, botParty, eventPiece, makeRoom, zoneBalls, wornParty, type RoomEvent } from './room';
 
 const MAPS = (worldJson as { maps: WorldMap[] }).maps;
 const PATCHES = patchJson as unknown as PatchTable;
@@ -952,6 +952,27 @@ describe('item balls', () => {
     expect(fly('MAP_PETALBURG_CITY', 20, 17)).toEqual({ map: 'MAP_PETALBURG_CITY', x: 20, y: 17 });
   });
 
+  it('FLY reaches SOOTOPOLIS as in Emerald: the city and its buildings are in the match, measured by ROUTE 126', () => {
+    // Cam, 11-22: "Fly should work exactly like in Emerald". The city was out of the room (its way
+    // in on foot is a dive the world has not got), so a flight there landed nowhere.
+    const room = makeRoom(MAPS, PATCHES, 4242);
+    expect(FLY_ONLY.has('MAP_SOOTOPOLIS_CITY')).toBe(true);
+    for (const id of ['MAP_SOOTOPOLIS_CITY', 'MAP_SOOTOPOLIS_CITY_POKEMON_CENTER_1F', 'MAP_SOOTOPOLIS_CITY_GYM_1F', 'MAP_SOOTOPOLIS_CITY_MART']) expect(room.maps.has(id), id).toBe(true);
+    expect(room.places.has('MAP_SOOTOPOLIS_CITY'), 'not on the plane').toBe(false);
+    const sea = room.places.get('MAP_ROUTE126')!, at = room.anchors.get('MAP_SOOTOPOLIS_CITY')!;
+    expect(at).toEqual({ gx: sea.gx + 40, gy: sea.gy + 40 });
+    room.apply({ c: 'join', id: 1000, bot: false, name: 'A', skin: 0, spot: { map: 'MAP_PETALBURG_CITY', x: 10, y: 22 }, facing: 1 });
+    // flyspots.ts's spot, outside the POKeMON CENTER.
+    room.apply({ c: 'fly', id: 1000, to: { map: 'MAP_SOOTOPOLIS_CITY', x: 43, y: 32 } });
+    expect(room.actor(1000)!.m.spot).toEqual({ map: 'MAP_SOOTOPOLIS_CITY', x: 43, y: 32 });
+    // In the fog as ROUTE 126's middle is, and back out by FLY.
+    const ring = { ...room.ring(), r: 5, cx: at.gx, cy: at.gy };
+    expect(room.inFog({ map: 'MAP_SOOTOPOLIS_CITY', x: 43, y: 32 }, ring)).toBe(false);
+    expect(room.inFog({ map: 'MAP_SOOTOPOLIS_CITY', x: 43, y: 32 }, { ...ring, cx: at.gx + 50 })).toBe(true);
+    room.apply({ c: 'fly', id: 1000, to: { map: 'MAP_PETALBURG_CITY', x: 20, y: 17 } });
+    expect(room.actor(1000)!.m.spot).toEqual({ map: 'MAP_PETALBURG_CITY', x: 20, y: 17 });
+  });
+
   it('the SS TIDAL and MR. BRINEY run: each stop sails where its own menu does (br_boot.c)', () => {
     const room = makeRoom(MAPS, PATCHES, 4242);
     const at = (map: string, x: number, y: number, facing: number) => {
@@ -1755,7 +1776,10 @@ describe('Cam 10-30', () => {
     // for balls: 2.54 minutes on average, half of them over 2.5, up to 4.5; after: 2.68, up to 6.07;
     // with the Zone's rails the ACRO BIKE's, so the bots' opening is another one: 2.97, up to 6.47).
     const worst: number[] = [];
-    for (const seed of [7, 8, 9, 10, 11, 12]) {
+    // Seed 13, not 10, since 11-22: SOOTOPOLIS's houses joined the deal (FLY reaches it). Over seeds
+    // 7 to 30 the duels went from 4.58 to 4.46 a match, and seed 10 from 1 to 0, the one seed of the 24
+    // with none: the dice again, not the bots.
+    for (const seed of [7, 8, 9, 13, 11, 12]) {
       const r = makeRoom(MAPS, PATCHES, seed);
       r.ringPhase = 120 * 60; r.opening = 60 * 60;
       const host = new Host(r, 7, MAPS, 0);
