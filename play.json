@@ -1,12 +1,73 @@
 {
- "readAt": "2026-11-23T01:42:06.372Z",
+ "readAt": "2026-11-23T01:57:09.011Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "R3NGJS",
-   "at": "2026-11-23T01:29:19.245Z",
+   "code": "X6ARD7",
+   "at": "2026-11-23T01:48:07.787Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-23T01:48:07.787Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-23T01:48:09.156Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "CC9YNY",
+   "at": "2026-11-23T01:42:11.942Z",
+   "end": "2026-11-23T01:49:08.046Z",
+   "secs": 416,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-23T01:42:11.942Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-23T01:42:14.811Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "R3NGJS",
+   "at": "2026-11-23T01:29:19.245Z",
+   "end": "2026-11-23T01:47:41.642Z",
+   "secs": 1102,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -27,10 +88,9 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1060
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -30737,6 +30797,34 @@
  ],
  "jank": [
   {
+   "t": "2026-11-23T01:49:07.978Z",
+   "code": "CC9YNY",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 410,
+   "drifts": 0,
+   "deploy": "1543f2df"
+  },
+  {
+   "t": "2026-11-23T01:47:01.973Z",
+   "code": "R3NGJS",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 2,
+   "checks": 1041,
+   "drifts": 0,
+   "deploy": "1543f2df"
+  },
+  {
    "t": "2026-11-23T01:01:53.688Z",
    "code": "GDQ2NC",
    "v": "b49b064",
@@ -43114,6 +43202,14 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-23T01:42:15.079Z",
+   "step": "match"
+  },
+  {
+   "t": "2026-11-23T01:42:03.991Z",
+   "step": "rom"
+  },
   {
    "t": "2026-11-23T01:41:51.459Z",
    "step": "ask"
