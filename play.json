@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-23T01:57:09.011Z",
+ "readAt": "2026-11-23T02:12:11.421Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "X6ARD7",
    "at": "2026-11-23T01:48:07.787Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-23T02:06:32.184Z",
+   "secs": 1104,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -27,10 +27,9 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1079
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -30797,6 +30796,20 @@
  ],
  "jank": [
   {
+   "t": "2026-11-23T02:06:08.595Z",
+   "code": "X6ARD7",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 4,
+   "cam": 0,
+   "lost": 1,
+   "stalls": 2,
+   "longest": 15,
+   "checks": 1069,
+   "drifts": 0,
+   "deploy": "1543f2df"
+  },
+  {
    "t": "2026-11-23T01:49:07.978Z",
    "code": "CC9YNY",
    "v": "b49b064",
@@ -43202,6 +43215,10 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-23T02:03:47.250Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-23T01:42:15.079Z",
    "step": "match"
