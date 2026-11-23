@@ -11909,7 +11909,9 @@ var STORIES = [
     map: "MAP_SOOTOPOLIS_CITY",
     mons: [[KYOGRE2, GROUDON2]],
     cells: [{ x: 31, y: 34 }, { x: 30, y: 35 }, { x: 32, y: 35 }],
-    final: true,
+    // An event like any story's since 11-22, not a final ring's: FLY reaches the city (room.ts
+    // FLY_ONLY), and a final ring there was centred on open sea. Cam: "We can have a legendary
+    // appear there sometimes".
     noBots: true
   }
 ];
@@ -13509,7 +13511,7 @@ var Room = class {
       return q2 ? { x: q2.gx + s.cells[0].x + 0.5, y: q2.gy + s.cells[0].y + 0.5 } : a ? { x: a.gx, y: a.gy } : void 0;
     };
     const finals = STORIES.filter((s) => {
-      const p2 = s.final && this.maps.has(s.map) && !FLY_ONLY.has(s.map) ? at2(s) : void 0;
+      const p2 = s.final && this.maps.has(s.map) ? at2(s) : void 0;
       return p2 && near(p2.x, p2.y);
     });
     const story = finals.length && (h >>> 7) % 1e3 / 1e3 < FINAL_CHANCE ? finals[(h >>> 17 >>> 0) % finals.length] : void 0;
@@ -13821,7 +13823,7 @@ var Room = class {
    *  over, a REGI behind its wall, a gate's boss to beat first, or an island the ferry
    *  sails to; not the final ring's. */
   storyFor(rng, ring) {
-    const open = STORIES.filter((s) => (s.people ?? []).every((p) => PERSON_GFX[p.gfx] && (!p.trainer || GATES.includes(p.trainer))) && (!s.boat || DOCKS[s.id]) && !s.final && !s.noBots && !this.events.some((e) => e.story === s.id) && s.cells.every((c) => this.maps.has(c.map ?? s.map) && this.world.cell(c.map ?? s.map, c.x, c.y) === 0) && !this.inFog({ map: s.map, x: s.cells[0].x, y: s.cells[0].y }, ring));
+    const open = STORIES.filter((s) => (s.people ?? []).every((p) => PERSON_GFX[p.gfx] && (!p.trainer || GATES.includes(p.trainer))) && (!s.boat || DOCKS[s.id]) && !s.final && (!s.noBots || FLY_ONLY.has(s.map)) && !this.events.some((e) => e.story === s.id) && s.cells.every((c) => this.maps.has(c.map ?? s.map) && this.world.cell(c.map ?? s.map, c.x, c.y) === 0) && !this.inFog({ map: s.map, x: s.cells[0].x, y: s.cells[0].y }, ring));
     return open.length ? open[Math.floor(rng() * open.length)] : void 0;
   }
   /** The story's pieces on its own cells (story.ts's storyDrop): its mons at the phase's
@@ -16776,4 +16778,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "b53c95f38439";
+export const WORLD_HASH = "50f48803ba0a";

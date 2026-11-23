@@ -736,9 +736,11 @@ describe('item balls', () => {
     }
     // The place-and-reward rows this world has the maps for.
     expect([...told].sort()).toEqual(expect.arrayContaining(['abandoned-ship', 'ancient-tomb', 'desert-ruins', 'granite-cave', 'island-cave', 'lavaridge-egg', 'mirage-tower', 'stevens-house']));
-    // ...and the islands, which the ferry sails to; not the final ring's two.
+    // ...and the islands, which the ferry sails to, and SOOTOPOLIS, which FLY reaches (11-22); not
+    // the final ring's SKY PILLAR.
     expect(told.has('southern-island')).toBe(true);
-    expect(told.has('sky-pillar') || told.has('sootopolis')).toBe(false);
+    expect(told.has('sootopolis')).toBe(true);
+    expect(told.has('sky-pillar')).toBe(false);
     // CAPT. STERN stands at his harbour with what he gives for the SCANNER.
     const stern = [...room.spills.values()].find((b) => b.person?.wants);
     expect(stern).toMatchObject({ map: 'MAP_SLATEPORT_CITY_HARBOR', x: 6, y: 13, person: { name: 'CAPT. STERN', wants: 278 } });
@@ -971,6 +973,19 @@ describe('item balls', () => {
     expect(room.inFog({ map: 'MAP_SOOTOPOLIS_CITY', x: 43, y: 32 }, { ...ring, cx: at.gx + 50 })).toBe(true);
     room.apply({ c: 'fly', id: 1000, to: { map: 'MAP_PETALBURG_CITY', x: 20, y: 17 } });
     expect(room.actor(1000)!.m.spot).toEqual({ map: 'MAP_PETALBURG_CITY', x: 20, y: 17 });
+  });
+
+  it('SOOTOPOLIS tells its clash as an event now and then, KYOGRE or GROUDON in the city in its weather', () => {
+    // Cam, 11-22: "We can have a legendary appear there sometimes". A story event like the others,
+    // not the final ring's (that ring was centred on open sea); about one match in twenty over seeds
+    // 1 to 200 with the ring open, seed 37 the first.
+    const room = makeRoom(MAPS, PATCHES, 37);
+    (room as unknown as { dropEvent(n: number, ring: unknown): void }).dropEvent(0, { ...room.ring(), r: Infinity });
+    const e = room.events.find((q) => q.story === 'sootopolis')!;
+    expect(e, 'the clash').toBeTruthy();
+    expect({ map: e.map, x: e.x, y: e.y }).toEqual({ map: 'MAP_SOOTOPOLIS_CITY', x: 31, y: 34 });
+    expect([404, 405]).toContain(e.species);
+    expect(room.weatherAt({ map: 'MAP_SOOTOPOLIS_CITY', x: 31, y: 33 })).toBeGreaterThan(0);
   });
 
   it('the SS TIDAL and MR. BRINEY run: each stop sails where its own menu does (br_boot.c)', () => {
