@@ -1,12 +1,64 @@
 {
- "readAt": "2026-11-23T14:20:38.137Z",
+ "readAt": "2026-11-23T14:35:42.078Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "EKM9B8",
-   "at": "2026-11-23T14:17:15.432Z",
+   "code": "5N6HCC",
+   "at": "2026-11-23T14:32:25.135Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-23T14:32:25.135Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-23T14:32:26.460Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "NATGFA",
+   "at": "2026-11-23T14:31:45.775Z",
+   "end": "2026-11-23T14:31:47.302Z",
+   "secs": 2,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [
+    {
+     "t": "2026-11-23T14:31:45.775Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "EKM9B8",
+   "at": "2026-11-23T14:17:15.432Z",
+   "end": "2026-11-23T14:31:19.650Z",
+   "secs": 844,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -27,10 +79,9 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 816
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -30922,7 +30973,7 @@
   {
    "id": "bca304b1",
    "first": "2026-11-20T22:05:00.471Z",
-   "last": "2026-11-23T14:17:04.367Z",
+   "last": "2026-11-23T14:31:51.286Z",
    "since": "2026-11-20",
    "versions": [
     "world-1e0304e5",
@@ -30932,7 +30983,7 @@
     "world-50f48803"
    ],
    "solo": 4,
-   "checkins": 14,
+   "checkins": 15,
    "v": "world-50f48803"
   },
   {
@@ -31173,6 +31224,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-23T14:30:53.149Z",
+   "code": "EKM9B8",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 2,
+   "cam": 0,
+   "lost": 1,
+   "stalls": 2,
+   "longest": 13,
+   "checks": 803,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
   {
    "t": "2026-11-23T14:16:04.526Z",
    "code": "VTS9FN",
