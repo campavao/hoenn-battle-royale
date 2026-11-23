@@ -12828,6 +12828,8 @@ function ferryAt(map, x2, y) {
   return Object.values(DOCKS).some((d) => d.map === map && d.sailor[0] === x2 && d.sailor[1] === y) ? "sailor" : void 0;
 }
 var port = (id2) => ({ id: id2, name: PORTS[id2].name });
+var FLY_ONLY = /* @__PURE__ */ new Set(["MAP_SOOTOPOLIS_CITY"]);
+var FLY_ONLY_IN = { MAP_SOOTOPOLIS_CITY: "MAP_ROUTE126" };
 function islandMaps(all) {
   const byId = new Map(all.map((m) => [m.id, m]));
   const out = /* @__PURE__ */ new Map();
@@ -13086,7 +13088,7 @@ var Room = class {
       if (cmd.spent && b2.loot) spend(b2.loot.items, cmd.spent.slice(0, 4));
     } else if (cmd.c === "fly") {
       const a = this.actor(cmd.id), t7 = cmd.to;
-      if (!a || a.battling || a.m.action || this.ring().safari || !this.places.has(t7.map)) return;
+      if (!a || a.battling || a.m.action || this.ring().safari || !(this.places.has(t7.map) || FLY_ONLY.has(t7.map) && this.maps.has(t7.map))) return;
       if (a.bot && !teamFlies(botParty(this.seed, a, this.ring().phase + 1))) return;
       if (this.world.cell(t7.map, t7.x, t7.y) !== 0 || this.actors.some((o) => o.m.spot.map === t7.map && o.m.spot.x === t7.x && o.m.spot.y === t7.y)) return;
       a.m = newMover({ map: t7.map, x: t7.x, y: t7.y }, 1);
@@ -13507,7 +13509,7 @@ var Room = class {
       return q2 ? { x: q2.gx + s.cells[0].x + 0.5, y: q2.gy + s.cells[0].y + 0.5 } : a ? { x: a.gx, y: a.gy } : void 0;
     };
     const finals = STORIES.filter((s) => {
-      const p2 = s.final && this.maps.has(s.map) ? at2(s) : void 0;
+      const p2 = s.final && this.maps.has(s.map) && !FLY_ONLY.has(s.map) ? at2(s) : void 0;
       return p2 && near(p2.x, p2.y);
     });
     const story = finals.length && (h >>> 7) % 1e3 / 1e3 < FINAL_CHANCE ? finals[(h >>> 17 >>> 0) % finals.length] : void 0;
@@ -14989,6 +14991,18 @@ function makeRoom(all, patches, seed, world) {
     maps.set(m.id, m);
     anchors.set(m.id, { gx: above.gx + m.w / 2, gy: above.gy + m.h / 2 });
     below.push(...m.seams.map((s) => s.to));
+  }
+  for (const id2 of FLY_ONLY) {
+    const town = byId.get(id2), over2 = places.get(FLY_ONLY_IN[id2]), sea = byId.get(FLY_ONLY_IN[id2]);
+    if (!town || !over2 || !sea || maps.has(id2)) continue;
+    const at2 = { gx: over2.gx + sea.w / 2, gy: over2.gy + sea.h / 2 };
+    maps.set(id2, town);
+    anchors.set(id2, at2);
+    for (const [inner, p] of interiors(all, /* @__PURE__ */ new Map([[id2, at2]]))) {
+      if (maps.has(inner) || places.has(inner)) continue;
+      maps.set(inner, p.m);
+      anchors.set(inner, at2);
+    }
   }
   const room = new Room(world ?? new World(all), maps, patches, seed, places, anchors);
   room.landing();
@@ -16762,4 +16776,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "4832274fc2cf";
+export const WORLD_HASH = "b53c95f38439";

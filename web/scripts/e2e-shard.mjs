@@ -53,7 +53,7 @@ export const FILE_SECONDS = {
   'spikeb-delays.spec.ts': 330,
   'spikeb-summary.spec.ts': 220,
   'spikeb-windows.spec.ts': 740,
-  'spikeb-map-markers.spec.ts': 420,
+  'spikeb-map-markers.spec.ts': 510,
   'spikeb-room.spec.ts': 250,
   'spikeb.spec.ts': 550,
   'spikeb-two.spec.ts': 102,

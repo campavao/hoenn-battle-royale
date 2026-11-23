@@ -358,6 +358,14 @@ export function ferryAt(map: string, x: number, y: number): 'attendant' | 'sailo
 const port = (id: string) => ({ id, name: PORTS[id].name });
 /** Every map the ferry's docks lead to on foot (their warps): the islands, which no
  *  seam or door joins to Hoenn. */
+/** Towns off the plane that FLY reaches, as Emerald's does (Cam, 11-22: "Fly should work exactly
+ *  like in Emerald"): SOOTOPOLIS, in its crater in the middle of ROUTE 126, whose way in on foot is
+ *  a dive the world has not got. A room holds them like the islands, by an anchor, and only a
+ *  flight lands in one. */
+export const FLY_ONLY: ReadonlySet<string> = new Set(['MAP_SOOTOPOLIS_CITY']);
+/** The plane map each FLY_ONLY town sits in the middle of, for its anchor. */
+const FLY_ONLY_IN: Readonly<Record<string, string>> = { MAP_SOOTOPOLIS_CITY: 'MAP_ROUTE126' };
+
 export function islandMaps(all: readonly WorldMap[]): WorldMap[] {
   const byId = new Map(all.map((m) => [m.id, m]));
   const out = new Map<string, WorldMap>();
@@ -829,7 +837,7 @@ export class Room {
       // To a town of the match's own Hoenn, on a cell a trainer could stand on, and not
       // out of the Zone before the drop (its gate is shut both ways).
       const a = this.actor(cmd.id), t = cmd.to;
-      if (!a || a.battling || a.m.action || this.ring().safari || !this.places.has(t.map)) return;
+      if (!a || a.battling || a.m.action || this.ring().safari || !(this.places.has(t.map) || (FLY_ONLY.has(t.map) && this.maps.has(t.map)))) return;
       // A bot's flight is the host's call (bots.ts flyGoal); its team has to be able to, as a trainer's.
       if (a.bot && !teamFlies(botParty(this.seed, a, this.ring().phase + 1))) return;
       if (this.world.cell(t.map, t.x, t.y) !== 0 || this.actors.some((o) => o.m.spot.map === t.map && o.m.spot.x === t.x && o.m.spot.y === t.y)) return;
@@ -1303,7 +1311,9 @@ export class Room {
     // own) would fog every one of them.
     const near = (x: number, y: number) => cells.some((s) => { const q = this.places.get(s.map)!; return Math.hypot(q.gx + s.x + 0.5 - x, q.gy + s.y + 0.5 - y) <= FINAL_REACH; });
     const at = (s: Story) => { const q = this.places.get(s.map), a = this.anchors.get(s.map); return q ? { x: q.gx + s.cells[0].x + 0.5, y: q.gy + s.cells[0].y + 0.5 } : a ? { x: a.gx, y: a.gy } : undefined; };
-    const finals = STORIES.filter((s) => { const p = s.final && this.maps.has(s.map) ? at(s) : undefined; return p && near(p.x, p.y); });
+    // Not a town only a flight reaches (FLY_ONLY): SOOTOPOLIS's story never came while the city
+    // was out of the room, and its coming is a call of its own, not FLY's.
+    const finals = STORIES.filter((s) => { const p = s.final && this.maps.has(s.map) && !FLY_ONLY.has(s.map) ? at(s) : undefined; return p && near(p.x, p.y); });
     const story = finals.length && ((h >>> 7) % 1000) / 1000 < FINAL_CHANCE ? finals[((h >>> 17) >>> 0) % finals.length] : undefined;
     if (story) ({ x: cx, y: cy } = at(story)!);
     let far = 0;
@@ -2754,6 +2764,19 @@ export function makeRoom(all: readonly WorldMap[], patches: PatchTable, seed: nu
     maps.set(m.id, m);
     anchors.set(m.id, { gx: above.gx + m.w / 2, gy: above.gy + m.h / 2 });
     below.push(...m.seams.map((s) => s.to));
+  }
+  // The towns only FLY reaches, and every building of theirs, by the middle of the map they sit in.
+  for (const id of FLY_ONLY) {
+    const town = byId.get(id), over = places.get(FLY_ONLY_IN[id]), sea = byId.get(FLY_ONLY_IN[id]);
+    if (!town || !over || !sea || maps.has(id)) continue;
+    const at = { gx: over.gx + sea.w / 2, gy: over.gy + sea.h / 2 };
+    maps.set(id, town);
+    anchors.set(id, at);
+    for (const [inner, p] of interiors(all, new Map([[id, at]]))) {
+      if (maps.has(inner) || places.has(inner)) continue;
+      maps.set(inner, p.m);
+      anchors.set(inner, at);
+    }
   }
   const room = new Room(world ?? new World(all as WorldMap[]), maps, patches, seed, places, anchors);
   // Built now, once per world (cached), not on the frame of the first drop.

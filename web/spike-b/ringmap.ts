@@ -4,7 +4,7 @@
 // ring is in tiles (room.ts), smaller than a town, so each grid pixel is taken back to the
 // tile it shows.
 
-import type { Ring, Room } from './shared/room';
+import { FLY_ONLY, type Ring, type Room } from './shared/room';
 import type { Spot, WorldMap } from '../src/bots/world';
 import { text, type RomArt } from './romart';
 import { LEADERS } from './shared/gyms';
@@ -48,6 +48,13 @@ export class RingMap {
       let s = ids.get(id);
       if (!s) { s = { id, ...art.section(id) }; ids.set(id, s); }
       this.sections.set(m.id, s);
+    }
+    // A town only FLY reaches (room.ts FLY_ONLY), SOOTOPOLIS: its own section on the MAP, to fly to.
+    for (const id of FLY_ONLY) {
+      const m = room.maps.get(id);
+      if (!m) continue;
+      const sid = art.mapsec(m.group, m.num);
+      this.sections.set(id, ids.get(sid) ?? { id: sid, ...art.section(sid) });
     }
     const zone = [...room.maps.values()].find((m) => m.id.startsWith('MAP_SAFARI_ZONE_'));
     if (zone) {
@@ -146,7 +153,7 @@ export class RingMap {
    *  known, Littleroot). */
   private cell(at: Spot): { mapsec: number; cellX: number; cellY: number } {
     if (at.map.startsWith('MAP_SAFARI_ZONE_') && this.zone !== undefined) return { mapsec: this.zone, cellX: 0, cellY: 0 };
-    const spot = this.outdoors(at) ?? { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 };
+    const spot = (FLY_ONLY.has(at.map) && this.sections.has(at.map) ? at : this.outdoors(at)) ?? { map: 'MAP_LITTLEROOT_TOWN', x: 10, y: 10 };
     const s = this.sections.get(spot.map)!;
     const m = this.room.maps.get(spot.map)!;
     const along = (at: number, size: number, cells: number) => Math.min(cells - 1, Math.floor((at * cells) / size));
@@ -163,7 +170,9 @@ export class RingMap {
   /** The place on cell (cx, cy) of the grid; null for open sea. */
   placeAt(cx: number, cy: number): MapPlace | null {
     const inIt = (s: Section) => cx >= s.x && cx < s.x + s.w && cy >= s.y && cy < s.y + s.h;
-    for (const s of this.sections.values()) if (inIt(s)) return { id: s.id, name: text(s.letters) };
+    // The smallest that holds it: SOOTOPOLIS's few cells are inside ROUTE 126's.
+    const s = [...this.sections.values()].filter(inIt).sort((p, q) => p.w * p.h - q.w * q.h)[0];
+    if (s) return { id: s.id, name: text(s.letters) };
     return this.zoneAt && inIt(this.zoneAt) ? { id: this.zoneAt.id, name: text(this.zoneAt.letters) } : null;
   }
 
