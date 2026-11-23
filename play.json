@@ -1,7 +1,38 @@
 {
- "readAt": "2026-11-23T05:42:54.454Z",
+ "readAt": "2026-11-23T08:58:04.972Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "9ECTCP",
+   "at": "2026-11-23T08:52:42.261Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-23T08:52:42.261Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-23T08:52:46.343Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "CQVJ9Y",
    "at": "2026-11-23T05:35:02.329Z",
@@ -43292,6 +43323,22 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-23T08:52:47.306Z",
+   "step": "match"
+  },
+  {
+   "t": "2026-11-23T08:50:23.677Z",
+   "step": "rom"
+  },
+  {
+   "t": "2026-11-23T08:49:54.564Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-23T08:49:49.430Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-23T02:19:22.106Z",
    "step": "landing"
