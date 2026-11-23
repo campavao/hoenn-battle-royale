@@ -1,7 +1,38 @@
 {
- "readAt": "2026-11-23T00:11:49.918Z",
+ "readAt": "2026-11-23T00:26:52.255Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "GPKCK2",
+   "at": "2026-11-23T00:15:35.933Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-23T00:15:35.933Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-23T00:15:39.253Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "4D4XUQ",
    "at": "2026-11-22T23:56:55.515Z",
@@ -42990,6 +43021,14 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-23T00:25:40.150Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-23T00:25:35.629Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-22T23:57:02.857Z",
    "step": "match"
