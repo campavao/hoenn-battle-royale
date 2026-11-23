@@ -122,8 +122,10 @@ describe('the fill and the real maps meet', () => {
         const h = halves.get(piece(x, y) ?? -1);
         if (!h) continue;
         trees += 1;
-        // A real map's cell has no piece here: it is that map's to finish the tree.
-        for (const [u, v] of [[x + h[0], y], [x, y + h[1]]]) if (!owned.has(`${u},${v}`) && !halves.has(piece(u, v) ?? -1)) bad.push(`${x},${y}`);
+        // A real map's cell has no piece here: it is that map's to finish the tree. A painted one
+        // is Cam's, who saw what it left in the painter (11-22: a row of his paint over half of a
+        // line of the generator's trees).
+        for (const [u, v] of [[x + h[0], y], [x, y + h[1]]]) if (!owned.has(`${u},${v}`) && !painted.has(`${u},${v}`) && !halves.has(piece(u, v) ?? -1)) bad.push(`${x},${y}`);
       }
     }
     expect(trees).toBeGreaterThan(1000);
