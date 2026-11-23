@@ -1,7 +1,98 @@
 {
- "readAt": "2026-11-23T13:05:30.834Z",
+ "readAt": "2026-11-23T14:05:35.596Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "VTS9FN",
+   "at": "2026-11-23T14:00:37.906Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-23T14:00:37.906Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-23T14:00:39.297Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "4Q7ZAZ",
+   "at": "2026-11-23T13:57:56.041Z",
+   "end": "2026-11-23T14:01:29.355Z",
+   "secs": 213,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-23T13:57:56.041Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-23T13:57:57.481Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "K58SRG",
+   "at": "2026-11-23T13:51:40.833Z",
+   "end": "2026-11-23T13:58:36.529Z",
+   "secs": 416,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-23T13:51:40.833Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-23T13:51:42.519Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
   {
    "code": "X329QF",
    "at": "2026-11-23T12:55:33.020Z",
@@ -30785,7 +30876,7 @@
   {
    "id": "bca304b1",
    "first": "2026-11-20T22:05:00.471Z",
-   "last": "2026-11-23T05:09:17.563Z",
+   "last": "2026-11-23T14:00:37.618Z",
    "since": "2026-11-20",
    "versions": [
     "world-1e0304e5",
@@ -30795,7 +30886,7 @@
     "world-50f48803"
    ],
    "solo": 4,
-   "checkins": 10,
+   "checkins": 13,
    "v": "world-50f48803"
   },
   {
