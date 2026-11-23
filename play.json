@@ -1,7 +1,38 @@
 {
- "readAt": "2026-11-23T15:50:54.788Z",
+ "readAt": "2026-11-23T16:05:58.845Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "W65N5C",
+   "at": "2026-11-23T15:58:51.328Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-23T15:58:51.328Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-23T15:58:52.582Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "VYFR96",
    "at": "2026-11-23T15:42:23.478Z",
@@ -43831,6 +43862,14 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-23T16:00:26.988Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-23T16:00:24.032Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-23T11:26:51.850Z",
    "step": "ask"
