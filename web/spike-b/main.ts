@@ -5490,9 +5490,12 @@ async function boot(): Promise<void> {
         // A hosted room's link is the address bar: copy it, send it, and a friend is in.
         if (!r.quick && parseRoomHash(location.hash)?.code !== r.code) history.replaceState(null, '', `#${withRoom(location.hash, 'join', r.code)}`);
         rom?.pace(r.set.textSpeed, r.set.animations);
-        if (matchOn && !r.playing) matchOver();
+        if (matchOn && !r.playing) { lobby!.know(r); matchOver(); }
         // The standings stay up until PLAY AGAIN; then the room as it is by then.
         else if (!matchOn && !winEl.classList.contains('on')) lobby!.roomIs(r);
+        // Not shown, but kept: PLAY AGAIN puts up the lobby's copy, and a page that came in
+        // while the match was on kept "A match is on" there for good (Cam, 11-22).
+        else lobby!.know(r);
         // Between matches a reload is back in this seat too (the relay holds it a moment),
         // the host still the host: the link alone made it a second trainer (11-12).
         if (!r.playing) rememberRoom(r);

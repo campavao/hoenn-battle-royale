@@ -354,9 +354,11 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
       y = lay.frame.y + lay.frame.h + 2;
 
       const noteText = m.countdown !== null && !m.started ? `STARTS IN ${m.countdown}` : m.note;
-      const noteRect = paintNote(c, noteText, y);
+      // Two lines at most, so a long one is read whole rather than cut ("You watch it, and are
+      // in the n...", Cam, 11-22).
+      const noteRect = paintNote(c, noteText, y, TEXT_WHITE, 2);
       widgets.push({ rect: noteRect, text: noteText, parent: 'room-note', cursor: null });
-      y += ROW_H + 2;
+      y += noteRect.h + 2;
 
       if (m.options && !m.started) {
         const opts = paintOptions(c, y, m.options, 'room-controls');

@@ -145,7 +145,7 @@ describe('world rooms', () => {
       svc.stop();
     }
   });
-  it('READY UP: back from a match, a quick room waits for its owner (or somebody new), then counts', () => {
+  it('READY UP: back from a match, a quick room waits for anybody in it (or somebody new), then counts', () => {
     let t = 0;
     const svc = new WorldService({ maps: MAPS, patches: PATCHES, bots: 0, cap: 30, now: () => t, log: () => undefined });
     try {
@@ -169,12 +169,13 @@ describe('world rooms', () => {
       t += 600_000;
       svc.pump();
       expect(hellos()).toBe(1);
-      // Only the owner readies up; their READY UP counts, START in the count deals.
+      // Anybody in it readies up, not only the first one in (Cam, 11-22, stuck behind an owner
+      // gone back to the menu): bob's READY UP counts; START in the count is still the owner's.
       sb.onText(JSON.stringify({ t: 'start' }));
-      expect(last(a).ready).toBe(true);
-      sa.onText(JSON.stringify({ t: 'start' }));
       expect(last(a).ready).toBeUndefined();
       expect(last(a).startsIn).toBe(60_000);
+      sb.onText(JSON.stringify({ t: 'start' }));
+      expect(hellos()).toBe(1);
       sa.onText(JSON.stringify({ t: 'start' }));
       expect(hellos()).toBe(2);
       // Back again: somebody new quick-joins, and the count is theirs too.

@@ -361,7 +361,9 @@ export class WorldService {
         if (m.t === 'start') {
           // READY UP: back from a match, a quick room's START arms its count, and START in
           // that count deals at once (match/room.ts readiesUp).
-          if (!host && phone.id === room.owner) {
+          // A quick room back from a match has no host to wait for: anybody in it readies it up
+          // (Cam, 11-22, stuck behind the first one in, gone back to the menu).
+          if (!host && (phone.id === room.owner || this.waiting(room))) {
             if (this.waiting(room)) { room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS); this.roster(room); }
             else this.start(room);
           }
