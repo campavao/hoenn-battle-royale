@@ -1311,9 +1311,7 @@ export class Room {
     // own) would fog every one of them.
     const near = (x: number, y: number) => cells.some((s) => { const q = this.places.get(s.map)!; return Math.hypot(q.gx + s.x + 0.5 - x, q.gy + s.y + 0.5 - y) <= FINAL_REACH; });
     const at = (s: Story) => { const q = this.places.get(s.map), a = this.anchors.get(s.map); return q ? { x: q.gx + s.cells[0].x + 0.5, y: q.gy + s.cells[0].y + 0.5 } : a ? { x: a.gx, y: a.gy } : undefined; };
-    // Not a town only a flight reaches (FLY_ONLY): SOOTOPOLIS's story never came while the city
-    // was out of the room, and its coming is a call of its own, not FLY's.
-    const finals = STORIES.filter((s) => { const p = s.final && this.maps.has(s.map) && !FLY_ONLY.has(s.map) ? at(s) : undefined; return p && near(p.x, p.y); });
+    const finals = STORIES.filter((s) => { const p = s.final && this.maps.has(s.map) ? at(s) : undefined; return p && near(p.x, p.y); });
     const story = finals.length && ((h >>> 7) % 1000) / 1000 < FINAL_CHANCE ? finals[((h >>> 17) >>> 0) % finals.length] : undefined;
     if (story) ({ x: cx, y: cy } = at(story)!);
     let far = 0;
@@ -1646,7 +1644,9 @@ export class Room {
    *  over, a REGI behind its wall, a gate's boss to beat first, or an island the ferry
    *  sails to; not the final ring's. */
   private storyFor(rng: () => number, ring: Ring): Story | undefined {
-    const open = STORIES.filter((s) => (s.people ?? []).every((p) => PERSON_GFX[p.gfx] && (!p.trainer || GATES.includes(p.trainer))) && (!s.boat || DOCKS[s.id]) && !s.final && !s.noBots &&
+    // A town only FLY reaches (FLY_ONLY) tells its story too, bots or none: SOOTOPOLIS's clash
+    // (Cam, 11-22: "We can have a legendary appear there sometimes").
+    const open = STORIES.filter((s) => (s.people ?? []).every((p) => PERSON_GFX[p.gfx] && (!p.trainer || GATES.includes(p.trainer))) && (!s.boat || DOCKS[s.id]) && !s.final && (!s.noBots || FLY_ONLY.has(s.map)) &&
       !this.events.some((e) => e.story === s.id) &&
       s.cells.every((c) => this.maps.has(c.map ?? s.map) && this.world.cell(c.map ?? s.map, c.x, c.y) === 0) &&
       !this.inFog({ map: s.map, x: s.cells[0].x, y: s.cells[0].y }, ring));

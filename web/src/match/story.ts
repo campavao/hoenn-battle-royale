@@ -371,7 +371,9 @@ export const STORIES: readonly Story[] = [
     map: 'MAP_SOOTOPOLIS_CITY',
     mons: [[KYOGRE, GROUDON]],
     cells: [{ x: 31, y: 34 }, { x: 30, y: 35 }, { x: 32, y: 35 }],
-    final: true,
+    // An event like any story's since 11-22, not a final ring's: FLY reaches the city (room.ts
+    // FLY_ONLY), and a final ring there was centred on open sea. Cam: "We can have a legendary
+    // appear there sometimes".
     noBots: true,
   },
 ];
