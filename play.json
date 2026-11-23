@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-23T16:36:10.994Z",
+ "readAt": "2026-11-23T16:51:17.660Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "RYSHVT",
    "at": "2026-11-23T16:26:51.044Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-23T16:46:04.669Z",
+   "secs": 1154,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -27,10 +27,9 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1072
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -31385,6 +31384,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-23T16:45:30.748Z",
+   "code": "RYSHVT",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 2,
+   "checks": 1071,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
   {
    "t": "2026-11-23T16:18:45.707Z",
    "code": "W65N5C",
