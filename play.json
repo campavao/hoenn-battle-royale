@@ -1,7 +1,44 @@
 {
- "readAt": "2026-11-23T11:35:23.785Z",
+ "readAt": "2026-11-23T13:05:30.834Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "X329QF",
+   "at": "2026-11-23T12:55:33.020Z",
+   "end": "2026-11-23T12:55:39.411Z",
+   "secs": 6,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "YB7SRR",
+   "at": "2026-11-23T12:55:10.266Z",
+   "end": "2026-11-23T12:55:22.519Z",
+   "secs": 12,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [
+    {
+     "t": "2026-11-23T12:55:10.266Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "BUT7T4",
    "at": "2026-11-23T09:25:07.901Z",
