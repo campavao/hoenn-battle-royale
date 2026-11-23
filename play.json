@@ -1,7 +1,38 @@
 {
- "readAt": "2026-11-23T00:26:52.255Z",
+ "readAt": "2026-11-23T00:56:57.165Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "GDQ2NC",
+   "at": "2026-11-23T00:52:57.792Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-23T00:52:57.792Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-23T00:53:00.286Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "GPKCK2",
    "at": "2026-11-23T00:15:35.933Z",
@@ -30409,15 +30440,16 @@
   {
    "id": "bca304b1",
    "first": "2026-11-20T22:05:00.471Z",
-   "last": "2026-11-22T14:21:54.138Z",
+   "last": "2026-11-23T00:52:56.871Z",
    "since": "2026-11-20",
    "versions": [
     "world-1e0304e5",
-    "world-77c9a81a"
+    "world-77c9a81a",
+    "world-f04b84e6"
    ],
    "solo": 4,
-   "checkins": 5,
-   "v": "world-77c9a81a"
+   "checkins": 6,
+   "v": "world-f04b84e6"
   },
   {
    "id": "d644c79a",
