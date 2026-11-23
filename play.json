@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-23T00:56:57.165Z",
+ "readAt": "2026-11-23T01:12:00.671Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "GDQ2NC",
    "at": "2026-11-23T00:52:57.792Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-23T01:01:53.783Z",
+   "secs": 536,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -30,7 +30,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -30690,6 +30689,20 @@
  ],
  "jank": [
   {
+   "t": "2026-11-23T01:01:53.688Z",
+   "code": "GDQ2NC",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 533,
+   "drifts": 0,
+   "deploy": "bfa13f88"
+  },
+  {
    "t": "2026-11-23T00:06:13.064Z",
    "code": "4D4XUQ",
    "v": "1d9a033",
@@ -43053,6 +43066,10 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-23T00:59:42.885Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-23T00:25:40.150Z",
    "step": "ask"
