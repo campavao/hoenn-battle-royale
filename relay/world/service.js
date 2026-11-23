@@ -16172,7 +16172,7 @@ var WorldService = class {
         if (!phone || !room) return;
         const host = room.host;
         if (m.t === "start") {
-          if (!host && phone.id === room.owner) {
+          if (!host && (phone.id === room.owner || this.waiting(room))) {
             if (this.waiting(room)) {
               room.startsAt = this.opts.now() + (this.opts.autoStartMs ?? AUTO_START_MS);
               this.roster(room);
@@ -16762,4 +16762,4 @@ export {
   PATCHES,
   WorldService
 };
-export const WORLD_HASH = "f04b84e6631c";
+export const WORLD_HASH = "4832274fc2cf";

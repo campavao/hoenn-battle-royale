@@ -184,6 +184,14 @@ export class Lobby {
     this.stage.push(ask);
   }
 
+  /** The room as the relay says it is now, kept for PLAY AGAIN without showing it: a match is
+   *  up. A page that came in while the match was on kept the room as it was then ("A match is
+   *  on"), and PLAY AGAIN put that back up for good (Cam, 11-22). */
+  know(r: RoomInfo): void {
+    this.room = r;
+    this.heardAt = performance.now();
+  }
+
   /** The room, as the relay says it is now. */
   roomIs(r: RoomInfo): void {
     const was = this.room;
@@ -579,16 +587,19 @@ export class Lobby {
   private readonly roomShown: DrawnScreen = roomScreen((): RoomModel => {
     const r = this.room!;
     const isHost = r.owner === r.you;
+    // A quick room has no host: whoever is in it may READY UP (Cam, 11-22, stuck behind the
+    // first one in, who had gone back to the menu).
+    const canReady = isHost || r.quick;
     const left = r.startsIn !== undefined ? Math.max(0, (r.startsIn - (performance.now() - this.heardAt)) / 1000) : null;
     // The live room's: MAX seats, FILL's bots in the ones nobody has, and START only for
     // a match somebody could win (match/room.ts canStart, startNote).
     const max = r.quick ? Math.max(BOT_FILL, r.members.length) : r.set.max;
     const fill = fillFor({ bots: r.set.bots, max }, r.members.length);
     const startable = dealable(r.members.length, fill);
-    const note = r.playing ? 'A match is on. You watch it, and are in the next.'
-      : r.ready ? (isHost ? 'READY UP when everybody is: the next match counts down from it.' : 'Waiting for the host to READY UP.')
-      : !isHost ? 'Waiting for the host to start.'
-        : !startable ? 'Nobody to play against. Turn FILL on, or wait for somebody.' : '';
+    const note = r.playing ? "A match is on. You'll play the next one."
+      : r.ready ? (canReady ? 'Press READY UP to start the countdown.' : 'Waiting for the host to READY UP.')
+      : !isHost ? (r.quick ? '' : 'Waiting for the host to start.')
+        : !startable ? 'Nobody to play against. Turn FILL on or wait.' : '';
     return {
       status: r.quick ? 'QUICK PLAY' : `Room ${r.code}`,
       note,
@@ -597,7 +608,7 @@ export class Lobby {
       fill,
       isHost,
       started: r.playing,
-      canStart: isHost && !r.playing && startable,
+      canStart: (r.ready ? canReady : isHost) && !r.playing && startable,
       startLabel: r.ready ? 'READY UP' : 'START',
       countdown: left === null ? null : Math.ceil(left),
       // The host's, in a room of their own (a quick room's are the relay's): the live

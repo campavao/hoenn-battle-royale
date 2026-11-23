@@ -72,6 +72,7 @@ export const FILE_SECONDS = {
   'spikeb-weather.spec.ts': 180,
   'spikeb-watch-log.spec.ts': 420,
   'spikeb-watcher-end.spec.ts': 120,
+  'spikeb-watcher-again.spec.ts': 120,
   'spikeb-stuck.spec.ts': 255,
   'spikeb-resthouse.spec.ts': 45,
   'spikeb-pickup-time.spec.ts': 90,
