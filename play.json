@@ -1,7 +1,54 @@
 {
- "readAt": "2026-11-23T01:12:00.671Z",
+ "readAt": "2026-11-23T01:42:06.372Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "R3NGJS",
+   "at": "2026-11-23T01:29:19.245Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-23T01:29:19.245Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-23T01:29:21.664Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "WFU5JB",
+   "at": "2026-11-23T01:29:09.811Z",
+   "end": "2026-11-23T01:29:16.406Z",
+   "secs": 7,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "GDQ2NC",
    "at": "2026-11-23T00:52:57.792Z",
@@ -30439,16 +30486,17 @@
   {
    "id": "bca304b1",
    "first": "2026-11-20T22:05:00.471Z",
-   "last": "2026-11-23T00:52:56.871Z",
+   "last": "2026-11-23T01:29:42.456Z",
    "since": "2026-11-20",
    "versions": [
     "world-1e0304e5",
     "world-77c9a81a",
-    "world-f04b84e6"
+    "world-f04b84e6",
+    "world-4832274f"
    ],
    "solo": 4,
-   "checkins": 6,
-   "v": "world-f04b84e6"
+   "checkins": 9,
+   "v": "world-4832274f"
   },
   {
    "id": "d644c79a",
@@ -43066,6 +43114,14 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-23T01:41:51.459Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-23T01:41:49.086Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-23T00:59:42.885Z",
    "step": "landing"
