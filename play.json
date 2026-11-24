@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-24T23:18:27.681Z",
+ "readAt": "2026-11-24T23:33:30.001Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -35,8 +35,8 @@
   {
    "code": "YPP5FD",
    "at": "2026-11-24T23:08:15.800Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-24T23:19:49.243Z",
+   "secs": 693,
    "door": "open",
    "mode": "quick",
    "humans": 2,
@@ -64,7 +64,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -32536,6 +32535,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-24T23:19:49.243Z",
+   "code": "YPP5FD",
+   "v": "b49b064",
+   "watched": 3,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 6,
+   "longest": 4,
+   "checks": 691,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-24T23:18:11.737Z",
    "code": "YPP5FD",
