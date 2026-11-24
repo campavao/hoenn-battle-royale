@@ -1,7 +1,32 @@
 {
- "readAt": "2026-11-24T03:40:26.171Z",
+ "readAt": "2026-11-24T03:55:29.821Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "9AW6BH",
+   "at": "2026-11-24T03:42:05.359Z",
+   "end": "2026-11-24T03:43:12.493Z",
+   "secs": 67,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-24T03:42:08.776Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
   {
    "code": "TDVSZR",
    "at": "2026-11-24T03:39:19.500Z",
@@ -9,13 +34,25 @@
    "secs": null,
    "door": "open",
    "mode": "quick",
-   "humans": 1,
-   "together": 1,
+   "humans": 4,
+   "together": 4,
    "spectators": 0,
-   "matches": 1,
+   "matches": 2,
    "joins": [
     {
      "t": "2026-11-24T03:39:19.500Z",
+     "how": "quick"
+    },
+    {
+     "t": "2026-11-24T03:41:54.587Z",
+     "how": "quick"
+    },
+    {
+     "t": "2026-11-24T03:49:18.417Z",
+     "how": "quick"
+    },
+    {
+     "t": "2026-11-24T03:50:00.115Z",
      "how": "quick"
     }
    ],
@@ -24,6 +61,13 @@
    "played": [
     {
      "t": "2026-11-24T03:39:21.180Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": 762
+    },
+    {
+     "t": "2026-11-24T03:52:39.354Z",
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
@@ -66,8 +110,8 @@
   {
    "code": "KA3SVB",
    "at": "2026-11-24T03:31:44.923Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-24T03:49:13.548Z",
+   "secs": 1049,
    "door": "open",
    "mode": "quick",
    "humans": 2,
@@ -95,7 +139,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -31816,6 +31859,90 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-24T03:52:03.455Z",
+   "code": "TDVSZR",
+   "v": "b49b064",
+   "watched": 123,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 124,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
+  {
+   "t": "2026-11-24T03:50:33.544Z",
+   "code": "TDVSZR",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 626,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
+  {
+   "t": "2026-11-24T03:49:53.682Z",
+   "code": "TDVSZR",
+   "v": "b49b064",
+   "watched": 35,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 35,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
+  {
+   "t": "2026-11-24T03:49:13.544Z",
+   "code": "KA3SVB",
+   "v": "b49b064",
+   "watched": 20,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1030,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
+  {
+   "t": "2026-11-24T03:42:12.408Z",
+   "code": "9AW6BH",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 3,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
+  {
+   "t": "2026-11-24T03:42:00.965Z",
+   "code": "TDVSZR",
+   "v": "b49b064",
+   "watched": 5,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 6,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
   {
    "t": "2026-11-24T03:39:13.794Z",
    "code": "XB3ZHJ",
