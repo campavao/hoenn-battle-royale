@@ -49,6 +49,9 @@ export function createRoomPoster({ url, rooms, log = () => {}, fetch = globalThi
   let quietUntil = 0;
   let timer = null;
   let failing = false;
+  // A deploy's drain: no more looks, and the one under way (if any) finishes before the messages
+  // come down, or a post it was still sending outlived the drain (11-22: two stayed for good).
+  let stopped = false;
 
   const call = async (method, path, body) => {
     const res = await fetch(`${base}${path}`, {
@@ -70,7 +73,7 @@ export function createRoomPoster({ url, rooms, log = () => {}, fetch = globalThi
   const deadlineOf = (r) => (r.quick && r.startsIn !== undefined ? now() + r.startsIn * 1000 : 0);
 
   async function tick() {
-    if (busy || now() < quietUntil) return;
+    if (stopped || busy || now() < quietUntil) return;
     busy = true;
     try {
       const all = rooms();
@@ -125,8 +128,10 @@ export function createRoomPoster({ url, rooms, log = () => {}, fetch = globalThi
       timer.unref?.();
     },
     async drain() {
+      stopped = true;
       clearInterval(timer);
       timer = null;
+      for (let i = 0; busy && i < 100; i++) await new Promise((ok) => setTimeout(ok, 50));
       for (const [code, had] of open) {
         try { await call("DELETE", `/messages/${had.id}`); } catch { /* the next relay posts it again */ }
         open.delete(code);
