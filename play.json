@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-24T02:40:14.674Z",
+ "readAt": "2026-11-24T03:10:20.070Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -12,7 +12,7 @@
    "humans": 1,
    "together": 1,
    "spectators": 0,
-   "matches": 2,
+   "matches": 3,
    "joins": [
     {
      "t": "2026-11-24T02:19:59.667Z",
@@ -34,7 +34,14 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1015
+    },
+    {
+     "t": "2026-11-24T02:56:59.425Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": 761
     }
    ],
    "live": true,
@@ -31630,6 +31637,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-24T03:09:40.306Z",
+   "code": "CZ5CH9",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 760,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
+  {
+   "t": "2026-11-24T02:56:23.615Z",
+   "code": "CZ5CH9",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 1015,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
   {
    "t": "2026-11-24T02:38:42.537Z",
    "code": "CZ5CH9",
