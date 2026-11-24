@@ -1,7 +1,101 @@
 {
- "readAt": "2026-11-24T20:48:14.110Z",
+ "readAt": "2026-11-24T22:33:23.598Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "T46HW7",
+   "at": "2026-11-24T22:21:42.596Z",
+   "end": "2026-11-24T22:29:30.122Z",
+   "secs": 468,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-24T22:21:42.596Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-24T22:21:45.649Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "VJMFTV",
+   "at": "2026-11-24T22:21:39.162Z",
+   "end": "2026-11-24T22:21:40.270Z",
+   "secs": 1,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "JZEW6W",
+   "at": "2026-11-24T22:21:27.802Z",
+   "end": "2026-11-24T22:21:33.639Z",
+   "secs": 6,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "T5KKZF",
+   "at": "2026-11-24T22:21:02.736Z",
+   "end": "2026-11-24T22:21:18.449Z",
+   "secs": 16,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "YJC865",
+   "at": "2026-11-24T22:20:56.867Z",
+   "end": "2026-11-24T22:20:59.390Z",
+   "secs": 3,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "N7W6ME",
    "at": "2026-11-24T20:26:57.328Z",
@@ -32376,6 +32470,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-24T22:29:30.121Z",
+   "code": "T46HW7",
+   "v": "b49b064",
+   "watched": 17,
+   "snaps": 7,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 464,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-24T20:43:54.169Z",
    "code": "N7W6ME",
