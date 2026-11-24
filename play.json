@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-24T19:17:59.791Z",
+ "readAt": "2026-11-24T19:33:02.023Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "3PYK6A",
    "at": "2026-11-24T19:11:02.079Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-24T19:31:30.891Z",
+   "secs": 1229,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -27,10 +27,9 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1195
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -32220,6 +32219,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-24T19:30:57.857Z",
+   "code": "3PYK6A",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 1194,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-24T17:44:43.158Z",
    "code": "2KRT3U",
