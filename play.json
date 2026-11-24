@@ -1,12 +1,43 @@
 {
- "readAt": "2026-11-24T20:18:06.843Z",
+ "readAt": "2026-11-24T20:33:10.045Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "W7CD7U",
-   "at": "2026-11-24T20:15:48.427Z",
+   "code": "N7W6ME",
+   "at": "2026-11-24T20:26:57.328Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-24T20:26:57.328Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-24T20:26:58.445Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "W7CD7U",
+   "at": "2026-11-24T20:15:48.427Z",
+   "end": "2026-11-24T20:18:06.875Z",
+   "secs": 138,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -30,7 +61,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -96,14 +126,14 @@
   {
    "code": "4PB5GN",
    "at": "2026-11-24T20:07:57.822Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-24T20:26:56.202Z",
+   "secs": 1138,
    "door": "open",
    "mode": "quick",
    "humans": 1,
    "together": 1,
    "spectators": 0,
-   "matches": 1,
+   "matches": 2,
    "joins": [
     {
      "t": "2026-11-24T20:07:57.822Z",
@@ -118,10 +148,16 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
+     "secs": 848
+    },
+    {
+     "t": "2026-11-24T20:22:35.997Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -32341,6 +32377,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-24T20:26:56.201Z",
+   "code": "4PB5GN",
+   "v": "b49b064",
+   "watched": 40,
+   "snaps": 4,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 3,
+   "longest": 3,
+   "checks": 260,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-24T20:22:09.017Z",
+   "code": "4PB5GN",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 3,
+   "checks": 848,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-24T20:17:06.661Z",
    "code": "W7CD7U",
