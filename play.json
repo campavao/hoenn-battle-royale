@@ -1,7 +1,72 @@
 {
- "readAt": "2026-11-24T22:33:23.598Z",
+ "readAt": "2026-11-24T23:18:27.681Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "PB3NPA",
+   "at": "2026-11-24T23:12:47.616Z",
+   "end": "2026-11-24T23:17:52.144Z",
+   "secs": 305,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-24T23:12:47.616Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-24T23:13:00.570Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "YPP5FD",
+   "at": "2026-11-24T23:08:15.800Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-24T23:08:15.800Z",
+     "how": "quick"
+    },
+    {
+     "t": "2026-11-24T23:17:56.772Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-24T23:08:17.673Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "T46HW7",
    "at": "2026-11-24T22:21:42.596Z",
@@ -32229,14 +32294,15 @@
   {
    "id": "d644c79a",
    "first": "2026-11-21T12:26:53.188Z",
-   "last": "2026-11-21T12:58:12.043Z",
+   "last": "2026-11-24T23:08:08.360Z",
    "since": "2026-11-16",
    "versions": [
-    "world-8bf416d6"
+    "world-8bf416d6",
+    "world-50f48803"
    ],
    "solo": 2,
-   "checkins": 6,
-   "v": "world-8bf416d6"
+   "checkins": 7,
+   "v": "world-50f48803"
   },
   {
    "id": "67e95228",
@@ -32470,6 +32536,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-24T23:18:11.737Z",
+   "code": "YPP5FD",
+   "v": "b49b064",
+   "watched": 14,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 14,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-24T23:17:52.144Z",
+   "code": "PB3NPA",
+   "v": "b49b064",
+   "watched": 8,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 291,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-24T22:29:30.121Z",
    "code": "T46HW7",
