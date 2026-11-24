@@ -1,12 +1,97 @@
 {
- "readAt": "2026-11-24T03:10:20.070Z",
+ "readAt": "2026-11-24T03:25:23.656Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "CZ5CH9",
-   "at": "2026-11-24T02:19:59.667Z",
+   "code": "P9C2AY",
+   "at": "2026-11-24T03:23:41.967Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-24T03:23:41.967Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-24T03:23:43.565Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "WFZVRE",
+   "at": "2026-11-24T03:11:15.777Z",
+   "end": "2026-11-24T03:23:40.430Z",
+   "secs": 745,
+   "door": "open",
+   "mode": "quick",
+   "humans": 3,
+   "together": 3,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-24T03:11:15.777Z",
+     "how": "quick"
+    },
+    {
+     "t": "2026-11-24T03:22:59.629Z",
+     "how": "quick"
+    },
+    {
+     "t": "2026-11-24T03:23:16.801Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-24T03:11:21.147Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "TA9ZF7",
+   "at": "2026-11-24T03:10:54.216Z",
+   "end": "2026-11-24T03:10:57.649Z",
+   "secs": 3,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "CZ5CH9",
+   "at": "2026-11-24T02:19:59.667Z",
+   "end": "2026-11-24T03:10:07.329Z",
+   "secs": 3008,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -44,7 +129,6 @@
      "secs": 761
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -31637,6 +31721,48 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-24T03:23:40.425Z",
+   "code": "WFZVRE",
+   "v": "b49b064",
+   "watched": 22,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 24,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
+  {
+   "t": "2026-11-24T03:23:20.014Z",
+   "code": "WFZVRE",
+   "v": "b49b064",
+   "watched": 19,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 20,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
+  {
+   "t": "2026-11-24T03:23:12.458Z",
+   "code": "WFZVRE",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 711,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
   {
    "t": "2026-11-24T03:09:40.306Z",
    "code": "CZ5CH9",
