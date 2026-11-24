@@ -109,7 +109,38 @@ test("a deploy's drain takes every message down; a rate limit waits it out", asy
   assert.equal(p.open, 0);
 });
 
+test("a post still being sent when the drain starts comes down too, and no look follows", async () => {
+  // 11-22: a deploy left two posts in the channel for good.
+  const calls = [];
+  let release;
+  const slow = new Promise((ok) => { release = ok; });
+  const fetch = async (url, init) => {
+    calls.push(init.method);
+    if (init.method === "POST") { await slow; return { ok: true, status: 200, json: async () => ({ id: "9" }) }; }
+    return { ok: true, status: 204, json: async () => ({}) };
+  };
+  const p = createRoomPoster({ url: URL_, rooms: () => [quick(1)], fetch, now: () => 1_000_000 });
+  const looking = p.tick();
+  const draining = p.drain();
+  release();
+  await looking;
+  await draining;
+  assert.deepEqual(calls, ["POST", "DELETE"]);
+  assert.equal(p.open, 0);
+  await p.tick();
+  assert.deepEqual(calls, ["POST", "DELETE"], "nothing posted after the drain");
+});
+
 test("a host's name cannot format or ping", () => {
   const t = roomText({ code: "X", host: "@everyone**", players: 1, seats: 8 });
   assert.ok(t.startsWith("**\\@everyone\\*\\*** is hosting"));
+});
+
+test("npm start hands the process over to node, so a deploy's SIGTERM reaches the drain", async () => {
+  // 11-22: `npm start` ran node under `sh -c`, which never passed SIGTERM on; Railway stopped the
+  // container a few seconds later with no drain, leaving every room's post in Discord and cutting
+  // every match short. `exec` makes node npm's own child.
+  const { readFile } = await import("node:fs/promises");
+  const pkg = JSON.parse(await readFile(new URL("./package.json", import.meta.url), "utf8"));
+  assert.match(pkg.scripts.start, /^exec node /);
 });

@@ -212,6 +212,13 @@ A page whose world bundle changed is told to reload (`old`) when it moves, betwe
 `/health` says `"drains":true` on a relay that does this, and `"draining":true` while it does.
 The first deploy of a relay that drains still replaces one that doesn't, so that one waited.
 
+**Until 2026-11-23 it never did.** Railway starts the relay with `npm run start`, and npm ran
+node under `sh -c`, which never passed the SIGTERM on: npm exited ("npm error signal SIGTERM")
+3 to 10 seconds after it, node with it, no `SIGTERM: draining` line ever logged. Every deploy cut
+its matches short and left every room's Discord post up for good. `relay/package.json`'s start
+is `exec node ...` now (node is npm's own child; `discord.test.js` holds it there). After a
+relay deploy, the old deployment's logs should say `SIGTERM: draining`.
+
 ### The relay's Railway settings (2026-11-18)
 
 `relay/.railway/railway.ts` is the Railway project's settings as code (Railway's Infrastructure
