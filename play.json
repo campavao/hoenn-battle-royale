@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-24T02:25:11.262Z",
+ "readAt": "2026-11-24T02:40:14.674Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -12,7 +12,7 @@
    "humans": 1,
    "together": 1,
    "spectators": 0,
-   "matches": 1,
+   "matches": 2,
    "joins": [
     {
      "t": "2026-11-24T02:19:59.667Z",
@@ -24,6 +24,13 @@
    "played": [
     {
      "t": "2026-11-24T02:20:07.357Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": 1115
+    },
+    {
+     "t": "2026-11-24T02:39:28.326Z",
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
@@ -31623,6 +31630,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-24T02:38:42.537Z",
+   "code": "CZ5CH9",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 1,
+   "checks": 1114,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
   {
    "t": "2026-11-24T01:14:24.242Z",
    "code": "CDEEXJ",
