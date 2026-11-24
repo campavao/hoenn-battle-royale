@@ -1,7 +1,58 @@
 {
- "readAt": "2026-11-24T00:54:57.332Z",
+ "readAt": "2026-11-24T01:25:00.678Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "CDEEXJ",
+   "at": "2026-11-24T01:13:56.149Z",
+   "end": "2026-11-24T01:14:24.319Z",
+   "secs": 28,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-24T01:13:56.149Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-24T01:13:57.313Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "HT8FU8",
+   "at": "2026-11-24T01:13:09.626Z",
+   "end": "2026-11-24T01:13:49.160Z",
+   "secs": 40,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [
+    {
+     "t": "2026-11-24T01:13:09.626Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "8CXDP9",
    "at": "2026-11-24T00:30:25.727Z",
@@ -31512,6 +31563,20 @@
  ],
  "jank": [
   {
+   "t": "2026-11-24T01:14:24.242Z",
+   "code": "CDEEXJ",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 26,
+   "drifts": 0,
+   "deploy": "23252356"
+  },
+  {
    "t": "2026-11-23T22:14:03.831Z",
    "code": "GYJR62",
    "v": "b49b064",
@@ -44127,6 +44192,22 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-24T01:13:57.572Z",
+   "step": "match"
+  },
+  {
+   "t": "2026-11-24T01:12:50.029Z",
+   "step": "rom"
+  },
+  {
+   "t": "2026-11-24T01:11:15.471Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-24T01:11:12.666Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-23T23:25:39.882Z",
    "step": "landing"
