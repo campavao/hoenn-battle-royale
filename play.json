@@ -1,7 +1,28 @@
 {
- "readAt": "2026-11-23T23:39:50.572Z",
+ "readAt": "2026-11-24T00:39:54.610Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "8CXDP9",
+   "at": "2026-11-24T00:30:25.727Z",
+   "end": "2026-11-24T00:30:31.449Z",
+   "secs": 6,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [
+    {
+     "t": "2026-11-24T00:30:25.727Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "GYJR62",
    "at": "2026-11-23T21:53:02.175Z",
