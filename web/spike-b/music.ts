@@ -30,6 +30,8 @@ export const SE_FAILURE = 32;
 export const SE_USE_ITEM = 1, SE_SELECT = 5, SE_WIN_OPEN = 6, SE_WALL_HIT = 7, SE_DOOR = 8, SE_EXIT = 9, SE_LEDGE = 10, SE_FALL = 43, SE_BIKE_HOP = 34;
 /** songs.h: FLY's swoop (Task_FlyOut). */
 export const SE_M_FLY = 158;
+export const SE_M_CUT = 128;
+export const SE_M_ROCK_THROW = 131;
 export const SE_CONTEST_CURTAIN_RISE = 97;
 export const SE_CONTEST_CURTAIN_FALL = 98;
 export const SE_FIELD_POISON = 79, SE_SHOP = 95;

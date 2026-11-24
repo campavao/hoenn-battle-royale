@@ -194,6 +194,23 @@ test('sideways on an iPhone 13 mini: the corner, the bike, the moves and the thu
   await expect.poll(() => page.evaluate(chips), { timeout: 15_000 }).toContain('ROCK SMASH+');
   expect(await page.evaluate(chips)).not.toContain('CUT+');
   if (process.env.HBR_SHOTS) await page.screenshot({ path: `${process.env.HBR_SHOTS}/upright-rock-smash.png` });
+  // ...and walking in breaks it, Emerald's REMOVE_OBSTACLE anim, and it stays broken behind you while
+  // you are on the map (11-24: it only hid under the trainer and was back as they stepped off).
+  const rock = () => page.evaluate(() => { const s = (window as any).__spike, p = s.placed.get('MAP_RUSTURF_TUNNEL'); const at = s.broken.get('MAP_RUSTURF_TUNNEL')?.get(4 * p.m.w + 24); return at === undefined ? null : s.frame - at; });
+  expect(await rock()).toBeNull();
+  await page.keyboard.down('ArrowRight');
+  // Let go on the frame it arrives, or the held key walks on past.
+  await page.waitForFunction(() => { const s = (window as any).__spike; return s.link.room.actor(s.link.me).m.spot.x === 24; }, undefined, { polling: 'raf', timeout: 5_000 });
+  await page.keyboard.up('ArrowRight');
+  if (process.env.HBR_SHOTS) await page.screenshot({ path: `${process.env.HBR_SHOTS}/upright-rock-breaking.png` });
+  expect(await rock(), 'broken on the step in').not.toBeNull();
+  await page.keyboard.down('ArrowLeft');
+  // Let go on the frame it arrives, or the held key walks on past.
+  await page.waitForFunction(() => { const s = (window as any).__spike; return s.link.room.actor(s.link.me).m.spot.x === 23; }, undefined, { polling: 'raf', timeout: 5_000 });
+  await page.keyboard.up('ArrowLeft');
+  await page.waitForTimeout(800);
+  expect(await rock(), 'still broken once stepped off, its anim done').toBeGreaterThan(32);
+  if (process.env.HBR_SHOTS) await page.screenshot({ path: `${process.env.HBR_SHOTS}/upright-rock-broken.png` });
   await ctx.close();
 });
 

@@ -54,7 +54,7 @@ import { OUT_BATCH_MS, event, felled, opening, outs, won } from '../src/match/ti
 import { MessageBox } from './msgbox';
 import { Fishing, fishPose, rodOf, type Rod } from './fish';
 import { Ticks } from './ticks';
-import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_CONTEST_CURTAIN_FALL, SE_CONTEST_CURTAIN_RISE, SE_DOOR, SE_EXIT, SE_FAILURE, SE_FALL, SE_BIKE_HOP, SE_FIELD_POISON, SE_LEDGE, SE_M_FLY, SE_SELECT, SE_SHOP, SE_USE_ITEM, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
+import { MUS_HEAL, MUS_OBTAIN_ITEM, MUS_OBTAIN_TMHM, MusicCue, SE_CONTEST_CURTAIN_FALL, SE_CONTEST_CURTAIN_RISE, SE_DOOR, SE_EXIT, SE_FAILURE, SE_FALL, SE_BIKE_HOP, SE_FIELD_POISON, SE_LEDGE, SE_M_CUT, SE_M_FLY, SE_M_ROCK_THROW, SE_SELECT, SE_SHOP, SE_USE_ITEM, SE_WALL_HIT, SE_WIN_OPEN, type Where } from './music';
 import { bootRom, loadRom, lastStart, type DuelLink, type Fought, type RomBattles } from './rom';
 import { devRomParam, importRom } from './import';
 import { DEFAULT_RELAY_URL, seen } from './seen';
@@ -4507,8 +4507,18 @@ const propArt = new Map<number, HTMLCanvasElement>();
 /** The trees CUT fells and the boulders STRENGTH moves, where nobody stands on them: a
  *  team that could CUT or push walks the cell (bots/world.ts canStand), and in Emerald
  *  the tree is down or the boulder moved by then. */
+/** The rocks broken and trees cut on a map, cell (y * w + x) -> the frame it went: Emerald's
+ *  REMOVE_OBSTACLE anim plays (object_event_anims.h: four frames, 8 each for a rock, 6 for a
+ *  tree), then the cell stays clear while the trainer the camera follows is on that map, as the
+ *  object stays gone until its map loads again. A trainer walked in and the rock only hid under
+ *  them, back the moment they left (11-24, the launch video's ROCK SMASH tip). */
+const broken = new Map<string, Map<number, number>>();
+const BREAK_STEP: Record<number, number> = { [OBJ_EVENT_GFX_BREAKABLE_ROCK]: 8, [OBJ_EVENT_GFX_CUTTABLE_TREE]: 6 };
+const breakArt = new Map<number, HTMLCanvasElement>();
 function drawProps(visible: Placed[], all: Actor[]): void {
   if (!art) return;
+  const watched = all.find((a) => a.id === follow)?.m.spot.map;
+  for (const id of [...broken.keys()]) if (id !== watched) broken.delete(id);
   for (const p of visible) {
     if (!p.props) {
       p.props = [];
@@ -4523,7 +4533,28 @@ function drawProps(visible: Placed[], all: Actor[]): void {
       }
     }
     for (const [x, y, gfx] of p.props) {
-      if (all.some((a) => a.m.spot.map === p.m.id && ((a.m.spot.x === x && a.m.spot.y === y) || (a.m.prev.map === p.m.id && a.m.prev.x === x && a.m.prev.y === y && a.m.action)))) continue;
+      const on = all.find((a) => a.m.spot.map === p.m.id && ((a.m.spot.x === x && a.m.spot.y === y) || (a.m.prev.map === p.m.id && a.m.prev.x === x && a.m.prev.y === y && a.m.action)));
+      const step = BREAK_STEP[gfx];
+      if (step) {
+        let cells = broken.get(p.m.id);
+        const at = y * p.m.w + x;
+        if (on && !cells?.has(at)) {
+          if (!cells) broken.set(p.m.id, (cells = new Map()));
+          cells.set(at, frame);
+          if (on.id === link.me) rom?.sound(gfx === OBJ_EVENT_GFX_BREAKABLE_ROCK ? SE_M_ROCK_THROW : SE_M_CUT);
+        }
+        const went = cells?.get(at);
+        if (went !== undefined) {
+          const k = Math.floor((frame - went) / step);
+          if (k >= 4) continue;
+          let strip = breakArt.get(gfx);
+          if (!strip) { strip = art.sprite(gfx, 4); breakArt.set(gfx, strip); }
+          const w = strip.width / 4;
+          ctx.drawImage(strip, k * w, 0, w, strip.height, (p.gx + x) * TILE + (TILE - w) / 2, (p.gy + y) * TILE + TILE - strip.height, w, strip.height);
+          continue;
+        }
+      }
+      if (on) continue;
       let img = propArt.get(gfx);
       if (!img) { img = art.sprite(gfx, 1); propArt.set(gfx, img); }
       ctx.drawImage(img, (p.gx + x) * TILE, (p.gy + y) * TILE + TILE - img.height);
@@ -5611,7 +5642,7 @@ async function boot(): Promise<void> {
   }
   loading.say(matchToken() ? 'Back to your match…' : 'Getting the game ready…');
   bootRom(files, link?.room.seed ?? 0, () => link?.mine()?.skin ?? 0).then(booted, (e) => { console.warn('spike ROM not booted', e); loading.hide(); });
-  (window as unknown as { __spike: unknown }).__spike = { watch, frameOf, get frame() { return frame; }, canvas, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get ending() { return { romUp, endingAt, endingShown, matchOn, shownWin }; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, askBox, get movesBox() { return movesBox; }, get hud() { return hudRef; }, pocket: (n: number) => (rom ? readPocket(rom.emu, romTables.sym, n) : []), radial, moveName: (id: number) => moveInfo(romTables, id)?.name ?? '' };
+  (window as unknown as { __spike: unknown }).__spike = { watch, frameOf, get frame() { return frame; }, canvas, get animStep() { return frame % ANIM_COUNTER_MAX; }, get flights() { return flights; }, get link() { return link; }, get mapWindow() { return mapWindow; }, get ringMap() { return ringMap; }, get lobby() { return lobby; }, get room() { return room; }, actors, placed, broken, goOut, get battleMenu() { return battleMenu; }, get effects() { return effects; }, ashGone, get art() { return art; }, get zoom() { return zoom; }, set zoom(v: number) { zoom = v; }, cam, toggleSpectate, startFor, handoff, stuckLimits, runMenu, get rom() { return rom; }, get battle() { return battle; }, get lastStart() { return lastStart; }, get lastResult() { return lastResult; }, get isOut() { return isOut; }, get ending() { return { romUp, endingAt, endingShown, matchOn, shownWin }; }, get waiting() { return waiting; }, give: (item: number) => { toGive.push({ key: 0, item, gift: true } as never); giveNext(); }, get swapping() { return swapping; }, get asking() { return !!asking; }, get spectating() { return spectating; }, get version() { return versionLine; }, get jank() { return jank; }, get askingRows() { return asking ? { rows: asking.rows.map((r) => r[1]), pick: asking.pick } : null; }, askBox, get movesBox() { return movesBox; }, get hud() { return hudRef; }, pocket: (n: number) => (rom ? readPocket(rom.emu, romTables.sym, n) : []), radial, moveName: (id: number) => moveInfo(romTables, id)?.name ?? '' };
 }
 
 void boot();
