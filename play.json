@@ -1,12 +1,28 @@
 {
- "readAt": "2026-11-25T21:40:01.593Z",
+ "readAt": "2026-11-25T21:55:04.315Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
+   "code": "N9BHG5",
+   "at": "2026-11-25T21:42:28.038Z",
+   "end": "2026-11-25T21:42:31.845Z",
+   "secs": 4,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
    "code": "8P82WF",
    "at": "2026-11-25T21:30:51.030Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-25T21:42:20.437Z",
+   "secs": 689,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -30,7 +46,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -33164,6 +33179,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-25T21:42:20.437Z",
+   "code": "8P82WF",
+   "v": "b49b064",
+   "watched": 26,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 8,
+   "checks": 683,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-25T21:28:13.212Z",
    "code": "WK95PJ",
