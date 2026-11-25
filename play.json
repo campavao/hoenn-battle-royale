@@ -1,7 +1,88 @@
 {
- "readAt": "2026-11-25T04:09:51.443Z",
+ "readAt": "2026-11-25T11:42:49.440Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "F9R9ST",
+   "at": "2026-11-25T09:29:37.865Z",
+   "end": "2026-11-25T09:31:19.927Z",
+   "secs": 102,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-25T09:29:37.865Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-25T09:29:48.694Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "3Q9NA6",
+   "at": "2026-11-25T09:29:12.754Z",
+   "end": "2026-11-25T09:29:14.662Z",
+   "secs": 2,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [
+    {
+     "t": "2026-11-25T09:29:12.754Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "KPH2F2",
+   "at": "2026-11-25T09:13:42.376Z",
+   "end": "2026-11-25T09:17:58.508Z",
+   "secs": 256,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-25T09:13:42.376Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-25T09:13:53.161Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
   {
    "code": "55PCQJ",
    "at": "2026-11-25T03:48:56.438Z",
@@ -32745,6 +32826,20 @@
  ],
  "jank": [
   {
+   "t": "2026-11-25T09:17:58.507Z",
+   "code": "KPH2F2",
+   "v": "b49b064",
+   "watched": 9,
+   "snaps": 5,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 1,
+   "checks": 245,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
    "t": "2026-11-25T03:47:45.955Z",
    "code": "X3S7R5",
    "v": "b49b064",
@@ -45920,6 +46015,38 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-25T09:35:17.762Z",
+   "step": "landing"
+  },
+  {
+   "t": "2026-11-25T09:29:49.137Z",
+   "step": "match"
+  },
+  {
+   "t": "2026-11-25T09:29:07.032Z",
+   "step": "rom"
+  },
+  {
+   "t": "2026-11-25T09:28:57.150Z",
+   "step": "landing"
+  },
+  {
+   "t": "2026-11-25T09:13:53.669Z",
+   "step": "match"
+  },
+  {
+   "t": "2026-11-25T09:12:50.263Z",
+   "step": "rom"
+  },
+  {
+   "t": "2026-11-25T09:12:22.363Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-25T09:12:16.609Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-25T03:55:14.374Z",
    "step": "ask"
