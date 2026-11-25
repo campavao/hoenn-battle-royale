@@ -5006,6 +5006,14 @@ function noteDoor(a: Actor, dir: number): void {
   r.entry = { x: a.m.spot.x, y: a.m.spot.y };
 }
 
+/** The last picture of a room, for a warp from it to another room (or across it, as the ANCIENT
+ *  TOMB's inner door goes): it goes to black, then the next room comes up out of black, as the
+ *  field's own warps do. The next room faded up over the dimmed world straight away, and a route's
+ *  trees and grass showed where the tomb had been (the launch video, 11-24). */
+const lastRoom = document.createElement('canvas');
+const lastRoomCtx = lastRoom.getContext('2d')!;
+let lastRoomOf = 0;
+
 function draw(): void {
   const all = actors();
   seamFrame(all);
@@ -5040,7 +5048,14 @@ function draw(): void {
   const open = going ? going.t / going.len : 1;
   if (going && going.t < 2 && followed) noteDoor(followed, going.dir);
   const left = going && followed ? placed.get(followed.m.prev.map) : undefined;
-  if (home.door) {
+  const between = !!going && !!left?.door && !!home.door;
+  if (between && open < 0.5) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const had = lastRoomOf === followed!.id;
+    if (had) ctx.drawImage(lastRoom, 0, 0, W, H);
+    ctx.fillStyle = `rgba(0, 0, 0, ${had ? open * 2 : 1})`;
+    ctx.fillRect(0, 0, W, H);
+  } else if (home.door) {
     // A room is a window over the world it is in, the world going on dimmed behind it (Cam,
     // 11-02: "the room is shown like in the same instance but maybe just a layer on top ...
     // and so the background is dimmed"), instead of a box on black.
@@ -5050,7 +5065,12 @@ function draw(): void {
     // Coming in from outside, the dim comes up as the door opens; between two rooms it stays.
     ctx.fillStyle = `rgba(0, 0, 0, ${ROOM_DIM * (going && !left?.door ? open : 1)})`;
     ctx.fillRect(0, 0, W, H);
-    drawScene(all, cam.x, cam.y, W, H, z, { room: home, alpha: open });
+    drawScene(all, cam.x, cam.y, W, H, z, { room: home, alpha: between ? 1 : open });
+    if (between) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = `rgba(0, 0, 0, ${(1 - open) * 2})`;
+      ctx.fillRect(0, 0, W, H);
+    }
   } else {
     drawScene(all, cam.x, cam.y, W, H, z, {});
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -5102,6 +5122,11 @@ function draw(): void {
       }
       ctx.drawImage(s, 0, sy, w, sh, x, y, w, sh);
     }
+  }
+  if (followed && home.door && !going) {
+    if (lastRoom.width !== W || lastRoom.height !== H) { lastRoom.width = W; lastRoom.height = H; }
+    lastRoomCtx.drawImage(canvas, 0, 0);
+    lastRoomOf = followed.id;
   }
 }
 
