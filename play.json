@@ -1,7 +1,37 @@
 {
- "readAt": "2026-11-25T23:25:15.687Z",
+ "readAt": "2026-11-25T23:40:18.212Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "TUU448",
+   "at": "2026-11-25T23:27:16.920Z",
+   "end": "2026-11-25T23:31:20.243Z",
+   "secs": 243,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-25T23:27:16.920Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-25T23:27:24.487Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
   {
    "code": "68PXJ3",
    "at": "2026-11-25T23:15:27.411Z",
@@ -33209,6 +33239,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-25T23:31:20.235Z",
+   "code": "TUU448",
+   "v": "b49b064",
+   "watched": 28,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 235,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-25T23:16:51.152Z",
    "code": "68PXJ3",
