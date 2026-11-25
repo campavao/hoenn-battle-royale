@@ -1,12 +1,47 @@
 {
- "readAt": "2026-11-25T20:39:48.828Z",
+ "readAt": "2026-11-25T20:54:51.249Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "BNCVWU",
-   "at": "2026-11-25T20:32:40.230Z",
+   "code": "6ECR66",
+   "at": "2026-11-25T20:49:55.380Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-25T20:49:55.380Z",
+     "how": "quick"
+    },
+    {
+     "t": "2026-11-25T20:54:18.403Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-25T20:50:01.214Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "BNCVWU",
+   "at": "2026-11-25T20:32:40.230Z",
+   "end": "2026-11-25T20:46:03.401Z",
+   "secs": 803,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -30,7 +65,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -32772,7 +32806,7 @@
   {
    "id": "bca304b1",
    "first": "2026-11-20T22:05:00.471Z",
-   "last": "2026-11-25T20:32:28.822Z",
+   "last": "2026-11-25T20:47:50.017Z",
    "since": "2026-11-20",
    "versions": [
     "world-1e0304e5",
@@ -32782,7 +32816,7 @@
     "world-50f48803"
    ],
    "solo": 7,
-   "checkins": 35,
+   "checkins": 36,
    "v": "world-50f48803"
   },
   {
@@ -46254,6 +46288,10 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-25T20:54:18.684Z",
+   "step": "match"
+  },
   {
    "t": "2026-11-25T18:27:48.596Z",
    "step": "match"
