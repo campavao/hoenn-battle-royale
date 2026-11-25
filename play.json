@@ -1,7 +1,68 @@
 {
- "readAt": "2026-11-25T13:43:02.962Z",
+ "readAt": "2026-11-25T14:28:06.765Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "ZBASP3",
+   "at": "2026-11-25T14:23:49.017Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-25T14:23:49.017Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-25T14:23:50.242Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "XH475B",
+   "at": "2026-11-25T14:16:54.908Z",
+   "end": "2026-11-25T14:23:45.034Z",
+   "secs": 410,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-25T14:16:54.908Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-25T14:16:56.008Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
   {
    "code": "WU6JSZ",
    "at": "2026-11-25T13:29:15.557Z",
@@ -32591,7 +32652,7 @@
   {
    "id": "bca304b1",
    "first": "2026-11-20T22:05:00.471Z",
-   "last": "2026-11-25T13:29:11.452Z",
+   "last": "2026-11-25T14:23:47.629Z",
    "since": "2026-11-20",
    "versions": [
     "world-1e0304e5",
@@ -32601,7 +32662,7 @@
     "world-50f48803"
    ],
    "solo": 7,
-   "checkins": 31,
+   "checkins": 33,
    "v": "world-50f48803"
   },
   {
@@ -32855,6 +32916,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-25T14:23:44.993Z",
+   "code": "XH475B",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 2,
+   "checks": 408,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-25T13:40:55.246Z",
    "code": "WU6JSZ",
