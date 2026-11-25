@@ -271,6 +271,54 @@ test('a room sits over the world it is in, dimmed like a battle, the door where 
   console.log(`[world-edges ${TAG}] room draw 720p: ${roomMs} ms`);
 });
 
+test('a warp inside a room goes black and back, never through to the world under it', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await inMatch(page);
+  // The ANCIENT TOMB over ROUTE 120, then its inner door (8,20) up to the chamber (8,11). The tomb
+  // let go at the warp and the chamber faded up over the dimmed route: trees and grass for 0.4 s
+  // (the launch video's capture, 11-24).
+  await throughDoor(page, 'MAP_ROUTE120', 'ANCIENT_TOMB');
+  await page.keyboard.down('ArrowUp');
+  await expect.poll(() => mapNow(page), { timeout: 5000, intervals: [30] }).toBe('MAP_ANCIENT_TOMB');
+  await page.keyboard.up('ArrowUp');
+  await page.waitForTimeout(600);
+  await page.evaluate(() => {
+    const s = (window as unknown as { __spike: S }).__spike, a = s.link.room.actor(s.link.me), spot = { map: 'MAP_ANCIENT_TOMB', x: 8, y: 22 };
+    a.m = { ...a.m, spot, prev: spot, facing: 2, action: null, px: 0, py: 0 };
+  });
+  await page.waitForTimeout(500);
+  // Every frame from here, the share of the middle of the view that is green (the route; the
+  // tomb is brown and grey), the warp's own frames marked.
+  await page.evaluate(() => {
+    const w = window as unknown as { __spike: S; __green: { warp: boolean; green: number }[] };
+    w.__green = [];
+    const cv = document.getElementById('world') as HTMLCanvasElement, c = cv.getContext('2d')!;
+    const tick = () => {
+      const a = w.__spike.link.room.actor(w.__spike.link.me);
+      const d = c.getImageData(Math.floor(cv.width * 0.2), Math.floor(cv.height * 0.2), Math.floor(cv.width * 0.6), Math.floor(cv.height * 0.6)).data;
+      let green = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4 * 37) { n++; if (d[i + 1] > d[i] + 12 && d[i + 1] > d[i + 2]) green++; }
+      w.__green.push({ warp: a.m.action?.kind === 'warp', green: green / n });
+      if (w.__green.length < 240) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await page.keyboard.down('ArrowUp');
+  await expect.poll(() => page.evaluate(() => { const s = (window as unknown as { __spike: S }).__spike; return s.link.room.actor(s.link.me).m.spot.y; }), { timeout: 5000, intervals: [30] }).toBeLessThan(15);
+  await page.keyboard.up('ArrowUp');
+  for (let i = 0; i < 8; i++) await shot(page, `warp-in-room-${i}`);
+  await page.waitForTimeout(1500);
+  const seen = await page.evaluate(() => (window as unknown as { __green: { warp: boolean; green: number }[] }).__green);
+  const warp = seen.filter((f) => f.warp);
+  expect(warp.length, 'frames of the warp seen').toBeGreaterThan(10);
+  // The dimmed route round the tomb's edges is in view before and after; through the warp it is
+  // no more than that (it was 0.60 against 0.14 before the fix).
+  const most = Math.max(...warp.map((f) => f.green)), before = seen[0].green, after = seen[seen.length - 1].green;
+  console.log(`[warp-in-room] green before ${before.toFixed(3)}, after ${after.toFixed(3)}, in the warp at most ${most.toFixed(3)} over ${warp.length} frames`);
+  expect(most, 'the route showing through the warp').toBeLessThanOrEqual(Math.max(before, after) + 0.03);
+});
+
 test('rooms at 1080p, on a phone, and on a watched trainer\'s page', async ({ browser }) => {
   test.setTimeout(420_000);
   const rooms: [string, string, string][] = [['center', 'MAP_OLDALE_TOWN', 'POKEMON_CENTER'], ['mart', 'MAP_OLDALE_TOWN', 'MART'], ['gym', 'MAP_RUSTBORO_CITY', 'GYM'], ['house', 'MAP_LITTLEROOT_TOWN', 'HOUSE'], ['cave', 'MAP_ROUTE116', 'RUSTURF']];
