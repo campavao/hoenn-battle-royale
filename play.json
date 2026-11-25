@@ -1,12 +1,28 @@
 {
- "readAt": "2026-11-25T03:39:47.252Z",
+ "readAt": "2026-11-25T03:54:49.268Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
+   "code": "55PCQJ",
+   "at": "2026-11-25T03:48:56.438Z",
+   "end": "2026-11-25T03:48:59.579Z",
+   "secs": 3,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
    "code": "X3S7R5",
    "at": "2026-11-25T03:24:47.335Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-25T03:48:16.953Z",
+   "secs": 1410,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -27,10 +43,9 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1377
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -32465,7 +32480,7 @@
   {
    "id": "bca304b1",
    "first": "2026-11-20T22:05:00.471Z",
-   "last": "2026-11-25T03:23:50.245Z",
+   "last": "2026-11-25T03:49:02.287Z",
    "since": "2026-11-20",
    "versions": [
     "world-1e0304e5",
@@ -32475,7 +32490,7 @@
     "world-50f48803"
    ],
    "solo": 7,
-   "checkins": 29,
+   "checkins": 30,
    "v": "world-50f48803"
   },
   {
@@ -32729,6 +32744,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-25T03:47:45.955Z",
+   "code": "X3S7R5",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 2,
+   "cam": 0,
+   "lost": 1,
+   "stalls": 2,
+   "longest": 20,
+   "checks": 1356,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-25T01:51:10.096Z",
    "code": "74JNM8",
