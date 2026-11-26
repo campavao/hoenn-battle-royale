@@ -1,7 +1,38 @@
 {
- "readAt": "2026-11-26T05:05:45.319Z",
+ "readAt": "2026-11-26T05:35:49.597Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "QPFGTT",
+   "at": "2026-11-26T05:31:44.700Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-26T05:31:44.700Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-26T05:32:07.420Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "4KYRRK",
    "at": "2026-11-26T04:35:42.943Z",
@@ -47006,6 +47037,22 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-26T05:32:07.652Z",
+   "step": "match"
+  },
+  {
+   "t": "2026-11-26T05:29:49.718Z",
+   "step": "rom"
+  },
+  {
+   "t": "2026-11-26T05:29:29.620Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-26T05:29:26.729Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-26T04:35:48.777Z",
    "step": "match"
