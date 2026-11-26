@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-26T06:20:56.788Z",
+ "readAt": "2026-11-26T06:36:00.006Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "Q5796E",
    "at": "2026-11-26T06:17:57.769Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-26T06:22:58.946Z",
+   "secs": 301,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -30,7 +30,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -43,7 +42,7 @@
    "humans": 1,
    "together": 1,
    "spectators": 0,
-   "matches": 1,
+   "matches": 2,
    "joins": [
     {
      "t": "2026-11-26T06:09:15.980Z",
@@ -55,6 +54,13 @@
    "played": [
     {
      "t": "2026-11-26T06:09:17.538Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": 1186
+    },
+    {
+     "t": "2026-11-26T06:29:37.631Z",
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
@@ -33725,6 +33731,34 @@
  ],
  "jank": [
   {
+   "t": "2026-11-26T06:29:03.649Z",
+   "code": "WWBE2J",
+   "v": "b49b064",
+   "watched": 3,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1185,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-26T06:22:58.946Z",
+   "code": "Q5796E",
+   "v": "b49b064",
+   "watched": 1,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 299,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
    "t": "2026-11-26T06:17:10.192Z",
    "code": "89J6SD",
    "v": "b49b064",
@@ -47306,6 +47340,10 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-26T06:23:47.394Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-26T05:32:07.652Z",
    "step": "match"
