@@ -1,7 +1,7 @@
 {
- "readAt": "2026-11-22T20:51:15.996Z",
+ "readAt": "2026-11-26T04:05:35.897Z",
  "from": "2026-11-22T00:06:55.860Z",
- "matches": 7,
+ "matches": 8,
  "players": [
   {
    "id": "71d3a7609b88",
@@ -22,6 +22,16 @@
    "wins": 0,
    "best": 2,
    "last": "2026-11-22T08:34:39.708Z"
+  },
+  {
+   "id": "a542e45f6cec",
+   "name": "GUUPY42",
+   "skin": 0,
+   "rating": 1015,
+   "played": 1,
+   "wins": 1,
+   "best": 1,
+   "last": "2026-11-26T03:57:38.327Z"
   },
   {
    "id": "0fe1486c840e",
@@ -64,16 +74,6 @@
    "last": "2026-11-22T20:37:59.127Z"
   },
   {
-   "id": "ab59f97c6e53",
-   "name": "SKEEGUL",
-   "skin": 4,
-   "rating": 984,
-   "played": 1,
-   "wins": 0,
-   "best": 6,
-   "last": "2026-11-22T14:29:42.097Z"
-  },
-  {
    "id": "1bcd8d3e6caf",
    "name": "SPIKE",
    "skin": 0,
@@ -82,6 +82,16 @@
    "wins": 0,
    "best": 3,
    "last": "2026-11-22T08:34:39.708Z"
+  },
+  {
+   "id": "ab59f97c6e53",
+   "name": "SKEEGUL",
+   "skin": 1,
+   "rating": 968,
+   "played": 2,
+   "wins": 0,
+   "best": 2,
+   "last": "2026-11-26T03:57:38.327Z"
   }
  ]
 }
