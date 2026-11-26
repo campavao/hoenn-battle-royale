@@ -1,12 +1,43 @@
 {
- "readAt": "2026-11-26T06:51:02.675Z",
+ "readAt": "2026-11-26T07:21:07.981Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "97FG7M",
-   "at": "2026-11-26T06:46:29.825Z",
+   "code": "E6H29K",
+   "at": "2026-11-26T07:06:37.121Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-26T07:06:37.121Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-26T07:06:39.293Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "97FG7M",
+   "at": "2026-11-26T06:46:29.825Z",
+   "end": "2026-11-26T07:06:34.193Z",
+   "secs": 1204,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -27,10 +58,9 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1117
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -33781,6 +33811,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-26T07:06:06.715Z",
+   "code": "97FG7M",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1116,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-26T06:43:58.970Z",
    "code": "WWBE2J",
