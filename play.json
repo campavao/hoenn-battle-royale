@@ -1,12 +1,43 @@
 {
- "readAt": "2026-11-26T14:04:56.123Z",
+ "readAt": "2026-11-26T14:19:58.508Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "UG3267",
-   "at": "2026-11-26T13:58:47.581Z",
+   "code": "RMFHAG",
+   "at": "2026-11-26T14:15:02.395Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-26T14:15:02.395Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-26T14:15:03.456Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "UG3267",
+   "at": "2026-11-26T13:58:47.581Z",
+   "end": "2026-11-26T14:14:57.890Z",
+   "secs": 970,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -27,10 +58,9 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 938
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -34233,6 +34263,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-26T14:14:26.639Z",
+   "code": "UG3267",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 937,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-26T10:50:15.688Z",
    "code": "YJXTGA",
