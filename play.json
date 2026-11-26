@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-26T04:50:42.896Z",
+ "readAt": "2026-11-26T05:05:45.319Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "4KYRRK",
    "at": "2026-11-26T04:35:42.943Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-26T04:54:20.711Z",
+   "secs": 1118,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -27,10 +27,9 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1079
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -33523,6 +33522,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-26T04:53:47.901Z",
+   "code": "4KYRRK",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1079,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-26T04:05:30.941Z",
    "code": "4NU75Z",
