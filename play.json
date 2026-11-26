@@ -1,7 +1,38 @@
 {
- "readAt": "2026-11-26T04:35:40.269Z",
+ "readAt": "2026-11-26T04:50:42.896Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "4KYRRK",
+   "at": "2026-11-26T04:35:42.943Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-26T04:35:42.943Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-26T04:35:48.517Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "8CB4GV",
    "at": "2026-11-26T04:03:41.413Z",
@@ -46962,6 +46993,10 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-26T04:35:48.777Z",
+   "step": "match"
+  },
   {
    "t": "2026-11-26T04:34:54.568Z",
    "step": "rom"
