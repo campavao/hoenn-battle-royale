@@ -1,7 +1,7 @@
 {
- "readAt": "2026-11-26T15:50:14.232Z",
+ "readAt": "2026-11-26T21:46:16.360Z",
  "from": "2026-11-22T00:06:55.860Z",
- "matches": 9,
+ "matches": 11,
  "players": [
   {
    "id": "71d3a7609b88",
@@ -22,6 +22,26 @@
    "wins": 2,
    "best": 1,
    "last": "2026-11-26T15:35:41.559Z"
+  },
+  {
+   "id": "b292441003d3",
+   "name": "MIKE",
+   "skin": 0,
+   "rating": 1016,
+   "played": 1,
+   "wins": 1,
+   "best": 1,
+   "last": "2026-11-26T19:05:12.964Z"
+  },
+  {
+   "id": "a3a1942cc5e1",
+   "name": "HARDY",
+   "skin": 0,
+   "rating": 1016,
+   "played": 1,
+   "wins": 1,
+   "best": 1,
+   "last": "2026-11-26T18:06:03.707Z"
   },
   {
    "id": "d498d270ddfc",
@@ -46,12 +66,12 @@
   {
    "id": "e4ccab195416",
    "name": "CAM",
-   "skin": 12,
-   "rating": 1002,
-   "played": 4,
+   "skin": 14,
+   "rating": 986,
+   "played": 5,
    "wins": 2,
    "best": 1,
-   "last": "2026-11-22T15:22:38.720Z"
+   "last": "2026-11-26T18:06:03.707Z"
   },
   {
    "id": "17bf2e441ee0",
@@ -62,6 +82,16 @@
    "wins": 0,
    "best": 2,
    "last": "2026-11-22T00:37:47.161Z"
+  },
+  {
+   "id": "6daeabfaebbf",
+   "name": "SKYGBIV",
+   "skin": 0,
+   "rating": 984,
+   "played": 1,
+   "wins": 0,
+   "best": 5,
+   "last": "2026-11-26T19:05:12.964Z"
   },
   {
    "id": "b821c142935e",
