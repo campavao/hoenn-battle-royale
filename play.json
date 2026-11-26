@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-26T15:35:11.178Z",
+ "readAt": "2026-11-26T15:50:14.232Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -36,8 +36,8 @@
   {
    "code": "FTQCYT",
    "at": "2026-11-26T15:10:54.954Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-26T15:36:06.288Z",
+   "secs": 1511,
    "door": "open",
    "mode": "host",
    "humans": 2,
@@ -58,10 +58,9 @@
      "mode": "host",
      "trainers": 2,
      "watching": 0,
-     "secs": null
+     "secs": 1442
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -34384,6 +34383,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-26T15:35:41.622Z",
+   "code": "FTQCYT",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1442,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-26T15:29:25.638Z",
    "code": "HJMFFQ",
