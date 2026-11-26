@@ -1,7 +1,59 @@
 {
- "readAt": "2026-11-26T06:36:00.006Z",
+ "readAt": "2026-11-26T06:51:02.675Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "97FG7M",
+   "at": "2026-11-26T06:46:29.825Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-26T06:46:29.825Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-26T06:47:29.929Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "WU48U5",
+   "at": "2026-11-26T06:45:13.654Z",
+   "end": "2026-11-26T06:45:17.261Z",
+   "secs": 4,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [
+    {
+     "t": "2026-11-26T06:45:13.654Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "Q5796E",
    "at": "2026-11-26T06:17:57.769Z",
@@ -35,8 +87,8 @@
   {
    "code": "WWBE2J",
    "at": "2026-11-26T06:09:15.980Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-26T06:44:29.739Z",
+   "secs": 2114,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -64,10 +116,9 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 861
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -33730,6 +33781,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-26T06:43:58.970Z",
+   "code": "WWBE2J",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 861,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-26T06:29:03.649Z",
    "code": "WWBE2J",
