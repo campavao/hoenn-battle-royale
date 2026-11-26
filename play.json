@@ -1,12 +1,94 @@
 {
- "readAt": "2026-11-26T07:36:10.220Z",
+ "readAt": "2026-11-26T07:51:12.647Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "B4VFXD",
-   "at": "2026-11-26T07:32:46.270Z",
+   "code": "QPX9X7",
+   "at": "2026-11-26T07:45:47.009Z",
+   "end": "2026-11-26T07:50:35.006Z",
+   "secs": 288,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-26T07:45:47.009Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-26T07:45:48.443Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "JQK93R",
+   "at": "2026-11-26T07:45:36.732Z",
+   "end": "2026-11-26T07:45:39.091Z",
+   "secs": 2,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [
+    {
+     "t": "2026-11-26T07:45:36.732Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "NXTDJC",
+   "at": "2026-11-26T07:40:03.768Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-26T07:40:03.768Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-26T07:40:06.038Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "B4VFXD",
+   "at": "2026-11-26T07:32:46.270Z",
+   "end": "2026-11-26T07:40:00.375Z",
+   "secs": 434,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -27,10 +109,9 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 405
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -33842,6 +33923,34 @@
  ],
  "jank": [
   {
+   "t": "2026-11-26T07:50:34.979Z",
+   "code": "QPX9X7",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 286,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-26T07:39:35.109Z",
+   "code": "B4VFXD",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 404,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
    "t": "2026-11-26T07:24:45.066Z",
    "code": "E6H29K",
    "v": "b49b064",
@@ -47493,6 +47602,14 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-26T07:37:34.459Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-26T07:37:30.471Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-26T06:23:47.394Z",
    "step": "landing"
