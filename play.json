@@ -1,12 +1,43 @@
 {
- "readAt": "2026-11-26T13:49:52.941Z",
+ "readAt": "2026-11-26T14:04:56.123Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "Q86A3F",
-   "at": "2026-11-26T13:48:48.310Z",
+   "code": "UG3267",
+   "at": "2026-11-26T13:58:47.581Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-26T13:58:47.581Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-26T13:58:48.901Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "Q86A3F",
+   "at": "2026-11-26T13:48:48.310Z",
+   "end": "2026-11-26T13:58:36.455Z",
+   "secs": 588,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -30,7 +61,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
