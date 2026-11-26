@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-26T14:35:01.677Z",
+ "readAt": "2026-11-26T14:50:05.144Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "PKSC69",
    "at": "2026-11-26T14:33:20.474Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-26T14:39:29.334Z",
+   "secs": 369,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -30,7 +30,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -34323,6 +34322,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-26T14:39:29.333Z",
+   "code": "PKSC69",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 4,
+   "longest": 1,
+   "checks": 363,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-26T14:14:26.639Z",
    "code": "UG3267",
