@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-27T00:46:40.482Z",
+ "readAt": "2026-11-27T01:01:43.665Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "534F5H",
    "at": "2026-11-27T00:45:56.386Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-27T00:59:28.746Z",
+   "secs": 812,
    "door": "open",
    "mode": "host",
    "humans": 3,
@@ -31,10 +31,9 @@
      "mode": "host",
      "trainers": 3,
      "watching": 0,
-     "secs": null
+     "secs": 752
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -34810,6 +34809,62 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-27T00:59:01.606Z",
+   "code": "534F5H",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 752,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T00:59:01.495Z",
+   "code": "534F5H",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 395,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T00:57:34.132Z",
+   "code": "534F5H",
+   "v": "b49b064",
+   "watched": 95,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 664,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T00:52:25.080Z",
+   "code": "534F5H",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 355,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-27T00:45:22.765Z",
    "code": "FNFNNR",
