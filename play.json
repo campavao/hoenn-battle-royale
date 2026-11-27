@@ -1,12 +1,64 @@
 {
- "readAt": "2026-11-27T01:16:45.978Z",
+ "readAt": "2026-11-27T01:31:50.169Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "ME9YWC",
-   "at": "2026-11-27T01:14:21.386Z",
+   "code": "QPCWDC",
+   "at": "2026-11-27T01:30:02.387Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T01:30:04.848Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T01:30:21.318Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "JXGDBP",
+   "at": "2026-11-27T01:22:16.186Z",
+   "end": "2026-11-27T01:22:19.466Z",
+   "secs": 3,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [
+    {
+     "t": "2026-11-27T01:22:16.186Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "ME9YWC",
+   "at": "2026-11-27T01:14:21.386Z",
+   "end": "2026-11-27T01:18:32.951Z",
+   "secs": 252,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -30,7 +82,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -34841,6 +34892,20 @@
  ],
  "jank": [
   {
+   "t": "2026-11-27T01:17:32.918Z",
+   "code": "ME9YWC",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 2,
+   "longest": 2,
+   "checks": 188,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
    "t": "2026-11-27T00:59:01.606Z",
    "code": "534F5H",
    "v": "b49b064",
@@ -48968,6 +49033,14 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-27T01:22:11.897Z",
+   "step": "rom"
+  },
+  {
+   "t": "2026-11-27T01:19:02.907Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-27T00:21:09.060Z",
    "step": "rom"
