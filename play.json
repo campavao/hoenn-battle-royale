@@ -1,7 +1,33 @@
 {
- "readAt": "2026-11-27T01:31:50.169Z",
+ "readAt": "2026-11-27T01:46:52.532Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "CDVDG7",
+   "at": "2026-11-27T01:40:44.418Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T01:40:47.619Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "QPCWDC",
    "at": "2026-11-27T01:30:02.387Z",
@@ -49033,6 +49059,10 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-27T01:40:48.129Z",
+   "step": "match"
+  },
   {
    "t": "2026-11-27T01:22:11.897Z",
    "step": "rom"
