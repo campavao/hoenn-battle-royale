@@ -1,12 +1,59 @@
 {
- "readAt": "2026-11-27T04:52:15.180Z",
+ "readAt": "2026-11-27T05:07:18.276Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "E4PE7B",
-   "at": "2026-11-27T04:29:53.030Z",
+   "code": "XZY74V",
+   "at": "2026-11-27T04:53:05.689Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T04:53:05.689Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T04:53:06.886Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "XZ85HG",
+   "at": "2026-11-27T04:52:35.542Z",
+   "end": "2026-11-27T04:53:02.210Z",
+   "secs": 27,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "E4PE7B",
+   "at": "2026-11-27T04:29:53.030Z",
+   "end": "2026-11-27T04:53:03.040Z",
+   "secs": 1390,
    "door": "open",
    "mode": "host",
    "humans": 2,
@@ -31,10 +78,9 @@
      "mode": "host",
      "trainers": 2,
      "watching": 0,
-     "secs": null
+     "secs": 1354
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -35439,6 +35485,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-27T04:52:35.065Z",
+   "code": "E4PE7B",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 1354,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T04:52:30.764Z",
+   "code": "E4PE7B",
+   "v": "b49b064",
+   "watched": 35,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 36,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-27T04:40:57.326Z",
    "code": "E4PE7B",
