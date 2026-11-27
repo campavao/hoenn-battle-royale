@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-27T15:18:35.025Z",
+ "readAt": "2026-11-27T15:33:38.035Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "R7EZPR",
    "at": "2026-11-27T15:09:57.027Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-27T15:28:28.039Z",
+   "secs": 1111,
    "door": "open",
    "mode": "host",
    "humans": 2,
@@ -27,10 +27,9 @@
      "mode": "host",
      "trainers": 2,
      "watching": 0,
-     "secs": null
+     "secs": 1048
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -35732,6 +35731,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-27T15:27:32.296Z",
+   "code": "R7EZPR",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1047,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-27T15:17:24.180Z",
    "code": "R7EZPR",
