@@ -1,7 +1,83 @@
 {
- "readAt": "2026-11-27T00:01:32.856Z",
+ "readAt": "2026-11-27T00:16:35.841Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "ZD9MCY",
+   "at": "2026-11-27T00:02:44.675Z",
+   "end": "2026-11-27T00:14:34.463Z",
+   "secs": 710,
+   "door": "open",
+   "mode": "quick",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T00:02:44.675Z",
+     "how": "quick"
+    },
+    {
+     "t": "2026-11-27T00:13:56.627Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T00:02:46.207Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "WVSEPR",
+   "at": "2026-11-27T00:02:25.168Z",
+   "end": "2026-11-27T00:02:26.563Z",
+   "secs": 1,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [
+    {
+     "t": "2026-11-27T00:02:25.168Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "A6YNQ6",
+   "at": "2026-11-27T00:02:12.704Z",
+   "end": "2026-11-27T00:02:14.085Z",
+   "secs": 1,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [
+    {
+     "t": "2026-11-27T00:02:12.704Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "GCBV5Y",
    "at": "2026-11-26T23:49:49.204Z",
@@ -11,7 +87,7 @@
    "mode": "host",
    "humans": 2,
    "together": 2,
-   "spectators": 1,
+   "spectators": 3,
    "matches": 1,
    "joins": [
     {
@@ -21,6 +97,30 @@
     {
      "t": "2026-11-26T23:52:38.864Z",
      "how": "spectate"
+    },
+    {
+     "t": "2026-11-27T00:01:56.844Z",
+     "how": "spectate"
+    },
+    {
+     "t": "2026-11-27T00:02:31.259Z",
+     "how": "spectate"
+    },
+    {
+     "t": "2026-11-27T00:14:03.480Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-27T00:14:37.746Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-27T00:14:39.543Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-27T00:15:13.630Z",
+     "how": "code"
     }
    ],
    "versions": [],
@@ -31,7 +131,7 @@
      "mode": "host",
      "trainers": 2,
      "watching": 0,
-     "secs": null
+     "secs": 1280
     }
    ],
    "live": true,
@@ -34606,6 +34706,90 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-27T00:14:14.308Z",
+   "code": "ZD9MCY",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 687,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T00:14:01.270Z",
+   "code": "ZD9MCY",
+   "v": "b49b064",
+   "watched": 4,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 4,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T00:11:33.704Z",
+   "code": "GCBV5Y",
+   "v": "b49b064",
+   "watched": 554,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 3,
+   "stalls": 4,
+   "longest": 198,
+   "checks": 555,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T00:11:33.667Z",
+   "code": "GCBV5Y",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1279,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T00:02:37.426Z",
+   "code": "GCBV5Y",
+   "v": "b49b064",
+   "watched": 5,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 6,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T00:02:04.685Z",
+   "code": "GCBV5Y",
+   "v": "b49b064",
+   "watched": 7,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 8,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-26T19:05:13.040Z",
    "code": "XBYR2V",
