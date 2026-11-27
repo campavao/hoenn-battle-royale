@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-27T04:37:11.970Z",
+ "readAt": "2026-11-27T04:52:15.180Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -11,12 +11,16 @@
    "mode": "host",
    "humans": 2,
    "together": 2,
-   "spectators": 0,
+   "spectators": 1,
    "matches": 1,
    "joins": [
     {
      "t": "2026-11-27T04:29:59.431Z",
      "how": "code"
+    },
+    {
+     "t": "2026-11-27T04:51:54.576Z",
+     "how": "spectate"
     }
    ],
    "versions": [],
@@ -35435,6 +35439,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-27T04:40:57.326Z",
+   "code": "E4PE7B",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 656,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-27T04:29:53.728Z",
    "code": "KSYWCS",
