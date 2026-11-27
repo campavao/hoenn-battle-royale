@@ -1,7 +1,37 @@
 {
- "readAt": "2026-11-27T07:52:38.212Z",
+ "readAt": "2026-11-27T13:18:14.249Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "VHVET7",
+   "at": "2026-11-27T12:52:09.479Z",
+   "end": "2026-11-27T12:56:39.253Z",
+   "secs": 270,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T12:52:09.479Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T12:52:18.153Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
   {
    "code": "YMUAFS",
    "at": "2026-11-27T06:03:39.854Z",
@@ -35536,6 +35566,20 @@
  ],
  "jank": [
   {
+   "t": "2026-11-27T12:56:39.253Z",
+   "code": "VHVET7",
+   "v": "b49b064",
+   "watched": 10,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 260,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
    "t": "2026-11-27T06:24:14.094Z",
    "code": "YMUAFS",
    "v": "b49b064",
@@ -50055,6 +50099,14 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-27T10:12:04.352Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-27T10:12:02.262Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-27T07:51:32.064Z",
    "step": "ask"
