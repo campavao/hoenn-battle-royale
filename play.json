@@ -1,7 +1,124 @@
 {
- "readAt": "2026-11-27T15:33:38.035Z",
+ "readAt": "2026-11-27T15:48:40.398Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "CVMTKB",
+   "at": "2026-11-27T15:44:22.355Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T15:44:39.405Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "Z4T757",
+   "at": "2026-11-27T15:43:53.711Z",
+   "end": "2026-11-27T15:44:18.080Z",
+   "secs": 24,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T15:43:53.711Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T15:43:55.148Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "62R72S",
+   "at": "2026-11-27T15:39:04.306Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T15:39:34.133Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T15:39:54.222Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "HNS9RQ",
+   "at": "2026-11-27T15:34:15.827Z",
+   "end": "2026-11-27T15:43:34.285Z",
+   "secs": 558,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T15:34:15.827Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T15:34:17.415Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
   {
    "code": "R7EZPR",
    "at": "2026-11-27T15:09:57.027Z",
@@ -35732,6 +35849,20 @@
  ],
  "jank": [
   {
+   "t": "2026-11-27T15:44:18.049Z",
+   "code": "Z4T757",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 22,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
    "t": "2026-11-27T15:27:32.296Z",
    "code": "R7EZPR",
    "v": "b49b064",
@@ -50349,6 +50480,18 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-27T15:39:54.448Z",
+   "step": "match"
+  },
+  {
+   "t": "2026-11-27T15:38:38.674Z",
+   "step": "rom"
+  },
+  {
+   "t": "2026-11-27T15:38:28.137Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-27T13:55:20.349Z",
    "step": "landing"
