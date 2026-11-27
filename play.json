@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-27T06:07:26.325Z",
+ "readAt": "2026-11-27T06:37:31.731Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "YMUAFS",
    "at": "2026-11-27T06:03:39.854Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-27T06:25:39.993Z",
+   "secs": 1320,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -27,10 +27,9 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1216
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -35536,6 +35535,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-27T06:24:14.094Z",
+   "code": "YMUAFS",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 1,
+   "stalls": 2,
+   "longest": 13,
+   "checks": 1203,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-27T05:09:57.284Z",
    "code": "XZY74V",
