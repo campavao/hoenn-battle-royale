@@ -1,12 +1,63 @@
 {
- "readAt": "2026-11-27T18:03:58.179Z",
+ "readAt": "2026-11-27T18:19:01.338Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "E5H83E",
-   "at": "2026-11-27T18:02:22.867Z",
+   "code": "TX4AWQ",
+   "at": "2026-11-27T18:06:25.863Z",
+   "end": "2026-11-27T18:06:45.546Z",
+   "secs": 20,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "Y2D78Q",
+   "at": "2026-11-27T18:04:40.753Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 3,
+   "together": 3,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T18:06:39.754Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-27T18:06:49.735Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T18:07:01.637Z",
+     "mode": "host",
+     "trainers": 3,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "E5H83E",
+   "at": "2026-11-27T18:02:22.867Z",
+   "end": "2026-11-27T18:06:32.764Z",
+   "secs": 250,
    "door": "open",
    "mode": "host",
    "humans": 2,
@@ -30,7 +81,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -35985,6 +36035,34 @@
  ],
  "jank": [
   {
+   "t": "2026-11-27T18:06:32.763Z",
+   "code": "E5H83E",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 244,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T18:04:39.354Z",
+   "code": "E5H83E",
+   "v": "b49b064",
+   "watched": 7,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 131,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
    "t": "2026-11-27T16:04:29.640Z",
    "code": "Z9GAGH",
    "v": "b49b064",
@@ -50672,6 +50750,18 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-27T18:07:01.965Z",
+   "step": "match"
+  },
+  {
+   "t": "2026-11-27T18:05:31.551Z",
+   "step": "rom"
+  },
+  {
+   "t": "2026-11-27T18:05:26.331Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-27T16:49:12.354Z",
    "step": "rom"
