@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-27T16:03:42.794Z",
+ "readAt": "2026-11-27T16:18:45.890Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "SRPV6Y",
    "at": "2026-11-27T16:02:35.323Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-27T16:05:10.284Z",
+   "secs": 155,
    "door": "open",
    "mode": "host",
    "humans": 1,
@@ -16,8 +16,7 @@
    "joins": [],
    "versions": [],
    "installs": [],
-   "played": [],
-   "live": true
+   "played": []
   },
   {
    "code": "46N7F4",
@@ -38,8 +37,8 @@
   {
    "code": "Z9GAGH",
    "at": "2026-11-27T15:51:16.914Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-27T16:04:54.054Z",
+   "secs": 817,
    "door": "open",
    "mode": "host",
    "humans": 3,
@@ -68,10 +67,9 @@
      "mode": "host",
      "trainers": 3,
      "watching": 0,
-     "secs": null
+     "secs": 765
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -35934,6 +35932,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-27T16:04:29.640Z",
+   "code": "Z9GAGH",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 765,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-27T16:00:58.741Z",
    "code": "Z9GAGH",
