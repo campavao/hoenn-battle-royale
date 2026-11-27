@@ -1,12 +1,28 @@
 {
- "readAt": "2026-11-27T03:52:01.296Z",
+ "readAt": "2026-11-27T04:07:04.770Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
+   "code": "24UY2W",
+   "at": "2026-11-27T03:52:06.607Z",
+   "end": "2026-11-27T03:52:07.882Z",
+   "secs": 1,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
    "code": "8S2JRF",
    "at": "2026-11-27T03:51:24.691Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-27T03:52:04.562Z",
+   "secs": 40,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -30,7 +46,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -42,12 +57,20 @@
    "mode": "host",
    "humans": 2,
    "together": 2,
-   "spectators": 0,
+   "spectators": 2,
    "matches": 1,
    "joins": [
     {
      "t": "2026-11-27T03:47:11.036Z",
      "how": "code"
+    },
+    {
+     "t": "2026-11-27T03:52:12.941Z",
+     "how": "spectate"
+    },
+    {
+     "t": "2026-11-27T04:01:43.587Z",
+     "how": "spectate"
     }
    ],
    "versions": [],
@@ -58,7 +81,7 @@
      "mode": "host",
      "trainers": 2,
      "watching": 0,
-     "secs": null
+     "secs": 1169
     }
    ],
    "live": true,
@@ -35348,6 +35371,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-27T04:06:54.168Z",
+   "code": "59NTKP",
+   "v": "b49b064",
+   "watched": 308,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 311,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T03:53:14.403Z",
+   "code": "59NTKP",
+   "v": "b49b064",
+   "watched": 60,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 61,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-27T03:51:42.167Z",
    "code": "8S2JRF",
