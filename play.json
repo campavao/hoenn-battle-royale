@@ -1,7 +1,38 @@
 {
- "readAt": "2026-11-27T17:03:52.224Z",
+ "readAt": "2026-11-27T18:03:58.179Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "E5H83E",
+   "at": "2026-11-27T18:02:22.867Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T18:02:24.859Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T18:02:28.010Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "V5ZRES",
    "at": "2026-11-27T16:51:15.821Z",
