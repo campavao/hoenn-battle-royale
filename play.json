@@ -1,7 +1,42 @@
 {
- "readAt": "2026-11-27T00:31:38.287Z",
+ "readAt": "2026-11-27T00:46:40.482Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "534F5H",
+   "at": "2026-11-27T00:45:56.386Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 3,
+   "together": 3,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T00:45:59.385Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-27T00:46:08.820Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T00:46:29.334Z",
+     "mode": "host",
+     "trainers": 3,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "GZHU4U",
    "at": "2026-11-27T00:22:59.870Z",
@@ -21,8 +56,8 @@
   {
    "code": "FNFNNR",
    "at": "2026-11-27T00:22:43.053Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-27T00:46:04.019Z",
+   "secs": 1401,
    "door": "open",
    "mode": "host",
    "humans": 3,
@@ -51,10 +86,9 @@
      "mode": "host",
      "trainers": 2,
      "watching": 0,
-     "secs": null
+     "secs": 1329
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -34387,7 +34421,7 @@
   {
    "id": "6144a717",
    "first": "2026-10-17T02:37:29.310Z",
-   "last": "2026-11-27T00:23:46.549Z",
+   "last": "2026-11-27T00:46:06.601Z",
    "since": "2026-10-15",
    "versions": [
     "2",
@@ -34417,7 +34451,7 @@
     "world-50f48803"
    ],
    "solo": 2,
-   "checkins": 107,
+   "checkins": 108,
    "v": "world-50f48803"
   },
   {
@@ -34776,6 +34810,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-27T00:45:22.765Z",
+   "code": "FNFNNR",
+   "v": "b49b064",
+   "watched": 1241,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 1294,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T00:45:22.737Z",
+   "code": "FNFNNR",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1328,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-27T00:14:14.308Z",
    "code": "ZD9MCY",
