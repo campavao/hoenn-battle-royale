@@ -1,7 +1,72 @@
 {
- "readAt": "2026-11-27T04:22:08.598Z",
+ "readAt": "2026-11-27T04:37:11.970Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "E4PE7B",
+   "at": "2026-11-27T04:29:53.030Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T04:29:59.431Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T04:30:00.561Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "KSYWCS",
+   "at": "2026-11-27T04:28:48.304Z",
+   "end": "2026-11-27T04:29:53.773Z",
+   "secs": 65,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 1,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T04:28:54.426Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-27T04:29:45.558Z",
+     "how": "spectate"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T04:28:56.407Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
   {
    "code": "24UY2W",
    "at": "2026-11-27T03:52:06.607Z",
@@ -35370,6 +35435,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-27T04:29:53.728Z",
+   "code": "KSYWCS",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 56,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T04:29:51.821Z",
+   "code": "KSYWCS",
+   "v": "b49b064",
+   "watched": 5,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 6,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-27T04:06:54.168Z",
    "code": "59NTKP",
