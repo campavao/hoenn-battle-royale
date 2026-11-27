@@ -1,12 +1,180 @@
 {
- "readAt": "2026-11-27T03:02:05.634Z",
+ "readAt": "2026-11-27T03:52:01.296Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "EPDFYV",
-   "at": "2026-11-27T03:01:06.416Z",
+   "code": "8S2JRF",
+   "at": "2026-11-27T03:51:24.691Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T03:51:24.691Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T03:51:27.541Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "59NTKP",
+   "at": "2026-11-27T03:47:05.413Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T03:47:11.036Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T03:47:24.731Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "GE9XMN",
+   "at": "2026-11-27T03:44:22.668Z",
+   "end": "2026-11-27T03:46:38.628Z",
+   "secs": 136,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T03:44:22.668Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T03:44:25.672Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "WEB9RZ",
+   "at": "2026-11-27T03:32:18.400Z",
+   "end": "2026-11-27T03:47:07.221Z",
+   "secs": 889,
+   "door": "open",
+   "mode": "host",
+   "humans": 3,
+   "together": 3,
+   "spectators": 1,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T03:32:20.511Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-27T03:40:48.908Z",
+     "how": "spectate"
+    },
+    {
+     "t": "2026-11-27T03:46:39.747Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-27T03:46:45.068Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-27T03:46:48.221Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T03:32:21.874Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": 856
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "37EVSB",
+   "at": "2026-11-27T03:13:06.185Z",
+   "end": "2026-11-27T03:32:15.616Z",
+   "secs": 1149,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T03:13:06.185Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T03:13:08.798Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": 1114
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "EPDFYV",
+   "at": "2026-11-27T03:01:06.416Z",
+   "end": "2026-11-27T03:26:29.081Z",
+   "secs": 1523,
    "door": "open",
    "mode": "host",
    "humans": 2,
@@ -27,10 +195,9 @@
      "mode": "host",
      "trainers": 2,
      "watching": 0,
-     "secs": null
+     "secs": 1482
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -35182,6 +35349,118 @@
  ],
  "jank": [
   {
+   "t": "2026-11-27T03:51:42.167Z",
+   "code": "8S2JRF",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 14,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T03:51:21.034Z",
+   "code": "59NTKP",
+   "v": "b49b064",
+   "watched": 55,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 236,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T03:46:38.627Z",
+   "code": "GE9XMN",
+   "v": "b49b064",
+   "watched": 8,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 132,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T03:46:37.941Z",
+   "code": "WEB9RZ",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 855,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T03:42:44.015Z",
+   "code": "WEB9RZ",
+   "v": "b49b064",
+   "watched": 114,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 114,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T03:31:42.620Z",
+   "code": "37EVSB",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1113,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T03:25:59.232Z",
+   "code": "EPDFYV",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1482,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T03:12:48.554Z",
+   "code": "EPDFYV",
+   "v": "b49b064",
+   "watched": 13,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 691,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
    "t": "2026-11-27T03:01:10.959Z",
    "code": "X5STV8",
    "v": "b49b064",
@@ -49463,6 +49742,30 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-27T03:40:49.480Z",
+   "step": "match"
+  },
+  {
+   "t": "2026-11-27T03:40:38.939Z",
+   "step": "rom"
+  },
+  {
+   "t": "2026-11-27T03:39:38.806Z",
+   "step": "bad-changed"
+  },
+  {
+   "t": "2026-11-27T03:39:14.813Z",
+   "step": "bad-size"
+  },
+  {
+   "t": "2026-11-27T03:38:41.053Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-27T03:38:37.749Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-27T02:56:26.220Z",
    "step": "landing"
