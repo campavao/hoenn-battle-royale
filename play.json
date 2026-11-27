@@ -1,7 +1,104 @@
 {
- "readAt": "2026-11-27T02:47:03.115Z",
+ "readAt": "2026-11-27T03:02:05.634Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "EPDFYV",
+   "at": "2026-11-27T03:01:06.416Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T03:01:12.911Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T03:01:16.863Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "X5STV8",
+   "at": "2026-11-27T02:59:13.041Z",
+   "end": "2026-11-27T03:01:19.471Z",
+   "secs": 126,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 1,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T02:59:22.132Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-27T03:00:25.603Z",
+     "how": "spectate"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T02:59:29.133Z",
+     "mode": "host",
+     "trainers": 2,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "WPV9DA",
+   "at": "2026-11-27T02:58:07.037Z",
+   "end": "2026-11-27T02:58:09.600Z",
+   "secs": 3,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "2QDMGC",
+   "at": "2026-11-27T02:56:24.827Z",
+   "end": "2026-11-27T02:57:00.254Z",
+   "secs": 35,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "HG8NUG",
    "at": "2026-11-27T02:23:02.710Z",
@@ -35085,6 +35182,34 @@
  ],
  "jank": [
   {
+   "t": "2026-11-27T03:01:10.959Z",
+   "code": "X5STV8",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 101,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T03:00:43.562Z",
+   "code": "X5STV8",
+   "v": "b49b064",
+   "watched": 17,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 18,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
    "t": "2026-11-27T02:28:48.822Z",
    "code": "TXVGN4",
    "v": "b49b064",
@@ -49338,6 +49463,10 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-27T02:56:26.220Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-27T02:13:24.264Z",
    "step": "match"
