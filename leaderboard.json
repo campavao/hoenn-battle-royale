@@ -1,17 +1,17 @@
 {
- "readAt": "2026-11-27T02:01:55.201Z",
+ "readAt": "2026-11-27T02:16:57.235Z",
  "from": "2026-11-22T00:06:55.860Z",
- "matches": 15,
+ "matches": 16,
  "players": [
   {
    "id": "a542e45f6cec",
    "name": "SKEEGUL",
    "skin": 4,
-   "rating": 1032,
-   "played": 6,
-   "wins": 4,
+   "rating": 1045,
+   "played": 7,
+   "wins": 5,
    "best": 1,
-   "last": "2026-11-27T01:49:33.455Z"
+   "last": "2026-11-27T02:09:50.422Z"
   },
   {
    "id": "71d3a7609b88",
@@ -114,14 +114,24 @@
    "last": "2026-11-22T08:34:39.708Z"
   },
   {
+   "id": "1523640f4fce",
+   "name": "DIH",
+   "skin": 0,
+   "rating": 983,
+   "played": 1,
+   "wins": 0,
+   "best": 6,
+   "last": "2026-11-27T02:09:50.422Z"
+  },
+  {
    "id": "ab59f97c6e53",
    "name": "BOB",
    "skin": 0,
-   "rating": 935,
-   "played": 7,
+   "rating": 939,
+   "played": 8,
    "wins": 1,
    "best": 1,
-   "last": "2026-11-27T01:49:33.455Z"
+   "last": "2026-11-27T02:09:50.422Z"
   }
  ]
 }

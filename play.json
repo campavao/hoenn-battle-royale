@@ -1,12 +1,51 @@
 {
- "readAt": "2026-11-27T02:01:55.201Z",
+ "readAt": "2026-11-27T02:16:57.235Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "SPH983",
-   "at": "2026-11-27T01:53:12.065Z",
+   "code": "TXVGN4",
+   "at": "2026-11-27T02:12:58.578Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 3,
+   "together": 3,
+   "spectators": 1,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T02:13:04.203Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-27T02:13:17.301Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-11-27T02:14:41.908Z",
+     "how": "spectate"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T02:13:24.007Z",
+     "mode": "host",
+     "trainers": 3,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "SPH983",
+   "at": "2026-11-27T01:53:12.065Z",
+   "end": "2026-11-27T02:07:29.319Z",
+   "secs": 857,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -30,14 +69,13 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
    "code": "D2KQKT",
    "at": "2026-11-27T01:49:54.418Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-27T02:10:19.771Z",
+   "secs": 1225,
    "door": "open",
    "mode": "host",
    "humans": 3,
@@ -62,10 +100,9 @@
      "mode": "host",
      "trainers": 3,
      "watching": 0,
-     "secs": null
+     "secs": 1138
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -34604,7 +34641,7 @@
   {
    "id": "6144a717",
    "first": "2026-10-17T02:37:29.310Z",
-   "last": "2026-11-27T00:46:06.601Z",
+   "last": "2026-11-27T02:14:39.631Z",
    "since": "2026-10-15",
    "versions": [
     "2",
@@ -34634,7 +34671,7 @@
     "world-50f48803"
    ],
    "solo": 2,
-   "checkins": 108,
+   "checkins": 109,
    "v": "world-50f48803"
   },
   {
@@ -34993,6 +35030,34 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-27T02:09:50.491Z",
+   "code": "D2KQKT",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 1137,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T02:09:50.483Z",
+   "code": "D2KQKT",
+   "v": "b49b064",
+   "watched": 1,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1137,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-27T01:59:39.748Z",
    "code": "D2KQKT",
@@ -49177,6 +49242,22 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-27T02:13:24.264Z",
+   "step": "match"
+  },
+  {
+   "t": "2026-11-27T02:12:23.986Z",
+   "step": "rom"
+  },
+  {
+   "t": "2026-11-27T02:11:43.849Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-27T02:11:41.223Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-27T01:50:52.842Z",
    "step": "match"
