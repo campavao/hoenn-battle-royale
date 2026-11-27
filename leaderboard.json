@@ -1,17 +1,17 @@
 {
- "readAt": "2026-11-27T02:16:57.235Z",
+ "readAt": "2026-11-27T02:32:00.012Z",
  "from": "2026-11-22T00:06:55.860Z",
- "matches": 16,
+ "matches": 17,
  "players": [
   {
    "id": "a542e45f6cec",
    "name": "SKEEGUL",
-   "skin": 4,
-   "rating": 1045,
-   "played": 7,
-   "wins": 5,
+   "skin": 6,
+   "rating": 1058,
+   "played": 8,
+   "wins": 6,
    "best": 1,
-   "last": "2026-11-27T02:09:50.422Z"
+   "last": "2026-11-27T02:28:48.759Z"
   },
   {
    "id": "71d3a7609b88",
@@ -74,6 +74,16 @@
    "last": "2026-11-27T00:59:01.504Z"
   },
   {
+   "id": "df9a529a4d77",
+   "name": "BOB",
+   "skin": 0,
+   "rating": 1000,
+   "played": 1,
+   "wins": 0,
+   "best": 5,
+   "last": "2026-11-27T02:28:48.759Z"
+  },
+  {
    "id": "17bf2e441ee0",
    "name": "NOX",
    "skin": 0,
@@ -125,13 +135,13 @@
   },
   {
    "id": "ab59f97c6e53",
-   "name": "BOB",
-   "skin": 0,
-   "rating": 939,
-   "played": 8,
+   "name": "ROLWETT",
+   "skin": 1,
+   "rating": 927,
+   "played": 9,
    "wins": 1,
    "best": 1,
-   "last": "2026-11-27T02:09:50.422Z"
+   "last": "2026-11-27T02:28:48.759Z"
   }
  ]
 }

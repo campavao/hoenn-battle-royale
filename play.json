@@ -1,17 +1,69 @@
 {
- "readAt": "2026-11-27T02:16:57.235Z",
+ "readAt": "2026-11-27T02:32:00.012Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "TXVGN4",
-   "at": "2026-11-27T02:12:58.578Z",
+   "code": "HG8NUG",
+   "at": "2026-11-27T02:23:02.710Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T02:23:02.710Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T02:23:04.329Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "SZND7B",
+   "at": "2026-11-27T02:22:55.341Z",
+   "end": "2026-11-27T02:22:57.207Z",
+   "secs": 2,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [
+    {
+     "t": "2026-11-27T02:22:55.341Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "TXVGN4",
+   "at": "2026-11-27T02:12:58.578Z",
+   "end": "2026-11-27T02:29:34.471Z",
+   "secs": 996,
    "door": "open",
    "mode": "host",
    "humans": 3,
    "together": 3,
-   "spectators": 1,
+   "spectators": 2,
    "matches": 1,
    "joins": [
     {
@@ -25,6 +77,10 @@
     {
      "t": "2026-11-27T02:14:41.908Z",
      "how": "spectate"
+    },
+    {
+     "t": "2026-11-27T02:22:46.236Z",
+     "how": "spectate"
     }
    ],
    "versions": [],
@@ -35,10 +91,9 @@
      "mode": "host",
      "trainers": 3,
      "watching": 0,
-     "secs": null
+     "secs": 925
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -35030,6 +35085,48 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-27T02:28:48.822Z",
+   "code": "TXVGN4",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 924,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T02:24:36.478Z",
+   "code": "TXVGN4",
+   "v": "b49b064",
+   "watched": 5,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 672,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
+   "t": "2026-11-27T02:22:51.577Z",
+   "code": "TXVGN4",
+   "v": "b49b064",
+   "watched": 4,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 5,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-27T02:09:50.491Z",
    "code": "D2KQKT",
