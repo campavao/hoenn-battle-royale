@@ -1,7 +1,37 @@
 {
- "readAt": "2026-11-27T14:03:19.384Z",
+ "readAt": "2026-11-27T14:18:22.585Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "4K953C",
+   "at": "2026-11-27T14:04:04.774Z",
+   "end": "2026-11-27T14:07:54.133Z",
+   "secs": 229,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T14:04:04.774Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T14:04:12.097Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
   {
    "code": "VHVET7",
    "at": "2026-11-27T12:52:09.479Z",
@@ -35565,6 +35595,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-27T14:06:54.126Z",
+   "code": "4K953C",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 121,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-27T12:56:39.253Z",
    "code": "VHVET7",
