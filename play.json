@@ -1,7 +1,59 @@
 {
- "readAt": "2026-11-27T05:22:21.454Z",
+ "readAt": "2026-11-27T06:07:26.325Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "YMUAFS",
+   "at": "2026-11-27T06:03:39.854Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-27T06:03:39.854Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-27T06:03:57.727Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "AN7NSE",
+   "at": "2026-11-27T06:03:27.126Z",
+   "end": "2026-11-27T06:03:48.533Z",
+   "secs": 21,
+   "door": "open",
+   "mode": "host",
+   "humans": 2,
+   "together": 2,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [
+    {
+     "t": "2026-11-27T06:03:32.706Z",
+     "how": "code"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "XZY74V",
    "at": "2026-11-27T04:53:05.689Z",
@@ -49990,6 +50042,10 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-27T06:03:58.092Z",
+   "step": "match"
+  },
   {
    "t": "2026-11-27T05:09:45.121Z",
    "step": "rom"
