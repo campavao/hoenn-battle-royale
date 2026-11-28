@@ -1,12 +1,12 @@
 {
- "readAt": "2026-11-28T06:23:11.735Z",
+ "readAt": "2026-11-28T06:38:15.426Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "BWDP5T",
    "at": "2026-11-28T06:21:33.438Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-11-28T06:27:23.384Z",
+   "secs": 350,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -30,7 +30,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -36438,6 +36437,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-28T06:27:23.234Z",
+   "code": "BWDP5T",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 347,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-28T05:57:42.587Z",
    "code": "8NBJS8",
