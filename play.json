@@ -1,7 +1,38 @@
 {
- "readAt": "2026-11-28T00:41:08.156Z",
+ "readAt": "2026-11-28T00:56:10.677Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "XKMCFP",
+   "at": "2026-11-28T00:50:55.271Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-28T00:50:55.271Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-28T00:50:57.395Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "6Q28K3",
    "at": "2026-11-27T20:06:44.795Z",
@@ -51201,6 +51232,10 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-28T00:50:58.065Z",
+   "step": "match"
+  },
   {
    "t": "2026-11-28T00:30:34.542Z",
    "step": "landing"
