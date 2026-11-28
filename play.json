@@ -1,12 +1,43 @@
 {
- "readAt": "2026-11-28T08:23:21.788Z",
+ "readAt": "2026-11-28T08:38:24.554Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
-   "code": "MTBC52",
-   "at": "2026-11-28T08:17:01.666Z",
+   "code": "C9PPUR",
+   "at": "2026-11-28T08:38:07.841Z",
    "end": null,
    "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-28T08:38:07.841Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-28T08:38:10.743Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "MTBC52",
+   "at": "2026-11-28T08:17:01.666Z",
+   "end": "2026-11-28T08:35:22.222Z",
+   "secs": 1101,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -27,10 +58,9 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1073
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -36469,6 +36499,20 @@
  ],
  "jank": [
   {
+   "t": "2026-11-28T08:34:57.591Z",
+   "code": "MTBC52",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 1072,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
+  {
    "t": "2026-11-28T06:27:23.234Z",
    "code": "BWDP5T",
    "v": "b49b064",
@@ -51408,6 +51452,10 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-28T08:32:34.785Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-28T08:17:05.305Z",
    "step": "match"
