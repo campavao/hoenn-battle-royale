@@ -1,5 +1,5 @@
 {
- "readAt": "2026-11-28T08:38:24.554Z",
+ "readAt": "2026-11-28T09:08:30.439Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -12,7 +12,7 @@
    "humans": 1,
    "together": 1,
    "spectators": 0,
-   "matches": 1,
+   "matches": 2,
    "joins": [
     {
      "t": "2026-11-28T08:38:07.841Z",
@@ -24,6 +24,13 @@
    "played": [
     {
      "t": "2026-11-28T08:38:10.743Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": 1075
+    },
+    {
+     "t": "2026-11-28T08:56:42.470Z",
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
@@ -36498,6 +36505,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-11-28T08:56:05.766Z",
+   "code": "C9PPUR",
+   "v": "b49b064",
+   "watched": 0,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 1,
+   "longest": 1,
+   "checks": 1074,
+   "drifts": 0,
+   "deploy": "596bbedd"
+  },
   {
    "t": "2026-11-28T08:34:57.591Z",
    "code": "MTBC52",
