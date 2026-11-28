@@ -1,7 +1,38 @@
 {
- "readAt": "2026-11-28T06:38:15.426Z",
+ "readAt": "2026-11-28T08:23:21.788Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "MTBC52",
+   "at": "2026-11-28T08:17:01.666Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-11-28T08:17:01.666Z",
+     "how": "quick"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-11-28T08:17:04.986Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "BWDP5T",
    "at": "2026-11-28T06:21:33.438Z",
@@ -51377,6 +51408,34 @@
   }
  ],
  "seen": [
+  {
+   "t": "2026-11-28T08:17:05.305Z",
+   "step": "match"
+  },
+  {
+   "t": "2026-11-28T08:16:57.363Z",
+   "step": "rom"
+  },
+  {
+   "t": "2026-11-28T08:16:51.684Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-28T08:16:47.588Z",
+   "step": "landing"
+  },
+  {
+   "t": "2026-11-28T08:16:30.964Z",
+   "step": "rom"
+  },
+  {
+   "t": "2026-11-28T08:16:16.831Z",
+   "step": "ask"
+  },
+  {
+   "t": "2026-11-28T08:16:06.603Z",
+   "step": "landing"
+  },
   {
    "t": "2026-11-28T06:12:44.822Z",
    "step": "landing"
